@@ -28,11 +28,15 @@ import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
 import {useLexicalEditable} from '@lexical/react/useLexicalEditable';
 import {CAN_USE_DOM} from '@lexical/utils';
 import * as React from 'react';
-import {useEffect, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
+
+import {$convertFromMarkdownString, $convertToMarkdownString} from '@lexical/markdown';
+import {$getRoot} from 'lexical';
 
 import {createWebsocketProvider} from './collaboration';
-import {useSettings} from './context/SettingsContext';
+import {DEFAULT_EDITOR_CONFIG, type EditorConfig} from './EditorConfig';
 import {useSharedHistoryContext} from './context/SharedHistoryContext';
+import {PLAYGROUND_TRANSFORMERS} from './plugins/MarkdownTransformers';
 import ActionsPlugin from './plugins/ActionsPlugin';
 import AutocompletePlugin from './plugins/AutocompletePlugin';
 import AutoEmbedPlugin from './plugins/AutoEmbedPlugin';
@@ -81,31 +85,33 @@ const skipCollaborationInit =
   // @ts-expect-error
   window.parent != null && window.parent.frames.right === window;
 
-export default function Editor(): JSX.Element {
+interface EditorProps {
+  config?: EditorConfig;
+}
+
+export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): JSX.Element {
   const {historyState} = useSharedHistoryContext();
   const {
-    settings: {
-      isCodeHighlighted,
-      isCodeShiki,
-      isCollab,
-      isAutocomplete,
-      isMaxLength,
-      isCharLimit,
-      hasLinkAttributes,
-      isCharLimitUtf8,
-      isRichText,
-      showTreeView,
-      showTableOfContents,
-      shouldUseLexicalContextMenu,
-      shouldPreserveNewLinesInMarkdown,
-      tableCellMerge,
-      tableCellBackgroundColor,
-      tableHorizontalScroll,
-      shouldAllowHighlightingWithBrackets,
-      selectionAlwaysOnDisplay,
-      listStrictIndent,
-    },
-  } = useSettings();
+    isCodeHighlighted,
+    isCodeShiki,
+    isCollab,
+    isAutocomplete,
+    isMaxLength,
+    isCharLimit,
+    hasLinkAttributes,
+    isCharLimitUtf8,
+    isRichText,
+    showTreeView,
+    showTableOfContents,
+    shouldUseLexicalContextMenu,
+    shouldPreserveNewLinesInMarkdown,
+    tableCellMerge,
+    tableCellBackgroundColor,
+    tableHorizontalScroll,
+    shouldAllowHighlightingWithBrackets,
+    selectionAlwaysOnDisplay,
+    listStrictIndent,
+  } = config;
   const isEditable = useLexicalEditable();
   const placeholder = isCollab
     ? 'Enter some collaborative rich text...'
@@ -119,12 +125,162 @@ export default function Editor(): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const [activeEditor, setActiveEditor] = useState(editor);
   const [isLinkEditMode, setIsLinkEditMode] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const onRef = (_floatingAnchorElem: HTMLDivElement) => {
     if (_floatingAnchorElem !== null) {
       setFloatingAnchorElem(_floatingAnchorElem);
     }
   };
+
+  // Helper function to extract markdown content
+  const getMarkdownContent = useCallback(() => {
+    return editor.read(() => {
+      const markdown = $convertToMarkdownString(PLAYGROUND_TRANSFORMERS, undefined, true);
+      // remove frontmatter
+      const frontmatterRegex = /^---\s*\n(?:.*\n)*?---\s*\n/;
+      const markdownWithoutFrontmatter = markdown.replace(frontmatterRegex, '');
+      return markdownWithoutFrontmatter;
+    });
+  }, [editor]);
+
+  // Load file content if initialContent is provided or if fileService supports auto-loading (but not both)
+  useEffect(() => {
+    const hasInitialContent = config.initialContent !== undefined;
+    const shouldAutoLoad = config.fileService?.canAutoLoad && !hasInitialContent;
+
+    if (!shouldAutoLoad && !hasInitialContent) return;
+
+    const loadFile = async () => {
+      try {
+        setIsLoading(true);
+
+        let content = '';
+        if (hasInitialContent) {
+          content = config.initialContent!;
+        } else if (shouldAutoLoad && config.fileService) {
+          content = await config.fileService.loadFile();
+        }
+
+        editor.update(() => {
+          const root = $getRoot();
+          root.clear();
+          if (content.trim()) {
+            $convertFromMarkdownString(content, PLAYGROUND_TRANSFORMERS, undefined, true);
+          }
+        });
+
+        // Only update file name if we're auto-loading (not when initialContent is provided)
+        if (shouldAutoLoad && config.onFileNameChange && config.fileService) {
+          config.onFileNameChange(config.fileService.getCurrentFileName());
+        }
+      } catch (error) {
+        console.error('Failed to load file:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadFile();
+  }, [config.fileService, config.initialContent, editor, config.onFileNameChange]);
+
+  // Auto-save functionality
+  const saveContent = useCallback(async (content: string, forceManualSave = false) => {
+    if (!config.fileService) return;
+
+    // Only check canAutoSave for automatic saves, not manual saves
+    if (!forceManualSave && !config.fileService.canAutoSave) return;
+
+    try {
+      await config.fileService.saveFile(content);
+      setLastSaved(new Date());
+    } catch (error) {
+      console.error('Failed to save file:', error);
+    }
+  }, [config.fileService]);
+
+  // Handle content changes and trigger auto-save
+  useEffect(() => {
+    if (!config.fileService) return;
+
+    const removeUpdateListener = editor.registerUpdateListener(({dirtyElements, dirtyLeaves}) => {
+      // Only trigger save if there are actual changes
+      if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return;
+
+      const content = getMarkdownContent();
+
+      // Call onChange callback if provided
+      if (config.onContentChange) {
+        config.onContentChange(content);
+      }
+
+      // Schedule auto-save for services that support it
+      if (config.fileService.canAutoSave && config.autoSaveInterval) {
+        // Clear existing timeout
+        if (autoSaveTimeoutRef.current) {
+          clearTimeout(autoSaveTimeoutRef.current);
+        }
+
+        // Schedule new auto-save
+        autoSaveTimeoutRef.current = setTimeout(() => {
+          saveContent(content);
+        }, config.autoSaveInterval);
+      }
+    });
+
+    return () => {
+      removeUpdateListener();
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [editor, config.fileService, config.onContentChange, config.autoSaveInterval, saveContent, getMarkdownContent]);
+
+  // Handle Cmd+S / Ctrl+S for manual save
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 's') {
+        event.preventDefault();
+
+        if (config.fileService) {
+          const content = getMarkdownContent();
+          saveContent(content, true); // forceManualSave = true
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [config.fileService, saveContent, getMarkdownContent]);
+
+  // Handle save on tab blur/visibility change
+  useEffect(() => {
+    if (!config.fileService) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        const content = getMarkdownContent();
+        saveContent(content, true); // Force save when tab becomes hidden
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      const content = getMarkdownContent();
+      saveContent(content, true); // Force save before page unload
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [config.fileService, saveContent, getMarkdownContent]);
 
   useEffect(() => {
     const updateViewPortWidth = () => {
@@ -159,10 +315,15 @@ export default function Editor(): JSX.Element {
           setIsLinkEditMode={setIsLinkEditMode}
         />
       )}
+      {isLoading && (
+        <div className="editor-loading">
+          Loading file...
+        </div>
+      )}
       <div
         className={`editor-container ${showTreeView ? 'tree-view' : ''} ${
           !isRichText ? 'plain-text' : ''
-        }`}>
+        } ${isLoading ? 'loading' : ''}`}>
         {isMaxLength && <MaxLengthPlugin maxLength={30} />}
         <DragDropPaste />
         <AutoFocusPlugin />
@@ -177,9 +338,9 @@ export default function Editor(): JSX.Element {
         <KeywordsPlugin />
         <SpeechToTextPlugin />
         <AutoLinkPlugin />
-        <CommentPlugin
-          providerFactory={isCollab ? createWebsocketProvider : undefined}
-        />
+        {/*<CommentPlugin*/}
+        {/*  providerFactory={isCollab ? createWebsocketProvider : undefined}*/}
+        {/*/>*/}
         {isRichText ? (
           <>
             {isCollab ? (
@@ -276,10 +437,10 @@ export default function Editor(): JSX.Element {
         <div>{showTableOfContents && <TableOfContentsPlugin />}</div>
         {shouldUseLexicalContextMenu && <ContextMenuPlugin />}
         {shouldAllowHighlightingWithBrackets && <SpecialTextPlugin />}
-        <ActionsPlugin
-          isRichText={isRichText}
-          shouldPreserveNewLinesInMarkdown={shouldPreserveNewLinesInMarkdown}
-        />
+        {/*<ActionsPlugin*/}
+        {/*  isRichText={isRichText}*/}
+        {/*  shouldPreserveNewLinesInMarkdown={shouldPreserveNewLinesInMarkdown}*/}
+        {/*/>*/}
       </div>
       {showTreeView && <TreeViewPlugin />}
     </>

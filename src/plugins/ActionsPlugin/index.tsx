@@ -9,7 +9,7 @@
 import type {LexicalEditor} from 'lexical';
 import type {JSX} from 'react';
 
-import {$createCodeNode, $isCodeNode} from '@lexical/code';
+import {$isCodeNode} from '@lexical/code';
 import {
   editorStateFromSerializedDocument,
   exportFile,
@@ -17,16 +17,11 @@ import {
   SerializedDocument,
   serializedDocumentFromEditorState,
 } from '@lexical/file';
-import {
-  $convertFromMarkdownString,
-  $convertToMarkdownString,
-} from '@lexical/markdown';
 import {useCollaborationContext} from '@lexical/react/LexicalCollaborationContext';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {mergeRegister} from '@lexical/utils';
 import {CONNECTED_COMMAND, TOGGLE_CONNECT_COMMAND} from '@lexical/yjs';
 import {
-  $createTextNode,
   $getRoot,
   $isParagraphNode,
   CLEAR_EDITOR_COMMAND,
@@ -41,8 +36,8 @@ import {INITIAL_SETTINGS} from '../../appSettings';
 import useFlashMessage from '../../hooks/useFlashMessage';
 import useModal from '../../hooks/useModal';
 import Button from '../../ui/Button';
-import {docFromHash, docToHash} from '../../utils/docSerialization';
-import {PLAYGROUND_TRANSFORMERS} from '../MarkdownTransformers';
+// Removed docSerialization imports - no longer serializing to URL
+// import {docFromHash, docToHash} from '../../utils/docSerialization';
 import {
   SPEECH_TO_TEXT_COMMAND,
   SUPPORT_SPEECH_RECOGNITION,
@@ -86,11 +81,10 @@ async function validateEditorState(editor: LexicalEditor): Promise<void> {
   }
 }
 
+// Disabled docSerialization - don't save content to URL hash
 async function shareDoc(doc: SerializedDocument): Promise<void> {
-  const url = new URL(window.location.toString());
-  url.hash = await docToHash(doc);
-  const newUrl = url.toString();
-  window.history.replaceState({}, '', newUrl);
+  // Just copy the current URL without modifying the hash
+  const newUrl = window.location.toString();
   await window.navigator.clipboard.writeText(newUrl);
 }
 
@@ -109,17 +103,18 @@ export default function ActionsPlugin({
   const [modal, showModal] = useModal();
   const showFlashMessage = useFlashMessage();
   const {isCollabActive} = useCollaborationContext();
-  useEffect(() => {
-    if (INITIAL_SETTINGS.isCollab) {
-      return;
-    }
-    docFromHash(window.location.hash).then((doc) => {
-      if (doc && doc.source === 'Playground') {
-        editor.setEditorState(editorStateFromSerializedDocument(editor, doc));
-        editor.dispatchCommand(CLEAR_HISTORY_COMMAND, undefined);
-      }
-    });
-  }, [editor]);
+  // Disabled docSerialization - don't load content from URL hash
+  // useEffect(() => {
+  //   if (INITIAL_SETTINGS.isCollab) {
+  //     return;
+  //   }
+  //   docFromHash(window.location.hash).then((doc) => {
+  //     if (doc && doc.source === 'Playground') {
+  //       editor.setEditorState(editorStateFromSerializedDocument(editor, doc));
+  //       editor.dispatchCommand(CLEAR_HISTORY_COMMAND, undefined);
+  //     }
+  //   });
+  // }, [editor]);
   useEffect(() => {
     return mergeRegister(
       editor.registerEditableListener((editable) => {
@@ -169,32 +164,6 @@ export default function ActionsPlugin({
     );
   }, [editor, isEditable]);
 
-  const handleMarkdownToggle = useCallback(() => {
-    editor.update(() => {
-      const root = $getRoot();
-      const firstChild = root.getFirstChild();
-      if ($isCodeNode(firstChild) && firstChild.getLanguage() === 'markdown') {
-        $convertFromMarkdownString(
-          firstChild.getTextContent(),
-          PLAYGROUND_TRANSFORMERS,
-          undefined, // node
-          shouldPreserveNewLinesInMarkdown,
-        );
-      } else {
-        const markdown = $convertToMarkdownString(
-          PLAYGROUND_TRANSFORMERS,
-          undefined, //node
-          shouldPreserveNewLinesInMarkdown,
-        );
-        const codeNode = $createCodeNode('markdown');
-        codeNode.append($createTextNode(markdown));
-        root.clear().append(codeNode);
-        if (markdown.length === 0) {
-          codeNode.select();
-        }
-      }
-    });
-  }, [editor, shouldPreserveNewLinesInMarkdown]);
 
   return (
     <div className="actions">
@@ -276,13 +245,6 @@ export default function ActionsPlugin({
         title="Read-Only Mode"
         aria-label={`${!isEditable ? 'Unlock' : 'Lock'} read-only mode`}>
         <i className={!isEditable ? 'unlock' : 'lock'} />
-      </button>
-      <button
-        className="action-button"
-        onClick={handleMarkdownToggle}
-        title="Convert From Markdown"
-        aria-label="Convert from markdown">
-        <i className="markdown" />
       </button>
       {isCollabActive && (
         <button

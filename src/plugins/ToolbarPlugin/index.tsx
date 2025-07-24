@@ -9,6 +9,7 @@
 import type {JSX} from 'react';
 
 import {
+  $createCodeNode,
   $isCodeNode,
   getCodeLanguageOptions as getCodeLanguageOptionsPrism,
   normalizeCodeLanguage as normalizeCodeLanguagePrism,
@@ -20,6 +21,10 @@ import {
 } from '@lexical/code-shiki';
 import {$isLinkNode, TOGGLE_LINK_COMMAND} from '@lexical/link';
 import {$isListNode, ListNode} from '@lexical/list';
+import {
+  $convertFromMarkdownString,
+  $convertToMarkdownString,
+} from '@lexical/markdown';
 import {INSERT_EMBED_COMMAND} from '@lexical/react/LexicalAutoEmbedPlugin';
 import {INSERT_HORIZONTAL_RULE_COMMAND} from '@lexical/react/LexicalHorizontalRuleNode';
 import {$isHeadingNode} from '@lexical/rich-text';
@@ -37,6 +42,7 @@ import {
   mergeRegister,
 } from '@lexical/utils';
 import {
+  $createTextNode,
   $getNodeByKey,
   $getRoot,
   $getSelection,
@@ -88,6 +94,7 @@ import InsertLayoutDialog from '../LayoutPlugin/InsertLayoutDialog';
 import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
 import {InsertPollDialog} from '../PollPlugin';
 import {SHORTCUTS} from '../ShortcutsPlugin/shortcuts';
+import {PLAYGROUND_TRANSFORMERS} from '../MarkdownTransformers';
 import {InsertTableDialog} from '../TablePlugin';
 import FontSize from './fontSize';
 import {
@@ -583,7 +590,7 @@ export default function ToolbarPlugin({
   );
 
   const {
-    settings: {isCodeHighlighted, isCodeShiki},
+    settings: {isCodeHighlighted, isCodeShiki, shouldPreserveNewLinesInMarkdown},
   } = useSettings();
 
   const $handleCodeNode = useCallback(
@@ -869,11 +876,46 @@ export default function ToolbarPlugin({
     activeEditor.dispatchCommand(INSERT_IMAGE_COMMAND, payload);
   };
 
+  const handleMarkdownToggle = useCallback(() => {
+    activeEditor.update(() => {
+      const root = $getRoot();
+      const firstChild = root.getFirstChild();
+      if ($isCodeNode(firstChild) && firstChild.getLanguage() === 'markdown') {
+        $convertFromMarkdownString(
+          firstChild.getTextContent(),
+          PLAYGROUND_TRANSFORMERS,
+          undefined, // node
+          true,
+        );
+      } else {
+        const markdown = $convertToMarkdownString(
+          PLAYGROUND_TRANSFORMERS,
+          undefined, //node
+          true,
+        );
+        const codeNode = $createCodeNode('markdown');
+        codeNode.append($createTextNode(markdown));
+        root.clear().append(codeNode);
+        if (markdown.length === 0) {
+          codeNode.select();
+        }
+      }
+    });
+  }, [activeEditor, shouldPreserveNewLinesInMarkdown]);
+
   const canViewerSeeInsertDropdown = !toolbarState.isImageCaption;
   const canViewerSeeInsertCodeButton = !toolbarState.isImageCaption;
 
   return (
     <div className="toolbar">
+      <button
+        className="toolbar-item spaced"
+        onClick={handleMarkdownToggle}
+        title="Toggle Markdown View"
+        aria-label="Toggle markdown view">
+        <i className="format markdown" />
+      </button>
+      <Divider />
       <button
         disabled={!toolbarState.canUndo || !isEditable}
         onClick={() => {
