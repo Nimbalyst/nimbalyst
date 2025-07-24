@@ -37,7 +37,6 @@ export default defineConfig(({mode}) => ({
         'lexical',
         // Other major dependencies
         '@excalidraw/excalidraw',
-        'katex',
         'prettier',
         'yjs',
         'y-websocket',
