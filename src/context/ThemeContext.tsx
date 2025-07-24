@@ -10,6 +10,7 @@ import type {JSX, ReactNode} from 'react';
 import {createContext, useContext, useEffect, useState} from 'react';
 
 export type Theme = 'light' | 'dark';
+export type ThemeConfig = 'light' | 'dark' | 'auto';
 
 interface ThemeContextType {
   theme: Theme;
@@ -21,11 +22,17 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 interface ThemeProviderProps {
   children: ReactNode;
+  initialTheme?: ThemeConfig;
 }
 
-export function ThemeProvider({children}: ThemeProviderProps): JSX.Element {
+export function ThemeProvider({children, initialTheme = 'auto'}: ThemeProviderProps): JSX.Element {
   const [theme, setThemeState] = useState<Theme>(() => {
-    // Check localStorage first, then system preference
+    // If a specific theme is configured, use it
+    if (initialTheme === 'light' || initialTheme === 'dark') {
+      return initialTheme;
+    }
+    
+    // Check localStorage first, then system preference (for 'auto' mode)
     const savedTheme = localStorage.getItem('stravu-editor-theme') as Theme;
     if (savedTheme && (savedTheme === 'light' || savedTheme === 'dark')) {
       return savedTheme;
@@ -56,10 +63,15 @@ export function ThemeProvider({children}: ThemeProviderProps): JSX.Element {
 
   // Listen for system theme changes
   useEffect(() => {
+    // Only listen for system changes if theme is set to 'auto'
+    if (initialTheme !== 'auto') {
+      return;
+    }
+
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     
     const handleChange = (e: MediaQueryListEvent) => {
-      // Only update if no theme is saved in localStorage
+      // Only update if no theme is saved in localStorage and we're in auto mode
       if (!localStorage.getItem('stravu-editor-theme')) {
         setTheme(e.matches ? 'dark' : 'light');
       }
@@ -67,7 +79,7 @@ export function ThemeProvider({children}: ThemeProviderProps): JSX.Element {
 
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
-  }, []);
+  }, [initialTheme]);
 
   return (
     <ThemeContext.Provider value={{theme, toggleTheme, setTheme}}>

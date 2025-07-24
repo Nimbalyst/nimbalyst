@@ -5,12 +5,15 @@
  * tables, and comprehensive editing capabilities.
  */
 
+// Import main CSS styles
+import './index.css';
+
 // Main editor components
 export { StravuEditor, type StravuEditorProps } from './App';
 export { default as Editor } from './Editor';
 
 // Configuration
-export { type EditorConfig, DEFAULT_EDITOR_CONFIG } from './EditorConfig';
+export { type EditorConfig, DEFAULT_EDITOR_CONFIG, type Theme as ConfigTheme } from './EditorConfig';
 
 // File services
 export { type FileService } from './FileService';
@@ -21,7 +24,7 @@ export { useFlashMessage } from './hooks/useFlashMessage';
 export { useModal } from './hooks/useModal';
 
 // Context providers - for advanced usage
-export { ThemeProvider, useTheme } from './context/ThemeContext';
+export { ThemeProvider, useTheme, type Theme, type ThemeConfig } from './context/ThemeContext';
 export { FlashMessageContext } from './context/FlashMessageContext';
 export { SharedHistoryContext } from './context/SharedHistoryContext';
 export { TableContext } from './plugins/TablePlugin';

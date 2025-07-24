@@ -47,7 +47,7 @@ function StravuEditor({config = DEFAULT_EDITOR_CONFIG}: StravuEditorProps): JSX.
     };
 
     return (
-        <ThemeProvider>
+        <ThemeProvider initialTheme={config.theme}>
             <LexicalComposer initialConfig={initialConfig}>
                 <SharedHistoryContext>
                     <TableContext>

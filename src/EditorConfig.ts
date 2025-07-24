@@ -5,6 +5,8 @@
 
 import type {FileService} from './FileService';
 
+export type Theme = 'light' | 'dark' | 'auto';
+
 export interface EditorConfig {
   // Core editor behavior
   isRichText?: boolean;
@@ -50,6 +52,9 @@ export interface EditorConfig {
   // Markdown-only mode - hides non-markdown native features
   markdownOnly?: boolean;
 
+  // Theme configuration
+  theme?: Theme; // Override theme: 'light' | 'dark' | 'auto' (default: 'auto')
+
   // File operations
   fileService?: FileService;
   autoSaveInterval?: number; // milliseconds, default 2000
@@ -86,5 +91,6 @@ export const DEFAULT_EDITOR_CONFIG: EditorConfig = {
   disableBeforeInput: false,
   listStrictIndent: false,
   markdownOnly: true,
+  theme: 'auto',
   autoSaveInterval: 2000,
 };

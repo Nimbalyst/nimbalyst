@@ -76,7 +76,7 @@ Import and use the `StravuEditor` component in your React application:
 
 ```tsx
 import { StravuEditor } from 'stravu-editor';
-import 'stravu-editor/style.css'; // Required: Import the CSS!
+// CSS is automatically included when you import the component!
 
 const config = {
   isRichText: true,
@@ -94,15 +94,9 @@ function MyApp() {
 }
 ```
 
-### ⚠️ Required CSS Import
+### ✅ No CSS Import Required!
 
-**Important**: You must import the editor's CSS for it to work properly:
-
-```tsx
-import 'stravu-editor/style.css';
-```
-
-Without this import, the editor will appear unstyled and broken.
+**Good news**: The CSS is automatically included when you import the component. No separate CSS import is needed!
 
 ## Configuration
 
@@ -116,6 +110,9 @@ interface EditorConfig {
   
   // Markdown-only mode
   markdownOnly?: boolean;                   // Hide non-markdown features (default: false)
+  
+  // Theme configuration
+  theme?: 'light' | 'dark' | 'auto';       // Set theme: 'auto' follows system (default: 'auto')
   
   // Features
   isAutocomplete?: boolean;                 // Enable autocomplete (default: false)
@@ -165,6 +162,8 @@ interface EditorConfig {
 ```
 
 ### Key Configuration Options
+
+**Theme Control**: Set `theme: 'light'`, `theme: 'dark'`, or `theme: 'auto'` to control the editor's appearance. Auto mode follows the system theme preference.
 
 **Markdown-Only Mode**: Set `markdownOnly: true` to hide rich text formatting options (font styling, colors, advanced formatting) while preserving markdown-native features like images, tables, excalidraw drawings, and collapsible containers.
 
@@ -260,10 +259,10 @@ __tests__/regression/
 ### Editor appears unstyled/broken
 **Problem**: The editor shows up but looks completely unstyled or broken.
 
-**Solution**: Make sure you import the CSS file:
-```tsx
-import 'stravu-editor/style.css';
-```
+**Solution**: This should not happen as CSS is automatically included. If you still see issues:
+1. Make sure you're importing from the correct package
+2. Check that your bundler supports CSS imports
+3. Try clearing your node_modules and reinstalling
 
 ### Missing Lexical dependencies
 **Problem**: Build errors about missing `@lexical/*` packages.
