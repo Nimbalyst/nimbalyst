@@ -242,3 +242,36 @@ export default function CollapsiblePlugin(): null {
 
   return null;
 }
+
+
+
+// Helper function to create a styled collapsible
+export function $createStyledCollapsible(options: {
+    classification?: string;
+    isOpen?: boolean;
+    readOnly?: boolean;
+}) {
+    const {
+        classification,
+        isOpen = true,
+        readOnly = false,
+    } = options;
+
+    const container = $createCollapsibleContainerNode(
+        isOpen,
+        classification,
+        readOnly
+    );
+
+    const title = $createCollapsibleTitleNode();
+    const content = $createCollapsibleContentNode();
+
+    const titleParagraph = $createParagraphNode();
+    const contentParagraph = $createParagraphNode();
+
+    title.append(titleParagraph);
+    content.append(contentParagraph);
+    container.append(title, content);
+
+    return { container, title, content, titleParagraph, contentParagraph };
+}

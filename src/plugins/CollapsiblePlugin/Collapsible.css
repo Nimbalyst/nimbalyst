@@ -55,3 +55,30 @@
   display: none;
   user-select: none;
 }
+
+/* Dark mode support */
+[data-theme="dark"] .Collapsible__container {
+  background: var(--bg-secondary);
+  border: 1px solid var(--editor-border);
+}
+
+[data-theme="dark"] .Collapsible__title {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .Collapsible__title:before {
+  border-left-color: var(--text-primary);
+}
+
+[data-theme="dark"] .Collapsible__container[open] > .Collapsible__title:before {
+  border-top-color: var(--text-primary);
+}
+
+[data-theme="dark"] .Collapsible__content {
+  color: var(--text-primary);
+}
+
+/* Hover effects for better UX */
+[data-theme="dark"] .Collapsible__title:hover {
+  background-color: var(--hover-bg);
+}

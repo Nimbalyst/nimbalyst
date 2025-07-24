@@ -50,6 +50,7 @@ import {
 import {$createImageNode, $isImageNode, ImageNode} from '../../nodes/ImageNode';
 import {$createTweetNode, $isTweetNode, TweetNode} from '../../nodes/TweetNode';
 import emojiList from '../../utils/emoji-list';
+import { COLLAPSIBLE_TRANSFORMER } from "../CollapsiblePlugin/CollapsibleTransformer";
 
 export const HR: ElementTransformer = {
   dependencies: [HorizontalRuleNode],
@@ -308,6 +309,9 @@ const mapToTableCells = (textContent: string): Array<TableCellNode> | null => {
 };
 
 export const PLAYGROUND_TRANSFORMERS: Array<Transformer> = [
+
+  COLLAPSIBLE_TRANSFORMER,
+
   TABLE,
   HR,
   IMAGE,
@@ -319,4 +323,5 @@ export const PLAYGROUND_TRANSFORMERS: Array<Transformer> = [
   ...MULTILINE_ELEMENT_TRANSFORMERS,
   ...TEXT_FORMAT_TRANSFORMERS,
   ...TEXT_MATCH_TRANSFORMERS,
+
 ];
