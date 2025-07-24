@@ -69,6 +69,7 @@ import {
 import {Dispatch, useCallback, useEffect, useRef, useState} from 'react';
 
 import {useSettings} from '../../context/SettingsContext';
+import {useTheme} from '../../context/ThemeContext';
 import {FileOperationsState, FileOperations} from '../../hooks/useFileOperations';
 import {
   blockTypeToBlockName,
@@ -186,6 +187,12 @@ const CODE_THEME_OPTIONS_SHIKI: [string, string][] =
     ].includes(option[0]),
   );
 
+// Theme mapping for automatic light/dark switching (matches CodeHighlightShikiPlugin)
+const THEME_MAPPING = {
+  light: 'github-light',
+  dark: 'dark-plus',
+} as const;
+
 const FONT_FAMILY_OPTIONS: [string, string][] = [
   ['Arial', 'Arial'],
   ['Courier New', 'Courier New'],
@@ -261,11 +268,13 @@ function BlockFormatDropDown({
   blockType,
   rootType,
   disabled = false,
+  theme,
 }: {
   blockType: keyof typeof blockTypeToBlockName;
   rootType: keyof typeof rootTypeToRootName;
   editor: LexicalEditor;
   disabled?: boolean;
+  theme?: string;
 }): JSX.Element {
   return (
     <DropDown
@@ -350,7 +359,7 @@ function BlockFormatDropDown({
       </DropDownItem>
       <DropDownItem
         className={'item wide ' + dropDownActiveClass(blockType === 'code')}
-        onClick={() => formatCode(editor, blockType)}>
+        onClick={() => formatCode(editor, blockType, theme)}>
         <div className="icon-text-container">
           <i className="icon code" />
           <span className="text">Code Block</span>
@@ -674,6 +683,7 @@ export default function ToolbarPlugin({
   const {
     settings: {isCodeHighlighted, isCodeShiki, shouldPreserveNewLinesInMarkdown},
   } = useSettings();
+  const {theme} = useTheme();
 
   const $handleCodeNode = useCallback(
     (element: LexicalNode) => {
@@ -982,6 +992,9 @@ export default function ToolbarPlugin({
           true,
         );
         const codeNode = $createCodeNode('markdown');
+        if (isCodeShiki) {
+          codeNode.setTheme(THEME_MAPPING[theme]);
+        }
         codeNode.append($createTextNode(markdown));
         root.clear().append(codeNode);
         if (markdown.length === 0) {
@@ -991,7 +1004,7 @@ export default function ToolbarPlugin({
       $getRoot().selectStart();
     }, {discrete: true});
 
-  }, [activeEditor, shouldPreserveNewLinesInMarkdown]);
+  }, [activeEditor, shouldPreserveNewLinesInMarkdown, isCodeShiki, theme]);
 
   const canViewerSeeInsertDropdown = !toolbarState.isImageCaption;
   const canViewerSeeInsertCodeButton = !toolbarState.isImageCaption;
@@ -1047,6 +1060,7 @@ export default function ToolbarPlugin({
               blockType={toolbarState.blockType}
               rootType={toolbarState.rootType}
               editor={activeEditor}
+              theme={isCodeShiki ? THEME_MAPPING[theme] : undefined}
             />
             <Divider />
           </>
