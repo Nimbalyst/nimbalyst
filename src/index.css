@@ -1377,6 +1377,15 @@ i.page-break,
   cursor: pointer;
 }
 
+i.file-text {
+  background-image: url(images/icons/file-earmark-text.svg);
+  background-size: contain;
+  background-repeat: no-repeat;
+  display: inline-block;
+  height: 16px;
+  width: 16px;
+}
+
 i.chevron-down {
   background-color: transparent;
   background-size: contain;
@@ -1924,6 +1933,10 @@ button.item.dropdown-item-active i {
 [data-theme="dark"] .icon.number,
 [data-theme="dark"] .icon.quote,
 [data-theme="dark"] .icon.code,
+[data-theme="dark"] i.file-text {
+  filter: invert(1);
+}
+
 [data-theme="dark"] i.chevron-down {
   filter: invert(1);
 }

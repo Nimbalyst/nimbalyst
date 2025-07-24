@@ -52,6 +52,9 @@ export interface EditorConfig {
   autoSaveInterval?: number; // milliseconds, default 2000
   onContentChange?: (content: string) => void;
   onFileNameChange?: (fileName: string | null) => void;
+  onGetContent?: (getContentFn: () => string) => void;
+  onSave?: (saveFn: () => Promise<void>) => void;
+  onFileServiceCreated?: (fileService: FileService) => void;
   initialContent?: string; // Pre-loaded content to set in editor
 }
 

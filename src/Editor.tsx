@@ -128,6 +128,11 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
   const [isLoading, setIsLoading] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [internalFileService, setInternalFileService] = useState<FileService | null>(null);
+  const [currentFileName, setCurrentFileName] = useState<string | null>(null);
+  const [showFileMenu, setShowFileMenu] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [lastSavedContent, setLastSavedContent] = useState<string>('');
 
   const onRef = (_floatingAnchorElem: HTMLDivElement) => {
     if (_floatingAnchorElem !== null) {
@@ -146,65 +151,223 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     });
   }, [editor]);
 
-  // Load file content if initialContent is provided or if fileService supports auto-loading (but not both)
+  // Provide getContent function to parent component
   useEffect(() => {
-    const hasInitialContent = config.initialContent !== undefined;
-    const shouldAutoLoad = config.fileService?.canAutoLoad && !hasInitialContent;
+    if (config.onGetContent) {
+      config.onGetContent(getMarkdownContent);
+    }
+  }, [config.onGetContent, getMarkdownContent]);
 
-    if (!shouldAutoLoad && !hasInitialContent) return;
 
-    const loadFile = async () => {
-      try {
-        setIsLoading(true);
+  // Load initial content if provided
+  useEffect(() => {
+    if (!config.initialContent) return;
 
-        let content = '';
-        if (hasInitialContent) {
-          content = config.initialContent!;
-        } else if (shouldAutoLoad && config.fileService) {
-          content = await config.fileService.loadFile();
-        }
-
-        editor.update(() => {
-          const root = $getRoot();
-          root.clear();
-          if (content.trim()) {
-            $convertFromMarkdownString(content, PLAYGROUND_TRANSFORMERS, undefined, true);
-          }
-        });
-
-        // Only update file name if we're auto-loading (not when initialContent is provided)
-        if (shouldAutoLoad && config.onFileNameChange && config.fileService) {
-          config.onFileNameChange(config.fileService.getCurrentFileName());
-        }
-      } catch (error) {
-        console.error('Failed to load file:', error);
-      } finally {
-        setIsLoading(false);
+    editor.update(() => {
+      const root = $getRoot();
+      root.clear();
+      if (config.initialContent.trim()) {
+        $convertFromMarkdownString(config.initialContent, PLAYGROUND_TRANSFORMERS, undefined, true);
       }
-    };
-
-    loadFile();
-  }, [config.fileService, config.initialContent, editor, config.onFileNameChange]);
+    });
+  }, [config.initialContent, editor]);
 
   // Auto-save functionality
   const saveContent = useCallback(async (content: string, forceManualSave = false) => {
-    if (!config.fileService) return;
+    if (!internalFileService) {
+      // No file service - create one with showSaveFilePicker if this is a manual save
+      if (!forceManualSave) return;
+
+      if (!('showSaveFilePicker' in window)) {
+        alert('File System Access API not supported in this browser');
+        return;
+      }
+
+      try {
+        const fileHandle = await (window as any).showSaveFilePicker({
+          suggestedName: 'document.md',
+          types: [
+            {
+              description: 'Markdown files',
+              accept: { 'text/markdown': ['.md'] },
+            },
+          ],
+        });
+
+        const writable = await fileHandle.createWritable();
+        await writable.write(content);
+        await writable.close();
+
+        // Create a file service for future saves to this file
+        const newFileService = {
+          canAutoSave: false,
+          canAutoLoad: false,
+
+          getCurrentFileName() {
+            return fileHandle.name;
+          },
+
+          async loadFile() {
+            const file = await fileHandle.getFile();
+            return await file.text();
+          },
+
+          async saveFile(content: string) {
+            const writable = await fileHandle.createWritable();
+            await writable.write(content);
+            await writable.close();
+          }
+        };
+
+        // Store the file service internally
+        setInternalFileService(newFileService);
+        setCurrentFileName(fileHandle.name);
+        setLastSavedContent(content);
+        setIsDirty(false);
+      } catch (error) {
+        console.error('Failed to save file:', error);
+        if (error.name !== 'AbortError') {
+          alert('Failed to save file');
+        }
+      }
+      return;
+    }
 
     // Only check canAutoSave for automatic saves, not manual saves
-    if (!forceManualSave && !config.fileService.canAutoSave) return;
+    if (!forceManualSave && !internalFileService.canAutoSave) return;
 
     try {
-      await config.fileService.saveFile(content);
+      await internalFileService.saveFile(content);
       setLastSaved(new Date());
+      setLastSavedContent(content);
+      setIsDirty(false);
     } catch (error) {
       console.error('Failed to save file:', error);
     }
-  }, [config.fileService]);
+  }, [internalFileService]);
 
-  // Handle content changes and trigger auto-save
+  // File operations
+  const handleNewFile = () => {
+    setInternalFileService(null);
+    setCurrentFileName(null);
+    setLastSavedContent('');
+    setIsDirty(false);
+    editor.update(() => {
+      const root = $getRoot();
+      root.clear();
+    });
+  };
+
+  const handleOpenFile = async () => {
+    try {
+      if (!('showOpenFilePicker' in window)) {
+        alert('File System Access API not supported in this browser');
+        return;
+      }
+
+      const [fileHandle] = await (window as any).showOpenFilePicker({
+        types: [
+          {
+            description: 'Markdown files',
+            accept: { 'text/markdown': ['.md'] },
+          },
+        ],
+      });
+
+      const file = await fileHandle.getFile();
+      const content = await file.text();
+
+      // Create file service for this file
+      const newFileService = {
+        canAutoSave: false,
+        canAutoLoad: false,
+
+        getCurrentFileName() {
+          return fileHandle.name;
+        },
+
+        async loadFile() {
+          const file = await fileHandle.getFile();
+          return await file.text();
+        },
+
+        async saveFile(content: string) {
+          const writable = await fileHandle.createWritable();
+          await writable.write(content);
+          await writable.close();
+        }
+      };
+
+      // Load content into editor
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        if (content.trim()) {
+          $convertFromMarkdownString(content, PLAYGROUND_TRANSFORMERS, undefined, true);
+        }
+      });
+
+      setInternalFileService(newFileService);
+      setCurrentFileName(fileHandle.name);
+      setLastSavedContent(content);
+      setIsDirty(false);
+    } catch (error) {
+      console.error('Failed to open file:', error);
+      if (error.name !== 'AbortError') {
+        alert('Failed to open file');
+      }
+    }
+  };
+
+  const handleSaveAs = async () => {
+    const content = getMarkdownContent();
+    await saveContent(content, true); // This will show the save picker
+  };
+
+  // Helper function for keyboard shortcut display
+  const getShortcutDisplay = (key: string, shift = false) => {
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const modifier = isMac ? '⌘' : 'Ctrl+';
+    const shiftKey = shift ? (isMac ? '⇧' : 'Shift+') : '';
+    return `${modifier}${shiftKey}${key.toUpperCase()}`;
+  };
+
+  // Close file menu on escape, click outside, or item click
   useEffect(() => {
-    if (!config.fileService) return;
+    if (!showFileMenu) return;
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowFileMenu(false);
+      }
+    };
+
+    const handleClickOutside = (event: MouseEvent) => {
+      setShowFileMenu(false);
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('click', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [showFileMenu]);
+
+  // Provide save function to parent component
+  useEffect(() => {
+    if (config.onSave) {
+      const manualSave = async () => {
+        const content = getMarkdownContent();
+        await saveContent(content, true);
+      };
+      config.onSave(manualSave);
+    }
+  }, [config.onSave, getMarkdownContent, saveContent]);
+
+  // Handle content changes
+  useEffect(() => {
     const removeUpdateListener = editor.registerUpdateListener(({dirtyElements, dirtyLeaves}) => {
       // Only trigger save if there are actual changes
       if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return;
@@ -216,8 +379,13 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         config.onContentChange(content);
       }
 
+      // Check if content has changed since last save
+      if (content !== lastSavedContent) {
+        setIsDirty(true);
+      }
+
       // Schedule auto-save for services that support it
-      if (config.fileService.canAutoSave && config.autoSaveInterval) {
+      if (internalFileService?.canAutoSave && config.autoSaveInterval) {
         // Clear existing timeout
         if (autoSaveTimeoutRef.current) {
           clearTimeout(autoSaveTimeoutRef.current);
@@ -236,18 +404,27 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [editor, config.fileService, config.onContentChange, config.autoSaveInterval, saveContent, getMarkdownContent]);
+  }, [editor, internalFileService, config.onContentChange, config.autoSaveInterval, saveContent, getMarkdownContent, lastSavedContent]);
 
-  // Handle Cmd+S / Ctrl+S for manual save
+  // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === 's') {
-        event.preventDefault();
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
 
-        if (config.fileService) {
-          const content = getMarkdownContent();
-          saveContent(content, true); // forceManualSave = true
-        }
+      if (cmdOrCtrl && event.key === 's') {
+        event.preventDefault();
+        const content = getMarkdownContent();
+        saveContent(content, true);
+      } else if (cmdOrCtrl && event.shiftKey && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        handleSaveAs();
+      } else if (cmdOrCtrl && event.key === 'n') {
+        event.preventDefault();
+        handleNewFile();
+      } else if (cmdOrCtrl && event.key === 'o') {
+        event.preventDefault();
+        handleOpenFile();
       }
     };
 
@@ -255,7 +432,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [config.fileService, saveContent, getMarkdownContent]);
+  }, [saveContent, getMarkdownContent, handleSaveAs, handleNewFile, handleOpenFile]);
 
   // Handle save on tab blur/visibility change
   useEffect(() => {
@@ -301,6 +478,154 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
 
   return (
     <>
+      {/* File Menu */}
+      <div style={{
+        padding: '8px 16px',
+        backgroundColor: 'var(--bg-secondary, #f8f9fa)',
+        borderBottom: '1px solid var(--border-color, #e9ecef)',
+        display: 'flex',
+        alignItems: 'center',
+        fontSize: '14px',
+        position: 'relative'
+      }}>
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowFileMenu(!showFileMenu);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: '4px 8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              color: 'var(--text-primary, #333)',
+              borderRadius: '4px'
+            }}
+          >
+            <i className="file-text" />
+            {currentFileName || 'Untitled'}{isDirty && <span style={{ color: 'var(--text-danger, #dc3545)' }}>•</span>}
+            <i className="chevron-down" />
+          </button>
+
+          {showFileMenu && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                backgroundColor: 'var(--bg-primary, white)',
+                border: '1px solid var(--border-color, #ccc)',
+                borderRadius: '4px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                zIndex: 1000,
+                minWidth: '200px',
+                overflow: 'hidden'
+              }}>
+              <div
+                onClick={() => { handleNewFile(); setShowFileMenu(false); }}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  width: '90%',
+                  padding: '6px 12px',
+                  border: 'none',
+                  background: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  color: 'var(--text-primary, #333)',
+                  fontSize: '13px'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover, #f0f0f0)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                <span>New</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary, #666)', marginLeft: '16px' }}>{getShortcutDisplay('N')}</span>
+              </div>
+              <div
+                onClick={() => { handleOpenFile(); setShowFileMenu(false); }}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  width: '90%',
+                  padding: '6px 12px',
+                  border: 'none',
+                  background: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  color: 'var(--text-primary, #333)',
+                  fontSize: '13px'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover, #f0f0f0)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                <span>Open...</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary, #666)', marginLeft: '16px' }}>{getShortcutDisplay('O')}</span>
+              </div>
+              <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid var(--border-color, #eee)' }} />
+              <div
+                onClick={() => {
+                  if (internalFileService) {
+                    const content = getMarkdownContent();
+                    saveContent(content, true);
+                  } else {
+                    handleSaveAs();
+                  }
+                  setShowFileMenu(false);
+                }}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  width: '90%',
+                  padding: '6px 12px',
+                  border: 'none',
+                  background: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  color: 'var(--text-primary, #333)',
+                  fontSize: '13px'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover, #f0f0f0)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                <span>Save</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary, #666)', marginLeft: '16px' }}>{getShortcutDisplay('S')}</span>
+              </div>
+              <div
+                onClick={() => { handleSaveAs(); setShowFileMenu(false); }}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  width: '90%',
+                  padding: '6px 12px',
+                  border: 'none',
+                  background: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  color: 'var(--text-primary, #333)',
+                  fontSize: '13px'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover, #f0f0f0)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                <span>Save As...</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary, #666)', marginLeft: '16px' }}>{getShortcutDisplay('S', true)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       {isRichText && (
         <ToolbarPlugin
           editor={editor}

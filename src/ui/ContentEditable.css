@@ -13,6 +13,7 @@
   position: relative;
   outline: 0;
   padding: 8px 46px 40px;
+  padding-bottom: 400px; /* click target for focusing cursor */
   min-height: 150px;
 }
 @media (max-width: 1025px) {
