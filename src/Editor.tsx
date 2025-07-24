@@ -112,6 +112,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     shouldAllowHighlightingWithBrackets,
     selectionAlwaysOnDisplay,
     listStrictIndent,
+    markdownOnly,
   } = config;
   const isEditable = useLexicalEditable();
   const placeholder = isCollab
@@ -207,6 +208,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
           setIsLinkEditMode={setIsLinkEditMode}
           fileState={fileState}
           fileOperations={fileOperations}
+          markdownOnly={markdownOnly}
         />
       )}
       {isRichText && (

@@ -81,30 +81,66 @@ The editor is highly configurable through the `EditorConfig` interface:
 ```typescript
 interface EditorConfig {
   // Core editor behavior
-  isRichText?: boolean;
-  emptyEditor?: boolean;
+  isRichText?: boolean;                     // Enable rich text mode (default: true)
+  emptyEditor?: boolean;                    // Start with empty editor (default: false)
+  
+  // Markdown-only mode
+  markdownOnly?: boolean;                   // Hide non-markdown features (default: false)
   
   // Features
-  isAutocomplete?: boolean;
-  hasLinkAttributes?: boolean;
-  isCodeHighlighted?: boolean;
-  showTableOfContents?: boolean;
+  isAutocomplete?: boolean;                 // Enable autocomplete (default: false)
+  hasLinkAttributes?: boolean;              // Enable link attributes (default: false)
+  isCodeHighlighted?: boolean;              // Enable code highlighting (default: true)
+  isCodeShiki?: boolean;                    // Use Shiki for highlighting (default: true)
+  showTableOfContents?: boolean;            // Show table of contents (default: false)
   
   // File operations
-  fileService?: FileService;
-  autoSaveInterval?: number;
-  onContentChange?: (content: string) => void;
-  onFileNameChange?: (fileName: string | null) => void;
-  initialContent?: string;
+  fileService?: FileService;                // Custom file service implementation
+  autoSaveInterval?: number;                // Auto-save interval in ms (default: 2000)
+  onContentChange?: (content: string) => void;     // Content change callback
+  onFileNameChange?: (fileName: string | null) => void;  // File name change callback
+  onGetContent?: (getContentFn: () => string) => void;   // Access to content getter
+  onSave?: (saveFn: () => Promise<void>) => void;        // Access to save function
+  onFileServiceCreated?: (fileService: FileService) => void;  // File service creation callback
+  initialContent?: string;                  // Pre-loaded content to set in editor
+  
+  // Limits and validation
+  isMaxLength?: boolean;                    // Enable max length validation (default: false)
+  isCharLimit?: boolean;                    // Enable character limit (default: false)
+  isCharLimitUtf8?: boolean;                // Use UTF-8 for char limit (default: false)
+  
+  // Collaboration
+  isCollab?: boolean;                       // Enable collaboration mode (default: false)
+  
+  // Context menu and selection
+  shouldUseLexicalContextMenu?: boolean;    // Use Lexical context menu (default: false)
+  selectionAlwaysOnDisplay?: boolean;       // Always show selection (default: false)
+  
+  // Markdown behavior
+  shouldPreserveNewLinesInMarkdown?: boolean;     // Preserve newlines in markdown (default: true)
+  shouldAllowHighlightingWithBrackets?: boolean;  // Allow bracket highlighting (default: false)
   
   // Table features
-  tableCellBackgroundColor?: boolean;
-  tableCellMerge?: boolean;
-  tableHorizontalScroll?: boolean;
+  tableCellBackgroundColor?: boolean;       // Enable table cell background colors (default: true)
+  tableCellMerge?: boolean;                 // Enable table cell merging (default: false)
+  tableHorizontalScroll?: boolean;          // Enable horizontal scrolling (default: true)
   
-  // And many more options...
+  // Advanced options
+  disableBeforeInput?: boolean;             // Disable beforeinput handling (default: false)
+  listStrictIndent?: boolean;               // Use strict list indentation (default: false)
+  measureTypingPerf?: boolean;              // Measure typing performance (default: false)
+  showTreeView?: boolean;                   // Show AST tree view (default: false)
+  showNestedEditorTreeView?: boolean;       // Show nested editor tree (default: false)
 }
 ```
+
+### Key Configuration Options
+
+**Markdown-Only Mode**: Set `markdownOnly: true` to hide rich text formatting options (font styling, colors, advanced formatting) while preserving markdown-native features like images, tables, excalidraw drawings, and collapsible containers.
+
+**File Operations**: Configure auto-save behavior, provide custom file service implementations, and set up callbacks for content and file name changes.
+
+**Feature Toggles**: Enable/disable specific features like autocomplete, code highlighting, collaboration, and table functionalities.
 
 ## File Services
 

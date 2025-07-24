@@ -47,6 +47,9 @@ export interface EditorConfig {
   disableBeforeInput?: boolean;
   listStrictIndent?: boolean;
 
+  // Markdown-only mode - hides non-markdown native features
+  markdownOnly?: boolean;
+
   // File operations
   fileService?: FileService;
   autoSaveInterval?: number; // milliseconds, default 2000
@@ -82,5 +85,6 @@ export const DEFAULT_EDITOR_CONFIG: EditorConfig = {
   showNestedEditorTreeView: false,
   disableBeforeInput: false,
   listStrictIndent: false,
+  markdownOnly: true,
   autoSaveInterval: 2000,
 };
