@@ -681,3 +681,10 @@
 .PlaygroundEditorTheme__diffRemove:has(br:only-child) {
   border-left: 10px solid #ffebe9; /* Light red border */
 }
+
+/* Dark mode styles for code block gutters only */
+[data-theme="dark"] .PlaygroundEditorTheme__code:before {
+  background-color: #2d2d2d;
+  border-right: 1px solid #404040;
+  color: #858585;
+}

@@ -8,16 +8,68 @@
 
 import type {JSX} from 'react';
 
+import {$isCodeNode} from '@lexical/code';
 import {registerCodeHighlighting} from '@lexical/code-shiki';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
+import {$getRoot, $isElementNode} from 'lexical';
 import {useEffect} from 'react';
+
+import {useTheme} from '../../context/ThemeContext';
+
+// Theme mapping for automatic light/dark switching
+const THEME_MAPPING = {
+  light: 'github-light',
+  dark: 'dark-plus',
+} as const;
 
 export default function CodeHighlightShikiPlugin(): JSX.Element | null {
   const [editor] = useLexicalComposerContext();
+  const {theme} = useTheme();
 
   useEffect(() => {
     return registerCodeHighlighting(editor);
   }, [editor]);
+
+  // Update all code block themes when global theme changes
+  useEffect(() => {
+    const targetTheme = THEME_MAPPING[theme];
+    console.log('Theme changed to:', theme, 'Setting code theme to:', targetTheme);
+
+    editor.update(() => {
+      const root = $getRoot();
+      const codeNodes: any[] = [];
+
+      // Find all code nodes
+      function findCodeNodes(node: any): void {
+        if ($isCodeNode(node)) {
+          codeNodes.push(node);
+        }
+        if ($isElementNode(node)) {
+          const children = node.getChildren();
+          for (const child of children) {
+            findCodeNodes(child);
+          }
+        }
+      }
+
+      findCodeNodes(root);
+
+      console.log('Found', codeNodes.length, 'code nodes');
+
+      // Update theme for code nodes that don't have a manually set theme
+      // or update all code nodes (you can adjust this logic as needed)
+      codeNodes.forEach((codeNode) => {
+        const currentTheme = codeNode.getTheme();
+        console.log('Code node current theme:', currentTheme, 'Will update:', !currentTheme || currentTheme === THEME_MAPPING.light || currentTheme === THEME_MAPPING.dark);
+        // Only update if no theme is set or if it's one of our mapped themes
+        // if (!currentTheme || currentTheme === THEME_MAPPING.light || currentTheme === THEME_MAPPING.dark) {
+          codeNode.setTheme(targetTheme);
+          codeNode.setStyle('');
+          console.log('Updated code node theme to:', targetTheme);
+        // }
+      });
+    });
+  }, [editor, theme]);
 
   return null;
 }

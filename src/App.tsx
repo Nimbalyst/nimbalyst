@@ -22,6 +22,7 @@ import {
 import {DEFAULT_EDITOR_CONFIG, type EditorConfig} from './EditorConfig';
 import {FlashMessageContext} from './context/FlashMessageContext';
 import {SharedHistoryContext} from './context/SharedHistoryContext';
+import {ThemeProvider} from './context/ThemeContext';
 import {ToolbarContext} from './context/ToolbarContext';
 import Editor from './Editor';
 import {createFileService, type FileService} from './FileService';
@@ -121,17 +122,19 @@ function StravaEditor({config = DEFAULT_EDITOR_CONFIG}: StravaEditorProps): JSX.
   };
 
   return (
-    <LexicalComposer initialConfig={initialConfig}>
-      <SharedHistoryContext>
-        <TableContext>
-          <ToolbarContext>
-            <div className="editor-shell">
-              <Editor config={config} />
-            </div>
-          </ToolbarContext>
-        </TableContext>
-      </SharedHistoryContext>
-    </LexicalComposer>
+    <ThemeProvider>
+      <LexicalComposer initialConfig={initialConfig}>
+        <SharedHistoryContext>
+          <TableContext>
+            <ToolbarContext>
+              <div className="editor-shell">
+                <Editor config={config} />
+              </div>
+            </ToolbarContext>
+          </TableContext>
+        </SharedHistoryContext>
+      </LexicalComposer>
+    </ThemeProvider>
   );
 }
 
@@ -328,9 +331,11 @@ function DevModeEditor(): JSX.Element {
 // For development builds - fullscreen editor with file operations
 export default function App(): JSX.Element {
   return (
-    <FlashMessageContext>
-      <DevModeEditor />
-    </FlashMessageContext>
+    <ThemeProvider>
+      <FlashMessageContext>
+        <DevModeEditor />
+      </FlashMessageContext>
+    </ThemeProvider>
   );
 }
 

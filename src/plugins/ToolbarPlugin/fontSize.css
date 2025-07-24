@@ -55,3 +55,20 @@ button.font-increment {
   padding: 0px;
   margin-left: 3px;
 }
+
+/* Dark mode styles for font size input */
+[data-theme="dark"] .font-size-input {
+  background-color: #3d3d3d;
+  color: #ccc;
+  border-color: #555;
+}
+
+[data-theme="dark"] .font-size-input:disabled {
+  background-color: #2d2d2d;
+  color: #666;
+}
+
+[data-theme="dark"] .add-icon,
+[data-theme="dark"] .minus-icon {
+  filter: invert(1);
+}

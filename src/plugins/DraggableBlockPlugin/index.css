@@ -44,3 +44,16 @@
   opacity: 0;
   will-change: transform;
 }
+
+/* Dark mode styles for draggable block plugin */
+[data-theme="dark"] .draggable-block-menu .icon {
+  filter: invert(1);
+}
+
+[data-theme="dark"] .draggable-block-menu .icon-plus {
+  filter: invert(1);
+}
+
+[data-theme="dark"] .draggable-block-menu .icon:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
