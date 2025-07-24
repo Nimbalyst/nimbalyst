@@ -66,9 +66,10 @@ import {
   SELECTION_CHANGE_COMMAND,
   UNDO_COMMAND,
 } from 'lexical';
-import {Dispatch, useCallback, useEffect, useState} from 'react';
+import {Dispatch, useCallback, useEffect, useRef, useState} from 'react';
 
 import {useSettings} from '../../context/SettingsContext';
+import {FileOperationsState, FileOperations} from '../../hooks/useFileOperations';
 import {
   blockTypeToBlockName,
   useToolbarState,
@@ -556,16 +557,95 @@ function $findTopLevelElement(node: LexicalNode) {
   return topLevelElement;
 }
 
+function FileDropDown({
+  fileState,
+  fileOperations,
+  disabled = false,
+}: {
+  fileState: FileOperationsState;
+  fileOperations: FileOperations;
+  disabled?: boolean;
+}): JSX.Element {
+  // Helper function for keyboard shortcut display
+  const getShortcutDisplay = (key: string, shift = false) => {
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    const modifier = isMac ? '⌘' : 'Ctrl+';
+    const shiftKey = shift ? (isMac ? '⇧' : 'Shift+') : '';
+    return `${modifier}${shiftKey}${key.toUpperCase()}`;
+  };
+
+  const displayName = fileState.currentFileName || 'Untitled';
+  const dirtyIndicator = fileState.isDirty ? ' •' : '';
+
+  return (
+    <DropDown
+      disabled={disabled}
+      buttonClassName="toolbar-item spaced"
+      buttonLabel={`${displayName}${dirtyIndicator}`}
+      buttonIconClassName="icon file-text"
+      buttonAriaLabel="File operations">
+      <DropDownItem
+        className="item wide"
+        onClick={() => fileOperations.handleNewFile()}>
+        <div className="icon-text-container">
+          <i className="icon plus" />
+          <span className="text">New</span>
+        </div>
+        <span className="shortcut">{getShortcutDisplay('N')}</span>
+      </DropDownItem>
+      <DropDownItem
+        className="item wide"
+        onClick={() => fileOperations.handleOpenFile()}>
+        <div className="icon-text-container">
+          <i className="icon import" />
+          <span className="text">Open...</span>
+        </div>
+        <span className="shortcut">{getShortcutDisplay('O')}</span>
+      </DropDownItem>
+      <Divider />
+      <DropDownItem
+        className="item wide"
+        onClick={() => {
+          if (fileState.internalFileService) {
+            const content = fileOperations.getMarkdownContent();
+            fileOperations.saveContent(content, true);
+          } else {
+            fileOperations.handleSaveAs();
+          }
+        }}>
+        <div className="icon-text-container">
+          <i className="icon export" />
+          <span className="text">Save</span>
+        </div>
+        <span className="shortcut">{getShortcutDisplay('S')}</span>
+      </DropDownItem>
+      <DropDownItem
+        className="item wide"
+        onClick={() => fileOperations.handleSaveAs()}>
+        <div className="icon-text-container">
+          <i className="icon export" />
+          <span className="text">Save As...</span>
+        </div>
+        <span className="shortcut">{getShortcutDisplay('S', true)}</span>
+      </DropDownItem>
+    </DropDown>
+  );
+}
+
 export default function ToolbarPlugin({
   editor,
   activeEditor,
   setActiveEditor,
   setIsLinkEditMode,
+  fileState,
+  fileOperations,
 }: {
   editor: LexicalEditor;
   activeEditor: LexicalEditor;
   setActiveEditor: Dispatch<LexicalEditor>;
   setIsLinkEditMode: Dispatch<boolean>;
+  fileState?: FileOperationsState;
+  fileOperations?: FileOperations;
 }): JSX.Element {
   const [selectedElementKey, setSelectedElementKey] = useState<NodeKey | null>(
     null,
@@ -909,6 +989,16 @@ export default function ToolbarPlugin({
 
   return (
     <div className="toolbar">
+      {fileState && fileOperations && (
+        <>
+          <FileDropDown
+            fileState={fileState}
+            fileOperations={fileOperations}
+            disabled={!isEditable}
+          />
+          <Divider />
+        </>
+      )}
       <button
         className="toolbar-item spaced"
         onClick={handleMarkdownToggle}

@@ -1377,7 +1377,8 @@ i.page-break,
   cursor: pointer;
 }
 
-i.file-text {
+i.file-text,
+span.file-text {
   background-image: url(images/icons/file-earmark-text.svg);
   background-size: contain;
   background-repeat: no-repeat;
@@ -1933,7 +1934,8 @@ button.item.dropdown-item-active i {
 [data-theme="dark"] .icon.number,
 [data-theme="dark"] .icon.quote,
 [data-theme="dark"] .icon.code,
-[data-theme="dark"] i.file-text {
+[data-theme="dark"] i.file-text,
+[data-theme="dark"] span.file-text {
   filter: invert(1);
 }
 
