@@ -22,6 +22,18 @@ A rich text editor built with Meta's Lexical framework, transformed from the Lex
 
 ## Installation
 
+### As a Library (Recommended)
+
+```bash
+npm install stravu-editor
+# or
+yarn add stravu-editor
+# or
+pnpm add stravu-editor
+```
+
+### For Development
+
 ```bash
 # Install dependencies
 pnpm install
@@ -29,7 +41,10 @@ pnpm install
 # Start development server
 pnpm run dev
 
-# Build for development
+# Build library for distribution
+pnpm run build
+
+# Build for development testing
 pnpm run build-dev
 
 # Build for production
@@ -57,22 +72,37 @@ Visit `http://localhost:4000` to access the editor with:
 
 ### As a Component
 
-Import and use the `StravaEditor` component in your React application:
+Import and use the `StravuEditor` component in your React application:
 
 ```tsx
-import { StravaEditor } from './src/App';
-import { EditorConfig } from './src/EditorConfig';
+import { StravuEditor } from 'stravu-editor';
+import 'stravu-editor/style.css'; // Required: Import the CSS!
 
-const config: EditorConfig = {
+const config = {
   isRichText: true,
   autoSaveInterval: 3000,
+  markdownOnly: false,
   // ... other configuration options
 };
 
 function MyApp() {
-  return <StravaEditor config={config} />;
+  return (
+    <div style={{ height: '400px' }}>
+      <StravuEditor config={config} />
+    </div>
+  );
 }
 ```
+
+### ⚠️ Required CSS Import
+
+**Important**: You must import the editor's CSS for it to work properly:
+
+```tsx
+import 'stravu-editor/style.css';
+```
+
+Without this import, the editor will appear unstyled and broken.
 
 ## Configuration
 
@@ -224,6 +254,32 @@ __tests__/regression/
 - **Save**: Cmd+S (Mac) / Ctrl+S (Windows) for manual save
 - **Auto-save**: Automatic saving on content changes and tab blur
 - **File Management**: Use toolbar buttons for file operations
+
+## Troubleshooting
+
+### Editor appears unstyled/broken
+**Problem**: The editor shows up but looks completely unstyled or broken.
+
+**Solution**: Make sure you import the CSS file:
+```tsx
+import 'stravu-editor/style.css';
+```
+
+### Missing Lexical dependencies
+**Problem**: Build errors about missing `@lexical/*` packages.
+
+**Solution**: Install the required peer dependencies:
+```bash
+npm install lexical @lexical/react @lexical/rich-text @lexical/plain-text @lexical/code @lexical/code-shiki @lexical/list @lexical/link @lexical/table @lexical/utils @lexical/selection @lexical/markdown @lexical/clipboard @lexical/file @lexical/hashtag @lexical/mark @lexical/overflow @lexical/yjs
+```
+
+### TypeScript errors
+**Problem**: TypeScript complains about missing type definitions.
+
+**Solution**: The library includes TypeScript definitions. Make sure you're importing from the correct path:
+```tsx
+import { StravuEditor, type EditorConfig } from 'stravu-editor';
+```
 
 ## Browser Support
 

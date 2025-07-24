@@ -13,7 +13,7 @@ import * as React from 'react';
 
 import Modal from '../ui/Modal';
 
-export default function useModal(): [
+function useModal(): [
   JSX.Element | null,
   (title: string, showModal: (onClose: () => void) => JSX.Element) => void,
 ] {
@@ -60,3 +60,6 @@ export default function useModal(): [
 
   return [modal, showModal];
 }
+
+export default useModal;
+export { useModal };

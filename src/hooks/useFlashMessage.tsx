@@ -11,6 +11,9 @@ import {
   useFlashMessageContext,
 } from '../context/FlashMessageContext';
 
-export default function useFlashMessage(): ShowFlashMessage {
+function useFlashMessage(): ShowFlashMessage {
   return useFlashMessageContext();
 }
+
+export default useFlashMessage;
+export { useFlashMessage };

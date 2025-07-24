@@ -1,0 +1,33 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "declarationDir": "./dist",
+    "emitDeclarationOnly": true,
+    "outDir": "./dist",
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/index.ts",
+    "src/App.tsx",
+    "src/Editor.tsx",
+    "src/EditorConfig.ts",
+    "src/FileService.ts",
+    "src/hooks/**/*",
+    "src/context/**/*",
+    "src/themes/**/*",
+    "src/nodes/**/*",
+    "src/plugins/**/*",
+    "src/ui/**/*",
+    "src/utils/**/*"
+  ],
+  "exclude": [
+    "src/index.tsx",
+    "src/setupEnv.ts",
+    "src/appSettings.ts",
+    "src/Settings.tsx",
+    "src/server/**/*",
+    "**/*.test.*",
+    "**/*.spec.*"
+  ]
+}

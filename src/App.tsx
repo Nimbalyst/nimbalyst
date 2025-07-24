@@ -6,111 +6,111 @@
  *
  */
 
-import type {JSX} from 'react';
+import type { JSX } from 'react';
 
-import {LexicalComposer} from '@lexical/react/LexicalComposer';
+import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import {
-  $createParagraphNode,
-  $createTextNode,
-  $getRoot,
-  $isTextNode,
-  DOMConversionMap,
-  TextNode,
+    $createParagraphNode,
+    $createTextNode,
+    $getRoot,
+    $isTextNode,
+    DOMConversionMap,
+    TextNode,
 } from 'lexical';
 
-import {DEFAULT_EDITOR_CONFIG, type EditorConfig} from './EditorConfig';
-import {FlashMessageContext} from './context/FlashMessageContext';
-import {SharedHistoryContext} from './context/SharedHistoryContext';
-import {TableContext} from './plugins/TablePlugin';
-import {ToolbarContext} from './context/ToolbarContext';
-import {ThemeProvider} from './context/ThemeContext';
+import { DEFAULT_EDITOR_CONFIG, type EditorConfig } from './EditorConfig';
+import { FlashMessageContext } from './context/FlashMessageContext';
+import { SharedHistoryContext } from './context/SharedHistoryContext';
+import { TableContext } from './plugins/TablePlugin';
+import { ToolbarContext } from './context/ToolbarContext';
+import { ThemeProvider } from './context/ThemeContext';
 import Editor from './Editor';
 import PlaygroundEditorTheme from './themes/PlaygroundEditorTheme';
 import EditorNodes from "./nodes/EditorNodes";
 
 const EMPTY_CONTENT = '';
 
-export interface StravaEditorProps {
-  config?: EditorConfig;
+export interface StravuEditorProps {
+    config?: EditorConfig;
 }
 
-function StravaEditor({config = DEFAULT_EDITOR_CONFIG}: StravaEditorProps): JSX.Element {
-  const initialConfig = {
-    editorState: config.emptyEditor ? undefined : $createEmptyEditor,
-    html: {import: buildImportMap()},
-    namespace: 'StravaEditor',
-    nodes: [...EditorNodes],
-    onError: (error: Error) => {
-      throw error;
-    },
-    theme: PlaygroundEditorTheme,
-  };
+function StravuEditor({config = DEFAULT_EDITOR_CONFIG}: StravuEditorProps): JSX.Element {
+    const initialConfig = {
+        editorState: config.emptyEditor ? undefined : $createEmptyEditor,
+        html: {import: buildImportMap()},
+        namespace: 'StravuEditor',
+        nodes: [...EditorNodes],
+        onError: (error: Error) => {
+            throw error;
+        },
+        theme: PlaygroundEditorTheme,
+    };
 
-  return (
-    <LexicalComposer initialConfig={initialConfig}>
-      <SharedHistoryContext>
-        <TableContext>
-          <ToolbarContext>
-            <div className="editor-shell">
-              <Editor config={config} />
-            </div>
-          </ToolbarContext>
-        </TableContext>
-      </SharedHistoryContext>
-    </LexicalComposer>
-  );
+    return (
+        <ThemeProvider>
+            <LexicalComposer initialConfig={initialConfig}>
+                <SharedHistoryContext>
+                    <TableContext>
+                        <ToolbarContext>
+                            <div className="editor-shell">
+                                <Editor config={config}/>
+                            </div>
+                        </ToolbarContext>
+                    </TableContext>
+                </SharedHistoryContext>
+            </LexicalComposer>
+        </ThemeProvider>
+    );
 }
 
 function $createEmptyEditor() {
-  const root = $getRoot();
-  if (root.getFirstChild() === null) {
-    const paragraph = $createParagraphNode();
-    root.append(paragraph);
-  }
+    const root = $getRoot();
+    if (root.getFirstChild() === null) {
+        const paragraph = $createParagraphNode();
+        root.append(paragraph);
+    }
 }
 
 // Map for HTML paste import
 function buildImportMap(): DOMConversionMap {
-  const importMap: DOMConversionMap = {};
+    const importMap: DOMConversionMap = {};
 
-  // Import text nodes
-  importMap['#text'] = () => ({
-    conversion: (element: Node): null => {
-      const textContent = element.textContent;
-      if (typeof textContent === 'string' && textContent.trim() !== '') {
-        return {node: $createTextNode(textContent)};
-      }
-      return null;
-    },
-    priority: 0,
-  });
+    // Import text nodes
+    importMap['#text'] = () => ({
+        conversion: (element: Node): null => {
+            const textContent = element.textContent;
+            if (typeof textContent === 'string' && textContent.trim() !== '') {
+                return {node: $createTextNode(textContent)};
+            }
+            return null;
+        },
+        priority: 0,
+    });
 
-  return importMap;
+    return importMap;
 }
 
 // Simple wrapper component
 function DevModeEditor(): JSX.Element {
-  const config: EditorConfig = {
-    ...DEFAULT_EDITOR_CONFIG,
-  };
+    const config: EditorConfig = {
+        ...DEFAULT_EDITOR_CONFIG,
+    };
 
-  return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <StravaEditor config={config} />
-    </div>
-  );
+    return (
+        <div style={{height: '100vh', display: 'flex', flexDirection: 'column'}}>
+            <StravuEditor config={config}/>
+        </div>
+    );
 }
 
 // For development builds - fullscreen editor with file operations
 export default function App(): JSX.Element {
-  return (
-    <ThemeProvider>
-      <FlashMessageContext>
-        <DevModeEditor />
-      </FlashMessageContext>
-    </ThemeProvider>
-  );
+    return (
+        <FlashMessageContext>
+            <DevModeEditor/>
+        </FlashMessageContext>
+    );
 }
 
 // Export the main component for use in other projects
-export {StravaEditor};
+export { StravuEditor };

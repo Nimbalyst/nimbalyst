@@ -26,7 +26,7 @@ interface ThemeProviderProps {
 export function ThemeProvider({children}: ThemeProviderProps): JSX.Element {
   const [theme, setThemeState] = useState<Theme>(() => {
     // Check localStorage first, then system preference
-    const savedTheme = localStorage.getItem('strava-editor-theme') as Theme;
+    const savedTheme = localStorage.getItem('stravu-editor-theme') as Theme;
     if (savedTheme && (savedTheme === 'light' || savedTheme === 'dark')) {
       return savedTheme;
     }
@@ -41,7 +41,7 @@ export function ThemeProvider({children}: ThemeProviderProps): JSX.Element {
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
-    localStorage.setItem('strava-editor-theme', newTheme);
+    localStorage.setItem('stravu-editor-theme', newTheme);
     document.documentElement.setAttribute('data-theme', newTheme);
   };
 
@@ -60,7 +60,7 @@ export function ThemeProvider({children}: ThemeProviderProps): JSX.Element {
     
     const handleChange = (e: MediaQueryListEvent) => {
       // Only update if no theme is saved in localStorage
-      if (!localStorage.getItem('strava-editor-theme')) {
+      if (!localStorage.getItem('stravu-editor-theme')) {
         setTheme(e.matches ? 'dark' : 'light');
       }
     };

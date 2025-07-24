@@ -20,7 +20,40 @@ const require = createRequire(import.meta.url);
 
 // https://vitejs.dev/config/
 export default defineConfig(({mode}) => ({
-  build: {
+  build: mode === 'library' ? {
+    lib: {
+      entry: new URL('./src/index.ts', import.meta.url).pathname,
+      name: 'StravuEditor',
+      fileName: 'index',
+      formats: ['es'],
+    },
+    rollupOptions: {
+      external: [
+        'react',
+        'react-dom',
+        'react/jsx-runtime',
+        // Keep Lexical dependencies as external since they're peer deps
+        /^@lexical\/.*/,
+        'lexical',
+        // Other major dependencies
+        '@excalidraw/excalidraw',
+        'katex',
+        'prettier',
+        'yjs',
+        'y-websocket',
+        'lodash-es',
+        'react-error-boundary',
+      ],
+      output: {
+        globals: {
+          'react': 'React',
+          'react-dom': 'ReactDOM',
+          'react/jsx-runtime': 'jsxRuntime',
+        },
+      },
+    },
+    cssCodeSplit: false,
+  } : {
     outDir: 'build',
     rollupOptions: {
       input: {
