@@ -7,6 +7,7 @@
  */
 
 import type { JSX } from 'react';
+import React from 'react';
 
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import {
@@ -23,7 +24,7 @@ import { FlashMessageContext } from './context/FlashMessageContext';
 import { SharedHistoryContext } from './context/SharedHistoryContext';
 import { TableContext } from './plugins/TablePlugin';
 import { ToolbarContext } from './context/ToolbarContext';
-import { ThemeProvider } from './context/ThemeContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 import Editor from './Editor';
 import PlaygroundEditorTheme from './themes/PlaygroundEditorTheme';
 import EditorNodes from "./nodes/EditorNodes";
@@ -34,7 +35,9 @@ export interface StravuEditorProps {
     config?: EditorConfig;
 }
 
-function StravuEditor({config = DEFAULT_EDITOR_CONFIG}: StravuEditorProps): JSX.Element {
+function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
+    const { theme } = useTheme();
+    
     const initialConfig = {
         editorState: config.emptyEditor ? undefined : $createEmptyEditor,
         html: {import: buildImportMap()},
@@ -47,7 +50,7 @@ function StravuEditor({config = DEFAULT_EDITOR_CONFIG}: StravuEditorProps): JSX.
     };
 
     return (
-        <ThemeProvider initialTheme={config.theme}>
+        <div className="stravu-editor" data-theme={theme}>
             <LexicalComposer initialConfig={initialConfig}>
                 <SharedHistoryContext>
                     <TableContext>
@@ -59,6 +62,14 @@ function StravuEditor({config = DEFAULT_EDITOR_CONFIG}: StravuEditorProps): JSX.
                     </TableContext>
                 </SharedHistoryContext>
             </LexicalComposer>
+        </div>
+    );
+}
+
+function StravuEditor({config = DEFAULT_EDITOR_CONFIG}: StravuEditorProps): JSX.Element {
+    return (
+        <ThemeProvider initialTheme={config.theme}>
+            <StravuEditorInner config={config} />
         </ThemeProvider>
     );
 }
@@ -95,6 +106,12 @@ function DevModeEditor(): JSX.Element {
     const config: EditorConfig = {
         ...DEFAULT_EDITOR_CONFIG,
     };
+
+    // Reset body margin for dev mode
+    React.useEffect(() => {
+        document.body.style.margin = '0';
+        document.body.style.padding = '0';
+    }, []);
 
     return (
         <div style={{height: '100vh', display: 'flex', flexDirection: 'column'}}>

@@ -9,22 +9,26 @@
 @import 'https://fonts.googleapis.com/css?family=Reenie+Beanie';
 @import './themes/DarkEditorTheme.css';
 
-html, body {
+.stravu-editor {
   margin: 0;
   padding: 0;
   height: 100%;
+  width: 100%;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, '.SFNSText-Regular',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: #eee;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 #root {
   height: 100%;
 }
 
-header {
+.stravu-editor header {
   max-width: 580px;
   margin: auto;
   position: relative;
@@ -32,13 +36,13 @@ header {
   justify-content: center;
 }
 
-header a {
+.stravu-editor header a {
   max-width: 220px;
   margin: 20px 0 0 0;
   display: block;
 }
 
-header img {
+.stravu-editor header img {
   display: block;
   height: 100%;
   width: 100%;
@@ -51,7 +55,7 @@ header h1 {
   margin: 20px 0 0 0;
 }
 
-.editor-shell {
+.stravu-editor .editor-shell {
   margin: 0;
   border-radius: 0;
   width: 100%;
@@ -62,9 +66,11 @@ header h1 {
   font-weight: 400;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
-.editor-shell .editor-container {
+.stravu-editor .editor-shell .editor-container {
   background: #fff;
   position: relative;
   display: block;
@@ -72,9 +78,14 @@ header h1 {
   border-bottom-right-radius: 0;
   flex: 1;
   overflow: hidden;
+  min-height: 0;
 }
 
-.editor-shell .editor-container.tree-view {
+.stravu-editor[data-theme="dark"] .editor-shell .editor-container {
+  background: var(--stravu-editor-bg);
+}
+
+.stravu-editor .editor-shell .editor-container.tree-view {
   border-radius: 0;
 }
 
@@ -83,7 +94,7 @@ header h1 {
   border-top-right-radius: 0;
 }
 
-.editor-scroller {
+.stravu-editor .editor-scroller {
   height: 100%;
   max-width: 100%;
   border: 0;
@@ -92,9 +103,11 @@ header h1 {
   outline: 0;
   z-index: 0;
   overflow: auto;
+  flex: 1;
+  min-height: 0;
 }
 
-.editor {
+.stravu-editor .editor {
   flex: auto;
   max-width: 100%;
   height: 100%;
@@ -107,7 +120,7 @@ header h1 {
   width: 100%;
 }
 
-pre {
+.stravu-editor pre {
   line-height: 1.1;
   background: #222;
   color: #fff;
@@ -131,12 +144,12 @@ pre {
   border-bottom-right-radius: 10px;
 }
 
-pre::-webkit-scrollbar {
+.stravu-editor pre::-webkit-scrollbar {
   background: transparent;
   width: 10px;
 }
 
-pre::-webkit-scrollbar-thumb {
+.stravu-editor pre::-webkit-scrollbar-thumb {
   background: #999;
 }
 
@@ -284,15 +297,12 @@ pre::-webkit-scrollbar-thumb {
   border-radius: 8px;
   max-height: 200px;
   overflow-y: scroll;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 .typeahead-popover ul::-webkit-scrollbar {
   display: none;
-}
-
-.typeahead-popover ul {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
 }
 
 .typeahead-popover ul li {
@@ -625,7 +635,7 @@ i.page-break,
 }
 
 .link-editor .button.active,
-.toolbar .button.active {
+.stravu-editor .toolbar .button.active {
   background-color: rgb(223, 232, 250);
 }
 
@@ -768,7 +778,7 @@ i.page-break,
   color: red;
 }
 
-.dropdown {
+.stravu-editor .dropdown {
   z-index: 100;
   display: block;
   position: fixed;
@@ -779,7 +789,7 @@ i.page-break,
   background-color: #fff;
 }
 
-.dropdown .item {
+.stravu-editor .dropdown .item {
   margin: 0 8px 0 8px;
   padding: 8px;
   color: #050505;
@@ -798,12 +808,12 @@ i.page-break,
   min-width: 100px;
 }
 
-.dropdown .item.wide {
+.stravu-editor .dropdown .item.wide {
   align-items: center;
   width: 260px;
 }
 
-.dropdown .item.wide .icon-text-container {
+.stravu-editor .dropdown .item.wide .icon-text-container {
   display: flex;
 
   .text {
@@ -811,38 +821,38 @@ i.page-break,
   }
 }
 
-.dropdown .item .shortcut {
+.stravu-editor .dropdown .item .shortcut {
   color: #939393;
   align-self: flex-end;
 }
 
-.dropdown .item .active {
+.stravu-editor .dropdown .item .active {
   display: flex;
   width: 20px;
   height: 20px;
   background-size: contain;
 }
 
-.dropdown .item:first-child {
+.stravu-editor .dropdown .item:first-child {
   margin-top: 8px;
 }
 
-.dropdown .item:last-child {
+.stravu-editor .dropdown .item:last-child {
   margin-bottom: 8px;
 }
 
-.dropdown .item:hover {
+.stravu-editor .dropdown .item:hover {
   background-color: #eee;
 }
 
-.dropdown .item .text {
+.stravu-editor .dropdown .item .text {
   display: flex;
   line-height: 20px;
   flex-grow: 1;
   min-width: 150px;
 }
 
-.dropdown .item .icon {
+.stravu-editor .dropdown .item .icon {
   display: flex;
   width: 20px;
   height: 20px;
@@ -854,7 +864,7 @@ i.page-break,
   background-repeat: no-repeat;
 }
 
-.dropdown .divider {
+.stravu-editor .dropdown .divider {
   width: auto;
   background-color: #eee;
   margin: 4px 8px;
@@ -862,19 +872,19 @@ i.page-break,
 }
 
 @media screen and (max-width: 1100px) {
-  .dropdown-button-text {
+  .stravu-editor .dropdown-button-text {
     display: none !important;
   }
 
-  .dialog-dropdown > .dropdown-button-text {
+  .stravu-editor .dialog-dropdown > .dropdown-button-text {
     display: flex !important;
   }
 
-  .font-size .dropdown-button-text {
+  .stravu-editor .font-size .dropdown-button-text {
     display: flex !important;
   }
 
-  .code-language .dropdown-button-text {
+  .stravu-editor .code-language .dropdown-button-text {
     display: flex !important;
   }
 }
@@ -1514,23 +1524,29 @@ button.action-button:disabled {
   text-align: right;
 }
 
-.toolbar {
+.stravu-editor .toolbar {
   display: flex;
   margin-bottom: 1px;
   background: #fff;
-  padding: 4px;
+  padding: 2px;
   border-top-left-radius: 10px;
+  flex-shrink: 0;
   border-top-right-radius: 10px;
   vertical-align: middle;
   overflow: auto;
   height: 36px;
   position: sticky;
   top: 0;
+}
+
+.stravu-editor[data-theme="dark"] .toolbar {
+  background: var(--stravu-toolbar-bg);
+
   z-index: 2;
   overflow-y: hidden; /* disable vertical scroll*/
 }
 
-button.toolbar-item {
+.stravu-editor button.toolbar-item {
   border: 0;
   display: flex;
   background: none;
@@ -1543,15 +1559,15 @@ button.toolbar-item {
   justify-content: space-between;
 }
 
-button.toolbar-item:disabled {
+.stravu-editor button.toolbar-item:disabled {
   cursor: not-allowed;
 }
 
-button.toolbar-item.spaced {
+.stravu-editor button.toolbar-item.spaced {
   margin-right: 2px;
 }
 
-button.toolbar-item i.format {
+.stravu-editor button.toolbar-item i.format {
   background-size: contain;
   display: inline-block;
   height: 18px;
@@ -1561,35 +1577,35 @@ button.toolbar-item i.format {
   opacity: 0.6;
 }
 
-button.toolbar-item:disabled .icon,
-button.toolbar-item:disabled .text,
-button.toolbar-item:disabled i.format,
-button.toolbar-item:disabled .chevron-down {
+.stravu-editor button.toolbar-item:disabled .icon,
+.stravu-editor button.toolbar-item:disabled .text,
+.stravu-editor button.toolbar-item:disabled i.format,
+.stravu-editor button.toolbar-item:disabled .chevron-down {
   opacity: 0.2;
 }
 
-button.toolbar-item.active {
+.stravu-editor button.toolbar-item.active {
   background-color: rgba(223, 232, 250, 0.3);
 }
 
-button.toolbar-item.active i {
+.stravu-editor button.toolbar-item.active i {
   opacity: 1;
 }
 
-.toolbar-item:hover:not([disabled]) {
+.stravu-editor .toolbar-item:hover:not([disabled]) {
   background-color: #eee;
 }
 
-.toolbar-item.font-family .text {
+.stravu-editor .toolbar-item.font-family .text {
   display: block;
   max-width: 40px;
 }
 
-.toolbar .code-language {
+.stravu-editor .toolbar .code-language {
   width: 150px;
 }
 
-.toolbar .toolbar-item .text {
+.stravu-editor .toolbar .toolbar-item .text {
   display: flex;
   line-height: 20px;
   vertical-align: middle;
@@ -1602,7 +1618,7 @@ button.toolbar-item.active i {
   padding-right: 10px;
 }
 
-.toolbar .toolbar-item .icon {
+.stravu-editor .toolbar .toolbar-item .icon {
   display: flex;
   width: 20px;
   height: 20px;
@@ -1612,8 +1628,8 @@ button.toolbar-item.active i {
   background-size: contain;
 }
 
-.toolbar i.chevron-down,
-.toolbar-item i.chevron-down {
+.stravu-editor .toolbar i.chevron-down,
+.stravu-editor .toolbar-item i.chevron-down {
   margin-top: 3px;
   width: 16px;
   height: 16px;
@@ -1621,7 +1637,7 @@ button.toolbar-item.active i {
   user-select: none;
 }
 
-.toolbar i.chevron-down.inside {
+.stravu-editor .toolbar i.chevron-down.inside {
   width: 16px;
   height: 16px;
   display: flex;
@@ -1631,7 +1647,7 @@ button.toolbar-item.active i {
   pointer-events: none;
 }
 
-.toolbar .divider {
+.stravu-editor .toolbar .divider {
   width: 1px;
   background-color: #eee;
   margin: 0 4px;
@@ -1799,11 +1815,11 @@ button.item i {
   opacity: 0.6;
 }
 
-button.item.dropdown-item-active {
+.stravu-editor button.item.dropdown-item-active {
   background-color: rgba(223, 232, 250, 0.3);
 }
 
-button.item.dropdown-item-active i {
+.stravu-editor button.item.dropdown-item-active i {
   opacity: 1;
 }
 
@@ -1829,12 +1845,12 @@ button.item.dropdown-item-active i {
   width: 100%;
 }
 
-.toolbar .block-controls {
+.stravu-editor .toolbar .block-controls {
   display: flex;
   align-items: center;
 }
 
-.toolbar .block-controls .dropdown-button-text {
+.stravu-editor .toolbar .block-controls .dropdown-button-text {
   width: 7em;
   text-align: left;
   overflow: hidden;
@@ -1844,101 +1860,101 @@ button.item.dropdown-item-active i {
 }
 
 /* Invert all SVG background images in dark mode */
-[data-theme="dark"] #options-button::after,
-[data-theme="dark"] #test-recorder-button::after,
-[data-theme="dark"] #paste-log-button::after,
-[data-theme="dark"] #docs-button::after,
-[data-theme="dark"] #test-recorder-button-snapshot::after,
-[data-theme="dark"] #test-recorder-button-copy::after,
-[data-theme="dark"] #test-recorder-button-download::after,
-[data-theme="dark"] i.palette,
-[data-theme="dark"] i.bucket,
-[data-theme="dark"] i.bold,
-[data-theme="dark"] i.italic,
-[data-theme="dark"] i.clear,
-[data-theme="dark"] i.code,
-[data-theme="dark"] i.underline,
-[data-theme="dark"] i.uppercase,
-[data-theme="dark"] i.lowercase,
-[data-theme="dark"] i.capitalize,
-[data-theme="dark"] i.strikethrough,
-[data-theme="dark"] i.subscript,
-[data-theme="dark"] i.superscript,
-[data-theme="dark"] i.highlight,
-[data-theme="dark"] i.link,
-[data-theme="dark"] i.horizontal-rule,
-[data-theme="dark"] i.plus,
-[data-theme="dark"] .icon.plus,
-[data-theme="dark"] i.caret-right,
-[data-theme="dark"] i.dropdown-more,
-[data-theme="dark"] .icon.dropdown-more,
-[data-theme="dark"] i.font-color,
-[data-theme="dark"] i.font-family,
-[data-theme="dark"] .icon.font-family,
-[data-theme="dark"] i.bg-color,
-[data-theme="dark"] i.image,
-[data-theme="dark"] i.table,
-[data-theme="dark"] i.close,
-[data-theme="dark"] i.figma,
-[data-theme="dark"] i.poll,
-[data-theme="dark"] i.columns,
-[data-theme="dark"] i.tweet,
-[data-theme="dark"] i.youtube,
-[data-theme="dark"] i.align-left,
-[data-theme="dark"] .icon.left-align,
-[data-theme="dark"] i.left-align,
-[data-theme="dark"] i.align-center,
-[data-theme="dark"] .icon.center-align,
-[data-theme="dark"] i.center-align,
-[data-theme="dark"] i.align-right,
-[data-theme="dark"] .icon.right-align,
-[data-theme="dark"] i.right-align,
-[data-theme="dark"] i.align-justify,
-[data-theme="dark"] .icon.justify-align,
-[data-theme="dark"] i.justify-align,
-[data-theme="dark"] i.vertical-align-top,
-[data-theme="dark"] i.vertical-align-middle,
-[data-theme="dark"] i.vertical-align-bottom,
-[data-theme="dark"] i.indent,
-[data-theme="dark"] i.markdown,
-[data-theme="dark"] i.outdent,
-[data-theme="dark"] i.undo,
-[data-theme="dark"] i.redo,
-[data-theme="dark"] i.sticky,
-[data-theme="dark"] i.mic,
-[data-theme="dark"] i.import,
-[data-theme="dark"] i.export,
-[data-theme="dark"] i.send,
-[data-theme="dark"] i.diagram-2,
-[data-theme="dark"] i.user,
-[data-theme="dark"] i.equation,
-[data-theme="dark"] i.gif,
-[data-theme="dark"] i.copy,
-[data-theme="dark"] i.clipboard,
-[data-theme="dark"] i.success,
-[data-theme="dark"] i.prettier,
-[data-theme="dark"] i.prettier-error,
-[data-theme="dark"] i.cut,
-[data-theme="dark"] .icon.paragraph,
-[data-theme="dark"] .icon.h1,
-[data-theme="dark"] .icon.h2,
-[data-theme="dark"] .icon.h3,
-[data-theme="dark"] .icon.h4,
-[data-theme="dark"] .icon.h5,
-[data-theme="dark"] .icon.h6,
-[data-theme="dark"] .icon.bullet-list,
-[data-theme="dark"] .icon.bullet,
-[data-theme="dark"] .icon.check-list,
-[data-theme="dark"] .icon.check,
-[data-theme="dark"] .icon.numbered-list,
-[data-theme="dark"] .icon.number,
-[data-theme="dark"] .icon.quote,
-[data-theme="dark"] .icon.code,
-[data-theme="dark"] i.file-text,
-[data-theme="dark"] span.file-text {
+.stravu-editor[data-theme="dark"] #options-button::after,
+.stravu-editor[data-theme="dark"] #test-recorder-button::after,
+.stravu-editor[data-theme="dark"] #paste-log-button::after,
+.stravu-editor[data-theme="dark"] #docs-button::after,
+.stravu-editor[data-theme="dark"] #test-recorder-button-snapshot::after,
+.stravu-editor[data-theme="dark"] #test-recorder-button-copy::after,
+.stravu-editor[data-theme="dark"] #test-recorder-button-download::after,
+.stravu-editor[data-theme="dark"] i.palette,
+.stravu-editor[data-theme="dark"] i.bucket,
+.stravu-editor[data-theme="dark"] i.bold,
+.stravu-editor[data-theme="dark"] i.italic,
+.stravu-editor[data-theme="dark"] i.clear,
+.stravu-editor[data-theme="dark"] i.code,
+.stravu-editor[data-theme="dark"] i.underline,
+.stravu-editor[data-theme="dark"] i.uppercase,
+.stravu-editor[data-theme="dark"] i.lowercase,
+.stravu-editor[data-theme="dark"] i.capitalize,
+.stravu-editor[data-theme="dark"] i.strikethrough,
+.stravu-editor[data-theme="dark"] i.subscript,
+.stravu-editor[data-theme="dark"] i.superscript,
+.stravu-editor[data-theme="dark"] i.highlight,
+.stravu-editor[data-theme="dark"] i.link,
+.stravu-editor[data-theme="dark"] i.horizontal-rule,
+.stravu-editor[data-theme="dark"] i.plus,
+.stravu-editor[data-theme="dark"] .icon.plus,
+.stravu-editor[data-theme="dark"] i.caret-right,
+.stravu-editor[data-theme="dark"] i.dropdown-more,
+.stravu-editor[data-theme="dark"] .icon.dropdown-more,
+.stravu-editor[data-theme="dark"] i.font-color,
+.stravu-editor[data-theme="dark"] i.font-family,
+.stravu-editor[data-theme="dark"] .icon.font-family,
+.stravu-editor[data-theme="dark"] i.bg-color,
+.stravu-editor[data-theme="dark"] i.image,
+.stravu-editor[data-theme="dark"] i.table,
+.stravu-editor[data-theme="dark"] i.close,
+.stravu-editor[data-theme="dark"] i.figma,
+.stravu-editor[data-theme="dark"] i.poll,
+.stravu-editor[data-theme="dark"] i.columns,
+.stravu-editor[data-theme="dark"] i.tweet,
+.stravu-editor[data-theme="dark"] i.youtube,
+.stravu-editor[data-theme="dark"] i.align-left,
+.stravu-editor[data-theme="dark"] .icon.left-align,
+.stravu-editor[data-theme="dark"] i.left-align,
+.stravu-editor[data-theme="dark"] i.align-center,
+.stravu-editor[data-theme="dark"] .icon.center-align,
+.stravu-editor[data-theme="dark"] i.center-align,
+.stravu-editor[data-theme="dark"] i.align-right,
+.stravu-editor[data-theme="dark"] .icon.right-align,
+.stravu-editor[data-theme="dark"] i.right-align,
+.stravu-editor[data-theme="dark"] i.align-justify,
+.stravu-editor[data-theme="dark"] .icon.justify-align,
+.stravu-editor[data-theme="dark"] i.justify-align,
+.stravu-editor[data-theme="dark"] i.vertical-align-top,
+.stravu-editor[data-theme="dark"] i.vertical-align-middle,
+.stravu-editor[data-theme="dark"] i.vertical-align-bottom,
+.stravu-editor[data-theme="dark"] i.indent,
+.stravu-editor[data-theme="dark"] i.markdown,
+.stravu-editor[data-theme="dark"] i.outdent,
+.stravu-editor[data-theme="dark"] i.undo,
+.stravu-editor[data-theme="dark"] i.redo,
+.stravu-editor[data-theme="dark"] i.sticky,
+.stravu-editor[data-theme="dark"] i.mic,
+.stravu-editor[data-theme="dark"] i.import,
+.stravu-editor[data-theme="dark"] i.export,
+.stravu-editor[data-theme="dark"] i.send,
+.stravu-editor[data-theme="dark"] i.diagram-2,
+.stravu-editor[data-theme="dark"] i.user,
+.stravu-editor[data-theme="dark"] i.equation,
+.stravu-editor[data-theme="dark"] i.gif,
+.stravu-editor[data-theme="dark"] i.copy,
+.stravu-editor[data-theme="dark"] i.clipboard,
+.stravu-editor[data-theme="dark"] i.success,
+.stravu-editor[data-theme="dark"] i.prettier,
+.stravu-editor[data-theme="dark"] i.prettier-error,
+.stravu-editor[data-theme="dark"] i.cut,
+.stravu-editor[data-theme="dark"] .icon.paragraph,
+.stravu-editor[data-theme="dark"] .icon.h1,
+.stravu-editor[data-theme="dark"] .icon.h2,
+.stravu-editor[data-theme="dark"] .icon.h3,
+.stravu-editor[data-theme="dark"] .icon.h4,
+.stravu-editor[data-theme="dark"] .icon.h5,
+.stravu-editor[data-theme="dark"] .icon.h6,
+.stravu-editor[data-theme="dark"] .icon.bullet-list,
+.stravu-editor[data-theme="dark"] .icon.bullet,
+.stravu-editor[data-theme="dark"] .icon.check-list,
+.stravu-editor[data-theme="dark"] .icon.check,
+.stravu-editor[data-theme="dark"] .icon.numbered-list,
+.stravu-editor[data-theme="dark"] .icon.number,
+.stravu-editor[data-theme="dark"] .icon.quote,
+.stravu-editor[data-theme="dark"] .icon.code,
+.stravu-editor[data-theme="dark"] i.file-text,
+.stravu-editor[data-theme="dark"] span.file-text {
   filter: invert(1);
 }
 
-[data-theme="dark"] i.chevron-down {
+.stravu-editor[data-theme="dark"] i.chevron-down {
   filter: invert(1);
 }

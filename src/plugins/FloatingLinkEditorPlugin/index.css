@@ -14,6 +14,11 @@
   will-change: transform;
 }
 
+.stravu-editor[data-theme="dark"] .link-editor {
+  background-color: var(--stravu-bg-secondary);
+  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.5);
+}
+
 .link-editor .button {
   width: 20px;
   height: 20px;

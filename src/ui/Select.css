@@ -6,7 +6,7 @@
  *
  */
 
-select {
+.stravu-editor select {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -23,16 +23,16 @@ select {
   outline: none;
 }
 
-:root {
-  --select-border: #393939;
-  --select-focus: #101484;
-  --select-arrow: var(--select-border);
+.stravu-editor {
+  --stravu-select-border: #393939;
+  --stravu-select-focus: #101484;
+  --stravu-select-arrow: var(--stravu-select-border);
 }
 
-.select {
+.stravu-editor .select {
   min-width: 160px;
   max-width: 290px;
-  border: 1px solid var(--select-border);
+  border: 1px solid var(--stravu-select-border);
   border-radius: 0.25em;
   padding: 0.25em 0.5em;
   font-size: 1rem;

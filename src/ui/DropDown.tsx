@@ -164,6 +164,17 @@ export default function DropDown({
   const dropDownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [showDropDown, setShowDropDown] = useState(false);
+  
+  // Find the editor container to render dropdowns within
+  const getPortalContainer = useCallback(() => {
+    if (buttonRef.current) {
+      const editorContainer = buttonRef.current.closest('.stravu-editor');
+      if (editorContainer) {
+        return editorContainer;
+      }
+    }
+    return document.body;
+  }, []);
 
   const handleClose = () => {
     setShowDropDown(false);
@@ -255,7 +266,7 @@ export default function DropDown({
           <DropDownItems dropDownRef={dropDownRef} onClose={handleClose}>
             {children}
           </DropDownItems>,
-          document.body,
+          getPortalContainer(),
         )}
     </>
   );

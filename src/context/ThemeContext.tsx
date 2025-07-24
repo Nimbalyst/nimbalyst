@@ -49,6 +49,7 @@ export function ThemeProvider({children, initialTheme = 'auto'}: ThemeProviderPr
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
     localStorage.setItem('stravu-editor-theme', newTheme);
+    // Also set on document for components rendered outside editor (like typeahead)
     document.documentElement.setAttribute('data-theme', newTheme);
   };
 
@@ -56,7 +57,7 @@ export function ThemeProvider({children, initialTheme = 'auto'}: ThemeProviderPr
     setTheme(theme === 'light' ? 'dark' : 'light');
   };
 
-  // Apply theme on mount and when it changes
+  // Apply theme on mount and when it changes (for components outside editor)
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);

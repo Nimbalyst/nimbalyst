@@ -864,7 +864,12 @@ export default function ToolbarPlugin({
       }),
       activeEditor.registerUpdateListener(({editorState}) => {
         editorState.read(() => {
-          $updateToolbar();
+            try {
+              // this throws errors when selection is not valid after toggling markdown
+              $updateToolbar();
+            } catch (error) {
+              console.error('Error updating toolbar:', error);
+            }
         });
       }),
       activeEditor.registerCommand<boolean>(
@@ -960,6 +965,7 @@ export default function ToolbarPlugin({
 
   const handleMarkdownToggle = useCallback(() => {
     activeEditor.update(() => {
+
       const root = $getRoot();
       const firstChild = root.getFirstChild();
       if ($isCodeNode(firstChild) && firstChild.getLanguage() === 'markdown') {
@@ -982,7 +988,9 @@ export default function ToolbarPlugin({
           codeNode.select();
         }
       }
-    });
+      $getRoot().selectStart();
+    }, {discrete: true});
+
   }, [activeEditor, shouldPreserveNewLinesInMarkdown]);
 
   const canViewerSeeInsertDropdown = !toolbarState.isImageCaption;

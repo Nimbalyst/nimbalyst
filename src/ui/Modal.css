@@ -34,6 +34,26 @@
   box-shadow: 0 0 20px 0 #444;
   border-radius: 10px;
 }
+
+.stravu-editor[data-theme="dark"] .Modal__modal {
+  background-color: var(--stravu-bg-secondary);
+  color: var(--stravu-text-primary);
+  box-shadow: 0 0 20px 0 rgba(0, 0, 0, 0.8);
+}
+
+.stravu-editor[data-theme="dark"] .Modal__title {
+  color: var(--stravu-text-primary);
+  border-bottom-color: var(--stravu-editor-border);
+}
+
+.stravu-editor[data-theme="dark"] .Modal__closeButton {
+  background-color: var(--stravu-bg-tertiary);
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="dark"] .Modal__closeButton:hover {
+  background-color: var(--stravu-hover-bg);
+}
 .Modal__title {
   color: #444;
   margin: 0px;

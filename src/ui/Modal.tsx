@@ -12,7 +12,7 @@ import './Modal.css';
 
 import {isDOMNode} from 'lexical';
 import * as React from 'react';
-import {ReactNode, useEffect, useRef} from 'react';
+import {ReactNode, useCallback, useEffect, useRef} from 'react';
 import {createPortal} from 'react-dom';
 
 function PortalImpl({
@@ -98,6 +98,26 @@ export default function Modal({
   onClose: () => void;
   title: string;
 }): JSX.Element {
+  const getPortalContainer = useCallback(() => {
+    // Try to find the nearest .stravu-editor container
+    const activeElement = document.activeElement;
+    if (activeElement) {
+      const editorContainer = activeElement.closest('.stravu-editor');
+      if (editorContainer) {
+        return editorContainer;
+      }
+    }
+    
+    // Fallback: look for any .stravu-editor container in the document
+    const editorContainer = document.querySelector('.stravu-editor');
+    if (editorContainer) {
+      return editorContainer;
+    }
+    
+    // Final fallback: use document.body
+    return document.body;
+  }, []);
+
   return createPortal(
     <PortalImpl
       onClose={onClose}
@@ -105,6 +125,6 @@ export default function Modal({
       closeOnClickOutside={closeOnClickOutside}>
       {children}
     </PortalImpl>,
-    document.body,
+    getPortalContainer(),
   );
 }

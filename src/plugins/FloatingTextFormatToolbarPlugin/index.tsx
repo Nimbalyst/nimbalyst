@@ -390,10 +390,15 @@ function useFloatingTextFormatToolbar(
         setIsText(false);
       }
 
-      const rawTextContent = selection.getTextContent().replace(/\n/g, '');
-      if (!selection.isCollapsed() && rawTextContent === '') {
-        setIsText(false);
-        return;
+      try {
+          // this throws errors when selection is not valid after toggling markdown
+          const rawTextContent = selection.getTextContent().replace(/\n/g, '');
+          if (!selection.isCollapsed() && rawTextContent === '') {
+              setIsText(false);
+              return;
+          }
+      } catch (error) {
+          console.error("unexpected error in selection.getTextContent():", error);
       }
     });
   }, [editor]);
