@@ -24,6 +24,7 @@ import {createPortal} from 'react-dom';
 
 import Button from './Button';
 import Modal from './Modal';
+import { useTheme } from "../context/ThemeContext.tsx";
 
 export type ExcalidrawInitialElements = ExcalidrawInitialDataState['elements'];
 
@@ -200,11 +201,14 @@ export default function ExcalidrawModal({
     setFiles(fls);
   };
 
+  const {theme} = useTheme();
+
   return createPortal(
     <div className="ExcalidrawModal__overlay" role="dialog">
       <div
-        className="ExcalidrawModal__modal"
+        className={`ExcalidrawModal__modal ${theme === 'dark' ? 'dark-theme' : ''}`}
         ref={excaliDrawModelRef}
+        style={{backgroundColor: theme === 'dark' ? '#333' : '#fff'}}
         tabIndex={-1}>
         <div className="ExcalidrawModal__row">
           {discardModalOpen && <ShowDiscardDialog />}
@@ -216,6 +220,7 @@ export default function ExcalidrawModal({
               elements: initialElements,
               files: initialFiles,
             }}
+            theme={theme.includes('dark') ? 'dark' : 'light'}
           />
           <div className="ExcalidrawModal__actions">
             <button className="action-button" onClick={discard}>

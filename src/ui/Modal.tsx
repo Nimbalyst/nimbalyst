@@ -107,13 +107,13 @@ export default function Modal({
         return editorContainer;
       }
     }
-    
+
     // Fallback: look for any .stravu-editor container in the document
     const editorContainer = document.querySelector('.stravu-editor');
     if (editorContainer) {
       return editorContainer;
     }
-    
+
     // Final fallback: use document.body
     return document.body;
   }, []);

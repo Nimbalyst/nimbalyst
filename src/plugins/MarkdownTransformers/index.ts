@@ -47,6 +47,8 @@ import {$createTweetNode, $isTweetNode, TweetNode} from '../../nodes/TweetNode';
 import emojiList from '../../utils/emoji-list';
 import { COLLAPSIBLE_TRANSFORMER } from "../CollapsiblePlugin/CollapsibleTransformer";
 
+import { ExcalidrawTransform } from "../../nodes/ExcalidrawNode/excalidrawTransform.tsx";
+
 export const HR: ElementTransformer = {
   dependencies: [HorizontalRuleNode],
   export: (node: LexicalNode) => {
@@ -287,6 +289,8 @@ const mapToTableCells = (textContent: string): Array<TableCellNode> | null => {
 export const PLAYGROUND_TRANSFORMERS: Array<Transformer> = [
 
   COLLAPSIBLE_TRANSFORMER,
+
+  ExcalidrawTransform,
 
   TABLE,
   HR,

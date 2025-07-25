@@ -7,19 +7,18 @@
  */
 
 import type {
-  DOMConversionMap,
-  DOMConversionOutput,
-  DOMExportOutput,
-  EditorConfig,
-  LexicalEditor,
-  LexicalNode,
-  NodeKey,
-  SerializedLexicalNode,
-  Spread,
+    DOMConversionMap,
+    DOMConversionOutput,
+    DOMExportOutput,
+    EditorConfig,
+    LexicalEditor,
+    LexicalNode,
+    NodeKey,
+    SerializedLexicalNode,
+    Spread,
 } from 'lexical';
-import type {JSX} from 'react';
-
-import {DecoratorNode} from 'lexical';
+import { DecoratorNode } from 'lexical';
+import type { JSX } from 'react';
 import * as React from 'react';
 
 type Dimension = number | 'inherit';
@@ -65,7 +64,14 @@ export class ExcalidrawNode extends DecoratorNode<JSX.Element> {
     return 'excalidraw';
   }
 
-  static clone(node: ExcalidrawNode): ExcalidrawNode {
+    // This makes it insert as a root child instead of in a paragraph
+    // This would break the use of a multiline element transformer
+    isInline(): boolean {
+        return false;
+    }
+
+
+    static clone(node: ExcalidrawNode): ExcalidrawNode {
     return new ExcalidrawNode(
       node.__data,
       node.__width,
@@ -202,3 +208,7 @@ export function $isExcalidrawNode(
 ): node is ExcalidrawNode {
   return node instanceof ExcalidrawNode;
 }
+
+
+
+

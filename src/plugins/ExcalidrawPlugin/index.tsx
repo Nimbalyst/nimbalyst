@@ -12,7 +12,7 @@ import type {JSX} from 'react';
 import '@excalidraw/excalidraw/index.css';
 
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
-import {$wrapNodeInElement} from '@lexical/utils';
+import { $insertNodeToNearestRoot, $wrapNodeInElement } from '@lexical/utils';
 import {
   $createParagraphNode,
   $insertNodes,
@@ -76,10 +76,7 @@ export default function ExcalidrawPlugin(): JSX.Element | null {
           files,
         }),
       );
-      $insertNodes([excalidrawNode]);
-      if ($isRootOrShadowRoot(excalidrawNode.getParentOrThrow())) {
-        $wrapNodeInElement(excalidrawNode, $createParagraphNode).selectEnd();
-      }
+      $insertNodeToNearestRoot(excalidrawNode);
     });
     setModalOpen(false);
   };
