@@ -33,32 +33,18 @@
   color: #333;
 }
 
-/* Dark mode styles */
-.stravu-editor[data-theme="dark"] .Input__label {
+/* Dark mode styles - shared across all dark themes */
+.stravu-editor.dark-theme .Input__label {
   color: var(--stravu-text-secondary);
 }
 
-.stravu-editor[data-theme="dark"] .Input__input {
+.stravu-editor.dark-theme .Input__input {
   border-color: var(--stravu-editor-border);
   background-color: var(--stravu-bg-secondary);
   color: var(--stravu-text-primary);
 }
 
-.stravu-editor[data-theme="dark"] .Input__input::placeholder {
+.stravu-editor.dark-theme .Input__input::placeholder {
   color: var(--stravu-text-muted);
 }
 
-/* Global dark mode styles (for components outside editor) */
-[data-theme="dark"] .Input__label {
-  color: #b3b3b3;
-}
-
-[data-theme="dark"] .Input__input {
-  border-color: #4a4a4a;
-  background-color: #2d2d2d;
-  color: #ffffff;
-}
-
-[data-theme="dark"] .Input__input::placeholder {
-  color: #8a8a8a;
-}

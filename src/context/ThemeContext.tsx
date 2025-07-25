@@ -9,8 +9,8 @@
 import type {JSX, ReactNode} from 'react';
 import {createContext, useContext, useEffect, useState} from 'react';
 
-export type Theme = 'light' | 'dark';
-export type ThemeConfig = 'light' | 'dark' | 'auto';
+export type Theme = 'light' | 'dark' | 'crystal-dark';
+export type ThemeConfig = 'light' | 'dark' | 'crystal-dark' | 'auto';
 
 interface ThemeContextType {
   theme: Theme;
@@ -28,13 +28,13 @@ interface ThemeProviderProps {
 export function ThemeProvider({children, initialTheme = 'auto'}: ThemeProviderProps): JSX.Element {
   const [theme, setThemeState] = useState<Theme>(() => {
     // If a specific theme is configured, use it
-    if (initialTheme === 'light' || initialTheme === 'dark') {
+    if (initialTheme === 'light' || initialTheme === 'dark' || initialTheme === 'crystal-dark') {
       return initialTheme;
     }
     
     // Check localStorage first, then system preference (for 'auto' mode)
     const savedTheme = localStorage.getItem('stravu-editor-theme') as Theme;
-    if (savedTheme && (savedTheme === 'light' || savedTheme === 'dark')) {
+    if (savedTheme && (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'crystal-dark')) {
       return savedTheme;
     }
     
@@ -54,12 +54,25 @@ export function ThemeProvider({children, initialTheme = 'auto'}: ThemeProviderPr
   };
 
   const toggleTheme = () => {
-    setTheme(theme === 'light' ? 'dark' : 'light');
+    if (theme === 'light') {
+      setTheme('dark');
+    } else if (theme === 'dark') {
+      setTheme('crystal-dark');
+    } else {
+      setTheme('light');
+    }
   };
 
   // Apply theme on mount and when it changes (for components outside editor)
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    
+    // Add/remove dark-theme class for shared dark styling
+    if (theme === 'dark' || theme === 'crystal-dark') {
+      document.documentElement.classList.add('dark-theme');
+    } else {
+      document.documentElement.classList.remove('dark-theme');
+    }
   }, [theme]);
 
   // Listen for system theme changes

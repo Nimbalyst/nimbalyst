@@ -36,40 +36,22 @@
   background-color: #eee;
 }
 
-/* Dark mode styles */
-.stravu-editor[data-theme="dark"] .Button__root {
+/* Dark theme styles - shared across all dark themes */
+.stravu-editor.dark-theme .Button__root {
   background-color: var(--stravu-bg-tertiary);
   color: var(--stravu-text-primary);
 }
 
-.stravu-editor[data-theme="dark"] .Button__root:hover:not(.Button__disabled) {
+.stravu-editor.dark-theme .Button__root:hover:not(.Button__disabled) {
   background-color: var(--stravu-hover-bg);
 }
 
-.stravu-editor[data-theme="dark"] .Button__disabled {
+.stravu-editor.dark-theme .Button__disabled {
   background-color: var(--stravu-bg-secondary);
   color: var(--stravu-text-muted);
 }
 
-.stravu-editor[data-theme="dark"] .Button__disabled:hover {
+.stravu-editor.dark-theme .Button__disabled:hover {
   background-color: var(--stravu-bg-secondary);
 }
 
-/* Global dark mode styles (for components outside editor) */
-[data-theme="dark"] .Button__root {
-  background-color: #3a3a3a;
-  color: #ffffff;
-}
-
-[data-theme="dark"] .Button__root:hover:not(.Button__disabled) {
-  background-color: #4a4a4a;
-}
-
-[data-theme="dark"] .Button__disabled {
-  background-color: #2d2d2d;
-  color: #8a8a8a;
-}
-
-[data-theme="dark"] .Button__disabled:hover {
-  background-color: #2d2d2d;
-}

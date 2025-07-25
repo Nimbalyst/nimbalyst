@@ -6,29 +6,54 @@
  *
  */
 
-import type {JSX} from 'react';
+import { JSX, useEffect } from 'react';
 
-import {$isCodeNode} from '@lexical/code';
-import {registerCodeHighlighting} from '@lexical/code-shiki';
+import { $isCodeNode, CodeNode, DEFAULT_CODE_LANGUAGE } from '@lexical/code';
+import { registerCodeHighlighting, Tokenizer } from '@lexical/code-shiki';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
-import {$getRoot, $isElementNode} from 'lexical';
-import {useEffect} from 'react';
+import { $getRoot, $isElementNode, LexicalNode, NodeMutation } from 'lexical';
 
 import {useTheme} from '../../context/ThemeContext';
+import { ShikiTokenizer } from "@lexical/code-shiki";
 
 // Theme mapping for automatic light/dark switching
 const THEME_MAPPING = {
   light: 'github-light',
   dark: 'dark-plus',
+  'crystal-dark': 'material-theme-darker',
 } as const;
+
+
 
 export default function CodeHighlightShikiPlugin(): JSX.Element | null {
   const [editor] = useLexicalComposerContext();
   const {theme} = useTheme();
 
   useEffect(() => {
-    return registerCodeHighlighting(editor);
-  }, [editor]);
+      const targetTheme = THEME_MAPPING[theme];
+
+      const ShikiThemelssTokenizer: Tokenizer = {
+          ...ShikiTokenizer,
+          defaultTheme: targetTheme,
+      };
+
+    return registerCodeHighlighting(editor, ShikiThemelssTokenizer);
+  }, [editor, theme]);
+
+    // useEffect(() => {
+    //
+    //     const targetTheme = THEME_MAPPING[theme];
+    //
+    //     return editor.registerNodeTransform(CodeNode, (codeNode: CodeNode) => {
+    //
+    //
+    //
+    //         if (codeNode.getTheme() !== targetTheme) {
+    //             codeNode.setTheme(targetTheme);
+    //         }
+    //     });
+    //
+    // }, [editor, theme]);
 
   // Update all code block themes when global theme changes
   useEffect(() => {

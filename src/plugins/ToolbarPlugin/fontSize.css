@@ -56,19 +56,20 @@ button.font-increment {
   margin-left: 3px;
 }
 
-/* Dark mode styles for font size input */
-[data-theme="dark"] .font-size-input {
-  background-color: #3d3d3d;
-  color: #ccc;
-  border-color: #555;
+/* Dark theme styles - shared across all dark themes */
+.dark-theme .font-size-input {
+  background-color: var(--stravu-bg-tertiary);
+  color: var(--stravu-text-secondary);
+  border-color: var(--stravu-border-muted);
 }
 
-[data-theme="dark"] .font-size-input:disabled {
-  background-color: #2d2d2d;
-  color: #666;
+.dark-theme .font-size-input:disabled {
+  background-color: var(--stravu-bg-secondary);
+  color: var(--stravu-text-muted);
 }
 
-[data-theme="dark"] .add-icon,
-[data-theme="dark"] .minus-icon {
+.dark-theme .add-icon,
+.dark-theme .minus-icon {
   filter: invert(1);
 }
+

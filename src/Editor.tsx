@@ -80,6 +80,7 @@ import TreeViewPlugin from './plugins/TreeViewPlugin';
 import TwitterPlugin from './plugins/TwitterPlugin';
 import YouTubePlugin from './plugins/YouTubePlugin';
 import ContentEditable from './ui/ContentEditable';
+import { useSettings } from "./context/SettingsContext.tsx";
 
 const skipCollaborationInit =
   // @ts-expect-error
@@ -101,7 +102,6 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     hasLinkAttributes,
     isCharLimitUtf8,
     isRichText,
-    showTreeView,
     showTableOfContents,
     shouldUseLexicalContextMenu,
     shouldPreserveNewLinesInMarkdown,
@@ -113,6 +113,9 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     listStrictIndent,
     markdownOnly,
   } = config;
+
+  const {settings} = useSettings();
+
   const isEditable = useLexicalEditable();
   const placeholder = isCollab
     ? 'Enter some collaborative rich text...'
@@ -222,7 +225,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         </div>
       )}
       <div
-        className={`editor-container ${showTreeView ? 'tree-view' : ''} ${
+        className={`editor-container ${settings.showTreeView || config.showTreeView ? 'tree-view' : ''} ${
           !isRichText ? 'plain-text' : ''
         } ${fileState.isLoading ? 'loading' : ''}`}>
         {isMaxLength && <MaxLengthPlugin maxLength={30} />}
@@ -342,7 +345,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         {/*  shouldPreserveNewLinesInMarkdown={shouldPreserveNewLinesInMarkdown}*/}
         {/*/>*/}
       </div>
-      {showTreeView && <TreeViewPlugin />}
+      {(settings.showTreeView || config.showTreeView) && <TreeViewPlugin />}
     </>
   );
 }

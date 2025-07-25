@@ -37,6 +37,7 @@ import {SpecialTextNode} from './SpecialTextNode';
 import {StickyNode} from './StickyNode';
 import {TweetNode} from './TweetNode';
 import {YouTubeNode} from './YouTubeNode';
+import { ThemelessCodeNode } from "../plugins/CodeHighlightShikiPlugin/ThemelessCodeNode.ts";
 
 const EditorNodes: Array<Klass<LexicalNode>> = [
   HeadingNode,
@@ -73,6 +74,17 @@ const EditorNodes: Array<Klass<LexicalNode>> = [
   LayoutContainerNode,
   LayoutItemNode,
   SpecialTextNode,
+
+    // ThemelessCodeNode,
+    // {
+    //     replace: CodeNode,
+    //     with: (CodeNode) => {
+    //         return ThemelessCodeNode.clone(CodeNode);
+    //     },
+    //     withKlass: ThemelessCodeNode
+    //
+    // }
+
 ];
 
 export default EditorNodes;

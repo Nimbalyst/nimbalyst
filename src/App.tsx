@@ -7,7 +7,7 @@
  */
 
 import type { JSX } from 'react';
-import React from 'react';
+import React, { useRef } from 'react';
 
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import {
@@ -25,9 +25,12 @@ import { SharedHistoryContext } from './context/SharedHistoryContext';
 import { TableContext } from './plugins/TablePlugin';
 import { ToolbarContext } from './context/ToolbarContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { useResponsiveWidth } from './hooks/useResponsiveWidth';
 import Editor from './Editor';
 import PlaygroundEditorTheme from './themes/PlaygroundEditorTheme';
 import EditorNodes from "./nodes/EditorNodes";
+import Settings from "./Settings";
+import { SettingsContext } from "./context/SettingsContext.tsx";
 
 const EMPTY_CONTENT = '';
 
@@ -37,7 +40,9 @@ export interface StravuEditorProps {
 
 function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
     const { theme } = useTheme();
-    
+    const containerRef = useRef<HTMLDivElement>(null);
+    const widthClass = useResponsiveWidth(containerRef);
+
     const initialConfig = {
         editorState: config.emptyEditor ? undefined : $createEmptyEditor,
         html: {import: buildImportMap()},
@@ -49,19 +54,27 @@ function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
         theme: PlaygroundEditorTheme,
     };
 
+    const isDarkTheme = theme === 'dark' || theme === 'crystal-dark';
+
     return (
-        <div className="stravu-editor" data-theme={theme}>
-            <LexicalComposer initialConfig={initialConfig}>
-                <SharedHistoryContext>
-                    <TableContext>
-                        <ToolbarContext>
-                            <div className="editor-shell">
-                                <Editor config={config}/>
-                            </div>
-                        </ToolbarContext>
-                    </TableContext>
-                </SharedHistoryContext>
-            </LexicalComposer>
+        <div
+            ref={containerRef}
+            className={`stravu-editor ${widthClass} ${isDarkTheme ? 'dark-theme' : ''}`}
+            data-theme={theme}
+        >
+            <SettingsContext>
+                <LexicalComposer initialConfig={initialConfig}>
+                    <SharedHistoryContext>
+                        <TableContext>
+                            <ToolbarContext>
+                                <div className="editor-shell">
+                                    <Editor config={config}/>
+                                </div>
+                            </ToolbarContext>
+                        </TableContext>
+                    </SharedHistoryContext>
+                </LexicalComposer>
+            </SettingsContext>
         </div>
     );
 }

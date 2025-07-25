@@ -23,7 +23,7 @@
   will-change: transform;
 }
 
-.stravu-editor[data-theme="dark"] .floating-text-format-popup {
+.stravu-editor.dark-theme .floating-text-format-popup {
   background: var(--stravu-bg-secondary);
   box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.5);
 }
@@ -145,29 +145,3 @@
   }
 }
 
-/* Dark mode styles for floating text format toolbar */
-[data-theme="dark"] .floating-text-format-popup {
-  background: #2d2d2d;
-  box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.6);
-}
-
-[data-theme="dark"] .floating-text-format-popup button.popup-item.active {
-  background-color: rgba(100, 150, 255, 0.3);
-}
-
-[data-theme="dark"] .floating-text-format-popup .popup-item:hover:not([disabled]) {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-[data-theme="dark"] .floating-text-format-popup .popup-item .text,
-[data-theme="dark"] .floating-text-format-popup select.popup-item {
-  color: #ccc;
-}
-
-[data-theme="dark"] .floating-text-format-popup .divider {
-  background-color: #555;
-}
-
-[data-theme="dark"] .floating-text-format-popup button.popup-item i.format {
-  filter: invert(1);
-}

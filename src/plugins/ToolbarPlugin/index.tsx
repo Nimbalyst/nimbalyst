@@ -109,6 +109,7 @@ import {
   formatParagraph,
   formatQuote,
 } from './utils';
+import MarkdownToggle from "./MarkdownToggle.tsx";
 
 const rootTypeToRootName = {
   root: 'Root',
@@ -191,6 +192,7 @@ const CODE_THEME_OPTIONS_SHIKI: [string, string][] =
 const THEME_MAPPING = {
   light: 'github-light',
   dark: 'dark-plus',
+  'crystal-dark': 'material-theme-darker',
 } as const;
 
 const FONT_FAMILY_OPTIONS: [string, string][] = [
@@ -664,7 +666,12 @@ export default function ToolbarPlugin({
   const [isEditable, setIsEditable] = useState(() => editor.isEditable());
   const {toolbarState, updateToolbarState} = useToolbarState();
 
-  const $handleHeadingNode = useCallback(
+  const { settings, setOption } = useSettings();
+  const isTreeViewVisible = settings.showTreeView || false;
+  const {theme} = useTheme();
+
+
+    const $handleHeadingNode = useCallback(
     (selectedElement: LexicalNode) => {
       const type = $isHeadingNode(selectedElement)
         ? selectedElement.getTag()
@@ -680,20 +687,16 @@ export default function ToolbarPlugin({
     [updateToolbarState],
   );
 
-  const {
-    settings: {isCodeHighlighted, isCodeShiki, shouldPreserveNewLinesInMarkdown},
-  } = useSettings();
-  const {theme} = useTheme();
 
-  const $handleCodeNode = useCallback(
+    const $handleCodeNode = useCallback(
     (element: LexicalNode) => {
       if ($isCodeNode(element)) {
         const language = element.getLanguage();
         updateToolbarState(
           'codeLanguage',
           language
-            ? (isCodeHighlighted &&
-                (isCodeShiki
+            ? (settings.isCodeHighlighted &&
+                (settings.isCodeShiki
                   ? normalizeCodeLanguageShiki(language)
                   : normalizeCodeLanguagePrism(language))) ||
                 language
@@ -704,7 +707,7 @@ export default function ToolbarPlugin({
         return;
       }
     },
-    [updateToolbarState, isCodeHighlighted, isCodeShiki],
+    [updateToolbarState, settings.isCodeHighlighted, settings.isCodeShiki],
   );
 
   const $updateToolbar = useCallback(() => {
@@ -992,7 +995,7 @@ export default function ToolbarPlugin({
           true,
         );
         const codeNode = $createCodeNode('markdown');
-        if (isCodeShiki) {
+        if (settings.isCodeShiki) {
           codeNode.setTheme(THEME_MAPPING[theme]);
         }
         codeNode.append($createTextNode(markdown));
@@ -1004,21 +1007,23 @@ export default function ToolbarPlugin({
       $getRoot().selectStart();
     }, {discrete: true});
 
-  }, [activeEditor, shouldPreserveNewLinesInMarkdown, isCodeShiki, theme]);
+  }, [activeEditor, settings.shouldPreserveNewLinesInMarkdown, settings.isCodeShiki, theme]);
 
   const canViewerSeeInsertDropdown = !toolbarState.isImageCaption;
   const canViewerSeeInsertCodeButton = !toolbarState.isImageCaption;
 
-  return (
+    return (
     <div className="toolbar">
       {fileState && fileOperations && (
         <>
-          <FileDropDown
-            fileState={fileState}
-            fileOperations={fileOperations}
-            disabled={!isEditable}
-          />
-          <Divider />
+          <div className="toolbar-file">
+            <FileDropDown
+              fileState={fileState}
+              fileOperations={fileOperations}
+              disabled={!isEditable}
+            />
+          </div>
+          <div className="divider toolbar-file-divider" />
         </>
       )}
       <button
@@ -1028,7 +1033,17 @@ export default function ToolbarPlugin({
         aria-label="Toggle markdown view">
         <i className="format markdown" />
       </button>
-      <Divider />
+    <button
+        onClick={() => {
+            setOption('showTreeView', !settings.showTreeView);
+        }}
+        className="toolbar-item spaced"
+        title="Toggle Debug Tree View"
+        type="button"
+        aria-label="Toggle Debug Tree View">
+        <i className="format bug" />
+    </button>
+      <div className="divider toolbar-main-divider" />
       <button
         disabled={!toolbarState.canUndo || !isEditable}
         onClick={() => {
@@ -1051,7 +1066,7 @@ export default function ToolbarPlugin({
         aria-label="Redo">
         <i className="format redo" />
       </button>
-      <Divider />
+      <div className="divider toolbar-main-divider" />
       {toolbarState.blockType in blockTypeToBlockName &&
         activeEditor === editor && (
           <>
@@ -1060,89 +1075,66 @@ export default function ToolbarPlugin({
               blockType={toolbarState.blockType}
               rootType={toolbarState.rootType}
               editor={activeEditor}
-              theme={isCodeShiki ? THEME_MAPPING[theme] : undefined}
+              theme={settings.isCodeShiki ? THEME_MAPPING[theme] : undefined}
             />
-            <Divider />
+            <div className="divider toolbar-main-divider" />
           </>
         )}
-      {toolbarState.blockType === 'code' && isCodeHighlighted ? (
+      {toolbarState.blockType === 'code' && settings.isCodeHighlighted ? (
         <>
-          {!isCodeShiki && (
+
+          {settings.isCodeShiki && (
             <>
-              <DropDown
-                disabled={!isEditable}
-                buttonClassName="toolbar-item code-language"
-                buttonLabel={
-                  (CODE_LANGUAGE_OPTIONS_PRISM.find(
-                    (opt) =>
-                      opt[0] ===
-                      normalizeCodeLanguagePrism(toolbarState.codeLanguage),
-                  ) || ['', ''])[1]
-                }
-                buttonAriaLabel="Select language">
-                {CODE_LANGUAGE_OPTIONS_PRISM.map(([value, name]) => {
-                  return (
-                    <DropDownItem
-                      className={`item ${dropDownActiveClass(
-                        value === toolbarState.codeLanguage,
-                      )}`}
-                      onClick={() => onCodeLanguageSelect(value)}
-                      key={value}>
-                      <span className="text">{name}</span>
-                    </DropDownItem>
-                  );
-                })}
-              </DropDown>
-            </>
-          )}
-          {isCodeShiki && (
-            <>
-              <DropDown
-                disabled={!isEditable}
-                buttonClassName="toolbar-item code-language"
-                buttonLabel={
-                  (CODE_LANGUAGE_OPTIONS_SHIKI.find(
-                    (opt) =>
-                      opt[0] ===
-                      normalizeCodeLanguageShiki(toolbarState.codeLanguage),
-                  ) || ['', ''])[1]
-                }
-                buttonAriaLabel="Select language">
-                {CODE_LANGUAGE_OPTIONS_SHIKI.map(([value, name]) => {
-                  return (
-                    <DropDownItem
-                      className={`item ${dropDownActiveClass(
-                        value === toolbarState.codeLanguage,
-                      )}`}
-                      onClick={() => onCodeLanguageSelect(value)}
-                      key={value}>
-                      <span className="text">{name}</span>
-                    </DropDownItem>
-                  );
-                })}
-              </DropDown>
-              <DropDown
-                disabled={!isEditable}
-                buttonClassName="toolbar-item code-language"
-                buttonLabel={
-                  (CODE_THEME_OPTIONS_SHIKI.find(
-                    (opt) => opt[0] === toolbarState.codeTheme,
-                  ) || ['', ''])[1]
-                }
-                buttonAriaLabel="Select theme">
-                {CODE_THEME_OPTIONS_SHIKI.map(([value, name]) => {
-                  return (
-                    <DropDownItem
-                      className={`item ${dropDownActiveClass(
-                        value === toolbarState.codeTheme,
-                      )}`}
-                      onClick={() => onCodeThemeSelect(value)}
-                      key={value}>
-                      <span className="text">{name}</span>
-                    </DropDownItem>
-                  );
-                })}
-              </DropDown>
+              <div className="toolbar-code-language">
+                <DropDown
+                  disabled={!isEditable}
+                  buttonClassName="toolbar-item code-language"
+                  buttonLabel={
+                    (CODE_LANGUAGE_OPTIONS_SHIKI.find(
+                      (opt) =>
+                        opt[0] ===
+                        normalizeCodeLanguageShiki(toolbarState.codeLanguage),
+                    ) || ['', ''])[1]
+                  }
+                  buttonAriaLabel="Select language">
+                  {CODE_LANGUAGE_OPTIONS_SHIKI.map(([value, name]) => {
+                    return (
+                      <DropDownItem
+                        className={`item ${dropDownActiveClass(
+                          value === toolbarState.codeLanguage,
+                        )}`}
+                        onClick={() => onCodeLanguageSelect(value)}
+                        key={value}>
+                        <span className="text">{name}</span>
+                      </DropDownItem>
+                    );
+                  })}
+                </DropDown>
+              </div>
+              <div className="toolbar-code-theme">
+                <DropDown
+                  disabled={!isEditable}
+                  buttonClassName="toolbar-item code-language"
+                  buttonLabel={
+                    (CODE_THEME_OPTIONS_SHIKI.find(
+                      (opt) => opt[0] === toolbarState.codeTheme,
+                    ) || ['', ''])[1]
+                  }
+                  buttonAriaLabel="Select theme">
+                  {CODE_THEME_OPTIONS_SHIKI.map(([value, name]) => {
+                    return (
+                      <DropDownItem
+                        className={`item ${dropDownActiveClass(
+                          value === toolbarState.codeTheme,
+                        )}`}
+                        onClick={() => onCodeThemeSelect(value)}
+                        key={value}>
+                        <span className="text">{name}</span>
+                      </DropDownItem>
+                    );
+                  })}
+                </DropDown>
+              </div>
             </>
           )}
         </>
@@ -1150,115 +1142,122 @@ export default function ToolbarPlugin({
         <>
           {!markdownOnly && (
             <>
-              <FontDropDown
-                disabled={!isEditable}
-                style={'font-family'}
-                value={toolbarState.fontFamily}
-                editor={activeEditor}
-              />
-              <Divider />
-              <FontSize
-                selectionFontSize={toolbarState.fontSize.slice(0, -2)}
-                editor={activeEditor}
-                disabled={!isEditable}
-              />
-              <Divider />
+              <div className="toolbar-font">
+                <FontDropDown
+                  disabled={!isEditable}
+                  style={'font-family'}
+                  value={toolbarState.fontFamily}
+                  editor={activeEditor}
+                />
+                <div className="divider" />
+                <FontSize
+                  selectionFontSize={toolbarState.fontSize.slice(0, -2)}
+                  editor={activeEditor}
+                  disabled={!isEditable}
+                />
+              </div>
+              <div className="divider toolbar-font-divider" />
             </>
           )}
-          <button
-            disabled={!isEditable}
-            onClick={() => {
-              activeEditor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold');
-            }}
-            className={
-              'toolbar-item spaced ' + (toolbarState.isBold ? 'active' : '')
-            }
-            title={`Bold (${SHORTCUTS.BOLD})`}
-            type="button"
-            aria-label={`Format text as bold. Shortcut: ${SHORTCUTS.BOLD}`}>
-            <i className="format bold" />
-          </button>
-          <button
-            disabled={!isEditable}
-            onClick={() => {
-              activeEditor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic');
-            }}
-            className={
-              'toolbar-item spaced ' + (toolbarState.isItalic ? 'active' : '')
-            }
-            title={`Italic (${SHORTCUTS.ITALIC})`}
-            type="button"
-            aria-label={`Format text as italics. Shortcut: ${SHORTCUTS.ITALIC}`}>
-            <i className="format italic" />
-          </button>
-          <button
-            disabled={!isEditable}
-            onClick={() => {
-              activeEditor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline');
-            }}
-            className={
-              'toolbar-item spaced ' +
-              (toolbarState.isUnderline ? 'active' : '')
-            }
-            title={`Underline (${SHORTCUTS.UNDERLINE})`}
-            type="button"
-            aria-label={`Format text to underlined. Shortcut: ${SHORTCUTS.UNDERLINE}`}>
-            <i className="format underline" />
-          </button>
-          {canViewerSeeInsertCodeButton && (
+          <div className="toolbar-formatting">
             <button
               disabled={!isEditable}
               onClick={() => {
-                activeEditor.dispatchCommand(FORMAT_TEXT_COMMAND, 'code');
+                activeEditor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold');
               }}
               className={
-                'toolbar-item spaced ' + (toolbarState.isCode ? 'active' : '')
+                'toolbar-item spaced ' + (toolbarState.isBold ? 'active' : '')
               }
-              title={`Insert code block (${SHORTCUTS.INSERT_CODE_BLOCK})`}
+              title={`Bold (${SHORTCUTS.BOLD})`}
               type="button"
-              aria-label="Insert code block">
-              <i className="format code" />
+              aria-label={`Format text as bold. Shortcut: ${SHORTCUTS.BOLD}`}>
+              <i className="format bold" />
             </button>
-          )}
-          <button
-            disabled={!isEditable}
-            onClick={insertLink}
-            className={
-              'toolbar-item spaced ' + (toolbarState.isLink ? 'active' : '')
-            }
-            aria-label="Insert link"
-            title={`Insert link (${SHORTCUTS.INSERT_LINK})`}
-            type="button">
-            <i className="format link" />
-          </button>
+            <button
+              disabled={!isEditable}
+              onClick={() => {
+                activeEditor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic');
+              }}
+              className={
+                'toolbar-item spaced ' + (toolbarState.isItalic ? 'active' : '')
+              }
+              title={`Italic (${SHORTCUTS.ITALIC})`}
+              type="button"
+              aria-label={`Format text as italics. Shortcut: ${SHORTCUTS.ITALIC}`}>
+              <i className="format italic" />
+            </button>
+            <button
+              disabled={!isEditable}
+              onClick={() => {
+                activeEditor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline');
+              }}
+              className={
+                'toolbar-item spaced ' +
+                (toolbarState.isUnderline ? 'active' : '')
+              }
+              title={`Underline (${SHORTCUTS.UNDERLINE})`}
+              type="button"
+              aria-label={`Format text to underlined. Shortcut: ${SHORTCUTS.UNDERLINE}`}>
+              <i className="format underline" />
+            </button>
+            {canViewerSeeInsertCodeButton && (
+              <button
+                disabled={!isEditable}
+                onClick={() => {
+                  activeEditor.dispatchCommand(FORMAT_TEXT_COMMAND, 'code');
+                }}
+                className={
+                  'toolbar-item spaced ' + (toolbarState.isCode ? 'active' : '')
+                }
+                title={`Insert code block (${SHORTCUTS.INSERT_CODE_BLOCK})`}
+                type="button"
+                aria-label="Insert code block">
+                <i className="format code" />
+              </button>
+            )}
+            <button
+              disabled={!isEditable}
+              onClick={insertLink}
+              className={
+                'toolbar-item spaced ' + (toolbarState.isLink ? 'active' : '')
+              }
+              aria-label="Insert link"
+              title={`Insert link (${SHORTCUTS.INSERT_LINK})`}
+              type="button">
+              <i className="format link" />
+            </button>
+          </div>
           {!markdownOnly && (
             <>
-              <DropdownColorPicker
-                disabled={!isEditable}
-                buttonClassName="toolbar-item color-picker"
-                buttonAriaLabel="Formatting text color"
-                buttonIconClassName="icon font-color"
-                color={toolbarState.fontColor}
-                onChange={onFontColorSelect}
-                title="text color"
-              />
-              <DropdownColorPicker
-                disabled={!isEditable}
-                buttonClassName="toolbar-item color-picker"
-                buttonAriaLabel="Formatting background color"
-                buttonIconClassName="icon bg-color"
-                color={toolbarState.bgColor}
-                onChange={onBgColorSelect}
-                title="bg color"
-              />
+              <div className="toolbar-colors">
+                <DropdownColorPicker
+                  disabled={!isEditable}
+                  buttonClassName="toolbar-item color-picker"
+                  buttonAriaLabel="Formatting text color"
+                  buttonIconClassName="icon font-color"
+                  color={toolbarState.fontColor}
+                  onChange={onFontColorSelect}
+                  title="text color"
+                />
+                <DropdownColorPicker
+                  disabled={!isEditable}
+                  buttonClassName="toolbar-item color-picker"
+                  buttonAriaLabel="Formatting background color"
+                  buttonIconClassName="icon bg-color"
+                  color={toolbarState.bgColor}
+                  onChange={onBgColorSelect}
+                  title="bg color"
+                />
+              </div>
             </>
           )}
-          <DropDown
-            disabled={!isEditable}
-            buttonClassName="toolbar-item spaced"
-            buttonLabel=""
-            buttonAriaLabel="Formatting options for additional text styles"
-            buttonIconClassName="icon dropdown-more">
+          <div className="toolbar-additional">
+            <DropDown
+              disabled={!isEditable}
+              buttonClassName="toolbar-item spaced"
+              buttonLabel=""
+              buttonAriaLabel="Formatting options for additional text styles"
+              buttonIconClassName="icon dropdown-more">
             {!markdownOnly && (
               <>
                 <DropDownItem
@@ -1388,16 +1387,18 @@ export default function ToolbarPlugin({
               </div>
               <span className="shortcut">{SHORTCUTS.CLEAR_FORMATTING}</span>
             </DropDownItem>
-          </DropDown>
+            </DropDown>
+          </div>
           {canViewerSeeInsertDropdown && (
             <>
-              <Divider />
-              <DropDown
-                disabled={!isEditable}
-                buttonClassName="toolbar-item spaced"
-                buttonLabel="Insert"
-                buttonAriaLabel="Insert specialized editor node"
-                buttonIconClassName="icon plus">
+              <div className="divider toolbar-insert-divider" />
+              <div className="toolbar-insert">
+                <DropDown
+                  disabled={!isEditable}
+                  buttonClassName="toolbar-item spaced"
+                  buttonLabel="Insert"
+                  buttonAriaLabel="Insert specialized editor node"
+                  buttonIconClassName="icon plus">
                 <DropDownItem
                   onClick={() => {
                     activeEditor.dispatchCommand(
@@ -1547,23 +1548,26 @@ export default function ToolbarPlugin({
                     <span className="text">{embedConfig.contentName}</span>
                   </DropDownItem>
                 ))}
-              </DropDown>
+                </DropDown>
+              </div>
             </>
           )}
         </>
       )}
       {!markdownOnly && (
         <>
-          <Divider />
-          <ElementFormatDropdown
-            disabled={!isEditable}
-            value={toolbarState.elementFormat}
-            editor={activeEditor}
-            isRTL={toolbarState.isRTL}
-          />
+          <div className="divider toolbar-alignment-divider" />
+          <div className="toolbar-alignment">
+            <ElementFormatDropdown
+              disabled={!isEditable}
+              value={toolbarState.elementFormat}
+              editor={activeEditor}
+              isRTL={toolbarState.isRTL}
+            />
+          </div>
         </>
       )}
-      <Divider />
+      <div className="divider toolbar-main-divider" />
       <ThemeToggle className="toolbar-item" />
 
       {modal}

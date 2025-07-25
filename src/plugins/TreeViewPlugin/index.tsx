@@ -14,6 +14,7 @@ import * as React from 'react';
 
 export default function TreeViewPlugin(): JSX.Element {
   const [editor] = useLexicalComposerContext();
+  console.log("Showing TreeViewPlugin");
   return (
     <TreeView
       viewClassName="tree-view-output"
