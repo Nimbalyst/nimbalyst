@@ -15,13 +15,10 @@ import '@excalidraw/excalidraw/index.css';
 
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { $insertNodeToNearestRoot } from '@lexical/utils';
-import { COMMAND_PRIORITY_EDITOR, createCommand, LexicalCommand, } from 'lexical';
+import { COMMAND_PRIORITY_EDITOR } from 'lexical';
 
 import { $createExcalidrawNode, ExcalidrawNode, } from '../../nodes/ExcalidrawNode';
-
-export const INSERT_EXCALIDRAW_COMMAND: LexicalCommand<void> = createCommand(
-  'INSERT_EXCALIDRAW_COMMAND',
-);
+import { INSERT_EXCALIDRAW_COMMAND } from './ExcalidrawCommands';
 
 export default function ExcalidrawPlugin(): JSX.Element | null {
   const [editor] = useLexicalComposerContext();

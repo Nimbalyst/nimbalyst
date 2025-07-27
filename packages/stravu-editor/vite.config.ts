@@ -32,12 +32,24 @@ const optimizeExcalidrawPlugin = () => {
     transform(code: string, id: string) {
       // Strip out locale imports from Excalidraw bundle
       if (id.includes('@excalidraw/excalidraw')) {
+        let hasChanges = false;
         // Replace dynamic locale imports with empty object
-        code = code.replace(/import\(.+?locales\/[^)]+\)/g, 'Promise.resolve({default: {}})');
+        const dynamicImportRegex = /import\(.+?locales\/[^)]+\)/g;
+        if (dynamicImportRegex.test(code)) {
+          code = code.replace(dynamicImportRegex, 'Promise.resolve({default: {}})');
+          hasChanges = true;
+        }
         // Replace static locale imports
-        code = code.replace(/from\s+["']\.\.?\/locales\/[^"']+["']/g, 'from "virtual:empty-locale"');
+        const staticImportRegex = /from\s+["']\.\.?\/locales\/[^"']+["']/g;
+        if (staticImportRegex.test(code)) {
+          code = code.replace(staticImportRegex, 'from "virtual:empty-locale"');
+          hasChanges = true;
+        }
+        if (hasChanges) {
+          return { code, map: null };
+        }
       }
-      return code;
+      return null;
     }
   };
 };
@@ -77,6 +89,17 @@ export default defineConfig(({ mode }) => ({
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM'
+        },
+        // Manual chunks to split out large dependencies
+        manualChunks: (id) => {
+          if (id.includes('@shikijs/langs/')) {
+            // Put each language in its own chunk
+            const lang = id.split('@shikijs/langs/')[1];
+            return `shiki-lang-${lang}`;
+          }
+          if (id.includes('prettier')) {
+            return 'prettier';
+          }
         }
       }
     },

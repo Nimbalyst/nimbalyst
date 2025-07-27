@@ -40,12 +40,14 @@
     "build": "vite build",
     "dev": "vite build --watch",
     "preview": "vite preview",
+    "clean": "rm -rf node_modules/.vite dist",
+    "clean:build": "rm -rf node_modules/.vite dist && pnpm run build",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.0",
-    "@lexical/dragon": "workspace:0.33.1",
-    "@lexical/history": "workspace:0.33.1",
+    "@lexical/dragon": "^0.33.2-nightly.20250724.0",
+    "@lexical/history": "^0.33.2-nightly.20250724.0",
     "lodash-es": "^4.17.21",
     "prettier": "^2.8.8",
     "react-error-boundary": "^3.1.4",

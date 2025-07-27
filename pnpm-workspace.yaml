@@ -1,4 +1,2 @@
 packages:
   - 'packages/*'
-  - '../facebooklexical/packages/*'
-  - '!../facebooklexical/packages/lexical-playground'

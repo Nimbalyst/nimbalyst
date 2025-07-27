@@ -8,7 +8,9 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "clean": "rm -rf node_modules/.vite out dist",
+    "clean:dev": "rm -rf node_modules/.vite && pnpm run dev"
   },
   "dependencies": {
     "electron-store": "^8.1.0",
@@ -24,9 +26,9 @@
     "@vitejs/plugin-react": "^4.0.0",
     "electron": "^25.0.0",
     "electron-builder": "^26.0.12",
-    "electron-vite": "^1.0.0",
+    "electron-vite": "^4.0.0",
     "typescript": "^5.0.0",
-    "vite": "^4.2.0"
+    "vite": "^5.2.11"
   },
   "build": {
     "appId": "com.stravu.editor",

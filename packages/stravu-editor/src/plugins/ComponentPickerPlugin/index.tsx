@@ -39,7 +39,7 @@ import * as ReactDOM from 'react-dom';
 import useModal from '../../hooks/useModal';
 import {EmbedConfigs} from '../AutoEmbedPlugin';
 import {INSERT_COLLAPSIBLE_COMMAND} from '../CollapsiblePlugin';
-import {INSERT_EXCALIDRAW_COMMAND} from '../ExcalidrawPlugin';
+import {INSERT_EXCALIDRAW_COMMAND} from '../ExcalidrawPlugin/ExcalidrawCommands';
 import InsertLayoutDialog from '../LayoutPlugin/InsertLayoutDialog';
 import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
 import {InsertPollDialog} from '../PollPlugin';
