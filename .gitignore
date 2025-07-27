@@ -9,6 +9,7 @@ dist/
 build/
 esm/build/
 split/build/
+out/
 
 # Development
 .vite/

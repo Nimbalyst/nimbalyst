@@ -1,6 +1,32 @@
-# Stravu Editor
+# Stravu Editor - Monorepo
 
-A rich text editor built with Meta's Lexical framework, transformed from the Lexical playground into a markdown editor component with comprehensive features including rich text editing, tables and code highlighting.
+This is the monorepo for Stravu Editor, a powerful rich text editor built with Meta's Lexical framework, featuring markdown support, tables, and comprehensive editing capabilities.
+
+## Packages
+
+- **`packages/stravu-editor`** - The core library (published to npm)
+- **`packages/playground`** - Demo and testing playground web app
+- **`packages/electron`** - Desktop application (Electron)
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- pnpm 8+
+
+### Installation
+
+```bash
+# Install dependencies
+pnpm install
+
+# Start the playground dev server
+pnpm dev
+
+# Build the library
+pnpm build
+```
 
 ## Features
 
@@ -20,9 +46,29 @@ A rich text editor built with Meta's Lexical framework, transformed from the Lex
 - **File Operations**: New File, Open File, Load File, and Save File operations
 - **URL Integration**: File names are reflected in the URL for bookmarking and sharing
 
-## Installation
+## Development
 
-### As a Library (Recommended)
+### Library Development
+
+```bash
+# Watch and rebuild library on changes
+pnpm dev:lib
+
+# Build library for production
+pnpm build
+```
+
+### Playground Development
+
+```bash
+# Start playground dev server (port 4000)
+pnpm dev
+
+# Build playground for deployment
+pnpm build:playground
+```
+
+### Library Installation (for end users)
 
 ```bash
 npm install stravu-editor
@@ -30,28 +76,6 @@ npm install stravu-editor
 yarn add stravu-editor
 # or
 pnpm add stravu-editor
-```
-
-### For Development
-
-```bash
-# Install dependencies
-pnpm install
-
-# Start development server
-pnpm run dev
-
-# Build library for distribution
-pnpm run build
-
-# Build for development testing
-pnpm run build-dev
-
-# Build for production
-pnpm run build-prod
-
-# Preview built application
-pnpm run preview
 ```
 
 ## Usage

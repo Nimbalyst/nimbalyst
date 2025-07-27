@@ -1,0 +1,42 @@
+{
+  "name": "@stravu-editor/playground",
+  "version": "0.33.1",
+  "private": true,
+  "description": "Demo and testing playground for Stravu Editor",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host --port 4000",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "stravu-editor": "workspace:*",
+    "@lexical/clipboard": "^0.33.2-nightly.20250724.0",
+    "@lexical/code": "^0.33.2-nightly.20250724.0",
+    "@lexical/code-shiki": "^0.33.2-nightly.20250724.0",
+    "@lexical/file": "^0.33.2-nightly.20250724.0",
+    "@lexical/hashtag": "^0.33.2-nightly.20250724.0",
+    "@lexical/link": "^0.33.2-nightly.20250724.0",
+    "@lexical/list": "^0.33.2-nightly.20250724.0",
+    "@lexical/mark": "^0.33.2-nightly.20250724.0",
+    "@lexical/markdown": "^0.33.2-nightly.20250724.0",
+    "@lexical/overflow": "^0.33.2-nightly.20250724.0",
+    "@lexical/plain-text": "^0.33.2-nightly.20250724.0",
+    "@lexical/react": "^0.33.2-nightly.20250724.0",
+    "@lexical/rich-text": "^0.33.2-nightly.20250724.0",
+    "@lexical/selection": "^0.33.2-nightly.20250724.0",
+    "@lexical/table": "^0.33.2-nightly.20250724.0",
+    "@lexical/utils": "^0.33.2-nightly.20250724.0",
+    "@lexical/yjs": "^0.33.2-nightly.20250724.0",
+    "lexical": "^0.33.2-nightly.20250724.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.0.0",
+    "vite": "^5.2.11"
+  }
+}

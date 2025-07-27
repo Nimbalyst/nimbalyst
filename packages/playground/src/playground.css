@@ -1,0 +1,147 @@
+/* Playground-specific styles */
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+.editor-shell {
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  position: relative;
+}
+
+.stravu-editor {
+  flex: 1;
+  height: 100vh;
+  overflow: auto;
+}
+
+/* Settings button */
+.editor-dev-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  background: #333;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 1000;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  transition: all 0.2s;
+}
+
+.editor-dev-button:hover {
+  background: #555;
+  transform: scale(1.1);
+}
+
+.editor-dev-button.active {
+  background: #007bff;
+}
+
+.editor-dev-button::before {
+  content: '⚙';
+  font-size: 24px;
+  color: white;
+}
+
+/* Settings panel */
+.switches {
+  position: fixed;
+  right: 20px;
+  bottom: 80px;
+  width: 300px;
+  max-height: 60vh;
+  background: #222;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 12px;
+  overflow-y: auto;
+  z-index: 999;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.8);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+/* Switch styles */
+.switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 6px 8px;
+  background: transparent;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+
+.switch:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+.switch input[type="checkbox"] {
+  width: 36px;
+  height: 20px;
+  appearance: none;
+  background: #444;
+  border-radius: 10px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.switch input[type="checkbox"]:checked {
+  background: #007bff;
+}
+
+.switch input[type="checkbox"]::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s;
+}
+
+.switch input[type="checkbox"]:checked::before {
+  transform: translateX(16px);
+}
+
+.switch label {
+  color: #fff;
+  font-size: 13px;
+  font-weight: normal;
+  user-select: none;
+  cursor: pointer;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+/* Override any default margins on editor containers */
+.editor-container {
+  height: 100%;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.ContentEditable__root {
+  height: 100%;
+  min-height: 100vh;
+}
