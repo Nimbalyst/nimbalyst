@@ -11,19 +11,20 @@
     "dist": "electron-builder"
   },
   "dependencies": {
-    "stravu-editor": "workspace:*",
     "electron-store": "^8.1.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "stravu-editor": "workspace:*"
   },
   "devDependencies": {
-    "electron": "^25.0.0",
-    "electron-builder": "^24.13.3",
-    "electron-vite": "^1.0.0",
+    "@electron/rebuild": "^4.0.1",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.0.0",
+    "electron": "^25.0.0",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^1.0.0",
     "typescript": "^5.0.0",
     "vite": "^4.2.0"
   },
@@ -69,12 +70,10 @@
       ]
     },
     "win": {
-      "target": "nsis",
-      "icon": "icon.ico"
+      "target": "nsis"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "icon.png"
+      "target": "AppImage"
     }
   }
 }

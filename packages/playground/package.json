@@ -10,12 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "stravu-editor": "workspace:*",
     "@lexical/clipboard": "^0.33.2-nightly.20250724.0",
     "@lexical/code": "^0.33.2-nightly.20250724.0",
     "@lexical/code-shiki": "^0.33.2-nightly.20250724.0",
+    "@lexical/dragon": "workspace:^",
     "@lexical/file": "^0.33.2-nightly.20250724.0",
     "@lexical/hashtag": "^0.33.2-nightly.20250724.0",
+    "@lexical/history": "workspace:^",
     "@lexical/link": "^0.33.2-nightly.20250724.0",
     "@lexical/list": "^0.33.2-nightly.20250724.0",
     "@lexical/mark": "^0.33.2-nightly.20250724.0",
@@ -30,7 +31,8 @@
     "@lexical/yjs": "^0.33.2-nightly.20250724.0",
     "lexical": "^0.33.2-nightly.20250724.0",
     "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "react-dom": "^18.0.0",
+    "stravu-editor": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^18.0.0",

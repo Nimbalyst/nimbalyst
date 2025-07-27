@@ -4,8 +4,47 @@ import { resolve } from 'path';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import dts from 'vite-plugin-dts';
 
+// Custom plugin to exclude Excalidraw locales and optimize imports
+const optimizeExcalidrawPlugin = () => {
+  return {
+    name: 'optimize-excalidraw',
+    enforce: 'pre' as const,
+    resolveId(source: string, importer?: string) {
+      // Block any locale imports from Excalidraw
+      if (source.includes('@excalidraw/excalidraw')) {
+        if (/locales\/[a-z]{2}-[A-Z]{2}/.test(source)) {
+          return { id: 'virtual:empty-locale', moduleSideEffects: false };
+        }
+        if (source.endsWith('/locales')) {
+          return { id: 'virtual:empty-locale-index', moduleSideEffects: false };
+        }
+      }
+      return null;
+    },
+    load(id: string) {
+      if (id === 'virtual:empty-locale') {
+        return 'export default {};';
+      }
+      if (id === 'virtual:empty-locale-index') {
+        return 'export default { "en": {} };';
+      }
+    },
+    transform(code: string, id: string) {
+      // Strip out locale imports from Excalidraw bundle
+      if (id.includes('@excalidraw/excalidraw')) {
+        // Replace dynamic locale imports with empty object
+        code = code.replace(/import\(.+?locales\/[^)]+\)/g, 'Promise.resolve({default: {}})');
+        // Replace static locale imports
+        code = code.replace(/from\s+["']\.\.?\/locales\/[^"']+["']/g, 'from "virtual:empty-locale"');
+      }
+      return code;
+    }
+  };
+};
+
 export default defineConfig(({ mode }) => ({
   plugins: [
+    optimizeExcalidrawPlugin(),
     react(),
     dts({
       insertTypesEntry: true,
@@ -33,7 +72,13 @@ export default defineConfig(({ mode }) => ({
         'react-dom',
         'lexical',
         /^@lexical\//
-      ]
+      ],
+      output: {
+        globals: {
+          react: 'React',
+          'react-dom': 'ReactDOM'
+        }
+      }
     },
     sourcemap: true,
     ...(mode === 'production' && {
@@ -47,6 +92,32 @@ export default defineConfig(({ mode }) => ({
     }),
   },
   optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'lexical',
+      '@lexical/react',
+      '@lexical/utils',
+      '@lexical/rich-text',
+      '@lexical/plain-text',
+      '@lexical/list',
+      '@lexical/link',
+      '@lexical/code',
+      '@lexical/table',
+      '@lexical/selection',
+      '@lexical/clipboard',
+      '@lexical/file',
+      '@lexical/mark',
+      '@lexical/markdown',
+      '@lexical/overflow',
+      '@lexical/hashtag',
+      '@lexical/history',
+      '@lexical/dragon'
+    ],
+    exclude: [
+      '@excalidraw/excalidraw/locales',
+      '@excalidraw/mermaid-to-excalidraw'
+    ],
     esbuildOptions: {
       target: 'es2022',
       treeShaking: true,
@@ -54,7 +125,49 @@ export default defineConfig(({ mode }) => ({
   },
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
+      '@': resolve(__dirname, 'src'),
+      '@excalidraw/mermaid-to-excalidraw': resolve(__dirname, 'src/mocks/mermaid-mock.ts'),
+      // Stub out uncommon Shiki language bundles
+      '@shikijs/langs/emacs-lisp': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/wolfram': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/objective-c': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/objective-cpp': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/racket': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/fortran-free-form': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/fortran-fixed-form': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/ocaml': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/stata': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/ada': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/haskell': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/cobol': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/erlang': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/julia': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/crystal': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/system-verilog': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/fsharp': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/vhdl': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/purescript': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/common-lisp': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/nim': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/elixir': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/matlab': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/prolog': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/elm': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/sas': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/scheme': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/smalltalk': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/clojure': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/verilog': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/coq': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/zig': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/tcl': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/pascal': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/lean': resolve(__dirname, 'src/mocks/shiki-lang-stub.js'),
+      '@shikijs/langs/mipsasm': resolve(__dirname, 'src/mocks/shiki-lang-stub.js')
     }
+  },
+  define: {
+    // Force production mode for dependencies to avoid dev warnings
+    'process.env.NODE_ENV': JSON.stringify(mode || 'development')
   }
 }));
