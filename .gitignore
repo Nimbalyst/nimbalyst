@@ -138,3 +138,6 @@ coverage/
 
 # Turbo
 .turbo/
+# Bundle analysis artifacts
+bundle-stats.html
+bundle-analysis.json

@@ -8,7 +8,7 @@ A rich text editor built with Meta's Lexical framework, transformed from the Lex
 - **Rich Text Editing**: Full-featured WYSIWYG editor with support for bold, italic, underline, strikethrough, and more
 - **Markdown Support**: Toggle between rich text and markdown source view with the markdown button in the toolbar
 - **Tables**: Create, edit, and manage tables with cell merging, background colors, and horizontal scrolling
-- **Code Blocks**: Syntax highlighting with support for multiple languages via Prism.js or Shiki
+- **Code Blocks**: Syntax highlighting with support for multiple languages via Shiki
 - **Lists**: Ordered and unordered lists with nested indentation and checkboxes
 - **Images**: Inline and block images with drag-and-drop support
 - **Excalidraw**: Embedded drawing support

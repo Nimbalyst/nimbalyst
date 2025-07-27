@@ -19,7 +19,6 @@ export const DEFAULT_SETTINGS = {
   isCharLimit: false,
   isCharLimitUtf8: false,
   isCodeHighlighted: true,
-  isCodeShiki: true,
   isCollab: false,
   isMaxLength: false,
   isRichText: true,

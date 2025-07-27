@@ -16,7 +16,6 @@ export interface EditorConfig {
   isAutocomplete?: boolean;
   hasLinkAttributes?: boolean;
   isCodeHighlighted?: boolean;
-  isCodeShiki?: boolean;
   showTableOfContents?: boolean;
 
   // Limits and validation
@@ -72,7 +71,6 @@ export const DEFAULT_EDITOR_CONFIG: EditorConfig = {
   isAutocomplete: false,
   hasLinkAttributes: false,
   isCodeHighlighted: true,
-  isCodeShiki: true,
   showTableOfContents: false,
   isMaxLength: false,
   isCharLimit: false,

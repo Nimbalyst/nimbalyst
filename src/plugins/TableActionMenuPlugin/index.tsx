@@ -111,6 +111,7 @@ type TableCellActionMenuProps = Readonly<{
   ) => void;
   tableCellNode: TableCellNode;
   cellMerge: boolean;
+  anchorElem: HTMLElement;
 }>;
 
 function TableActionMenu({
@@ -120,6 +121,7 @@ function TableActionMenu({
   contextRef,
   cellMerge,
   showColorPickerModal,
+  anchorElem,
 }: TableCellActionMenuProps) {
   const [editor] = useLexicalComposerContext();
   const dropDownRef = useRef<HTMLDivElement | null>(null);
@@ -178,30 +180,32 @@ function TableActionMenu({
       dropDownElement != null &&
       rootElement != null
     ) {
+      const anchorRect = anchorElem.getBoundingClientRect();
       const rootEleRect = rootElement.getBoundingClientRect();
       const menuButtonRect = menuButtonElement.getBoundingClientRect();
       dropDownElement.style.opacity = '1';
       const dropDownElementRect = dropDownElement.getBoundingClientRect();
       const margin = 5;
-      let leftPosition = menuButtonRect.right + margin;
+      
+      // Calculate position relative to anchorElem
+      let leftPosition = menuButtonRect.right - anchorRect.left + margin;
       if (
-        leftPosition + dropDownElementRect.width > window.innerWidth ||
-        leftPosition + dropDownElementRect.width > rootEleRect.right
+        menuButtonRect.right + margin + dropDownElementRect.width > window.innerWidth ||
+        menuButtonRect.right + margin + dropDownElementRect.width > rootEleRect.right
       ) {
-        const position =
-          menuButtonRect.left - dropDownElementRect.width - margin;
-        leftPosition = (position < 0 ? margin : position) + window.pageXOffset;
+        const position = menuButtonRect.left - anchorRect.left - dropDownElementRect.width - margin;
+        leftPosition = position < 0 ? margin : position;
       }
-      dropDownElement.style.left = `${leftPosition + window.pageXOffset}px`;
+      dropDownElement.style.left = `${leftPosition}px`;
 
-      let topPosition = menuButtonRect.top;
-      if (topPosition + dropDownElementRect.height > window.innerHeight) {
-        const position = menuButtonRect.bottom - dropDownElementRect.height;
+      let topPosition = menuButtonRect.top - anchorRect.top;
+      if (menuButtonRect.top + dropDownElementRect.height > window.innerHeight) {
+        const position = menuButtonRect.bottom - anchorRect.top - dropDownElementRect.height;
         topPosition = position < 0 ? margin : position;
       }
       dropDownElement.style.top = `${topPosition}px`;
     }
-  }, [contextRef, dropDownRef, editor]);
+  }, [contextRef, dropDownRef, editor, anchorElem]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -498,7 +502,7 @@ function TableActionMenu({
   return createPortal(
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
-      className="dropdown"
+      className="dropdown table-cell-action-menu-dropdown"
       ref={dropDownRef}
       onClick={(e) => {
         e.stopPropagation();
@@ -674,7 +678,7 @@ function TableActionMenu({
         </span>
       </button>
     </div>,
-    document.body,
+    anchorElem,
   );
 }
 
@@ -910,6 +914,7 @@ function TableCellActionMenuContainer({
               tableCellNode={tableCellNode}
               cellMerge={cellMerge}
               showColorPickerModal={showColorPickerModal}
+              anchorElem={anchorElem}
             />
           )}
         </>

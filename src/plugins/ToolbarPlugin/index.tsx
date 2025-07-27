@@ -11,8 +11,6 @@ import type {JSX} from 'react';
 import {
   $createCodeNode,
   $isCodeNode,
-  getCodeLanguageOptions as getCodeLanguageOptionsPrism,
-  normalizeCodeLanguage as normalizeCodeLanguagePrism,
 } from '@lexical/code';
 import {
   getCodeLanguageOptions as getCodeLanguageOptionsShiki,
@@ -76,7 +74,6 @@ import {
   useToolbarState,
 } from '../../context/ToolbarContext';
 import useModal from '../../hooks/useModal';
-import catTypingGif from '../../images/cat-typing.gif';
 import {$createStickyNode} from '../../nodes/StickyNode';
 import DropDown, {DropDownItem} from '../../ui/DropDown';
 import DropdownColorPicker from '../../ui/DropdownColorPicker';
@@ -86,11 +83,7 @@ import {sanitizeUrl} from '../../utils/url';
 import {EmbedConfigs} from '../AutoEmbedPlugin';
 import {INSERT_COLLAPSIBLE_COMMAND} from '../CollapsiblePlugin';
 import {INSERT_EXCALIDRAW_COMMAND} from '../ExcalidrawPlugin';
-import {
-  INSERT_IMAGE_COMMAND,
-  InsertImageDialog,
-  InsertImagePayload,
-} from '../ImagesPlugin';
+import {InsertImageDialog} from '../ImagesPlugin';
 import {InsertInlineImageDialog} from '../InlineImagePlugin';
 import InsertLayoutDialog from '../LayoutPlugin/InsertLayoutDialog';
 import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
@@ -116,31 +109,6 @@ const rootTypeToRootName = {
   table: 'Table',
 };
 
-const CODE_LANGUAGE_OPTIONS_PRISM: [string, string][] =
-  getCodeLanguageOptionsPrism().filter((option) =>
-    [
-      'c',
-      'clike',
-      'cpp',
-      'css',
-      'html',
-      'java',
-      'js',
-      'javascript',
-      'markdown',
-      'objc',
-      'objective-c',
-      'plain',
-      'powershell',
-      'py',
-      'python',
-      'rust',
-      'sql',
-      'swift',
-      'typescript',
-      'xml',
-    ].includes(option[0]),
-  );
 
 const CODE_LANGUAGE_OPTIONS_SHIKI: [string, string][] =
   getCodeLanguageOptionsShiki().filter((option) =>
@@ -695,10 +663,7 @@ export default function ToolbarPlugin({
         updateToolbarState(
           'codeLanguage',
           language
-            ? (settings.isCodeHighlighted &&
-                (settings.isCodeShiki
-                  ? normalizeCodeLanguageShiki(language)
-                  : normalizeCodeLanguagePrism(language))) ||
+            ? (settings.isCodeHighlighted && normalizeCodeLanguageShiki(language)) ||
                 language
             : '',
         );
@@ -707,7 +672,7 @@ export default function ToolbarPlugin({
         return;
       }
     },
-    [updateToolbarState, settings.isCodeHighlighted, settings.isCodeShiki],
+    [updateToolbarState, settings.isCodeHighlighted],
   );
 
   const $updateToolbar = useCallback(() => {
@@ -972,9 +937,6 @@ export default function ToolbarPlugin({
     },
     [activeEditor, selectedElementKey],
   );
-  const insertGifOnClick = (payload: InsertImagePayload) => {
-    activeEditor.dispatchCommand(INSERT_IMAGE_COMMAND, payload);
-  };
 
   const handleMarkdownToggle = useCallback(() => {
     activeEditor.update(() => {
@@ -995,9 +957,7 @@ export default function ToolbarPlugin({
           true,
         );
         const codeNode = $createCodeNode('markdown');
-        if (settings.isCodeShiki) {
-          codeNode.setTheme(THEME_MAPPING[theme]);
-        }
+        codeNode.setTheme(THEME_MAPPING[theme]);
         codeNode.append($createTextNode(markdown));
         root.clear().append(codeNode);
         if (markdown.length === 0) {
@@ -1007,7 +967,7 @@ export default function ToolbarPlugin({
       $getRoot().selectStart();
     }, {discrete: true});
 
-  }, [activeEditor, settings.shouldPreserveNewLinesInMarkdown, settings.isCodeShiki, theme]);
+  }, [activeEditor, settings.shouldPreserveNewLinesInMarkdown, theme]);
 
   const canViewerSeeInsertDropdown = !toolbarState.isImageCaption;
   const canViewerSeeInsertCodeButton = !toolbarState.isImageCaption;
@@ -1075,7 +1035,7 @@ export default function ToolbarPlugin({
               blockType={toolbarState.blockType}
               rootType={toolbarState.rootType}
               editor={activeEditor}
-              theme={settings.isCodeShiki ? THEME_MAPPING[theme] : undefined}
+              theme={THEME_MAPPING[theme]}
             />
             <div className="divider toolbar-main-divider" />
           </>
@@ -1083,8 +1043,7 @@ export default function ToolbarPlugin({
       {toolbarState.blockType === 'code' && settings.isCodeHighlighted ? (
         <>
 
-          {settings.isCodeShiki && (
-            <>
+          <>
               <div className="toolbar-code-language">
                 <DropDown
                   disabled={!isEditable}
@@ -1136,7 +1095,6 @@ export default function ToolbarPlugin({
                 </DropDown>
               </div>
             </>
-          )}
         </>
       ) : (
         <>
@@ -1444,19 +1402,6 @@ export default function ToolbarPlugin({
                   <i className="icon image" />
                   <span className="text">Inline Image</span>
                 </DropDownItem>
-                {!markdownOnly && (
-                  <DropDownItem
-                    onClick={() =>
-                      insertGifOnClick({
-                        altText: 'Cat typing on a laptop',
-                        src: catTypingGif,
-                      })
-                    }
-                    className="item">
-                    <i className="icon gif" />
-                    <span className="text">GIF</span>
-                  </DropDownItem>
-                )}
                 <DropDownItem
                   onClick={() => {
                     activeEditor.dispatchCommand(

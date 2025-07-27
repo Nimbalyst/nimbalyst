@@ -43,7 +43,6 @@ import AutocompletePlugin from './plugins/AutocompletePlugin';
 import AutoEmbedPlugin from './plugins/AutoEmbedPlugin';
 import AutoLinkPlugin from './plugins/AutoLinkPlugin';
 import CodeActionMenuPlugin from './plugins/CodeActionMenuPlugin';
-import CodeHighlightPrismPlugin from './plugins/CodeHighlightPrismPlugin';
 import CodeHighlightShikiPlugin from './plugins/CodeHighlightShikiPlugin';
 import CollapsiblePlugin from './plugins/CollapsiblePlugin';
 import CommentPlugin from './plugins/CommentPlugin';
@@ -94,7 +93,6 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
   const {historyState} = useSharedHistoryContext();
   const {
     isCodeHighlighted,
-    isCodeShiki,
     isCollab,
     isAutocomplete,
     isMaxLength,
@@ -241,7 +239,10 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         <HashtagPlugin />
         <KeywordsPlugin />
         <SpeechToTextPlugin />
-        <AutoLinkPlugin />
+
+        {/*  This doesn't play well with images embedded as base64 urls (spins forever) */}
+        {/*<AutoLinkPlugin />*/}
+
         {/*<CommentPlugin*/}
         {/*  providerFactory={isCollab ? createWebsocketProvider : undefined}*/}
         {/*/>*/}
@@ -267,12 +268,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
               ErrorBoundary={LexicalErrorBoundary}
             />
             <MarkdownShortcutPlugin />
-            {isCodeHighlighted &&
-              (isCodeShiki ? (
-                <CodeHighlightShikiPlugin />
-              ) : (
-                <CodeHighlightPrismPlugin />
-              ))}
+            {isCodeHighlighted && <CodeHighlightShikiPlugin />}
             <ListPlugin hasStrictIndent={listStrictIndent} />
             <CheckListPlugin />
             <TablePlugin

@@ -798,6 +798,10 @@ i.page-break,
   background-color: #fff;
 }
 
+.stravu-editor .dropdown.table-cell-action-menu-dropdown {
+  position: absolute;
+}
+
 .stravu-editor .dropdown .item {
   margin: 0 8px 0 8px;
   padding: 8px;
