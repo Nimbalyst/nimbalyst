@@ -68,4 +68,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Window operations
   setDocumentEdited: (edited: boolean) => ipcRenderer.send('set-document-edited', edited),
   setTitle: (title: string) => ipcRenderer.send('set-title', title),
+  setCurrentFile: (filePath: string | null) => ipcRenderer.send('set-current-file', filePath),
 });

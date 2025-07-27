@@ -64,4 +64,4 @@ Custom nodes extend Lexical's base functionality:
 
 ## Dependencies
 
-Built with modern React, TypeScript, and Vite. Uses extensive Lexical packages (@lexical/*) for editor functionality, plus supporting libraries like KaTeX for equations, Prettier for code formatting, and Excalidraw for drawings.
+Built with modern React, TypeScript, and Vite. Uses extensive Lexical packages (@lexical/\*) for editor functionality, plus supporting libraries like KaTeX for equations, Prettier for code formatting, and Excalidraw for drawings.

@@ -1,10 +1,42 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, Menu, dialog, ipcMain, nativeImage } from 'electron';
 import { join } from 'path';
-import { readFileSync, writeFileSync, appendFileSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'fs';
 
 let mainWindow: BrowserWindow | null = null;
 let currentFilePath: string | null = null;
 let documentEdited: boolean = false;
+let pendingFilePath: string | null = null;
+
+// Function to load file into window
+function loadFileIntoWindow(filePath: string) {
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    currentFilePath = filePath;
+    console.log('Loading file into window:', filePath);
+    mainWindow?.webContents.send('file-opened-from-os', { filePath, content });
+  } catch (error) {
+    console.error('Error loading file from OS:', error);
+  }
+}
+
+// Handle file opening from OS (file associations and dock drops)
+// This needs to be registered early to catch files dropped on dock
+app.on('open-file', (event, path) => {
+  event.preventDefault();
+  console.log('open-file event received:', path);
+  
+  if (app.isReady() && mainWindow && !mainWindow.isDestroyed()) {
+    // If window already exists, load the file
+    loadFileIntoWindow(path);
+  } else {
+    // Store the file path to open after window is created
+    pendingFilePath = path;
+    // If app is ready but no window exists, create one
+    if (app.isReady() && !mainWindow) {
+      createWindow();
+    }
+  }
+});
 
 // Reset file path when creating new window
 function resetFileState() {
@@ -14,12 +46,41 @@ function resetFileState() {
 }
 
 function createWindow() {
-  // Reset state when creating new window
-  resetFileState();
+  try {
+    console.log('Creating window...');
+    // Reset state when creating new window
+    resetFileState();
+  
+  // Set up icon path based on platform
+  let icon;
+  try {
+    if (process.platform === 'darwin') {
+      // On macOS in dev, we need to use a PNG file, not the iconset
+      const iconPath = join(__dirname, '../../../../assets/crystal-editor-iconset/icon.iconset/icon_512x512.png');
+      console.log('Window icon path:', iconPath);
+      if (existsSync(iconPath)) {
+        icon = nativeImage.createFromPath(iconPath);
+      }
+    } else if (process.platform === 'win32') {
+      const iconPath = join(__dirname, '../../icon.ico');
+      if (existsSync(iconPath)) {
+        icon = iconPath;
+      }
+    } else {
+      // Linux
+      const iconPath = join(__dirname, '../../icon.png');
+      if (existsSync(iconPath)) {
+        icon = iconPath;
+      }
+    }
+  } catch (error) {
+    console.error('Error loading icon:', error);
+  }
   
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
@@ -30,11 +91,9 @@ function createWindow() {
   // In development, load from vite dev server
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:5273');
-    mainWindow.webContents.openDevTools();
   } else {
     // In production, load built files
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
-    mainWindow.webContents.openDevTools(); // Enable dev tools
   }
 
   // Handle window close with unsaved changes
@@ -74,10 +133,19 @@ function createWindow() {
 
   // If a file was requested to be opened before window was ready, open it now
   mainWindow.webContents.once('did-finish-load', () => {
-    if (currentFilePath) {
+    if (pendingFilePath) {
+      loadFileIntoWindow(pendingFilePath);
+      pendingFilePath = null;
+    } else if (currentFilePath) {
       loadFileIntoWindow(currentFilePath);
     }
   });
+  
+  console.log('Window created successfully');
+  } catch (error) {
+    console.error('Error creating window:', error);
+    throw error;
+  }
 }
 
 // Set up console logging in development
@@ -136,46 +204,47 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 app.whenReady().then(() => {
-  createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+  try {
+    // Set dock icon for macOS
+    if (process.platform === 'darwin' && app.dock) {
+      const iconPath = join(__dirname, '../../../../assets/crystal-editor-iconset/icon.iconset/icon_512x512.png');
+      console.log('Looking for icon at:', iconPath);
+      if (existsSync(iconPath)) {
+        const dockIcon = nativeImage.createFromPath(iconPath);
+        app.dock.setIcon(dockIcon);
+        console.log('Dock icon set successfully');
+      } else {
+        console.log('Icon file not found');
+      }
     }
-  });
+    
+    createWindow();
+    createApplicationMenu();
+
+    app.on('activate', () => {
+      // On macOS, re-create window when dock icon is clicked
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error during app initialization:', error);
+  }
 });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+  // On macOS, keep the app running even when all windows are closed
+  // This allows dropping files on the dock icon
 });
 
-// Handle file opening from OS (file associations)
-app.on('open-file', (event, path) => {
-  event.preventDefault();
-  
-  if (mainWindow) {
-    // If window already exists, load the file
-    loadFileIntoWindow(path);
-  } else {
-    // Store the file path to open after window is created
-    currentFilePath = path;
-  }
-});
 
-function loadFileIntoWindow(filePath: string) {
-  try {
-    const content = readFileSync(filePath, 'utf-8');
-    currentFilePath = filePath;
-    mainWindow?.webContents.send('file-opened-from-os', { filePath, content });
-  } catch (error) {
-    console.error('Error loading file from OS:', error);
-  }
-}
-
-// Create application menu
-const template = [
+// Function to create application menu
+function createApplicationMenu() {
+  const template: any[] = [
   {
     label: 'File',
     submenu: [
@@ -197,10 +266,83 @@ const template = [
       { label: 'Copy', accelerator: 'CmdOrCtrl+C', role: 'copy' },
       { label: 'Paste', accelerator: 'CmdOrCtrl+V', role: 'paste' }
     ]
+  },
+  {
+    label: 'View',
+    submenu: [
+      { label: 'Toggle Developer Tools', accelerator: 'CmdOrCtrl+Shift+I', click: () => mainWindow?.webContents.toggleDevTools() },
+      { type: 'separator' },
+      { label: 'Reload', accelerator: 'CmdOrCtrl+R', click: () => mainWindow?.webContents.reload() },
+      { label: 'Force Reload', accelerator: 'CmdOrCtrl+Shift+R', click: () => mainWindow?.webContents.reloadIgnoringCache() },
+      { type: 'separator' },
+      { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: () => mainWindow?.webContents.setZoomFactor(1) },
+      { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', click: () => {
+        const currentZoom = mainWindow?.webContents.getZoomFactor() || 1;
+        mainWindow?.webContents.setZoomFactor(currentZoom + 0.1);
+      }},
+      { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => {
+        const currentZoom = mainWindow?.webContents.getZoomFactor() || 1;
+        mainWindow?.webContents.setZoomFactor(Math.max(0.5, currentZoom - 0.1));
+      }}
+    ]
   }
 ];
 
-Menu.setApplicationMenu(Menu.buildFromTemplate(template as any));
+// Add app menu on macOS
+if (process.platform === 'darwin') {
+  template.unshift({
+    label: app.getName(),
+    submenu: [
+      {
+        label: 'About Stravu Editor',
+        click: () => {
+          dialog.showMessageBox(mainWindow!, {
+            type: 'info',
+            title: 'About Stravu Editor',
+            message: 'Stravu Editor',
+            detail: `Version 0.33.1\n\nA powerful rich text editor made with ❤️ by Stravu\n\nBuilt with Lexical - Meta's extensible text editor framework\n\nCredits:\n• Lexical Framework by Meta\n• Based on Lexical Playground\n• Icons and design by Stravu\n\n© 2024 Stravu. All rights reserved.`,
+            buttons: ['OK'],
+            icon: process.platform === 'darwin' 
+              ? nativeImage.createFromPath(join(__dirname, '../../../../assets/crystal-editor-iconset/icon.iconset/icon_512x512.png'))
+              : undefined
+          });
+        }
+      },
+      { type: 'separator' },
+      { label: 'Preferences...', accelerator: 'CmdOrCtrl+,', enabled: false },
+      { type: 'separator' },
+      { label: 'Services', submenu: [] },
+      { type: 'separator' },
+      { label: 'Hide ' + app.getName(), accelerator: 'Command+H', role: 'hide' },
+      { label: 'Hide Others', accelerator: 'Command+Shift+H', role: 'hideothers' },
+      { label: 'Show All', role: 'unhide' },
+      { type: 'separator' },
+      { label: 'Quit', accelerator: 'Command+Q', click: () => app.quit() }
+    ]
+  });
+} else {
+  // Windows and Linux
+  template.push({
+    label: 'Help',
+    submenu: [
+      {
+        label: 'About Stravu Editor',
+        click: () => {
+          dialog.showMessageBox(mainWindow!, {
+            type: 'info',
+            title: 'About Stravu Editor',
+            message: 'Stravu Editor',
+            detail: `Version 0.33.1\n\nA powerful rich text editor made with ❤️ by Stravu\n\nBuilt with Lexical - Meta's extensible text editor framework\n\nCredits:\n• Lexical Framework by Meta\n• Based on Lexical Playground\n• Icons and design by Stravu\n\n© 2024 Stravu. All rights reserved.`,
+            buttons: ['OK']
+          });
+        }
+      }
+    ]
+  });
+}
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
 // IPC handlers for file operations
 ipcMain.handle('open-file', async () => {
@@ -234,11 +376,18 @@ ipcMain.handle('save-file', async (_event, content: string) => {
     
     console.log('Writing to file:', currentFilePath);
     writeFileSync(currentFilePath, content, 'utf-8');
+    documentEdited = false; // Reset dirty state after save
     return { success: true, filePath: currentFilePath };
   } catch (error) {
     console.error('Error saving file:', error);
     return null;
   }
+});
+
+// IPC handler to update current file path from renderer (for drag-drop)
+ipcMain.on('set-current-file', (_event, filePath: string | null) => {
+  currentFilePath = filePath;
+  console.log('Current file path updated from renderer:', currentFilePath);
 });
 
 ipcMain.handle('save-file-as', async (_event, content: string) => {

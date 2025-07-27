@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "electron": "^25.0.0",
-    "electron-builder": "^24.0.0",
+    "electron-builder": "^24.13.3",
     "electron-vite": "^1.0.0",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
@@ -53,13 +53,28 @@
       }
     ],
     "mac": {
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "icon": "../../assets/crystal-editor-iconset/icon.iconset",
+      "fileAssociations": [
+        {
+          "ext": "md",
+          "name": "Markdown Document",
+          "role": "Editor"
+        },
+        {
+          "ext": "markdown",
+          "name": "Markdown Document",
+          "role": "Editor"
+        }
+      ]
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "icon.ico"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "icon.png"
     }
   }
 }

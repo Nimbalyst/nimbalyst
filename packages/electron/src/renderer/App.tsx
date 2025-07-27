@@ -14,6 +14,7 @@ interface ElectronAPI {
   saveFileAs: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
   setDocumentEdited: (edited: boolean) => void;
   setTitle: (title: string) => void;
+  setCurrentFile: (filePath: string | null) => void;
 }
 
 declare global {
@@ -39,6 +40,10 @@ export default function App() {
     setCurrentFileName(null);
     setIsDirty(false);
     initialContentRef.current = '';
+    // Notify main process to clear file path
+    if (window.electronAPI) {
+      window.electronAPI.setCurrentFile(null);
+    }
   }, []);
 
   // Handle open file
@@ -53,6 +58,8 @@ export default function App() {
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
         setIsDirty(false);
         initialContentRef.current = result.content;
+        // Notify main process about the file path
+        window.electronAPI.setCurrentFile(result.filePath);
       }
     } catch (error) {
       console.error('Failed to open file:', error);
@@ -156,6 +163,68 @@ export default function App() {
       cleanupFns.forEach(cleanup => cleanup());
     };
   }, [handleNew, handleOpen, handleSave, handleSaveAs]);
+
+  // Handle drag and drop
+  useEffect(() => {
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    
+    const handleDrop = async (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        // Check if it's a markdown file
+        if (file.name.endsWith('.md') || file.name.endsWith('.markdown') || file.type === 'text/markdown') {
+          // In Electron, we can access the path property
+          const filePath = (file as any).path;
+          if (filePath && window.electronAPI) {
+            // Use the same logic as opening a file
+            try {
+              const text = await file.text();
+              setContent(text);
+              setCurrentFilePath(filePath);
+              setCurrentFileName(file.name);
+              setIsDirty(false);
+              initialContentRef.current = text;
+              // Notify main process about the file path
+              window.electronAPI.setCurrentFile(filePath);
+              console.log('File dropped with path:', filePath);
+            } catch (error) {
+              console.error('Error reading dropped file:', error);
+            }
+          } else {
+            // Fallback for non-Electron or no path
+            try {
+              const text = await file.text();
+              setContent(text);
+              setCurrentFilePath(null); // Will need to save-as
+              setCurrentFileName(file.name);
+              setIsDirty(false);
+              initialContentRef.current = text;
+              console.log('File dropped (no path):', file.name);
+            } catch (error) {
+              console.error('Error reading dropped file:', error);
+            }
+          }
+        } else {
+          console.log('Not a markdown file:', file.name, file.type);
+        }
+      }
+    };
+    
+    document.addEventListener('dragover', handleDragOver);
+    document.addEventListener('drop', handleDrop);
+    
+    return () => {
+      document.removeEventListener('dragover', handleDragOver);
+      document.removeEventListener('drop', handleDrop);
+    };
+  }, []);
 
   console.log('Rendering App with config:', {
     contentLength: content.length,
