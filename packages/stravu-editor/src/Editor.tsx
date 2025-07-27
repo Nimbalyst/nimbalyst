@@ -7,6 +7,7 @@
  */
 
 import type {JSX} from 'react';
+import React, {Suspense} from 'react';
 
 import {AutoFocusPlugin} from '@lexical/react/LexicalAutoFocusPlugin';
 import {CharacterLimitPlugin} from '@lexical/react/LexicalCharacterLimitPlugin';
@@ -39,7 +40,8 @@ import {PLAYGROUND_TRANSFORMERS} from './plugins/MarkdownTransformers';
 import AutocompletePlugin from './plugins/AutocompletePlugin';
 import AutoEmbedPlugin from './plugins/AutoEmbedPlugin';
 import CodeActionMenuPlugin from './plugins/CodeActionMenuPlugin';
-import CodeHighlightShikiPlugin from './plugins/CodeHighlightShikiPlugin';
+// Lazy load CodeHighlightShikiPlugin to improve initial load time
+const CodeHighlightShikiPlugin = React.lazy(() => import('./plugins/CodeHighlightShikiPlugin'));
 import CollapsiblePlugin from './plugins/CollapsiblePlugin';
 import ComponentPickerPlugin from './plugins/ComponentPickerPlugin';
 import ContextMenuPlugin from './plugins/ContextMenuPlugin';
@@ -47,7 +49,8 @@ import DragDropPaste from './plugins/DragDropPastePlugin';
 import DraggableBlockPlugin from './plugins/DraggableBlockPlugin';
 import EmojiPickerPlugin from './plugins/EmojiPickerPlugin';
 import EmojisPlugin from './plugins/EmojisPlugin';
-import ExcalidrawPlugin from './plugins/ExcalidrawPlugin';
+// Lazy load ExcalidrawPlugin to improve initial load time
+const ExcalidrawPlugin = React.lazy(() => import('./plugins/ExcalidrawPlugin'));
 import FigmaPlugin from './plugins/FigmaPlugin';
 import FloatingLinkEditorPlugin from './plugins/FloatingLinkEditorPlugin';
 import FloatingTextFormatToolbarPlugin from './plugins/FloatingTextFormatToolbarPlugin';
@@ -73,6 +76,7 @@ import ToolbarPlugin from './plugins/ToolbarPlugin';
 import TreeViewPlugin from './plugins/TreeViewPlugin';
 import TwitterPlugin from './plugins/TwitterPlugin';
 import YouTubePlugin from './plugins/YouTubePlugin';
+import SearchReplacePlugin from './plugins/SearchReplacePlugin';
 import ContentEditable from './ui/ContentEditable';
 import { useRuntimeSettings } from './context/RuntimeSettingsContext';
 
@@ -138,6 +142,13 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
       config.onGetContent(getContent);
     }
   }, [editor, config.onGetContent]);
+
+  // Expose editor instance
+  useEffect(() => {
+    if (config.onEditorReady) {
+      config.onEditorReady(editor);
+    }
+  }, [editor, config]);
 
   // Handle content changes
   useEffect(() => {
@@ -217,6 +228,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
           setIsLinkEditMode={setIsLinkEditMode}
         />
       )}
+      {isRichText && <SearchReplacePlugin />}
       <div
         className={`editor-container ${(runtimeSettings.settings.showTreeView || config.showTreeView) ? 'tree-view' : ''} ${
           !isRichText ? 'plain-text' : ''
@@ -264,7 +276,11 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
               ErrorBoundary={LexicalErrorBoundary}
             />
             <MarkdownShortcutPlugin />
-            {isCodeHighlighted && <CodeHighlightShikiPlugin />}
+            {isCodeHighlighted && (
+              <Suspense fallback={null}>
+                <CodeHighlightShikiPlugin />
+              </Suspense>
+            )}
             <ListPlugin hasStrictIndent={listStrictIndent} />
             <CheckListPlugin />
             <TablePlugin
@@ -282,7 +298,9 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             <FigmaPlugin />
             <ClickableLinkPlugin disabled={isEditable} />
             <HorizontalRulePlugin />
-            <ExcalidrawPlugin />
+            <Suspense fallback={null}>
+              <ExcalidrawPlugin />
+            </Suspense>
             <TabFocusPlugin />
             <TabIndentationPlugin maxIndent={7} />
             <CollapsiblePlugin />

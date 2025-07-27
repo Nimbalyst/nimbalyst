@@ -1,6 +1,12 @@
+console.log('[RENDERER] App.tsx loading at', new Date().toISOString());
+
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { StravuEditor } from 'stravu-editor';
+
+console.log('[RENDERER] About to import StravuEditor at', new Date().toISOString());
+import { StravuEditor, TOGGLE_SEARCH_COMMAND } from 'stravu-editor';
+import type { LexicalCommand } from 'stravu-editor';
 import 'stravu-editor/styles';
+console.log('[RENDERER] StravuEditor imported at', new Date().toISOString());
 
 // Electron API interface
 interface ElectronAPI {
@@ -9,12 +15,13 @@ interface ElectronAPI {
   onFileSave: (callback: () => void) => () => void;
   onFileSaveAs: (callback: () => void) => () => void;
   onFileOpenedFromOS: (callback: (data: { filePath: string; content: string }) => void) => () => void;
+  onToggleSearch: (callback: () => void) => () => void;
+  onToggleSearchReplace: (callback: () => void) => () => void;
   openFile: () => Promise<{ filePath: string; content: string } | null>;
   saveFile: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
   saveFileAs: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
   setDocumentEdited: (edited: boolean) => void;
   setTitle: (title: string) => void;
-  setCurrentFile: (filePath: string | null) => void;
 }
 
 declare global {
@@ -25,13 +32,23 @@ declare global {
 
 
 export default function App() {
-  console.log('App component rendering');
+  console.log('[RENDERER] App component rendering at', new Date().toISOString());
   const [content, setContent] = useState('');
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
   const [currentFileName, setCurrentFileName] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
+  const editorRef = useRef<any>(null);
+  const searchCommandRef = useRef<LexicalCommand<undefined> | null>(null);
+
+  // Log mount/unmount
+  useEffect(() => {
+    console.log('[RENDERER] App component mounted at', new Date().toISOString());
+    return () => {
+      console.log('[RENDERER] App component unmounting at', new Date().toISOString());
+    };
+  }, []);
 
   // Handle new file
   const handleNew = useCallback(() => {
@@ -40,16 +57,12 @@ export default function App() {
     setCurrentFileName(null);
     setIsDirty(false);
     initialContentRef.current = '';
-    // Notify main process to clear file path
-    if (window.electronAPI) {
-      window.electronAPI.setCurrentFile(null);
-    }
   }, []);
 
   // Handle open file
   const handleOpen = useCallback(async () => {
     if (!window.electronAPI) return;
-    
+
     try {
       const result = await window.electronAPI.openFile();
       if (result) {
@@ -58,8 +71,6 @@ export default function App() {
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
         setIsDirty(false);
         initialContentRef.current = result.content;
-        // Notify main process about the file path
-        window.electronAPI.setCurrentFile(result.filePath);
       }
     } catch (error) {
       console.error('Failed to open file:', error);
@@ -70,9 +81,9 @@ export default function App() {
   const handleSaveAs = useCallback(async () => {
     console.log('handleSaveAs called');
     if (!window.electronAPI || !getContentRef.current) return;
-    
+
     const content = getContentRef.current();
-    
+
     try {
       console.log('Calling electronAPI.saveFileAs');
       const result = await window.electronAPI.saveFileAs(content);
@@ -93,10 +104,10 @@ export default function App() {
   const handleSave = useCallback(async () => {
     console.log('handleSave called, currentFilePath:', currentFilePath);
     if (!window.electronAPI || !getContentRef.current) return;
-    
+
     const content = getContentRef.current();
     console.log('Saving content:', { contentLength: content.length, hasFilePath: !!currentFilePath, currentFilePath });
-    
+
     if (!currentFilePath) {
       console.log('No file path, triggering save as');
       // No file loaded, for Cmd+S we should trigger save as
@@ -104,7 +115,7 @@ export default function App() {
       await handleSaveAs();
       return;
     }
-    
+
     try {
       console.log('Calling electronAPI.saveFile');
       const result = await window.electronAPI.saveFile(content);
@@ -126,11 +137,11 @@ export default function App() {
   // Update window title and dirty state
   useEffect(() => {
     if (!window.electronAPI) return;
-    
-    const title = currentFileName 
+
+    const title = currentFileName
       ? `${currentFileName}${isDirty ? ' •' : ''} - Stravu Editor`
       : 'Stravu Editor';
-    
+
     window.electronAPI.setTitle(title);
     window.electronAPI.setDocumentEdited(isDirty);
   }, [currentFileName, isDirty]);
@@ -138,12 +149,12 @@ export default function App() {
   // Set up IPC listeners
   useEffect(() => {
     if (!window.electronAPI) return;
-    
+
     console.log('Setting up IPC listeners, currentFilePath:', currentFilePath);
-    
+
     // Set up listeners and store cleanup functions
     const cleanupFns: Array<() => void> = [];
-    
+
     cleanupFns.push(window.electronAPI.onFileNew(handleNew));
     cleanupFns.push(window.electronAPI.onFileOpen(handleOpen));
     cleanupFns.push(window.electronAPI.onFileSave(handleSave));
@@ -156,7 +167,19 @@ export default function App() {
       setIsDirty(false);
       initialContentRef.current = data.content;
     }));
-    
+    cleanupFns.push(window.electronAPI.onToggleSearch(() => {
+      console.log('Toggle search command received');
+      if (editorRef.current && searchCommandRef.current) {
+        editorRef.current.dispatchCommand(searchCommandRef.current, undefined);
+      }
+    }));
+    cleanupFns.push(window.electronAPI.onToggleSearchReplace(() => {
+      console.log('Toggle search replace command received');
+      if (editorRef.current && searchCommandRef.current) {
+        editorRef.current.dispatchCommand(searchCommandRef.current, undefined);
+      }
+    }));
+
     // Clean up listeners when dependencies change
     return () => {
       console.log('Cleaning up IPC listeners');
@@ -164,72 +187,12 @@ export default function App() {
     };
   }, [handleNew, handleOpen, handleSave, handleSaveAs]);
 
-  // Handle drag and drop
-  useEffect(() => {
-    const handleDragOver = (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    
-    const handleDrop = async (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      const files = e.dataTransfer?.files;
-      if (files && files.length > 0) {
-        const file = files[0];
-        // Check if it's a markdown file
-        if (file.name.endsWith('.md') || file.name.endsWith('.markdown') || file.type === 'text/markdown') {
-          // In Electron, we can access the path property
-          const filePath = (file as any).path;
-          if (filePath && window.electronAPI) {
-            // Use the same logic as opening a file
-            try {
-              const text = await file.text();
-              setContent(text);
-              setCurrentFilePath(filePath);
-              setCurrentFileName(file.name);
-              setIsDirty(false);
-              initialContentRef.current = text;
-              // Notify main process about the file path
-              window.electronAPI.setCurrentFile(filePath);
-              console.log('File dropped with path:', filePath);
-            } catch (error) {
-              console.error('Error reading dropped file:', error);
-            }
-          } else {
-            // Fallback for non-Electron or no path
-            try {
-              const text = await file.text();
-              setContent(text);
-              setCurrentFilePath(null); // Will need to save-as
-              setCurrentFileName(file.name);
-              setIsDirty(false);
-              initialContentRef.current = text;
-              console.log('File dropped (no path):', file.name);
-            } catch (error) {
-              console.error('Error reading dropped file:', error);
-            }
-          }
-        } else {
-          console.log('Not a markdown file:', file.name, file.type);
-        }
-      }
-    };
-    
-    document.addEventListener('dragover', handleDragOver);
-    document.addEventListener('drop', handleDrop);
-    
-    return () => {
-      document.removeEventListener('dragover', handleDragOver);
-      document.removeEventListener('drop', handleDrop);
-    };
-  }, []);
-
   console.log('Rendering App with config:', {
     contentLength: content.length,
     currentFileName
   });
+
+  console.log('[RENDERER] About to render StravuEditor at', new Date().toISOString());
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -248,8 +211,13 @@ export default function App() {
             }
           },
           onGetContent: (getContentFn) => {
-            console.log('Received getContent function');
+            console.log('[RENDERER] Received getContent function at', new Date().toISOString());
             getContentRef.current = getContentFn;
+          },
+          onEditorReady: (editor) => {
+            console.log('[RENDERER] Editor ready at', new Date().toISOString());
+            editorRef.current = editor;
+            searchCommandRef.current = TOGGLE_SEARCH_COMMAND;
           },
           isRichText: true,
           showTreeView: false,

@@ -44,3 +44,14 @@ export type {
 export type {
   InitialConfigType,
 } from '@lexical/react/LexicalComposer';
+
+// Export search/replace commands
+export {
+  TOGGLE_SEARCH_COMMAND,
+  CLOSE_SEARCH_COMMAND,
+  SEARCH_COMMAND,
+  REPLACE_COMMAND,
+  REPLACE_ALL_COMMAND,
+  NEXT_MATCH_COMMAND,
+  PREVIOUS_MATCH_COMMAND,
+} from './plugins/SearchReplacePlugin';

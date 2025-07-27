@@ -21,7 +21,9 @@
     </style>
 </head>
 <body>
+    <script>console.log('[HTML] Body loaded at', new Date().toISOString());</script>
     <div id="root"></div>
+    <script>console.log('[HTML] Before loading index.tsx at', new Date().toISOString());</script>
     <script type="module" src="./index.tsx"></script>
 </body>
 </html>

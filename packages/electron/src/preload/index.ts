@@ -13,13 +13,13 @@ if (process.env.NODE_ENV !== 'production') {
   const captureLog = (level: string, ...args: any[]) => {
     // Still log to original console
     originalConsole[level as keyof typeof originalConsole](...args);
-    
+
     // Send to main process for file logging
     const timestamp = new Date().toISOString();
-    const message = args.map(arg => 
+    const message = args.map(arg =>
       typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
     ).join(' ');
-    
+
     ipcRenderer.send('console-log', {
       timestamp,
       level,
@@ -59,12 +59,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('file-opened-from-os', handler);
     return () => ipcRenderer.removeListener('file-opened-from-os', handler);
   },
-  
+  onToggleSearch: (callback: () => void) => {
+    ipcRenderer.on('toggle-search', callback);
+    return () => ipcRenderer.removeListener('toggle-search', callback);
+  },
+  onToggleSearchReplace: (callback: () => void) => {
+    ipcRenderer.on('toggle-search-replace', callback);
+    return () => ipcRenderer.removeListener('toggle-search-replace', callback);
+  },
+
   // File operations
   openFile: () => ipcRenderer.invoke('open-file'),
   saveFile: (content: string) => ipcRenderer.invoke('save-file', content),
   saveFileAs: (content: string) => ipcRenderer.invoke('save-file-as', content),
-  
+
   // Window operations
   setDocumentEdited: (edited: boolean) => ipcRenderer.send('set-document-edited', edited),
   setTitle: (title: string) => ipcRenderer.send('set-title', title),

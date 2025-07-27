@@ -3,6 +3,7 @@ import { StravuEditor } from 'stravu-editor';
 import Settings from './Settings';
 import { SettingsContext, SETTINGS, DEFAULT_SETTINGS, type SettingName } from './SettingsContext';
 import { INITIAL_SETTINGS } from './appSettings';
+import { README_CONTENT } from './readmeContent';
 
 export default function App(): JSX.Element {
   const [settings, setSettings] = useState({...DEFAULT_SETTINGS, ...INITIAL_SETTINGS});
@@ -22,7 +23,11 @@ export default function App(): JSX.Element {
         settings,
       }}>
       <div className="editor-shell">
-        <StravuEditor config={settings} />
+        <StravuEditor config={{
+          ...settings,
+          initialContent: README_CONTENT,
+          emptyEditor: false,
+        }} />
         <Settings />
       </div>
     </SettingsContext.Provider>
