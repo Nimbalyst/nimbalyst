@@ -5,7 +5,7 @@
   "description": "Demo and testing playground for Stravu Editor",
   "type": "module",
   "scripts": {
-    "dev": "vite --host --port 4000",
+    "dev": "vite --host --port 4101",
     "build": "vite build",
     "preview": "vite preview"
   },

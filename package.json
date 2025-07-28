@@ -11,8 +11,10 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @stravu-editor/playground dev",
-    "dev:lib": "pnpm --filter stravu-editor dev",
+    "dev": "concurrently -n lib,playground -c magenta,cyan \"pnpm:dev:lib\" \"pnpm:dev:playground\"",
+    "dev:lib": "pnpm --filter stravu-editor vite",
+    "dev:playground": "pnpm --filter @stravu-editor/playground dev",
+    "dev:old": "pnpm --filter @stravu-editor/playground dev",
     "build": "pnpm --filter stravu-editor build",
     "build:playground": "pnpm --filter @stravu-editor/playground build",
     "preview": "pnpm --filter @stravu-editor/playground preview",
@@ -26,6 +28,7 @@
     "@babel/plugin-transform-flow-strip-types": "^7.24.7",
     "@babel/preset-react": "^7.24.7",
     "@types/node": "^20.0.0",
+    "concurrently": "^9.2.0",
     "typescript": "^5.0.0"
   },
   "packageManager": "pnpm@8.0.0"

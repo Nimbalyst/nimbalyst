@@ -21,10 +21,10 @@ This is the monorepo for Stravu Editor, a powerful rich text editor built with M
 # Install dependencies
 pnpm install
 
-# Start the playground dev server
+# Start development (runs both library and playground)
 pnpm dev
 
-# Build the library
+# Build the library for production
 pnpm build
 ```
 
@@ -60,13 +60,27 @@ pnpm build
 
 ### Playground Development
 
+The monorepo uses a concurrent development setup that runs both the library and playground in watch mode with hot module replacement (HMR):
+
 ```bash
-# Start playground dev server (port 4000)
+# Start both library and playground dev servers concurrently
 pnpm dev
+
+# This runs:
+# - Library dev server on port 4100 (with HMR)
+# - Playground dev server on port 4101 (imports directly from library source)
 
 # Build playground for deployment
 pnpm build:playground
 ```
+
+#### Hot Module Replacement (HMR)
+
+The development setup provides seamless HMR between packages:
+- Changes to `packages/stravu-editor` source files are immediately reflected in the playground
+- The playground imports directly from the library's TypeScript source files
+- Both CSS and TypeScript changes trigger instant updates
+- No manual rebuilds required during development
 
 ### Library Installation (for end users)
 
@@ -88,7 +102,7 @@ The project runs in development mode with full file management capabilities:
 pnpm run dev
 ```
 
-Visit `http://localhost:4000` to access the editor with:
+Visit `http://localhost:4101` to access the editor with:
 - File management toolbar (New File, Load File, Open File, Save File)
 - URL-based file naming
 - Auto-save functionality

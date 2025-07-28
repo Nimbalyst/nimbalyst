@@ -58,19 +58,30 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     optimizeExcalidrawPlugin(),
     react(),
-    dts({
-      insertTypesEntry: true,
-      include: ['src']
-    }),
-    viteStaticCopy({
-      targets: [
-        {
-          src: 'src/images/**/*',
-          dest: 'images'
-        }
-      ]
-    })
+    ...(mode === 'production' ? [
+      dts({
+        insertTypesEntry: true,
+        include: ['src']
+      }),
+      viteStaticCopy({
+        targets: [
+          {
+            src: 'src/images/**/*',
+            dest: 'images'
+          }
+        ]
+      })
+    ] : []),
   ],
+  server: {
+    port: 4100,
+    host: true,
+    // Allow CORS for dev server
+    cors: true,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+    }
+  },
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
