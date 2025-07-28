@@ -15,6 +15,7 @@ interface ElectronAPI {
   onFileSave: (callback: () => void) => () => void;
   onFileSaveAs: (callback: () => void) => () => void;
   onFileOpenedFromOS: (callback: (data: { filePath: string; content: string }) => void) => () => void;
+  onNewUntitledDocument: (callback: (data: { untitledName: string }) => void) => () => void;
   onToggleSearch: (callback: () => void) => () => void;
   onToggleSearchReplace: (callback: () => void) => () => void;
   openFile: () => Promise<{ filePath: string; content: string } | null>;
@@ -22,6 +23,7 @@ interface ElectronAPI {
   saveFileAs: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
   setDocumentEdited: (edited: boolean) => void;
   setTitle: (title: string) => void;
+  setCurrentFile: (filePath: string | null) => void;
 }
 
 declare global {
@@ -156,7 +158,6 @@ export default function App() {
     const cleanupFns: Array<() => void> = [];
 
     cleanupFns.push(window.electronAPI.onFileNew(handleNew));
-    cleanupFns.push(window.electronAPI.onFileOpen(handleOpen));
     cleanupFns.push(window.electronAPI.onFileSave(handleSave));
     cleanupFns.push(window.electronAPI.onFileSaveAs(handleSaveAs));
     cleanupFns.push(window.electronAPI.onFileOpenedFromOS((data) => {
@@ -166,6 +167,19 @@ export default function App() {
       setCurrentFileName(data.filePath.split('/').pop() || data.filePath);
       setIsDirty(false);
       initialContentRef.current = data.content;
+    }));
+    cleanupFns.push(window.electronAPI.onNewUntitledDocument((data) => {
+      console.log('[RENDERER] Received new-untitled-document event:', data.untitledName);
+      setContent('');
+      setCurrentFilePath(null);
+      setCurrentFileName(data.untitledName);
+      setIsDirty(true); // New documents start as dirty
+      initialContentRef.current = '';
+      // Update the window title immediately
+      if (window.electronAPI) {
+        window.electronAPI.setTitle(`${data.untitledName} • - Stravu Editor`);
+        window.electronAPI.setDocumentEdited(true);
+      }
     }));
     cleanupFns.push(window.electronAPI.onToggleSearch(() => {
       console.log('Toggle search command received');
@@ -185,7 +199,7 @@ export default function App() {
       console.log('Cleaning up IPC listeners');
       cleanupFns.forEach(cleanup => cleanup());
     };
-  }, [handleNew, handleOpen, handleSave, handleSaveAs]);
+  }, [handleNew, handleSave, handleSaveAs]);
 
   console.log('Rendering App with config:', {
     contentLength: content.length,
@@ -221,6 +235,7 @@ export default function App() {
           },
           isRichText: true,
           showTreeView: false,
+          markdownOnly: true,
         }}
       />
     </div>

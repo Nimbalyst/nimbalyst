@@ -33,7 +33,6 @@ pnpm build
 ### 🔥 Core Editor Features
 - **Rich Text Editing**: Full-featured WYSIWYG editor with support for bold, italic, underline, strikethrough, and more
 - **Markdown Support**: Toggle between rich text and markdown source view with the markdown button in the toolbar
-- **Table of Contents**: Quick navigation dropdown in the toolbar showing all document headers with smooth scrolling
 - **Tables**: Create, edit, and manage tables with cell merging, background colors, and horizontal scrolling
 - **Code Blocks**: Syntax highlighting with support for multiple languages via Shiki
 - **Lists**: Ordered and unordered lists with nested indentation and checkboxes

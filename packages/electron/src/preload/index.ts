@@ -59,6 +59,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('file-opened-from-os', handler);
     return () => ipcRenderer.removeListener('file-opened-from-os', handler);
   },
+  onNewUntitledDocument: (callback: (data: { untitledName: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('new-untitled-document', handler);
+    return () => ipcRenderer.removeListener('new-untitled-document', handler);
+  },
   onToggleSearch: (callback: () => void) => {
     ipcRenderer.on('toggle-search', callback);
     return () => ipcRenderer.removeListener('toggle-search', callback);

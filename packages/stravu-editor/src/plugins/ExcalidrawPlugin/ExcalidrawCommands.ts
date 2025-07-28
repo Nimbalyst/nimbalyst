@@ -8,6 +8,5 @@
 
 import {LexicalCommand, createCommand} from 'lexical';
 
-export const INSERT_EXCALIDRAW_COMMAND: LexicalCommand<undefined> = createCommand(
-  'INSERT_EXCALIDRAW_COMMAND',
-);
+
+export const INSERT_EXCALIDRAW_COMMAND: LexicalCommand<void> = createCommand('INSERT_EXCALIDRAW_COMMAND');

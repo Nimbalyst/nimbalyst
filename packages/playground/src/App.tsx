@@ -27,6 +27,7 @@ export default function App(): JSX.Element {
           ...settings,
           initialContent: README_CONTENT,
           emptyEditor: false,
+          markdownOnly: false,
         }} />
         <Settings />
       </div>
