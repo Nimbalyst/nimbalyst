@@ -71,10 +71,12 @@ function DropDownItems({
   children,
   dropDownRef,
   onClose,
+  className,
 }: {
   children: React.ReactNode;
   dropDownRef: React.Ref<HTMLDivElement>;
   onClose: () => void;
+  className?: string;
 }) {
   const [items, setItems] = useState<React.RefObject<HTMLButtonElement>[]>();
   const [highlightedItem, setHighlightedItem] =
@@ -137,7 +139,7 @@ function DropDownItems({
 
   return (
     <DropDownContext.Provider value={contextValue}>
-      <div className="dropdown" ref={dropDownRef} onKeyDown={handleKeyDown}>
+      <div className={`dropdown ${className}` } ref={dropDownRef} onKeyDown={handleKeyDown}>
         {children}
       </div>
     </DropDownContext.Provider>
@@ -152,6 +154,7 @@ export default function DropDown({
   buttonIconClassName,
   children,
   stopCloseOnClickSelf,
+  className = '',
 }: {
   disabled?: boolean;
   buttonAriaLabel?: string;
@@ -160,11 +163,12 @@ export default function DropDown({
   buttonLabel?: string;
   children: ReactNode;
   stopCloseOnClickSelf?: boolean;
+  className?: string;
 }): JSX.Element {
   const dropDownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [showDropDown, setShowDropDown] = useState(false);
-  
+
   // Find the editor container to render dropdowns within
   const getPortalContainer = useCallback(() => {
     if (buttonRef.current) {
@@ -263,7 +267,7 @@ export default function DropDown({
 
       {showDropDown &&
         createPortal(
-          <DropDownItems dropDownRef={dropDownRef} onClose={handleClose}>
+          <DropDownItems dropDownRef={dropDownRef} onClose={handleClose} className={className}>
             {children}
           </DropDownItems>,
           getPortalContainer(),

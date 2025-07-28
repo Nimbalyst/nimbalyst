@@ -10,7 +10,7 @@
 // at import time (disableBeforeInput is used to test legacy events)
 // eslint-disable-next-line simple-import-sort/imports
 import setupEnv from './setupEnv';
-import 'stravu-editor/styles';
+import '../../stravu-editor/src/index.css';
 import './playground.css';
 
 import * as React from 'react';

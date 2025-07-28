@@ -953,6 +953,17 @@ i.page-break,
   background-image: url(images/icons/code.svg);
 }
 
+.icon.table-of-contents,
+.stravu-editor .toolbar .toolbar-item .icon.table-of-contents {
+  background-image: url(./images/icons/table-of-contents.svg);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+}
+
 .switches {
   z-index: 6;
   position: fixed;

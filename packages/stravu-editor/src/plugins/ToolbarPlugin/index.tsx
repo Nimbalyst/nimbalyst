@@ -90,6 +90,7 @@ import {InsertPollDialog} from '../PollPlugin';
 import {SHORTCUTS} from '../ShortcutsPlugin/shortcuts';
 import {PLAYGROUND_TRANSFORMERS} from '../MarkdownTransformers';
 import {InsertTableDialog} from '../TablePlugin';
+import TableOfContentsDropdownPlugin from '../TableOfContentsPlugin';
 import FontSize from './fontSize';
 import {
   clearFormatting,
@@ -1423,6 +1424,7 @@ export default function ToolbarPlugin({
         </>
       )}
       <div className="divider toolbar-main-divider" />
+      <TableOfContentsDropdownPlugin disabled={!isEditable} />
       <ThemeToggle className="toolbar-item" />
 
       {modal}
