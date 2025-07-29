@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, nativeImage } from 'electron';
 import { join } from 'path';
 import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'fs';
+import * as chokidar from 'chokidar';
 
 // Window management
 const windows = new Map<number, BrowserWindow>();
@@ -8,6 +9,9 @@ const windowStates = new Map<number, {
     filePath: string | null;
     documentEdited: boolean;
 }>();
+
+// File watchers management
+const fileWatchers = new Map<number, chokidar.FSWatcher>();
 
 let pendingFilePath: string | null = null;
 let windowIdCounter = 0;
@@ -22,6 +26,7 @@ let untitledCounter = 0;
 // Function to load file into window
 function loadFileIntoWindow(window: BrowserWindow, filePath: string) {
     try {
+        console.log('[LOAD_FILE] Loading file into window:', filePath, 'window:', window.id);
         const content = readFileSync(filePath, 'utf-8');
         const windowId = window.id;
         const state = windowStates.get(windowId);
@@ -29,10 +34,14 @@ function loadFileIntoWindow(window: BrowserWindow, filePath: string) {
             state.filePath = filePath;
             state.documentEdited = false;
         }
-        console.log('Loading file into window:', filePath);
+        console.log('[LOAD_FILE] Sending file-opened-from-os event');
         window.webContents.send('file-opened-from-os', { filePath, content });
+        
+        // Start watching the file for changes
+        console.log('[LOAD_FILE] Starting file watcher');
+        startFileWatcher(window, filePath);
     } catch (error) {
-        console.error('Error loading file from OS:', error);
+        console.error('[LOAD_FILE] Error loading file from OS:', error);
     }
 }
 
@@ -45,6 +54,108 @@ function findWindowByFilePath(filePath: string): BrowserWindow | null {
         }
     }
     return null;
+}
+
+// Start watching a file for changes
+function startFileWatcher(window: BrowserWindow, filePath: string) {
+    const windowId = window.id;
+    
+    // Stop any existing watcher for this window
+    stopFileWatcher(windowId);
+    
+    console.log('[FILE_WATCHER] Starting file watcher for:', filePath, 'window:', windowId);
+    
+    try {
+        const watcher = chokidar.watch(filePath, {
+            persistent: true,
+            ignoreInitial: true,
+            usePolling: true,  // Use polling instead of native fsevents
+            interval: 1000,    // Check every second
+            awaitWriteFinish: {
+                stabilityThreshold: 300,
+                pollInterval: 100
+            }
+        });
+        
+        // Add ready event to confirm watcher is active
+        watcher.on('ready', () => {
+            console.log('[FILE_WATCHER] Watcher ready for:', filePath);
+        });
+        
+        watcher.on('add', (path) => {
+            console.log('[FILE_WATCHER] File added:', path);
+        });
+        
+        watcher.on('change', (path, stats) => {
+            console.log('[FILE_WATCHER] File changed on disk:', path, 'stats:', stats);
+            const state = windowStates.get(windowId);
+            console.log('[FILE_WATCHER] Window state:', state);
+            
+            if (state?.documentEdited) {
+                console.log('[FILE_WATCHER] Document has unsaved changes, showing dialog');
+                // File has unsaved changes, ask user what to do
+                const choice = dialog.showMessageBoxSync(window, {
+                    type: 'question',
+                    buttons: ['Keep My Changes', 'Load From Disk', 'Cancel'],
+                    defaultId: 0,
+                    cancelId: 2,
+                    message: 'This file has been modified on disk. You have unsaved changes.\nWhat would you like to do?',
+                    detail: `File: ${filePath}`
+                });
+                
+                console.log('[FILE_WATCHER] User choice:', choice);
+                
+                if (choice === 1) {
+                    // Load from disk
+                    console.log('[FILE_WATCHER] Loading file from disk');
+                    loadFileIntoWindow(window, filePath);
+                }
+                // choice === 0 or 2: keep current changes
+            } else {
+                // No unsaved changes, just reload
+                console.log('[FILE_WATCHER] No unsaved changes, reloading file');
+                loadFileIntoWindow(window, filePath);
+            }
+        });
+        
+        watcher.on('unlink', (path) => {
+            console.log('[FILE_WATCHER] File deleted:', path);
+            window.webContents.send('file-deleted', { filePath });
+        });
+        
+        // Handle file rename/move
+        watcher.on('error', (error) => {
+            console.error('[FILE_WATCHER] File watcher error:', error);
+        });
+        
+        watcher.on('raw', (event, path, details) => {
+            console.log('[FILE_WATCHER] Raw event:', event, path, details);
+        });
+        
+        fileWatchers.set(windowId, watcher);
+        console.log('[FILE_WATCHER] Watcher stored for window:', windowId);
+        
+        // Log what files are being watched after a short delay
+        setTimeout(() => {
+            const watched = watcher.getWatched();
+            console.log('[FILE_WATCHER] Currently watching:', watched);
+        }, 1000);
+        
+    } catch (error) {
+        console.error('[FILE_WATCHER] Failed to create watcher:', error);
+    }
+}
+
+// Stop watching a file
+function stopFileWatcher(windowId: number) {
+    const watcher = fileWatchers.get(windowId);
+    if (watcher) {
+        console.log('[FILE_WATCHER] Stopping file watcher for window:', windowId);
+        watcher.close();
+        fileWatchers.delete(windowId);
+    } else {
+        console.log('[FILE_WATCHER] No watcher found for window:', windowId);
+    }
 }
 
 // Get focused window or create new one
@@ -201,6 +312,7 @@ function createWindow(isOpeningFile: boolean = false): BrowserWindow {
         window.on('closed', () => {
             windows.delete(windowId);
             windowStates.delete(windowId);
+            stopFileWatcher(windowId);
         });
 
         // If a file was requested to be opened before window was ready, open it now
@@ -516,6 +628,10 @@ ipcMain.handle('open-file', async (event) => {
             state.documentEdited = false;
         }
         const content = readFileSync(filePath, 'utf-8');
+        
+        // Start watching the file
+        startFileWatcher(window, filePath);
+        
         return { filePath, content };
     }
 
@@ -530,19 +646,34 @@ ipcMain.handle('save-file', async (event, content: string) => {
     const state = windowStates.get(windowId);
     const filePath = state?.filePath;
     
-    console.log('save-file handler called, filePath:', filePath);
+    console.log('[SAVE] save-file handler called, filePath:', filePath, 'window:', windowId);
     try {
         if (!filePath) {
-            console.log('No current file path for this window');
+            console.log('[SAVE] No current file path for this window');
             // No file is currently open - the renderer should handle this
             // by calling save-file-as instead
             return null;
         }
 
-        console.log('Writing to file:', filePath);
+        // Temporarily pause the file watcher to avoid triggering on our own save
+        const watcher = fileWatchers.get(windowId);
+        if (watcher) {
+            console.log('[SAVE] Pausing file watcher during save');
+            watcher.unwatch(filePath);
+        }
+
+        console.log('[SAVE] Writing to file:', filePath);
         writeFileSync(filePath, content, 'utf-8');
         if (state) {
             state.documentEdited = false; // Reset dirty state after save
+        }
+        
+        // Resume watching after a short delay
+        if (watcher) {
+            setTimeout(() => {
+                console.log('[SAVE] Resuming file watcher after save');
+                watcher.add(filePath);
+            }, 500);
         }
         return { success: true, filePath };
     } catch (error) {
@@ -559,9 +690,21 @@ ipcMain.on('set-current-file', (event, filePath: string | null) => {
     const windowId = window.id;
     const state = windowStates.get(windowId);
     if (state) {
+        // Stop watching the old file
+        if (state.filePath && state.filePath !== filePath) {
+            console.log('[SET_FILE] Stopping watcher for old file:', state.filePath);
+            stopFileWatcher(windowId);
+        }
+        
         state.filePath = filePath;
+        
+        // Start watching the new file
+        if (filePath) {
+            console.log('[SET_FILE] Starting watcher for new file:', filePath);
+            startFileWatcher(window, filePath);
+        }
     }
-    console.log('Current file path updated from renderer:', filePath);
+    console.log('[SET_FILE] Current file path updated from renderer:', filePath);
 });
 
 ipcMain.handle('save-file-as', async (event, content: string) => {

@@ -22,6 +22,9 @@ importers:
 
   packages/electron:
     dependencies:
+      chokidar:
+        specifier: ^3.6.0
+        version: 3.6.0
       electron-store:
         specifier: ^8.1.0
         version: 8.1.0

@@ -18,6 +18,7 @@ interface ElectronAPI {
   onNewUntitledDocument: (callback: (data: { untitledName: string }) => void) => () => void;
   onToggleSearch: (callback: () => void) => () => void;
   onToggleSearchReplace: (callback: () => void) => () => void;
+  onFileDeleted: (callback: (data: { filePath: string }) => void) => () => void;
   openFile: () => Promise<{ filePath: string; content: string } | null>;
   saveFile: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
   saveFileAs: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
@@ -43,6 +44,9 @@ export default function App() {
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
   const searchCommandRef = useRef<LexicalCommand<undefined> | null>(null);
+  const contentVersionRef = useRef<number>(0);
+  const isInitializedRef = useRef<boolean>(false);
+  const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Log mount/unmount
   useEffect(() => {
@@ -54,6 +58,8 @@ export default function App() {
 
   // Handle new file
   const handleNew = useCallback(() => {
+    contentVersionRef.current += 1;
+    isInitializedRef.current = false;
     setContent('');
     setCurrentFilePath(null);
     setCurrentFileName(null);
@@ -68,6 +74,8 @@ export default function App() {
     try {
       const result = await window.electronAPI.openFile();
       if (result) {
+        contentVersionRef.current += 1;
+        isInitializedRef.current = false;
         setContent(result.content);
         setCurrentFilePath(result.filePath);
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
@@ -95,7 +103,10 @@ export default function App() {
         setCurrentFilePath(result.filePath);
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
         setIsDirty(false);
-        initialContentRef.current = content;
+        // Update initial content ref to the saved content
+        if (getContentRef.current) {
+          initialContentRef.current = getContentRef.current();
+        }
       }
     } catch (error) {
       console.error('Failed to save file as:', error);
@@ -126,7 +137,10 @@ export default function App() {
         setCurrentFilePath(result.filePath);
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
         setIsDirty(false);
-        initialContentRef.current = content;
+        // Update initial content ref to the saved content
+        if (getContentRef.current) {
+          initialContentRef.current = getContentRef.current();
+        }
         console.log('File saved successfully');
       } else {
         console.log('Save returned null - no current file in main process');
@@ -148,6 +162,59 @@ export default function App() {
     window.electronAPI.setDocumentEdited(isDirty);
   }, [currentFileName, isDirty]);
 
+  // Autosave functionality
+  useEffect(() => {
+    // Clear any existing interval
+    if (autoSaveIntervalRef.current) {
+      clearInterval(autoSaveIntervalRef.current);
+      autoSaveIntervalRef.current = null;
+    }
+
+    // Set up autosave if we have a file path and the document is dirty
+    if (currentFilePath && isDirty && getContentRef.current) {
+      console.log('Starting autosave interval');
+      autoSaveIntervalRef.current = setInterval(async () => {
+        if (isDirty && currentFilePath && getContentRef.current && window.electronAPI) {
+          console.log('[AUTOSAVE] Autosaving...', {
+            isDirty,
+            currentFilePath,
+            hasGetContent: !!getContentRef.current
+          });
+          try {
+            const content = getContentRef.current();
+            console.log('[AUTOSAVE] Content length:', content.length);
+            const result = await window.electronAPI.saveFile(content);
+            console.log('[AUTOSAVE] Save result:', result);
+            if (result) {
+              setIsDirty(false);
+              initialContentRef.current = content;
+              console.log('[AUTOSAVE] Autosaved successfully');
+            } else {
+              console.log('[AUTOSAVE] Save returned null');
+            }
+          } catch (error) {
+            console.error('[AUTOSAVE] Autosave failed:', error);
+          }
+        } else {
+          console.log('[AUTOSAVE] Skipping autosave:', {
+            isDirty,
+            currentFilePath,
+            hasGetContent: !!getContentRef.current,
+            hasElectronAPI: !!window.electronAPI
+          });
+        }
+      }, 2000); // Autosave every 2 seconds
+    }
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      if (autoSaveIntervalRef.current) {
+        clearInterval(autoSaveIntervalRef.current);
+        autoSaveIntervalRef.current = null;
+      }
+    };
+  }, [currentFilePath, isDirty]);
+
   // Set up IPC listeners
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -158,10 +225,13 @@ export default function App() {
     const cleanupFns: Array<() => void> = [];
 
     cleanupFns.push(window.electronAPI.onFileNew(handleNew));
+    cleanupFns.push(window.electronAPI.onFileOpen(handleOpen));
     cleanupFns.push(window.electronAPI.onFileSave(handleSave));
     cleanupFns.push(window.electronAPI.onFileSaveAs(handleSaveAs));
     cleanupFns.push(window.electronAPI.onFileOpenedFromOS((data) => {
       console.log('File opened from OS:', data.filePath);
+      contentVersionRef.current += 1;
+      isInitializedRef.current = false;
       setContent(data.content);
       setCurrentFilePath(data.filePath);
       setCurrentFileName(data.filePath.split('/').pop() || data.filePath);
@@ -193,13 +263,23 @@ export default function App() {
         editorRef.current.dispatchCommand(searchCommandRef.current, undefined);
       }
     }));
+    cleanupFns.push(window.electronAPI.onFileDeleted((data) => {
+      console.log('File deleted:', data.filePath);
+      if (currentFilePath === data.filePath) {
+        // Current file was deleted, mark as dirty and clear the file path
+        setCurrentFilePath(null);
+        setIsDirty(true);
+        // Optionally show a notification to the user
+        alert('The file has been deleted from disk.');
+      }
+    }));
 
     // Clean up listeners when dependencies change
     return () => {
       console.log('Cleaning up IPC listeners');
       cleanupFns.forEach(cleanup => cleanup());
     };
-  }, [handleNew, handleSave, handleSaveAs]);
+  }, [handleNew, handleOpen, handleSave, handleSaveAs, currentFilePath]);
 
   console.log('Rendering App with config:', {
     contentLength: content.length,
@@ -214,12 +294,25 @@ export default function App() {
         config={{
           initialContent: content,
           onContentChange: (newContent) => {
-            console.log('Content changed:', newContent.length);
+            console.log('Content changed:', newContent.length, 'initialized:', isInitializedRef.current);
+            
+            // Mark as initialized after first content change
+            if (!isInitializedRef.current) {
+              isInitializedRef.current = true;
+              // Update initial content reference on first change
+              if (getContentRef.current) {
+                initialContentRef.current = getContentRef.current();
+                console.log('Set initial content on first change');
+              }
+              return;
+            }
+            
             // Check if content actually changed from initial
             if (getContentRef.current) {
               const currentContent = getContentRef.current();
               const hasChanged = currentContent !== initialContentRef.current;
               if (hasChanged !== isDirty) {
+                console.log('Dirty state changed to:', hasChanged);
                 setIsDirty(hasChanged);
               }
             }

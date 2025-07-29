@@ -72,6 +72,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('toggle-search-replace', callback);
     return () => ipcRenderer.removeListener('toggle-search-replace', callback);
   },
+  onFileDeleted: (callback: (data: { filePath: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('file-deleted', handler);
+    return () => ipcRenderer.removeListener('file-deleted', handler);
+  },
 
   // File operations
   openFile: () => ipcRenderer.invoke('open-file'),
