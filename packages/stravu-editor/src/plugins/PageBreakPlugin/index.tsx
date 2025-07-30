@@ -19,7 +19,7 @@ import {
 } from 'lexical';
 import {useEffect} from 'react';
 
-import {$createPageBreakNode, PageBreakNode} from '../../nodes/PageBreakNode';
+import {$createPageBreakNode, PageBreakNode} from './PageBreakNode';
 
 export const INSERT_PAGE_BREAK: LexicalCommand<undefined> = createCommand();
 

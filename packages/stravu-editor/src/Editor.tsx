@@ -39,8 +39,11 @@ import CollapsiblePlugin from './plugins/CollapsiblePlugin';
 import ComponentPickerPlugin from './plugins/ComponentPickerPlugin';
 import DragDropPaste from './plugins/DragDropPastePlugin';
 import DraggableBlockPlugin from './plugins/DraggableBlockPlugin';
+
+// TODO: Should we keep emojis?
 import EmojiPickerPlugin from './plugins/EmojiPickerPlugin';
 import EmojisPlugin from './plugins/EmojisPlugin';
+
 import FloatingLinkEditorPlugin from './plugins/FloatingLinkEditorPlugin';
 import FloatingTextFormatToolbarPlugin from './plugins/FloatingTextFormatToolbarPlugin';
 import ImagesPlugin from './plugins/ImagesPlugin';

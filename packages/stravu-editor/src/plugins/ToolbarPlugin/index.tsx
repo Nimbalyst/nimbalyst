@@ -73,7 +73,7 @@ import {
   useToolbarState,
 } from '../../context/ToolbarContext';
 import useModal from '../../hooks/useModal';
-import {$createStickyNode} from '../../nodes/StickyNode';
+import {$createStickyNode} from '../StickyPlugin/StickyNode.tsx';
 import DropDown, {DropDownItem} from '../../ui/DropDown';
 import DropdownColorPicker from '../../ui/DropdownColorPicker';
 import ThemeToggle from '../../ui/ThemeToggle';

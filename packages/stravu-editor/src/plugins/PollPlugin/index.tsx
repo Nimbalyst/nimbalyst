@@ -25,7 +25,7 @@ import {
   $createPollNode,
   createPollOption,
   PollNode,
-} from '../../nodes/PollNode';
+} from './PollNode.tsx';
 import Button from '../../ui/Button';
 import {DialogActions} from '../../ui/Dialog';
 import TextInput from '../../ui/TextInput';

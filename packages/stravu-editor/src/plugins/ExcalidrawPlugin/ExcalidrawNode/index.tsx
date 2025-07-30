@@ -23,7 +23,7 @@ import * as React from 'react';
 
 type Dimension = number | 'inherit';
 
-const ExcalidrawComponent = React.lazy(() => import('./ExcalidrawComponent'));
+const ExcalidrawComponent = React.lazy(() => import('./ExcalidrawComponent.tsx'));
 
 export type SerializedExcalidrawNode = Spread<
   {

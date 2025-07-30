@@ -42,12 +42,13 @@ import {
   LexicalNode,
 } from 'lexical';
 
-import {$createImageNode, $isImageNode, ImageNode} from '../../nodes/ImageNode';
-import {$createTweetNode, $isTweetNode, TweetNode} from '../../nodes/TweetNode';
+import {$createImageNode, $isImageNode, ImageNode} from '../ImagesPlugin/ImageNode';
+import {$createTweetNode, $isTweetNode, TweetNode} from '../TwitterPlugin/TweetNode.tsx';
 import emojiList from '../../utils/emoji-list';
 import { COLLAPSIBLE_TRANSFORMER } from "../CollapsiblePlugin/CollapsibleTransformer";
+import { ExcalidrawTransform } from "../ExcalidrawPlugin/ExcalidrawNode/excalidrawTransform.tsx";
 
-import { ExcalidrawTransform } from "../../nodes/ExcalidrawNode/excalidrawTransform.tsx";
+
 
 export const HR: ElementTransformer = {
   dependencies: [HorizontalRuleNode],

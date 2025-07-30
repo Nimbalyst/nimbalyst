@@ -33,12 +33,12 @@ import {
   $createLayoutContainerNode,
   $isLayoutContainerNode,
   LayoutContainerNode,
-} from '../../nodes/LayoutContainerNode';
+} from './LayoutContainerNode.ts';
 import {
   $createLayoutItemNode,
   $isLayoutItemNode,
   LayoutItemNode,
-} from '../../nodes/LayoutItemNode';
+} from './LayoutItemNode.ts';
 
 export const INSERT_LAYOUT_COMMAND: LexicalCommand<string> =
   createCommand<string>();

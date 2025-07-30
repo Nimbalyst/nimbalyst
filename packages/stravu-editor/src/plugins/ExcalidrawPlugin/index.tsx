@@ -17,7 +17,7 @@ import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext
 import { $insertNodeToNearestRoot } from '@lexical/utils';
 import { COMMAND_PRIORITY_EDITOR } from 'lexical';
 
-import { $createExcalidrawNode, ExcalidrawNode, } from '../../nodes/ExcalidrawNode';
+import { $createExcalidrawNode, ExcalidrawNode, } from './ExcalidrawNode';
 import { INSERT_EXCALIDRAW_COMMAND } from './ExcalidrawCommands';
 
 export default function ExcalidrawPlugin(): JSX.Element | null {

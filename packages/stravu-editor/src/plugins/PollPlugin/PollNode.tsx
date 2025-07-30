@@ -32,7 +32,7 @@ export type Option = Readonly<{
   votes: Array<number>;
 }>;
 
-const PollComponent = React.lazy(() => import('./PollComponent'));
+const PollComponent = React.lazy(() => import('./PollComponent.tsx'));
 
 function createUID(): string {
   return Math.random()

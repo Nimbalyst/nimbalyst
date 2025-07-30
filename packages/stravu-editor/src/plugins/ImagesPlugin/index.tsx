@@ -37,7 +37,7 @@ import {
   $isImageNode,
   ImageNode,
   ImagePayload,
-} from '../../nodes/ImageNode';
+} from './ImageNode';
 import Button from '../../ui/Button';
 import {DialogActions, DialogButtonsList} from '../../ui/Dialog';
 import FileInput from '../../ui/FileInput';

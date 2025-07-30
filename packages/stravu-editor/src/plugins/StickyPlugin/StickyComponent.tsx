@@ -23,10 +23,10 @@ import {$getNodeByKey} from 'lexical';
 import {useEffect, useLayoutEffect, useRef} from 'react';
 
 // import {createWebsocketProvider} from '../collaboration';
-import {useSharedHistoryContext} from '../context/SharedHistoryContext';
-import StickyEditorTheme from '../themes/StickyEditorTheme';
-import ContentEditable from '../ui/ContentEditable';
-import {$isStickyNode} from './StickyNode';
+import {useSharedHistoryContext} from '../../context/SharedHistoryContext.tsx';
+import StickyEditorTheme from '../../themes/StickyEditorTheme.ts';
+import ContentEditable from '../../ui/ContentEditable.tsx';
+import {$isStickyNode} from './StickyNode.tsx';
 
 type Positioning = {
   isDragging: boolean;

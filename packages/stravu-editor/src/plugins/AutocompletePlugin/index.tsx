@@ -31,7 +31,7 @@ import {useToolbarState} from '../../context/ToolbarContext';
 import {
   $createAutocompleteNode,
   AutocompleteNode,
-} from '../../nodes/AutocompleteNode';
+} from './AutocompleteNode.tsx';
 import {addSwipeRightListener} from '../../utils/swipe';
 
 const HISTORY_MERGE = {tag: HISTORY_MERGE_TAG};

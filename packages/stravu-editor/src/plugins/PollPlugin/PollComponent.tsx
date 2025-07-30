@@ -6,7 +6,7 @@
  *
  */
 
-import type {Option, Options, PollNode} from './PollNode';
+import type {Option, Options, PollNode} from './PollNode.tsx';
 import type {JSX} from 'react';
 
 import './PollNode.css';
@@ -26,9 +26,9 @@ import {
 } from 'lexical';
 import {useEffect, useMemo, useRef, useState} from 'react';
 
-import Button from '../ui/Button';
-import joinClasses from '../utils/joinClasses';
-import {$isPollNode, createPollOption} from './PollNode';
+import Button from '../../ui/Button.tsx';
+import joinClasses from '../../utils/joinClasses.ts';
+import {$isPollNode, createPollOption} from './PollNode.tsx';
 
 function getTotalVotes(options: Options): number {
   return options.reduce((totalVotes, next) => {

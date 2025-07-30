@@ -15,7 +15,7 @@ import {useEffect} from 'react';
 import {
   $createSpecialTextNode,
   SpecialTextNode,
-} from '../../nodes/SpecialTextNode';
+} from './SpecialTextNode.tsx';
 
 const BRACKETED_TEXT_REGEX = /\[([^\[\]]+)\]/; // eslint-disable-line
 
