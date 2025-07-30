@@ -92,6 +92,9 @@ importers:
       '@lexical/history':
         specifier: ^0.33.2-nightly.20250724.0
         version: 0.33.2-nightly.20250724.0
+      '@lexical/html':
+        specifier: ^0.33.2-nightly.20250730.0
+        version: 0.33.2-nightly.20250730.0
       '@lexical/link':
         specifier: ^0.33.2-nightly.20250724.0
         version: 0.33.2-nightly.20250724.0
@@ -1630,6 +1633,16 @@ packages:
       lexical: 0.33.2-nightly.20250724.0
     dev: false
 
+  /@lexical/clipboard@0.33.2-nightly.20250730.0:
+    resolution: {integrity: sha512-CXzCTrfE/5TGagfBcAvbxWJZvvyedC/vOnELx0BV885BDJ4hXNFCs2bcuSIqfMvRn24VHG+fMupfyWRTrvNwkw==}
+    dependencies:
+      '@lexical/html': 0.33.2-nightly.20250730.0
+      '@lexical/list': 0.33.2-nightly.20250730.0
+      '@lexical/selection': 0.33.2-nightly.20250730.0
+      '@lexical/utils': 0.33.2-nightly.20250730.0
+      lexical: 0.33.2-nightly.20250730.0
+    dev: false
+
   /@lexical/code-shiki@0.33.2-nightly.20250724.0:
     resolution: {integrity: sha512-oXlsjbqrjdewIc/S+KAZNwM/iPW5Ar/jp787eQnSpr0q+OqcKtjS/2a/VfGvjPNr3awfLzZtDnugLpIMaz/ftw==}
     dependencies:
@@ -1701,6 +1714,14 @@ packages:
       lexical: 0.33.2-nightly.20250724.0
     dev: false
 
+  /@lexical/html@0.33.2-nightly.20250730.0:
+    resolution: {integrity: sha512-/9yQRDl0UC87ACLZntxCHmaI7kNqqw0z8pnsrxa4FZLCviXzmWvhtztHgbRpUl1GH2CZzeFv7hemNk5OZLr9cQ==}
+    dependencies:
+      '@lexical/selection': 0.33.2-nightly.20250730.0
+      '@lexical/utils': 0.33.2-nightly.20250730.0
+      lexical: 0.33.2-nightly.20250730.0
+    dev: false
+
   /@lexical/link@0.33.2-nightly.20250724.0:
     resolution: {integrity: sha512-bjnhRYxYuxNd56groUjSB+uvDa2GXO9sOSMAtspMa7vjMPfgh9vWQbFvMBqCqzRPkIpqriH1Ratlv+ddCwGrAg==}
     dependencies:
@@ -1714,6 +1735,14 @@ packages:
       '@lexical/selection': 0.33.2-nightly.20250724.0
       '@lexical/utils': 0.33.2-nightly.20250724.0
       lexical: 0.33.2-nightly.20250724.0
+    dev: false
+
+  /@lexical/list@0.33.2-nightly.20250730.0:
+    resolution: {integrity: sha512-LRKS65MVrcI8IELvwR4y0EH0cBgTLFtD/uTo59/cENwe4EpUbIi46gQmZXzD1z9JdjgswvS0GjmKHmgQ5qUozA==}
+    dependencies:
+      '@lexical/selection': 0.33.2-nightly.20250730.0
+      '@lexical/utils': 0.33.2-nightly.20250730.0
+      lexical: 0.33.2-nightly.20250730.0
     dev: false
 
   /@lexical/mark@0.33.2-nightly.20250724.0:
@@ -1831,12 +1860,26 @@ packages:
       lexical: 0.33.2-nightly.20250724.0
     dev: false
 
+  /@lexical/selection@0.33.2-nightly.20250730.0:
+    resolution: {integrity: sha512-7avq1FDLBQ0tVg453FIjhIhguM4Wab/xfk8XxLSLS1nQznGGUnbgM8eUsOLhBlLtfDyOhCGp4HU4xAso6dCGEw==}
+    dependencies:
+      lexical: 0.33.2-nightly.20250730.0
+    dev: false
+
   /@lexical/table@0.33.2-nightly.20250724.0:
     resolution: {integrity: sha512-GT8JFeksRQoRlJaLpHLCx5kXEcPkUqKxPA/kQoaJhr/7IfZG/XaB+dguDFG5SdFci4Ud8oPeX3iz/mGh4J6n+g==}
     dependencies:
       '@lexical/clipboard': 0.33.2-nightly.20250724.0
       '@lexical/utils': 0.33.2-nightly.20250724.0
       lexical: 0.33.2-nightly.20250724.0
+    dev: false
+
+  /@lexical/table@0.33.2-nightly.20250730.0:
+    resolution: {integrity: sha512-qsUGoWnFrQbkMD68vKo1Mgfbbbxx6AD8uMxEpHi3l6HnCUFEqEkmgWu2IzQckpe5tX/4HS8bPEdz7EKwicAMwQ==}
+    dependencies:
+      '@lexical/clipboard': 0.33.2-nightly.20250730.0
+      '@lexical/utils': 0.33.2-nightly.20250730.0
+      lexical: 0.33.2-nightly.20250730.0
     dev: false
 
   /@lexical/text@0.33.2-nightly.20250724.0:
@@ -1852,6 +1895,15 @@ packages:
       '@lexical/selection': 0.33.2-nightly.20250724.0
       '@lexical/table': 0.33.2-nightly.20250724.0
       lexical: 0.33.2-nightly.20250724.0
+    dev: false
+
+  /@lexical/utils@0.33.2-nightly.20250730.0:
+    resolution: {integrity: sha512-i+k5KcN+rMMtOX+yCoc1yVorJafv8BGAvBba1FueF2VcZ/FNujIxIBRW7+9lNCH7oKtSYbgOCBS/Bk0W/SSAKA==}
+    dependencies:
+      '@lexical/list': 0.33.2-nightly.20250730.0
+      '@lexical/selection': 0.33.2-nightly.20250730.0
+      '@lexical/table': 0.33.2-nightly.20250730.0
+      lexical: 0.33.2-nightly.20250730.0
     dev: false
 
   /@lexical/yjs@0.33.2-nightly.20250724.0(yjs@13.5.42):
@@ -5567,6 +5619,10 @@ packages:
 
   /lexical@0.33.2-nightly.20250724.0:
     resolution: {integrity: sha512-LyyZuQlHkAWii/o7QsD81l+3J9j42dFB6oKLpEyOIzpBsA9VLWksGzyVS6hkajHmyduezJGvbtsT1PUK9CSDAg==}
+    dev: false
+
+  /lexical@0.33.2-nightly.20250730.0:
+    resolution: {integrity: sha512-R5X/zEsl0KVOC9Fs447eUV+8nROP6/HXktfZDKxt5cNixXZeaAoirb2S07Et4wl7U1y1VDdt2erIr32OQZTvtQ==}
     dev: false
 
   /lib0@0.2.114:

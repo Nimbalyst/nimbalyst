@@ -86,7 +86,6 @@ import {InsertImageDialog} from '../ImagesPlugin';
 import {InsertInlineImageDialog} from '../InlineImagePlugin';
 import InsertLayoutDialog from '../LayoutPlugin/InsertLayoutDialog';
 import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
-import {InsertPollDialog} from '../PollPlugin';
 import {SHORTCUTS} from '../ShortcutsPlugin/shortcuts';
 import {PLAYGROUND_TRANSFORMERS} from '../MarkdownTransformers';
 import {InsertTableDialog} from '../TablePlugin';
@@ -1339,19 +1338,7 @@ export default function ToolbarPlugin({
                 </DropDownItem>
                 {!markdownOnly && (
                   <>
-                    <DropDownItem
-                      onClick={() => {
-                        showModal('Insert Poll', (onClose) => (
-                          <InsertPollDialog
-                            activeEditor={activeEditor}
-                            onClose={onClose}
-                          />
-                        ));
-                      }}
-                      className="item">
-                      <i className="icon poll" />
-                      <span className="text">Poll</span>
-                    </DropDownItem>
+
                     <DropDownItem
                       onClick={() => {
                         showModal('Insert Columns Layout', (onClose) => (
