@@ -6,66 +6,50 @@
  *
  */
 
-import type {JSX} from 'react';
-import React, {Suspense} from 'react';
+import type { JSX } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 
-import {AutoFocusPlugin} from '@lexical/react/LexicalAutoFocusPlugin';
-import {CharacterLimitPlugin} from '@lexical/react/LexicalCharacterLimitPlugin';
-import {CheckListPlugin} from '@lexical/react/LexicalCheckListPlugin';
-import {ClearEditorPlugin} from '@lexical/react/LexicalClearEditorPlugin';
-import {ClickableLinkPlugin} from '@lexical/react/LexicalClickableLinkPlugin';
-// import {CollaborationPlugin} from '@lexical/react/LexicalCollaborationPlugin';
-import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
-import {LexicalErrorBoundary} from '@lexical/react/LexicalErrorBoundary';
-import {HashtagPlugin} from '@lexical/react/LexicalHashtagPlugin';
-import {HistoryPlugin} from '@lexical/react/LexicalHistoryPlugin';
-import {HorizontalRulePlugin} from '@lexical/react/LexicalHorizontalRulePlugin';
-import {ListPlugin} from '@lexical/react/LexicalListPlugin';
-import {PlainTextPlugin} from '@lexical/react/LexicalPlainTextPlugin';
-import {RichTextPlugin} from '@lexical/react/LexicalRichTextPlugin';
-import {SelectionAlwaysOnDisplay} from '@lexical/react/LexicalSelectionAlwaysOnDisplay';
-import {TabIndentationPlugin} from '@lexical/react/LexicalTabIndentationPlugin';
-import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
-import {useLexicalEditable} from '@lexical/react/useLexicalEditable';
-import {CAN_USE_DOM} from '@lexical/utils';
-import {useEffect, useState} from 'react';
+import { AutoFocusPlugin } from '@lexical/react/LexicalAutoFocusPlugin';
+import { CheckListPlugin } from '@lexical/react/LexicalCheckListPlugin';
+import { ClearEditorPlugin } from '@lexical/react/LexicalClearEditorPlugin';
+import { ClickableLinkPlugin } from '@lexical/react/LexicalClickableLinkPlugin';
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
+import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
+import { HashtagPlugin } from '@lexical/react/LexicalHashtagPlugin';
+import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
+import { HorizontalRulePlugin } from '@lexical/react/LexicalHorizontalRulePlugin';
+import { ListPlugin } from '@lexical/react/LexicalListPlugin';
+import { PlainTextPlugin } from '@lexical/react/LexicalPlainTextPlugin';
+import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
+import { SelectionAlwaysOnDisplay } from '@lexical/react/LexicalSelectionAlwaysOnDisplay';
+import { TabIndentationPlugin } from '@lexical/react/LexicalTabIndentationPlugin';
+import { TablePlugin } from '@lexical/react/LexicalTablePlugin';
+import { useLexicalEditable } from '@lexical/react/useLexicalEditable';
+import { CAN_USE_DOM } from '@lexical/utils';
 
-import {$convertFromMarkdownString, $convertToMarkdownString} from '@lexical/markdown';
-import {$getRoot} from 'lexical';
+import { $convertFromMarkdownString, $convertToMarkdownString } from '@lexical/markdown';
+import { $getRoot } from 'lexical';
 
-// import {createWebsocketProvider} from './collaboration';
-import {DEFAULT_EDITOR_CONFIG, type EditorConfig} from './EditorConfig';
-import {useSharedHistoryContext} from './context/SharedHistoryContext';
-import {PLAYGROUND_TRANSFORMERS} from './plugins/MarkdownTransformers';
-import AutocompletePlugin from './plugins/AutocompletePlugin';
+import { DEFAULT_EDITOR_CONFIG, type EditorConfig } from './EditorConfig';
+import { useSharedHistoryContext } from './context/SharedHistoryContext';
+import { PLAYGROUND_TRANSFORMERS } from './plugins/MarkdownTransformers';
 import AutoEmbedPlugin from './plugins/AutoEmbedPlugin';
 import CodeActionMenuPlugin from './plugins/CodeActionMenuPlugin';
-// Lazy load CodeHighlightShikiPlugin to improve initial load time
-const CodeHighlightShikiPlugin = React.lazy(() => import('./plugins/CodeHighlightShikiPlugin'));
 import CollapsiblePlugin from './plugins/CollapsiblePlugin';
 import ComponentPickerPlugin from './plugins/ComponentPickerPlugin';
-import ContextMenuPlugin from './plugins/ContextMenuPlugin';
 import DragDropPaste from './plugins/DragDropPastePlugin';
 import DraggableBlockPlugin from './plugins/DraggableBlockPlugin';
 import EmojiPickerPlugin from './plugins/EmojiPickerPlugin';
 import EmojisPlugin from './plugins/EmojisPlugin';
-// Lazy load ExcalidrawPlugin to improve initial load time
-const ExcalidrawPlugin = React.lazy(() => import('./plugins/ExcalidrawPlugin'));
-import FigmaPlugin from './plugins/FigmaPlugin';
 import FloatingLinkEditorPlugin from './plugins/FloatingLinkEditorPlugin';
 import FloatingTextFormatToolbarPlugin from './plugins/FloatingTextFormatToolbarPlugin';
 import ImagesPlugin from './plugins/ImagesPlugin';
 import InlineImagePlugin from './plugins/InlineImagePlugin';
-import KeywordsPlugin from './plugins/KeywordsPlugin';
-import {LayoutPlugin} from './plugins/LayoutPlugin/LayoutPlugin';
+import { LayoutPlugin } from './plugins/LayoutPlugin/LayoutPlugin';
 import LinkPlugin from './plugins/LinkPlugin';
 import MarkdownShortcutPlugin from './plugins/MarkdownShortcutPlugin';
-import {MaxLengthPlugin} from './plugins/MaxLengthPlugin';
-import MentionsPlugin from './plugins/MentionsPlugin';
 import PageBreakPlugin from './plugins/PageBreakPlugin';
-import PollPlugin from './plugins/PollPlugin';
 import ShortcutsPlugin from './plugins/ShortcutsPlugin';
-import SpecialTextPlugin from './plugins/SpecialTextPlugin';
 import SpeechToTextPlugin from './plugins/SpeechToTextPlugin';
 import TabFocusPlugin from './plugins/TabFocusPlugin';
 import TableCellActionMenuPlugin from './plugins/TableActionMenuPlugin';
@@ -73,39 +57,45 @@ import TableCellResizer from './plugins/TableCellResizer';
 import TableHoverActionsPlugin from './plugins/TableHoverActionsPlugin';
 import ToolbarPlugin from './plugins/ToolbarPlugin';
 import TreeViewPlugin from './plugins/TreeViewPlugin';
-import TwitterPlugin from './plugins/TwitterPlugin';
-import YouTubePlugin from './plugins/YouTubePlugin';
 import SearchReplacePlugin from './plugins/SearchReplacePlugin';
 import ContentEditable from './ui/ContentEditable';
 import { useRuntimeSettings } from './context/RuntimeSettingsContext';
+// Lazy load CodeHighlightShikiPlugin to improve initial load time
+const CodeHighlightShikiPlugin = React.lazy(() => import('./plugins/CodeHighlightShikiPlugin'));
+// Lazy load ExcalidrawPlugin to improve initial load time
+const ExcalidrawPlugin = React.lazy(() => import('./plugins/ExcalidrawPlugin'));
 
-const skipCollaborationInit =
-  // @ts-expect-error
-  window.parent != null && window.parent.frames.right === window;
 
 interface EditorProps {
   config?: EditorConfig;
 }
 
+
+/**
+ * Most plugins from the Lexical Playground are included here. Incomplete or plugins that don't make sense for an
+ * editor focused on Markdown compatibility are omitted.
+ *
+ * List of omitted plugins:
+ *
+ * - CommentPlugin: Not relevant for this editor
+ * - CollaborationPlugin: Not implemented yet
+ * - FigmaPlugin: Not included as it is not relevant for a markdown editor
+ * - KeywordsPlugin: Not useful
+ * - MentionsPlugin: Not implemented as pluggable
+ * - PollPlugin: Not relevant for this editor
+ * - TwitterPlugin: Not relevant for this editor
+ * - YouTubePlugin: Not relevant for this editor
+ *
+ *
+ */
 export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): JSX.Element {
   const runtimeSettings = useRuntimeSettings();
   const {historyState} = useSharedHistoryContext();
   const {
     isCodeHighlighted,
-    isCollab,
-    isAutocomplete,
-    isMaxLength,
-    isCharLimit,
     hasLinkAttributes,
-    isCharLimitUtf8,
     isRichText,
-    showTableOfContents,
-    shouldUseLexicalContextMenu,
     shouldPreserveNewLinesInMarkdown,
-    tableCellMerge,
-    tableCellBackgroundColor,
-    tableHorizontalScroll,
-    shouldAllowHighlightingWithBrackets,
     selectionAlwaysOnDisplay,
     listStrictIndent,
     markdownOnly,
@@ -113,11 +103,10 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
 
 
   const isEditable = useLexicalEditable();
-  const placeholder = isCollab
-    ? 'Enter some collaborative rich text...'
-    : isRichText
+  const placeholder = isRichText
     ? 'Enter some rich text...'
     : 'Enter some plain text...';
+
   const [floatingAnchorElem, setFloatingAnchorElem] =
     useState<HTMLDivElement | null>(null);
   const [isSmallWidthViewport, setIsSmallWidthViewport] =
@@ -232,7 +221,6 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         className={`editor-container ${(runtimeSettings.settings.showTreeView || config.showTreeView) ? 'tree-view' : ''} ${
           !isRichText ? 'plain-text' : ''
         }`}>
-        {isMaxLength && <MaxLengthPlugin maxLength={30} />}
         <DragDropPaste />
         <AutoFocusPlugin />
         {selectionAlwaysOnDisplay && <SelectionAlwaysOnDisplay />}
@@ -240,10 +228,8 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         <ComponentPickerPlugin />
         <EmojiPickerPlugin />
         <AutoEmbedPlugin />
-        <MentionsPlugin />
         <EmojisPlugin />
         <HashtagPlugin />
-        <KeywordsPlugin />
         <SpeechToTextPlugin />
 
         {/*  This doesn't play well with images embedded as base64 urls (spins forever) */}
@@ -283,18 +269,14 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             <ListPlugin hasStrictIndent={listStrictIndent} />
             <CheckListPlugin />
             <TablePlugin
-              hasCellMerge={tableCellMerge}
-              hasCellBackgroundColor={tableCellBackgroundColor}
-              hasHorizontalScroll={tableHorizontalScroll}
+              hasCellMerge={false}
+              hasCellBackgroundColor={false}
+              hasHorizontalScroll={false}
             />
             <TableCellResizer />
             <ImagesPlugin />
             <InlineImagePlugin />
             <LinkPlugin hasLinkAttributes={hasLinkAttributes} />
-            <PollPlugin />
-            <TwitterPlugin />
-            <YouTubePlugin />
-            <FigmaPlugin />
             <ClickableLinkPlugin disabled={isEditable} />
             <HorizontalRulePlugin />
             <Suspense fallback={null}>
@@ -339,19 +321,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             <HistoryPlugin externalHistoryState={historyState} />
           </>
         )}
-        {(isCharLimit || isCharLimitUtf8) && (
-          <CharacterLimitPlugin
-            charset={isCharLimit ? 'UTF-16' : 'UTF-8'}
-            maxLength={5}
-          />
-        )}
-        {isAutocomplete && <AutocompletePlugin />}
-        {shouldUseLexicalContextMenu && <ContextMenuPlugin />}
-        {shouldAllowHighlightingWithBrackets && <SpecialTextPlugin />}
-        {/*<ActionsPlugin*/}
-        {/*  isRichText={isRichText}*/}
-        {/*  shouldPreserveNewLinesInMarkdown={shouldPreserveNewLinesInMarkdown}*/}
-        {/*/>*/}
+
       </div>
       {(runtimeSettings.settings.showTreeView || config.showTreeView) && <TreeViewPlugin />}
     </>

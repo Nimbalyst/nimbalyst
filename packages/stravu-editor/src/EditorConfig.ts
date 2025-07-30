@@ -5,49 +5,75 @@
 
 export type Theme = 'light' | 'dark' | 'auto';
 
+
+/**
+ * Removed features that are either incomplete, or not appropriate for an editor targeting markdown compatibility
+ *
+ * - isAutocomplete: Not implemented as pluggable
+ * - isMaxLength: Can be external
+ * - isCharLimit: Can be external
+ * - isCharLimitUtf8: Can be external
+ *
+ * - isCollab: Not supported yet in Stravu Editor (See Lexical Playground)
+ *
+ * - shouldUseLexicalContextMenu: Not implemented as pluggable (or that useful)
+ *
+ * - shouldAllowHighlightingWithBrackets: Just highlights content in brackets (e.g. [text]), not sure. Uses SpecialTextPlugin
+ *
+ *
+ * Non markdown-safe table features
+ * - tableCellBackgroundColor?: boolean;
+ * - tableCellMerge?: boolean;
+ *
+ * Less sure about this one
+ * - tableHorizontalScroll?: boolean;
+ *
+ *
+ *
+ *   // Not sure about these
+ *   measureTypingPerf?: boolean;
+ *   showNestedEditorTreeView?: boolean;
+ */
+
 export interface EditorConfig {
+
   // Core editor behavior
   isRichText?: boolean;
+
+  // TODO: Do we need this? Think we either accept content or blank
   emptyEditor?: boolean;
 
-  // Features
-  isAutocomplete?: boolean;
+  /** Open links in a new tab with rel="noopener noreferrer" */
   hasLinkAttributes?: boolean;
+
+  /** Code highlighting enabled for blocks */
   isCodeHighlighted?: boolean;
-  showTableOfContents?: boolean;
 
-  // Limits and validation
-  isMaxLength?: boolean;
-  isCharLimit?: boolean;
-  isCharLimitUtf8?: boolean;
-
-  // Collaboration
-  isCollab?: boolean;
-
-  // Context menu and selection
-  shouldUseLexicalContextMenu?: boolean;
+  /** show selection even if editor is not focused */
   selectionAlwaysOnDisplay?: boolean;
 
-  // Markdown behavior
+
+  /** Should we always enable this? Seems appropriate */
   shouldPreserveNewLinesInMarkdown?: boolean;
-  shouldAllowHighlightingWithBrackets?: boolean;
 
-  // Table features
-  tableCellBackgroundColor?: boolean;
-  tableCellMerge?: boolean;
-  tableHorizontalScroll?: boolean;
 
-  // Development and debugging (should be false in production)
-  measureTypingPerf?: boolean;
+
+
+  /** Show the hierarchical node tree view for debugging */
   showTreeView?: boolean;
-  showNestedEditorTreeView?: boolean;
 
-  // Advanced
+
+  // Is this only for testing?
   disableBeforeInput?: boolean;
+
+
+  /** Strict or relaxed indentation for lists */
   listStrictIndent?: boolean;
 
+  // This goes away after we're done whittling down the config right?
   // Markdown-only mode - hides non-markdown native features
   markdownOnly?: boolean;
+
 
   // Theme configuration
   theme?: Theme; // Override theme: 'light' | 'dark' | 'auto' (default: 'auto')
@@ -62,24 +88,11 @@ export interface EditorConfig {
 export const DEFAULT_EDITOR_CONFIG: EditorConfig = {
   isRichText: true,
   emptyEditor: false,
-  isAutocomplete: false,
   hasLinkAttributes: false,
   isCodeHighlighted: true,
-  showTableOfContents: false,
-  isMaxLength: false,
-  isCharLimit: false,
-  isCharLimitUtf8: false,
-  isCollab: false,
-  shouldUseLexicalContextMenu: false,
   selectionAlwaysOnDisplay: false,
   shouldPreserveNewLinesInMarkdown: true,
-  shouldAllowHighlightingWithBrackets: false,
-  tableCellBackgroundColor: true,
-  tableCellMerge: false,
-  tableHorizontalScroll: true,
-  measureTypingPerf: false,
   showTreeView: false,
-  showNestedEditorTreeView: false,
   disableBeforeInput: false,
   listStrictIndent: false,
   markdownOnly: true,
