@@ -335,6 +335,40 @@ function createWindow(isOpeningFile: boolean = false): BrowserWindow {
                 }, 100);
             }
         });
+
+        // Log any console messages from the renderer
+        window.webContents.on('console-message', (event, level, message, line, sourceId) => {
+            // Skip messages that are already from our console wrapper to avoid duplication
+            if (message.includes('[renderer]') || message.includes('[main]')) {
+                return;
+            }
+            
+            // Map numeric levels to string names
+            const levelNames = ['verbose', 'info', 'warning', 'error'];
+            const levelName = levelNames[level] || 'unknown';
+            
+            // In development, write all console messages to debug log
+            if (process.env.NODE_ENV !== 'production') {
+                const timestamp = new Date().toISOString();
+                const debugLogPath = join(app.getPath('userData'), 'stravu-editor-debug.log');
+                const logMessage = `[${timestamp}] [${levelName.toUpperCase()}] [browser] ${message} (${sourceId}:${line})\n`;
+                
+                try {
+                    appendFileSync(debugLogPath, logMessage);
+                } catch (error) {
+                    // Don't crash if we can't write to the log file
+                    console.error('Failed to write browser console to debug log:', error);
+                }
+                
+                // Also log to main console for immediate visibility
+                console.log(`[Browser ${levelName}] ${message} (${sourceId}:${line})`);
+            } else {
+                // In production, only log warnings and errors
+                if (level >= 2) { // 2 = warning, 3 = error
+                    console.log(`[Browser ${levelName}] ${message} (${sourceId}:${line})`);
+                }
+            }
+        });
         
         // Handle pending file after window is ready to show
         window.once('ready-to-show', () => {
@@ -359,6 +393,7 @@ if (process.env.NODE_ENV !== 'production') {
     // Clear log on startup
     try {
         writeFileSync(debugLogPath, `=== Stravu Editor Debug Log Started ${new Date().toISOString()} ===\n`);
+        console.log('[MAIN] Debug logging enabled. Browser console logs will be written to:', debugLogPath);
     } catch (error) {
         console.error('Failed to initialize debug log:', error);
     }

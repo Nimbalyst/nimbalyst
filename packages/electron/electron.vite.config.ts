@@ -1,6 +1,7 @@
 import { resolve } from 'path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import viteStravuPlugin from '../shared/viteStravuPlugin'
 
 // Custom plugin to exclude Excalidraw locales and optimize imports (copied from stravu-editor)
 // Plugin to optimize Shiki language imports
@@ -102,7 +103,7 @@ export default defineConfig({
   },
   renderer: {
     root: 'src/renderer',
-    plugins: [react(), optimizeExcalidrawPlugin(), optimizeShikiPlugin()],
+    plugins: [viteStravuPlugin(), react(), optimizeExcalidrawPlugin(), optimizeShikiPlugin()],
     server: {
       port: 5273,
       strictPort: true
@@ -124,11 +125,11 @@ export default defineConfig({
     optimizeDeps: {
       include: [
         'react',
-        'react-dom'
+        'react-dom',
+        'es6-promise-pool'
       ],
       exclude: [
         'stravu-editor',
-        '@excalidraw/excalidraw',
         '@shikijs/langs',
         'prettier'
       ],

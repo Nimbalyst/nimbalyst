@@ -5,7 +5,6 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 console.log('[RENDERER] About to import StravuEditor at', new Date().toISOString());
 import { StravuEditor, TOGGLE_SEARCH_COMMAND } from 'stravu-editor';
 import type { LexicalCommand } from 'stravu-editor';
-import 'stravu-editor/styles';
 console.log('[RENDERER] StravuEditor imported at', new Date().toISOString());
 
 // Electron API interface

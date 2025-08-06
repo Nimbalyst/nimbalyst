@@ -10,14 +10,14 @@
     "start": "electron .",
     "dist": "electron-builder",
     "clean": "rm -rf node_modules/.vite out dist",
-    "clean:dev": "rm -rf node_modules/.vite && pnpm run dev"
+    "clean:dev": "rm -rf node_modules/.vite && npm run dev"
   },
   "dependencies": {
     "chokidar": "^3.6.0",
     "electron-store": "^8.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "stravu-editor": "workspace:*"
+    "stravu-editor": "*"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.1",
