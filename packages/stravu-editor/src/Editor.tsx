@@ -63,6 +63,7 @@ import TreeViewPlugin from './plugins/TreeViewPlugin';
 import SearchReplacePlugin from './plugins/SearchReplacePlugin';
 import ContentEditable from './ui/ContentEditable';
 import { useRuntimeSettings } from './context/RuntimeSettingsContext';
+import { PluginManager } from './plugins/PluginManager';
 // Lazy load CodeHighlightShikiPlugin to improve initial load time
 const CodeHighlightShikiPlugin = React.lazy(() => import('./plugins/CodeHighlightShikiPlugin'));
 // Lazy load ExcalidrawPlugin to improve initial load time
@@ -80,14 +81,18 @@ interface EditorProps {
  *
  * List of omitted plugins:
  *
- * - CommentPlugin: Not relevant for this editor
- * - CollaborationPlugin: Not implemented yet
+ * - AutocompletePlugin: Not relevant for this editor, nor configurable
+ * - CommentPlugin: Not relevant for this editor (left in code for now)
+ * - ContextPlugin: Not complete
+ * - CollaborationPlugin: Not implemented yet (left in code for now)
+ * - DocsPlugin: Not relevant for this editor
  * - FigmaPlugin: Not included as it is not relevant for a markdown editor
  * - KeywordsPlugin: Not useful
  * - MentionsPlugin: Not implemented as pluggable
  * - PollPlugin: Not relevant for this editor
  * - TwitterPlugin: Not relevant for this editor
  * - YouTubePlugin: Not relevant for this editor
+ *
  *
  *
  */
@@ -117,6 +122,9 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
   const [editor] = useLexicalComposerContext();
   const [activeEditor, setActiveEditor] = useState(editor);
   const [isLinkEditMode, setIsLinkEditMode] = useState<boolean>(false);
+
+  // Get all transformers including from plugins
+  // const allTransformers = [...PLAYGROUND_TRANSFORMERS]; //, ...pluginRegistry.getAllTransformers()];
 
   // Expose markdown content getter
   useEffect(() => {
@@ -290,6 +298,10 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             <CollapsiblePlugin />
             <PageBreakPlugin />
             <LayoutPlugin />
+
+            {/* Render any custom plugins */}
+            <PluginManager />
+
             {floatingAnchorElem && (
               <>
                 <FloatingLinkEditorPlugin

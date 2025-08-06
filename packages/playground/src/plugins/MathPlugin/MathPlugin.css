@@ -1,0 +1,26 @@
+.math-inline {
+  display: inline-block;
+  background-color: rgba(0, 100, 255, 0.05);
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: 0 2px;
+  font-family: 'Courier New', monospace;
+}
+
+.math-block {
+  display: block;
+  background-color: rgba(0, 100, 255, 0.05);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+  font-size: 1.1em;
+}
+
+.math-inline code,
+.math-block code {
+  background: none;
+  color: #0066cc;
+  padding: 0;
+}

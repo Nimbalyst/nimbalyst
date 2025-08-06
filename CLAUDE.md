@@ -65,3 +65,12 @@ Custom nodes extend Lexical's base functionality:
 ## Dependencies
 
 Built with modern React, TypeScript, and Vite. Uses extensive Lexical packages (@lexical/\*) for editor functionality, plus supporting libraries like KaTeX for equations, Prettier for code formatting, and Excalidraw for drawings.
+
+## Electron App Debug Logging
+
+The Electron app (`packages/electron/`) includes a debug logging feature that captures all browser console messages in development mode. This is useful for debugging renderer-side issues and browser load problems.
+
+- **Log file location**: `~/Library/Application Support/stravu-editor/stravu-editor-debug.log` (macOS)
+- **What's logged**: All browser console messages, main process logs, timestamps, source locations, and log levels
+- **When active**: Only in development mode (`NODE_ENV !== 'production'`)
+- **Implementation**: See `packages/electron/src/main/index.ts` - uses `webContents.on('console-message')` event

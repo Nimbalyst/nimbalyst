@@ -13,19 +13,19 @@ This is the monorepo for Stravu Editor, a powerful rich text editor built with M
 ### Prerequisites
 
 - Node.js 18+
-- pnpm 8+
+- npm 7+ (for workspaces support)
 
 ### Installation
 
 ```bash
 # Install dependencies
-pnpm install
+npm install
 
-# Start development (runs both library and playground)
-pnpm dev
+# Start development (runs playground with HMR)
+npm run dev
 
 # Build the library for production
-pnpm build
+npm run build
 ```
 
 ## Features
@@ -51,36 +51,32 @@ pnpm build
 ### Library Development
 
 ```bash
-# Watch and rebuild library on changes
-pnpm dev:lib
-
 # Build library for production
-pnpm build
+npm run build
 ```
 
 ### Playground Development
 
-The monorepo uses a concurrent development setup that runs both the library and playground in watch mode with hot module replacement (HMR):
+The monorepo uses a simplified development setup with hot module replacement (HMR):
 
 ```bash
-# Start both library and playground dev servers concurrently
-pnpm dev
+# Start development server
+npm run dev
 
-# This runs:
-# - Library dev server on port 4100 (with HMR)
-# - Playground dev server on port 4101 (imports directly from library source)
+# This runs the playground dev server on port 3000
+# The playground imports directly from the library source files via custom Vite plugin
 
 # Build playground for deployment
-pnpm build:playground
+npm run build:playground
 ```
 
 #### Hot Module Replacement (HMR)
 
-The development setup provides seamless HMR between packages:
+The development setup provides seamless HMR:
 - Changes to `packages/stravu-editor` source files are immediately reflected in the playground
-- The playground imports directly from the library's TypeScript source files
+- A custom Vite plugin handles module resolution to import directly from TypeScript source
 - Both CSS and TypeScript changes trigger instant updates
-- No manual rebuilds required during development
+- No manual rebuilds or separate library dev server required
 
 ### Library Installation (for end users)
 
@@ -88,8 +84,6 @@ The development setup provides seamless HMR between packages:
 npm install stravu-editor
 # or
 yarn add stravu-editor
-# or
-pnpm add stravu-editor
 ```
 
 ## Usage
@@ -99,10 +93,10 @@ pnpm add stravu-editor
 The project runs in development mode with full file management capabilities:
 
 ```bash
-pnpm run dev
+npm run dev
 ```
 
-Visit `http://localhost:4101` to access the editor with:
+Visit `http://localhost:3000` to access the editor with:
 - File management toolbar (New File, Load File, Open File, Save File)
 - URL-based file naming
 - Auto-save functionality
@@ -293,6 +287,18 @@ __tests__/regression/
 - **File Management**: Use toolbar buttons for file operations
 
 ## Troubleshooting
+
+### LexicalComposerContext Error
+**Problem**: Getting "LexicalComposerContext.useLexicalComposerContext: cannot find a LexicalComposerContext" error.
+
+**Solution**: This is typically caused by Vite module caching issues. Clear the cache:
+```bash
+# Quick cache clean
+npm run clean
+
+# Full clean and reinstall
+npm run clean:full
+```
 
 ### Editor appears unstyled/broken
 **Problem**: The editor shows up but looks completely unstyled or broken.

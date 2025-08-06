@@ -243,7 +243,7 @@
   overflow-y: scroll;
   overflow-x: scroll;
   table-layout: fixed;
-  width: fit-content;
+  /*width: fit-content;*/
   margin-top: 25px;
   margin-bottom: 30px;
 }
@@ -311,7 +311,7 @@
 }
 .PlaygroundEditorTheme__tableCell {
   border: 1px solid #bbb;
-  width: 75px;
+  /*width: 75px;*/
   vertical-align: top;
   text-align: start;
   padding: 6px 8px;

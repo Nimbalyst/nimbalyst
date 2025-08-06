@@ -55,3 +55,8 @@ export {
   NEXT_MATCH_COMMAND,
   PREVIOUS_MATCH_COMMAND,
 } from './plugins/SearchReplacePlugin';
+
+// Plugin system exports
+export type { PluginPackage } from './types/PluginTypes';
+export { pluginRegistry } from './plugins/PluginRegistry';
+export { PluginManager } from './plugins/PluginManager';

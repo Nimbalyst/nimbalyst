@@ -43,7 +43,7 @@ import {INSERT_EXCALIDRAW_COMMAND} from '../ExcalidrawPlugin/ExcalidrawCommands'
 import InsertLayoutDialog from '../LayoutPlugin/InsertLayoutDialog';
 import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
 import {InsertTableDialog} from '../TablePlugin';
-// import {pluginRegistry} from '../PluginRegistry';
+import {pluginRegistry} from '../PluginRegistry';
 
 class ComponentPickerOption extends MenuOption {
   // What shows up in the editor
@@ -276,15 +276,15 @@ function getBaseOptions(editor: LexicalEditor, showModal: ShowModal) {
         }),
     ),
     // Add user commands from plugins
-    // ...pluginRegistry.getAllUserCommands().map(
-    //   (userCommand) =>
-    //     new ComponentPickerOption(userCommand.title, {
-    //       icon: userCommand.icon ? <span>{userCommand.icon}</span> : undefined,
-    //       keywords: userCommand.keywords || [],
-    //       onSelect: () =>
-    //         editor.dispatchCommand(userCommand.command, userCommand.payload),
-    //     }),
-    // ),
+    ...pluginRegistry.getAllUserCommands().map(
+      (userCommand) =>
+        new ComponentPickerOption(userCommand.title, {
+          icon: userCommand.icon ? <span>{userCommand.icon}</span> : undefined,
+          keywords: userCommand.keywords || [],
+          onSelect: () =>
+            editor.dispatchCommand(userCommand.command, userCommand.payload),
+        }),
+    ),
   ];
 }
 

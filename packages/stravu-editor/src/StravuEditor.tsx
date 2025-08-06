@@ -27,21 +27,23 @@ import { useResponsiveWidth } from './hooks/useResponsiveWidth';
 import Editor from './Editor';
 import PlaygroundEditorTheme from './themes/PlaygroundEditorTheme';
 import EditorNodes from "./nodes/EditorNodes";
+import { pluginRegistry } from './plugins/PluginRegistry';
 
 export interface StravuEditorProps {
     config?: EditorConfig;
 }
 
 function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
+
     const { theme } = useTheme();
     const containerRef = useRef<HTMLDivElement>(null);
     const widthClass = useResponsiveWidth(containerRef);
 
     const initialConfig = {
         editorState: config.emptyEditor ? undefined : $createEmptyEditor,
-        html: {import: buildImportMap()},
+        // html: {import: buildImportMap()},
         namespace: 'StravuEditor',
-        nodes: [...EditorNodes],
+        nodes: [...EditorNodes,  ...pluginRegistry.getAllNodes()],
         onError: (error: Error) => {
             throw error;
         },
@@ -73,10 +75,16 @@ function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
     );
 }
 
-function StravuEditor({config = DEFAULT_EDITOR_CONFIG}: StravuEditorProps): JSX.Element {
+function StravuEditor({config}: StravuEditorProps): JSX.Element {
+    // Merge provided config with defaults
+    const mergedConfig = {
+        ...DEFAULT_EDITOR_CONFIG,
+        ...config
+    };
+
     return (
-        <ThemeProvider initialTheme={config.theme}>
-            <StravuEditorInner config={config} />
+        <ThemeProvider initialTheme={mergedConfig.theme}>
+            <StravuEditorInner config={mergedConfig} />
         </ThemeProvider>
     );
 }

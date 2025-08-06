@@ -11,18 +11,17 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n lib,playground -c magenta,cyan \"pnpm:dev:lib\" \"pnpm:dev:playground\"",
-    "dev:lib": "pnpm --filter stravu-editor vite",
-    "dev:playground": "pnpm --filter @stravu-editor/playground dev",
-    "dev:old": "pnpm --filter @stravu-editor/playground dev",
-    "build": "pnpm --filter stravu-editor build",
-    "build:playground": "pnpm --filter @stravu-editor/playground build",
-    "preview": "pnpm --filter @stravu-editor/playground preview",
-    "test": "pnpm test:unit && pnpm test:e2e",
+    "dev": "npm run dev --prefix packages/playground",
+    "build": "npm run build --prefix packages/stravu-editor",
+    "build:playground": "npm run build --prefix packages/playground",
+    "preview": "npm run preview --prefix packages/playground",
+    "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "jest",
     "test:e2e": "playwright test",
     "analyze": "node scripts/bundle-size.js",
-    "analyze:top": "node scripts/bundle-size.js --top"
+    "analyze:top": "node scripts/bundle-size.js --top",
+    "clean": "rm -rf packages/*/node_modules/.vite packages/*/dist node_modules/.cache",
+    "clean:full": "rm -rf packages/*/node_modules packages/*/dist node_modules && npm install"
   },
   "devDependencies": {
     "@babel/plugin-transform-flow-strip-types": "^7.24.7",
@@ -31,5 +30,9 @@
     "concurrently": "^9.2.0",
     "typescript": "^5.0.0"
   },
-  "packageManager": "pnpm@8.0.0"
+  "workspaces": [
+    "packages/stravu-editor",
+    "packages/playground",
+    "packages/electron"
+  ]
 }
