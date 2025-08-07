@@ -64,8 +64,10 @@ import SearchReplacePlugin from './plugins/SearchReplacePlugin';
 import ContentEditable from './ui/ContentEditable';
 import { useRuntimeSettings } from './context/RuntimeSettingsContext';
 import { PluginManager } from './plugins/PluginManager';
-// Lazy load CodeHighlightShikiPlugin to improve initial load time
-const CodeHighlightShikiPlugin = React.lazy(() => import('./plugins/CodeHighlightShikiPlugin'));
+// Use standard Prism-based code highlighting for now
+import CodeHighlightPlugin from './plugins/CodeHighlightPlugin';
+// Shiki plugin has issues with Vite bundling
+// import CodeHighlightShikiPlugin  from './plugins/CodeHighlightShikiPlugin';
 // Lazy load ExcalidrawPlugin to improve initial load time
 const ExcalidrawPlugin = React.lazy(() => import('./plugins/ExcalidrawPlugin'));
 
@@ -274,7 +276,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             <MarkdownShortcutPlugin />
             {isCodeHighlighted && (
               <Suspense fallback={null}>
-                <CodeHighlightShikiPlugin />
+                <CodeHighlightPlugin />
               </Suspense>
             )}
             <ListPlugin hasStrictIndent={listStrictIndent} />

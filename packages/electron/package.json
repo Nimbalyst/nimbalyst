@@ -10,7 +10,7 @@
     "start": "electron .",
     "dist": "electron-builder",
     "clean": "rm -rf node_modules/.vite out dist",
-    "clean:dev": "rm -rf node_modules/.vite && npm run dev"
+    " clean:dev": "rm -rf node_modules/.vite && npm run dev"
   },
   "dependencies": {
     "chokidar": "^3.6.0",
@@ -20,12 +20,11 @@
     "stravu-editor": "*"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.1",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.0.0",
-    "electron": "^25.0.0",
+    "electron": "^37.2.6",
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.0",
     "typescript": "^5.0.0",
@@ -34,6 +33,7 @@
   "build": {
     "appId": "com.stravu.editor",
     "productName": "Stravu Editor",
+    "electronVersion": "37.2.6",
     "directories": {
       "output": "release"
     },

@@ -28,6 +28,7 @@ import {InlineImageNode} from '../plugins/InlineImagePlugin/InlineImageNode/Inli
 import {LayoutContainerNode} from '../plugins/LayoutPlugin/LayoutContainerNode.ts';
 import {LayoutItemNode} from '../plugins/LayoutPlugin/LayoutItemNode.ts';
 import {PageBreakNode} from '../plugins/PageBreakPlugin/PageBreakNode';
+// import { $createThemelessCodeNode, ThemelessCodeNode } from '../plugins/CodeHighlightShikiPlugin/ThemelessCodeNode.ts';
 
 const EditorNodes: Array<Klass<LexicalNode>> = [
   HeadingNode,
@@ -61,7 +62,7 @@ const EditorNodes: Array<Klass<LexicalNode>> = [
     // {
     //     replace: CodeNode,
     //     with: (CodeNode) => {
-    //         return ThemelessCodeNode.clone(CodeNode);
+    //         return $createThemelessCodeNode();
     //     },
     //     withKlass: ThemelessCodeNode
     //

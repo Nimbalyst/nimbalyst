@@ -28,6 +28,7 @@
     "@babel/preset-react": "^7.24.7",
     "@types/node": "^20.0.0",
     "concurrently": "^9.2.0",
+    "electron-builder": "^26.0.12",
     "typescript": "^5.0.0"
   },
   "workspaces": [

@@ -5,6 +5,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 console.log('[RENDERER] About to import StravuEditor at', new Date().toISOString());
 import { StravuEditor, TOGGLE_SEARCH_COMMAND } from 'stravu-editor';
 import type { LexicalCommand, ConfigTheme } from 'stravu-editor';
+import '../../../stravu-editor/dist/style.css';
 console.log('[RENDERER] StravuEditor imported at', new Date().toISOString());
 import { ProjectSidebar } from './components/ProjectSidebar';
 import { ProjectWelcome } from './components/ProjectWelcome';
@@ -82,7 +83,7 @@ export default function App() {
   // Apply theme to document
   useEffect(() => {
     const root = document.documentElement;
-    
+
     if (theme === 'dark') {
       root.classList.add('dark-theme');
       root.classList.remove('light-theme', 'crystal-dark-theme');
@@ -228,7 +229,7 @@ export default function App() {
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
         setIsDirty(false);
         initialContentRef.current = result.content;
-        
+
         // Update the current file in main process
         window.electronAPI.setCurrentFile(filePath);
       }
@@ -351,7 +352,7 @@ export default function App() {
       setContent('');
       setCurrentFilePath(null);
       setCurrentFileName(data.untitledName);
-      setIsDirty(true); // New documents start as dirty
+      // setIsDirty(true); // New documents start as dirty
       initialContentRef.current = '';
       // Update the window title immediately
       if (window.electronAPI) {
@@ -428,7 +429,7 @@ export default function App() {
               initialContent: content,
               onContentChange: (newContent) => {
             console.log('Content changed:', newContent.length, 'initialized:', isInitializedRef.current);
-            
+
             // Mark as initialized after first content change
             if (!isInitializedRef.current) {
               isInitializedRef.current = true;
@@ -439,7 +440,7 @@ export default function App() {
               }
               return;
             }
-            
+
             // Check if content actually changed from initial
             if (getContentRef.current) {
               const currentContent = getContentRef.current();

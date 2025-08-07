@@ -160,76 +160,76 @@
 
 /* Dark mode support */
 .dark-theme .project-sidebar {
-  background-color: #1f2937;
-  border-right-color: #374151;
+  background-color: #2d2d2d;
+  border-right-color: #4a4a4a;
 }
 
 .dark-theme .project-sidebar-header {
-  background-color: #111827;
-  border-bottom-color: #374151;
+  background-color: #1a1a1a;
+  border-bottom-color: #4a4a4a;
 }
 
 .dark-theme .project-name {
-  color: #f3f4f6;
+  color: #ffffff;
 }
 
 .dark-theme .close-project-btn {
-  color: #9ca3af;
+  color: #b3b3b3;
 }
 
 .dark-theme .close-project-btn:hover {
-  background-color: #374151;
-  color: #f3f4f6;
+  background-color: #3a3a3a;
+  color: #ffffff;
 }
 
 .dark-theme .project-search {
-  background-color: #111827;
-  border-bottom-color: #374151;
+  background-color: #1a1a1a;
+  border-bottom-color: #4a4a4a;
 }
 
 .dark-theme .project-search-input {
-  background-color: #1f2937;
-  border-color: #374151;
-  color: #f3f4f6;
+  background-color: #2d2d2d;
+  border-color: #4a4a4a;
+  color: #ffffff;
 }
 
 .dark-theme .project-search-input:focus {
-  border-color: #3b82f6;
+  border-color: #60a5fa;
 }
 
 .dark-theme .file-tree-directory,
 .dark-theme .file-tree-file {
-  color: #e5e7eb;
+  color: #ffffff;
 }
 
 .dark-theme .file-tree-directory:hover,
 .dark-theme .file-tree-file:hover {
-  background-color: #374151;
+  background-color: #3a3a3a;
 }
 
 .dark-theme .file-tree-file.active {
-  background-color: #1e3a8a;
-  color: #dbeafe;
+  background-color: #4a5568;
+  color: #ffffff;
 }
 
 .dark-theme .file-tree-chevron {
-  color: #9ca3af;
+  color: #b3b3b3;
 }
 
 .dark-theme .file-tree-icon {
-  color: #9ca3af;
+  color: #b3b3b3;
 }
 
 .dark-theme .file-tree-file.active .file-tree-icon {
-  color: #dbeafe;
+  color: #ffffff;
 }
 
 .dark-theme .project-file-tree::-webkit-scrollbar-thumb {
-  background-color: #4b5563;
+  background-color: #4a4a4a;
 }
 
 .dark-theme .project-file-tree::-webkit-scrollbar-thumb:hover {
-  background-color: #6b7280;
+  background-color: #5a5a5a;
 }
 
 /* System preference dark mode */

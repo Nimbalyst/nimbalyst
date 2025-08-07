@@ -12,11 +12,42 @@ import {
   $createCodeNode,
   $isCodeNode,
 } from '@lexical/code';
-import {
-  getCodeLanguageOptions as getCodeLanguageOptionsShiki,
-  getCodeThemeOptions as getCodeThemeOptionsShiki,
-  normalizeCodeLanguage as normalizeCodeLanguageShiki,
-} from '@lexical/code-shiki';
+// Code language support - now using custom implementation
+const CODE_LANGUAGE_OPTIONS = [
+  ['javascript', 'JavaScript'],
+  ['typescript', 'TypeScript'],
+  ['jsx', 'JSX'],
+  ['tsx', 'TSX'],
+  ['python', 'Python'],
+  ['java', 'Java'],
+  ['cpp', 'C++'],
+  ['csharp', 'C#'],
+  ['go', 'Go'],
+  ['rust', 'Rust'],
+  ['html', 'HTML'],
+  ['css', 'CSS'],
+  ['json', 'JSON'],
+  ['sql', 'SQL'],
+  ['yaml', 'YAML'],
+  ['markdown', 'Markdown'],
+  ['bash', 'Bash'],
+  ['xml', 'XML'],
+];
+
+function getCodeLanguageOptionsShiki() {
+  return CODE_LANGUAGE_OPTIONS;
+}
+
+function normalizeCodeLanguageShiki(language: string) {
+  const aliases: Record<string, string> = {
+    'js': 'javascript',
+    'ts': 'typescript',
+    'py': 'python',
+    'yml': 'yaml',
+    'sh': 'bash',
+  };
+  return aliases[language] || language;
+}
 import {$isLinkNode, TOGGLE_LINK_COMMAND} from '@lexical/link';
 import { useRuntimeSettings } from '../../context/RuntimeSettingsContext';
 import {$isListNode, ListNode} from '@lexical/list';
@@ -108,58 +139,7 @@ const rootTypeToRootName = {
 };
 
 
-const CODE_LANGUAGE_OPTIONS_SHIKI: [string, string][] =
-  getCodeLanguageOptionsShiki().filter((option) =>
-    [
-      'c',
-      'clike',
-      'cpp',
-      'css',
-      'html',
-      'java',
-      'js',
-      'javascript',
-      'markdown',
-      'objc',
-      'objective-c',
-      'plain',
-      'powershell',
-      'py',
-      'python',
-      'rust',
-      'sql',
-      'typescript',
-      'xml',
-    ].includes(option[0]),
-  );
-
-const CODE_THEME_OPTIONS_SHIKI: [string, string][] =
-  getCodeThemeOptionsShiki().filter((option) =>
-    [
-      'catppuccin-latte',
-      'everforest-light',
-      'github-light',
-      'gruvbox-light-medium',
-      'kanagawa-lotus',
-      'dark-plus',
-      'light-plus',
-      'material-theme-lighter',
-      'min-light',
-      'one-light',
-      'rose-pine-dawn',
-      'slack-ochin',
-      'snazzy-light',
-      'solarized-light',
-      'vitesse-light',
-    ].includes(option[0]),
-  );
-
-// Theme mapping for automatic light/dark switching (matches CodeHighlightShikiPlugin)
-const THEME_MAPPING = {
-  light: 'github-light',
-  dark: 'dark-plus',
-  'crystal-dark': 'material-theme-darker',
-} as const;
+const CODE_LANGUAGE_OPTIONS_SHIKI: [string, string][] = CODE_LANGUAGE_OPTIONS;
 
 const FONT_FAMILY_OPTIONS: [string, string][] = [
   ['Arial', 'Arial'],
@@ -236,13 +216,11 @@ function BlockFormatDropDown({
   blockType,
   rootType,
   disabled = false,
-  theme,
 }: {
   blockType: keyof typeof blockTypeToBlockName;
   rootType: keyof typeof rootTypeToRootName;
   editor: LexicalEditor;
   disabled?: boolean;
-  theme?: string;
 }): JSX.Element {
   return (
     <DropDown
@@ -327,7 +305,7 @@ function BlockFormatDropDown({
       </DropDownItem>
       <DropDownItem
         className={'item wide ' + dropDownActiveClass(blockType === 'code')}
-        onClick={() => formatCode(editor, blockType, theme)}>
+        onClick={() => formatCode(editor, blockType)}>
         <div className="icon-text-container">
           <i className="icon code" />
           <span className="text">Code Block</span>
@@ -589,8 +567,6 @@ export default function ToolbarPlugin({
                 language
             : '',
         );
-        const theme = element.getTheme();
-        updateToolbarState('codeTheme', theme || '');
         return;
       }
     },
@@ -846,19 +822,6 @@ export default function ToolbarPlugin({
     },
     [activeEditor, selectedElementKey],
   );
-  const onCodeThemeSelect = useCallback(
-    (value: string) => {
-      activeEditor.update(() => {
-        if (selectedElementKey !== null) {
-          const node = $getNodeByKey(selectedElementKey);
-          if ($isCodeNode(node)) {
-            node.setTheme(value);
-          }
-        }
-      });
-    },
-    [activeEditor, selectedElementKey],
-  );
 
   const handleMarkdownToggle = useCallback(() => {
     activeEditor.update(() => {
@@ -945,7 +908,6 @@ export default function ToolbarPlugin({
               blockType={toolbarState.blockType}
               rootType={toolbarState.rootType}
               editor={activeEditor}
-              theme={THEME_MAPPING[theme]}
             />
             <div className="divider toolbar-main-divider" />
           </>
@@ -973,30 +935,6 @@ export default function ToolbarPlugin({
                           value === toolbarState.codeLanguage,
                         )}`}
                         onClick={() => onCodeLanguageSelect(value)}
-                        key={value}>
-                        <span className="text">{name}</span>
-                      </DropDownItem>
-                    );
-                  })}
-                </DropDown>
-              </div>
-              <div className="toolbar-code-theme">
-                <DropDown
-                  disabled={!isEditable}
-                  buttonClassName="toolbar-item code-language"
-                  buttonLabel={
-                    (CODE_THEME_OPTIONS_SHIKI.find(
-                      (opt) => opt[0] === toolbarState.codeTheme,
-                    ) || ['', ''])[1]
-                  }
-                  buttonAriaLabel="Select theme">
-                  {CODE_THEME_OPTIONS_SHIKI.map(([value, name]) => {
-                    return (
-                      <DropDownItem
-                        className={`item ${dropDownActiveClass(
-                          value === toolbarState.codeTheme,
-                        )}`}
-                        onClick={() => onCodeThemeSelect(value)}
                         key={value}>
                         <span className="text">{name}</span>
                       </DropDownItem>

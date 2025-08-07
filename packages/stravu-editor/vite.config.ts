@@ -103,11 +103,6 @@ export default defineConfig(({ mode }) => ({
         },
         // Manual chunks to split out large dependencies
         manualChunks: (id) => {
-          if (id.includes('@shikijs/langs/')) {
-            // Put each language in its own chunk
-            const lang = id.split('@shikijs/langs/')[1];
-            return `shiki-lang-${lang}`;
-          }
           if (id.includes('prettier')) {
             return 'prettier';
           }
@@ -146,7 +141,7 @@ export default defineConfig(({ mode }) => ({
       '@lexical/overflow',
       '@lexical/hashtag',
       '@lexical/history',
-      '@lexical/dragon'
+      '@lexical/dragon',
     ],
     exclude: [
       '@excalidraw/excalidraw/locales',

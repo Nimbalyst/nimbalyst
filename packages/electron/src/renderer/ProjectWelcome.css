@@ -79,35 +79,35 @@
 
 /* Dark mode support */
 .dark-theme .project-welcome {
-  background-color: #111827;
-  color: #e5e7eb;
+  background-color: #1a1a1a;
+  color: #ffffff;
 }
 
 .dark-theme .project-welcome-title {
-  color: #f3f4f6;
+  color: #ffffff;
 }
 
 .dark-theme .project-welcome-text {
-  color: #9ca3af;
+  color: #b3b3b3;
 }
 
 .dark-theme .project-welcome-tips {
-  background-color: #1f2937;
-  border-color: #374151;
+  background-color: #2d2d2d;
+  border-color: #4a4a4a;
 }
 
 .dark-theme .project-welcome-tips h3 {
-  color: #9ca3af;
+  color: #b3b3b3;
 }
 
 .dark-theme .project-welcome-tips ul {
-  color: #d1d5db;
+  color: #ffffff;
 }
 
 .dark-theme .project-welcome-tips kbd {
-  background-color: #374151;
-  border-color: #4b5563;
-  color: #e5e7eb;
+  background-color: #3a3a3a;
+  border-color: #4a4a4a;
+  color: #ffffff;
 }
 
 /* System preference dark mode */

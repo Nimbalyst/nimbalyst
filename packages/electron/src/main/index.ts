@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain, nativeImage } from 'electron';
+import { app, BrowserWindow, Menu, dialog, ipcMain, nativeImage, nativeTheme } from 'electron';
 import { join, basename } from 'path';
 import { readFileSync, writeFileSync, appendFileSync, existsSync, readdirSync, statSync } from 'fs';
 import * as chokidar from 'chokidar';
@@ -65,23 +65,23 @@ function getRecentItems(type: 'projects' | 'documents'): RecentItem[] {
 
 function addToRecentItems(type: 'projects' | 'documents', path: string, name: string) {
     const items = getRecentItems(type);
-    
+
     // Remove if already exists
     const filtered = items.filter(item => item.path !== path);
-    
+
     // Add to beginning
     filtered.unshift({
         path,
         name,
         timestamp: Date.now()
     });
-    
+
     // Limit to MAX_RECENT_ITEMS
     const limited = filtered.slice(0, MAX_RECENT_ITEMS);
-    
+
     // Save back to store
     store.set(`recent.${type}`, limited);
-    
+
     // Update menu
     updateApplicationMenu();
 }
@@ -97,40 +97,95 @@ function updateApplicationMenu() {
     Menu.setApplicationMenu(menu);
 }
 
+// Function to update native theme
+function updateNativeTheme() {
+    const currentTheme = store.get('theme', 'system') as string;
+
+    if (currentTheme === 'system') {
+        nativeTheme.themeSource = 'system';
+    } else if (currentTheme === 'dark' || currentTheme === 'crystal-dark') {
+        nativeTheme.themeSource = 'dark';
+    } else {
+        nativeTheme.themeSource = 'light';
+    }
+}
+
+// Function to update window title bar colors based on theme
+function updateWindowTitleBars() {
+    const currentTheme = store.get('theme', 'system') as string;
+    const systemDarkMode = nativeTheme.shouldUseDarkColors;
+    const isDarkTheme = currentTheme === 'dark' ||
+                      currentTheme === 'crystal-dark' ||
+                      (currentTheme === 'system' && systemDarkMode);
+
+    // Update native theme first
+    updateNativeTheme();
+
+    // Define title bar colors for each theme
+    const titleBarColors = {
+        dark: { color: '#1a1a1a', symbolColor: '#ffffff' },
+        crystalDark: { color: '#1F2837', symbolColor: '#F3F4F6' },
+        light: { color: '#ffffff', symbolColor: '#374151' }
+    };
+
+    // Select appropriate colors based on theme
+    let titleBarColor = titleBarColors.light;
+    let backgroundColor = '#ffffff';
+
+    if (currentTheme === 'crystal-dark') {
+        titleBarColor = titleBarColors.crystalDark;
+        backgroundColor = '#1F2837';
+    } else if (isDarkTheme) {
+        titleBarColor = titleBarColors.dark;
+        backgroundColor = '#1a1a1a';
+    }
+
+    // Update all windows
+    BrowserWindow.getAllWindows().forEach(window => {
+        // Update background color
+        window.setBackgroundColor(backgroundColor);
+
+        // Update title bar overlay on Windows/Linux
+        if (process.platform !== 'darwin' && window.setTitleBarOverlay) {
+            window.setTitleBarOverlay(titleBarColor);
+        }
+    });
+}
+
 // Save session state
 function saveSessionState() {
     const sessionWindows: SessionWindow[] = [];
-    
+
     for (const [windowId, window] of windows) {
         const state = windowStates.get(windowId);
         if (!state || window.isDestroyed()) continue;
-        
+
         // Don't save untitled empty documents
         if (state.mode === 'document' && !state.filePath && !state.documentEdited) {
             continue;
         }
-        
+
         const bounds = window.getBounds();
         const sessionWindow: SessionWindow = {
             mode: state.mode,
             bounds
         };
-        
+
         if (state.filePath) {
             sessionWindow.filePath = state.filePath;
         }
         if (state.projectPath) {
             sessionWindow.projectPath = state.projectPath;
         }
-        
+
         sessionWindows.push(sessionWindow);
     }
-    
+
     const sessionState: SessionState = {
         windows: sessionWindows,
         lastUpdated: Date.now()
     };
-    
+
     store.set('session', sessionState);
     console.log('[SESSION] Saved session state:', sessionState);
 }
@@ -138,14 +193,14 @@ function saveSessionState() {
 // Restore session state
 function restoreSessionState() {
     const sessionState = store.get('session') as SessionState | undefined;
-    
+
     if (!sessionState || !sessionState.windows || sessionState.windows.length === 0) {
         console.log('[SESSION] No session to restore');
         return false;
     }
-    
+
     console.log('[SESSION] Restoring session:', sessionState);
-    
+
     // Restore each window
     sessionState.windows.forEach((sessionWindow, index) => {
         // Add a small delay between windows to avoid race conditions
@@ -174,7 +229,7 @@ function restoreSessionState() {
             }
         }, index * 100);
     });
-    
+
     return true;
 }
 
@@ -182,20 +237,20 @@ function restoreSessionState() {
 function createWindowListMenu(): any[] {
     const menuItems: any[] = [];
     const allWindows = BrowserWindow.getAllWindows();
-    
+
     if (allWindows.length === 0) {
         return [];
     }
-    
+
     // Sort windows by ID for consistent ordering
     const sortedWindows = allWindows.sort((a, b) => a.id - b.id);
-    
+
     sortedWindows.forEach((window, index) => {
         const windowId = window.id;
         const state = windowStates.get(windowId);
-        
+
         let title = 'Untitled';
-        
+
         if (state) {
             if (state.mode === 'project' && state.projectPath) {
                 const projectName = basename(state.projectPath);
@@ -208,16 +263,16 @@ function createWindowListMenu(): any[] {
             } else if (state.filePath) {
                 title = basename(state.filePath);
             }
-            
+
             // Add dirty indicator
             if (state.documentEdited) {
                 title = `${title} •`;
             }
         }
-        
+
         // Add keyboard shortcut for first 9 windows
         const accelerator = index < 9 ? `CmdOrCtrl+${index + 1}` : undefined;
-        
+
         menuItems.push({
             label: title,
             accelerator,
@@ -228,7 +283,7 @@ function createWindowListMenu(): any[] {
             }
         });
     });
-    
+
     return menuItems;
 }
 
@@ -237,7 +292,7 @@ function createRecentSubmenu(): any[] {
     const recentProjects = getRecentItems('projects');
     const recentDocuments = getRecentItems('documents');
     const submenu: any[] = [];
-    
+
     // Recent Projects section
     if (recentProjects.length > 0) {
         submenu.push({ label: 'Recent Projects', enabled: false });
@@ -259,12 +314,12 @@ function createRecentSubmenu(): any[] {
                 }
             });
         });
-        
+
         if (recentDocuments.length > 0) {
             submenu.push({ type: 'separator' });
         }
     }
-    
+
     // Recent Documents section
     if (recentDocuments.length > 0) {
         submenu.push({ label: 'Recent Documents', enabled: false });
@@ -296,18 +351,18 @@ function createRecentSubmenu(): any[] {
             });
         });
     }
-    
+
     // Clear Recent options
     if (recentProjects.length > 0 || recentDocuments.length > 0) {
         submenu.push({ type: 'separator' });
-        
+
         if (recentProjects.length > 0) {
             submenu.push({
                 label: 'Clear Recent Projects',
                 click: () => clearRecentItems('projects')
             });
         }
-        
+
         if (recentDocuments.length > 0) {
             submenu.push({
                 label: 'Clear Recent Documents',
@@ -315,12 +370,12 @@ function createRecentSubmenu(): any[] {
             });
         }
     }
-    
+
     // If no recent items
     if (submenu.length === 0) {
         submenu.push({ label: 'No Recent Items', enabled: false });
     }
-    
+
     return submenu;
 }
 let windowPositionOffset = 0;
@@ -344,16 +399,16 @@ function getFolderContents(dirPath: string): FileTreeItem[] {
     try {
         const items = readdirSync(dirPath);
         const result: FileTreeItem[] = [];
-        
+
         for (const item of items) {
             // Skip hidden files and common non-content directories
             if (item.startsWith('.') || item === 'node_modules' || item === 'dist' || item === 'build') {
                 continue;
             }
-            
+
             const fullPath = join(dirPath, item);
             const stats = statSync(fullPath);
-            
+
             if (stats.isDirectory()) {
                 result.push({
                     name: item,
@@ -369,7 +424,7 @@ function getFolderContents(dirPath: string): FileTreeItem[] {
                 });
             }
         }
-        
+
         // Sort: directories first, then files, alphabetically
         return result.sort((a, b) => {
             if (a.type !== b.type) {
@@ -396,10 +451,15 @@ function loadFileIntoWindow(window: BrowserWindow, filePath: string) {
         }
         console.log('[LOAD_FILE] Sending file-opened-from-os event');
         window.webContents.send('file-opened-from-os', { filePath, content });
-        
+
+        // Set represented filename for macOS
+        if (process.platform === 'darwin') {
+            window.setRepresentedFilename(filePath);
+        }
+
         // Add to recent documents
         addToRecentItems('documents', filePath, basename(filePath));
-        
+
         // Start watching the file for changes
         console.log('[LOAD_FILE] Starting file watcher');
         startFileWatcher(window, filePath);
@@ -422,12 +482,12 @@ function findWindowByFilePath(filePath: string): BrowserWindow | null {
 // Start watching a file for changes
 function startFileWatcher(window: BrowserWindow, filePath: string) {
     const windowId = window.id;
-    
+
     // Stop any existing watcher for this window
     stopFileWatcher(windowId);
-    
+
     console.log('[FILE_WATCHER] Starting file watcher for:', filePath, 'window:', windowId);
-    
+
     try {
         const watcher = chokidar.watch(filePath, {
             persistent: true,
@@ -439,21 +499,21 @@ function startFileWatcher(window: BrowserWindow, filePath: string) {
                 pollInterval: 100
             }
         });
-        
+
         // Add ready event to confirm watcher is active
         watcher.on('ready', () => {
             console.log('[FILE_WATCHER] Watcher ready for:', filePath);
         });
-        
+
         watcher.on('add', (path) => {
             console.log('[FILE_WATCHER] File added:', path);
         });
-        
+
         watcher.on('change', (path, stats) => {
             console.log('[FILE_WATCHER] File changed on disk:', path, 'stats:', stats);
             const state = windowStates.get(windowId);
             console.log('[FILE_WATCHER] Window state:', state);
-            
+
             if (state?.documentEdited) {
                 console.log('[FILE_WATCHER] Document has unsaved changes, showing dialog');
                 // File has unsaved changes, ask user what to do
@@ -465,9 +525,9 @@ function startFileWatcher(window: BrowserWindow, filePath: string) {
                     message: 'This file has been modified on disk. You have unsaved changes.\nWhat would you like to do?',
                     detail: `File: ${filePath}`
                 });
-                
+
                 console.log('[FILE_WATCHER] User choice:', choice);
-                
+
                 if (choice === 1) {
                     // Load from disk
                     console.log('[FILE_WATCHER] Loading file from disk');
@@ -480,30 +540,30 @@ function startFileWatcher(window: BrowserWindow, filePath: string) {
                 loadFileIntoWindow(window, filePath);
             }
         });
-        
+
         watcher.on('unlink', (path) => {
             console.log('[FILE_WATCHER] File deleted:', path);
             window.webContents.send('file-deleted', { filePath });
         });
-        
+
         // Handle file rename/move
         watcher.on('error', (error) => {
             console.error('[FILE_WATCHER] File watcher error:', error);
         });
-        
+
         watcher.on('raw', (event, path, details) => {
             console.log('[FILE_WATCHER] Raw event:', event, path, details);
         });
-        
+
         fileWatchers.set(windowId, watcher);
         console.log('[FILE_WATCHER] Watcher stored for window:', windowId);
-        
+
         // Log what files are being watched after a short delay
         setTimeout(() => {
             const watched = watcher.getWatched();
             console.log('[FILE_WATCHER] Currently watching:', watched);
         }, 1000);
-        
+
     } catch (error) {
         console.error('[FILE_WATCHER] Failed to create watcher:', error);
     }
@@ -587,10 +647,10 @@ function createWindow(isOpeningFile: boolean = false, isProjectMode: boolean = f
         }
 
         console.log('[MAIN] About to create BrowserWindow at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
-        
+
         // Use saved bounds if provided, otherwise calculate window position for cascading effect
         let windowBounds: { width: number; height: number; x?: number; y?: number };
-        
+
         if (savedBounds) {
             windowBounds = savedBounds;
         } else {
@@ -602,17 +662,43 @@ function createWindow(isOpeningFile: boolean = false, isProjectMode: boolean = f
                 x: windowX,
                 y: windowY
             };
-            
+
             // Increment offset for next window, reset after 10 windows to avoid going off screen
             windowPositionOffset += WINDOW_CASCADE_OFFSET;
             if (windowPositionOffset > WINDOW_CASCADE_OFFSET * 10) {
                 windowPositionOffset = 0;
             }
         }
-        
+
+        // Get current theme for title bar styling
+        const currentTheme = store.get('theme', 'system') as string;
+        const systemDarkMode = nativeTheme.shouldUseDarkColors;
+        const isDarkTheme = currentTheme === 'dark' ||
+                          currentTheme === 'crystal-dark' ||
+                          (currentTheme === 'system' && systemDarkMode);
+
+        // Define title bar colors for each theme
+        const titleBarColors = {
+            dark: { color: '#1a1a1a', symbolColor: '#ffffff' },
+            crystalDark: { color: '#1F2837', symbolColor: '#F3F4F6' },
+            light: { color: '#ffffff', symbolColor: '#374151' }
+        };
+
+        // Select appropriate colors based on theme
+        let titleBarColor = titleBarColors.light;
+        if (currentTheme === 'crystal-dark') {
+            titleBarColor = titleBarColors.crystalDark;
+        } else if (isDarkTheme) {
+            titleBarColor = titleBarColors.dark;
+        }
+
         const window = new BrowserWindow({
             ...windowBounds,
             icon: icon,
+            backgroundColor: isDarkTheme ? (currentTheme === 'crystal-dark' ? '#1F2837' : '#1a1a1a') : '#ffffff',
+            // Use default title bar on macOS
+            titleBarStyle: process.platform === 'darwin' ? undefined : 'hidden',
+            titleBarOverlay: process.platform !== 'darwin' ? titleBarColor : false,
             webPreferences: {
                 preload: join(__dirname, '../preload/index.js'),
                 nodeIntegration: false,
@@ -635,7 +721,7 @@ function createWindow(isOpeningFile: boolean = false, isProjectMode: boolean = f
         window.webContents.on('did-start-loading', () => {
             console.log('[MAIN] did-start-loading at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
         });
-        
+
         window.webContents.on('dom-ready', () => {
             console.log('[MAIN] dom-ready at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
         });
@@ -695,12 +781,12 @@ function createWindow(isOpeningFile: boolean = false, isProjectMode: boolean = f
             // Update menu to reflect window closure
             updateApplicationMenu();
         });
-        
+
         // Update menu when window gains/loses focus
         window.on('focus', () => {
             updateApplicationMenu();
         });
-        
+
         window.on('blur', () => {
             updateApplicationMenu();
         });
@@ -708,11 +794,11 @@ function createWindow(isOpeningFile: boolean = false, isProjectMode: boolean = f
         // If a file was requested to be opened before window was ready, open it now
         window.webContents.once('did-finish-load', () => {
             console.log('[MAIN] did-finish-load at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
-            
+
             // Send the current theme to the new window
             const theme = store.get('theme', 'system') as string;
             window.webContents.send('theme-change', theme);
-            
+
             if (isProjectMode && projectPath) {
                 // Send project information to the renderer
                 const fileTree = getFolderContents(projectPath);
@@ -731,11 +817,17 @@ function createWindow(isOpeningFile: boolean = false, isProjectMode: boolean = f
                 // Add a small delay to ensure renderer has set up listeners
                 setTimeout(() => {
                     window.webContents.send('new-untitled-document', { untitledName });
-                    // Mark as edited since it's a new document
-                    const state = windowStates.get(windowId);
-                    if (state) {
-                        state.documentEdited = true;
+
+                    // Clear represented filename for new documents
+                    if (process.platform === 'darwin') {
+                        window.setRepresentedFilename('');
                     }
+
+                    // Mark as edited since it's a new document
+                    // const state = windowStates.get(windowId);
+                    // if (state) {
+                    //     state.documentEdited = true;
+                    // }
                 }, 100);
             }
         });
@@ -746,24 +838,24 @@ function createWindow(isOpeningFile: boolean = false, isProjectMode: boolean = f
             if (message.includes('[renderer]') || message.includes('[main]')) {
                 return;
             }
-            
+
             // Map numeric levels to string names
             const levelNames = ['verbose', 'info', 'warning', 'error'];
             const levelName = levelNames[level] || 'unknown';
-            
+
             // In development, write all console messages to debug log
             if (process.env.NODE_ENV !== 'production') {
                 const timestamp = new Date().toISOString();
                 const debugLogPath = join(app.getPath('userData'), 'stravu-editor-debug.log');
                 const logMessage = `[${timestamp}] [${levelName.toUpperCase()}] [browser] ${message} (${sourceId}:${line})\n`;
-                
+
                 try {
                     appendFileSync(debugLogPath, logMessage);
                 } catch (error) {
                     // Don't crash if we can't write to the log file
                     console.error('Failed to write browser console to debug log:', error);
                 }
-                
+
                 // Also log to main console for immediate visibility
                 console.log(`[Browser ${levelName}] ${message} (${sourceId}:${line})`);
             } else {
@@ -773,7 +865,7 @@ function createWindow(isOpeningFile: boolean = false, isProjectMode: boolean = f
                 }
             }
         });
-        
+
         // Handle pending file after window is ready to show
         window.once('ready-to-show', () => {
             if (pendingFilePath) {
@@ -863,7 +955,7 @@ app.whenReady().then(() => {
 
         // Try to restore session, otherwise create a new window
         const sessionRestored = restoreSessionState();
-        
+
         if (!sessionRestored && !pendingFilePath) {
             // No session to restore and no file to open, create a new window
             createWindow(false);
@@ -875,13 +967,29 @@ app.whenReady().then(() => {
                 pendingFilePath = null;
             });
         }
-        
+
         createApplicationMenu();
-        
+
+        // Set initial native theme
+        updateNativeTheme();
+
         // Save session periodically (every 30 seconds)
         sessionSaveInterval = setInterval(() => {
             saveSessionState();
         }, 30000);
+
+        // Listen for system theme changes
+        nativeTheme.on('updated', () => {
+            const currentTheme = store.get('theme', 'system') as string;
+            if (currentTheme === 'system') {
+                // Update windows when system theme changes
+                updateWindowTitleBars();
+                // Send theme change to all windows
+                BrowserWindow.getAllWindows().forEach(window => {
+                    window.webContents.send('theme-change', 'system');
+                });
+            }
+        });
 
         app.on('activate', () => {
             // On macOS, re-create window when dock icon is clicked
@@ -906,13 +1014,13 @@ app.on('window-all-closed', () => {
 // Save session state before quitting
 app.on('before-quit', () => {
     console.log('[SESSION] App quitting, saving session state');
-    
+
     // Clear the session save interval
     if (sessionSaveInterval) {
         clearInterval(sessionSaveInterval);
         sessionSaveInterval = null;
     }
-    
+
     saveSessionState();
 });
 
@@ -921,7 +1029,7 @@ app.on('before-quit', () => {
 function createApplicationMenu() {
     // Get current theme from store
     const currentTheme = store.get('theme', 'system') as string;
-    
+
     const template: any[] = [
         {
             label: 'File',
@@ -937,7 +1045,7 @@ function createApplicationMenu() {
                             { name: 'All Files', extensions: ['*'] }
                         ]
                     });
-                    
+
                     if (!result.canceled && result.filePaths.length > 0) {
                         const filePath = result.filePaths[0];
                         // Check if file is already open
@@ -957,7 +1065,7 @@ function createApplicationMenu() {
                     const result = await dialog.showOpenDialog({
                         properties: ['openDirectory']
                     });
-                    
+
                     if (!result.canceled && result.filePaths.length > 0) {
                         const projectPath = result.filePaths[0];
                         // Add to recent projects
@@ -1042,8 +1150,8 @@ function createApplicationMenu() {
                 {
                     label: 'Theme',
                     submenu: [
-                        { 
-                            label: 'Light', 
+                        {
+                            label: 'Light',
                             type: 'radio',
                             checked: currentTheme === 'light',
                             click: () => {
@@ -1052,12 +1160,14 @@ function createApplicationMenu() {
                                 BrowserWindow.getAllWindows().forEach(window => {
                                     window.webContents.send('theme-change', 'light');
                                 });
+                                // Update window title bars
+                                updateWindowTitleBars();
                                 // Recreate menu to update checkmarks
                                 createApplicationMenu();
                             }
                         },
-                        { 
-                            label: 'Dark', 
+                        {
+                            label: 'Dark',
                             type: 'radio',
                             checked: currentTheme === 'dark',
                             click: () => {
@@ -1066,12 +1176,14 @@ function createApplicationMenu() {
                                 BrowserWindow.getAllWindows().forEach(window => {
                                     window.webContents.send('theme-change', 'dark');
                                 });
+                                // Update window title bars
+                                updateWindowTitleBars();
                                 // Recreate menu to update checkmarks
                                 createApplicationMenu();
                             }
                         },
-                        { 
-                            label: 'Crystal Dark', 
+                        {
+                            label: 'Crystal Dark',
                             type: 'radio',
                             checked: currentTheme === 'crystal-dark',
                             click: () => {
@@ -1080,12 +1192,14 @@ function createApplicationMenu() {
                                 BrowserWindow.getAllWindows().forEach(window => {
                                     window.webContents.send('theme-change', 'crystal-dark');
                                 });
+                                // Update window title bars
+                                updateWindowTitleBars();
                                 // Recreate menu to update checkmarks
                                 createApplicationMenu();
                             }
                         },
-                        { 
-                            label: 'System', 
+                        {
+                            label: 'System',
                             type: 'radio',
                             checked: currentTheme === 'system',
                             click: () => {
@@ -1094,6 +1208,8 @@ function createApplicationMenu() {
                                 BrowserWindow.getAllWindows().forEach(window => {
                                     window.webContents.send('theme-change', 'system');
                                 });
+                                // Update window title bars
+                                updateWindowTitleBars();
                                 // Recreate menu to update checkmarks
                                 createApplicationMenu();
                             }
@@ -1160,7 +1276,7 @@ function createApplicationMenu() {
 ipcMain.handle('open-file', async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return null;
-    
+
     const result = await dialog.showOpenDialog(window, {
         properties: ['openFile'],
         filters: [
@@ -1179,10 +1295,10 @@ ipcMain.handle('open-file', async (event) => {
             state.documentEdited = false;
         }
         const content = readFileSync(filePath, 'utf-8');
-        
+
         // Start watching the file
         startFileWatcher(window, filePath);
-        
+
         return { filePath, content };
     }
 
@@ -1192,11 +1308,11 @@ ipcMain.handle('open-file', async (event) => {
 ipcMain.handle('save-file', async (event, content: string) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return null;
-    
+
     const windowId = window.id;
     const state = windowStates.get(windowId);
     const filePath = state?.filePath;
-    
+
     console.log('[SAVE] save-file handler called, filePath:', filePath, 'window:', windowId);
     try {
         if (!filePath) {
@@ -1218,7 +1334,7 @@ ipcMain.handle('save-file', async (event, content: string) => {
         if (state) {
             state.documentEdited = false; // Reset dirty state after save
         }
-        
+
         // Resume watching after a short delay
         if (watcher) {
             setTimeout(() => {
@@ -1237,7 +1353,7 @@ ipcMain.handle('save-file', async (event, content: string) => {
 ipcMain.on('set-current-file', (event, filePath: string | null) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return;
-    
+
     const windowId = window.id;
     const state = windowStates.get(windowId);
     if (state) {
@@ -1246,12 +1362,12 @@ ipcMain.on('set-current-file', (event, filePath: string | null) => {
             console.log('[SET_FILE] Stopping watcher for old file:', state.filePath);
             stopFileWatcher(windowId);
         }
-        
+
         state.filePath = filePath;
-        
+
         // Update menu to reflect new file
         updateApplicationMenu();
-        
+
         // Start watching the new file
         if (filePath) {
             console.log('[SET_FILE] Starting watcher for new file:', filePath);
@@ -1264,10 +1380,10 @@ ipcMain.on('set-current-file', (event, filePath: string | null) => {
 ipcMain.handle('save-file-as', async (event, content: string) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return null;
-    
+
     const windowId = window.id;
     const state = windowStates.get(windowId);
-    
+
     try {
         const result = await dialog.showSaveDialog(window, {
             filters: [
@@ -1285,6 +1401,12 @@ ipcMain.handle('save-file-as', async (event, content: string) => {
                 state.documentEdited = false;
             }
             writeFileSync(filePath, content, 'utf-8');
+
+            // Set represented filename for macOS
+            if (process.platform === 'darwin') {
+                window.setRepresentedFilename(filePath);
+            }
+
             return { success: true, filePath };
         }
 
@@ -1299,14 +1421,14 @@ ipcMain.handle('save-file-as', async (event, content: string) => {
 ipcMain.on('set-document-edited', (event, edited: boolean) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return;
-    
+
     const windowId = window.id;
     const state = windowStates.get(windowId);
     if (state) {
         state.documentEdited = edited;
     }
     window.setDocumentEdited(edited);
-    
+
     // Update menu to reflect new window state
     updateApplicationMenu();
 });
@@ -1331,25 +1453,30 @@ ipcMain.handle('get-folder-contents', (event, dirPath: string) => {
 ipcMain.handle('switch-project-file', async (event, filePath: string) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return null;
-    
+
     try {
         const content = readFileSync(filePath, 'utf-8');
         const windowId = window.id;
         const state = windowStates.get(windowId);
-        
+
         if (state) {
             // Stop watching the old file
             if (state.filePath && state.filePath !== filePath) {
                 stopFileWatcher(windowId);
             }
-            
+
             state.filePath = filePath;
             state.documentEdited = false;
-            
+
             // Start watching the new file
             startFileWatcher(window, filePath);
         }
-        
+
+        // Set represented filename for macOS
+        if (process.platform === 'darwin') {
+            window.setRepresentedFilename(filePath);
+        }
+
         return { filePath, content };
     } catch (error) {
         console.error('Error switching project file:', error);

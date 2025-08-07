@@ -211,7 +211,7 @@ export const formatQuote = (editor: LexicalEditor, blockType: string) => {
   }
 };
 
-export const formatCode = (editor: LexicalEditor, blockType: string, theme?: string) => {
+export const formatCode = (editor: LexicalEditor, blockType: string) => {
   if (blockType !== 'code') {
     editor.update(() => {
       let selection = $getSelection();
@@ -221,17 +221,11 @@ export const formatCode = (editor: LexicalEditor, blockType: string, theme?: str
       if (!$isRangeSelection(selection) || selection.isCollapsed()) {
         $setBlocksType(selection, () => {
           const codeNode = $createCodeNode();
-          if (theme) {
-            codeNode.setTheme(theme);
-          }
           return codeNode;
         });
       } else {
         const textContent = selection.getTextContent();
         const codeNode = $createCodeNode();
-        if (theme) {
-          codeNode.setTheme(theme);
-        }
         selection.insertNodes([codeNode]);
         selection = $getSelection();
         if ($isRangeSelection(selection)) {
