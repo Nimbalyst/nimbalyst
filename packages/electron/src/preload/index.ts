@@ -46,6 +46,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('file-open', callback);
     return () => ipcRenderer.removeListener('file-open', callback);
   },
+  onProjectOpened: (callback: (data: { projectPath: string; projectName: string; fileTree: any[] }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('project-opened', handler);
+    return () => ipcRenderer.removeListener('project-opened', handler);
+  },
   onFileSave: (callback: () => void) => {
     ipcRenderer.on('file-save', callback);
     return () => ipcRenderer.removeListener('file-save', callback);
@@ -77,6 +82,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('file-deleted', handler);
     return () => ipcRenderer.removeListener('file-deleted', handler);
   },
+  onThemeChange: (callback: (theme: string) => void) => {
+    const handler = (_event: any, theme: string) => callback(theme);
+    ipcRenderer.on('theme-change', handler);
+    return () => ipcRenderer.removeListener('theme-change', handler);
+  },
+  onShowAbout: (callback: () => void) => {
+    ipcRenderer.on('show-about', callback);
+    return () => ipcRenderer.removeListener('show-about', callback);
+  },
 
   // File operations
   openFile: () => ipcRenderer.invoke('open-file'),
@@ -87,4 +101,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setDocumentEdited: (edited: boolean) => ipcRenderer.send('set-document-edited', edited),
   setTitle: (title: string) => ipcRenderer.send('set-title', title),
   setCurrentFile: (filePath: string | null) => ipcRenderer.send('set-current-file', filePath),
+
+  // Project operations
+  getFolderContents: (dirPath: string) => ipcRenderer.invoke('get-folder-contents', dirPath),
+  switchProjectFile: (filePath: string) => ipcRenderer.invoke('switch-project-file', filePath),
 });

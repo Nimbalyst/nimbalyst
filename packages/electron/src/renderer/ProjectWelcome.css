@@ -1,0 +1,179 @@
+/* Project Welcome Styles */
+.project-welcome {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background-color: #f9fafb;
+  color: #374151;
+}
+
+.project-welcome-content {
+  text-align: center;
+  max-width: 500px;
+  padding: 2rem;
+}
+
+.project-welcome-icon {
+  color: #9ca3af;
+  margin-bottom: 1.5rem;
+}
+
+.project-welcome-title {
+  font-size: 2rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+  color: #1f2937;
+}
+
+.project-welcome-text {
+  font-size: 1.125rem;
+  color: #6b7280;
+  margin: 0 0 2rem 0;
+}
+
+.project-welcome-tips {
+  text-align: left;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 2rem;
+}
+
+.project-welcome-tips h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  margin: 0 0 1rem 0;
+}
+
+.project-welcome-tips ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: #4b5563;
+}
+
+.project-welcome-tips li {
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+.project-welcome-tips li:last-child {
+  margin-bottom: 0;
+}
+
+.project-welcome-tips kbd {
+  display: inline-block;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.75rem;
+  font-family: monospace;
+  background-color: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Dark mode support */
+.dark-theme .project-welcome {
+  background-color: #111827;
+  color: #e5e7eb;
+}
+
+.dark-theme .project-welcome-title {
+  color: #f3f4f6;
+}
+
+.dark-theme .project-welcome-text {
+  color: #9ca3af;
+}
+
+.dark-theme .project-welcome-tips {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+
+.dark-theme .project-welcome-tips h3 {
+  color: #9ca3af;
+}
+
+.dark-theme .project-welcome-tips ul {
+  color: #d1d5db;
+}
+
+.dark-theme .project-welcome-tips kbd {
+  background-color: #374151;
+  border-color: #4b5563;
+  color: #e5e7eb;
+}
+
+/* System preference dark mode */
+@media (prefers-color-scheme: dark) {
+  html:not(.light-theme):not(.dark-theme) .project-welcome {
+    background-color: #111827;
+    color: #e5e7eb;
+  }
+
+  html:not(.light-theme):not(.dark-theme) .project-welcome-title {
+    color: #f3f4f6;
+  }
+
+  html:not(.light-theme):not(.dark-theme) .project-welcome-text {
+    color: #9ca3af;
+  }
+
+  html:not(.light-theme):not(.dark-theme) .project-welcome-tips {
+    background-color: #1f2937;
+    border-color: #374151;
+  }
+
+  html:not(.light-theme):not(.dark-theme) .project-welcome-tips h3 {
+    color: #9ca3af;
+  }
+
+  html:not(.light-theme):not(.dark-theme) .project-welcome-tips ul {
+    color: #d1d5db;
+  }
+
+  html:not(.light-theme):not(.dark-theme) .project-welcome-tips kbd {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+  }
+}
+
+/* Crystal Dark theme */
+.crystal-dark-theme .project-welcome {
+  background-color: #1F2837;
+  color: #F3F4F6;
+}
+
+.crystal-dark-theme .project-welcome-title {
+  color: #F3F4F6;
+}
+
+.crystal-dark-theme .project-welcome-text {
+  color: #9CA3AF;
+}
+
+.crystal-dark-theme .project-welcome-tips {
+  background-color: #374151;
+  border-color: #4B5563;
+}
+
+.crystal-dark-theme .project-welcome-tips h3 {
+  color: #9CA3AF;
+}
+
+.crystal-dark-theme .project-welcome-tips ul {
+  color: #D1D5DB;
+}
+
+.crystal-dark-theme .project-welcome-tips kbd {
+  background-color: #4B5563;
+  border-color: #6B7280;
+  color: #F3F4F6;
+}

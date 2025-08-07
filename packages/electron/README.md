@@ -6,16 +6,16 @@ This package contains the Electron desktop application for Stravu Editor.
 
 ```bash
 # Install dependencies
-pnpm install
+npm install
 
 # Run in development mode
-pnpm dev
+npm run dev
 
 # Build for production
-pnpm build
+npm run build
 
 # Package for distribution
-pnpm dist
+npm run dist
 ```
 
 ## Features
@@ -25,6 +25,9 @@ pnpm dist
 - Offline usage
 - Better performance for large documents
 - Debug logging in development mode
+- Multiple themes including Light, Dark, Crystal Dark, and System preference
+- Project/folder view with file tree navigation
+- Recent files and projects tracking
 
 ## Architecture
 

@@ -1,14 +1,51 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, nativeImage } from 'electron';
-import { join } from 'path';
-import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'fs';
+import { join, basename } from 'path';
+import { readFileSync, writeFileSync, appendFileSync, existsSync, readdirSync, statSync } from 'fs';
 import * as chokidar from 'chokidar';
+import Store from 'electron-store';
+
+// Initialize electron store
+const store = new Store();
+
+// Window state interface
+interface WindowState {
+    mode: 'document' | 'project';
+    filePath: string | null;
+    projectPath: string | null;
+    documentEdited: boolean;
+}
+
+// Recent items interface
+interface RecentItem {
+    path: string;
+    name: string;
+    timestamp: number;
+}
+
+// Session state interface
+interface SessionWindow {
+    mode: 'document' | 'project';
+    filePath?: string;
+    projectPath?: string;
+    bounds?: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    };
+}
+
+interface SessionState {
+    windows: SessionWindow[];
+    lastUpdated: number;
+}
+
+// Maximum number of recent items to store
+const MAX_RECENT_ITEMS = 10;
 
 // Window management
 const windows = new Map<number, BrowserWindow>();
-const windowStates = new Map<number, {
-    filePath: string | null;
-    documentEdited: boolean;
-}>();
+const windowStates = new Map<number, WindowState>();
 
 // File watchers management
 const fileWatchers = new Map<number, chokidar.FSWatcher>();
@@ -18,10 +55,333 @@ let windowIdCounter = 0;
 
 // Window position offset for cascading
 const WINDOW_CASCADE_OFFSET = 25;
+
+// Functions to manage recent items
+function getRecentItems(type: 'projects' | 'documents'): RecentItem[] {
+    const items = store.get(`recent.${type}`, []) as RecentItem[];
+    // Sort by timestamp descending (most recent first)
+    return items.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+function addToRecentItems(type: 'projects' | 'documents', path: string, name: string) {
+    const items = getRecentItems(type);
+    
+    // Remove if already exists
+    const filtered = items.filter(item => item.path !== path);
+    
+    // Add to beginning
+    filtered.unshift({
+        path,
+        name,
+        timestamp: Date.now()
+    });
+    
+    // Limit to MAX_RECENT_ITEMS
+    const limited = filtered.slice(0, MAX_RECENT_ITEMS);
+    
+    // Save back to store
+    store.set(`recent.${type}`, limited);
+    
+    // Update menu
+    updateApplicationMenu();
+}
+
+function clearRecentItems(type: 'projects' | 'documents') {
+    store.set(`recent.${type}`, []);
+    updateApplicationMenu();
+}
+
+// Function to update the application menu (will be called after recent items change)
+function updateApplicationMenu() {
+    const menu = createApplicationMenu();
+    Menu.setApplicationMenu(menu);
+}
+
+// Save session state
+function saveSessionState() {
+    const sessionWindows: SessionWindow[] = [];
+    
+    for (const [windowId, window] of windows) {
+        const state = windowStates.get(windowId);
+        if (!state || window.isDestroyed()) continue;
+        
+        // Don't save untitled empty documents
+        if (state.mode === 'document' && !state.filePath && !state.documentEdited) {
+            continue;
+        }
+        
+        const bounds = window.getBounds();
+        const sessionWindow: SessionWindow = {
+            mode: state.mode,
+            bounds
+        };
+        
+        if (state.filePath) {
+            sessionWindow.filePath = state.filePath;
+        }
+        if (state.projectPath) {
+            sessionWindow.projectPath = state.projectPath;
+        }
+        
+        sessionWindows.push(sessionWindow);
+    }
+    
+    const sessionState: SessionState = {
+        windows: sessionWindows,
+        lastUpdated: Date.now()
+    };
+    
+    store.set('session', sessionState);
+    console.log('[SESSION] Saved session state:', sessionState);
+}
+
+// Restore session state
+function restoreSessionState() {
+    const sessionState = store.get('session') as SessionState | undefined;
+    
+    if (!sessionState || !sessionState.windows || sessionState.windows.length === 0) {
+        console.log('[SESSION] No session to restore');
+        return false;
+    }
+    
+    console.log('[SESSION] Restoring session:', sessionState);
+    
+    // Restore each window
+    sessionState.windows.forEach((sessionWindow, index) => {
+        // Add a small delay between windows to avoid race conditions
+        setTimeout(() => {
+            if (sessionWindow.mode === 'project' && sessionWindow.projectPath) {
+                // Check if project path still exists
+                if (existsSync(sessionWindow.projectPath)) {
+                    // Restore project window
+                    const window = createWindow(false, true, sessionWindow.projectPath, sessionWindow.bounds);
+                    console.log('[SESSION] Restored project window:', sessionWindow.projectPath);
+                } else {
+                    console.log('[SESSION] Project path no longer exists:', sessionWindow.projectPath);
+                }
+            } else if (sessionWindow.mode === 'document' && sessionWindow.filePath) {
+                // Check if file still exists
+                if (existsSync(sessionWindow.filePath)) {
+                    // Restore document window
+                    const window = createWindow(true, false, undefined, sessionWindow.bounds);
+                    window.once('ready-to-show', () => {
+                        loadFileIntoWindow(window, sessionWindow.filePath!);
+                    });
+                    console.log('[SESSION] Restored document window:', sessionWindow.filePath);
+                } else {
+                    console.log('[SESSION] File no longer exists:', sessionWindow.filePath);
+                }
+            }
+        }, index * 100);
+    });
+    
+    return true;
+}
+
+// Create window list menu items
+function createWindowListMenu(): any[] {
+    const menuItems: any[] = [];
+    const allWindows = BrowserWindow.getAllWindows();
+    
+    if (allWindows.length === 0) {
+        return [];
+    }
+    
+    // Sort windows by ID for consistent ordering
+    const sortedWindows = allWindows.sort((a, b) => a.id - b.id);
+    
+    sortedWindows.forEach((window, index) => {
+        const windowId = window.id;
+        const state = windowStates.get(windowId);
+        
+        let title = 'Untitled';
+        
+        if (state) {
+            if (state.mode === 'project' && state.projectPath) {
+                const projectName = basename(state.projectPath);
+                if (state.filePath) {
+                    const fileName = basename(state.filePath);
+                    title = `${fileName} - ${projectName}`;
+                } else {
+                    title = projectName;
+                }
+            } else if (state.filePath) {
+                title = basename(state.filePath);
+            }
+            
+            // Add dirty indicator
+            if (state.documentEdited) {
+                title = `${title} •`;
+            }
+        }
+        
+        // Add keyboard shortcut for first 9 windows
+        const accelerator = index < 9 ? `CmdOrCtrl+${index + 1}` : undefined;
+        
+        menuItems.push({
+            label: title,
+            accelerator,
+            type: 'checkbox',
+            checked: window.isFocused(),
+            click: () => {
+                window.focus();
+            }
+        });
+    });
+    
+    return menuItems;
+}
+
+// Create the recent submenu
+function createRecentSubmenu(): any[] {
+    const recentProjects = getRecentItems('projects');
+    const recentDocuments = getRecentItems('documents');
+    const submenu: any[] = [];
+    
+    // Recent Projects section
+    if (recentProjects.length > 0) {
+        submenu.push({ label: 'Recent Projects', enabled: false });
+        recentProjects.forEach(project => {
+            submenu.push({
+                label: project.name,
+                click: () => {
+                    // Check if project exists
+                    if (existsSync(project.path)) {
+                        // Create a new window in project mode
+                        createWindow(false, true, project.path);
+                    } else {
+                        // Remove from recent if doesn't exist
+                        const items = getRecentItems('projects').filter(item => item.path !== project.path);
+                        store.set('recent.projects', items);
+                        updateApplicationMenu();
+                        dialog.showErrorBox('Project Not Found', `The project "${project.name}" could not be found at:\n${project.path}`);
+                    }
+                }
+            });
+        });
+        
+        if (recentDocuments.length > 0) {
+            submenu.push({ type: 'separator' });
+        }
+    }
+    
+    // Recent Documents section
+    if (recentDocuments.length > 0) {
+        submenu.push({ label: 'Recent Documents', enabled: false });
+        recentDocuments.forEach(doc => {
+            submenu.push({
+                label: doc.name,
+                click: () => {
+                    // Check if file exists
+                    if (existsSync(doc.path)) {
+                        // Check if file is already open
+                        const existingWindow = findWindowByFilePath(doc.path);
+                        if (existingWindow) {
+                            existingWindow.focus();
+                        } else {
+                            // Open in new window
+                            const window = createWindow(true);
+                            window.once('ready-to-show', () => {
+                                loadFileIntoWindow(window, doc.path);
+                            });
+                        }
+                    } else {
+                        // Remove from recent if doesn't exist
+                        const items = getRecentItems('documents').filter(item => item.path !== doc.path);
+                        store.set('recent.documents', items);
+                        updateApplicationMenu();
+                        dialog.showErrorBox('File Not Found', `The file "${doc.name}" could not be found at:\n${doc.path}`);
+                    }
+                }
+            });
+        });
+    }
+    
+    // Clear Recent options
+    if (recentProjects.length > 0 || recentDocuments.length > 0) {
+        submenu.push({ type: 'separator' });
+        
+        if (recentProjects.length > 0) {
+            submenu.push({
+                label: 'Clear Recent Projects',
+                click: () => clearRecentItems('projects')
+            });
+        }
+        
+        if (recentDocuments.length > 0) {
+            submenu.push({
+                label: 'Clear Recent Documents',
+                click: () => clearRecentItems('documents')
+            });
+        }
+    }
+    
+    // If no recent items
+    if (submenu.length === 0) {
+        submenu.push({ label: 'No Recent Items', enabled: false });
+    }
+    
+    return submenu;
+}
 let windowPositionOffset = 0;
 
 // Untitled document counter
 let untitledCounter = 0;
+
+// Session save interval
+let sessionSaveInterval: NodeJS.Timeout | null = null;
+
+// File tree interface
+interface FileTreeItem {
+    name: string;
+    path: string;
+    type: 'file' | 'directory';
+    children?: FileTreeItem[];
+}
+
+// Get folder contents recursively
+function getFolderContents(dirPath: string): FileTreeItem[] {
+    try {
+        const items = readdirSync(dirPath);
+        const result: FileTreeItem[] = [];
+        
+        for (const item of items) {
+            // Skip hidden files and common non-content directories
+            if (item.startsWith('.') || item === 'node_modules' || item === 'dist' || item === 'build') {
+                continue;
+            }
+            
+            const fullPath = join(dirPath, item);
+            const stats = statSync(fullPath);
+            
+            if (stats.isDirectory()) {
+                result.push({
+                    name: item,
+                    path: fullPath,
+                    type: 'directory',
+                    children: getFolderContents(fullPath)
+                });
+            } else if (stats.isFile() && (item.endsWith('.md') || item.endsWith('.markdown'))) {
+                result.push({
+                    name: item,
+                    path: fullPath,
+                    type: 'file'
+                });
+            }
+        }
+        
+        // Sort: directories first, then files, alphabetically
+        return result.sort((a, b) => {
+            if (a.type !== b.type) {
+                return a.type === 'directory' ? -1 : 1;
+            }
+            return a.name.localeCompare(b.name);
+        });
+    } catch (error) {
+        console.error('Error reading folder contents:', error);
+        return [];
+    }
+}
 
 // Function to load file into window
 function loadFileIntoWindow(window: BrowserWindow, filePath: string) {
@@ -36,6 +396,9 @@ function loadFileIntoWindow(window: BrowserWindow, filePath: string) {
         }
         console.log('[LOAD_FILE] Sending file-opened-from-os event');
         window.webContents.send('file-opened-from-os', { filePath, content });
+        
+        // Add to recent documents
+        addToRecentItems('documents', filePath, basename(filePath));
         
         // Start watching the file for changes
         console.log('[LOAD_FILE] Starting file watcher');
@@ -192,7 +555,7 @@ app.on('open-file', (event, path) => {
 });
 
 
-function createWindow(isOpeningFile: boolean = false): BrowserWindow {
+function createWindow(isOpeningFile: boolean = false, isProjectMode: boolean = false, projectPath: string | null = null, savedBounds?: { x: number; y: number; width: number; height: number }): BrowserWindow {
     const startTime = Date.now();
     try {
         console.log('[MAIN] Creating window at', new Date().toISOString());
@@ -225,15 +588,30 @@ function createWindow(isOpeningFile: boolean = false): BrowserWindow {
 
         console.log('[MAIN] About to create BrowserWindow at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
         
-        // Calculate window position for cascading effect
-        const windowX = 100 + windowPositionOffset;
-        const windowY = 100 + windowPositionOffset;
+        // Use saved bounds if provided, otherwise calculate window position for cascading effect
+        let windowBounds: { width: number; height: number; x?: number; y?: number };
+        
+        if (savedBounds) {
+            windowBounds = savedBounds;
+        } else {
+            const windowX = 100 + windowPositionOffset;
+            const windowY = 100 + windowPositionOffset;
+            windowBounds = {
+                width: 1200,
+                height: 800,
+                x: windowX,
+                y: windowY
+            };
+            
+            // Increment offset for next window, reset after 10 windows to avoid going off screen
+            windowPositionOffset += WINDOW_CASCADE_OFFSET;
+            if (windowPositionOffset > WINDOW_CASCADE_OFFSET * 10) {
+                windowPositionOffset = 0;
+            }
+        }
         
         const window = new BrowserWindow({
-            width: 1200,
-            height: 800,
-            x: windowX,
-            y: windowY,
+            ...windowBounds,
             icon: icon,
             webPreferences: {
                 preload: join(__dirname, '../preload/index.js'),
@@ -241,19 +619,15 @@ function createWindow(isOpeningFile: boolean = false): BrowserWindow {
                 contextIsolation: true
             }
         });
-        
-        // Increment offset for next window, reset after 10 windows to avoid going off screen
-        windowPositionOffset += WINDOW_CASCADE_OFFSET;
-        if (windowPositionOffset > WINDOW_CASCADE_OFFSET * 10) {
-            windowPositionOffset = 0;
-        }
         console.log('[MAIN] BrowserWindow created at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
 
         // Add window to our tracking
         const windowId = window.id;
         windows.set(windowId, window);
         windowStates.set(windowId, {
+            mode: isProjectMode ? 'project' : 'document',
             filePath: null,
+            projectPath: projectPath,
             documentEdited: false
         });
 
@@ -309,17 +683,47 @@ function createWindow(isOpeningFile: boolean = false): BrowserWindow {
             }
         });
 
+        window.on('close', (event) => {
+            // Save session before the window is closed
+            saveSessionState();
+        });
+
         window.on('closed', () => {
             windows.delete(windowId);
             windowStates.delete(windowId);
             stopFileWatcher(windowId);
+            // Update menu to reflect window closure
+            updateApplicationMenu();
+        });
+        
+        // Update menu when window gains/loses focus
+        window.on('focus', () => {
+            updateApplicationMenu();
+        });
+        
+        window.on('blur', () => {
+            updateApplicationMenu();
         });
 
         // If a file was requested to be opened before window was ready, open it now
         window.webContents.once('did-finish-load', () => {
             console.log('[MAIN] did-finish-load at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
-            // Don't send untitled document event if we're already handling a file
-            if (!pendingFilePath && !isOpeningFile) {
+            
+            // Send the current theme to the new window
+            const theme = store.get('theme', 'system') as string;
+            window.webContents.send('theme-change', theme);
+            
+            if (isProjectMode && projectPath) {
+                // Send project information to the renderer
+                const fileTree = getFolderContents(projectPath);
+                setTimeout(() => {
+                    window.webContents.send('project-opened', {
+                        projectPath,
+                        projectName: basename(projectPath),
+                        fileTree
+                    });
+                }, 100);
+            } else if (!pendingFilePath && !isOpeningFile) {
                 // This is a new untitled document
                 untitledCounter++;
                 const untitledName = untitledCounter === 1 ? 'Untitled' : `Untitled ${untitledCounter}`;
@@ -457,9 +861,27 @@ app.whenReady().then(() => {
             }
         }
 
-        // Create window, marking it as opening a file if we have a pending file
-        createWindow(!!pendingFilePath);
+        // Try to restore session, otherwise create a new window
+        const sessionRestored = restoreSessionState();
+        
+        if (!sessionRestored && !pendingFilePath) {
+            // No session to restore and no file to open, create a new window
+            createWindow(false);
+        } else if (pendingFilePath) {
+            // Handle pending file if we have one
+            const window = createWindow(true);
+            window.once('ready-to-show', () => {
+                loadFileIntoWindow(window, pendingFilePath);
+                pendingFilePath = null;
+            });
+        }
+        
         createApplicationMenu();
+        
+        // Save session periodically (every 30 seconds)
+        sessionSaveInterval = setInterval(() => {
+            saveSessionState();
+        }, 30000);
 
         app.on('activate', () => {
             // On macOS, re-create window when dock icon is clicked
@@ -481,9 +903,25 @@ app.on('window-all-closed', () => {
     // This allows dropping files on the dock icon
 });
 
+// Save session state before quitting
+app.on('before-quit', () => {
+    console.log('[SESSION] App quitting, saving session state');
+    
+    // Clear the session save interval
+    if (sessionSaveInterval) {
+        clearInterval(sessionSaveInterval);
+        sessionSaveInterval = null;
+    }
+    
+    saveSessionState();
+});
+
 
 // Function to create application menu
 function createApplicationMenu() {
+    // Get current theme from store
+    const currentTheme = store.get('theme', 'system') as string;
+    
     const template: any[] = [
         {
             label: 'File',
@@ -515,6 +953,24 @@ function createApplicationMenu() {
                         }
                     }
                 }},
+                { label: 'Open Folder...', accelerator: 'CmdOrCtrl+Shift+O', click: async () => {
+                    const result = await dialog.showOpenDialog({
+                        properties: ['openDirectory']
+                    });
+                    
+                    if (!result.canceled && result.filePaths.length > 0) {
+                        const projectPath = result.filePaths[0];
+                        // Add to recent projects
+                        addToRecentItems('projects', projectPath, basename(projectPath));
+                        // Create a new window in project mode
+                        createWindow(false, true, projectPath);
+                    }
+                }},
+                {
+                    label: 'Open Recent',
+                    submenu: createRecentSubmenu()
+                },
+                { type: 'separator' },
                 { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => {
                     const focused = BrowserWindow.getFocusedWindow();
                     if (focused) focused.webContents.send('file-save');
@@ -579,6 +1035,77 @@ function createApplicationMenu() {
                     }
                 }}
             ]
+        },
+        {
+            label: 'Window',
+            submenu: [
+                {
+                    label: 'Theme',
+                    submenu: [
+                        { 
+                            label: 'Light', 
+                            type: 'radio',
+                            checked: currentTheme === 'light',
+                            click: () => {
+                                store.set('theme', 'light');
+                                // Send to all windows
+                                BrowserWindow.getAllWindows().forEach(window => {
+                                    window.webContents.send('theme-change', 'light');
+                                });
+                                // Recreate menu to update checkmarks
+                                createApplicationMenu();
+                            }
+                        },
+                        { 
+                            label: 'Dark', 
+                            type: 'radio',
+                            checked: currentTheme === 'dark',
+                            click: () => {
+                                store.set('theme', 'dark');
+                                // Send to all windows
+                                BrowserWindow.getAllWindows().forEach(window => {
+                                    window.webContents.send('theme-change', 'dark');
+                                });
+                                // Recreate menu to update checkmarks
+                                createApplicationMenu();
+                            }
+                        },
+                        { 
+                            label: 'Crystal Dark', 
+                            type: 'radio',
+                            checked: currentTheme === 'crystal-dark',
+                            click: () => {
+                                store.set('theme', 'crystal-dark');
+                                // Send to all windows
+                                BrowserWindow.getAllWindows().forEach(window => {
+                                    window.webContents.send('theme-change', 'crystal-dark');
+                                });
+                                // Recreate menu to update checkmarks
+                                createApplicationMenu();
+                            }
+                        },
+                        { 
+                            label: 'System', 
+                            type: 'radio',
+                            checked: currentTheme === 'system',
+                            click: () => {
+                                store.set('theme', 'system');
+                                // Send to all windows
+                                BrowserWindow.getAllWindows().forEach(window => {
+                                    window.webContents.send('theme-change', 'system');
+                                });
+                                // Recreate menu to update checkmarks
+                                createApplicationMenu();
+                            }
+                        }
+                    ]
+                },
+                { type: 'separator' },
+                { label: 'Minimize', role: 'minimize' },
+                { label: 'Close', role: 'close' },
+                { type: 'separator' },
+                ...createWindowListMenu()
+            ]
         }
     ];
 
@@ -591,16 +1118,9 @@ function createApplicationMenu() {
                     label: 'About Stravu Editor',
                     click: () => {
                         const focused = BrowserWindow.getFocusedWindow();
-                        dialog.showMessageBox(focused || undefined, {
-                            type: 'info',
-                            title: 'About Stravu Editor',
-                            message: 'Stravu Editor',
-                            detail: `Version 0.33.1\n\nA powerful rich text editor made with ❤️ by Stravu\n\nBuilt with Lexical - Meta's extensible text editor framework\n\nCredits:\n• Lexical Framework by Meta\n• Based on Lexical Playground\n• Icons and design by Stravu\n\n© 2024 Stravu. All rights reserved.`,
-                            buttons: ['OK'],
-                            icon: process.platform === 'darwin'
-                                ? nativeImage.createFromPath(join(__dirname, '../../../../assets/crystal-editor-iconset/icon.iconset/icon_512x512.png'))
-                                : undefined
-                        });
+                        if (focused) {
+                            focused.webContents.send('show-about');
+                        }
                     }
                 },
                 { type: 'separator' },
@@ -624,13 +1144,9 @@ function createApplicationMenu() {
                     label: 'About Stravu Editor',
                     click: () => {
                         const focused = BrowserWindow.getFocusedWindow();
-                        dialog.showMessageBox(focused || undefined, {
-                            type: 'info',
-                            title: 'About Stravu Editor',
-                            message: 'Stravu Editor',
-                            detail: `Version 0.33.1\n\nA powerful rich text editor made with ❤️ by Stravu\n\nBuilt with Lexical - Meta's extensible text editor framework\n\nCredits:\n• Lexical Framework by Meta\n• Based on Lexical Playground\n• Icons and design by Stravu\n\n© 2024 Stravu. All rights reserved.`,
-                            buttons: ['OK']
-                        });
+                        if (focused) {
+                            focused.webContents.send('show-about');
+                        }
                     }
                 }
             ]
@@ -733,6 +1249,9 @@ ipcMain.on('set-current-file', (event, filePath: string | null) => {
         
         state.filePath = filePath;
         
+        // Update menu to reflect new file
+        updateApplicationMenu();
+        
         // Start watching the new file
         if (filePath) {
             console.log('[SET_FILE] Starting watcher for new file:', filePath);
@@ -787,11 +1306,53 @@ ipcMain.on('set-document-edited', (event, edited: boolean) => {
         state.documentEdited = edited;
     }
     window.setDocumentEdited(edited);
+    
+    // Update menu to reflect new window state
+    updateApplicationMenu();
 });
 
 ipcMain.on('set-title', (event, title: string) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (window) {
         window.setTitle(title);
+        // Update menu to reflect new window title
+        updateApplicationMenu();
+    }
+});
+
+
+// IPC handler for getting folder contents
+ipcMain.handle('get-folder-contents', (event, dirPath: string) => {
+    return getFolderContents(dirPath);
+});
+
+
+// IPC handler for switching files within a project
+ipcMain.handle('switch-project-file', async (event, filePath: string) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) return null;
+    
+    try {
+        const content = readFileSync(filePath, 'utf-8');
+        const windowId = window.id;
+        const state = windowStates.get(windowId);
+        
+        if (state) {
+            // Stop watching the old file
+            if (state.filePath && state.filePath !== filePath) {
+                stopFileWatcher(windowId);
+            }
+            
+            state.filePath = filePath;
+            state.documentEdited = false;
+            
+            // Start watching the new file
+            startFileWatcher(window, filePath);
+        }
+        
+        return { filePath, content };
+    } catch (error) {
+        console.error('Error switching project file:', error);
+        return null;
     }
 });

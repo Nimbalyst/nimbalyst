@@ -3,6 +3,7 @@ console.log('[RENDERER] index.tsx executing at', new Date().toISOString());
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import './index.css';
 
 console.log('[RENDERER] Imports complete at', new Date().toISOString());
 

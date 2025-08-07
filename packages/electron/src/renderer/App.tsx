@@ -4,13 +4,26 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 
 console.log('[RENDERER] About to import StravuEditor at', new Date().toISOString());
 import { StravuEditor, TOGGLE_SEARCH_COMMAND } from 'stravu-editor';
-import type { LexicalCommand } from 'stravu-editor';
+import type { LexicalCommand, ConfigTheme } from 'stravu-editor';
 console.log('[RENDERER] StravuEditor imported at', new Date().toISOString());
+import { ProjectSidebar } from './components/ProjectSidebar';
+import { ProjectWelcome } from './components/ProjectWelcome';
+import { AboutBox } from './components/AboutBox';
+import './ProjectWelcome.css';
+
+// File tree interface
+interface FileTreeItem {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  children?: FileTreeItem[];
+}
 
 // Electron API interface
 interface ElectronAPI {
   onFileNew: (callback: () => void) => () => void;
   onFileOpen: (callback: () => void) => () => void;
+  onProjectOpened: (callback: (data: { projectPath: string; projectName: string; fileTree: FileTreeItem[] }) => void) => () => void;
   onFileSave: (callback: () => void) => () => void;
   onFileSaveAs: (callback: () => void) => () => void;
   onFileOpenedFromOS: (callback: (data: { filePath: string; content: string }) => void) => () => void;
@@ -18,12 +31,17 @@ interface ElectronAPI {
   onToggleSearch: (callback: () => void) => () => void;
   onToggleSearchReplace: (callback: () => void) => () => void;
   onFileDeleted: (callback: (data: { filePath: string }) => void) => () => void;
+  onThemeChange: (callback: (theme: string) => void) => () => void;
+  onShowAbout: (callback: () => void) => () => void;
   openFile: () => Promise<{ filePath: string; content: string } | null>;
   saveFile: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
   saveFileAs: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
   setDocumentEdited: (edited: boolean) => void;
   setTitle: (title: string) => void;
   setCurrentFile: (filePath: string | null) => void;
+  // Project operations
+  getFolderContents: (dirPath: string) => Promise<FileTreeItem[]>;
+  switchProjectFile: (filePath: string) => Promise<{ filePath: string; content: string } | null>;
 }
 
 declare global {
@@ -39,6 +57,12 @@ export default function App() {
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
   const [currentFileName, setCurrentFileName] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [projectMode, setProjectMode] = useState(false);
+  const [projectPath, setProjectPath] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState<string | null>(null);
+  const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
+  const [theme, setTheme] = useState<ConfigTheme>('auto');
+  const [showAbout, setShowAbout] = useState(false);
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
@@ -54,6 +78,25 @@ export default function App() {
       console.log('[RENDERER] App component unmounting at', new Date().toISOString());
     };
   }, []);
+
+  // Apply theme to document
+  useEffect(() => {
+    const root = document.documentElement;
+    
+    if (theme === 'dark') {
+      root.classList.add('dark-theme');
+      root.classList.remove('light-theme', 'crystal-dark-theme');
+    } else if (theme === 'light') {
+      root.classList.add('light-theme');
+      root.classList.remove('dark-theme', 'crystal-dark-theme');
+    } else if (theme === 'crystal-dark') {
+      root.classList.add('crystal-dark-theme');
+      root.classList.remove('light-theme', 'dark-theme');
+    } else {
+      // Auto theme - let CSS handle it with prefers-color-scheme
+      root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
+    }
+  }, [theme]);
 
   // Handle new file
   const handleNew = useCallback(() => {
@@ -149,17 +192,69 @@ export default function App() {
     }
   }, [currentFilePath, handleSaveAs]);
 
+  // Handle close project
+  const handleCloseProject = useCallback(async () => {
+    // Save current file if dirty
+    if (isDirty && getContentRef.current) {
+      const save = confirm('Do you want to save the current file before closing the project?');
+      if (save) {
+        await handleSave();
+      }
+    }
+
+    // Close the window
+    window.close();
+  }, [isDirty, handleSave]);
+
+  // Handle file selection in project
+  const handleProjectFileSelect = useCallback(async (filePath: string) => {
+    if (!window.electronAPI) return;
+
+    // Save current file if dirty
+    if (isDirty && getContentRef.current && currentFilePath && currentFilePath !== filePath) {
+      const save = confirm('Do you want to save the current file before switching?');
+      if (save) {
+        await handleSave();
+      }
+    }
+
+    try {
+      const result = await window.electronAPI.switchProjectFile(filePath);
+      if (result) {
+        contentVersionRef.current += 1;
+        isInitializedRef.current = false;
+        setContent(result.content);
+        setCurrentFilePath(result.filePath);
+        setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
+        setIsDirty(false);
+        initialContentRef.current = result.content;
+        
+        // Update the current file in main process
+        window.electronAPI.setCurrentFile(filePath);
+      }
+    } catch (error) {
+      console.error('Failed to switch project file:', error);
+    }
+  }, [isDirty, currentFilePath, handleSave]);
+
   // Update window title and dirty state
   useEffect(() => {
     if (!window.electronAPI) return;
 
-    const title = currentFileName
-      ? `${currentFileName}${isDirty ? ' •' : ''} - Stravu Editor`
-      : 'Stravu Editor';
+    let title = 'Stravu Editor';
+    if (projectMode && projectName) {
+      if (currentFileName) {
+        title = `${currentFileName}${isDirty ? ' •' : ''} - ${projectName} - Stravu Editor`;
+      } else {
+        title = `${projectName} - Stravu Editor`;
+      }
+    } else if (currentFileName) {
+      title = `${currentFileName}${isDirty ? ' •' : ''} - Stravu Editor`;
+    }
 
     window.electronAPI.setTitle(title);
     window.electronAPI.setDocumentEdited(isDirty);
-  }, [currentFileName, isDirty]);
+  }, [currentFileName, isDirty, projectMode, projectName]);
 
   // Autosave functionality
   useEffect(() => {
@@ -227,6 +322,20 @@ export default function App() {
     cleanupFns.push(window.electronAPI.onFileOpen(handleOpen));
     cleanupFns.push(window.electronAPI.onFileSave(handleSave));
     cleanupFns.push(window.electronAPI.onFileSaveAs(handleSaveAs));
+    cleanupFns.push(window.electronAPI.onProjectOpened((data) => {
+      console.log('Project opened:', data);
+      setProjectMode(true);
+      setProjectPath(data.projectPath);
+      setProjectName(data.projectName);
+      setFileTree(data.fileTree);
+      // Clear current document
+      setContent('');
+      setCurrentFilePath(null);
+      setCurrentFileName(null);
+      setIsDirty(false);
+      contentVersionRef.current += 1;
+      isInitializedRef.current = false;
+    }));
     cleanupFns.push(window.electronAPI.onFileOpenedFromOS((data) => {
       console.log('File opened from OS:', data.filePath);
       contentVersionRef.current += 1;
@@ -272,6 +381,16 @@ export default function App() {
         alert('The file has been deleted from disk.');
       }
     }));
+    cleanupFns.push(window.electronAPI.onThemeChange((newTheme) => {
+      console.log('Theme changed to:', newTheme);
+      // Map 'system' to 'auto' for the editor
+      const editorTheme = newTheme === 'system' ? 'auto' : newTheme;
+      setTheme(editorTheme as ConfigTheme);
+      console.log('Editor theme set to:', editorTheme);
+    }));
+    cleanupFns.push(window.electronAPI.onShowAbout(() => {
+      setShowAbout(true);
+    }));
 
     // Clean up listeners when dependencies change
     return () => {
@@ -282,17 +401,32 @@ export default function App() {
 
   console.log('Rendering App with config:', {
     contentLength: content.length,
-    currentFileName
+    currentFileName,
+    theme
   });
 
   console.log('[RENDERER] About to render StravuEditor at', new Date().toISOString());
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <StravuEditor
-        config={{
-          initialContent: content,
-          onContentChange: (newContent) => {
+    <div style={{ height: '100vh', display: 'flex', flexDirection: projectMode ? 'row' : 'column' }}>
+      {projectMode && projectName && (
+        <ProjectSidebar
+          projectName={projectName}
+          fileTree={fileTree}
+          currentFilePath={currentFilePath}
+          onFileSelect={handleProjectFileSelect}
+          onCloseProject={handleCloseProject}
+        />
+      )}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {projectMode && !currentFilePath ? (
+          <ProjectWelcome projectName={projectName || 'Project'} />
+        ) : (
+          <StravuEditor
+            key={`${contentVersionRef.current}-${theme}`}
+            config={{
+              initialContent: content,
+              onContentChange: (newContent) => {
             console.log('Content changed:', newContent.length, 'initialized:', isInitializedRef.current);
             
             // Mark as initialized after first content change
@@ -328,8 +462,12 @@ export default function App() {
           isRichText: true,
           showTreeView: false,
           markdownOnly: true,
-        }}
-      />
+          theme: theme,
+            }}
+          />
+        )}
+      </div>
+      <AboutBox isOpen={showAbout} onClose={() => setShowAbout(false)} />
     </div>
   );
 }
