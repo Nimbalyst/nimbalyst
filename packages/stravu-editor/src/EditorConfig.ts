@@ -3,7 +3,7 @@
  * This replaces the reactive settings system with static configuration props.
  */
 
-export type Theme = 'light' | 'dark' | 'auto';
+export type Theme = 'light' | 'dark' | 'crystal-dark' | 'auto';
 
 
 /**

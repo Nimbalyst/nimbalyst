@@ -8,10 +8,10 @@ This is Stravu Editor - a rich text editor built with Meta's Lexical framework. 
 
 ## Development Commands
 
-- **Start dev server**: `pnpm run dev` - Runs Vite dev server on port 3000
-- **Build for development**: `pnpm run build-dev` - Creates development build
-- **Build for production**: `pnpm run build-prod` - Creates optimized production build with terser minification
-- **Preview build**: `pnpm run preview` - Preview the built application
+- **Start dev server**: `npm run dev` - Runs Vite dev server on port 3000
+- **Build for development**: `npm run build-dev` - Creates development build
+- **Build for production**: `npm run build-prod` - Creates optimized production build with terser minification
+- **Preview build**: `npm run preview` - Preview the built application
 
 ## Testing
 
@@ -74,3 +74,13 @@ The Electron app (`packages/electron/`) includes a debug logging feature that ca
 - **What's logged**: All browser console messages, main process logs, timestamps, source locations, and log levels
 - **When active**: Only in development mode (`NODE_ENV !== 'production'`)
 - **Implementation**: See `packages/electron/src/main/index.ts` - uses `webContents.on('console-message')` event
+
+## Theme Support
+
+The editor supports multiple themes:
+- **Light**: Clean, bright theme for daytime use
+- **Dark**: Standard dark theme with good contrast
+- **Crystal Dark**: A premium dark theme with Tailwind gray scale colors and refined aesthetics
+- **Auto**: Follows system preference
+
+The Electron app includes a Window > Theme menu to switch between all themes. The selected theme is persisted and applied to all windows.
