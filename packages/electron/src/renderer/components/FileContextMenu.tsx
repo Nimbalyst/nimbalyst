@@ -13,6 +13,8 @@ interface FileContextMenuProps {
   onDelete: (filePath: string) => void;
   onOpenInNewWindow: (filePath: string) => void;
   onShowInFinder: (filePath: string) => void;
+  onNewFile?: (folderPath: string) => void;
+  onNewFolder?: (folderPath: string) => void;
 }
 
 export function FileContextMenu({
@@ -25,7 +27,9 @@ export function FileContextMenu({
   onRename,
   onDelete,
   onOpenInNewWindow,
-  onShowInFinder
+  onShowInFinder,
+  onNewFile,
+  onNewFolder
 }: FileContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -161,6 +165,24 @@ export function FileContextMenu({
       className="file-context-menu"
       style={{ left: adjustedPosition.x, top: adjustedPosition.y }}
     >
+      {fileType === 'directory' && (
+        <>
+          {onNewFile && (
+            <div className="context-menu-item" onClick={() => { onNewFile(filePath); onClose(); }}>
+              <MaterialSymbol icon="note_add" size={18} />
+              <span>New File</span>
+            </div>
+          )}
+          {onNewFolder && (
+            <div className="context-menu-item" onClick={() => { onNewFolder(filePath); onClose(); }}>
+              <MaterialSymbol icon="create_new_folder" size={18} />
+              <span>New Folder</span>
+            </div>
+          )}
+          {(onNewFile || onNewFolder) && <div className="context-menu-separator" />}
+        </>
+      )}
+      
       {fileType === 'file' && (
         <div className="context-menu-item" onClick={handleOpenInNewWindow}>
           <MaterialSymbol icon="open_in_new" size={18} />

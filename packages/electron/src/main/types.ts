@@ -1,0 +1,36 @@
+export interface WindowState {
+    mode: 'document' | 'project';
+    filePath: string | null;
+    projectPath: string | null;
+    documentEdited: boolean;
+}
+
+export interface RecentItem {
+    path: string;
+    name: string;
+    timestamp: number;
+}
+
+export interface SessionWindow {
+    mode: 'document' | 'project';
+    filePath?: string;
+    projectPath?: string;
+    bounds: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    };
+}
+
+export interface SessionState {
+    windows: SessionWindow[];
+    lastUpdated: number;
+}
+
+export interface FileTreeItem {
+    name: string;
+    type: 'file' | 'directory';
+    path: string;
+    children?: FileTreeItem[];
+}

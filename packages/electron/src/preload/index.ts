@@ -107,6 +107,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Project operations
   getFolderContents: (dirPath: string) => ipcRenderer.invoke('get-folder-contents', dirPath),
+  createFile: (filePath: string, content: string) => ipcRenderer.invoke('create-file', filePath, content),
+  createFolder: (folderPath: string) => ipcRenderer.invoke('create-folder', folderPath),
   switchProjectFile: (filePath: string) => ipcRenderer.invoke('switch-project-file', filePath),
   
   // File context menu operations
@@ -136,4 +138,38 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchProjectFiles: (projectPath: string, query: string) => ipcRenderer.invoke('search-project-files', projectPath, query),
   getRecentProjectFiles: () => ipcRenderer.invoke('get-recent-project-files'),
   addToProjectRecentFiles: (filePath: string) => ipcRenderer.send('add-to-project-recent-files', filePath),
+  
+  // History operations
+  history: {
+    createSnapshot: (filePath: string, state: string, type: string, description?: string) => 
+      ipcRenderer.invoke('history:create-snapshot', filePath, state, type, description),
+    listSnapshots: (filePath: string) => 
+      ipcRenderer.invoke('history:list-snapshots', filePath),
+    loadSnapshot: (filePath: string, timestamp: string) => 
+      ipcRenderer.invoke('history:load-snapshot', filePath, timestamp),
+    deleteSnapshot: (filePath: string, timestamp: string) => 
+      ipcRenderer.invoke('history:delete-snapshot', filePath, timestamp),
+  },
+  
+  // Session operations
+  session: {
+    create: (filePath: string, type: string, source?: any) => 
+      ipcRenderer.invoke('session:create', filePath, type, source),
+    load: (sessionId: string) => 
+      ipcRenderer.invoke('session:load', sessionId),
+    save: (session: any) => 
+      ipcRenderer.invoke('session:save', session),
+    delete: (sessionId: string) => 
+      ipcRenderer.invoke('session:delete', sessionId),
+    getActive: (filePath: string) => 
+      ipcRenderer.invoke('session:get-active', filePath),
+    setActive: (filePath: string, sessionId: string, type: string) => 
+      ipcRenderer.invoke('session:set-active', filePath, sessionId, type),
+    checkConflicts: (session: any, currentMarkdownHash: string) => 
+      ipcRenderer.invoke('session:check-conflicts', session, currentMarkdownHash),
+    resolveConflict: (session: any, resolution: string, newBaseHash?: string) => 
+      ipcRenderer.invoke('session:resolve-conflict', session, resolution, newBaseHash),
+    createCheckpoint: (sessionId: string, state: string) => 
+      ipcRenderer.invoke('session:create-checkpoint', sessionId, state),
+  },
 });

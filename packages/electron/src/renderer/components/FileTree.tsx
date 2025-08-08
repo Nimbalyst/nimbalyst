@@ -14,6 +14,9 @@ interface FileTreeProps {
   currentFilePath: string | null;
   onFileSelect: (filePath: string) => void;
   level: number;
+  onNewFile?: (folderPath: string) => void;
+  onNewFolder?: (folderPath: string) => void;
+  onRefreshFileTree?: () => void;
 }
 
 function getFileIcon(fileName: string) {
@@ -28,7 +31,7 @@ function getFileIcon(fileName: string) {
   return <MaterialSymbol icon="description" size={18} />;
 }
 
-export function FileTree({ items, currentFilePath, onFileSelect, level }: FileTreeProps) {
+export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFile, onNewFolder, onRefreshFileTree }: FileTreeProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -150,6 +153,9 @@ export function FileTree({ items, currentFilePath, onFileSelect, level }: FileTr
                     currentFilePath={currentFilePath}
                     onFileSelect={onFileSelect}
                     level={level + 1}
+                    onNewFile={onNewFile}
+                    onNewFolder={onNewFolder}
+                    onRefreshFileTree={onRefreshFileTree}
                   />
                 )}
               </>
@@ -182,6 +188,8 @@ export function FileTree({ items, currentFilePath, onFileSelect, level }: FileTr
           onDelete={handleDelete}
           onOpenInNewWindow={handleOpenInNewWindow}
           onShowInFinder={handleShowInFinder}
+          onNewFile={onNewFile}
+          onNewFolder={onNewFolder}
         />
       )}
     </>

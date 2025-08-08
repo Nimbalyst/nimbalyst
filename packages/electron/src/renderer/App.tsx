@@ -10,6 +10,7 @@ console.log('[RENDERER] StravuEditor imported at', new Date().toISOString());
 import { ProjectSidebar } from './components/ProjectSidebar';
 import { ProjectWelcome } from './components/ProjectWelcome';
 import { QuickOpen } from './components/QuickOpen';
+import { AIChat } from './components/AIChat';
 import './ProjectWelcome.css';
 
 // File tree interface
@@ -48,6 +49,29 @@ interface ElectronAPI {
   // Settings
   getSidebarWidth: () => Promise<number | null>;
   setSidebarWidth: (width: number) => void;
+  getAIChatState: () => Promise<{ collapsed: boolean; width: number } | null>;
+  setAIChatState: (state: { collapsed: boolean; width: number }) => void;
+  getRecentProjectFiles?: () => Promise<string[]>;
+  addToProjectRecentFiles?: (filePath: string) => void;
+  // History operations
+  history?: {
+    createSnapshot: (filePath: string, state: string, type: string, description?: string) => Promise<void>;
+    listSnapshots: (filePath: string) => Promise<any[]>;
+    loadSnapshot: (filePath: string, timestamp: string) => Promise<string>;
+    deleteSnapshot: (filePath: string, timestamp: string) => Promise<void>;
+  };
+  // Session operations  
+  session?: {
+    create: (filePath: string, type: string, source?: any) => Promise<any>;
+    load: (sessionId: string) => Promise<any>;
+    save: (session: any) => Promise<void>;
+    delete: (sessionId: string) => Promise<void>;
+    getActive: (filePath: string) => Promise<any>;
+    setActive: (filePath: string, sessionId: string, type: string) => Promise<void>;
+    checkConflicts: (session: any, currentMarkdownHash: string) => Promise<any>;
+    resolveConflict: (session: any, resolution: string, newBaseHash?: string) => Promise<void>;
+    createCheckpoint: (sessionId: string, state: string) => Promise<void>;
+  };
 }
 
 declare global {
@@ -71,6 +95,8 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
   const [recentProjectFiles, setRecentProjectFiles] = useState<string[]>([]);
+  const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
+  const [aiChatWidth, setAIChatWidth] = useState<number>(350);
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
@@ -171,12 +197,19 @@ export default function App() {
     }
   }, [projectMode, projectPath, projectName, fileTree, currentFilePath, currentFileName, content, sidebarWidth, isDirty, theme]);
 
-  // Load saved sidebar width on mount
+  // Load saved sidebar width and AI chat state on mount
   useEffect(() => {
     if (window.electronAPI) {
       window.electronAPI.getSidebarWidth().then((width) => {
         if (width) {
           setSidebarWidth(width);
+        }
+      });
+      
+      window.electronAPI.getAIChatState?.().then((state) => {
+        if (state) {
+          setIsAIChatCollapsed(state.collapsed);
+          setAIChatWidth(state.width);
         }
       });
     }
@@ -393,15 +426,20 @@ export default function App() {
     window.electronAPI.setDocumentEdited(isDirty);
   }, [currentFileName, isDirty, projectMode, projectName]);
 
-  // Quick Open keyboard shortcut (Cmd+K)
+  // Keyboard shortcuts
   useEffect(() => {
     if (!projectMode) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd+E (Mac) or Ctrl+E (Windows/Linux)
+      // Cmd+E (Mac) or Ctrl+E (Windows/Linux) for Quick Open
       if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
         e.preventDefault();
         setIsQuickOpenVisible(true);
+      }
+      // Cmd+Shift+A (Mac) or Ctrl+Shift+A (Windows/Linux) for AI Chat
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'a') {
+        e.preventDefault();
+        setIsAIChatCollapsed(prev => !prev);
       }
     };
 
@@ -409,14 +447,23 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [projectMode]);
 
+  // Save AI Chat state when it changes
+  useEffect(() => {
+    if (window.electronAPI?.setAIChatState) {
+      window.electronAPI.setAIChatState({ collapsed: isAIChatCollapsed, width: aiChatWidth });
+    }
+  }, [isAIChatCollapsed, aiChatWidth]);
+
   // Load recent project files when in project mode
   useEffect(() => {
     if (!projectMode || !window.electronAPI) return;
 
     const loadRecentFiles = async () => {
       try {
-        const files = await window.electronAPI.getRecentProjectFiles();
-        setRecentProjectFiles(files);
+        if (window.electronAPI.getRecentProjectFiles) {
+          const files = await window.electronAPI.getRecentProjectFiles();
+          setRecentProjectFiles(files);
+        }
       } catch (error) {
         console.error('Failed to load recent project files:', error);
       }
@@ -430,7 +477,7 @@ export default function App() {
     await handleProjectFileSelect(filePath);
 
     // Add to recent files
-    if (window.electronAPI) {
+    if (window.electronAPI?.addToProjectRecentFiles) {
       window.electronAPI.addToProjectRecentFiles(filePath);
     }
   }, [handleProjectFileSelect]);
@@ -620,11 +667,18 @@ export default function App() {
           <div ref={sidebarRef} style={{ width: sidebarWidth, position: 'relative' }}>
             <ProjectSidebar
               projectName={projectName}
+              projectPath={projectPath || ''}
               fileTree={fileTree}
               currentFilePath={currentFilePath}
               onFileSelect={handleProjectFileSelect}
               onCloseProject={handleCloseProject}
               onOpenQuickSearch={() => setIsQuickOpenVisible(true)}
+              onRefreshFileTree={async () => {
+                if (projectPath && window.electronAPI) {
+                  const tree = await window.electronAPI.getFolderContents(projectPath);
+                  setFileTree(tree);
+                }
+              }}
             />
           </div>
           <div
@@ -703,6 +757,14 @@ export default function App() {
           />
         )}
       </div>
+      {projectMode && (
+        <AIChat
+          isCollapsed={isAIChatCollapsed}
+          onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}
+          width={aiChatWidth}
+          onWidthChange={setAIChatWidth}
+        />
+      )}
       {projectMode && projectPath && (
         <QuickOpen
           isOpen={isQuickOpenVisible}

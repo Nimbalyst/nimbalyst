@@ -10,7 +10,7 @@
 }
 
 .project-sidebar-header {
-  padding: 12px 16px;
+  padding: 6px 12px;
   border-bottom: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
@@ -30,6 +30,31 @@
   flex: 1;
 }
 
+.project-sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.project-action-button {
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  border-radius: 4px;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.project-action-button:hover {
+  background-color: #f3f4f6;
+  color: #1f2937;
+}
+
+/* Legacy class for backward compatibility */
 .project-search-button {
   background: none;
   border: none;

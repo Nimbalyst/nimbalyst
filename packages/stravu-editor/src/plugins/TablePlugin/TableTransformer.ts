@@ -25,13 +25,11 @@ import {
   LexicalNode,
 } from 'lexical';
 
-// Lazy import to avoid circular dependency
-let STRAVU_TRANSFORMERS: any = null;
+// Import transformers directly
+import { MARKDOWN_TRANSFORMERS } from '../../markdown';
+
 const getTransformers = () => {
-  if (!STRAVU_TRANSFORMERS) {
-    STRAVU_TRANSFORMERS = require('../../markdown').STRAVU_TRANSFORMERS;
-  }
-  return STRAVU_TRANSFORMERS;
+  return MARKDOWN_TRANSFORMERS;
 };
 
 // Very primitive table setup
