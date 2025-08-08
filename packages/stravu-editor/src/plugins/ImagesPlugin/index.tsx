@@ -8,6 +8,9 @@
 
 import type {JSX} from 'react';
 
+// Export the transformer for use in markdown operations
+export { IMAGE_TRANSFORMER } from './ImageTransformer';
+
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {$wrapNodeInElement, mergeRegister} from '@lexical/utils';
 import {

@@ -1,4 +1,4 @@
-# Stravu Editor
+# [Stravu Editor](https://)
 
 A powerful and extensible rich text editor built with Meta's Lexical framework, featuring markdown support, tables, and comprehensive editing capabilities.
 

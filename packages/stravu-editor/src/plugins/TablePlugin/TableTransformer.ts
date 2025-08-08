@@ -1,28 +1,8 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- *
+ * Table transformer for markdown import/export
  */
 
-import {
-  $convertFromMarkdownString,
-  $convertToMarkdownString,
-  CHECK_LIST,
-  ELEMENT_TRANSFORMERS,
-  ElementTransformer,
-  MULTILINE_ELEMENT_TRANSFORMERS,
-  TEXT_FORMAT_TRANSFORMERS,
-  TEXT_MATCH_TRANSFORMERS,
-  TextMatchTransformer,
-  Transformer,
-} from '@lexical/markdown';
-import {
-  $createHorizontalRuleNode,
-  $isHorizontalRuleNode,
-  HorizontalRuleNode,
-} from '@lexical/react/LexicalHorizontalRuleNode';
+import { ElementTransformer } from '@lexical/markdown';
 import {
   $createTableCellNode,
   $createTableNode,
@@ -36,84 +16,29 @@ import {
   TableRowNode,
 } from '@lexical/table';
 import {
-  $createTextNode,
+  $convertFromMarkdownString,
+  $convertToMarkdownString,
+} from '@lexical/markdown';
+import {
   $isParagraphNode,
   $isTextNode,
   LexicalNode,
 } from 'lexical';
 
-import {$createImageNode, $isImageNode, ImageNode} from '../ImagesPlugin/ImageNode';
-import emojiList from '../../utils/emoji-list';
-import { COLLAPSIBLE_TRANSFORMER } from "../CollapsiblePlugin/CollapsibleTransformer";
-import { ExcalidrawTransform } from "../ExcalidrawPlugin/ExcalidrawNode/excalidrawTransform.tsx";
-
-
-
-export const HR: ElementTransformer = {
-  dependencies: [HorizontalRuleNode],
-  export: (node: LexicalNode) => {
-    return $isHorizontalRuleNode(node) ? '***' : null;
-  },
-  regExp: /^(---|\*\*\*|___)\s?$/,
-  replace: (parentNode, _1, _2, isImport) => {
-    const line = $createHorizontalRuleNode();
-
-    // TODO: Get rid of isImport flag
-    if (isImport || parentNode.getNextSibling() != null) {
-      parentNode.replace(line);
-    } else {
-      parentNode.insertBefore(line);
-    }
-
-    line.selectNext();
-  },
-  type: 'element',
-};
-
-export const IMAGE: TextMatchTransformer = {
-  dependencies: [ImageNode],
-  export: (node) => {
-    if (!$isImageNode(node)) {
-      return null;
-    }
-
-    return `![${node.getAltText()}](${node.getSrc()})`;
-  },
-  importRegExp: /!(?:\[([^[]*)\])(?:\(([^(]+)\))/,
-  regExp: /!(?:\[([^[]*)\])(?:\(([^(]+)\))$/,
-  replace: (textNode, match) => {
-    const [, altText, src] = match;
-    const imageNode = $createImageNode({
-      altText,
-      maxWidth: 800,
-      src,
-    });
-    textNode.replace(imageNode);
-  },
-  trigger: ')',
-  type: 'text-match',
-};
-
-export const EMOJI: TextMatchTransformer = {
-  dependencies: [],
-  export: () => null,
-  importRegExp: /:([a-z0-9_]+):/,
-  regExp: /:([a-z0-9_]+):$/,
-  replace: (textNode, [, name]) => {
-    const emoji = emojiList.find((e) => e.aliases.includes(name))?.emoji;
-    if (emoji) {
-      textNode.replace($createTextNode(emoji));
-    }
-  },
-  trigger: ':',
-  type: 'text-match',
+// Lazy import to avoid circular dependency
+let STRAVU_TRANSFORMERS: any = null;
+const getTransformers = () => {
+  if (!STRAVU_TRANSFORMERS) {
+    STRAVU_TRANSFORMERS = require('../../markdown').STRAVU_TRANSFORMERS;
+  }
+  return STRAVU_TRANSFORMERS;
 };
 
 // Very primitive table setup
 const TABLE_ROW_REG_EXP = /^(?:\|)(.+)(?:\|)\s?$/;
 const TABLE_ROW_DIVIDER_REG_EXP = /^(\| ?:?-*:? ?)+\|\s?$/;
 
-export const TABLE: ElementTransformer = {
+export const TABLE_TRANSFORMER: ElementTransformer = {
   dependencies: [TableNode, TableRowNode, TableCellNode],
   export: (node: LexicalNode) => {
     if (!$isTableNode(node)) {
@@ -133,7 +58,7 @@ export const TABLE: ElementTransformer = {
         // It's TableCellNode so it's just to make flow happy
         if ($isTableCellNode(cell)) {
           rowOutput.push(
-            $convertToMarkdownString(PLAYGROUND_TRANSFORMERS, cell)
+            $convertToMarkdownString(getTransformers(), cell)
               .replace(/\n/g, '\\n')
               .trim(),
           );
@@ -241,9 +166,6 @@ export const TABLE: ElementTransformer = {
     } else {
       parentNode.replace(table);
     }
-
-    // TODO GH: Why is this here? Bad!
-    // table.selectEnd();
   },
   type: 'element',
 };
@@ -256,7 +178,7 @@ function getTableColumnsSize(table: TableNode) {
 const $createTableCell = (textContent: string): TableCellNode => {
   textContent = textContent.replace(/\\n/g, '\n');
   const cell = $createTableCellNode(TableCellHeaderStates.NO_STATUS);
-  $convertFromMarkdownString(textContent, PLAYGROUND_TRANSFORMERS, cell);
+  $convertFromMarkdownString(textContent, getTransformers(), cell);
   return cell;
 };
 
@@ -267,21 +189,3 @@ const mapToTableCells = (textContent: string): Array<TableCellNode> | null => {
   }
   return match[1].split('|').map((text) => $createTableCell(text));
 };
-
-export const PLAYGROUND_TRANSFORMERS: Array<Transformer> = [
-
-  COLLAPSIBLE_TRANSFORMER,
-
-  ExcalidrawTransform,
-
-  TABLE,
-  HR,
-  IMAGE,
-  EMOJI,
-  CHECK_LIST,
-  ...ELEMENT_TRANSFORMERS,
-  ...MULTILINE_ELEMENT_TRANSFORMERS,
-  ...TEXT_FORMAT_TRANSFORMERS,
-  ...TEXT_MATCH_TRANSFORMERS,
-
-];

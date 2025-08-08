@@ -14,6 +14,9 @@ import {TextNode} from 'lexical';
 import {useEffect} from 'react';
 import { $createEmojiNode, EmojiNode } from "./EmojiNode.tsx";
 
+// Export the transformer for use in markdown operations
+export { EMOJI_TRANSFORMER } from './EmojiTransformer';
+
 
 const emojis: Map<string, [string, string]> = new Map([
   [':)', ['emoji happysmile', '🙂']],

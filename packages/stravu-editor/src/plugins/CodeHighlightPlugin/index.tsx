@@ -36,7 +36,7 @@ import 'prismjs/themes/prism.css'; // Light theme (default)
 import './prism-dark.css'; // Dark theme overrides
 
 // Theme mapping for automatic light/dark switching
-const THEME_MAPPING = {
+export const THEME_MAPPING = {
     light: 'github-light',
     dark: 'dark-plus',
     'crystal-dark': 'material-theme-darker',
@@ -53,11 +53,11 @@ export default function CodeHighlightPlugin(): null {
   // Handle theme updates for code nodes
   useEffect(() => {
     const targetTheme = THEME_MAPPING[theme];
-    
+
     // Update all existing code nodes
     editor.update(() => {
       const root = $getRoot();
-      
+
       function updateCodeNodes(node: any): void {
         if ($isCodeNode(node)) {
           const currentTheme = node.getTheme();
@@ -72,10 +72,10 @@ export default function CodeHighlightPlugin(): null {
           }
         }
       }
-      
+
       updateCodeNodes(root);
     });
-    
+
     // Register a transform for new nodes
     const removeTransform = editor.registerNodeTransform(CodeNode, (node) => {
       const currentTheme = node.getTheme();
@@ -83,7 +83,7 @@ export default function CodeHighlightPlugin(): null {
         node.setTheme(targetTheme);
       }
     });
-    
+
     return removeTransform;
   }, [editor, theme]);
 

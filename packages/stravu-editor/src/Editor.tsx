@@ -32,7 +32,7 @@ import { $getRoot } from 'lexical';
 
 import { DEFAULT_EDITOR_CONFIG, type EditorConfig } from './EditorConfig';
 import { useSharedHistoryContext } from './context/SharedHistoryContext';
-import { PLAYGROUND_TRANSFORMERS } from './plugins/MarkdownTransformers';
+import { MARKDOWN_TRANSFORMERS } from './markdown';
 import AutoEmbedPlugin from './plugins/AutoEmbedPlugin';
 import CodeActionMenuPlugin from './plugins/CodeActionMenuPlugin';
 import CollapsiblePlugin from './plugins/CollapsiblePlugin';
@@ -125,14 +125,14 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
   const [isLinkEditMode, setIsLinkEditMode] = useState<boolean>(false);
 
   // Get all transformers including from plugins
-  // const allTransformers = [...PLAYGROUND_TRANSFORMERS]; //, ...pluginRegistry.getAllTransformers()];
+  // const allTransformers = [...STRAVU_TRANSFORMERS]; //, ...pluginRegistry.getAllTransformers()];
 
   // Expose markdown content getter
   useEffect(() => {
     if (config.onGetContent) {
       const getContent = () => {
         return editor.read(() => {
-          const markdown = $convertToMarkdownString(PLAYGROUND_TRANSFORMERS, undefined, true);
+          const markdown = $convertToMarkdownString(MARKDOWN_TRANSFORMERS, undefined, true);
           // remove frontmatter
           const frontmatterRegex = /^---\s*\n(?:.*\n)*?---\s*\n/;
           const markdownWithoutFrontmatter = markdown.replace(frontmatterRegex, '');
@@ -158,7 +158,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
 
       if (config.onContentChange) {
         const content = editor.read(() => {
-          const markdown = $convertToMarkdownString(PLAYGROUND_TRANSFORMERS, undefined, true);
+          const markdown = $convertToMarkdownString(MARKDOWN_TRANSFORMERS, undefined, true);
           const frontmatterRegex = /^---\s*\n(?:.*\n)*?---\s*\n/;
           const markdownWithoutFrontmatter = markdown.replace(frontmatterRegex, '');
           return markdownWithoutFrontmatter;
@@ -187,7 +187,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
       const root = $getRoot();
       root.clear();
       if (config.initialContent?.trim()) {
-        $convertFromMarkdownString(config.initialContent, PLAYGROUND_TRANSFORMERS, undefined, true);
+        $convertFromMarkdownString(config.initialContent, MARKDOWN_TRANSFORMERS, undefined, true);
         root.selectStart();
       }
     }, {discrete: true});

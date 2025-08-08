@@ -117,7 +117,7 @@ import {InsertImageDialog} from '../ImagesPlugin';
 import InsertLayoutDialog from '../LayoutPlugin/InsertLayoutDialog';
 import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
 import {SHORTCUTS} from '../ShortcutsPlugin/shortcuts';
-import {PLAYGROUND_TRANSFORMERS} from '../MarkdownTransformers';
+import {MARKDOWN_TRANSFORMERS} from '../../markdown';
 import {InsertTableDialog} from '../TablePlugin';
 import TableOfContentsDropdownPlugin from '../TableOfContentsPlugin';
 import FontSize from './fontSize';
@@ -131,6 +131,7 @@ import {
   formatParagraph,
   formatQuote,
 } from './utils';
+import { THEME_MAPPING } from "../CodeHighlightPlugin";
 
 const rootTypeToRootName = {
   root: 'Root',
@@ -830,13 +831,13 @@ export default function ToolbarPlugin({
       if ($isCodeNode(firstChild) && firstChild.getLanguage() === 'markdown') {
         $convertFromMarkdownString(
           firstChild.getTextContent(),
-          PLAYGROUND_TRANSFORMERS,
+          MARKDOWN_TRANSFORMERS,
           undefined, // node
           true,
         );
       } else {
         const markdown = $convertToMarkdownString(
-          PLAYGROUND_TRANSFORMERS,
+          MARKDOWN_TRANSFORMERS,
           undefined, //node
           true,
         );

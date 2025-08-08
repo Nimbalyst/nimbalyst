@@ -3,7 +3,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { $createTextNode, $getRoot } from 'lexical';
 import { $isCodeNode, CodeNode } from '@lexical/code';
 import { $convertFromMarkdownString, $convertToMarkdownString } from '@lexical/markdown';
-import { PLAYGROUND_TRANSFORMERS } from '../MarkdownTransformers';
+import { MARKDOWN_TRANSFORMERS } from '../../markdown';
 
 const MarkdownToggle = () => {
     const [editor] = useLexicalComposerContext();
@@ -16,14 +16,14 @@ const MarkdownToggle = () => {
             if ($isCodeNode(firstChild) && firstChild.getLanguage() === 'markdown') {
                 $convertFromMarkdownString(
                     firstChild.getTextContent(),
-                    PLAYGROUND_TRANSFORMERS,
+                    MARKDOWN_TRANSFORMERS,
                     undefined, // node
                     shouldPreserveNewLinesInMarkdown,
                     false, // shouldMergeAdjacentLines
                 );
             } else {
                 const markdown = $convertToMarkdownString(
-                    PLAYGROUND_TRANSFORMERS,
+                    MARKDOWN_TRANSFORMERS,
                     undefined, //node
                     shouldPreserveNewLinesInMarkdown,
                 );
