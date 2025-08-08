@@ -104,7 +104,6 @@ import {
   useToolbarState,
 } from '../../context/ToolbarContext';
 import useModal from '../../hooks/useModal';
-import {$createStickyNode} from '../StickyPlugin/StickyNode.tsx';
 import DropDown, {DropDownItem} from '../../ui/DropDown';
 import DropdownColorPicker from '../../ui/DropdownColorPicker';
 import ThemeToggle from '../../ui/ThemeToggle';
@@ -1277,18 +1276,7 @@ export default function ToolbarPlugin({
                       <i className="icon columns" />
                       <span className="text">Columns Layout</span>
                     </DropDownItem>
-                    <DropDownItem
-                      onClick={() => {
-                        editor.update(() => {
-                          const root = $getRoot();
-                          const stickyNode = $createStickyNode(0, 0);
-                          root.append(stickyNode);
-                        });
-                      }}
-                      className="item">
-                      <i className="icon sticky" />
-                      <span className="text">Sticky Note</span>
-                    </DropDownItem>
+
                   </>
                 )}
                 <DropDownItem

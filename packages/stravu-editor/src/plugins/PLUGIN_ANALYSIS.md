@@ -8,6 +8,7 @@ This document analyzes the current plugin architecture and identifies which plug
 - **Roundtrip Support**: Content should convert losslessly between markdown and editor format
 - **Clean Architecture**: Plugins should be properly packaged and isolated
 
+
 ## Plugin Categories
 
 ### ✅ Keep - Markdown Compatible
@@ -26,33 +27,36 @@ These plugins work well with markdown or enhance the editing experience without 
 ### ⚠️ Rework Needed - Partial Markdown Support
 These plugins need modifications to properly support markdown roundtrip:
 
-1. **TablePlugin** + **TableActionMenuPlugin** + **TableCellResizer** + **TableHoverActionsPlugin**
+**TablePlugin** + **TableActionMenuPlugin** + **TableCellResizer** + **TableHoverActionsPlugin**
 - Tables are markdown-compatible but need proper transformer implementation
 - Should consolidate into single table package
 
-2. **CollapsiblePlugin** ✅ UPDATED
+**CollapsiblePlugin** ✅ UPDATED
 - Now uses standard HTML `<details>`/`<summary>` syntax
 - Fully markdown-compatible with native browser support
 
-3. **PageBreakPlugin**
+**PageBreakPlugin**
 - Needs markdown representation (e.g., `---` or custom syntax)
 
-4. **EmojisPlugin**
+**EmojisPlugin**
 - Should use standard emoji Unicode or :emoji: notation in markdown
+
+**ExcalidrawPlugin** - Switch to DiagramLM for roundtrip rendering
+
+
 
 ### ❌ Remove - Not Markdown Compatible
 These plugins don't fit the markdown-native approach or are unnecessary:
 
 1. **CommentPlugin** - Comments don't have standard markdown representation
-2. **ExcalidrawPlugin** - Drawings can't be represented in markdown text
-3. **StickyPlugin** - Sticky notes aren't markdown-native
-4. **AutoEmbedPlugin** - Embeds aren't pure markdown (could be links instead)
-5. **LayoutPlugin** - Multi-column layouts aren't standard markdown
-6. **SpeechToTextPlugin** - Input method, not content type
-7. **TestRecorderPlugin** - Development tool, not for production
-8. **TypingPerfPlugin** - Performance monitoring tool
-9. **TreeViewPlugin** - Debug/development tool
-10. **SpecialTextPlugin** - Custom bracket syntax conflicts with markdown links (REMOVED)
+2. **StickyPlugin** - Sticky notes aren't markdown-native
+3. **AutoEmbedPlugin** - Embeds aren't pure markdown (could be links instead)
+4. **LayoutPlugin** - Multi-column layouts aren't standard markdown
+5. **SpeechToTextPlugin** - Input method, not content type
+6. **TestRecorderPlugin** - Development tool, not for production
+7. **TypingPerfPlugin** - Performance monitoring tool
+8. **TreeViewPlugin** - Debug/development tool
+9. **SpecialTextPlugin** - Custom bracket syntax conflicts with markdown links (REMOVED)
 
 ### 🔧 Utility/UI Plugins - Keep but Review
 These provide UI/UX features that don't affect markdown content:
