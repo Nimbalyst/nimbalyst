@@ -682,6 +682,34 @@
   border-left: 10px solid #ffebe9; /* Light red border */
 }
 
+/* Modified content (when both added and removed) */
+.PlaygroundEditorTheme__diffModify {
+  background-color: #fff5b1; /* Light yellow */
+  outline: 1px solid #f9c74f;
+  outline-offset: -1px;
+}
+
+/* Dark mode styles for diffs */
+[data-theme="dark"] .PlaygroundEditorTheme__diffAdd,
+[data-theme="crystal-dark"] .PlaygroundEditorTheme__diffAdd {
+  background-color: rgba(40, 167, 69, 0.15); /* Dark green background */
+  outline: 1px solid rgba(40, 167, 69, 0.4);
+}
+
+[data-theme="dark"] .PlaygroundEditorTheme__diffRemove,
+[data-theme="crystal-dark"] .PlaygroundEditorTheme__diffRemove {
+  background-color: rgba(220, 53, 69, 0.15); /* Dark red background */
+  outline: 1px solid rgba(220, 53, 69, 0.4);
+  text-decoration: line-through;
+  text-decoration-color: rgba(220, 53, 69, 0.6);
+}
+
+[data-theme="dark"] .PlaygroundEditorTheme__diffModify,
+[data-theme="crystal-dark"] .PlaygroundEditorTheme__diffModify {
+  background-color: rgba(249, 199, 79, 0.15); /* Dark yellow background */
+  outline: 1px solid rgba(249, 199, 79, 0.4);
+}
+
 /* Dark mode styles for code block gutters only */
 [data-theme="dark"] .PlaygroundEditorTheme__code:before {
   background-color: #2d2d2d;

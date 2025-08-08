@@ -71,3 +71,5 @@ export function createTransformers(
 
 // Re-export for convenience
 export { $convertFromMarkdownString, $convertToMarkdownString } from '@lexical/markdown';
+export { MarkdownStreamProcessor, createHeadlessEditorFromEditor, markdownToJSONSync } from './MarkdownStreamProcessor';
+export type { InsertMode } from './MarkdownStreamProcessor';

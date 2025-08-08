@@ -98,6 +98,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Theme operations
   getTheme: () => ipcRenderer.invoke('get-theme'),
+  setTheme: (theme: string) => ipcRenderer.invoke('set-theme', theme),
 
   // File operations
   openFile: () => ipcRenderer.invoke('open-file'),
@@ -175,5 +176,40 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('session:resolve-conflict', session, resolution, newBaseHash),
     createCheckpoint: (sessionId: string, state: string) => 
       ipcRenderer.invoke('session:create-checkpoint', sessionId, state),
+  },
+
+  // Claude AI operations
+  claudeInitialize: (apiKey?: string) => ipcRenderer.invoke('claude:initialize', apiKey),
+  claudeCreateSession: (documentContext?: any) => ipcRenderer.invoke('claude:createSession', documentContext),
+  claudeSendMessage: (message: string, documentContext?: any) => ipcRenderer.invoke('claude:sendMessage', message, documentContext),
+  claudeGetSessions: () => ipcRenderer.invoke('claude:getSessions'),
+  claudeLoadSession: (sessionId: string) => ipcRenderer.invoke('claude:loadSession', sessionId),
+  claudeClearSession: () => ipcRenderer.invoke('claude:clearSession'),
+  claudeApplyEdit: (edit: any) => ipcRenderer.invoke('claude:applyEdit', edit),
+  getClaudeSettings: () => ipcRenderer.invoke('claude:getSettings'),
+  saveClaudeSettings: (settings: any) => ipcRenderer.invoke('claude:saveSettings', settings),
+  testClaudeConnection: () => ipcRenderer.invoke('claude:testConnection'),
+  getClaudeModels: () => ipcRenderer.invoke('claude:getModels'),
+  
+  // Claude AI event listeners
+  onClaudeStreamResponse: (callback: (data: any) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('claude:streamResponse', handler);
+    return () => ipcRenderer.removeListener('claude:streamResponse', handler);
+  },
+  onClaudeEditRequest: (callback: (edit: any) => void) => {
+    const handler = (_event: any, edit: any) => callback(edit);
+    ipcRenderer.on('claude:editRequest', handler);
+    return () => ipcRenderer.removeListener('claude:editRequest', handler);
+  },
+
+  // Preferences operations
+  getGeneralSettings: () => ipcRenderer.invoke('preferences:getGeneral'),
+  saveGeneralSettings: (settings: any) => ipcRenderer.invoke('preferences:saveGeneral', settings),
+  getEditorSettings: () => ipcRenderer.invoke('preferences:getEditor'),
+  saveEditorSettings: (settings: any) => ipcRenderer.invoke('preferences:saveEditor', settings),
+  onShowPreferences: (callback: () => void) => {
+    ipcRenderer.on('show-preferences', callback);
+    return () => ipcRenderer.removeListener('show-preferences', callback);
   },
 });

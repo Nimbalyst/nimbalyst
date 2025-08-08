@@ -12,13 +12,18 @@ import { registerSettingsHandlers } from './ipc/SettingsHandlers';
 import { registerWindowHandlers } from './ipc/WindowHandlers';
 import { registerHistoryHandlers } from './ipc/HistoryHandlers';
 import { registerSessionHandlers } from './ipc/SessionHandlers';
+import { registerPreferencesHandlers } from './ipc/PreferencesHandlers';
 import { getTheme } from './utils/store';
+import { ClaudeService } from './services/ClaudeService';
 
 // Track pending file to open
 let pendingFilePath: string | null = null;
 
 // Session save interval
 let sessionSaveInterval: NodeJS.Timeout | null = null;
+
+// Claude service instance
+let claudeService: ClaudeService | null = null;
 
 // Initialize debug logging in development
 function initializeDebugLogging() {
@@ -129,6 +134,10 @@ app.whenReady().then(async () => {
     registerWindowHandlers();
     await registerHistoryHandlers();
     await registerSessionHandlers();
+    registerPreferencesHandlers();
+    
+    // Initialize Claude service
+    claudeService = new ClaudeService();
     
     // Try to restore session, otherwise create a new window
     const sessionRestored = restoreSessionState();
@@ -191,6 +200,12 @@ app.on('before-quit', () => {
     if (sessionSaveInterval) {
         clearInterval(sessionSaveInterval);
         sessionSaveInterval = null;
+    }
+    
+    // Clean up Claude service
+    if (claudeService) {
+        claudeService.destroy();
+        claudeService = null;
     }
     
     // Save session state

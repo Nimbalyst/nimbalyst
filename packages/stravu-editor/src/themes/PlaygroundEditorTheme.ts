@@ -128,6 +128,10 @@ const theme: EditorThemeClasses = {
     underlineStrikethrough: 'PlaygroundEditorTheme__textUnderlineStrikethrough',
     uppercase: 'PlaygroundEditorTheme__textUppercase',
   },
+  // Diff styling
+  diffAdd: 'PlaygroundEditorTheme__diffAdd',
+  diffRemove: 'PlaygroundEditorTheme__diffRemove',
+  diffModify: 'PlaygroundEditorTheme__diffModify',
 };
 
 export default theme;

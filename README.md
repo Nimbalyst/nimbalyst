@@ -1,6 +1,13 @@
-# Stravu Editor - Monorepo
+# Stravu Editor
 
-This is the monorepo for Stravu Editor, a powerful rich text editor built with Meta's Lexical framework, featuring markdown support, tables, and comprehensive editing capabilities.
+Stravu Editor is a powerful, rich text markdown editor based on the Lexical editor project. 
+
+While heavily leveraging the Lexical playground environment, this editor works to make this functionality available as an embeddable component. It also adds an externally configurable plugin architecture and several new plugins.
+
+## Features Added on top of Lexical
+
+- Search / Replace
+- Red / Green Diff rendering
 
 ## Packages
 
@@ -334,7 +341,7 @@ npm run clean:full
 **Solution**: This should not happen as CSS is automatically included. If you still see issues:
 1. Make sure you're importing from the correct package
 2. Check that your bundler supports CSS imports
-3. Try clearing your node_modules and reinstalling
+3. Try clearing your node\_modules and reinstalling
 
 ### Missing Lexical dependencies
 **Problem**: Build errors about missing `@lexical/*` packages.

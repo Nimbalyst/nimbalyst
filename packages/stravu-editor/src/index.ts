@@ -60,3 +60,29 @@ export {
 export type { PluginPackage } from './types/PluginTypes';
 export { pluginRegistry } from './plugins/PluginRegistry';
 export { PluginManager } from './plugins/PluginManager';
+
+// Markdown utilities
+export { 
+  MarkdownStreamProcessor, 
+  createHeadlessEditorFromEditor, 
+  markdownToJSONSync,
+  type InsertMode,
+  MARKDOWN_TRANSFORMERS
+} from './markdown';
+
+// Diff plugin and hook
+export { DiffPlugin, useDiffCommands, APPLY_MARKDOWN_REPLACE_COMMAND } from './plugins/DiffPlugin';
+
+// Diff utilities (now from local plugin)
+export {
+  applyMarkdownReplace,
+  $approveDiffs,
+  $rejectDiffs,
+  $hasDiffNodes,
+  APPROVE_DIFF_COMMAND,
+  REJECT_DIFF_COMMAND,
+  type TextReplacement
+} from './plugins/DiffPlugin/core/exports';
+
+// AI Chat integration
+export { aiChatBridge } from './plugins/AIChatIntegrationPlugin';

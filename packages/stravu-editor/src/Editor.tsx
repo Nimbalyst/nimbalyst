@@ -60,6 +60,8 @@ import TableHoverActionsPlugin from './plugins/TableHoverActionsPlugin';
 import ToolbarPlugin from './plugins/ToolbarPlugin';
 import TreeViewPlugin from './plugins/TreeViewPlugin';
 import SearchReplacePlugin from './plugins/SearchReplacePlugin';
+import { DiffPlugin } from './plugins/DiffPlugin';
+import { AIChatIntegrationPlugin } from './plugins/AIChatIntegrationPlugin';
 import ContentEditable from './ui/ContentEditable';
 import { useRuntimeSettings } from './context/RuntimeSettingsContext';
 import { PluginManager } from './plugins/PluginManager';
@@ -308,6 +310,8 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             <CollapsiblePlugin />
             <PageBreakPlugin />
             <LayoutPlugin />
+            <DiffPlugin />
+            <AIChatIntegrationPlugin />
 
             {/* Render any custom plugins */}
             <PluginManager />

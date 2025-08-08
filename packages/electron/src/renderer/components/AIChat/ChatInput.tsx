@@ -5,9 +5,10 @@ interface ChatInputProps {
   onChange: (value: string) => void;
   onSend: (message: string) => void;
   disabled?: boolean;
+  placeholder?: string;
 }
 
-export function ChatInput({ value, onChange, onSend, disabled }: ChatInputProps) {
+export function ChatInput({ value, onChange, onSend, disabled, placeholder = "Ask a question..." }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea
@@ -53,7 +54,7 @@ export function ChatInput({ value, onChange, onSend, disabled }: ChatInputProps)
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Ask a question..."
+        placeholder={placeholder}
         disabled={disabled}
         rows={1}
       />

@@ -3,8 +3,8 @@ console.log('[RENDERER] App.tsx loading at', new Date().toISOString());
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 
 console.log('[RENDERER] About to import StravuEditor at', new Date().toISOString());
-import { StravuEditor, TOGGLE_SEARCH_COMMAND } from 'stravu-editor';
-import type { LexicalCommand, ConfigTheme } from 'stravu-editor';
+import { StravuEditor, TOGGLE_SEARCH_COMMAND, MARKDOWN_TRANSFORMERS, aiChatBridge } from 'stravu-editor';
+import type { LexicalCommand, ConfigTheme, TextReplacement } from 'stravu-editor';
 import '../../../stravu-editor/dist/style.css';
 console.log('[RENDERER] StravuEditor imported at', new Date().toISOString());
 import { ProjectSidebar } from './components/ProjectSidebar';
@@ -12,6 +12,7 @@ import { ProjectWelcome } from './components/ProjectWelcome';
 import { QuickOpen } from './components/QuickOpen';
 import { AIChat } from './components/AIChat';
 import { HistoryDialog } from './components/HistoryDialog';
+import { PreferencesDialog } from './components/Preferences/PreferencesDialog';
 import './ProjectWelcome.css';
 
 // File tree interface
@@ -39,6 +40,7 @@ interface ElectronAPI {
   onThemeChange: (callback: (theme: string) => void) => () => void;
   onShowAbout: (callback: () => void) => () => void;
   onViewHistory?: (callback: () => void) => () => void;
+  onShowPreferences?: (callback: () => void) => () => void;
   openFile: () => Promise<{ filePath: string; content: string } | null>;
   saveFile: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
   saveFileAs: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
@@ -62,7 +64,7 @@ interface ElectronAPI {
     loadSnapshot: (filePath: string, timestamp: string) => Promise<string>;
     deleteSnapshot: (filePath: string, timestamp: string) => Promise<void>;
   };
-  // Session operations  
+  // Session operations
   session?: {
     create: (filePath: string, type: string, source?: any) => Promise<any>;
     load: (sessionId: string) => Promise<any>;
@@ -100,6 +102,7 @@ export default function App() {
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
@@ -210,7 +213,7 @@ export default function App() {
           setSidebarWidth(width);
         }
       });
-      
+
       window.electronAPI.getAIChatState?.().then((state) => {
         if (state) {
           setIsAIChatCollapsed(state.collapsed);
@@ -302,7 +305,7 @@ export default function App() {
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
         setIsDirty(false);
         initialContentRef.current = result.content;
-        
+
         // Create automatic snapshot when opening file
         if (window.electronAPI.history) {
           try {
@@ -441,7 +444,7 @@ export default function App() {
 
         // Update the current file in main process
         window.electronAPI.setCurrentFile(filePath);
-        
+
         // Create automatic snapshot when switching to file
         if (window.electronAPI.history) {
           try {
@@ -716,7 +719,7 @@ export default function App() {
       setCurrentFileName(data.filePath.split('/').pop() || data.filePath);
       setIsDirty(false);
       initialContentRef.current = data.content;
-      
+
       // Create automatic snapshot when file is opened from OS
       if (window.electronAPI.history) {
         try {
@@ -794,6 +797,14 @@ export default function App() {
       setTheme(editorTheme as ConfigTheme);
       console.log('Editor theme set to:', editorTheme);
     }));
+
+    // Listen for show preferences event
+    if (window.electronAPI.onShowPreferences) {
+      cleanupFns.push(window.electronAPI.onShowPreferences(() => {
+        console.log('Show preferences requested');
+        setIsPreferencesOpen(true);
+      }));
+    }
     cleanupFns.push(window.electronAPI.onFileRenamed((data) => {
       console.log('File renamed:', data);
 
@@ -824,7 +835,7 @@ export default function App() {
       console.log('Project file tree updated:', data);
       setFileTree(data.fileTree);
     }));
-    
+
     // View history menu handler
     if (window.electronAPI.onViewHistory) {
       cleanupFns.push(window.electronAPI.onViewHistory(() => {
@@ -961,6 +972,36 @@ export default function App() {
           onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}
           width={aiChatWidth}
           onWidthChange={setAIChatWidth}
+          documentContext={{
+            filePath: currentFilePath || '',
+            fileType: 'markdown',
+            content: getContentRef.current ? getContentRef.current() : content,
+            cursorPosition: undefined, // TODO: Get from Lexical editor
+            selection: undefined // TODO: Get selected text from Lexical
+          }}
+          onApplyEdit={(edit) => {
+            console.log('Applying edit:', edit);
+            if (edit.type === 'diff' && edit.replacements) {
+              try {
+                // Convert the replacements to the TextReplacement format
+                const textReplacements: TextReplacement[] = edit.replacements.map((r: any) => ({
+                  oldText: r.oldText,
+                  newText: r.newText
+                }));
+
+                // Apply through the AI chat bridge which will dispatch to the DiffPlugin
+                aiChatBridge.applyReplacements(textReplacements);
+                console.log('Diff applied successfully - showing red/green preview');
+                // Document will show diffs but not marked as dirty yet
+                // User needs to approve/reject the diffs
+              } catch (error) {
+                console.error('Failed to apply diff:', error);
+                alert('Failed to apply diff. Please try again.');
+              }
+            } else {
+              console.error('Diff service not initialized or invalid edit type');
+            }
+          }}
         />
       )}
       {projectMode && projectPath && (
@@ -977,6 +1018,10 @@ export default function App() {
         onClose={() => setIsHistoryDialogOpen(false)}
         filePath={currentFilePath}
         onRestore={handleRestoreFromHistory}
+      />
+      <PreferencesDialog
+        isOpen={isPreferencesOpen}
+        onClose={() => setIsPreferencesOpen(false)}
       />
     </div>
   );

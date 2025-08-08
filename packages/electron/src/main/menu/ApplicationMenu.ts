@@ -430,7 +430,16 @@ export function createApplicationMenu() {
                     }
                 },
                 { type: 'separator' },
-                { label: 'Preferences...', accelerator: 'CmdOrCtrl+,', enabled: false },
+                { 
+                    label: 'Preferences...', 
+                    accelerator: 'CmdOrCtrl+,', 
+                    click: () => {
+                        const focusedWindow = BrowserWindow.getFocusedWindow();
+                        if (focusedWindow) {
+                            focusedWindow.webContents.send('show-preferences');
+                        }
+                    }
+                },
                 { type: 'separator' },
                 { label: 'Services', submenu: [] },
                 { type: 'separator' },

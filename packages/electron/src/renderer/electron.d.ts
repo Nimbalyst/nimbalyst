@@ -49,6 +49,26 @@ interface ElectronAPI {
   
   // Project file tree operations
   onProjectFileTreeUpdated: (callback: (data: { fileTree: FileTreeItem[]; addedPath?: string; removedPath?: string }) => void) => () => void;
+  
+  // Claude AI operations
+  claudeInitialize?: (apiKey?: string) => Promise<any>;
+  claudeCreateSession?: (documentContext?: any) => Promise<any>;
+  claudeSendMessage?: (message: string, documentContext?: any) => Promise<any>;
+  claudeGetSessions?: () => Promise<any>;
+  claudeLoadSession?: (sessionId: string) => Promise<any>;
+  claudeClearSession?: () => Promise<any>;
+  claudeApplyEdit?: (edit: any) => Promise<any>;
+  getClaudeSettings?: () => Promise<any>;
+  saveClaudeSettings?: (settings: any) => Promise<any>;
+  testClaudeConnection?: () => Promise<any>;
+  getClaudeModels?: () => Promise<{ success: boolean; models: Array<{ id: string; display_name: string }>; error?: string }>;
+  
+  // Preferences operations
+  getGeneralSettings?: () => Promise<any>;
+  saveGeneralSettings?: (settings: any) => Promise<any>;
+  getEditorSettings?: () => Promise<any>;
+  saveEditorSettings?: (settings: any) => Promise<any>;
+  onShowPreferences?: (callback: () => void) => () => void;
 }
 
 interface Window {

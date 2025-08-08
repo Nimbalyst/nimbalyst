@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatHeader } from './ChatHeader';
 import { ChatMessages } from './ChatMessages';
 import { ChatInput } from './ChatInput';
+import { claudeApi, DocumentContext } from '../../services/claudeApi';
 import './AIChat.css';
 
 interface AIChatProps {
@@ -9,19 +10,100 @@ interface AIChatProps {
   onToggleCollapse: () => void;
   width: number;
   onWidthChange: (width: number) => void;
+  documentContext?: DocumentContext;
+  onApplyEdit?: (edit: any) => void;
 }
 
 export function AIChat({
   isCollapsed,
   onToggleCollapse,
   width,
-  onWidthChange
+  onWidthChange,
+  documentContext,
+  onApplyEdit
 }: AIChatProps) {
-  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; edits?: any[] }>>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [currentStreamContent, setCurrentStreamContent] = useState('');
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
   const isResizingRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // Initialize Claude on mount
+  useEffect(() => {
+    const initClaude = async () => {
+      try {
+        await claudeApi.initialize();
+        await claudeApi.createSession(documentContext);
+        setIsInitialized(true);
+      } catch (error: any) {
+        console.error('Failed to initialize Claude:', error);
+        setInitError(error.message || 'Failed to initialize Claude');
+      }
+    };
+
+    initClaude();
+
+    // Set up streaming response listener
+    const handleStreamResponse = (data: any) => {
+      if (data.isComplete) {
+        // Final response with edits
+        setMessages(prev => {
+          const newMessages = [...prev];
+          if (newMessages.length > 0 && newMessages[newMessages.length - 1].role === 'assistant') {
+            newMessages[newMessages.length - 1].content = data.content;
+            newMessages[newMessages.length - 1].edits = data.edits;
+          } else {
+            newMessages.push({ 
+              role: 'assistant', 
+              content: data.content,
+              edits: data.edits 
+            });
+          }
+          return newMessages;
+        });
+        setCurrentStreamContent('');
+        setIsLoading(false);
+        
+        // Auto-apply edits when they arrive
+        if (data.edits && data.edits.length > 0 && onApplyEdit) {
+          data.edits.forEach((edit: any) => {
+            console.log('Auto-applying edit from Claude:', edit);
+            onApplyEdit(edit);
+          });
+        }
+      } else if (data.partial) {
+        // Streaming partial response
+        setCurrentStreamContent(prev => prev + data.partial);
+      }
+    };
+
+    claudeApi.on('streamResponse', handleStreamResponse);
+
+    // Set up edit request listener
+    const handleEditRequest = (edit: any) => {
+      if (onApplyEdit) {
+        onApplyEdit(edit);
+      }
+    };
+
+    claudeApi.on('editRequest', handleEditRequest);
+
+    return () => {
+      claudeApi.off('streamResponse', handleStreamResponse);
+      claudeApi.off('editRequest', handleEditRequest);
+    };
+  }, [documentContext, onApplyEdit]);
+
+  // Update document context when it changes
+  useEffect(() => {
+    if (isInitialized && documentContext) {
+      // Update context for future messages
+      // This could be enhanced to send context updates to Claude
+    }
+  }, [documentContext, isInitialized]);
 
   // Handle resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -58,23 +140,31 @@ export function AIChat({
     };
   }, [onWidthChange]);
 
-  const handleSendMessage = useCallback((message: string) => {
-    if (!message.trim()) return;
+  const handleSendMessage = useCallback(async (message: string) => {
+    if (!message.trim() || !isInitialized) return;
     
     // Add user message
     setMessages(prev => [...prev, { role: 'user', content: message }]);
     setInputValue('');
     setIsLoading(true);
+    setCurrentStreamContent('');
     
-    // TODO: Send to AI service
-    // For now, just simulate a response
-    setTimeout(() => {
+    try {
+      // Send message to Claude with document context
+      await claudeApi.sendMessage(message, documentContext);
+    } catch (error) {
+      console.error('Failed to send message:', error);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: 'This is a placeholder response. AI integration coming soon!' 
+        content: 'Sorry, I encountered an error processing your request. Please try again.' 
       }]);
       setIsLoading(false);
-    }, 1000);
+    }
+  }, [isInitialized, documentContext]);
+
+  const handleApplyEdit = useCallback((edit: any) => {
+    // Apply the edit through the API
+    claudeApi.applyEdit(edit);
   }, []);
 
   if (isCollapsed) {
@@ -107,17 +197,30 @@ export function AIChat({
       
       <ChatHeader onToggleCollapse={onToggleCollapse} />
       
-      <ChatMessages 
-        messages={messages}
-        isLoading={isLoading}
-      />
-      
-      <ChatInput 
-        value={inputValue}
-        onChange={setInputValue}
-        onSend={handleSendMessage}
-        disabled={isLoading}
-      />
+      {initError ? (
+        <div className="ai-chat-error">
+          <p>Failed to initialize Claude AI:</p>
+          <p>{initError}</p>
+          <p>Please check your API key in settings.</p>
+        </div>
+      ) : (
+        <>
+          <ChatMessages 
+            messages={messages}
+            isLoading={isLoading}
+            currentStreamContent={currentStreamContent}
+            onApplyEdit={handleApplyEdit}
+          />
+          
+          <ChatInput 
+            value={inputValue}
+            onChange={setInputValue}
+            onSend={handleSendMessage}
+            disabled={isLoading || !isInitialized}
+            placeholder={!isInitialized ? "Initializing Claude..." : "Ask Claude anything..."}
+          />
+        </>
+      )}
     </div>
   );
 }

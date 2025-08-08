@@ -1,0 +1,400 @@
+/* Preferences Dialog Overlay */
+.preferences-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Main Dialog Container */
+.preferences-dialog {
+  background: var(--background-primary);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 800px;
+  height: 600px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Header */
+.preferences-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.preferences-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.preferences-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preferences-close:hover {
+  background: var(--background-secondary);
+  color: var(--text-primary);
+}
+
+/* Content Area */
+.preferences-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.preferences-sidebar {
+  width: 200px;
+  background: var(--background-secondary);
+  border-right: 1px solid var(--border-color);
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.preferences-tab {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 4px;
+}
+
+.preferences-tab:hover {
+  background: var(--background-hover);
+  color: var(--text-primary);
+}
+
+.preferences-tab.active {
+  background: var(--primary-color);
+  color: white;
+}
+
+.preferences-tab svg {
+  flex-shrink: 0;
+}
+
+/* Panel */
+.preferences-panel {
+  flex: 1;
+  padding: 24px 32px;
+  overflow-y: auto;
+}
+
+/* Section Styles */
+.preferences-section h3 {
+  margin: 0 0 24px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.preferences-section h4 {
+  margin: 16px 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Preference Groups */
+.preference-group {
+  margin-bottom: 24px;
+}
+
+.preference-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.preference-description {
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.preference-link {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.preference-link:hover {
+  text-decoration: underline;
+}
+
+/* Input Styles */
+.preference-input,
+.preference-select {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.preference-input:focus,
+.preference-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.preference-input-small {
+  width: 80px;
+  padding: 6px 10px;
+  background: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* API Key Input Group */
+.api-key-input-wrapper {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.api-key-input {
+  flex: 1;
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+}
+
+/* Checkbox Styles */
+.preference-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.preference-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.preference-checkbox-label span {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* Slider Styles */
+.preference-slider-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.preference-slider {
+  flex: 1;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 2px;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.preference-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--primary-color);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preference-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.1);
+}
+
+.preference-slider-value {
+  min-width: 40px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+/* Button Styles */
+.preference-button-primary,
+.preference-button-secondary {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.preference-button-primary {
+  background: var(--primary-color);
+  color: white;
+}
+
+.preference-button-primary:hover:not(:disabled) {
+  background: var(--primary-color-hover);
+}
+
+.preference-button-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.preference-button-secondary {
+  background: var(--background-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.preference-button-secondary:hover:not(:disabled) {
+  background: var(--background-tertiary);
+}
+
+.preference-button-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Message Styles */
+.preference-message {
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin: 16px 0;
+  font-size: 13px;
+  animation: messageSlide 0.3s ease;
+}
+
+@keyframes messageSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.preference-message.success {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.preference-message.error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* Actions */
+.preference-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.preference-subgroup {
+  margin-top: 12px;
+  padding-left: 24px;
+}
+
+/* Scrollbar Styling */
+.preferences-panel::-webkit-scrollbar,
+.preferences-sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.preferences-panel::-webkit-scrollbar-track,
+.preferences-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.preferences-panel::-webkit-scrollbar-thumb,
+.preferences-sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.preferences-panel::-webkit-scrollbar-thumb:hover,
+.preferences-sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* Dark Theme Adjustments */
+.dark-theme .preferences-dialog,
+.crystal-dark-theme .preferences-dialog {
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.dark-theme .preferences-overlay,
+.crystal-dark-theme .preferences-overlay {
+  background: rgba(0, 0, 0, 0.7);
+}
