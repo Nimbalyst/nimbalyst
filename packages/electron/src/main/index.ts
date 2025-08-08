@@ -50,6 +50,8 @@ const windowStates = new Map<number, WindowState>();
 // File watchers management
 const fileWatchers = new Map<number, chokidar.FSWatcher>();
 const projectWatchers = new Map<number, chokidar.FSWatcher>();
+// Track when we're saving to ignore file change events  
+const savingWindows = new Set<number>();
 
 let pendingFilePath: string | null = null;
 let windowIdCounter = 0;
@@ -590,6 +592,13 @@ function startFileWatcher(window: BrowserWindow, filePath: string) {
 
         watcher.on('change', (path, stats) => {
             console.log('[FILE_WATCHER] File changed on disk:', path, 'stats:', stats);
+            
+            // Check if we're currently saving this window
+            if (savingWindows.has(windowId)) {
+                console.log('[FILE_WATCHER] Ignoring change - window is currently saving');
+                return;
+            }
+            
             const state = windowStates.get(windowId);
             console.log('[FILE_WATCHER] Window state:', state);
 
@@ -965,6 +974,7 @@ function createWindow(isOpeningFile: boolean = false, isProjectMode: boolean = f
         window.on('closed', () => {
             windows.delete(windowId);
             windowStates.delete(windowId);
+            savingWindows.delete(windowId);
             stopFileWatcher(windowId);
             stopProjectWatcher(windowId);
             // Update menu to reflect window closure
@@ -1512,12 +1522,9 @@ ipcMain.handle('save-file', async (event, content: string) => {
             return null;
         }
 
-        // Temporarily pause the file watcher to avoid triggering on our own save
-        const watcher = fileWatchers.get(windowId);
-        if (watcher) {
-            console.log('[SAVE] Pausing file watcher during save');
-            watcher.unwatch(filePath);
-        }
+        // Mark that we're saving to prevent file watcher from reacting
+        savingWindows.add(windowId);
+        console.log('[SAVE] Marked window as saving:', windowId);
 
         console.log('[SAVE] Writing to file:', filePath);
         writeFileSync(filePath, content, 'utf-8');
@@ -1525,13 +1532,11 @@ ipcMain.handle('save-file', async (event, content: string) => {
             state.documentEdited = false; // Reset dirty state after save
         }
 
-        // Resume watching after a short delay
-        if (watcher) {
-            setTimeout(() => {
-                console.log('[SAVE] Resuming file watcher after save');
-                watcher.add(filePath);
-            }, 500);
-        }
+        // Clear the saving flag after a delay to ensure the file watcher doesn't react
+        setTimeout(() => {
+            savingWindows.delete(windowId);
+            console.log('[SAVE] Cleared saving flag for window:', windowId);
+        }, 1500); // Wait 1.5 seconds to ensure the polling cycle passes
         return { success: true, filePath };
     } catch (error) {
         console.error('Error saving file:', error);
@@ -1586,11 +1591,22 @@ ipcMain.handle('save-file-as', async (event, content: string) => {
 
         if (!result.canceled && result.filePath) {
             const filePath = result.filePath;
+            
+            // Mark that we're saving to prevent file watcher from reacting
+            savingWindows.add(windowId);
+            console.log('[SAVE_AS] Marked window as saving:', windowId);
+            
             if (state) {
                 state.filePath = filePath;
                 state.documentEdited = false;
             }
             writeFileSync(filePath, content, 'utf-8');
+
+            // Clear the saving flag after a delay
+            setTimeout(() => {
+                savingWindows.delete(windowId);
+                console.log('[SAVE_AS] Cleared saving flag for window:', windowId);
+            }, 1500);
 
             // Set represented filename for macOS
             if (process.platform === 'darwin') {

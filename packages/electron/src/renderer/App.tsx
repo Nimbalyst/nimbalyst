@@ -98,7 +98,7 @@ export default function App() {
         try {
           const state = JSON.parse(savedState);
           console.log('[HMR] Restoring dev state:', state);
-          
+
           // Restore the state
           if (state.projectMode) {
             setProjectMode(true);
@@ -106,7 +106,7 @@ export default function App() {
             setProjectName(state.projectName);
             setFileTree(state.fileTree || []);
           }
-          
+
           if (state.filePath) {
             setCurrentFilePath(state.filePath);
             setCurrentFileName(state.fileName);
@@ -114,25 +114,25 @@ export default function App() {
             initialContentRef.current = state.content || '';
             contentVersionRef.current += 1;
             isInitializedRef.current = false;
-            
+
             // Update the main process about the current file
             if (window.electronAPI) {
               window.electronAPI.setCurrentFile(state.filePath);
             }
           }
-          
+
           if (state.sidebarWidth) {
             setSidebarWidth(state.sidebarWidth);
           }
-          
+
           if (state.isDirty !== undefined) {
             setIsDirty(state.isDirty);
           }
-          
+
           if (state.theme) {
             setTheme(state.theme);
           }
-          
+
           // Clear the saved state
           sessionStorage.removeItem('stravu-editor-dev-state');
         } catch (error) {
@@ -141,7 +141,7 @@ export default function App() {
       }
     }
   }, []); // Empty dependency array - only run on mount
-  
+
   // Save state before HMR in development
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
@@ -161,10 +161,10 @@ export default function App() {
         console.log('[HMR] Saving dev state:', state);
         sessionStorage.setItem('stravu-editor-dev-state', JSON.stringify(state));
       };
-      
+
       // Save state on beforeunload (catches HMR)
       window.addEventListener('beforeunload', saveDevState);
-      
+
       return () => {
         window.removeEventListener('beforeunload', saveDevState);
       };
@@ -193,18 +193,18 @@ export default function App() {
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizingRef.current) return;
-      
+
       const newWidth = Math.min(Math.max(150, e.clientX), 500);
       setSidebarWidth(newWidth);
     };
 
     const handleMouseUp = () => {
       if (!isResizingRef.current) return;
-      
+
       isResizingRef.current = false;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
-      
+
       // Save the width
       if (window.electronAPI) {
         window.electronAPI.setSidebarWidth(sidebarWidth);
@@ -402,8 +402,8 @@ export default function App() {
     if (!projectMode) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd+K (Mac) or Ctrl+K (Windows/Linux)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      // Cmd+E (Mac) or Ctrl+E (Windows/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
         e.preventDefault();
         setIsQuickOpenVisible(true);
       }
@@ -432,7 +432,7 @@ export default function App() {
   // Handle QuickOpen file selection
   const handleQuickOpenFileSelect = useCallback(async (filePath: string) => {
     await handleProjectFileSelect(filePath);
-    
+
     // Add to recent files
     if (window.electronAPI) {
       window.electronAPI.addToProjectRecentFiles(filePath);
@@ -480,7 +480,7 @@ export default function App() {
             hasElectronAPI: !!window.electronAPI
           });
         }
-      }, 2000); // Autosave every 2 seconds
+      }, 10000); // Autosave every 10 seconds
     }
 
     // Cleanup on unmount or when dependencies change
@@ -573,7 +573,7 @@ export default function App() {
     }));
     cleanupFns.push(window.electronAPI.onFileRenamed((data) => {
       console.log('File renamed:', data);
-      
+
       // Update file tree with the renamed file
       const updateFileTree = (items: FileTreeItem[]): FileTreeItem[] => {
         return items.map(item => {
@@ -588,9 +588,9 @@ export default function App() {
           return item;
         });
       };
-      
+
       setFileTree(prevTree => updateFileTree(prevTree));
-      
+
       // Update current file path if it was renamed
       if (currentFilePath === data.oldPath) {
         setCurrentFilePath(data.newPath);
