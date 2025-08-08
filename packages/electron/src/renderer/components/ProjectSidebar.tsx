@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import { FileTree } from './FileTree';
 import '../ProjectSidebar.css';
 
@@ -15,6 +15,7 @@ interface ProjectSidebarProps {
   currentFilePath: string | null;
   onFileSelect: (filePath: string) => void;
   onCloseProject: () => void;
+  onOpenQuickSearch?: () => void;
 }
 
 export function ProjectSidebar({
@@ -22,55 +23,31 @@ export function ProjectSidebar({
   fileTree,
   currentFilePath,
   onFileSelect,
-  onCloseProject
+  onCloseProject,
+  onOpenQuickSearch
 }: ProjectSidebarProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const filterFileTree = useCallback((items: FileTreeItem[]): FileTreeItem[] => {
-    if (!searchQuery) return items;
-
-    const query = searchQuery.toLowerCase();
-    const filtered: FileTreeItem[] = [];
-
-    for (const item of items) {
-      if (item.type === 'file' && item.name.toLowerCase().includes(query)) {
-        filtered.push(item);
-      } else if (item.type === 'directory' && item.children) {
-        const filteredChildren = filterFileTree(item.children);
-        if (filteredChildren.length > 0) {
-          filtered.push({
-            ...item,
-            children: filteredChildren
-          });
-        }
-      }
-    }
-
-    return filtered;
-  }, [searchQuery]);
-
-  const filteredTree = filterFileTree(fileTree);
 
   return (
     <div className="project-sidebar">
       <div className="project-sidebar-header">
         <h3 className="project-name">{projectName}</h3>
-
-      </div>
-
-      <div className="project-search">
-        <input
-          type="text"
-          placeholder="Search files..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="project-search-input"
-        />
+        {onOpenQuickSearch && (
+          <button
+            className="project-search-button"
+            onClick={onOpenQuickSearch}
+            title="Search files (⌘K)"
+            aria-label="Search files"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z" fill="currentColor"/>
+            </svg>
+          </button>
+        )}
       </div>
 
       <div className="project-file-tree">
         <FileTree
-          items={filteredTree}
+          items={fileTree}
           currentFilePath={currentFilePath}
           onFileSelect={onFileSelect}
           level={0}

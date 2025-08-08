@@ -16,6 +16,7 @@
   align-items: center;
   justify-content: space-between;
   background-color: #ffffff;
+  gap: 8px;
 }
 
 .project-name {
@@ -26,6 +27,29 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+}
+
+.project-search-button {
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  border-radius: 4px;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.project-search-button:hover {
+  background-color: #f3f4f6;
+  color: #1f2937;
+}
+
+.project-search-button:active {
+  background-color: #e5e7eb;
 }
 
 .close-project-btn {
@@ -44,25 +68,7 @@
   color: #1f2937;
 }
 
-.project-search {
-  padding: 8px;
-  border-bottom: 1px solid #e5e7eb;
-  background-color: #ffffff;
-}
-
-.project-search-input {
-  width: 100%;
-  padding: 6px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 13px;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.project-search-input:focus {
-  border-color: #3b82f6;
-}
+/* Search functionality moved to QuickOpen component (Cmd+K) */
 
 .project-file-tree {
   flex: 1;
@@ -171,6 +177,19 @@
 
 .dark-theme .project-name {
   color: #ffffff;
+}
+
+.dark-theme .project-search-button {
+  color: #b3b3b3;
+}
+
+.dark-theme .project-search-button:hover {
+  background-color: #3a3a3a;
+  color: #ffffff;
+}
+
+.dark-theme .project-search-button:active {
+  background-color: #4a4a4a;
 }
 
 .dark-theme .close-project-btn {
@@ -321,6 +340,19 @@
 
 .crystal-dark-theme .project-name {
   color: #F3F4F6;
+}
+
+.crystal-dark-theme .project-search-button {
+  color: #9CA3AF;
+}
+
+.crystal-dark-theme .project-search-button:hover {
+  background-color: #374151;
+  color: #F3F4F6;
+}
+
+.crystal-dark-theme .project-search-button:active {
+  background-color: #4B5563;
 }
 
 .crystal-dark-theme .close-project-btn {

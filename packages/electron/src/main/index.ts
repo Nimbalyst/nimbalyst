@@ -1662,6 +1662,21 @@ ipcMain.handle('switch-project-file', async (event, filePath: string) => {
 
             state.filePath = filePath;
             state.documentEdited = false;
+            
+            // Add to recent project files
+            if (state.projectPath) {
+                const key = `projectRecentFiles.${state.projectPath}`;
+                let recentFiles = store.get(key, []) as string[];
+                
+                // Remove if already exists and add to beginning
+                recentFiles = recentFiles.filter(f => f !== filePath);
+                recentFiles.unshift(filePath);
+                
+                // Keep only 50 most recent
+                recentFiles = recentFiles.slice(0, 50);
+                
+                store.set(key, recentFiles);
+            }
 
             // Start watching the new file
             startFileWatcher(window, filePath);
@@ -1779,4 +1794,87 @@ ipcMain.handle('get-sidebar-width', () => {
 
 ipcMain.on('set-sidebar-width', (event, width: number) => {
     store.set('sidebarWidth', width);
+});
+
+// IPC handlers for QuickOpen
+ipcMain.handle('search-project-files', async (event, projectPath: string, query: string) => {
+    try {
+        const results: string[] = [];
+        const searchLower = query.toLowerCase();
+        const maxResults = 50;
+        
+        // Recursive function to search files
+        const searchDir = (dir: string) => {
+            if (results.length >= maxResults) return;
+            
+            try {
+                const items = readdirSync(dir);
+                
+                for (const item of items) {
+                    if (results.length >= maxResults) break;
+                    
+                    const fullPath = join(dir, item);
+                    
+                    // Skip node_modules, .git, and other common directories
+                    if (item === 'node_modules' || item === '.git' || item === 'dist' || item === 'build' || item.startsWith('.')) {
+                        continue;
+                    }
+                    
+                    const stat = statSync(fullPath);
+                    
+                    if (stat.isDirectory()) {
+                        searchDir(fullPath);
+                    } else if (stat.isFile()) {
+                        // Check if filename matches query and is a markdown file
+                        if (item.toLowerCase().includes(searchLower) && 
+                            (item.endsWith('.md') || item.endsWith('.markdown'))) {
+                            results.push(fullPath);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error(`Error searching directory ${dir}:`, error);
+            }
+        };
+        
+        searchDir(projectPath);
+        return results;
+    } catch (error) {
+        console.error('Error searching project files:', error);
+        return [];
+    }
+});
+
+ipcMain.handle('get-recent-project-files', (event) => {
+    const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
+    if (!windowId) return [];
+    
+    const state = windowStates.get(windowId);
+    if (!state || !state.projectPath) return [];
+    
+    // Get recent files for this project from store
+    const projectRecentFiles = store.get(`projectRecentFiles.${state.projectPath}`, []) as string[];
+    
+    // Filter to only existing files
+    return projectRecentFiles.filter(filePath => existsSync(filePath)).slice(0, 20);
+});
+
+ipcMain.on('add-to-project-recent-files', (event, filePath: string) => {
+    const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
+    if (!windowId) return;
+    
+    const state = windowStates.get(windowId);
+    if (!state || !state.projectPath) return;
+    
+    const key = `projectRecentFiles.${state.projectPath}`;
+    let recentFiles = store.get(key, []) as string[];
+    
+    // Remove if already exists and add to beginning
+    recentFiles = recentFiles.filter(f => f !== filePath);
+    recentFiles.unshift(filePath);
+    
+    // Keep only 50 most recent
+    recentFiles = recentFiles.slice(0, 50);
+    
+    store.set(key, recentFiles);
 });

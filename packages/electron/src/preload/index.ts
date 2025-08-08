@@ -131,4 +131,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Settings operations
   getSidebarWidth: () => ipcRenderer.invoke('get-sidebar-width'),
   setSidebarWidth: (width: number) => ipcRenderer.send('set-sidebar-width', width),
+  
+  // QuickOpen operations
+  searchProjectFiles: (projectPath: string, query: string) => ipcRenderer.invoke('search-project-files', projectPath, query),
+  getRecentProjectFiles: () => ipcRenderer.invoke('get-recent-project-files'),
+  addToProjectRecentFiles: (filePath: string) => ipcRenderer.send('add-to-project-recent-files', filePath),
 });

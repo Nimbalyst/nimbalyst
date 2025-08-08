@@ -9,6 +9,7 @@ import '../../../stravu-editor/dist/style.css';
 console.log('[RENDERER] StravuEditor imported at', new Date().toISOString());
 import { ProjectSidebar } from './components/ProjectSidebar';
 import { ProjectWelcome } from './components/ProjectWelcome';
+import { QuickOpen } from './components/QuickOpen';
 import './ProjectWelcome.css';
 
 // File tree interface
@@ -68,6 +69,8 @@ export default function App() {
   const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
   const [theme, setTheme] = useState<ConfigTheme>('auto');
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
+  const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
+  const [recentProjectFiles, setRecentProjectFiles] = useState<string[]>([]);
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
@@ -394,6 +397,48 @@ export default function App() {
     window.electronAPI.setDocumentEdited(isDirty);
   }, [currentFileName, isDirty, projectMode, projectName]);
 
+  // Quick Open keyboard shortcut (Cmd+K)
+  useEffect(() => {
+    if (!projectMode) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+K (Mac) or Ctrl+K (Windows/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsQuickOpenVisible(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [projectMode]);
+
+  // Load recent project files when in project mode
+  useEffect(() => {
+    if (!projectMode || !window.electronAPI) return;
+
+    const loadRecentFiles = async () => {
+      try {
+        const files = await window.electronAPI.getRecentProjectFiles();
+        setRecentProjectFiles(files);
+      } catch (error) {
+        console.error('Failed to load recent project files:', error);
+      }
+    };
+
+    loadRecentFiles();
+  }, [projectMode, currentFilePath]); // Reload when current file changes
+
+  // Handle QuickOpen file selection
+  const handleQuickOpenFileSelect = useCallback(async (filePath: string) => {
+    await handleProjectFileSelect(filePath);
+    
+    // Add to recent files
+    if (window.electronAPI) {
+      window.electronAPI.addToProjectRecentFiles(filePath);
+    }
+  }, [handleProjectFileSelect]);
+
   // Autosave functionality
   useEffect(() => {
     // Clear any existing interval
@@ -583,6 +628,7 @@ export default function App() {
               currentFilePath={currentFilePath}
               onFileSelect={handleProjectFileSelect}
               onCloseProject={handleCloseProject}
+              onOpenQuickSearch={() => setIsQuickOpenVisible(true)}
             />
           </div>
           <div
@@ -661,6 +707,15 @@ export default function App() {
           />
         )}
       </div>
+      {projectMode && projectPath && (
+        <QuickOpen
+          isOpen={isQuickOpenVisible}
+          onClose={() => setIsQuickOpenVisible(false)}
+          projectPath={projectPath}
+          recentFiles={recentProjectFiles}
+          onFileSelect={handleQuickOpenFileSelect}
+        />
+      )}
     </div>
   );
 }
