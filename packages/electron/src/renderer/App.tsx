@@ -44,6 +44,9 @@ interface ElectronAPI {
   // Project operations
   getFolderContents: (dirPath: string) => Promise<FileTreeItem[]>;
   switchProjectFile: (filePath: string) => Promise<{ filePath: string; content: string } | null>;
+  // Settings
+  getSidebarWidth: () => Promise<number | null>;
+  setSidebarWidth: (width: number) => void;
 }
 
 declare global {
@@ -64,6 +67,7 @@ export default function App() {
   const [projectName, setProjectName] = useState<string | null>(null);
   const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
   const [theme, setTheme] = useState<ConfigTheme>('auto');
+  const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
@@ -71,6 +75,8 @@ export default function App() {
   const contentVersionRef = useRef<number>(0);
   const isInitializedRef = useRef<boolean>(false);
   const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const isResizingRef = useRef<boolean>(false);
 
   // Log mount/unmount
   useEffect(() => {
@@ -79,6 +85,137 @@ export default function App() {
       console.log('[RENDERER] App component unmounting at', new Date().toISOString());
     };
   }, []);
+
+  // Restore state during development HMR (only on mount)
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      // Restore state from session storage on mount
+      const savedState = sessionStorage.getItem('stravu-editor-dev-state');
+      if (savedState) {
+        try {
+          const state = JSON.parse(savedState);
+          console.log('[HMR] Restoring dev state:', state);
+          
+          // Restore the state
+          if (state.projectMode) {
+            setProjectMode(true);
+            setProjectPath(state.projectPath);
+            setProjectName(state.projectName);
+            setFileTree(state.fileTree || []);
+          }
+          
+          if (state.filePath) {
+            setCurrentFilePath(state.filePath);
+            setCurrentFileName(state.fileName);
+            setContent(state.content || '');
+            initialContentRef.current = state.content || '';
+            contentVersionRef.current += 1;
+            isInitializedRef.current = false;
+            
+            // Update the main process about the current file
+            if (window.electronAPI) {
+              window.electronAPI.setCurrentFile(state.filePath);
+            }
+          }
+          
+          if (state.sidebarWidth) {
+            setSidebarWidth(state.sidebarWidth);
+          }
+          
+          if (state.isDirty !== undefined) {
+            setIsDirty(state.isDirty);
+          }
+          
+          if (state.theme) {
+            setTheme(state.theme);
+          }
+          
+          // Clear the saved state
+          sessionStorage.removeItem('stravu-editor-dev-state');
+        } catch (error) {
+          console.error('[HMR] Failed to restore dev state:', error);
+        }
+      }
+    }
+  }, []); // Empty dependency array - only run on mount
+  
+  // Save state before HMR in development
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      const saveDevState = () => {
+        const state = {
+          projectMode,
+          projectPath,
+          projectName,
+          fileTree,
+          filePath: currentFilePath,
+          fileName: currentFileName,
+          content: getContentRef.current ? getContentRef.current() : content,
+          sidebarWidth: sidebarWidth,
+          isDirty: isDirty,
+          theme: theme
+        };
+        console.log('[HMR] Saving dev state:', state);
+        sessionStorage.setItem('stravu-editor-dev-state', JSON.stringify(state));
+      };
+      
+      // Save state on beforeunload (catches HMR)
+      window.addEventListener('beforeunload', saveDevState);
+      
+      return () => {
+        window.removeEventListener('beforeunload', saveDevState);
+      };
+    }
+  }, [projectMode, projectPath, projectName, fileTree, currentFilePath, currentFileName, content, sidebarWidth, isDirty, theme]);
+
+  // Load saved sidebar width on mount
+  useEffect(() => {
+    if (window.electronAPI) {
+      window.electronAPI.getSidebarWidth().then((width) => {
+        if (width) {
+          setSidebarWidth(width);
+        }
+      });
+    }
+  }, []);
+
+  // Handle sidebar resize
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      
+      const newWidth = Math.min(Math.max(150, e.clientX), 500);
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (!isResizingRef.current) return;
+      
+      isResizingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      
+      // Save the width
+      if (window.electronAPI) {
+        window.electronAPI.setSidebarWidth(sidebarWidth);
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [sidebarWidth]);
 
   // Apply theme to document
   useEffect(() => {
@@ -438,13 +575,42 @@ export default function App() {
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: projectMode ? 'row' : 'column' }}>
       {projectMode && projectName && (
-        <ProjectSidebar
-          projectName={projectName}
-          fileTree={fileTree}
-          currentFilePath={currentFilePath}
-          onFileSelect={handleProjectFileSelect}
-          onCloseProject={handleCloseProject}
-        />
+        <>
+          <div ref={sidebarRef} style={{ width: sidebarWidth, position: 'relative' }}>
+            <ProjectSidebar
+              projectName={projectName}
+              fileTree={fileTree}
+              currentFilePath={currentFilePath}
+              onFileSelect={handleProjectFileSelect}
+              onCloseProject={handleCloseProject}
+            />
+          </div>
+          <div
+            style={{
+              width: '5px',
+              cursor: 'col-resize',
+              backgroundColor: 'transparent',
+              position: 'relative',
+              zIndex: 10,
+              marginLeft: '-2.5px',
+              marginRight: '-2.5px'
+            }}
+            onMouseDown={handleMouseDown}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: '2px',
+                width: '1px',
+                backgroundColor: '#e5e7eb',
+                transition: 'background-color 0.2s'
+              }}
+              className="sidebar-resize-handle"
+            />
+          </div>
+        </>
       )}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {projectMode && !currentFilePath ? (

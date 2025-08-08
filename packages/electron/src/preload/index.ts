@@ -127,4 +127,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('project-file-tree-updated', handler);
     return () => ipcRenderer.removeListener('project-file-tree-updated', handler);
   },
+  
+  // Settings operations
+  getSidebarWidth: () => ipcRenderer.invoke('get-sidebar-width'),
+  setSidebarWidth: (width: number) => ipcRenderer.send('set-sidebar-width', width),
 });

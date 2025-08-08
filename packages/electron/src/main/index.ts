@@ -640,7 +640,7 @@ function startFileWatcher(window: BrowserWindow, filePath: string) {
         // Log what files are being watched after a short delay
         setTimeout(() => {
             const watched = watcher.getWatched();
-            console.log('[FILE_WATCHER] Currently watching:', watched);
+            // console.log('[FILE_WATCHER] Currently watching:', watched);
         }, 1000);
 
     } catch (error) {
@@ -740,9 +740,9 @@ function startProjectWatcher(window: BrowserWindow, projectPath: string) {
         });
 
         // Add raw event handler for debugging
-        watcher.on('raw', (event, path, details) => {
-            console.log('[PROJECT_WATCHER] Raw event:', event, path, details);
-        });
+        // watcher.on('raw', (event, path, details) => {
+        //     // console.log('[PROJECT_WATCHER] Raw event:', event, path, details);
+        // });
 
         projectWatchers.set(windowId, watcher);
         console.log('[PROJECT_WATCHER] Watcher stored for window:', windowId);
@@ -750,7 +750,7 @@ function startProjectWatcher(window: BrowserWindow, projectPath: string) {
         // Log what's being watched after a short delay
         setTimeout(() => {
             const watched = watcher.getWatched();
-            console.log('[PROJECT_WATCHER] Currently watching:', watched);
+            // console.log('[PROJECT_WATCHER] Currently watching:', watched);
         }, 2000);
 
     } catch (error) {
@@ -1770,4 +1770,13 @@ ipcMain.handle('show-in-finder', async (event, filePath: string) => {
         console.error('Error showing in finder:', error);
         return { success: false, error: error.message };
     }
+});
+
+// IPC handlers for settings
+ipcMain.handle('get-sidebar-width', () => {
+    return store.get('sidebarWidth', 250) as number;
+});
+
+ipcMain.on('set-sidebar-width', (event, width: number) => {
+    store.set('sidebarWidth', width);
 });

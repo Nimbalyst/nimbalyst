@@ -1,6 +1,6 @@
 /* Project Sidebar Styles */
 .project-sidebar {
-  width: 250px;
+  width: 100%;
   background-color: #f3f4f6;
   border-right: 1px solid #e5e7eb;
   display: flex;
@@ -380,4 +380,28 @@
 
 .crystal-dark-theme .project-file-tree::-webkit-scrollbar-thumb:hover {
   background-color: #6B7280;
+}
+
+/* Resize handle styles */
+.sidebar-resize-handle {
+  background-color: #e5e7eb !important;
+}
+
+.dark-theme .sidebar-resize-handle {
+  background-color: #4a4a4a !important;
+}
+
+.crystal-dark-theme .sidebar-resize-handle {
+  background-color: #374151 !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not(.light-theme):not(.dark-theme) .sidebar-resize-handle {
+    background-color: #374151 !important;
+  }
+}
+
+/* Hover effect for resize area */
+div[style*="col-resize"]:hover .sidebar-resize-handle {
+  background-color: #3b82f6 !important;
 }
