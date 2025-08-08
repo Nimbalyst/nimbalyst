@@ -19,6 +19,18 @@ export function ChatInput({ value, onChange, onSend, disabled }: ChatInputProps)
   }, [value]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+     // Handle Cmd+A / Ctrl+A for select all
+    if ((e.metaKey || e.ctrlKey) && e.key === 'a' && !e.shiftKey) {
+      e.stopPropagation(); // Prevent bubbling to global handlers
+      // Don't preventDefault - let the browser handle select all
+      const textarea = e.currentTarget;
+      setTimeout(() => {
+        textarea.select();
+      }, 0);
+      return;
+    }
+
+    // Handle Enter to send (Shift+Enter for new line)
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (value.trim() && !disabled) {

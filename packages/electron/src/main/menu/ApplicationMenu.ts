@@ -262,7 +262,18 @@ export function createApplicationMenu() {
                 { type: 'separator' },
                 { label: 'Cut', accelerator: 'CmdOrCtrl+X', role: 'cut' },
                 { label: 'Copy', accelerator: 'CmdOrCtrl+C', role: 'copy' },
-                { label: 'Paste', accelerator: 'CmdOrCtrl+V', role: 'paste' }
+                { label: 'Paste', accelerator: 'CmdOrCtrl+V', role: 'paste' },
+                { type: 'separator' },
+                { 
+                    label: 'View History...', 
+                    accelerator: 'CmdOrCtrl+Y',
+                    click: () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('view-history');
+                        }
+                    }
+                }
             ]
         },
         {

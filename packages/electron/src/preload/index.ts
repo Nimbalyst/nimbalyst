@@ -91,6 +91,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('show-about', callback);
     return () => ipcRenderer.removeListener('show-about', callback);
   },
+  onViewHistory: (callback: () => void) => {
+    ipcRenderer.on('view-history', callback);
+    return () => ipcRenderer.removeListener('view-history', callback);
+  },
 
   // Theme operations
   getTheme: () => ipcRenderer.invoke('get-theme'),

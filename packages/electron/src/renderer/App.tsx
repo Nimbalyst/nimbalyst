@@ -11,6 +11,7 @@ import { ProjectSidebar } from './components/ProjectSidebar';
 import { ProjectWelcome } from './components/ProjectWelcome';
 import { QuickOpen } from './components/QuickOpen';
 import { AIChat } from './components/AIChat';
+import { HistoryDialog } from './components/HistoryDialog';
 import './ProjectWelcome.css';
 
 // File tree interface
@@ -37,6 +38,7 @@ interface ElectronAPI {
   onProjectFileTreeUpdated: (callback: (data: { fileTree: FileTreeItem[]; addedPath?: string; removedPath?: string }) => void) => () => void;
   onThemeChange: (callback: (theme: string) => void) => () => void;
   onShowAbout: (callback: () => void) => () => void;
+  onViewHistory?: (callback: () => void) => () => void;
   openFile: () => Promise<{ filePath: string; content: string } | null>;
   saveFile: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
   saveFileAs: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
@@ -97,6 +99,7 @@ export default function App() {
   const [recentProjectFiles, setRecentProjectFiles] = useState<string[]>([]);
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
@@ -104,6 +107,8 @@ export default function App() {
   const contentVersionRef = useRef<number>(0);
   const isInitializedRef = useRef<boolean>(false);
   const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const autoSnapshotIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSnapshotContentRef = useRef<string>('');
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef<boolean>(false);
 
@@ -297,6 +302,41 @@ export default function App() {
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
         setIsDirty(false);
         initialContentRef.current = result.content;
+        
+        // Create automatic snapshot when opening file
+        if (window.electronAPI.history) {
+          try {
+            // Check if we have previous snapshots
+            const snapshots = await window.electronAPI.history.listSnapshots(result.filePath);
+            if (snapshots.length === 0) {
+              // First time opening this file, create initial snapshot
+              await window.electronAPI.history.createSnapshot(
+                result.filePath,
+                result.content,
+                'auto',
+                'Initial file open'
+              );
+            } else {
+              // Check if content changed since last snapshot
+              const latestSnapshot = snapshots[0]; // Assuming sorted by timestamp desc
+              const lastContent = await window.electronAPI.history.loadSnapshot(
+                result.filePath,
+                latestSnapshot.timestamp
+              );
+              if (lastContent !== result.content) {
+                // Content changed externally, create snapshot
+                await window.electronAPI.history.createSnapshot(
+                  result.filePath,
+                  result.content,
+                  'auto',
+                  'File changed externally'
+                );
+              }
+            }
+          } catch (error) {
+            console.error('Failed to create automatic snapshot:', error);
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to open file:', error);
@@ -401,6 +441,41 @@ export default function App() {
 
         // Update the current file in main process
         window.electronAPI.setCurrentFile(filePath);
+        
+        // Create automatic snapshot when switching to file
+        if (window.electronAPI.history) {
+          try {
+            // Check if we have previous snapshots
+            const snapshots = await window.electronAPI.history.listSnapshots(result.filePath);
+            if (snapshots.length === 0) {
+              // First time opening this file, create initial snapshot
+              await window.electronAPI.history.createSnapshot(
+                result.filePath,
+                result.content,
+                'auto',
+                'Initial file open'
+              );
+            } else {
+              // Check if content changed since last snapshot
+              const latestSnapshot = snapshots[0]; // Assuming sorted by timestamp desc
+              const lastContent = await window.electronAPI.history.loadSnapshot(
+                result.filePath,
+                latestSnapshot.timestamp
+              );
+              if (lastContent !== result.content) {
+                // Content changed externally, create snapshot
+                await window.electronAPI.history.createSnapshot(
+                  result.filePath,
+                  result.content,
+                  'auto',
+                  'File changed externally'
+                );
+              }
+            }
+          } catch (error) {
+            console.error('Failed to create automatic snapshot:', error);
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to switch project file:', error);
@@ -428,24 +503,37 @@ export default function App() {
 
   // Keyboard shortcuts
   useEffect(() => {
-    if (!projectMode) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
       // Cmd+E (Mac) or Ctrl+E (Windows/Linux) for Quick Open
-      if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+      if (projectMode && (e.metaKey || e.ctrlKey) && e.key === 'e') {
         e.preventDefault();
         setIsQuickOpenVisible(true);
       }
       // Cmd+Shift+A (Mac) or Ctrl+Shift+A (Windows/Linux) for AI Chat
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'a') {
+      if (projectMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'a') {
         e.preventDefault();
         setIsAIChatCollapsed(prev => !prev);
+      }
+      // Cmd+Y (Mac) or Ctrl+Y (Windows/Linux) for History
+      if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+        e.preventDefault();
+        // Save current state as manual snapshot before opening history
+        if (currentFilePath && getContentRef.current && window.electronAPI?.history) {
+          const content = getContentRef.current();
+          window.electronAPI.history.createSnapshot(
+            currentFilePath,
+            content,
+            'manual',
+            'Before viewing history'
+          );
+        }
+        setIsHistoryDialogOpen(true);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [projectMode]);
+  }, [projectMode, currentFilePath]);
 
   // Save AI Chat state when it changes
   useEffect(() => {
@@ -481,6 +569,16 @@ export default function App() {
       window.electronAPI.addToProjectRecentFiles(filePath);
     }
   }, [handleProjectFileSelect]);
+
+  // Handle restoring content from history
+  const handleRestoreFromHistory = useCallback((content: string) => {
+    contentVersionRef.current += 1;
+    isInitializedRef.current = false;
+    setContent(content);
+    setIsDirty(true);
+    // Close the history dialog
+    setIsHistoryDialogOpen(false);
+  }, []);
 
   // Autosave functionality
   useEffect(() => {
@@ -535,6 +633,53 @@ export default function App() {
     };
   }, [currentFilePath, isDirty]);
 
+  // Automatic snapshot functionality
+  useEffect(() => {
+    // Clear any existing interval
+    if (autoSnapshotIntervalRef.current) {
+      clearInterval(autoSnapshotIntervalRef.current);
+      autoSnapshotIntervalRef.current = null;
+    }
+
+    // Set up auto-snapshot if we have a file path
+    if (currentFilePath && getContentRef.current && window.electronAPI?.history) {
+      console.log('Starting auto-snapshot interval');
+      autoSnapshotIntervalRef.current = setInterval(async () => {
+        if (currentFilePath && getContentRef.current && window.electronAPI?.history) {
+          try {
+            const content = getContentRef.current();
+            // Only create snapshot if content changed since last snapshot
+            if (content !== lastSnapshotContentRef.current && content !== '') {
+              console.log('[AUTO-SNAPSHOT] Creating periodic snapshot');
+              await window.electronAPI.history.createSnapshot(
+                currentFilePath,
+                content,
+                'auto',
+                'Periodic auto-save'
+              );
+              lastSnapshotContentRef.current = content;
+            }
+          } catch (error) {
+            console.error('[AUTO-SNAPSHOT] Failed to create snapshot:', error);
+          }
+        }
+      }, 300000); // Create snapshot every 5 minutes
+    }
+
+    // Update last snapshot content when file changes
+    if (getContentRef.current) {
+      lastSnapshotContentRef.current = getContentRef.current();
+    }
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      if (autoSnapshotIntervalRef.current) {
+        clearInterval(autoSnapshotIntervalRef.current);
+        autoSnapshotIntervalRef.current = null;
+      }
+    };
+  }, [currentFilePath]);
+
   // Set up IPC listeners
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -562,7 +707,7 @@ export default function App() {
       contentVersionRef.current += 1;
       isInitializedRef.current = false;
     }));
-    cleanupFns.push(window.electronAPI.onFileOpenedFromOS((data) => {
+    cleanupFns.push(window.electronAPI.onFileOpenedFromOS(async (data) => {
       console.log('File opened from OS:', data.filePath);
       contentVersionRef.current += 1;
       isInitializedRef.current = false;
@@ -571,6 +716,41 @@ export default function App() {
       setCurrentFileName(data.filePath.split('/').pop() || data.filePath);
       setIsDirty(false);
       initialContentRef.current = data.content;
+      
+      // Create automatic snapshot when file is opened from OS
+      if (window.electronAPI.history) {
+        try {
+          // Check if we have previous snapshots
+          const snapshots = await window.electronAPI.history.listSnapshots(data.filePath);
+          if (snapshots.length === 0) {
+            // First time opening this file, create initial snapshot
+            await window.electronAPI.history.createSnapshot(
+              data.filePath,
+              data.content,
+              'auto',
+              'Initial file open'
+            );
+          } else {
+            // Check if content changed since last snapshot
+            const latestSnapshot = snapshots[0]; // Assuming sorted by timestamp desc
+            const lastContent = await window.electronAPI.history.loadSnapshot(
+              data.filePath,
+              latestSnapshot.timestamp
+            );
+            if (lastContent !== data.content) {
+              // Content changed externally, create snapshot
+              await window.electronAPI.history.createSnapshot(
+                data.filePath,
+                data.content,
+                'auto',
+                'File changed externally'
+              );
+            }
+          }
+        } catch (error) {
+          console.error('Failed to create automatic snapshot:', error);
+        }
+      }
     }));
     cleanupFns.push(window.electronAPI.onNewUntitledDocument((data) => {
       console.log('[RENDERER] Received new-untitled-document event:', data.untitledName);
@@ -644,6 +824,24 @@ export default function App() {
       console.log('Project file tree updated:', data);
       setFileTree(data.fileTree);
     }));
+    
+    // View history menu handler
+    if (window.electronAPI.onViewHistory) {
+      cleanupFns.push(window.electronAPI.onViewHistory(() => {
+        console.log('View history menu triggered');
+        // Save current state as manual snapshot before opening history
+        if (currentFilePath && getContentRef.current && window.electronAPI?.history) {
+          const content = getContentRef.current();
+          window.electronAPI.history.createSnapshot(
+            currentFilePath,
+            content,
+            'manual',
+            'Before viewing history'
+          );
+        }
+        setIsHistoryDialogOpen(true);
+      }));
+    }
 
     // Clean up listeners when dependencies change
     return () => {
@@ -774,6 +972,12 @@ export default function App() {
           onFileSelect={handleQuickOpenFileSelect}
         />
       )}
+      <HistoryDialog
+        isOpen={isHistoryDialogOpen}
+        onClose={() => setIsHistoryDialogOpen(false)}
+        filePath={currentFilePath}
+        onRestore={handleRestoreFromHistory}
+      />
     </div>
   );
 }
