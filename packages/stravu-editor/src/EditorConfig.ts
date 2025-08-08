@@ -18,8 +18,6 @@ export type Theme = 'light' | 'dark' | 'crystal-dark' | 'auto';
  *
  * - shouldUseLexicalContextMenu: Not implemented as pluggable (or that useful)
  *
- * - shouldAllowHighlightingWithBrackets: Just highlights content in brackets (e.g. [text]), not sure. Uses SpecialTextPlugin
- *
  *
  * Non markdown-safe table features
  * - tableCellBackgroundColor?: boolean;
