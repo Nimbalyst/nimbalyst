@@ -24,7 +24,6 @@ import {CollapsibleTitleNode} from '../plugins/CollapsiblePlugin/CollapsibleTitl
 import {EmojiNode} from '../plugins/EmojisPlugin/EmojiNode.tsx';
 import {ExcalidrawNode} from '../plugins/ExcalidrawPlugin/ExcalidrawNode';
 import {ImageNode} from '../plugins/ImagesPlugin/ImageNode';
-import {InlineImageNode} from '../plugins/InlineImagePlugin/InlineImageNode/InlineImageNode';
 import {LayoutContainerNode} from '../plugins/LayoutPlugin/LayoutContainerNode.ts';
 import {LayoutItemNode} from '../plugins/LayoutPlugin/LayoutItemNode.ts';
 import {PageBreakNode} from '../plugins/PageBreakPlugin/PageBreakNode';
@@ -45,7 +44,6 @@ const EditorNodes: Array<Klass<LexicalNode>> = [
   LinkNode,
   OverflowNode,
   ImageNode,
-  InlineImageNode,
   EmojiNode,
   ExcalidrawNode,
   HorizontalRuleNode,

@@ -47,7 +47,6 @@ import EmojisPlugin from './plugins/EmojisPlugin';
 import FloatingLinkEditorPlugin from './plugins/FloatingLinkEditorPlugin';
 import FloatingTextFormatToolbarPlugin from './plugins/FloatingTextFormatToolbarPlugin';
 import ImagesPlugin from './plugins/ImagesPlugin';
-import InlineImagePlugin from './plugins/InlineImagePlugin';
 import { LayoutPlugin } from './plugins/LayoutPlugin/LayoutPlugin';
 import LinkPlugin from './plugins/LinkPlugin';
 import MarkdownShortcutPlugin from './plugins/MarkdownShortcutPlugin';
@@ -298,7 +297,6 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             />
             <TableCellResizer />
             <ImagesPlugin />
-            <InlineImagePlugin />
             <LinkPlugin hasLinkAttributes={hasLinkAttributes} />
             <ClickableLinkPlugin disabled={isEditable} />
             <HorizontalRulePlugin />
