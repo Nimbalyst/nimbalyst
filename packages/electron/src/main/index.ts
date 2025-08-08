@@ -95,8 +95,16 @@ function clearRecentItems(type: 'projects' | 'documents') {
 
 // Function to update the application menu (will be called after recent items change)
 function updateApplicationMenu() {
-    const menu = createApplicationMenu();
-    Menu.setApplicationMenu(menu);
+    try {
+        const menu = createApplicationMenu();
+        Menu.setApplicationMenu(menu);
+
+        // Debug logging
+        const allWindows = BrowserWindow.getAllWindows();
+        const focusedWindow = BrowserWindow.getFocusedWindow();
+    } catch (error) {
+        console.error('[MENU] Error updating application menu:', error);
+    }
 }
 
 // Function to create About window
@@ -623,7 +631,7 @@ function startFileWatcher(window: BrowserWindow, filePath: string) {
         });
 
         watcher.on('raw', (event, path, details) => {
-            console.log('[FILE_WATCHER] Raw event:', event, path, details);
+            // console.log('[FILE_WATCHER] Raw event:', event, path, details);
         });
 
         fileWatchers.set(windowId, watcher);
@@ -660,7 +668,7 @@ function startProjectWatcher(window: BrowserWindow, projectPath: string) {
     stopProjectWatcher(windowId);
 
     console.log('[PROJECT_WATCHER] Starting project watcher for:', projectPath, 'window:', windowId);
-    
+
     // Debounce timer for file tree updates
     let updateTimer: NodeJS.Timeout | null = null;
     const debounceUpdate = () => {
@@ -738,7 +746,7 @@ function startProjectWatcher(window: BrowserWindow, projectPath: string) {
 
         projectWatchers.set(windowId, watcher);
         console.log('[PROJECT_WATCHER] Watcher stored for window:', windowId);
-        
+
         // Log what's being watched after a short delay
         setTimeout(() => {
             const watched = watcher.getWatched();
@@ -763,7 +771,8 @@ function stopProjectWatcher(windowId: number) {
 // Get focused window or create new one
 function getFocusedOrNewWindow(): BrowserWindow {
     const focusedWindow = BrowserWindow.getFocusedWindow();
-    if (focusedWindow && windows.has(focusedWindow.id)) {
+    // Ignore the about window when getting focused window
+    if (focusedWindow && focusedWindow !== aboutWindow && windows.has(focusedWindow.id)) {
         return focusedWindow;
     }
     return createWindow(false);
@@ -1155,6 +1164,11 @@ app.whenReady().then(() => {
         // Set initial native theme
         updateNativeTheme();
 
+        // Update menu periodically to catch any state changes
+        setInterval(() => {
+            updateApplicationMenu();
+        }, 1000);
+
         // Save session periodically (every 30 seconds)
         sessionSaveInterval = setInterval(() => {
             saveSessionState();
@@ -1263,11 +1277,11 @@ function createApplicationMenu() {
                 { type: 'separator' },
                 { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => {
                     const focused = BrowserWindow.getFocusedWindow();
-                    if (focused) focused.webContents.send('file-save');
+                    if (focused && focused !== aboutWindow) focused.webContents.send('file-save');
                 }},
                 { label: 'Save As', accelerator: 'CmdOrCtrl+Shift+S', click: () => {
                     const focused = BrowserWindow.getFocusedWindow();
-                    if (focused) focused.webContents.send('file-save-as');
+                    if (focused && focused !== aboutWindow) focused.webContents.send('file-save-as');
                 }},
                 { type: 'separator' },
                 { label: 'Close', accelerator: 'CmdOrCtrl+W', click: () => {
