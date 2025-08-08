@@ -335,12 +335,10 @@ export default function App() {
 
   // Handle close project
   const handleCloseProject = useCallback(async () => {
-    // Save current file if dirty
+    // Auto-save current file if dirty (no prompt needed with autosave)
     if (isDirty && getContentRef.current) {
-      const save = confirm('Do you want to save the current file before closing the project?');
-      if (save) {
-        await handleSave();
-      }
+      console.log('[CLOSE_PROJECT] Auto-saving current file before closing');
+      await handleSave();
     }
 
     // Close the window
@@ -351,12 +349,10 @@ export default function App() {
   const handleProjectFileSelect = useCallback(async (filePath: string) => {
     if (!window.electronAPI) return;
 
-    // Save current file if dirty
+    // Auto-save current file if dirty (no prompt needed with autosave)
     if (isDirty && getContentRef.current && currentFilePath && currentFilePath !== filePath) {
-      const save = confirm('Do you want to save the current file before switching?');
-      if (save) {
-        await handleSave();
-      }
+      console.log('[PROJECT_FILE_SELECT] Auto-saving current file before switching');
+      await handleSave();
     }
 
     try {
