@@ -34,7 +34,7 @@ npm run build
 - **Rich Text Editing**: Full-featured WYSIWYG editor with support for bold, italic, underline, strikethrough, and more
 - **Markdown Support**: Toggle between rich text and markdown source view with the markdown button in the toolbar
 - **Tables**: Create, edit, and manage tables with cell merging, background colors, and horizontal scrolling
-- **Code Blocks**: Syntax highlighting with support for multiple languages via Shiki
+- **Code Blocks**: Syntax highlighting with support for multiple languages via Prism.js
 - **Lists**: Ordered and unordered lists with nested indentation and checkboxes
 - **Images**: Inline and block images with drag-and-drop support
 - **Excalidraw**: Embedded drawing support
@@ -54,6 +54,35 @@ npm run build
 # Build library for production
 npm run build
 ```
+
+### Electron Development
+
+```bash
+# Build the stravu-editor library first
+npm run build
+
+# Navigate to electron package
+cd packages/electron
+
+# Build the Electron app
+npm run build
+
+# Run the Electron app in development
+npm run start
+
+# Create distributable (DMG, ZIP) - macOS only
+npm run dist
+```
+
+The Electron app features:
+- **Latest Electron version (37.x)** for improved performance and security
+- **Native About window** that respects the current theme
+- **Dark mode support** with automatic title bar theming
+- **Code highlighting** using Prism.js with full dark theme support
+- **Auto-save** functionality every 2 seconds
+- **File watching** for external changes with auto-reload
+- **Project mode** for working with entire folders
+- **Recent files** tracking in the application menu
 
 ### Playground Development
 
@@ -150,7 +179,6 @@ interface EditorConfig {
   isAutocomplete?: boolean;                 // Enable autocomplete (default: false)
   hasLinkAttributes?: boolean;              // Enable link attributes (default: false)
   isCodeHighlighted?: boolean;              // Enable code highlighting (default: true)
-  isCodeShiki?: boolean;                    // Use Shiki for highlighting (default: true)
   showTableOfContents?: boolean;            // Show table of contents (default: false)
   
   // File operations

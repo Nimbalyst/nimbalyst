@@ -28,10 +28,10 @@ export function ProjectSidebar({
 
   const filterFileTree = useCallback((items: FileTreeItem[]): FileTreeItem[] => {
     if (!searchQuery) return items;
-    
+
     const query = searchQuery.toLowerCase();
     const filtered: FileTreeItem[] = [];
-    
+
     for (const item of items) {
       if (item.type === 'file' && item.name.toLowerCase().includes(query)) {
         filtered.push(item);
@@ -45,7 +45,7 @@ export function ProjectSidebar({
         }
       }
     }
-    
+
     return filtered;
   }, [searchQuery]);
 
@@ -55,15 +55,9 @@ export function ProjectSidebar({
     <div className="project-sidebar">
       <div className="project-sidebar-header">
         <h3 className="project-name">{projectName}</h3>
-        <button
-          className="close-project-btn"
-          onClick={onCloseProject}
-          title="Close Project"
-        >
-          ×
-        </button>
+
       </div>
-      
+
       <div className="project-search">
         <input
           type="text"
@@ -73,7 +67,7 @@ export function ProjectSidebar({
           className="project-search-input"
         />
       </div>
-      
+
       <div className="project-file-tree">
         <FileTree
           items={filteredTree}

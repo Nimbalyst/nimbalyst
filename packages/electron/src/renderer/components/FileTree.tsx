@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { MaterialSymbol } from './MaterialSymbol';
+import { FileContextMenu } from './FileContextMenu';
 
 interface FileTreeItem {
   name: string;
@@ -28,6 +29,13 @@ function getFileIcon(fileName: string) {
 }
 
 export function FileTree({ items, currentFilePath, onFileSelect, level }: FileTreeProps) {
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    filePath: string;
+    fileName: string;
+    fileType: 'file' | 'directory';
+  } | null>(null);
   // Initialize expanded directories to show path to current file
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
     const initialExpanded = new Set<string>();
@@ -67,8 +75,49 @@ export function FileTree({ items, currentFilePath, onFileSelect, level }: FileTr
     });
   }, []);
 
+  const handleContextMenu = useCallback((e: React.MouseEvent, item: FileTreeItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      filePath: item.path,
+      fileName: item.name,
+      fileType: item.type
+    });
+  }, []);
+
+  const handleRename = useCallback(async (filePath: string, newName: string) => {
+    const result = await window.electronAPI.renameFile(filePath, newName);
+    if (!result.success) {
+      console.error('Failed to rename file:', result.error);
+    }
+  }, []);
+
+  const handleDelete = useCallback(async (filePath: string) => {
+    const result = await window.electronAPI.deleteFile(filePath);
+    if (!result.success) {
+      console.error('Failed to delete file:', result.error);
+    }
+  }, []);
+
+  const handleOpenInNewWindow = useCallback(async (filePath: string) => {
+    const result = await window.electronAPI.openFileInNewWindow(filePath);
+    if (!result.success) {
+      console.error('Failed to open in new window:', result.error);
+    }
+  }, []);
+
+  const handleShowInFinder = useCallback(async (filePath: string) => {
+    const result = await window.electronAPI.showInFinder(filePath);
+    if (!result.success) {
+      console.error('Failed to show in finder:', result.error);
+    }
+  }, []);
+
   return (
-    <ul className="file-tree" style={{ paddingLeft: level > 0 ? '16px' : '0' }}>
+    <>
+      <ul className="file-tree" style={{ paddingLeft: level > 0 ? '16px' : '0' }}>
       {items.map((item) => {
         const isExpanded = expandedDirs.has(item.path);
         
@@ -79,6 +128,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level }: FileTr
                 <div
                   className="file-tree-directory"
                   onClick={() => toggleDirectory(item.path)}
+                  onContextMenu={(e) => handleContextMenu(e, item)}
                 >
                   <span className="file-tree-chevron">
                     <MaterialSymbol 
@@ -107,6 +157,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level }: FileTr
               <div
                 className={`file-tree-file ${currentFilePath === item.path ? 'active' : ''}`}
                 onClick={() => onFileSelect(item.path)}
+                onContextMenu={(e) => handleContextMenu(e, item)}
               >
                 <span className="file-tree-spacer"></span>
                 <span className="file-tree-icon">
@@ -118,6 +169,21 @@ export function FileTree({ items, currentFilePath, onFileSelect, level }: FileTr
           </li>
         );
       })}
-    </ul>
+      </ul>
+      {contextMenu && (
+        <FileContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          filePath={contextMenu.filePath}
+          fileName={contextMenu.fileName}
+          fileType={contextMenu.fileType}
+          onClose={() => setContextMenu(null)}
+          onRename={handleRename}
+          onDelete={handleDelete}
+          onOpenInNewWindow={handleOpenInNewWindow}
+          onShowInFinder={handleShowInFinder}
+        />
+      )}
+    </>
   );
 }

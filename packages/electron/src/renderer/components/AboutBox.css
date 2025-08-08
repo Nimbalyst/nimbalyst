@@ -26,6 +26,10 @@
   border: 1px solid var(--border-color, #e0e0e0);
 }
 
+.logo-test {
+    background-color: rgba(129, 174, 211, 0.47);
+}
+
 .about-close {
   position: absolute;
   top: 16px;

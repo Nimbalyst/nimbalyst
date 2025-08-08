@@ -1,0 +1,196 @@
+.file-context-menu {
+  position: fixed;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  min-width: 200px;
+  z-index: 10000;
+  font-size: 13px;
+  backdrop-filter: blur(10px);
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.1s;
+  color: #1f2937;
+}
+
+.context-menu-item:hover {
+  background-color: #f3f4f6;
+}
+
+.context-menu-item-danger {
+  color: #dc2626;
+}
+
+.context-menu-item-danger:hover {
+  background-color: #fee2e2;
+}
+
+.context-menu-separator {
+  height: 1px;
+  background-color: #e5e7eb;
+  margin: 4px 8px;
+}
+
+.file-context-menu-rename {
+  padding: 8px;
+  min-width: 250px;
+  background: #ffffff;
+}
+
+.rename-input-container {
+  display: flex;
+  align-items: center;
+}
+
+.rename-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #3b82f6;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1f2937;
+  font-size: 13px;
+  outline: none;
+}
+
+.rename-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Dark theme support */
+.dark-theme .file-context-menu {
+  background: #1a1a1a;
+  border-color: #4a4a4a;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.dark-theme .file-context-menu-rename {
+  background: #1a1a1a;
+}
+
+.dark-theme .context-menu-item {
+  color: #ffffff;
+}
+
+.dark-theme .context-menu-item:hover {
+  background-color: #3a3a3a;
+}
+
+.dark-theme .context-menu-item-danger {
+  color: #ef4444;
+}
+
+.dark-theme .context-menu-item-danger:hover {
+  background-color: rgba(239, 68, 68, 0.2);
+}
+
+.dark-theme .context-menu-separator {
+  background-color: #4a4a4a;
+}
+
+.dark-theme .rename-input {
+  background: #2d2d2d;
+  border-color: #60a5fa;
+  color: #ffffff;
+}
+
+.dark-theme .rename-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+/* Crystal Dark theme */
+.crystal-dark-theme .file-context-menu {
+  background: #0F172A;
+  border-color: #374151;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+
+.crystal-dark-theme .file-context-menu-rename {
+  background: #0F172A;
+}
+
+.crystal-dark-theme .context-menu-item {
+  color: #F3F4F6;
+}
+
+.crystal-dark-theme .context-menu-item:hover {
+  background-color: #1F2837;
+}
+
+.crystal-dark-theme .context-menu-item-danger {
+  color: #EF4444;
+}
+
+.crystal-dark-theme .context-menu-item-danger:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+.crystal-dark-theme .context-menu-separator {
+  background-color: #374151;
+}
+
+.crystal-dark-theme .rename-input {
+  background: #1F2837;
+  border-color: #3B82F6;
+  color: #F3F4F6;
+}
+
+.crystal-dark-theme .rename-input:focus {
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+/* System preference dark mode */
+@media (prefers-color-scheme: dark) {
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .file-context-menu {
+    background: #111827;
+    border-color: #374151;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  }
+  
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .file-context-menu-rename {
+    background: #111827;
+  }
+  
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .context-menu-item {
+    color: #e5e7eb;
+  }
+  
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .context-menu-item:hover {
+    background-color: #1f2937;
+  }
+  
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .context-menu-item-danger {
+    color: #ef4444;
+  }
+  
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .context-menu-item-danger:hover {
+    background-color: rgba(239, 68, 68, 0.15);
+  }
+  
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .context-menu-separator {
+    background-color: #374151;
+  }
+  
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .rename-input {
+    background: #1f2937;
+    border-color: #3b82f6;
+    color: #f3f4f6;
+  }
+  
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .rename-input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  }
+}

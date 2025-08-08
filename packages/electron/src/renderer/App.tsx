@@ -9,7 +9,6 @@ import '../../../stravu-editor/dist/style.css';
 console.log('[RENDERER] StravuEditor imported at', new Date().toISOString());
 import { ProjectSidebar } from './components/ProjectSidebar';
 import { ProjectWelcome } from './components/ProjectWelcome';
-import { AboutBox } from './components/AboutBox';
 import './ProjectWelcome.css';
 
 // File tree interface
@@ -32,6 +31,8 @@ interface ElectronAPI {
   onToggleSearch: (callback: () => void) => () => void;
   onToggleSearchReplace: (callback: () => void) => () => void;
   onFileDeleted: (callback: (data: { filePath: string }) => void) => () => void;
+  onFileRenamed: (callback: (data: { oldPath: string; newPath: string }) => void) => () => void;
+  onProjectFileTreeUpdated: (callback: (data: { fileTree: FileTreeItem[]; addedPath?: string; removedPath?: string }) => void) => () => void;
   onThemeChange: (callback: (theme: string) => void) => () => void;
   onShowAbout: (callback: () => void) => () => void;
   openFile: () => Promise<{ filePath: string; content: string } | null>;
@@ -63,7 +64,6 @@ export default function App() {
   const [projectName, setProjectName] = useState<string | null>(null);
   const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
   const [theme, setTheme] = useState<ConfigTheme>('auto');
-  const [showAbout, setShowAbout] = useState(false);
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
@@ -389,8 +389,35 @@ export default function App() {
       setTheme(editorTheme as ConfigTheme);
       console.log('Editor theme set to:', editorTheme);
     }));
-    cleanupFns.push(window.electronAPI.onShowAbout(() => {
-      setShowAbout(true);
+    cleanupFns.push(window.electronAPI.onFileRenamed((data) => {
+      console.log('File renamed:', data);
+      
+      // Update file tree with the renamed file
+      const updateFileTree = (items: FileTreeItem[]): FileTreeItem[] => {
+        return items.map(item => {
+          if (item.path === data.oldPath) {
+            // Update the renamed item
+            const newFileName = data.newPath.split('/').pop() || data.newPath;
+            return { ...item, path: data.newPath, name: newFileName };
+          } else if (item.children) {
+            // Recursively update children
+            return { ...item, children: updateFileTree(item.children) };
+          }
+          return item;
+        });
+      };
+      
+      setFileTree(prevTree => updateFileTree(prevTree));
+      
+      // Update current file path if it was renamed
+      if (currentFilePath === data.oldPath) {
+        setCurrentFilePath(data.newPath);
+        setCurrentFileName(data.newPath.split('/').pop() || data.newPath);
+      }
+    }));
+    cleanupFns.push(window.electronAPI.onProjectFileTreeUpdated((data) => {
+      console.log('Project file tree updated:', data);
+      setFileTree(data.fileTree);
     }));
 
     // Clean up listeners when dependencies change
@@ -468,7 +495,6 @@ export default function App() {
           />
         )}
       </div>
-      <AboutBox isOpen={showAbout} onClose={() => setShowAbout(false)} />
     </div>
   );
 }

@@ -5,12 +5,15 @@
   "description": "Electron app for Stravu Editor",
   "main": "out/main/index.js",
   "scripts": {
+    "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "start": "electron .",
-    "dist": "electron-builder",
-    "clean": "rm -rf node_modules/.vite out dist",
-    " clean:dev": "rm -rf node_modules/.vite && npm run dev"
+    "postinstall": "electron-builder install-app-deps",
+    "build:unpack": "npm run build && electron-builder --dir",
+    "build:dist": "npm run build && electron-builder",
+    "build:mac": "npm run build && electron-builder --mac",
+    "build:win": "npm run build && electron-builder --win",
+    "build:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {
     "chokidar": "^3.6.0",
@@ -28,7 +31,8 @@
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.0",
     "typescript": "^5.0.0",
-    "vite": "^5.2.11"
+    "vite": "^5.2.11",
+    "vite-plugin-static-copy": "^3.1.1"
   },
   "build": {
     "appId": "com.stravu.editor",
@@ -58,7 +62,7 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "icon": "../../assets/crystal-editor-iconset/icon.iconset",
+      "icon": "icon.png",
       "fileAssociations": [
         {
           "ext": "md",

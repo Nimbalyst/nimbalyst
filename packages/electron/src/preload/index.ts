@@ -92,6 +92,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('show-about', callback);
   },
 
+  // Theme operations
+  getTheme: () => ipcRenderer.invoke('get-theme'),
+
   // File operations
   openFile: () => ipcRenderer.invoke('open-file'),
   saveFile: (content: string) => ipcRenderer.invoke('save-file', content),
@@ -105,4 +108,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Project operations
   getFolderContents: (dirPath: string) => ipcRenderer.invoke('get-folder-contents', dirPath),
   switchProjectFile: (filePath: string) => ipcRenderer.invoke('switch-project-file', filePath),
+  
+  // File context menu operations
+  renameFile: (oldPath: string, newName: string) => ipcRenderer.invoke('rename-file', oldPath, newName),
+  deleteFile: (filePath: string) => ipcRenderer.invoke('delete-file', filePath),
+  openFileInNewWindow: (filePath: string) => ipcRenderer.invoke('open-file-in-new-window', filePath),
+  showInFinder: (filePath: string) => ipcRenderer.invoke('show-in-finder', filePath),
+  
+  // File change event listeners
+  onFileRenamed: (callback: (data: { oldPath: string; newPath: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('file-renamed', handler);
+    return () => ipcRenderer.removeListener('file-renamed', handler);
+  },
+  
+  onProjectFileTreeUpdated: (callback: (data: { fileTree: any[]; addedPath?: string; removedPath?: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('project-file-tree-updated', handler);
+    return () => ipcRenderer.removeListener('project-file-tree-updated', handler);
+  },
 });

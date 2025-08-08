@@ -49,9 +49,11 @@ const windowStates = new Map<number, WindowState>();
 
 // File watchers management
 const fileWatchers = new Map<number, chokidar.FSWatcher>();
+const projectWatchers = new Map<number, chokidar.FSWatcher>();
 
 let pendingFilePath: string | null = null;
 let windowIdCounter = 0;
+let aboutWindow: BrowserWindow | null = null;
 
 // Window position offset for cascading
 const WINDOW_CASCADE_OFFSET = 25;
@@ -95,6 +97,48 @@ function clearRecentItems(type: 'projects' | 'documents') {
 function updateApplicationMenu() {
     const menu = createApplicationMenu();
     Menu.setApplicationMenu(menu);
+}
+
+// Function to create About window
+function createAboutWindow() {
+    if (aboutWindow && !aboutWindow.isDestroyed()) {
+        aboutWindow.focus();
+        return;
+    }
+
+    const currentTheme = store.get('theme', 'system') as string;
+    const isDarkTheme = nativeTheme.shouldUseDarkColors || currentTheme === 'dark' || currentTheme === 'crystal-dark';
+
+    aboutWindow = new BrowserWindow({
+        width: 650,
+        height: 650,
+        resizable: false,
+        minimizable: false,
+        maximizable: false,
+        fullscreenable: false,
+        title: 'About Stravu Editor',
+        show: false,
+        backgroundColor: isDarkTheme ? '#2a2a2a' : '#ffffff',
+        titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+        webPreferences: {
+            preload: join(__dirname, '../preload/index.js'),
+            nodeIntegration: false,
+            contextIsolation: true
+        }
+    });
+
+    // Load the about.html file
+    aboutWindow.loadFile(join(__dirname, '../../about.html'));
+
+    aboutWindow.once('ready-to-show', () => {
+        aboutWindow?.show();
+        // Send initial theme
+        aboutWindow?.webContents.send('theme-change', currentTheme);
+    });
+
+    aboutWindow.on('closed', () => {
+        aboutWindow = null;
+    });
 }
 
 // Function to update native theme
@@ -150,6 +194,12 @@ function updateWindowTitleBars() {
             window.setTitleBarOverlay(titleBarColor);
         }
     });
+
+    // Update About window if it exists
+    if (aboutWindow && !aboutWindow.isDestroyed()) {
+        aboutWindow.setBackgroundColor(isDarkTheme ? '#2a2a2a' : '#ffffff');
+        aboutWindow.webContents.send('theme-change', currentTheme);
+    }
 }
 
 // Save session state
@@ -211,6 +261,27 @@ function restoreSessionState() {
                     // Restore project window
                     const window = createWindow(false, true, sessionWindow.projectPath, sessionWindow.bounds);
                     console.log('[SESSION] Restored project window:', sessionWindow.projectPath);
+
+                    // If there was a file open in the project, restore it
+                    if (sessionWindow.filePath && existsSync(sessionWindow.filePath)) {
+                        window.once('ready-to-show', () => {
+                            // Wait a bit for the project to load
+                            setTimeout(() => {
+                                window.webContents.send('file-opened-from-os', {
+                                    filePath: sessionWindow.filePath,
+                                    content: readFileSync(sessionWindow.filePath, 'utf-8')
+                                });
+
+                                // Update window state
+                                const windowId = window.id;
+                                const state = windowStates.get(windowId);
+                                if (state) {
+                                    state.filePath = sessionWindow.filePath;
+                                }
+                            }, 500);
+                        });
+                        console.log('[SESSION] Restored file in project:', sessionWindow.filePath);
+                    }
                 } else {
                     console.log('[SESSION] Project path no longer exists:', sessionWindow.projectPath);
                 }
@@ -581,6 +652,114 @@ function stopFileWatcher(windowId: number) {
     }
 }
 
+// Start watching a project directory for changes
+function startProjectWatcher(window: BrowserWindow, projectPath: string) {
+    const windowId = window.id;
+
+    // Stop any existing project watcher for this window
+    stopProjectWatcher(windowId);
+
+    console.log('[PROJECT_WATCHER] Starting project watcher for:', projectPath, 'window:', windowId);
+    
+    // Debounce timer for file tree updates
+    let updateTimer: NodeJS.Timeout | null = null;
+    const debounceUpdate = () => {
+        if (updateTimer) {
+            clearTimeout(updateTimer);
+        }
+        updateTimer = setTimeout(() => {
+            const fileTree = getFolderContents(projectPath);
+            window.webContents.send('project-file-tree-updated', { fileTree });
+        }, 300); // Wait 300ms after last change before updating
+    };
+
+    try {
+        const watcher = chokidar.watch(projectPath, {
+            persistent: true,
+            ignoreInitial: true,
+            ignored: [
+                /(^|[\/\\])\../, // ignore dotfiles
+                /node_modules/,
+                /dist/,
+                /build/
+            ],
+            depth: 99, // watch deeply nested directories
+            usePolling: true,  // Use polling for reliability
+            interval: 2000,    // Check every 2 seconds
+            binaryInterval: 2000,
+            awaitWriteFinish: {
+                stabilityThreshold: 300,
+                pollInterval: 100
+            }
+        });
+
+        watcher.on('ready', () => {
+            console.log('[PROJECT_WATCHER] Watcher ready for:', projectPath);
+        });
+
+        watcher.on('add', (path) => {
+            console.log('[PROJECT_WATCHER] File added:', path);
+            // Debounce the update to handle rapid changes
+            debounceUpdate();
+        });
+
+        // Watch for file changes (which includes renames)
+        watcher.on('change', (path) => {
+            console.log('[PROJECT_WATCHER] File changed:', path);
+            // Don't update tree on content changes, only structure changes
+        });
+
+        watcher.on('addDir', (path) => {
+            console.log('[PROJECT_WATCHER] Directory added:', path);
+            // Debounce the update to handle rapid changes
+            debounceUpdate();
+        });
+
+        watcher.on('unlink', (path) => {
+            console.log('[PROJECT_WATCHER] File removed:', path);
+            // Debounce the update to handle rapid changes
+            debounceUpdate();
+        });
+
+        watcher.on('unlinkDir', (path) => {
+            console.log('[PROJECT_WATCHER] Directory removed:', path);
+            // Debounce the update to handle rapid changes
+            debounceUpdate();
+        });
+
+        watcher.on('error', (error) => {
+            console.error('[PROJECT_WATCHER] Project watcher error:', error);
+        });
+
+        // Add raw event handler for debugging
+        watcher.on('raw', (event, path, details) => {
+            console.log('[PROJECT_WATCHER] Raw event:', event, path, details);
+        });
+
+        projectWatchers.set(windowId, watcher);
+        console.log('[PROJECT_WATCHER] Watcher stored for window:', windowId);
+        
+        // Log what's being watched after a short delay
+        setTimeout(() => {
+            const watched = watcher.getWatched();
+            console.log('[PROJECT_WATCHER] Currently watching:', watched);
+        }, 2000);
+
+    } catch (error) {
+        console.error('[PROJECT_WATCHER] Failed to create watcher:', error);
+    }
+}
+
+// Stop watching a project directory
+function stopProjectWatcher(windowId: number) {
+    const watcher = projectWatchers.get(windowId);
+    if (watcher) {
+        console.log('[PROJECT_WATCHER] Stopping project watcher for window:', windowId);
+        watcher.close();
+        projectWatchers.delete(windowId);
+    }
+}
+
 // Get focused window or create new one
 function getFocusedOrNewWindow(): BrowserWindow {
     const focusedWindow = BrowserWindow.getFocusedWindow();
@@ -624,8 +803,8 @@ function createWindow(isOpeningFile: boolean = false, isProjectMode: boolean = f
         let icon;
         try {
             if (process.platform === 'darwin') {
-                // On macOS in dev, we need to use a PNG file, not the iconset
-                const iconPath = join(__dirname, '../../../../assets/crystal-editor-iconset/icon.iconset/icon_512x512.png');
+                // On macOS in dev, we need to use a PNG file
+                const iconPath = join(__dirname, '../../icon.png');
                 console.log('Window icon path:', iconPath);
                 if (existsSync(iconPath)) {
                     icon = nativeImage.createFromPath(iconPath);
@@ -778,6 +957,7 @@ function createWindow(isOpeningFile: boolean = false, isProjectMode: boolean = f
             windows.delete(windowId);
             windowStates.delete(windowId);
             stopFileWatcher(windowId);
+            stopProjectWatcher(windowId);
             // Update menu to reflect window closure
             updateApplicationMenu();
         });
@@ -808,6 +988,8 @@ function createWindow(isOpeningFile: boolean = false, isProjectMode: boolean = f
                         projectName: basename(projectPath),
                         fileTree
                     });
+                    // Start watching the project directory for changes
+                    startProjectWatcher(window, projectPath);
                 }, 100);
             } else if (!pendingFilePath && !isOpeningFile) {
                 // This is a new untitled document
@@ -942,7 +1124,7 @@ app.whenReady().then(() => {
     try {
         // Set dock icon for macOS
         if (process.platform === 'darwin' && app.dock) {
-            const iconPath = join(__dirname, '../../../../assets/crystal-editor-iconset/icon.iconset/icon_512x512.png');
+            const iconPath = join(__dirname, '../../icon.png');
             console.log('Looking for icon at:', iconPath);
             if (existsSync(iconPath)) {
                 const dockIcon = nativeImage.createFromPath(iconPath);
@@ -1233,10 +1415,7 @@ function createApplicationMenu() {
                 {
                     label: 'About Stravu Editor',
                     click: () => {
-                        const focused = BrowserWindow.getFocusedWindow();
-                        if (focused) {
-                            focused.webContents.send('show-about');
-                        }
+                        createAboutWindow();
                     }
                 },
                 { type: 'separator' },
@@ -1259,10 +1438,7 @@ function createApplicationMenu() {
                 {
                     label: 'About Stravu Editor',
                     click: () => {
-                        const focused = BrowserWindow.getFocusedWindow();
-                        if (focused) {
-                            focused.webContents.send('show-about');
-                        }
+                        createAboutWindow();
                     }
                 }
             ]
@@ -1448,6 +1624,11 @@ ipcMain.handle('get-folder-contents', (event, dirPath: string) => {
     return getFolderContents(dirPath);
 });
 
+// IPC handler for getting current theme
+ipcMain.handle('get-theme', () => {
+    return store.get('theme', 'system') as string;
+});
+
 
 // IPC handler for switching files within a project
 ipcMain.handle('switch-project-file', async (event, filePath: string) => {
@@ -1481,5 +1662,98 @@ ipcMain.handle('switch-project-file', async (event, filePath: string) => {
     } catch (error) {
         console.error('Error switching project file:', error);
         return null;
+    }
+});
+
+// IPC handlers for file context menu operations
+ipcMain.handle('rename-file', async (event, oldPath: string, newName: string) => {
+    const { rename } = require('fs').promises;
+    const { dirname, join } = require('path');
+
+    try {
+        const newPath = join(dirname(oldPath), newName);
+        await rename(oldPath, newPath);
+
+        // Update windows that have this file open
+        for (const [windowId, window] of windows) {
+            const state = windowStates.get(windowId);
+            if (state?.filePath === oldPath) {
+                state.filePath = newPath;
+                // Update represented filename for macOS
+                if (process.platform === 'darwin') {
+                    window.setRepresentedFilename(newPath);
+                }
+            }
+        }
+
+        // Notify all windows about the file rename
+        BrowserWindow.getAllWindows().forEach(window => {
+            window.webContents.send('file-renamed', { oldPath, newPath });
+        });
+
+        return { success: true, newPath };
+    } catch (error: any) {
+        console.error('Error renaming file:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('delete-file', async (event, filePath: string) => {
+    const { unlink, rmdir, stat, rm } = require('fs').promises;
+
+    try {
+        const stats = await stat(filePath);
+
+        if (stats.isDirectory()) {
+            // For directories, use recursive removal
+            await rm(filePath, { recursive: true, force: true });
+        } else {
+            await unlink(filePath);
+        }
+
+        // Close windows that have this file open
+        for (const [windowId, window] of windows) {
+            const state = windowStates.get(windowId);
+            if (state?.filePath === filePath) {
+                // Clear the file path for this window
+                state.filePath = null;
+                state.documentEdited = false;
+            }
+        }
+
+        // Notify all windows about the file deletion
+        BrowserWindow.getAllWindows().forEach(window => {
+            window.webContents.send('file-deleted', { filePath });
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('Error deleting file:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('open-file-in-new-window', async (event, filePath: string) => {
+    try {
+        const newWindow = createWindow(true, false);
+        newWindow.once('ready-to-show', () => {
+            loadFileIntoWindow(newWindow, filePath);
+        });
+        return { success: true };
+    } catch (error: any) {
+        console.error('Error opening file in new window:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('show-in-finder', async (event, filePath: string) => {
+    const { shell } = require('electron');
+
+    try {
+        shell.showItemInFolder(filePath);
+        return { success: true };
+    } catch (error: any) {
+        console.error('Error showing in finder:', error);
+        return { success: false, error: error.message };
     }
 });

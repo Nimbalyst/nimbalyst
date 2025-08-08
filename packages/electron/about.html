@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About Stravu Editor</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background: #f5f5f5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      .about-container {
+        background: white;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 40px;
+        box-sizing: border-box;
+      }
+
+      .about-icon {
+        width: 100px;
+        height: 100px;
+        margin-bottom: 25px;
+      }
+      
+      .about-icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+
+      .about-title {
+        font-size: 32px;
+        font-weight: 600;
+        margin: 0 0 10px 0;
+        color: #1a1a1a;
+      }
+
+      .about-version {
+        font-size: 18px;
+        color: #666;
+        margin: 0 0 35px 0;
+      }
+
+      .about-description {
+        font-size: 16px;
+        line-height: 1.6;
+        color: #444;
+        max-width: 450px;
+        margin: 0 auto 35px;
+      }
+
+      .about-features {
+        text-align: left;
+        margin: 0 auto 30px;
+        max-width: 300px;
+      }
+
+      .about-features h3 {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0 0 15px 0;
+        color: #333;
+      }
+
+      .about-features ul {
+        margin: 0;
+        padding: 0 0 0 20px;
+        font-size: 15px;
+        color: #555;
+        line-height: 1.8;
+      }
+
+      .about-footer {
+        font-size: 14px;
+        color: #666;
+      }
+
+      .about-footer p {
+        margin: 5px 0;
+      }
+
+      /* Dark theme support */
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #1a1a1a;
+        }
+
+        .about-container {
+          background: #2a2a2a;
+          color: #e0e0e0;
+        }
+
+        .about-title {
+          color: #f0f0f0;
+        }
+
+        .about-version {
+          color: #aaa;
+        }
+
+        .about-description {
+          color: #ccc;
+        }
+
+        .about-features h3 {
+          color: #ddd;
+        }
+
+        .about-features ul {
+          color: #bbb;
+        }
+
+        .about-footer {
+          color: #999;
+        }
+      }
+
+      /* Manual theme classes */
+      body.dark-theme {
+        background: #1a1a1a;
+      }
+
+      body.dark-theme .about-container {
+        background: #2a2a2a;
+        color: #e0e0e0;
+      }
+
+      body.dark-theme .about-title {
+        color: #f0f0f0;
+      }
+
+      body.dark-theme .about-version {
+        color: #aaa;
+      }
+
+      body.dark-theme .about-description {
+        color: #ccc;
+      }
+
+      body.dark-theme .about-features h3 {
+        color: #ddd;
+      }
+
+      body.dark-theme .about-features ul {
+        color: #bbb;
+      }
+
+      body.dark-theme .about-footer {
+        color: #999;
+      }
+
+      body.crystal-dark-theme {
+        background: #0f0f0f;
+      }
+
+      body.crystal-dark-theme .about-container {
+        background: #1a1a1a;
+        color: #e0e0e0;
+      }
+
+      body.crystal-dark-theme .about-title {
+        color: #f0f0f0;
+      }
+
+      body.crystal-dark-theme .about-version {
+        color: #aaa;
+      }
+
+      body.crystal-dark-theme .about-description {
+        color: #ccc;
+      }
+
+      body.crystal-dark-theme .about-features h3 {
+        color: #ddd;
+      }
+
+      body.crystal-dark-theme .about-features ul {
+        color: #bbb;
+      }
+
+      body.crystal-dark-theme .about-footer {
+        color: #999;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="about-container">
+      <div class="about-icon">
+        <img src="icon.png" alt="Stravu Editor">
+      </div>
+      <h1 class="about-title">Stravu Editor</h1>
+      <p class="about-version">Version 0.33.1</p>
+      
+      <p class="about-description">
+        A powerful rich text editor built with Meta's Lexical framework.
+        Features comprehensive editing capabilities including tables,
+        collaboration, code highlighting, and extensible plugins.
+      </p>
+
+      <div class="about-features">
+        <h3>Key Features</h3>
+        <ul>
+          <li>Rich text editing of Markdown</li>
+          <li>Table support with advanced editing</li>
+          <li>Code syntax highlighting</li>
+          <li>Multiple themes including dark mode</li>
+        </ul>
+      </div>
+
+      <div class="about-footer">
+        <p>Built with ❤️ by Stravu</p>
+        <p class="about-copyright">© 2025 Stravu Editor</p>
+      </div>
+    </div>
+
+    <script>
+      // Apply theme from main window
+      window.electronAPI?.onThemeChange((theme) => {
+        const body = document.body;
+        body.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
+        
+        if (theme === 'dark') {
+          body.classList.add('dark-theme');
+        } else if (theme === 'light') {
+          body.classList.add('light-theme');
+        } else if (theme === 'crystal-dark') {
+          body.classList.add('crystal-dark-theme');
+        }
+      });
+
+      // Request initial theme
+      window.electronAPI?.getTheme?.().then(theme => {
+        if (theme === 'dark') {
+          document.body.classList.add('dark-theme');
+        } else if (theme === 'crystal-dark') {
+          document.body.classList.add('crystal-dark-theme');
+        }
+      });
+    </script>
+  </body>
+</html>

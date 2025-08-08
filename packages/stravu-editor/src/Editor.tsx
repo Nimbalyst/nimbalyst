@@ -184,12 +184,22 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     if (!config.initialContent) return;
 
     editor.update(() => {
+        console.log("Loading initial content");
       const root = $getRoot();
       root.clear();
       if (config.initialContent?.trim()) {
         $convertFromMarkdownString(config.initialContent, PLAYGROUND_TRANSFORMERS, undefined, true);
+        root.selectStart();
       }
-    });
+    }, {discrete: true});
+
+    // TODO GH: This is bad, why do we have to move selection after load? Something is being stupid
+    // something is setting the selection in a code node for reasons I don't understand
+    setTimeout(()=> {
+        editor.update(() => {
+            $getRoot().selectStart();
+        });
+    },100);
   }, [config.initialContent, editor]);
 
 
@@ -235,7 +245,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
           !isRichText ? 'plain-text' : ''
         }`}>
         <DragDropPaste />
-        <AutoFocusPlugin />
+        {/*<AutoFocusPlugin defaultSelection={'rootStart'}/>*/}
         {selectionAlwaysOnDisplay && <SelectionAlwaysOnDisplay />}
         <ClearEditorPlugin />
         <ComponentPickerPlugin />

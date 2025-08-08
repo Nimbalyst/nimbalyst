@@ -242,7 +242,8 @@ export const TABLE: ElementTransformer = {
       parentNode.replace(table);
     }
 
-    table.selectEnd();
+    // TODO GH: Why is this here? Bad!
+    // table.selectEnd();
   },
   type: 'element',
 };

@@ -1,5 +1,4 @@
 import React from 'react';
-import { MaterialSymbol } from './MaterialSymbol';
 
 interface ProjectWelcomeProps {
   projectName: string;
@@ -9,8 +8,10 @@ export function ProjectWelcome({ projectName }: ProjectWelcomeProps) {
   return (
     <div className="project-welcome">
       <div className="project-welcome-content">
-        <MaterialSymbol icon="folder_open" size={64} className="project-welcome-icon" />
-        <h1 className="project-welcome-title">Welcome to {projectName}</h1>
+        <div className="project-welcome-icon">
+          <img src="../../../icon.png" alt="Stravu Editor" />
+        </div>
+        <h1 className="project-welcome-title">{projectName}</h1>
         <p className="project-welcome-text">
           Select a file from the sidebar to start editing
         </p>

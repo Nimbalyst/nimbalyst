@@ -2,6 +2,7 @@ import { resolve } from 'path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import viteStravuPlugin from '../shared/viteStravuPlugin'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
 
 // Custom plugin to exclude Excalidraw locales and optimize imports (copied from stravu-editor)
 // Plugin to optimize Shiki language imports
@@ -84,6 +85,7 @@ export default defineConfig({
   main: {
     build: {
       target: 'node16',
+      sourcemap: true,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts')
@@ -94,6 +96,7 @@ export default defineConfig({
   preload: {
     build: {
       target: 'node16',
+      sourcemap: true,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/preload/index.ts')
@@ -103,13 +106,31 @@ export default defineConfig({
   },
   renderer: {
     root: 'src/renderer',
-    plugins: [viteStravuPlugin(), react(), optimizeExcalidrawPlugin(), optimizeShikiPlugin()],
+    plugins: [
+      viteStravuPlugin(), 
+      react(), 
+      optimizeExcalidrawPlugin(), 
+      optimizeShikiPlugin(),
+      viteStaticCopy({
+        targets: [
+          {
+            src: resolve(__dirname, 'icon.png'),
+            dest: ''
+          },
+          {
+            src: resolve(__dirname, 'about.html'),
+            dest: ''
+          }
+        ]
+      })
+    ],
     server: {
       port: 5273,
       strictPort: true
     },
     build: {
       target: 'chrome109',
+      sourcemap: true,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html')
