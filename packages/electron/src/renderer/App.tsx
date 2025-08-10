@@ -42,6 +42,7 @@ interface ElectronAPI {
   onThemeChange: (callback: (theme: string) => void) => () => void;
   onShowAbout: (callback: () => void) => () => void;
   onViewHistory?: (callback: () => void) => () => void;
+  onLoadSessionFromManager?: (callback: (data: { sessionId: string; projectPath?: string }) => void) => () => void;
   onShowPreferences?: (callback: () => void) => () => void;
   openFile: () => Promise<{ filePath: string; content: string } | null>;
   saveFile: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
@@ -106,6 +107,7 @@ export default function App() {
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
+  const [sessionToLoad, setSessionToLoad] = useState<{ sessionId: string; projectPath?: string } | null>(null);
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
@@ -873,6 +875,30 @@ export default function App() {
       setFileTree(data.fileTree);
     }));
 
+    // Load session from Session Manager
+    if (window.electronAPI.onLoadSessionFromManager) {
+      cleanupFns.push(window.electronAPI.onLoadSessionFromManager(async (data: { sessionId: string; projectPath?: string }) => {
+        console.log('Loading session from manager:', data);
+        
+        // If there's a project path and we're not in project mode, open the project first
+        if (data.projectPath && !projectMode) {
+          // Open the project
+          const projectName = data.projectPath.split('/').pop() || 'Project';
+          const fileTree = await window.electronAPI.getFolderContents(data.projectPath);
+          setProjectMode(true);
+          setProjectPath(data.projectPath);
+          setProjectName(projectName);
+          setFileTree(fileTree);
+        }
+        
+        // Set the session to load - AIChat will pick this up
+        setSessionToLoad(data);
+        
+        // Make sure AI Chat is visible
+        setIsAIChatCollapsed(false);
+      }));
+    }
+
     // View history menu handler
     if (window.electronAPI.onViewHistory) {
       cleanupFns.push(window.electronAPI.onViewHistory(() => {
@@ -1010,6 +1036,8 @@ export default function App() {
           width={aiChatWidth}
           onWidthChange={setAIChatWidth}
           projectPath={projectPath || undefined}
+          sessionToLoad={sessionToLoad}
+          onSessionLoaded={() => setSessionToLoad(null)}
           documentContext={{
             filePath: currentFilePath || '',
             fileType: 'markdown',

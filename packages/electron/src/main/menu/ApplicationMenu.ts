@@ -3,8 +3,9 @@ import { basename } from 'path';
 import { existsSync } from 'fs';
 import { windows, windowStates, createWindow, findWindowByFilePath } from '../window/WindowManager';
 import { createAboutWindow } from '../window/AboutWindow';
+import { createSessionManagerWindow } from '../window/SessionManagerWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
-import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store } from '../utils/store';
+import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getProjectWindowState } from '../utils/store';
 import { updateWindowTitleBars } from '../theme/ThemeManager';
 import { getFileWatcherStatus, refreshProjectFileTree } from '../file/FileWatcherDebug';
 import { getFolderContents } from '../utils/FileTree';
@@ -78,8 +79,18 @@ function createRecentSubmenu(): any[] {
                 click: () => {
                     // Check if project exists
                     if (existsSync(project.path)) {
-                        // Create a new window in project mode
-                        createWindow(false, true, project.path);
+                        // Check for saved project window state
+                        const savedState = getProjectWindowState(project.path);
+                        
+                        // Create window with saved bounds if available
+                        const window = createWindow(false, true, project.path, savedState?.bounds);
+                        
+                        // Restore dev tools if they were open
+                        if (savedState?.devToolsOpen) {
+                            window.webContents.once('did-finish-load', () => {
+                                window.webContents.openDevTools();
+                            });
+                        }
                     } else {
                         // Remove from recent if doesn't exist
                         const items = getRecentItems('projects').filter(item => item.path !== project.path);
@@ -213,8 +224,19 @@ export function createApplicationMenu() {
                             const projectPath = result.filePaths[0];
                             // Add to recent projects
                             addToRecentItems('projects', projectPath, basename(projectPath));
-                            // Create a new window in project mode
-                            createWindow(false, true, projectPath);
+                            
+                            // Check for saved project window state
+                            const savedState = getProjectWindowState(projectPath);
+                            
+                            // Create window with saved bounds if available
+                            const window = createWindow(false, true, projectPath, savedState?.bounds);
+                            
+                            // Restore dev tools if they were open
+                            if (savedState?.devToolsOpen) {
+                                window.webContents.once('did-finish-load', () => {
+                                    window.webContents.openDevTools();
+                                });
+                            }
                         }
                     }
                 },
@@ -410,6 +432,14 @@ export function createApplicationMenu() {
                             }
                         }
                     ]
+                },
+                { type: 'separator' },
+                {
+                    label: 'Session Manager',
+                    accelerator: 'CmdOrCtrl+Alt+S',
+                    click: () => {
+                        createSessionManagerWindow();
+                    }
                 },
                 { type: 'separator' },
                 { label: 'Minimize', role: 'minimize' },

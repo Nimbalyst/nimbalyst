@@ -22,6 +22,7 @@ export interface SessionWindow {
         height: number;
     };
     focusOrder?: number; // Track window focus order (higher = more recently focused)
+    devToolsOpen?: boolean; // Track if developer tools are open
 }
 
 export interface SessionState {

@@ -44,24 +44,24 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
   const [dragOverItem, setDragOverItem] = useState<string | null>(null);
   const [isDragCopy, setIsDragCopy] = useState(false);
   
+  // Helper function to find parent directories of a file
+  const findParentDirs = useCallback((items: FileTreeItem[], targetPath: string, parents: string[] = []): string[] | null => {
+    for (const item of items) {
+      if (item.type === 'file' && item.path === targetPath) {
+        return parents;
+      } else if (item.type === 'directory' && item.children) {
+        const result = findParentDirs(item.children, targetPath, [...parents, item.path]);
+        if (result) return result;
+      }
+    }
+    return null;
+  }, []);
+  
   // Initialize expanded directories to show path to current file
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
     const initialExpanded = new Set<string>();
     
     if (currentFilePath && level === 0) {
-      // Find all parent directories of the current file
-      const findParentDirs = (items: FileTreeItem[], targetPath: string, parents: string[] = []): string[] | null => {
-        for (const item of items) {
-          if (item.type === 'file' && item.path === targetPath) {
-            return parents;
-          } else if (item.type === 'directory' && item.children) {
-            const result = findParentDirs(item.children, targetPath, [...parents, item.path]);
-            if (result) return result;
-          }
-        }
-        return null;
-      };
-      
       const parentDirs = findParentDirs(items, currentFilePath);
       if (parentDirs) {
         parentDirs.forEach(dir => initialExpanded.add(dir));
@@ -70,6 +70,20 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
     
     return initialExpanded;
   });
+  
+  // Update expanded directories when current file changes
+  useEffect(() => {
+    if (currentFilePath && level === 0) {
+      const parentDirs = findParentDirs(items, currentFilePath);
+      if (parentDirs) {
+        setExpandedDirs(prev => {
+          const newSet = new Set(prev);
+          parentDirs.forEach(dir => newSet.add(dir));
+          return newSet;
+        });
+      }
+    }
+  }, [currentFilePath, items, level, findParentDirs]);
 
   const toggleDirectory = useCallback((path: string) => {
     setExpandedDirs(prev => {

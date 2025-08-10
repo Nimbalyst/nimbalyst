@@ -90,6 +90,11 @@ The Electron app features:
 - **File watching** for external changes with auto-reload
 - **Project mode** for working with entire folders
 - **Recent files** tracking in the application menu
+- **Window state persistence** - remembers window position, size, and dev tools state
+- **Per-project window state** - each project remembers its own window configuration
+- **AI Chat integration** - Built-in Claude AI assistant with context-aware editing
+- **Session Manager** - Global view of all AI chat sessions across projects
+- **Drag and drop** file operations in the project sidebar with copy/move support
 
 ### Playground Development
 
@@ -165,6 +170,36 @@ function MyApp() {
 ### ✅ No CSS Import Required!
 
 **Good news**: The CSS is automatically included when you import the component. No separate CSS import is needed!
+
+## AI Features (Electron App)
+
+The Electron app includes powerful AI integration powered by Claude:
+
+### AI Chat Panel
+- **Context-aware assistance**: Claude understands your current document and project
+- **Real-time editing**: Stream code changes directly to the editor
+- **Session persistence**: Chat history is saved and restored across app restarts
+- **Draft persistence**: Unsent messages are saved automatically
+- **Keyboard shortcut**: Cmd+Shift+A to toggle the AI panel
+
+### Session Manager
+- **Global session view**: Access all AI sessions across all projects (Cmd+Alt+S)
+- **Search functionality**: Find sessions by content, project, or date
+- **Full conversation history**: View and reopen any past conversation
+- **Export sessions**: Save conversations for documentation or sharing
+- **Clean interface**: Left navigation with session list, detailed view on the right
+
+### Window State Management
+- **Smart persistence**: Every window remembers its position, size, and dev tools state
+- **Per-project memory**: Each project maintains its own window configuration
+- **Session restoration**: Reopening the app restores all windows exactly as they were
+- **Focus order preservation**: Windows are restored in the correct stacking order
+
+### Enhanced File Operations
+- **Drag and drop**: Move files and folders in the project sidebar
+- **Copy on drag**: Hold Option/Alt while dragging to copy instead of move
+- **Visual feedback**: Clear indicators show valid drop targets
+- **Smart renaming**: Copied files automatically get unique names
 
 ## Configuration
 

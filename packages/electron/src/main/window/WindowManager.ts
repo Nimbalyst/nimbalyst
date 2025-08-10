@@ -2,7 +2,7 @@ import { BrowserWindow, dialog, app, nativeImage } from 'electron';
 import { join, basename } from 'path';
 import { WindowState, FileTreeItem } from '../types';
 import { WINDOW_CASCADE_OFFSET } from '../utils/constants';
-import { getTheme } from '../utils/store';
+import { getTheme, saveProjectWindowState } from '../utils/store';
 import { stopFileWatcher } from '../file/FileWatcher';
 import { stopProjectWatcher } from '../file/ProjectWatcher';
 import { getFolderContents } from '../utils/FileTree';
@@ -13,6 +13,7 @@ export const windows = new Map<number, BrowserWindow>();
 export const windowStates = new Map<number, WindowState>();
 export const savingWindows = new Set<number>();
 export const windowFocusOrder = new Map<number, number>(); // Track focus order for each window
+export const windowDevToolsState = new Map<number, boolean>(); // Track dev tools state for each window
 
 let windowIdCounter = 0;
 let windowPositionOffset = 0;
@@ -181,8 +182,22 @@ export function createWindow(
         });
 
         window.on('close', (event) => {
-            // Save session before the window is closed
-            // This will be handled by the session manager
+            // Save project-specific window state before closing
+            const state = windowStates.get(windowId);
+            if (state?.mode === 'project' && state.projectPath) {
+                const bounds = window.getBounds();
+                const focusOrder = windowFocusOrder.get(windowId) || 0;
+                const devToolsOpen = windowDevToolsState.get(windowId) || false;
+                
+                saveProjectWindowState(state.projectPath, {
+                    mode: 'project',
+                    projectPath: state.projectPath,
+                    filePath: state.filePath,
+                    bounds,
+                    focusOrder,
+                    devToolsOpen
+                });
+            }
         });
 
         window.on('closed', () => {
@@ -190,6 +205,7 @@ export function createWindow(
             windowStates.delete(windowId);
             savingWindows.delete(windowId);
             windowFocusOrder.delete(windowId);
+            windowDevToolsState.delete(windowId);
             stopFileWatcher(windowId);
             stopProjectWatcher(windowId);
             // Update menu to reflect window closure
@@ -205,6 +221,15 @@ export function createWindow(
 
         window.on('blur', () => {
             // This will be handled by the menu system
+        });
+
+        // Track dev tools state
+        window.webContents.on('devtools-opened', () => {
+            windowDevToolsState.set(windowId, true);
+        });
+
+        window.webContents.on('devtools-closed', () => {
+            windowDevToolsState.set(windowId, false);
         });
 
         // Load the HTML file

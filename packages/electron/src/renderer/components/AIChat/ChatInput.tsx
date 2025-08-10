@@ -4,11 +4,12 @@ interface ChatInputProps {
   value: string;
   onChange: (value: string) => void;
   onSend: (message: string) => void;
+  onNavigateHistory?: (direction: 'up' | 'down') => void;
   disabled?: boolean;
   placeholder?: string;
 }
 
-export function ChatInput({ value, onChange, onSend, disabled, placeholder = "Ask a question..." }: ChatInputProps) {
+export function ChatInput({ value, onChange, onSend, onNavigateHistory, disabled, placeholder = "Ask a question..." }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea
@@ -29,6 +30,30 @@ export function ChatInput({ value, onChange, onSend, disabled, placeholder = "As
         textarea.select();
       }, 0);
       return;
+    }
+
+    // Handle arrow keys for history navigation (only when at start/end of input)
+    if (onNavigateHistory) {
+      const textarea = e.currentTarget;
+      const cursorPosition = textarea.selectionStart;
+      const isAtStart = cursorPosition === 0;
+      const isAtEnd = cursorPosition === value.length;
+      
+      if (e.key === 'ArrowUp' && isAtStart) {
+        e.preventDefault();
+        onNavigateHistory('up');
+        // Move cursor to beginning after navigation
+        setTimeout(() => {
+          textarea.setSelectionRange(0, 0);
+        }, 0);
+        return;
+      }
+      
+      if (e.key === 'ArrowDown' && isAtEnd) {
+        e.preventDefault();
+        onNavigateHistory('down');
+        return;
+      }
     }
 
     // Handle Enter to send (Shift+Enter for new line)

@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { existsSync, readFileSync } from 'fs';
-import { windows, windowStates, createWindow, windowFocusOrder } from '../window/WindowManager';
+import { windows, windowStates, createWindow, windowFocusOrder, windowDevToolsState } from '../window/WindowManager';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getSessionState, saveSessionState as saveToStore, SessionState } from '../utils/store';
 import { startProjectWatcher } from '../file/ProjectWatcher';
@@ -22,10 +22,12 @@ export function saveSessionState() {
 
         const bounds = window.getBounds();
         const focusOrder = windowFocusOrder.get(windowId) || 0;
+        const devToolsOpen = windowDevToolsState.get(windowId) || false;
         const sessionWindow: any = {
             mode: state.mode,
             bounds,
-            focusOrder
+            focusOrder,
+            devToolsOpen
         };
 
         if (state.filePath) {
@@ -125,6 +127,14 @@ export function restoreSessionState(): boolean {
                 if (focusOrder > highestFocusOrder) {
                     highestFocusOrder = focusOrder;
                     lastFocusedWindow = window;
+                }
+                
+                // Restore dev tools state
+                if (sessionWindow.devToolsOpen) {
+                    // Wait for window to be ready before opening dev tools
+                    window.webContents.once('did-finish-load', () => {
+                        window.webContents.openDevTools();
+                    });
                 }
             }
         }, index * 100);

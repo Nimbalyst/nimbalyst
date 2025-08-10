@@ -15,6 +15,8 @@ interface AIChatProps {
   documentContext?: DocumentContext;
   onApplyEdit?: (edit: any) => void;
   projectPath?: string;
+  sessionToLoad?: { sessionId: string; projectPath?: string } | null;
+  onSessionLoaded?: () => void;
 }
 
 export function AIChat({
@@ -24,7 +26,9 @@ export function AIChat({
   onWidthChange,
   documentContext,
   onApplyEdit,
-  projectPath
+  projectPath,
+  sessionToLoad,
+  onSessionLoaded
 }: AIChatProps) {
   const [messages, setMessages] = useState<Array<{ 
     role: 'user' | 'assistant'; 
@@ -48,6 +52,8 @@ export function AIChat({
   const [streamingContent, setStreamingContent] = useState<string>('');
   const [sessions, setSessions] = useState<Array<any>>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [tempInput, setTempInput] = useState('');
   const isResizingRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const streamingEditIdRef = useRef<string | null>(null);
@@ -422,6 +428,8 @@ export function AIChat({
     // Add user message
     setMessages(prev => [...prev, { role: 'user', content: message }]);
     setInputValue('');
+    setHistoryIndex(-1); // Reset history navigation
+    setTempInput(''); // Clear temp input
     setIsLoading(true);
     setCurrentStreamContent('');
     
@@ -439,6 +447,44 @@ export function AIChat({
       setIsLoading(false);
     }
   }, [isInitialized, documentContext, loadSessions, currentSessionId, projectPath]);
+
+  const handleNavigateHistory = useCallback((direction: 'up' | 'down') => {
+    const userMessages = messages.filter(m => m.role === 'user');
+    if (userMessages.length === 0) return;
+    
+    let newIndex = historyIndex;
+    
+    if (direction === 'up') {
+      // Going back in history
+      if (historyIndex === -1) {
+        // First time pressing up, save current input
+        setTempInput(inputValue);
+        newIndex = userMessages.length - 1;
+      } else if (historyIndex > 0) {
+        newIndex = historyIndex - 1;
+      }
+      // else: already at oldest message, do nothing
+    } else {
+      // Going forward in history
+      if (historyIndex === -1) {
+        // Already at current input, do nothing
+        return;
+      } else if (historyIndex < userMessages.length - 1) {
+        newIndex = historyIndex + 1;
+      } else if (historyIndex === userMessages.length - 1) {
+        // Return to current input
+        newIndex = -1;
+        setInputValue(tempInput);
+        setHistoryIndex(-1);
+        return;
+      }
+    }
+    
+    if (newIndex >= 0 && newIndex < userMessages.length) {
+      setHistoryIndex(newIndex);
+      setInputValue(userMessages[newIndex].content);
+    }
+  }, [messages, historyIndex, inputValue, tempInput]);
 
   const handleApplyEdit = useCallback(async (edit: any): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -554,6 +600,24 @@ export function AIChat({
       logger.log('session', 'Failed to rename session:', error);
     }
   }, [loadSessions]);
+  
+  // Handle loading a specific session from Session Manager
+  useEffect(() => {
+    if (!sessionToLoad || !isInitialized) return;
+    
+    const loadRequestedSession = async () => {
+      try {
+        await handleSessionSelect(sessionToLoad.sessionId);
+        if (onSessionLoaded) {
+          onSessionLoaded();
+        }
+      } catch (error) {
+        logger.log('session', 'Failed to load requested session:', error);
+      }
+    };
+    
+    loadRequestedSession();
+  }, [sessionToLoad, isInitialized, handleSessionSelect, onSessionLoaded]);
 
   if (isCollapsed) {
     return (
@@ -619,6 +683,7 @@ export function AIChat({
             value={inputValue}
             onChange={setInputValue}
             onSend={handleSendMessage}
+            onNavigateHistory={handleNavigateHistory}
             disabled={isLoading || !isInitialized}
             placeholder={!isInitialized ? "Initializing Claude..." : "Ask Claude anything..."}
           />

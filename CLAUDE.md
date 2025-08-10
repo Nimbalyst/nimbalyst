@@ -84,3 +84,53 @@ The editor supports multiple themes:
 - **Auto**: Follows system preference
 
 The Electron app includes a Window > Theme menu to switch between all themes. The selected theme is persisted and applied to all windows.
+
+## Window State Persistence
+
+The Electron app includes comprehensive window state persistence:
+
+### Session State
+- **Global session state**: Restores all windows when the app restarts
+- **Window position and size**: Each window's bounds are saved and restored
+- **Focus order**: Windows are restored in the correct stacking order
+- **Developer tools state**: Dev tools are reopened if they were open when the window was closed
+
+### Project-Specific State
+- **Per-project window state**: Each project remembers its own window configuration
+- **Persistent across sessions**: Opening a project restores its last window position, size, and dev tools state
+- **File state**: Remembers which file was open in each project window
+
+### AI Chat Integration
+- **Panel width persistence**: The AI Chat panel width is saved per-window
+- **Collapsed state**: Whether the AI Chat panel is visible or hidden is remembered
+- **Draft input persistence**: Unsent messages in the chat input are saved with the session
+- **Session continuity**: Chat sessions persist across app restarts
+
+## AI Features
+
+### AI Chat Panel
+- **Claude integration**: Built-in AI assistant powered by Claude API
+- **Context-aware**: Sends current document context with messages
+- **Session management**: Multiple chat sessions per project
+- **Edit streaming**: Real-time streaming of code edits directly to the editor
+- **Keyboard shortcut**: Cmd+Shift+A to toggle the AI Chat panel
+
+### Session Manager
+- **Global session view**: Access all AI chat sessions across all projects (Cmd+Alt+S)
+- **Session search**: Filter sessions by content, project, or date
+- **Session details**: View full conversation history for any session
+- **Session actions**: Open, export, or delete sessions
+- **Left navigation design**: Clean interface with session list on left, details on right
+
+## File Operations
+
+### Project Sidebar
+- **Drag and drop**: Move files and folders via drag and drop
+- **Copy on drag**: Hold Option/Alt while dragging to copy instead of move
+- **Visual feedback**: Drop targets are highlighted during drag operations
+- **Automatic renaming**: Copied files get unique names to avoid conflicts
+
+### File Tree Features
+- **Context menus**: Right-click files for rename, delete, open in new window
+- **File watching**: Automatic updates when files change on disk
+- **Recent files**: Quick access to recently opened files in projects

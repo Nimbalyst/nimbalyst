@@ -1,5 +1,5 @@
 import Store from 'electron-store';
-import { RecentItem, SessionState } from '../types';
+import { RecentItem, SessionState, SessionWindow } from '../types';
 
 // Create a singleton store instance
 export const store = new Store();
@@ -42,6 +42,24 @@ export function getSessionState(): SessionState | undefined {
 
 export function saveSessionState(state: SessionState) {
     store.set('session', state);
+}
+
+// Project-specific window state management
+export function getProjectWindowState(projectPath: string): SessionWindow | undefined {
+    const projectStates = store.get('projectWindowStates', {}) as Record<string, SessionWindow>;
+    return projectStates[projectPath];
+}
+
+export function saveProjectWindowState(projectPath: string, windowState: SessionWindow) {
+    const projectStates = store.get('projectWindowStates', {}) as Record<string, SessionWindow>;
+    projectStates[projectPath] = windowState;
+    store.set('projectWindowStates', projectStates);
+}
+
+export function clearProjectWindowState(projectPath: string) {
+    const projectStates = store.get('projectWindowStates', {}) as Record<string, SessionWindow>;
+    delete projectStates[projectPath];
+    store.set('projectWindowStates', projectStates);
 }
 
 // Theme management

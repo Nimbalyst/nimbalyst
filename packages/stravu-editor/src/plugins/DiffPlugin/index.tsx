@@ -26,6 +26,7 @@ import {
 
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { $convertToMarkdownString } from '@lexical/markdown';
+import { $isTableNode, $isTableRowNode, $isTableCellNode } from '@lexical/table';
 import {
   $createTextNode,
   $getRoot,
@@ -70,28 +71,34 @@ export function DiffPlugin(): JSX.Element | null {
         }
 
         const traverseNodes = (node: LexicalNode) => {
-          const diffState = $getDiffState(node);
-          const element = editor.getElementByKey(node.getKey());
+          // Skip table internal nodes as they don't have direct DOM elements
+          // Only process table cells which do have DOM elements
+          const isTableInternalNode = $isTableNode(node) || $isTableRowNode(node);
           
-          if (element) {
-            // Clear existing diff classes
-            if (diffAddClass) {
-              element.classList.remove(diffAddClass);
-            }
-            if (diffRemoveClass) {
-              element.classList.remove(diffRemoveClass);
-            }
-            if (diffModifyClass) {
-              element.classList.remove(diffModifyClass);
-            }
+          if (!isTableInternalNode) {
+            const diffState = $getDiffState(node);
+            const element = editor.getElementByKey(node.getKey());
+            
+            if (element) {
+              // Clear existing diff classes
+              if (diffAddClass) {
+                element.classList.remove(diffAddClass);
+              }
+              if (diffRemoveClass) {
+                element.classList.remove(diffRemoveClass);
+              }
+              if (diffModifyClass) {
+                element.classList.remove(diffModifyClass);
+              }
 
-            // Apply appropriate diff class based on state
-            if (diffState === 'added' && diffAddClass) {
-              element.classList.add(diffAddClass);
-            } else if (diffState === 'removed' && diffRemoveClass) {
-              element.classList.add(diffRemoveClass);
-            } else if (diffState === 'modified' && diffModifyClass) {
-              element.classList.add(diffModifyClass);
+              // Apply appropriate diff class based on state
+              if (diffState === 'added' && diffAddClass) {
+                element.classList.add(diffAddClass);
+              } else if (diffState === 'removed' && diffRemoveClass) {
+                element.classList.add(diffRemoveClass);
+              } else if (diffState === 'modified' && diffModifyClass) {
+                element.classList.add(diffModifyClass);
+              }
             }
           }
 

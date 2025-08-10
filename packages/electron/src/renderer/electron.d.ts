@@ -21,6 +21,8 @@ interface ElectronAPI {
   onFileCopied: (callback: (data: { sourcePath: string; destinationPath: string }) => void) => () => void;
   onThemeChange: (callback: (theme: string) => void) => () => void;
   onShowAbout: (callback: () => void) => () => void;
+  onViewHistory?: (callback: () => void) => () => void;
+  onLoadSessionFromManager?: (callback: (data: { sessionId: string; projectPath?: string }) => void) => () => void;
   
   getTheme: () => Promise<string>;
   openFile: () => Promise<{ filePath: string; content: string } | null>;
@@ -71,6 +73,10 @@ interface ElectronAPI {
   saveClaudeSettings?: (settings: any) => Promise<any>;
   testClaudeConnection?: () => Promise<any>;
   getClaudeModels?: () => Promise<{ success: boolean; models: Array<{ id: string; display_name: string }>; error?: string }>;
+  
+  // Claude AI event listeners
+  onClaudeStreamResponse?: (callback: (data: any) => void) => () => void;
+  onClaudeEditRequest?: (callback: (edit: any) => void) => () => void;
   
   // Preferences operations
   getGeneralSettings?: () => Promise<any>;

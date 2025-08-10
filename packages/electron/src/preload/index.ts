@@ -100,6 +100,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('view-history', callback);
     return () => ipcRenderer.removeListener('view-history', callback);
   },
+  
+  onLoadSessionFromManager: (callback: (data: { sessionId: string; projectPath?: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('load-session-from-manager', handler);
+    return () => ipcRenderer.removeListener('load-session-from-manager', handler);
+  },
 
   // Theme operations
   getTheme: () => ipcRenderer.invoke('get-theme'),
