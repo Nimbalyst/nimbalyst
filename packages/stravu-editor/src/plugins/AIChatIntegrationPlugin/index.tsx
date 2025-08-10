@@ -14,6 +14,7 @@ import { $getSelection, $isRangeSelection, $getRoot } from 'lexical';
 import { APPLY_MARKDOWN_REPLACE_COMMAND } from '../DiffPlugin';
 import type { TextReplacement } from '../DiffPlugin/core/exports';
 import { MarkdownStreamProcessor } from '../../markdown/MarkdownStreamProcessor';
+import { getEditorTransformers } from '../../markdown';
 
 // Global event emitter for AI chat integration
 interface AIChatEvent {
@@ -204,7 +205,7 @@ export function AIChatIntegrationPlugin(): null {
         // Create a new stream processor with the correct starting point
         const processor = new MarkdownStreamProcessor(
           editor,
-          undefined, // Use default transformers
+          getEditorTransformers(), // Use dynamic transformers from enabled plugins
           startingNodeKey,
           streamConfig.mode || 'after',
           (node) => {

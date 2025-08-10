@@ -47,8 +47,8 @@ export function detectStreamingIntent(content: string): {
     hasStreamToEditor: content.includes('stream-to-editor')
   });
   
-  // Look for streaming directive at the start of the response
-  const streamingPattern = /^<!--\s*STREAM_EDIT:\s*(.+?)\s*-->\n?/;
+  // Look for streaming directive anywhere in the response (not just at start)
+  const streamingPattern = /<!--\s*STREAM_EDIT:\s*(.+?)\s*-->/;
   const match = content.match(streamingPattern);
   
   if (match) {
@@ -56,10 +56,16 @@ export function detectStreamingIntent(content: string): {
     try {
       const config = JSON.parse(match[1]);
       logger.log('protocol', 'Parsed config:', config);
+      // Extract clean content - everything after the STREAM_EDIT marker
+      const markerIndex = content.indexOf(match[0]);
+      const afterMarker = content.substring(markerIndex + match[0].length);
+      // Remove leading newline if present
+      const cleanContent = afterMarker.replace(/^\n/, '');
+      
       return {
         isStreaming: true,
         streamConfig: config,
-        cleanContent: content.replace(streamingPattern, '')
+        cleanContent: cleanContent
       };
     } catch (e) {
       logger.log('protocol', 'Failed to parse streaming config:', e);
