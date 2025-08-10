@@ -4,6 +4,7 @@ import { existsSync } from 'fs';
 import { windows, windowStates, createWindow, findWindowByFilePath } from '../window/WindowManager';
 import { createAboutWindow } from '../window/AboutWindow';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
+import { createProjectManagerWindow } from '../window/ProjectManagerWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getProjectWindowState } from '../utils/store';
 import { updateWindowTitleBars } from '../theme/ThemeManager';
@@ -81,10 +82,10 @@ function createRecentSubmenu(): any[] {
                     if (existsSync(project.path)) {
                         // Check for saved project window state
                         const savedState = getProjectWindowState(project.path);
-                        
+
                         // Create window with saved bounds if available
                         const window = createWindow(false, true, project.path, savedState?.bounds);
-                        
+
                         // Restore dev tools if they were open
                         if (savedState?.devToolsOpen) {
                             window.webContents.once('did-finish-load', () => {
@@ -183,9 +184,9 @@ export function createApplicationMenu() {
             submenu: [
                 { label: 'New', accelerator: 'CmdOrCtrl+N', click: () => createWindow() },
                 { type: 'separator' },
-                { 
-                    label: 'Open...', 
-                    accelerator: 'CmdOrCtrl+O', 
+                {
+                    label: 'Open...',
+                    accelerator: 'CmdOrCtrl+O',
                     click: async () => {
                         const result = await dialog.showOpenDialog({
                             properties: ['openFile'],
@@ -212,9 +213,9 @@ export function createApplicationMenu() {
                         }
                     }
                 },
-                { 
-                    label: 'Open Folder...', 
-                    accelerator: 'CmdOrCtrl+Shift+O', 
+                {
+                    label: 'Open Folder...',
+                    accelerator: 'CmdOrCtrl+Shift+O',
                     click: async () => {
                         const result = await dialog.showOpenDialog({
                             properties: ['openDirectory']
@@ -224,13 +225,13 @@ export function createApplicationMenu() {
                             const projectPath = result.filePaths[0];
                             // Add to recent projects
                             addToRecentItems('projects', projectPath, basename(projectPath));
-                            
+
                             // Check for saved project window state
                             const savedState = getProjectWindowState(projectPath);
-                            
+
                             // Create window with saved bounds if available
                             const window = createWindow(false, true, projectPath, savedState?.bounds);
-                            
+
                             // Restore dev tools if they were open
                             if (savedState?.devToolsOpen) {
                                 window.webContents.once('did-finish-load', () => {
@@ -245,9 +246,9 @@ export function createApplicationMenu() {
                     submenu: createRecentSubmenu()
                 },
                 { type: 'separator' },
-                { 
-                    label: 'Save', 
-                    accelerator: 'CmdOrCtrl+S', 
+                {
+                    label: 'Save',
+                    accelerator: 'CmdOrCtrl+S',
                     click: () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused && !isAboutWindow(focused)) {
@@ -255,20 +256,20 @@ export function createApplicationMenu() {
                         }
                     }
                 },
-                { 
-                    label: 'Save As', 
-                    accelerator: 'CmdOrCtrl+Shift+S', 
-                    click: () => {
-                        const focused = BrowserWindow.getFocusedWindow();
-                        if (focused && !isAboutWindow(focused)) {
-                            focused.webContents.send('file-save-as');
-                        }
-                    }
-                },
+                // {
+                //     label: 'Save As',
+                //     accelerator: 'CmdOrCtrl+Shift+S',
+                //     click: () => {
+                //         const focused = BrowserWindow.getFocusedWindow();
+                //         if (focused && !isAboutWindow(focused)) {
+                //             focused.webContents.send('file-save-as');
+                //         }
+                //     }
+                // },
                 { type: 'separator' },
-                { 
-                    label: 'Close', 
-                    accelerator: 'CmdOrCtrl+W', 
+                {
+                    label: 'Close',
+                    accelerator: 'CmdOrCtrl+W',
                     click: () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) focused.close();
@@ -288,8 +289,8 @@ export function createApplicationMenu() {
                 { label: 'Copy', accelerator: 'CmdOrCtrl+C', role: 'copy' },
                 { label: 'Paste', accelerator: 'CmdOrCtrl+V', role: 'paste' },
                 { type: 'separator' },
-                { 
-                    label: 'View History...', 
+                {
+                    label: 'View History...',
                     accelerator: 'CmdOrCtrl+Y',
                     click: () => {
                         const focused = BrowserWindow.getFocusedWindow();
@@ -303,43 +304,43 @@ export function createApplicationMenu() {
         {
             label: 'View',
             submenu: [
-                { 
-                    label: 'Toggle Developer Tools', 
-                    accelerator: 'CmdOrCtrl+Shift+I', 
+                {
+                    label: 'Toggle Developer Tools',
+                    accelerator: 'CmdOrCtrl+Shift+I',
                     click: () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) focused.webContents.toggleDevTools();
                     }
                 },
                 { type: 'separator' },
-                { 
-                    label: 'Reload', 
-                    accelerator: 'CmdOrCtrl+R', 
+                {
+                    label: 'Reload',
+                    accelerator: 'CmdOrCtrl+R',
                     click: () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) focused.webContents.reload();
                     }
                 },
-                { 
-                    label: 'Force Reload', 
-                    accelerator: 'CmdOrCtrl+Shift+R', 
+                {
+                    label: 'Force Reload',
+                    accelerator: 'CmdOrCtrl+Shift+R',
                     click: () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) focused.webContents.reloadIgnoringCache();
                     }
                 },
                 { type: 'separator' },
-                { 
-                    label: 'Actual Size', 
-                    accelerator: 'CmdOrCtrl+0', 
+                {
+                    label: 'Actual Size',
+                    accelerator: 'CmdOrCtrl+0',
                     click: () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) focused.webContents.setZoomFactor(1);
                     }
                 },
-                { 
-                    label: 'Zoom In', 
-                    accelerator: 'CmdOrCtrl+Plus', 
+                {
+                    label: 'Zoom In',
+                    accelerator: 'CmdOrCtrl+Plus',
                     click: () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -348,9 +349,9 @@ export function createApplicationMenu() {
                         }
                     }
                 },
-                { 
-                    label: 'Zoom Out', 
-                    accelerator: 'CmdOrCtrl+-', 
+                {
+                    label: 'Zoom Out',
+                    accelerator: 'CmdOrCtrl+-',
                     click: () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -435,6 +436,13 @@ export function createApplicationMenu() {
                 },
                 { type: 'separator' },
                 {
+                    label: 'Project Manager',
+                    accelerator: 'CmdOrCtrl+P',
+                    click: () => {
+                        createProjectManagerWindow();
+                    }
+                },
+                {
                     label: 'Session Manager',
                     accelerator: 'CmdOrCtrl+Alt+S',
                     click: () => {
@@ -512,9 +520,9 @@ export function createApplicationMenu() {
                     }
                 },
                 { type: 'separator' },
-                { 
-                    label: 'Preferences...', 
-                    accelerator: 'CmdOrCtrl+,', 
+                {
+                    label: 'Preferences...',
+                    accelerator: 'CmdOrCtrl+,',
                     click: () => {
                         const focusedWindow = BrowserWindow.getFocusedWindow();
                         if (focusedWindow) {

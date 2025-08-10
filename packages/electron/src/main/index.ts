@@ -6,6 +6,7 @@ import { loadFileIntoWindow } from './file/FileOperations';
 import { createApplicationMenu, updateApplicationMenu } from './menu/ApplicationMenu';
 import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
 import { saveSessionState, restoreSessionState } from './session/SessionState';
+import { createProjectManagerWindow, setupProjectManagerHandlers } from './window/ProjectManagerWindow';
 import { registerFileHandlers } from './ipc/FileHandlers';
 import { registerProjectHandlers } from './ipc/ProjectHandlers';
 import { registerSettingsHandlers } from './ipc/SettingsHandlers';
@@ -60,12 +61,21 @@ function initializeDebugLogging() {
         };
 
         const captureMainLog = (level: string, ...args: any[]) => {
-            originalConsole[level as keyof typeof originalConsole](...args);
+            // Call original console method first with try-catch
+            try {
+                originalConsole[level as keyof typeof originalConsole](...args);
+            } catch (error) {
+                // Ignore console errors (EPIPE, etc)
+            }
 
             const timestamp = new Date().toISOString();
-            const message = args.map(arg =>
-                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-            ).join(' ');
+            const message = args.map(arg => {
+                try {
+                    return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
+                } catch (e) {
+                    return '[Circular or unstringifiable object]';
+                }
+            }).join(' ');
 
             const logEntry = `[${timestamp}] [${level.toUpperCase()}] [main] ${message}\n`;
             try {
@@ -121,6 +131,7 @@ function parseCommandLineArgs() {
     }
 }
 
+
 // App ready handler
 app.whenReady().then(async () => {
     console.log('[MAIN] App ready');
@@ -133,14 +144,13 @@ app.whenReady().then(async () => {
     
     // Set dock icon for macOS
     if (process.platform === 'darwin' && app.dock) {
-        const iconPath = join(__dirname, '../../icon.png');
-        console.log('Looking for icon at:', iconPath);
+        const iconPath = join(__dirname, '../../resources/icon.png');
         if (existsSync(iconPath)) {
             const dockIcon = nativeImage.createFromPath(iconPath);
             app.dock.setIcon(dockIcon);
-            console.log('Dock icon set successfully');
+            console.log('Dock icon set successfully from resources');
         } else {
-            console.log('Icon file not found');
+            console.log('icon not found at:', iconPath);
         }
     }
     
@@ -152,11 +162,12 @@ app.whenReady().then(async () => {
     await registerHistoryHandlers();
     await registerSessionHandlers();
     registerPreferencesHandlers();
+    setupProjectManagerHandlers();
     
     // Initialize Claude service
     claudeService = new ClaudeService();
     
-    // Try to restore session, otherwise create a new window
+    // Try to restore session, otherwise show Project Manager
     const sessionRestored = restoreSessionState();
     
     if (pendingProjectPath) {
@@ -168,8 +179,8 @@ app.whenReady().then(async () => {
             pendingProjectPath = null;
         });
     } else if (!sessionRestored && !pendingFilePath) {
-        // No session to restore and no file to open, create a new window
-        createWindow(false);
+        // No session to restore and no file to open, show Project Manager
+        createProjectManagerWindow();
     } else if (pendingFilePath) {
         // Handle pending file if we have one
         const window = createWindow(true);
@@ -241,8 +252,12 @@ app.on('before-quit', () => {
 app.on('window-all-closed', () => {
     console.log('[MAIN] All windows closed');
     // On macOS, keep app running when all windows are closed
-    // This allows dropping files on the dock icon
-    if (process.platform !== 'darwin') {
+    // and show the Project Manager
+    if (process.platform === 'darwin') {
+        // Show Project Manager when all windows are closed on macOS
+        createProjectManagerWindow();
+    } else {
+        // On other platforms, quit when all windows are closed
         app.quit();
     }
 });

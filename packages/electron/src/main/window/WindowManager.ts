@@ -1,5 +1,6 @@
 import { BrowserWindow, dialog, app, nativeImage } from 'electron';
 import { join, basename } from 'path';
+import { existsSync } from 'fs';
 import { WindowState, FileTreeItem } from '../types';
 import { WINDOW_CASCADE_OFFSET } from '../utils/constants';
 import { getTheme, saveProjectWindowState } from '../utils/store';
@@ -43,19 +44,21 @@ export function createWindow(
 
         // Set up icon path based on platform
         let iconPath: string | undefined;
+        
         if (process.platform === 'darwin') {
-            iconPath = join(__dirname, '../../resources/icon.icns');
+            iconPath = join(__dirname, '../../resources/icon.png');
         } else if (process.platform === 'win32') {
-            iconPath = join(__dirname, '../../resources/icon.ico');
+            iconPath = join(__dirname, '../../resources/icon.png');
         } else {
             iconPath = join(__dirname, '../../resources/icon.png');
         }
 
         // Check if icon exists
-        const fs = require('fs');
-        if (!fs.existsSync(iconPath)) {
-            console.warn('[MAIN] Icon file not found at:', iconPath);
+        if (!existsSync(iconPath)) {
+            console.log('[MAIN] Icon not found at:', iconPath);
             iconPath = undefined;
+        } else {
+            console.log('[MAIN] Using icon at:', iconPath);
         }
 
         // Calculate window position with cascading effect
@@ -124,13 +127,7 @@ export function createWindow(
         };
 
         if (iconPath) {
-            if (process.platform === 'darwin') {
-                // On macOS, the icon is set for the app, not individual windows
-                // But we can set it for the dock
-                app.dock?.setIcon(nativeImage.createFromPath(iconPath));
-            } else {
-                windowOptions.icon = nativeImage.createFromPath(iconPath);
-            }
+            windowOptions.icon = nativeImage.createFromPath(iconPath);
         }
 
         const window = new BrowserWindow(windowOptions);
