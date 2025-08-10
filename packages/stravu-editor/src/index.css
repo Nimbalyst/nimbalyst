@@ -2063,6 +2063,7 @@ button.item i {
 .stravu-editor.dark-theme .icon.number,
 .stravu-editor.dark-theme .icon.quote,
 .stravu-editor.dark-theme .icon.code,
+.stravu-editor.dark-theme .icon.table-of-contents,
 .stravu-editor.dark-theme i.file-text,
 .stravu-editor.dark-theme span.file-text {
   filter: invert(1);

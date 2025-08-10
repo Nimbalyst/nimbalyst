@@ -7,7 +7,7 @@
  */
 
 import * as React from 'react';
-import {useCallback, useEffect, useRef, useState, useMemo} from 'react';
+import {useCallback, useEffect, useRef, useState, useMemo, useImperativeHandle, forwardRef} from 'react';
 
 import type {SearchMatch} from './index';
 
@@ -56,7 +56,11 @@ interface SearchReplaceDialogProps {
   onClose: () => void;
 }
 
-export function SearchReplaceDialog({
+export interface SearchReplaceDialogHandle {
+  focusSearchInput: () => void;
+}
+
+export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchReplaceDialogProps>(({
   searchString,
   replaceString,
   caseInsensitive = true,
@@ -72,7 +76,7 @@ export function SearchReplaceDialog({
   onReplace,
   onReplaceAll,
   onClose,
-}: SearchReplaceDialogProps): React.ReactElement {
+}, ref) => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -82,6 +86,11 @@ export function SearchReplaceDialog({
   const [searchHistoryIndex, setSearchHistoryIndex] = useState(-1);
   const [replaceHistoryIndex, setReplaceHistoryIndex] = useState(-1);
   
+  // Dragging state
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  
   const searchHistory = useMemo(() => getHistory(SEARCH_HISTORY_KEY), [showSearchHistory]);
   const replaceHistory = useMemo(() => getHistory(REPLACE_HISTORY_KEY), [showReplaceHistory]);
 
@@ -89,6 +98,14 @@ export function SearchReplaceDialog({
     searchInputRef.current?.focus();
     searchInputRef.current?.select();
   }, []);
+  
+  // Expose focus method to parent
+  useImperativeHandle(ref, () => ({
+    focusSearchInput: () => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }
+  }), []);
   
   // Save to history when performing search/replace actions
   useEffect(() => {
@@ -212,9 +229,62 @@ export function SearchReplaceDialog({
     [handleKeyDown, handleReplace, handleReplaceAll, onReplaceChange, showReplaceHistory, replaceHistory, replaceHistoryIndex],
   );
 
+  // Drag handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Only drag from the header
+    if (!(e.target as HTMLElement).closest('.search-replace-header')) {
+      return;
+    }
+    // Don't drag if clicking the close button
+    if ((e.target as HTMLElement).closest('.search-replace-close')) {
+      return;
+    }
+    
+    setIsDragging(true);
+    // Store the initial mouse position and the current dialog position
+    setDragOffset({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y
+    });
+  }, [position]);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging) return;
+    
+    // Calculate new position based on mouse movement
+    const newX = e.clientX - dragOffset.x;
+    const newY = e.clientY - dragOffset.y;
+    
+    setPosition({ x: newX, y: newY });
+  }, [isDragging, dragOffset]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, handleMouseMove, handleMouseUp]);
+
   return (
-    <div ref={dialogRef} className="search-replace-dialog">
-      <div className="search-replace-header">
+    <div 
+      ref={dialogRef} 
+      className={`search-replace-dialog ${isDragging ? 'is-dragging' : ''}`}
+      style={{
+        transform: `translate(${position.x}px, ${position.y}px)`,
+        cursor: isDragging ? 'grabbing' : 'auto'
+      }}
+      onMouseDown={handleMouseDown}
+    >
+      <div className="search-replace-header" style={{ cursor: 'grab' }}>
         <span className="search-replace-title">Find and Replace</span>
         <button
           className="search-replace-close"
@@ -368,4 +438,6 @@ export function SearchReplaceDialog({
       </div>
     </div>
   );
-}
+});
+
+SearchReplaceDialog.displayName = 'SearchReplaceDialog';

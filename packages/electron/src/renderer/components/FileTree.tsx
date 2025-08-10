@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { MaterialSymbol } from './MaterialSymbol';
 import { FileContextMenu } from './FileContextMenu';
 
@@ -39,6 +39,11 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
     fileName: string;
     fileType: 'file' | 'directory';
   } | null>(null);
+  
+  const [draggedItem, setDraggedItem] = useState<FileTreeItem | null>(null);
+  const [dragOverItem, setDragOverItem] = useState<string | null>(null);
+  const [isDragCopy, setIsDragCopy] = useState(false);
+  
   // Initialize expanded directories to show path to current file
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
     const initialExpanded = new Set<string>();
@@ -118,20 +123,162 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
     }
   }, []);
 
+  // Drag and drop handlers
+  const handleDragStart = useCallback((e: React.DragEvent, item: FileTreeItem) => {
+    // Prevent dragging by the icon
+    const target = e.target as HTMLElement;
+    if (target.closest('.file-tree-icon') || target.closest('.file-tree-chevron')) {
+      e.preventDefault();
+      return;
+    }
+    
+    e.dataTransfer.effectAllowed = 'copyMove';
+    e.dataTransfer.setData('text/plain', item.path);
+    setDraggedItem(item);
+    
+    // Add a custom drag image with just the text
+    const dragImage = document.createElement('div');
+    dragImage.textContent = item.name;
+    dragImage.style.position = 'absolute';
+    dragImage.style.top = '-1000px';
+    dragImage.style.left = '-1000px';
+    dragImage.style.padding = '4px 8px';
+    dragImage.style.backgroundColor = '#ffffff';
+    dragImage.style.border = '1px solid #e5e7eb';
+    dragImage.style.borderRadius = '4px';
+    dragImage.style.fontSize = '13px';
+    dragImage.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+    dragImage.style.color = '#1f2937';
+    dragImage.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+    dragImage.style.zIndex = '10000';
+    dragImage.style.pointerEvents = 'none';
+    document.body.appendChild(dragImage);
+    e.dataTransfer.setDragImage(dragImage, 10, 10);
+    
+    // Clean up the drag image after a brief delay
+    setTimeout(() => {
+      if (document.body.contains(dragImage)) {
+        document.body.removeChild(dragImage);
+      }
+    }, 0);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedItem(null);
+    setDragOverItem(null);
+    setIsDragCopy(false);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, item: FileTreeItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Only allow dropping on directories
+    if (draggedItem && item.type === 'directory' && item.path !== draggedItem.path) {
+      // Check if Option/Alt key is held for copy
+      const isCopy = e.altKey || e.metaKey;
+      setIsDragCopy(isCopy);
+      e.dataTransfer.dropEffect = isCopy ? 'copy' : 'move';
+      setDragOverItem(item.path);
+    } else {
+      e.dataTransfer.dropEffect = 'none';
+    }
+  }, [draggedItem]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear if we're leaving the element entirely
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!e.currentTarget.contains(relatedTarget)) {
+      setDragOverItem(null);
+    }
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent, targetItem: FileTreeItem) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Only allow dropping on directories
+    if (!draggedItem || targetItem.type !== 'directory' || draggedItem.path === targetItem.path) {
+      setDragOverItem(null);
+      return;
+    }
+
+    const isCopy = e.altKey || e.metaKey;
+    
+    try {
+      const targetPath = targetItem.path;
+      
+      if (isCopy) {
+        const result = await window.electronAPI.copyFile(draggedItem.path, targetPath);
+        if (!result.success) {
+          console.error('Failed to copy file:', result.error);
+        } else {
+          // Refresh the file tree if callback is provided
+          if (onRefreshFileTree) {
+            onRefreshFileTree();
+          }
+        }
+      } else {
+        const result = await window.electronAPI.moveFile(draggedItem.path, targetPath);
+        if (!result.success) {
+          console.error('Failed to move file:', result.error);
+        } else {
+          // Refresh the file tree if callback is provided
+          if (onRefreshFileTree) {
+            onRefreshFileTree();
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error during drag and drop:', error);
+    } finally {
+      setDragOverItem(null);
+      setDraggedItem(null);
+      setIsDragCopy(false);
+    }
+  }, [draggedItem, onRefreshFileTree]);
+
+  // Update drag effect based on keyboard modifiers
+  useEffect(() => {
+    const handleKeyChange = (e: KeyboardEvent) => {
+      if (draggedItem) {
+        setIsDragCopy(e.altKey || e.metaKey);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyChange);
+    window.addEventListener('keyup', handleKeyChange);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyChange);
+      window.removeEventListener('keyup', handleKeyChange);
+    };
+  }, [draggedItem]);
+
   return (
     <>
       <ul className="file-tree" style={{ paddingLeft: level > 0 ? '16px' : '0' }}>
       {items.map((item) => {
         const isExpanded = expandedDirs.has(item.path);
+        const isDragOver = dragOverItem === item.path;
         
         return (
           <li key={item.path} className="file-tree-item">
             {item.type === 'directory' ? (
               <>
                 <div
-                  className="file-tree-directory"
+                  className={`file-tree-directory ${isDragOver ? 'drag-over' : ''}`}
                   onClick={() => toggleDirectory(item.path)}
                   onContextMenu={(e) => handleContextMenu(e, item)}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, item)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => handleDragOver(e, item)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, item)}
+                  style={{
+                    opacity: draggedItem?.path === item.path ? 0.5 : 1
+                  }}
                 >
                   <span className="file-tree-chevron">
                     <MaterialSymbol 
@@ -145,7 +292,10 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
                       size={18} 
                     />
                   </span>
-                  <span className="file-tree-name">{item.name}</span>
+                  <span className="file-tree-name">
+                    {item.name}
+                    {isDragOver && isDragCopy && <span style={{ marginLeft: '4px', fontSize: '10px', opacity: 0.7 }}>(copy)</span>}
+                  </span>
                 </div>
                 {isExpanded && item.children && (
                   <FileTree
@@ -164,12 +314,20 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
                 className={`file-tree-file ${currentFilePath === item.path ? 'active' : ''}`}
                 onClick={() => onFileSelect(item.path)}
                 onContextMenu={(e) => handleContextMenu(e, item)}
+                draggable
+                onDragStart={(e) => handleDragStart(e, item)}
+                onDragEnd={handleDragEnd}
+                style={{
+                  opacity: draggedItem?.path === item.path ? 0.5 : 1
+                }}
               >
                 <span className="file-tree-spacer"></span>
                 <span className="file-tree-icon">
                   {getFileIcon(item.name)}
                 </span>
-                <span className="file-tree-name">{item.name}</span>
+                <span className="file-tree-name">
+                  {item.name}
+                </span>
               </div>
             )}
           </li>

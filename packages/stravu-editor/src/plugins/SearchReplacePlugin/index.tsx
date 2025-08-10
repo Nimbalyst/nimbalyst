@@ -27,7 +27,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 
 import './SearchReplace.css';
-import {SearchReplaceDialog} from './SearchReplaceDialog';
+import {SearchReplaceDialog, SearchReplaceDialogHandle} from './SearchReplaceDialog';
 import {mergeRegister} from '@lexical/utils';
 import {$isTextNode, $isElementNode, type LexicalNode} from 'lexical';
 
@@ -71,6 +71,7 @@ function $findTextNodes(node: LexicalNode, callback: (textNode: any) => void): v
 
 function SearchReplacePlugin(): React.ReactElement | null {
   const [editor] = useLexicalComposerContext();
+  const dialogRef = useRef<SearchReplaceDialogHandle>(null);
   const [searchState, setSearchState] = useState<SearchReplaceState>({
     searchString: '',
     replaceString: '',
@@ -363,11 +364,17 @@ function SearchReplacePlugin(): React.ReactElement | null {
         e.preventDefault();
         if (!searchState.isVisible) {
           editor.dispatchCommand(TOGGLE_SEARCH_COMMAND, undefined);
+        } else {
+          // Dialog is already open, just focus the input
+          dialogRef.current?.focusSearchInput();
         }
       } else if ((e.metaKey || e.ctrlKey) && e.key === 'h') {
         e.preventDefault();
         if (!searchState.isVisible) {
           editor.dispatchCommand(TOGGLE_SEARCH_COMMAND, undefined);
+        } else {
+          // Dialog is already open, just focus the input
+          dialogRef.current?.focusSearchInput();
         }
       } else if ((e.metaKey || e.ctrlKey) && e.key === 'g') {
         if (searchState.isVisible && searchState.matches.length > 0) {
@@ -401,6 +408,7 @@ function SearchReplacePlugin(): React.ReactElement | null {
 
   return createPortal(
     <SearchReplaceDialog
+      ref={dialogRef}
       searchString={searchState.searchString}
       replaceString={searchState.replaceString}
       caseInsensitive={searchState.caseInsensitive}
@@ -428,7 +436,7 @@ function SearchReplacePlugin(): React.ReactElement | null {
       onReplaceAll={() => editor.dispatchCommand(REPLACE_ALL_COMMAND, undefined)}
       onClose={() => editor.dispatchCommand(CLOSE_SEARCH_COMMAND, undefined)}
     />,
-    parentElement,
+    document.body,
   );
 }
 

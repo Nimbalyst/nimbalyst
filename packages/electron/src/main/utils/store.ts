@@ -62,6 +62,15 @@ export function setSidebarWidth(width: number) {
     store.set('sidebarWidth', width);
 }
 
+// AI Chat settings
+export function getAIChatState(): { collapsed: boolean; width: number } {
+    return store.get('aiChatState', { collapsed: false, width: 350 }) as { collapsed: boolean; width: number };
+}
+
+export function setAIChatState(state: { collapsed: boolean; width: number }) {
+    store.set('aiChatState', state);
+}
+
 // Project recent files
 export function getProjectRecentFiles(projectPath: string): string[] {
     const key = `projectRecentFiles.${projectPath}`;

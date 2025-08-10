@@ -3,7 +3,7 @@ import * as chokidar from 'chokidar';
 import { getFolderContents } from '../utils/FileTree';
 
 // Project watchers management  
-const projectWatchers = new Map<number, chokidar.FSWatcher>();
+export const projectWatchers = new Map<number, chokidar.FSWatcher>();
 
 // Start watching a project directory for changes
 export function startProjectWatcher(window: BrowserWindow, projectPath: string) {
@@ -37,11 +37,17 @@ export function startProjectWatcher(window: BrowserWindow, projectPath: string) 
                 /\.DS_Store/
             ],
             depth: 10, // Limit depth to avoid deep recursion
-            usePolling: false, // Use native events for project watching
+            usePolling: true, // Force polling for better reliability
+            interval: 1000, // Poll every second for project files
+            binaryInterval: 2000, // Poll binary files less frequently
             awaitWriteFinish: {
                 stabilityThreshold: 300,
                 pollInterval: 100
-            }
+            },
+            // Additional options for better detection
+            alwaysStat: true,  // Get full stat results
+            atomic: true,  // Handle atomic writes better
+            followSymlinks: false  // Don't follow symlinks to avoid loops
         });
         
         watcher.on('ready', () => {
@@ -95,4 +101,38 @@ export function stopProjectWatcher(windowId: number) {
         watcher.close();
         projectWatchers.delete(windowId);
     }
+}
+
+// Get project watcher info for debugging
+export function getProjectWatcherInfo(windowId: number): any {
+    const watcher = projectWatchers.get(windowId);
+    if (watcher) {
+        const watched = watcher.getWatched();
+        const watchedCount = Object.keys(watched).reduce((count, dir) => {
+            return count + (watched[dir]?.length || 0);
+        }, Object.keys(watched).length);
+        
+        return {
+            path: Object.keys(watched)[0] || 'unknown',
+            watched: Object.keys(watched).length > 10 
+                ? `${Object.keys(watched).length} directories` 
+                : Object.keys(watched),
+            watchedCount,
+            usePolling: true,
+            depth: 10
+        };
+    }
+    return null;
+}
+
+// Restart the project watcher
+export function restartProjectWatcher(window: BrowserWindow, projectPath: string) {
+    const windowId = window.id;
+    console.log('[PROJECT_WATCHER] Restarting project watcher for:', projectPath);
+    
+    // Stop existing watcher
+    stopProjectWatcher(windowId);
+    
+    // Start new watcher
+    startProjectWatcher(window, projectPath);
 }

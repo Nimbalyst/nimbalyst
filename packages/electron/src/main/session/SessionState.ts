@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { existsSync, readFileSync } from 'fs';
-import { windows, windowStates, createWindow } from '../window/WindowManager';
+import { windows, windowStates, createWindow, windowFocusOrder } from '../window/WindowManager';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getSessionState, saveSessionState as saveToStore, SessionState } from '../utils/store';
 import { startProjectWatcher } from '../file/ProjectWatcher';
@@ -21,9 +21,11 @@ export function saveSessionState() {
         }
 
         const bounds = window.getBounds();
+        const focusOrder = windowFocusOrder.get(windowId) || 0;
         const sessionWindow: any = {
             mode: state.mode,
-            bounds
+            bounds,
+            focusOrder
         };
 
         if (state.filePath) {
@@ -42,7 +44,7 @@ export function saveSessionState() {
     };
 
     saveToStore(sessionState);
-    console.log('[SESSION] Saved session state:', sessionState);
+    // console.log('[SESSION] Saved session state:', sessionState);
 }
 
 // Restore session state
@@ -56,15 +58,28 @@ export function restoreSessionState(): boolean {
 
     console.log('[SESSION] Restoring session:', sessionState);
 
+    // Sort windows by focus order (lower order first, so they're created in background)
+    const sortedWindows = [...sessionState.windows].sort((a, b) => {
+        const aOrder = a.focusOrder || 0;
+        const bOrder = b.focusOrder || 0;
+        return aOrder - bOrder;
+    });
+
+    // Track the window with highest focus order to focus it last
+    let lastFocusedWindow: BrowserWindow | null = null;
+    let highestFocusOrder = -1;
+
     // Restore each window
-    sessionState.windows.forEach((sessionWindow, index) => {
+    sortedWindows.forEach((sessionWindow, index) => {
         // Add a small delay between windows to avoid race conditions
         setTimeout(() => {
+            let window: BrowserWindow | null = null;
+
             if (sessionWindow.mode === 'project' && sessionWindow.projectPath) {
                 // Check if project path still exists
                 if (existsSync(sessionWindow.projectPath)) {
                     // Restore project window
-                    const window = createWindow(false, true, sessionWindow.projectPath, sessionWindow.bounds);
+                    window = createWindow(false, true, sessionWindow.projectPath, sessionWindow.bounds);
                     console.log('[SESSION] Restored project window:', sessionWindow.projectPath);
 
                     // If there was a file open in the project, restore it
@@ -94,7 +109,7 @@ export function restoreSessionState(): boolean {
                 // Check if file still exists
                 if (existsSync(sessionWindow.filePath)) {
                     // Restore document window
-                    const window = createWindow(true, false, undefined, sessionWindow.bounds);
+                    window = createWindow(true, false, undefined, sessionWindow.bounds);
                     window.once('ready-to-show', () => {
                         loadFileIntoWindow(window, sessionWindow.filePath!);
                     });
@@ -103,8 +118,27 @@ export function restoreSessionState(): boolean {
                     console.log('[SESSION] File no longer exists:', sessionWindow.filePath);
                 }
             }
+
+            // Track window with highest focus order
+            if (window) {
+                const focusOrder = sessionWindow.focusOrder || 0;
+                if (focusOrder > highestFocusOrder) {
+                    highestFocusOrder = focusOrder;
+                    lastFocusedWindow = window;
+                }
+            }
         }, index * 100);
     });
+
+    // Focus the last focused window after all windows are created
+    if (lastFocusedWindow) {
+        setTimeout(() => {
+            if (lastFocusedWindow && !lastFocusedWindow.isDestroyed()) {
+                lastFocusedWindow.focus();
+                console.log('[SESSION] Focused last active window');
+            }
+        }, sortedWindows.length * 100 + 200);
+    }
 
     return true;
 }

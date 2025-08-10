@@ -62,6 +62,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-color);
   background: var(--background-secondary);
@@ -73,11 +74,21 @@
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
+  flex-shrink: 0;
+}
+
+.ai-chat-header-controls {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
 }
 
 .ai-chat-header-actions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .ai-chat-action-button {
@@ -505,7 +516,21 @@
   padding: 8px 12px;
   background: var(--background-secondary);
   border-radius: 4px;
-  border-left: 3px solid var(--primary-color);
+  border-left: 3px solid var(--border-color);
+}
+
+.ai-chat-edit-status--applied {
+  border-left-color: var(--primary-color);
+}
+
+.ai-chat-edit-status--failed {
+  border-left-color: #dc3545;
+  background: rgba(220, 53, 69, 0.05);
+}
+
+.ai-chat-edit-status--pending {
+  border-left-color: #ffc107;
+  background: rgba(255, 193, 7, 0.05);
 }
 
 .ai-chat-edit-status-text {
@@ -514,12 +539,58 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  flex: 1;
 }
 
-.ai-chat-edit-status-text::before {
-  content: '✓';
+.ai-chat-edit-status-text--success {
   color: var(--primary-color);
-  font-weight: bold;
+}
+
+.ai-chat-edit-status-text--error {
+  color: #dc3545;
+}
+
+.ai-chat-loading-indicator {
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.ai-chat-edit-apply--inline {
+  margin-left: auto;
+  padding: 4px 8px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-chat-edit-apply--inline:hover {
+  background: var(--primary-color-hover);
+}
+
+.ai-chat-edit-retry {
+  margin-left: auto;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--primary-color);
+  color: var(--primary-color);
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-chat-edit-retry:hover {
+  background: var(--primary-color);
+  color: white;
 }
 
 /* Replacement diff styles */

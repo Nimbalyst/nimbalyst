@@ -6,6 +6,8 @@ import { createAboutWindow } from '../window/AboutWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store } from '../utils/store';
 import { updateWindowTitleBars } from '../theme/ThemeManager';
+import { getFileWatcherStatus, refreshProjectFileTree } from '../file/FileWatcherDebug';
+import { getFolderContents } from '../utils/FileTree';
 
 // Create window list menu items
 function createWindowListMenu(): any[] {
@@ -414,6 +416,56 @@ export function createApplicationMenu() {
                 { label: 'Close', role: 'close' },
                 { type: 'separator' },
                 ...createWindowListMenu()
+            ]
+        },
+        {
+            label: 'Debug',
+            submenu: [
+                {
+                    label: 'Show File Watcher Status',
+                    click: () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            const status = getFileWatcherStatus(focused.id);
+                            dialog.showMessageBox(focused, {
+                                type: 'info',
+                                title: 'File Watcher Status',
+                                message: 'File Watcher Diagnostics',
+                                detail: status,
+                                buttons: ['OK']
+                            });
+                        }
+                    }
+                },
+                {
+                    label: 'Refresh File Tree',
+                    accelerator: 'CmdOrCtrl+Shift+F5',
+                    click: () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            refreshProjectFileTree(focused);
+                        }
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Open Debug Log',
+                    click: () => {
+                        const logPath = app.getPath('userData') + '/stravu-editor-debug.log';
+                        require('electron').shell.openPath(logPath);
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Toggle Debug Console',
+                    accelerator: 'CmdOrCtrl+Shift+D',
+                    click: () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('toggle-debug-console');
+                        }
+                    }
+                }
             ]
         }
     ];

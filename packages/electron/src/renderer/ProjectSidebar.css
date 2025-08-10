@@ -171,6 +171,30 @@
   line-height: 1;
 }
 
+/* Drag and drop styles */
+.file-tree-directory.drag-over {
+  background-color: #93c5fd !important;
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+}
+
+.dark-theme .file-tree-directory.drag-over {
+  background-color: #1e3a8a !important;
+  outline: 2px solid #3b82f6;
+}
+
+.crystal-dark-theme .file-tree-directory.drag-over {
+  background-color: #1e3a8a !important;
+  outline: 2px solid #3b82f6;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not(.light-theme):not(.dark-theme) .file-tree-directory.drag-over {
+    background-color: #1e3a8a !important;
+    outline: 2px solid #3b82f6;
+  }
+}
+
 /* Scrollbar styling */
 .project-file-tree::-webkit-scrollbar {
   width: 8px;

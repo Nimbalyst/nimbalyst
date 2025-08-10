@@ -8,6 +8,10 @@ interface SessionData {
   timestamp: number;
   messages: Message[];
   documentContext?: DocumentContext;
+  projectPath?: string;
+  name?: string;
+  title?: string;
+  draftInput?: string;
 }
 
 interface Message {
@@ -38,6 +42,7 @@ export class ClaudeService extends EventEmitter {
   private anthropic: Anthropic | null = null;
   private store: Store;
   private currentSession: SessionData | null = null;
+  private currentProjectPath: string | null = null;
   private apiKey: string | null = null;
   private settings: {
     model: string;
@@ -54,13 +59,13 @@ export class ClaudeService extends EventEmitter {
     this.store = new Store({
       name: 'claude-sessions',
       schema: {
-        sessions: {
-          type: 'array',
-          default: []
+        sessionsByProject: {
+          type: 'object',
+          default: {}
         },
-        currentSessionId: {
-          type: ['string', 'null'],
-          default: null
+        currentSessionByProject: {
+          type: 'object',
+          default: {}
         },
         apiKey: {
           type: ['string', 'null'],
@@ -111,17 +116,44 @@ export class ClaudeService extends EventEmitter {
     });
 
     // Create new session
-    ipcMain.handle('claude:createSession', async (event, documentContext?: DocumentContext) => {
-      const sessionId = `session-${Date.now()}`;
+    ipcMain.handle('claude:createSession', async (event, documentContext?: DocumentContext, projectPath?: string) => {
+      // Use provided project path or try to extract from document context
+      const project = projectPath || documentContext?.filePath?.split('/').slice(0, -1).join('/') || 'default';
+      this.currentProjectPath = project;
+      
+      // Check if we already have a recent session (within 2 seconds) to avoid duplicates
+      const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+      const projectSessions = sessionsByProject[project] || [];
+      const now = Date.now();
+      
+      // Find a session created within the last 2 seconds
+      const recentSession = projectSessions.find(s => 
+        (now - s.timestamp) < 2000
+      );
+      
+      if (recentSession) {
+        // Return existing recent session instead of creating a new one
+        this.currentSession = recentSession;
+        return recentSession;
+      }
+      
+      const sessionId = `session-${now}`;
       const session: SessionData = {
         id: sessionId,
-        timestamp: Date.now(),
+        timestamp: now,
         messages: [],
-        documentContext
+        documentContext,
+        projectPath: project,
+        title: 'New conversation'
       };
 
       this.currentSession = session;
       this.saveSession(session);
+      
+      // Set as current session for this project
+      const currentByProject = this.store.get('currentSessionByProject', {}) as Record<string, string>;
+      currentByProject[project] = sessionId;
+      this.store.set('currentSessionByProject', currentByProject);
       
       return session;
     });
@@ -143,6 +175,17 @@ export class ClaudeService extends EventEmitter {
         timestamp: Date.now()
       };
       this.currentSession.messages.push(userMessage);
+      
+      // Clear draft input since message is being sent
+      this.currentSession.draftInput = '';
+      
+      // Generate title from first user message if not already set
+      if (this.currentSession.messages.length === 1 && (!this.currentSession.title || this.currentSession.title === 'New conversation')) {
+        this.currentSession.title = this.generateSessionTitle(message);
+      }
+      
+      // Save session after adding user message
+      this.saveSession(this.currentSession);
 
       // Build system prompt with document context
       const systemPrompt = this.buildSystemPrompt(documentContext);
@@ -203,18 +246,30 @@ export class ClaudeService extends EventEmitter {
       }
     });
 
-    // Get session history
-    ipcMain.handle('claude:getSessions', async () => {
-      return this.store.get('sessions', []);
+    // Get session history for current project (newest first)
+    ipcMain.handle('claude:getSessions', async (event, projectPath?: string) => {
+      const project = projectPath || this.currentProjectPath || 'default';
+      const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+      const sessions = sessionsByProject[project] || [];
+      // Sort by timestamp descending (newest first)
+      return sessions.sort((a, b) => b.timestamp - a.timestamp);
     });
 
     // Load session
-    ipcMain.handle('claude:loadSession', async (event, sessionId: string) => {
-      const sessions = this.store.get('sessions', []) as SessionData[];
+    ipcMain.handle('claude:loadSession', async (event, sessionId: string, projectPath?: string) => {
+      const project = projectPath || this.currentProjectPath || 'default';
+      const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+      const sessions = sessionsByProject[project] || [];
       const session = sessions.find(s => s.id === sessionId);
       
       if (session) {
         this.currentSession = session;
+        this.currentProjectPath = project;
+        
+        // Set as current session for this project
+        const currentByProject = this.store.get('currentSessionByProject', {}) as Record<string, string>;
+        currentByProject[project] = sessionId;
+        this.store.set('currentSessionByProject', currentByProject);
         return session;
       }
       
@@ -225,6 +280,50 @@ export class ClaudeService extends EventEmitter {
     ipcMain.handle('claude:clearSession', async () => {
       this.currentSession = null;
       return { success: true };
+    });
+    
+    // Update session messages (for syncing streaming status messages)
+    ipcMain.handle('claude:updateSessionMessages', async (event, sessionId: string, messages: Message[], projectPath?: string) => {
+      const project = projectPath || this.currentProjectPath || 'default';
+      const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+      const sessions = sessionsByProject[project] || [];
+      const session = sessions.find(s => s.id === sessionId);
+      
+      if (session) {
+        session.messages = messages;
+        this.saveSession(session);
+        
+        // Update current session if it matches
+        if (this.currentSession?.id === sessionId) {
+          this.currentSession = session;
+        }
+        
+        return { success: true };
+      }
+      
+      return { success: false, error: 'Session not found' };
+    });
+
+    // Save draft input for a session
+    ipcMain.handle('claude:saveDraftInput', async (event, sessionId: string, draftInput: string, projectPath?: string) => {
+      const project = projectPath || this.currentProjectPath || 'default';
+      const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+      const sessions = sessionsByProject[project] || [];
+      const session = sessions.find(s => s.id === sessionId);
+      
+      if (session) {
+        session.draftInput = draftInput;
+        this.saveSession(session);
+        
+        // Update current session if it matches
+        if (this.currentSession?.id === sessionId) {
+          this.currentSession.draftInput = draftInput;
+        }
+        
+        return { success: true };
+      }
+      
+      return { success: false, error: 'Session not found' };
     });
 
     // Apply edit request
@@ -284,6 +383,34 @@ export class ClaudeService extends EventEmitter {
       } catch (error: any) {
         return { success: false, error: error.message };
       }
+    });
+
+    // Delete session
+    ipcMain.handle('claude:deleteSession', async (event, sessionId: string, projectPath?: string) => {
+      const project = projectPath || this.currentProjectPath || 'default';
+      const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+      const sessions = sessionsByProject[project] || [];
+      
+      // Filter out the session to delete
+      const updatedSessions = sessions.filter(s => s.id !== sessionId);
+      
+      // Update the store
+      sessionsByProject[project] = updatedSessions;
+      this.store.set('sessionsByProject', sessionsByProject);
+      
+      // If we deleted the current session, clear it
+      if (this.currentSession?.id === sessionId) {
+        this.currentSession = null;
+        
+        // Clear from current session tracking
+        const currentByProject = this.store.get('currentSessionByProject', {}) as Record<string, string>;
+        if (currentByProject[project] === sessionId) {
+          delete currentByProject[project];
+          this.store.set('currentSessionByProject', currentByProject);
+        }
+      }
+      
+      return { success: true };
     });
 
     // Get available models
@@ -367,13 +494,57 @@ export class ClaudeService extends EventEmitter {
     let prompt = `You are an AI assistant for Stravu Editor, a markdown-focused text editor built with Lexical.
 Your role is to help users edit and improve their documents. You can suggest edits, generate content, and answer questions about the document.
 
-When users ask you to edit or modify their document, you should provide specific edit instructions that can be applied to the document.
+STREAMING PROTOCOL:
+When the user asks you to add, insert, or create new content in their document (e.g., "add a section about X", "insert a paragraph", "write an introduction"), 
+you should stream the content directly into the editor instead of showing it in the chat. 
+
+You MUST specify WHERE to insert the content by using ONE of these options:
+
+1. To insert after specific text (finds the line containing this text and inserts after it):
+<!-- STREAM_EDIT: {"insertAfter": "last line or partial text to insert after", "mode": "after"} -->
+
+2. To insert at the end of the document:
+<!-- STREAM_EDIT: {"insertAtEnd": true, "mode": "after"} -->
+
+Then provide the markdown content to be inserted, and end with:
+<!-- STREAM_END -->
+
+IMPORTANT: For "insertAfter", provide enough unique text from the END of a line to identify where to insert.
+Examples:
+- If user says "add a section after the introduction", find the last line of the introduction section
+- If user says "add content after 'Features' section", find the last line of that section
+- If no location specified, use {"insertAtEnd": true}
+
+Example for adding after specific text:
+<!-- STREAM_EDIT: {"insertAfter": "This concludes the introduction.", "mode": "after"} -->
+## New Section
+Content to be inserted...
+<!-- STREAM_END -->
+
+Example for adding at document end:
+<!-- STREAM_EDIT: {"insertAtEnd": true, "mode": "after"} -->
+## Appendix
+Content to be added at the end...
+<!-- STREAM_END -->
+
+Use streaming mode when:
+- User asks to "add", "insert", "append", or "write" new content
+- User asks to create sections, paragraphs, or other new content blocks
+- User requests generation of new content for the document
+
+DO NOT use streaming mode when:
+- User asks questions about the document
+- User asks for suggestions or feedback
+- User asks to edit/modify existing content (use diff edits instead)
+- User is having a general conversation
+
+When NOT streaming, provide specific edit instructions that can be applied to the document.
 Focus on being helpful and making precise, targeted edits rather than rewriting entire documents unless specifically asked.
 
 Key capabilities:
-- Generate and expand content
-- Rewrite and improve text
-- Create structured documents (outlines, summaries, etc.)
+- Generate and expand content (use streaming for new content)
+- Rewrite and improve text (use diff edits for modifications)
+- Create structured documents (use streaming for new sections)
 - Format markdown correctly
 - Suggest improvements for clarity and readability`;
 
@@ -481,7 +652,8 @@ IMPORTANT:
       id: sessionId,
       timestamp: Date.now(),
       messages: [],
-      documentContext
+      documentContext,
+      title: 'New conversation'
     };
 
     this.saveSession(session);
@@ -489,7 +661,14 @@ IMPORTANT:
   }
 
   private saveSession(session: SessionData) {
-    const sessions = this.store.get('sessions', []) as SessionData[];
+    const project = session.projectPath || this.currentProjectPath || 'default';
+    const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+    
+    if (!sessionsByProject[project]) {
+      sessionsByProject[project] = [];
+    }
+    
+    const sessions = sessionsByProject[project];
     const index = sessions.findIndex(s => s.id === session.id);
     
     if (index >= 0) {
@@ -498,13 +677,49 @@ IMPORTANT:
       sessions.push(session);
     }
 
-    // Keep only last 50 sessions
+    // Keep only last 50 sessions per project
     if (sessions.length > 50) {
       sessions.splice(0, sessions.length - 50);
     }
 
-    this.store.set('sessions', sessions);
-    this.store.set('currentSessionId', session.id);
+    sessionsByProject[project] = sessions;
+    this.store.set('sessionsByProject', sessionsByProject);
+  }
+
+  private generateSessionTitle(firstMessage: string): string {
+    // Clean and truncate the message for a title
+    let title = firstMessage
+      .replace(/[\n\r]+/g, ' ')  // Replace newlines with spaces
+      .replace(/\s+/g, ' ')       // Normalize whitespace
+      .trim();
+    
+    // If message starts with common patterns, extract the main topic
+    const patterns = [
+      /^(can you |could you |please |help me |i need to |i want to |how do i |how to |what is |what are |where is |where are |why is |why are |when is |when are )/i,
+      /^(add |create |make |build |implement |fix |update |modify |change |refactor |optimize |debug |test |write |generate )/i
+    ];
+    
+    for (const pattern of patterns) {
+      if (pattern.test(title)) {
+        title = title.replace(pattern, '');
+        break;
+      }
+    }
+    
+    // Capitalize first letter
+    title = title.charAt(0).toUpperCase() + title.slice(1);
+    
+    // Truncate to reasonable length (50 chars) and add ellipsis if needed
+    if (title.length > 50) {
+      title = title.substring(0, 47) + '...';
+    }
+    
+    // If title is too short or empty, use a default
+    if (title.length < 3) {
+      title = 'New conversation';
+    }
+    
+    return title;
   }
 
   public destroy() {

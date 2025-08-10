@@ -15,7 +15,7 @@ interface ChatMessageProps {
   content: string;
   edits?: EditRequest[];
   isStreaming?: boolean;
-  onApplyEdit?: (edit: EditRequest) => void;
+  onApplyEdit?: (edit: EditRequest) => Promise<{ success: boolean; error?: string }>;
 }
 
 export function ChatMessage({ 
@@ -27,11 +27,36 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const [expandedEdits, setExpandedEdits] = useState(false);
   const [appliedEdits, setAppliedEdits] = useState<Set<number>>(new Set());
+  const [editStatus, setEditStatus] = useState<{ [key: number]: { status: 'applied' | 'failed' | 'pending'; error?: string } }>({});
 
-  const handleApplyEdit = (edit: EditRequest, index: number) => {
-    if (onApplyEdit) {
-      onApplyEdit(edit);
-      setAppliedEdits(prev => new Set(prev).add(index));
+  const handleApplyEdit = async (edit: EditRequest, index: number) => {
+    if (!onApplyEdit) return;
+    
+    setEditStatus(prev => ({ ...prev, [index]: { status: 'pending' } }));
+    
+    try {
+      const result = await onApplyEdit(edit);
+      
+      if (result.success) {
+        setAppliedEdits(prev => new Set(prev).add(index));
+        setEditStatus(prev => ({ ...prev, [index]: { status: 'applied' } }));
+      } else {
+        setEditStatus(prev => ({ 
+          ...prev, 
+          [index]: { 
+            status: 'failed', 
+            error: result.error || 'Failed to apply changes' 
+          } 
+        }));
+      }
+    } catch (error) {
+      setEditStatus(prev => ({ 
+        ...prev, 
+        [index]: { 
+          status: 'failed', 
+          error: error instanceof Error ? error.message : 'Unexpected error occurred' 
+        } 
+      }));
     }
   };
 
@@ -114,10 +139,42 @@ export function ChatMessage({
                         )}
                       </div>
                     ))}
-                    <div className="ai-chat-edit-status">
-                      <span className="ai-chat-edit-status-text">
-                        ✓ Applied to document - use the diff toolbar to approve or reject
-                      </span>
+                    <div className={`ai-chat-edit-status ${editStatus[index]?.status ? `ai-chat-edit-status--${editStatus[index].status}` : ''}`}>
+                      {editStatus[index]?.status === 'pending' ? (
+                        <span className="ai-chat-edit-status-text">
+                          <span className="ai-chat-loading-indicator">⟳</span> Applying changes...
+                        </span>
+                      ) : editStatus[index]?.status === 'failed' ? (
+                        <>
+                          <span className="ai-chat-edit-status-text ai-chat-edit-status-text--error">
+                            ✗ {editStatus[index].error}
+                          </span>
+                          <button 
+                            className="ai-chat-edit-retry"
+                            onClick={() => handleApplyEdit(edit, index)}
+                            title="Retry applying this edit"
+                          >
+                            Retry
+                          </button>
+                        </>
+                      ) : editStatus[index]?.status === 'applied' ? (
+                        <span className="ai-chat-edit-status-text ai-chat-edit-status-text--success">
+                          ✓ Changes applied - use the diff toolbar to approve or reject
+                        </span>
+                      ) : (
+                        <>
+                          <span className="ai-chat-edit-status-text">
+                            Ready to apply changes
+                          </span>
+                          <button 
+                            className="ai-chat-edit-apply ai-chat-edit-apply--inline"
+                            onClick={() => handleApplyEdit(edit, index)}
+                            title="Apply this edit"
+                          >
+                            Apply
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}

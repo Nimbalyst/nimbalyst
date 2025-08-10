@@ -12,10 +12,12 @@ import { getTitleBarColors } from '../theme/ThemeManager';
 export const windows = new Map<number, BrowserWindow>();
 export const windowStates = new Map<number, WindowState>();
 export const savingWindows = new Set<number>();
+export const windowFocusOrder = new Map<number, number>(); // Track focus order for each window
 
 let windowIdCounter = 0;
 let windowPositionOffset = 0;
 let untitledCounter = 0;
+let focusOrderCounter = 0; // Counter for tracking focus order
 
 // Get focused window or create new one
 export function getFocusedOrNewWindow(): BrowserWindow {
@@ -144,6 +146,7 @@ export function createWindow(
             projectPath: isProjectMode ? projectPath : null,
             documentEdited: false
         });
+        windowFocusOrder.set(windowId, ++focusOrderCounter); // Track initial focus order
 
         // Handle window close with unsaved changes
         window.on('close', (event) => {
@@ -186,6 +189,7 @@ export function createWindow(
             windows.delete(windowId);
             windowStates.delete(windowId);
             savingWindows.delete(windowId);
+            windowFocusOrder.delete(windowId);
             stopFileWatcher(windowId);
             stopProjectWatcher(windowId);
             // Update menu to reflect window closure
@@ -194,6 +198,8 @@ export function createWindow(
 
         // Update menu when window gains/loses focus
         window.on('focus', () => {
+            // Update focus order
+            windowFocusOrder.set(windowId, ++focusOrderCounter);
             // This will be handled by the menu system
         });
 

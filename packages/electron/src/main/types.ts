@@ -21,6 +21,7 @@ export interface SessionWindow {
         width: number;
         height: number;
     };
+    focusOrder?: number; // Track window focus order (higher = more recently focused)
 }
 
 export interface SessionState {

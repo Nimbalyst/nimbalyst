@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatHeader } from './ChatHeader';
 import { ChatMessages } from './ChatMessages';
 import { ChatInput } from './ChatInput';
+import { SessionDropdown } from './SessionDropdown';
 import { claudeApi, DocumentContext } from '../../services/claudeApi';
+import { logger } from '../../utils/logger';
 import './AIChat.css';
 
 interface AIChatProps {
@@ -12,6 +14,7 @@ interface AIChatProps {
   onWidthChange: (width: number) => void;
   documentContext?: DocumentContext;
   onApplyEdit?: (edit: any) => void;
+  projectPath?: string;
 }
 
 export function AIChat({
@@ -20,32 +23,50 @@ export function AIChat({
   width,
   onWidthChange,
   documentContext,
-  onApplyEdit
+  onApplyEdit,
+  projectPath
 }: AIChatProps) {
-  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; edits?: any[] }>>([]);
+  const [messages, setMessages] = useState<Array<{ 
+    role: 'user' | 'assistant'; 
+    content: string; 
+    edits?: any[];
+    isStreamingStatus?: boolean;
+    streamingData?: {
+      position: string;
+      mode: string;
+      content: string;
+      isActive: boolean;
+    };
+  }>>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentStreamContent, setCurrentStreamContent] = useState('');
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+  const [isStreamingToEditor, setIsStreamingToEditor] = useState(false);
+  const [streamingEditId, setStreamingEditId] = useState<string | null>(null);
+  const [streamingContent, setStreamingContent] = useState<string>('');
+  const [sessions, setSessions] = useState<Array<any>>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const isResizingRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const streamingEditIdRef = useRef<string | null>(null);
+  const isStreamingToEditorRef = useRef(false);
+  const streamTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize Claude on mount
+  // Load sessions on mount
+  const loadSessions = useCallback(async () => {
+    try {
+      const allSessions = await claudeApi.getSessions(projectPath);
+      setSessions(allSessions || []);
+    } catch (error) {
+      logger.log('session', 'Failed to load sessions:', error);
+    }
+  }, [projectPath]);
+
+  // Set up all event listeners FIRST (before initialization)
   useEffect(() => {
-    const initClaude = async () => {
-      try {
-        await claudeApi.initialize();
-        await claudeApi.createSession(documentContext);
-        setIsInitialized(true);
-      } catch (error: any) {
-        console.error('Failed to initialize Claude:', error);
-        setInitError(error.message || 'Failed to initialize Claude');
-      }
-    };
-
-    initClaude();
-
+    logger.log('ui', 'Setting up event listeners...');
     // Set up streaming response listener
     const handleStreamResponse = (data: any) => {
       if (data.isComplete) {
@@ -70,7 +91,7 @@ export function AIChat({
         // Auto-apply edits when they arrive
         if (data.edits && data.edits.length > 0 && onApplyEdit) {
           data.edits.forEach((edit: any) => {
-            console.log('Auto-applying edit from Claude:', edit);
+            logger.log('bridge', 'Auto-applying edit from Claude:', edit);
             onApplyEdit(edit);
           });
         }
@@ -91,11 +112,252 @@ export function AIChat({
 
     claudeApi.on('editRequest', handleEditRequest);
 
+    // Set up streaming edit listeners
+    const handleStreamEditStart = (config: any) => {
+      logger.log('streaming', '🎯 Stream Edit Start Event Received:', config);
+      setIsStreamingToEditor(true);
+      isStreamingToEditorRef.current = true; // Set ref immediately
+      setStreamingContent(''); // Reset streaming content
+      
+      // Clear any existing timeout
+      if (streamTimeoutRef.current) {
+        clearTimeout(streamTimeoutRef.current);
+      }
+      
+      // Set a timeout to detect stuck streaming (30 seconds)
+      streamTimeoutRef.current = setTimeout(() => {
+        if (isStreamingToEditorRef.current) {
+          logger.log('streaming', '⚠️ Streaming timeout - ending stuck session');
+          handleStreamEditEnd({ error: 'Streaming timeout after 30 seconds' });
+        }
+      }, 30000);
+      
+      // Generate a unique ID for this streaming session
+      const editId = `stream-${Date.now()}`;
+      setStreamingEditId(editId);
+      streamingEditIdRef.current = editId; // Set ref immediately
+      logger.log('streaming', 'Generated stream ID:', editId);
+      
+      // Initialize the streaming edit in the editor
+      const aiChatBridge = (window as any).aiChatBridge;
+      logger.log('bridge', 'AI Chat Bridge available:', !!aiChatBridge);
+      logger.log('bridge', 'Bridge methods:', {
+        startStreamingEdit: !!aiChatBridge?.startStreamingEdit,
+        streamContent: !!aiChatBridge?.streamContent,
+        endStreamingEdit: !!aiChatBridge?.endStreamingEdit
+      });
+      
+      if (aiChatBridge?.startStreamingEdit) {
+        logger.log('bridge', 'Calling bridge.startStreamingEdit with:', {
+          id: editId,
+          ...config
+        });
+        aiChatBridge.startStreamingEdit({
+          id: editId,
+          ...config
+        });
+      } else {
+        logger.log('bridge', '❌ Bridge method startStreamingEdit not available!');
+      }
+      
+      // Determine position text for display
+      let positionText = 'document';
+      if (config.insertAtEnd) {
+        positionText = 'end of document';
+      } else if (config.insertAfter) {
+        positionText = `after "${config.insertAfter.substring(0, 30)}..."`;
+      }
+      
+      // Add a streaming status message
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '',
+        isStreamingStatus: true,
+        streamingData: {
+          position: positionText,
+          mode: config.mode || 'after',
+          content: '',
+          isActive: true
+        }
+      }]);
+    };
+
+    const handleStreamEditContent = (content: string) => {
+      const currentStreamId = streamingEditIdRef.current || streamingEditId;
+      const isStreaming = isStreamingToEditorRef.current || isStreamingToEditor;
+      logger.log('streaming', 'Stream content received:', {
+        hasStreamingEditId: !!currentStreamId,
+        isStreamingToEditor: isStreaming,
+        contentLength: content?.length,
+        preview: content?.substring(0, 50)
+      });
+      
+      if (!isStreaming || !currentStreamId) {
+        logger.log('streaming', 'Ignoring stream content - not in streaming mode');
+        return;
+      }
+      
+      // Accumulate streaming content for display
+      setStreamingContent(prev => prev + content);
+      
+      // Update the streaming status message with accumulated content
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastMsg = newMessages[newMessages.length - 1];
+        if (lastMsg && lastMsg.isStreamingStatus && lastMsg.streamingData) {
+          lastMsg.streamingData.content = streamingContent + content;
+        }
+        return newMessages;
+      });
+      
+      // Stream the content to the editor
+      const aiChatBridge = (window as any).aiChatBridge;
+      if (aiChatBridge?.streamContent) {
+        logger.log('bridge', 'Calling bridge.streamContent');
+        aiChatBridge.streamContent(currentStreamId, content);
+      } else {
+        logger.log('bridge', '❌ Bridge method streamContent not available!');
+      }
+    };
+
+    const handleStreamEditEnd = async (data?: { error?: string }) => {
+      const currentStreamId = streamingEditIdRef.current || streamingEditId;
+      const isStreaming = isStreamingToEditorRef.current || isStreamingToEditor;
+      logger.log('streaming', '🏁 Stream Edit End Event Received:', {
+        streamingEditId: currentStreamId,
+        isStreamingToEditor: isStreaming,
+        streamingContentLength: streamingContent.length,
+        error: data?.error
+      });
+      
+      if (!currentStreamId) {
+        logger.log('streaming', 'No streaming edit ID to end');
+        return;
+      }
+      
+      // Finalize the streaming edit in the editor
+      const aiChatBridge = (window as any).aiChatBridge;
+      if (aiChatBridge?.endStreamingEdit) {
+        logger.log('bridge', 'Calling bridge.endStreamingEdit');
+        aiChatBridge.endStreamingEdit(currentStreamId);
+      } else {
+        logger.log('bridge', '❌ Bridge method endStreamingEdit not available!');
+      }
+      
+      // Update the streaming status to complete or error
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastMsg = newMessages[newMessages.length - 1];
+        if (lastMsg && lastMsg.isStreamingStatus && lastMsg.streamingData) {
+          lastMsg.streamingData.isActive = false;
+          lastMsg.streamingData.content = streamingContent || (data?.error ? `Error: ${data.error}` : '');
+        }
+        return newMessages;
+      });
+      
+      // Save the streaming status message to the session
+      // This ensures it persists when sessions are reloaded
+      await loadSessions();
+      
+      // Clear timeout
+      if (streamTimeoutRef.current) {
+        clearTimeout(streamTimeoutRef.current);
+        streamTimeoutRef.current = null;
+      }
+      
+      setIsStreamingToEditor(false);
+      isStreamingToEditorRef.current = false; // Clear ref
+      setStreamingEditId(null);
+      streamingEditIdRef.current = null; // Clear ref
+      setStreamingContent('');
+      setIsLoading(false);
+    };
+
+    // Register all event handlers
+    logger.log('ui', 'Registering event handlers...');
+    claudeApi.on('streamEditStart', handleStreamEditStart);
+    claudeApi.on('streamEditContent', handleStreamEditContent);
+    claudeApi.on('streamEditEnd', handleStreamEditEnd);
+    
+    // Test that handlers are registered
+    logger.log('ui', 'Event handlers registered:', {
+      streamResponse: true,
+      editRequest: true,
+      streamEditStart: true,
+      streamEditContent: true,
+      streamEditEnd: true
+    });
+
     return () => {
+      logger.log('ui', 'Cleaning up event handlers...');
       claudeApi.off('streamResponse', handleStreamResponse);
       claudeApi.off('editRequest', handleEditRequest);
+      claudeApi.off('streamEditStart', handleStreamEditStart);
+      claudeApi.off('streamEditContent', handleStreamEditContent);
+      claudeApi.off('streamEditEnd', handleStreamEditEnd);
     };
-  }, [documentContext, onApplyEdit]);
+  }, [documentContext, onApplyEdit, loadSessions, streamingContent]); // Add missing dependencies
+
+  // Initialize Claude AFTER event handlers are set up
+  useEffect(() => {
+    // Prevent double initialization
+    if (isInitialized) return;
+    
+    let mounted = true;
+    const initClaude = async () => {
+      try {
+        await claudeApi.initialize();
+        
+        // First check if there's an existing session for this project
+        const existingSessions = await claudeApi.getSessions(projectPath);
+        let session;
+        
+        if (existingSessions && existingSessions.length > 0) {
+          // Load the most recent session
+          session = await claudeApi.loadSession(existingSessions[0].id, projectPath);
+        } else {
+          // Create new session only if none exists
+          session = await claudeApi.createSession(documentContext, projectPath);
+        }
+        
+        if (mounted) {
+          setCurrentSessionId(session.id);
+          setIsInitialized(true);
+          
+          // Load existing messages if any
+          if (session.messages && session.messages.length > 0) {
+            const chatMessages = session.messages.map((msg: any) => ({
+              role: msg.role,
+              content: msg.content,
+              edits: msg.edits,
+              isStreamingStatus: msg.isStreamingStatus,
+              streamingData: msg.streamingData
+            }));
+            setMessages(chatMessages);
+          }
+          
+          // Restore draft input if it exists
+          if (session.draftInput) {
+            setInputValue(session.draftInput);
+          }
+          
+          await loadSessions();
+        }
+      } catch (error: any) {
+        if (mounted) {
+          logger.log('api', 'Failed to initialize Claude:', error);
+          setInitError(error.message || 'Failed to initialize Claude');
+        }
+      }
+    };
+
+    // Small delay to ensure event handlers are registered
+    setTimeout(initClaude, 100);
+    
+    return () => {
+      mounted = false;
+    };
+  }, [projectPath, documentContext, loadSessions]);
 
   // Update document context when it changes
   useEffect(() => {
@@ -119,7 +381,9 @@ export function AIChat({
       
       // Calculate new width from right edge
       const newWidth = window.innerWidth - e.clientX;
-      const clampedWidth = Math.min(Math.max(280, newWidth), 600);
+      // Allow up to 50% of window width, with minimum of 280px
+      const maxWidth = Math.floor(window.innerWidth * 0.5);
+      const clampedWidth = Math.min(Math.max(280, newWidth), maxWidth);
       onWidthChange(clampedWidth);
     };
 
@@ -143,6 +407,18 @@ export function AIChat({
   const handleSendMessage = useCallback(async (message: string) => {
     if (!message.trim() || !isInitialized) return;
     
+    // Get fresh document context with latest content
+    const freshDocumentContext = {
+      ...documentContext,
+      content: documentContext?.content || '' // This will get the latest from getContentRef
+    };
+    
+    // If no current session, create one first
+    if (!currentSessionId) {
+      const session = await claudeApi.createSession(freshDocumentContext, projectPath);
+      setCurrentSessionId(session.id);
+    }
+    
     // Add user message
     setMessages(prev => [...prev, { role: 'user', content: message }]);
     setInputValue('');
@@ -150,22 +426,134 @@ export function AIChat({
     setCurrentStreamContent('');
     
     try {
-      // Send message to Claude with document context
-      await claudeApi.sendMessage(message, documentContext);
+      // Send message to Claude with fresh document context
+      await claudeApi.sendMessage(message, freshDocumentContext);
+      // Reload sessions to update message counts
+      await loadSessions();
     } catch (error) {
-      console.error('Failed to send message:', error);
+      logger.log('api', 'Failed to send message:', error);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: 'Sorry, I encountered an error processing your request. Please try again.' 
       }]);
       setIsLoading(false);
     }
-  }, [isInitialized, documentContext]);
+  }, [isInitialized, documentContext, loadSessions, currentSessionId, projectPath]);
 
-  const handleApplyEdit = useCallback((edit: any) => {
-    // Apply the edit through the API
-    claudeApi.applyEdit(edit);
+  const handleApplyEdit = useCallback(async (edit: any): Promise<{ success: boolean; error?: string }> => {
+    try {
+      // Apply the edit through the API - this should return a promise
+      const result = await claudeApi.applyEdit(edit);
+      return result;
+    } catch (error) {
+      logger.log('bridge', 'Failed to apply edit:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to apply changes' 
+      };
+    }
   }, []);
+
+  // Session management handlers
+  const handleNewSession = useCallback(async () => {
+    try {
+      const session = await claudeApi.createSession(documentContext, projectPath);
+      setCurrentSessionId(session.id);
+      setMessages([]);
+      setInputValue(''); // Clear input for new session
+      await loadSessions();
+    } catch (error) {
+      logger.log('session', 'Failed to create new session:', error);
+    }
+  }, [documentContext, projectPath, loadSessions]);
+  
+  // Sync messages to backend whenever they change
+  useEffect(() => {
+    if (!currentSessionId || messages.length === 0) return;
+    
+    const syncMessages = async () => {
+      try {
+        await claudeApi.updateSessionMessages(currentSessionId, messages, projectPath);
+        // Reload sessions to update message counts
+        await loadSessions();
+      } catch (error) {
+        logger.log('session', 'Failed to sync messages:', error);
+      }
+    };
+    
+    // Debounce to avoid too many updates
+    const timeoutId = setTimeout(syncMessages, 500);
+    return () => clearTimeout(timeoutId);
+  }, [messages, currentSessionId, projectPath, loadSessions]);
+
+  // Save draft input whenever it changes
+  useEffect(() => {
+    if (!currentSessionId || !isInitialized) return;
+    
+    const saveDraft = async () => {
+      try {
+        await claudeApi.saveDraftInput(currentSessionId, inputValue, projectPath);
+      } catch (error) {
+        logger.log('session', 'Failed to save draft input:', error);
+      }
+    };
+    
+    // Debounce to avoid too many saves
+    const timeoutId = setTimeout(saveDraft, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [inputValue, currentSessionId, projectPath, isInitialized]);
+
+  const handleSessionSelect = useCallback(async (sessionId: string) => {
+    try {
+      const session = await claudeApi.loadSession(sessionId, projectPath);
+      setCurrentSessionId(session.id);
+      
+      // Convert session messages to chat format, preserving streaming status
+      const chatMessages = session.messages.map((msg: any) => ({
+        role: msg.role,
+        content: msg.content,
+        edits: msg.edits,
+        isStreamingStatus: msg.isStreamingStatus,
+        streamingData: msg.streamingData
+      }));
+      
+      setMessages(chatMessages);
+      
+      // Restore draft input for this session
+      setInputValue(session.draftInput || '');
+    } catch (error) {
+      logger.log('session', 'Failed to load session:', error);
+    }
+  }, []);
+
+  const handleDeleteSession = useCallback(async (sessionId: string) => {
+    try {
+      // Delete the session
+      await claudeApi.deleteSession(sessionId, projectPath);
+      
+      // If we deleted the current session, clear the UI but don't create a new one yet
+      if (sessionId === currentSessionId) {
+        setCurrentSessionId(null);
+        setMessages([]);
+      }
+      
+      // Reload sessions list
+      await loadSessions();
+    } catch (error) {
+      logger.log('session', 'Failed to delete session:', error);
+    }
+  }, [currentSessionId, projectPath, loadSessions]);
+
+  const handleRenameSession = useCallback(async (sessionId: string, newName: string) => {
+    try {
+      // TODO: Add rename session API call when available
+      // await claudeApi.renameSession(sessionId, newName);
+      
+      await loadSessions();
+    } catch (error) {
+      logger.log('session', 'Failed to rename session:', error);
+    }
+  }, [loadSessions]);
 
   if (isCollapsed) {
     return (
@@ -195,7 +583,22 @@ export function AIChat({
         onMouseDown={handleMouseDown}
       />
       
-      <ChatHeader onToggleCollapse={onToggleCollapse} />
+      <ChatHeader onToggleCollapse={onToggleCollapse} onNewSession={handleNewSession}>
+        <SessionDropdown
+          currentSessionId={currentSessionId}
+          sessions={sessions.map(s => ({
+            id: s.id,
+            timestamp: s.timestamp,
+            name: s.name,
+            title: s.title,
+            messageCount: s.messages?.length || 0
+          }))}
+          onSessionSelect={handleSessionSelect}
+          onNewSession={handleNewSession}
+          onDeleteSession={handleDeleteSession}
+          onRenameSession={handleRenameSession}
+        />
+      </ChatHeader>
       
       {initError ? (
         <div className="ai-chat-error">

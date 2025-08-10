@@ -7,8 +7,8 @@
  */
 
 .search-replace-dialog {
-  position: absolute;
-  top: 36px;
+  position: fixed;
+  top: 80px;
   right: 20px;
   width: 520px;
   max-width: calc(100% - 40px);
@@ -19,6 +19,13 @@
   z-index: 500;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   font-size: 14px;
+  transition: box-shadow 0.2s;
+  user-select: none;
+}
+
+.search-replace-dialog.is-dragging {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  opacity: 0.95;
 }
 
 .search-replace-header {
@@ -27,6 +34,11 @@
   align-items: center;
   padding: 6px 16px;
   border-bottom: 1px solid #e0e0e0;
+  cursor: grab;
+}
+
+.search-replace-dialog.is-dragging .search-replace-header {
+  cursor: grabbing;
 }
 
 .search-replace-title {
@@ -211,27 +223,38 @@
 }
 
 /* Dark mode support */
-.stravu-editor[data-theme="dark"] .search-replace-dialog {
+.stravu-editor[data-theme="dark"] .search-replace-dialog,
+.stravu-editor[data-theme="crystal-dark"] .search-replace-dialog {
   background: var(--stravu-bg-secondary);
   border-color: var(--stravu-editor-border);
 }
 
-.stravu-editor[data-theme="dark"] .search-replace-header {
+.stravu-editor[data-theme="dark"] .search-replace-dialog.is-dragging,
+.stravu-editor[data-theme="crystal-dark"] .search-replace-dialog.is-dragging {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.stravu-editor[data-theme="dark"] .search-replace-header,
+.stravu-editor[data-theme="crystal-dark"] .search-replace-header {
   border-bottom-color: var(--stravu-editor-border);
 }
 
-.stravu-editor[data-theme="dark"] .search-replace-input {
+.stravu-editor[data-theme="dark"] .search-replace-input,
+.stravu-editor[data-theme="crystal-dark"] .search-replace-input {
   background: var(--stravu-bg-primary);
   border-color: var(--stravu-editor-border);
   color: var(--stravu-text-primary);
 }
 
-.stravu-editor[data-theme="dark"] .search-replace-input:focus {
+.stravu-editor[data-theme="dark"] .search-replace-input:focus,
+.stravu-editor[data-theme="crystal-dark"] .search-replace-input:focus {
   border-color: var(--stravu-focus-border);
 }
 
 .stravu-editor[data-theme="dark"] .search-replace-title,
-.stravu-editor[data-theme="dark"] .search-replace-close {
+.stravu-editor[data-theme="dark"] .search-replace-close,
+.stravu-editor[data-theme="crystal-dark"] .search-replace-title,
+.stravu-editor[data-theme="crystal-dark"] .search-replace-close {
   color: var(--stravu-text-primary);
 }
 

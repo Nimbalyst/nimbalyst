@@ -1,12 +1,13 @@
-console.log('[RENDERER] App.tsx loading at', new Date().toISOString());
-
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { logger } from './utils/logger';
 
-console.log('[RENDERER] About to import StravuEditor at', new Date().toISOString());
+logger.log('ui', 'App.tsx loading at', new Date().toISOString());
+logger.log('ui', 'About to import StravuEditor at', new Date().toISOString());
 import { StravuEditor, TOGGLE_SEARCH_COMMAND, MARKDOWN_TRANSFORMERS, aiChatBridge } from 'stravu-editor';
 import type { LexicalCommand, ConfigTheme, TextReplacement } from 'stravu-editor';
-import '../../../stravu-editor/dist/style.css';
-console.log('[RENDERER] StravuEditor imported at', new Date().toISOString());
+// Import styles - handled by vite plugin for both dev and prod
+import 'stravu-editor/styles';
+logger.log('ui', 'StravuEditor imported at', new Date().toISOString());
 import { ProjectSidebar } from './components/ProjectSidebar';
 import { ProjectWelcome } from './components/ProjectWelcome';
 import { QuickOpen } from './components/QuickOpen';
@@ -28,6 +29,7 @@ interface ElectronAPI {
   onFileNew: (callback: () => void) => () => void;
   onFileOpen: (callback: () => void) => () => void;
   onProjectOpened: (callback: (data: { projectPath: string; projectName: string; fileTree: FileTreeItem[] }) => void) => () => void;
+  onOpenProjectFromCLI?: (callback: (projectPath: string) => void) => () => void;
   onFileSave: (callback: () => void) => () => void;
   onFileSaveAs: (callback: () => void) => () => void;
   onFileOpenedFromOS: (callback: (data: { filePath: string; content: string }) => void) => () => void;
@@ -86,7 +88,7 @@ declare global {
 
 
 export default function App() {
-  console.log('[RENDERER] App component rendering at', new Date().toISOString());
+  logger.log('ui', 'App component rendering at', new Date().toISOString());
   const [content, setContent] = useState('');
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
   const [currentFileName, setCurrentFileName] = useState<string | null>(null);
@@ -103,6 +105,7 @@ export default function App() {
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
+  const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
@@ -117,9 +120,9 @@ export default function App() {
 
   // Log mount/unmount
   useEffect(() => {
-    console.log('[RENDERER] App component mounted at', new Date().toISOString());
+    logger.log('ui', 'App component mounted at', new Date().toISOString());
     return () => {
-      console.log('[RENDERER] App component unmounting at', new Date().toISOString());
+      logger.log('ui', 'App component unmounting at', new Date().toISOString());
     };
   }, []);
 
@@ -214,11 +217,16 @@ export default function App() {
         }
       });
 
-      window.electronAPI.getAIChatState?.().then((state) => {
+      window.electronAPI.getAIChatState().then((state) => {
+        console.log('Loaded AI Chat state:', state);
         if (state) {
           setIsAIChatCollapsed(state.collapsed);
           setAIChatWidth(state.width);
         }
+        setIsAIChatStateLoaded(true);
+      }).catch(error => {
+        console.error('Failed to load AI Chat state:', error);
+        setIsAIChatStateLoaded(true);
       });
     }
   }, []);
@@ -538,12 +546,14 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [projectMode, currentFilePath]);
 
-  // Save AI Chat state when it changes
+  // Save AI Chat state when it changes (but only after initial load)
   useEffect(() => {
-    if (window.electronAPI?.setAIChatState) {
-      window.electronAPI.setAIChatState({ collapsed: isAIChatCollapsed, width: aiChatWidth });
+    if (isAIChatStateLoaded && window.electronAPI.setAIChatState) {
+      const state = { collapsed: isAIChatCollapsed, width: aiChatWidth };
+      console.log('Saving AI Chat state:', state);
+      window.electronAPI.setAIChatState(state);
     }
-  }, [isAIChatCollapsed, aiChatWidth]);
+  }, [isAIChatCollapsed, aiChatWidth, isAIChatStateLoaded]);
 
   // Load recent project files when in project mode
   useEffect(() => {
@@ -593,7 +603,7 @@ export default function App() {
 
     // Set up autosave if we have a file path and the document is dirty
     if (currentFilePath && isDirty && getContentRef.current) {
-      console.log('Starting autosave interval');
+      logger.log('autosave', 'Starting autosave interval');
       autoSaveIntervalRef.current = setInterval(async () => {
         if (isDirty && currentFilePath && getContentRef.current && window.electronAPI) {
           console.log('[AUTOSAVE] Autosaving...', {
@@ -617,7 +627,7 @@ export default function App() {
             console.error('[AUTOSAVE] Autosave failed:', error);
           }
         } else {
-          console.log('[AUTOSAVE] Skipping autosave:', {
+          logger.log('autosave', 'Skipping autosave:', {
             isDirty,
             currentFilePath,
             hasGetContent: !!getContentRef.current,
@@ -696,7 +706,7 @@ export default function App() {
     cleanupFns.push(window.electronAPI.onFileOpen(handleOpen));
     cleanupFns.push(window.electronAPI.onFileSave(handleSave));
     cleanupFns.push(window.electronAPI.onFileSaveAs(handleSaveAs));
-    cleanupFns.push(window.electronAPI.onProjectOpened((data) => {
+    cleanupFns.push(window.electronAPI.onProjectOpened(async (data) => {
       console.log('Project opened:', data);
       setProjectMode(true);
       setProjectPath(data.projectPath);
@@ -709,7 +719,34 @@ export default function App() {
       setIsDirty(false);
       contentVersionRef.current += 1;
       isInitializedRef.current = false;
+      
+      // Restore AI Chat state when opening a project
+      try {
+        const aiChatState = await window.electronAPI.getAIChatState();
+        console.log('Restoring AI Chat state for project:', aiChatState);
+        if (aiChatState) {
+          setIsAIChatCollapsed(aiChatState.collapsed);
+          setAIChatWidth(aiChatState.width);
+        }
+        // Make sure the loaded flag is set so future changes will be saved
+        setIsAIChatStateLoaded(true);
+      } catch (error) {
+        console.error('Failed to restore AI Chat state:', error);
+        setIsAIChatStateLoaded(true);
+      }
     }));
+    
+    // Handle project open from CLI
+    if (window.electronAPI.onOpenProjectFromCLI) {
+      cleanupFns.push(window.electronAPI.onOpenProjectFromCLI(async (projectPath) => {
+        console.log('Opening project from CLI:', projectPath);
+        // Open the project using the existing openProject API
+        if (window.electronAPI.openProject) {
+          await window.electronAPI.openProject(projectPath);
+        }
+      }));
+    }
+    
     cleanupFns.push(window.electronAPI.onFileOpenedFromOS(async (data) => {
       console.log('File opened from OS:', data.filePath);
       contentVersionRef.current += 1;
@@ -756,7 +793,7 @@ export default function App() {
       }
     }));
     cleanupFns.push(window.electronAPI.onNewUntitledDocument((data) => {
-      console.log('[RENDERER] Received new-untitled-document event:', data.untitledName);
+      logger.log('file', 'Received new-untitled-document event:', data.untitledName);
       setContent('');
       setCurrentFilePath(null);
       setCurrentFileName(data.untitledName);
@@ -861,13 +898,13 @@ export default function App() {
     };
   }, [handleNew, handleOpen, handleSave, handleSaveAs, currentFilePath]);
 
-  console.log('Rendering App with config:', {
+  logger.log('ui', 'Rendering App with config:', {
     contentLength: content.length,
     currentFileName,
     theme
   });
 
-  console.log('[RENDERER] About to render StravuEditor at', new Date().toISOString());
+  logger.log('ui', 'About to render StravuEditor at', new Date().toISOString());
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: projectMode ? 'row' : 'column' }}>
@@ -926,7 +963,7 @@ export default function App() {
             config={{
               initialContent: content,
               onContentChange: (newContent) => {
-            console.log('Content changed:', newContent.length, 'initialized:', isInitializedRef.current);
+            logger.log('editor', 'Content changed:', newContent.length, 'initialized:', isInitializedRef.current);
 
             // Mark as initialized after first content change
             if (!isInitializedRef.current) {
@@ -944,17 +981,17 @@ export default function App() {
               const currentContent = getContentRef.current();
               const hasChanged = currentContent !== initialContentRef.current;
               if (hasChanged !== isDirty) {
-                console.log('Dirty state changed to:', hasChanged);
+                logger.log('editor', 'Dirty state changed to:', hasChanged);
                 setIsDirty(hasChanged);
               }
             }
           },
           onGetContent: (getContentFn) => {
-            console.log('[RENDERER] Received getContent function at', new Date().toISOString());
+            logger.log('ui', 'Received getContent function at', new Date().toISOString());
             getContentRef.current = getContentFn;
           },
           onEditorReady: (editor) => {
-            console.log('[RENDERER] Editor ready at', new Date().toISOString());
+            logger.log('ui', 'Editor ready at', new Date().toISOString());
             editorRef.current = editor;
             searchCommandRef.current = TOGGLE_SEARCH_COMMAND;
           },
@@ -972,6 +1009,7 @@ export default function App() {
           onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}
           width={aiChatWidth}
           onWidthChange={setAIChatWidth}
+          projectPath={projectPath || undefined}
           documentContext={{
             filePath: currentFilePath || '',
             fileType: 'markdown',
@@ -990,10 +1028,19 @@ export default function App() {
                 }));
 
                 // Apply through the AI chat bridge which will dispatch to the DiffPlugin
-                aiChatBridge.applyReplacements(textReplacements);
-                console.log('Diff applied successfully - showing red/green preview');
-                // Document will show diffs but not marked as dirty yet
-                // User needs to approve/reject the diffs
+                aiChatBridge.applyReplacements(textReplacements).then(result => {
+                  if (result.success) {
+                    console.log('Diff applied successfully - showing red/green preview');
+                    // Document will show diffs but not marked as dirty yet
+                    // User needs to approve/reject the diffs
+                  } else {
+                    console.error('Failed to apply diff:', result.error);
+                    alert(`Failed to apply changes: ${result.error || 'Unknown error'}`);
+                  }
+                }).catch(err => {
+                  console.error('Error applying diff:', err);
+                  alert('Failed to apply changes. Please try again.');
+                });
               } catch (error) {
                 console.error('Failed to apply diff:', error);
                 alert('Failed to apply diff. Please try again.');

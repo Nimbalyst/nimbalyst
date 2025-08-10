@@ -17,6 +17,8 @@ interface ElectronAPI {
   onToggleSearchReplace: (callback: () => void) => () => void;
   onFileDeleted: (callback: (data: { filePath: string }) => void) => () => void;
   onFileRenamed: (callback: (data: { oldPath: string; newPath: string }) => void) => () => void;
+  onFileMoved: (callback: (data: { sourcePath: string; destinationPath: string }) => void) => () => void;
+  onFileCopied: (callback: (data: { sourcePath: string; destinationPath: string }) => void) => () => void;
   onThemeChange: (callback: (theme: string) => void) => () => void;
   onShowAbout: (callback: () => void) => () => void;
   
@@ -37,10 +39,14 @@ interface ElectronAPI {
   deleteFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   openFileInNewWindow: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   showInFinder: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+  moveFile: (sourcePath: string, targetPath: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
+  copyFile: (sourcePath: string, targetPath: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
   
   // Settings operations
   getSidebarWidth: () => Promise<number>;
   setSidebarWidth: (width: number) => void;
+  getAIChatState: () => Promise<{ collapsed: boolean; width: number }>;
+  setAIChatState: (state: { collapsed: boolean; width: number }) => void;
   
   // QuickOpen operations
   searchProjectFiles: (projectPath: string, query: string) => Promise<string[]>;
@@ -52,11 +58,14 @@ interface ElectronAPI {
   
   // Claude AI operations
   claudeInitialize?: (apiKey?: string) => Promise<any>;
-  claudeCreateSession?: (documentContext?: any) => Promise<any>;
+  claudeCreateSession?: (documentContext?: any, projectPath?: string) => Promise<any>;
   claudeSendMessage?: (message: string, documentContext?: any) => Promise<any>;
-  claudeGetSessions?: () => Promise<any>;
-  claudeLoadSession?: (sessionId: string) => Promise<any>;
+  claudeGetSessions?: (projectPath?: string) => Promise<any>;
+  claudeLoadSession?: (sessionId: string, projectPath?: string) => Promise<any>;
   claudeClearSession?: () => Promise<any>;
+  claudeUpdateSessionMessages?: (sessionId: string, messages: any[], projectPath?: string) => Promise<{ success: boolean; error?: string }>;
+  claudeSaveDraftInput?: (sessionId: string, draftInput: string, projectPath?: string) => Promise<{ success: boolean; error?: string }>;
+  claudeDeleteSession?: (sessionId: string, projectPath?: string) => Promise<{ success: boolean }>;
   claudeApplyEdit?: (edit: any) => Promise<any>;
   getClaudeSettings?: () => Promise<any>;
   saveClaudeSettings?: (settings: any) => Promise<any>;

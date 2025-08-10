@@ -177,13 +177,28 @@ export function DiffPlugin(): JSX.Element | null {
               replacements,
               MARKDOWN_TRANSFORMERS
             );
-          });
+          }, { discrete: true });
 
           console.log('Diff applied successfully');
           return true;
-        } catch (error) {
+        } catch (error: any) {
           console.error('Failed to apply diff:', error);
-          return false;
+          
+          // Extract meaningful error message
+          let errorMessage = 'Failed to apply changes';
+          
+          if (error?.context?.errorType === 'TEXT_REPLACEMENT_ERROR') {
+            // Whitespace or text mismatch error
+            const replacement = error.context?.additionalInfo?.replacement;
+            if (replacement) {
+              errorMessage = `Could not find matching text in the document. The text may have been modified or contains different whitespace/formatting.`;
+            }
+          } else if (error?.message) {
+            errorMessage = error.message;
+          }
+          
+          // Re-throw with a more user-friendly error
+          throw new Error(errorMessage);
         }
       },
       COMMAND_PRIORITY_EDITOR,

@@ -1,10 +1,18 @@
 import React, { useEffect, useRef } from 'react';
 import { ChatMessage } from './ChatMessage';
+import { StreamingStatus } from './StreamingStatus';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   edits?: any[];
+  isStreamingStatus?: boolean;
+  streamingData?: {
+    position: string;
+    mode: string;
+    content: string;
+    isActive: boolean;
+  };
 }
 
 interface ChatMessagesProps {
@@ -38,13 +46,23 @@ export function ChatMessages({
       )}
       
       {messages.map((message, index) => (
-        <ChatMessage
-          key={index}
-          role={message.role}
-          content={message.content}
-          edits={message.edits}
-          onApplyEdit={onApplyEdit}
-        />
+        message.isStreamingStatus ? (
+          <StreamingStatus
+            key={index}
+            isActive={message.streamingData?.isActive || false}
+            content={message.streamingData?.content}
+            position={message.streamingData?.position}
+            mode={message.streamingData?.mode}
+          />
+        ) : (
+          <ChatMessage
+            key={index}
+            role={message.role}
+            content={message.content}
+            edits={message.edits}
+            onApplyEdit={onApplyEdit}
+          />
+        )
       ))}
       
       {/* Show streaming content */}

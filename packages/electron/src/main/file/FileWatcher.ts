@@ -5,7 +5,7 @@ import { FILE_WATCHER_POLL_INTERVAL, FILE_WATCHER_STABILITY_THRESHOLD } from '..
 import { loadFileIntoWindow } from './FileOperations';
 
 // File watchers management
-const fileWatchers = new Map<number, chokidar.FSWatcher>();
+export const fileWatchers = new Map<number, chokidar.FSWatcher>();
 
 // Start watching a file for changes
 export function startFileWatcher(window: BrowserWindow, filePath: string) {
@@ -20,12 +20,17 @@ export function startFileWatcher(window: BrowserWindow, filePath: string) {
         const watcher = chokidar.watch(filePath, {
             persistent: true,
             ignoreInitial: true,
-            usePolling: true,  // Use polling instead of native fsevents
+            usePolling: true,  // Force polling for better reliability
             interval: FILE_WATCHER_POLL_INTERVAL,
+            binaryInterval: FILE_WATCHER_POLL_INTERVAL, // Poll binary files at same rate
             awaitWriteFinish: {
                 stabilityThreshold: FILE_WATCHER_STABILITY_THRESHOLD,
                 pollInterval: 100
-            }
+            },
+            // Additional options for better detection
+            alwaysStat: true,  // Get full stat results
+            depth: 0,  // Only watch the specific file
+            atomic: true  // Handle atomic writes better
         });
         
         // Add ready event to confirm watcher is active
@@ -114,4 +119,29 @@ export function stopFileWatcher(windowId: number) {
     } else {
         console.log('[FILE_WATCHER] No watcher found for window:', windowId);
     }
+}
+
+// Get file watcher info for debugging
+export function getFileWatcherInfo(windowId: number): any {
+    const watcher = fileWatchers.get(windowId);
+    if (watcher) {
+        const watched = watcher.getWatched();
+        return {
+            path: Object.keys(watched)[0] || 'unknown',
+            watched,
+            usePolling: true,
+            interval: FILE_WATCHER_POLL_INTERVAL
+        };
+    }
+    return null;
+}
+
+// Check file for changes manually
+export function checkFileForChanges(window: BrowserWindow, filePath: string) {
+    console.log('[FILE_WATCHER] Manual check for file changes:', filePath);
+    const windowId = window.id;
+    
+    // Restart the watcher to ensure it picks up changes
+    stopFileWatcher(windowId);
+    startFileWatcher(window, filePath);
 }

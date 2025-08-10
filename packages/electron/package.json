@@ -4,6 +4,9 @@
   "private": true,
   "description": "Electron app for Stravu Editor",
   "main": "out/main/index.js",
+  "bin": {
+    "stravueditor": "./bin/stravueditor"
+  },
   "scripts": {
     "start": "electron-vite preview",
     "dev": "electron-vite dev",

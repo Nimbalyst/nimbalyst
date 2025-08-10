@@ -176,6 +176,28 @@ export type TextReplacement = {
   newText: string;
 };
 
+/**
+ * Normalize whitespace for more flexible matching
+ * - Normalize line endings to \n
+ * - Trim trailing whitespace from each line
+ * - Preserve the number of newlines at the end
+ */
+function normalizeWhitespace(text: string): string {
+  // Count trailing newlines
+  const trailingNewlines = text.match(/\n*$/)?.[0] || '';
+  
+  // Normalize line endings and trim trailing spaces from each line
+  const normalized = text
+    .replace(/\r\n/g, '\n')  // Windows -> Unix
+    .replace(/\r/g, '\n')    // Old Mac -> Unix
+    .split('\n')
+    .map(line => line.trimEnd())  // Remove trailing spaces from each line
+    .join('\n');
+  
+  // Preserve original trailing newlines
+  return normalized.trimEnd() + trailingNewlines;
+}
+
 function _applyMarkdownEdits(
   originalMarkdown: string,
   replacements: TextReplacement[],
@@ -183,16 +205,69 @@ function _applyMarkdownEdits(
   let newMarkdown = originalMarkdown;
 
   for (const replacement of replacements) {
-    // Validate the replacement
-    if (!originalMarkdown.includes(replacement.oldText)) {
+    // Normalize whitespace for matching
+    const normalizedOriginal = normalizeWhitespace(originalMarkdown);
+    const normalizedOldText = normalizeWhitespace(replacement.oldText);
+    
+    // Try exact match first
+    if (originalMarkdown.includes(replacement.oldText)) {
+      // Apply the replacement - replace all occurrences
+      newMarkdown = newMarkdown.replace(
+        new RegExp(escapeRegExp(replacement.oldText), 'g'),
+        replacement.newText,
+      );
+    } 
+    // Try normalized match if exact match fails
+    else if (normalizedOriginal.includes(normalizedOldText)) {
+      // Find the position in the normalized text
+      const normalizedIndex = normalizedOriginal.indexOf(normalizedOldText);
+      
+      // Try to find the corresponding position in the original text
+      // This is a best-effort approach
+      const lines = originalMarkdown.split(/\r?\n/);
+      const normalizedLines = lines.map(line => line.trimEnd());
+      
+      // Reconstruct with normalized matching
+      let currentPos = 0;
+      let found = false;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const normalizedLine = normalizedLines[i];
+        const originalLine = lines[i];
+        
+        // Check if this is where our replacement should start
+        const lineStart = normalizedLines.slice(0, i).join('\n').length + (i > 0 ? 1 : 0);
+        const lineEnd = lineStart + normalizedLine.length;
+        
+        if (!found && normalizedIndex >= lineStart && normalizedIndex < lineEnd + 1) {
+          // This is where the replacement starts
+          const beforeReplacement = originalMarkdown.substring(0, currentPos);
+          
+          // Find the end of the replacement in the original
+          let endPos = currentPos;
+          let replacementLines = normalizedOldText.split('\n');
+          
+          for (let j = 0; j < replacementLines.length; j++) {
+            if (i + j < lines.length) {
+              endPos += lines[i + j].length + (j > 0 ? 1 : 0);
+            }
+          }
+          
+          const afterReplacement = originalMarkdown.substring(endPos);
+          newMarkdown = beforeReplacement + replacement.newText + afterReplacement;
+          found = true;
+          break;
+        }
+        
+        currentPos += originalLine.length + (i < lines.length - 1 ? 1 : 0);
+      }
+      
+      if (!found) {
+        throw createTextReplacementError(originalMarkdown, replacement);
+      }
+    } else {
       throw createTextReplacementError(originalMarkdown, replacement);
     }
-
-    // Apply the replacement - replace all occurrences
-    newMarkdown = newMarkdown.replace(
-      new RegExp(escapeRegExp(replacement.oldText), 'g'),
-      replacement.newText,
-    );
   }
   return newMarkdown;
 }
@@ -430,8 +505,6 @@ export function applyMarkdownDiffToDocument(
       throw new Error('Editor must have nodes configured');
     }
 
-    const _originalEditorState = editor.getEditorState();
-
     // Create temporary editors for source and target states
     const sourceEditor = createHeadlessEditor({
       nodes: editor._createEditorArgs.nodes,
@@ -442,8 +515,6 @@ export function applyMarkdownDiffToDocument(
       nodes: editor._createEditorArgs.nodes,
       theme: editor._config.theme,
     });
-
-    let sourceState: any, targetState: any;
 
     try {
       // Load editors with their content
@@ -477,9 +548,9 @@ export function applyMarkdownDiffToDocument(
         {discrete: true},
       );
 
-      // Get serialized states for diffing
-      sourceState = sourceEditor.getEditorState().toJSON();
-      targetState = targetEditor.getEditorState().toJSON();
+      // Get serialized states for diffing (unused but kept for potential future use)
+      // sourceEditor.getEditorState().toJSON();
+      // targetEditor.getEditorState().toJSON();
     } catch (error) {
       throw createMappingError(
         `Failed to create editor states from markdown: ${

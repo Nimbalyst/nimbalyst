@@ -237,6 +237,11 @@
   background-color: var(--stravu-toolbar-border);
 }
 
+/* Ensure table of contents icon is visible in Crystal Dark theme */
+.stravu-editor[data-theme="crystal-dark"] .toolbar .icon.table-of-contents {
+  filter: invert(1);
+}
+
 /* Dropdown dark theme */
 .stravu-editor[data-theme="crystal-dark"] .dropdown {
   background-color: var(--stravu-bg-secondary);

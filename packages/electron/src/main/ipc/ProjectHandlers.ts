@@ -217,6 +217,104 @@ export function registerProjectHandlers() {
         }
     });
 
+    // Move file/folder
+    ipcMain.handle('move-file', async (event, sourcePath: string, targetPath: string) => {
+        const { rename, stat } = require('fs').promises;
+        const { join, basename } = require('path');
+
+        try {
+            // Check if source exists
+            const sourceStats = await stat(sourcePath);
+            
+            // Check if target is a directory
+            let destinationPath = targetPath;
+            try {
+                const targetStats = await stat(targetPath);
+                if (targetStats.isDirectory()) {
+                    // If target is a directory, move source into it
+                    destinationPath = join(targetPath, basename(sourcePath));
+                }
+            } catch {
+                // Target doesn't exist, use it as the new path
+            }
+
+            // Perform the move
+            await rename(sourcePath, destinationPath);
+
+            // Update windows that have this file open
+            if (!sourceStats.isDirectory()) {
+                for (const [windowId, state] of windowStates) {
+                    if (state?.filePath === sourcePath) {
+                        state.filePath = destinationPath;
+                        // Update represented filename for macOS
+                        const window = BrowserWindow.getAllWindows().find(w => w.id === windowId);
+                        if (window && process.platform === 'darwin') {
+                            window.setRepresentedFilename(destinationPath);
+                        }
+                    }
+                }
+            }
+
+            // Notify all windows about the file move
+            BrowserWindow.getAllWindows().forEach(window => {
+                window.webContents.send('file-moved', { sourcePath, destinationPath });
+            });
+
+            return { success: true, newPath: destinationPath };
+        } catch (error: any) {
+            console.error('Error moving file:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Copy file/folder
+    ipcMain.handle('copy-file', async (event, sourcePath: string, targetPath: string) => {
+        const { cp, stat } = require('fs').promises;
+        const { join, basename, extname } = require('path');
+
+        try {
+            // Check if source exists
+            const sourceStats = await stat(sourcePath);
+            
+            // Check if target is a directory
+            let destinationPath = targetPath;
+            try {
+                const targetStats = await stat(targetPath);
+                if (targetStats.isDirectory()) {
+                    // If target is a directory, copy source into it
+                    let destName = basename(sourcePath);
+                    destinationPath = join(targetPath, destName);
+                    
+                    // Check if file already exists and generate unique name
+                    let counter = 1;
+                    const nameWithoutExt = basename(sourcePath, extname(sourcePath));
+                    const ext = extname(sourcePath);
+                    
+                    while (existsSync(destinationPath)) {
+                        destName = `${nameWithoutExt} copy${counter > 1 ? ' ' + counter : ''}${ext}`;
+                        destinationPath = join(targetPath, destName);
+                        counter++;
+                    }
+                }
+            } catch {
+                // Target doesn't exist, use it as the new path
+            }
+
+            // Perform the copy
+            await cp(sourcePath, destinationPath, { recursive: true });
+
+            // Notify all windows about the file copy
+            BrowserWindow.getAllWindows().forEach(window => {
+                window.webContents.send('file-copied', { sourcePath, destinationPath });
+            });
+
+            return { success: true, newPath: destinationPath };
+        } catch (error: any) {
+            console.error('Error copying file:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('open-file-in-new-window', async (event, filePath: string) => {
         try {
             const { createWindow } = require('../window/WindowManager');

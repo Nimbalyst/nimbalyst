@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { getSidebarWidth, setSidebarWidth, getTheme } from '../utils/store';
+import { getSidebarWidth, setSidebarWidth, getTheme, getAIChatState, setAIChatState } from '../utils/store';
 
 export function registerSettingsHandlers() {
     // Get sidebar width
@@ -15,5 +15,15 @@ export function registerSettingsHandlers() {
     // Get theme
     ipcMain.handle('get-theme', () => {
         return getTheme();
+    });
+
+    // Get AI Chat state
+    ipcMain.handle('get-ai-chat-state', () => {
+        return getAIChatState();
+    });
+
+    // Set AI Chat state
+    ipcMain.on('set-ai-chat-state', (event, state: { collapsed: boolean; width: number }) => {
+        setAIChatState(state);
     });
 }

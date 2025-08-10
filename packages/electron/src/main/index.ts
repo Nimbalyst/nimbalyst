@@ -18,6 +18,8 @@ import { ClaudeService } from './services/ClaudeService';
 
 // Track pending file to open
 let pendingFilePath: string | null = null;
+// Track pending project to open
+let pendingProjectPath: string | null = null;
 
 // Session save interval
 let sessionSaveInterval: NodeJS.Timeout | null = null;
@@ -107,9 +109,24 @@ app.on('open-file', (event, path) => {
     }
 });
 
+// Parse command line arguments
+function parseCommandLineArgs() {
+    const args = process.argv.slice(app.isPackaged ? 1 : 2);
+    
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === '--project' && i + 1 < args.length) {
+            pendingProjectPath = args[i + 1];
+            console.log('[MAIN] Project path from CLI:', pendingProjectPath);
+        }
+    }
+}
+
 // App ready handler
 app.whenReady().then(async () => {
     console.log('[MAIN] App ready');
+    
+    // Parse command line arguments
+    parseCommandLineArgs();
     
     // Initialize debug logging
     initializeDebugLogging();
@@ -142,7 +159,15 @@ app.whenReady().then(async () => {
     // Try to restore session, otherwise create a new window
     const sessionRestored = restoreSessionState();
     
-    if (!sessionRestored && !pendingFilePath) {
+    if (pendingProjectPath) {
+        // Handle project path from CLI
+        const window = createWindow(true);
+        window.once('ready-to-show', () => {
+            // Send project open event to renderer
+            window.webContents.send('open-project-from-cli', pendingProjectPath);
+            pendingProjectPath = null;
+        });
+    } else if (!sessionRestored && !pendingFilePath) {
         // No session to restore and no file to open, create a new window
         createWindow(false);
     } else if (pendingFilePath) {

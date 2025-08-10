@@ -1,0 +1,115 @@
+.streaming-status {
+  margin: 8px 0;
+  margin-left: 40px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 6px;
+  background: var(--bg-secondary, #f8f9fa);
+}
+
+.streaming-status.active {
+  border-color: var(--accent-color, #007bff);
+  background: var(--bg-active, #e7f3ff);
+}
+
+.streaming-status.complete {
+  border-color: var(--success-color, #28a745);
+  background: var(--bg-success, #e7f5ea);
+}
+
+.streaming-status-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.streaming-status-header:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.streaming-status-icon {
+  font-size: 10px;
+  margin-right: 8px;
+  color: var(--text-secondary, #666);
+}
+
+.streaming-status-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary, #333);
+}
+
+.streaming-status-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--success-color, #28a745);
+  color: white;
+  margin-left: 8px;
+}
+
+.streaming-status-cancel {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--danger-color, #dc3545);
+  color: white;
+  margin-left: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+.streaming-status-cancel:hover {
+  background: var(--danger-color-hover, #c82333);
+}
+
+.streaming-status-content {
+  padding: 12px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+  background: var(--bg-primary, white);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.streaming-status-content pre {
+  margin: 0;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary, #666);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Animation for active streaming */
+.streaming-status.active .streaming-status-text::after {
+  content: '';
+  animation: streaming-dots 1.5s infinite;
+}
+
+@keyframes streaming-dots {
+  0%, 20% { content: ''; }
+  40% { content: '.'; }
+  60% { content: '..'; }
+  80%, 100% { content: '...'; }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .streaming-status {
+    --border-color: #3a3a3a;
+    --bg-secondary: #2a2a2a;
+    --bg-active: #1a3a52;
+    --bg-success: #1a3a2a;
+    --bg-primary: #1e1e1e;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --accent-color: #4a9eff;
+    --success-color: #4ade80;
+    --danger-color: #dc3545;
+    --danger-color-hover: #c82333;
+  }
+}

@@ -51,6 +51,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('project-opened', handler);
     return () => ipcRenderer.removeListener('project-opened', handler);
   },
+  onOpenProjectFromCLI: (callback: (projectPath: string) => void) => {
+    const handler = (_event: any, projectPath: string) => callback(projectPath);
+    ipcRenderer.on('open-project-from-cli', handler);
+    return () => ipcRenderer.removeListener('open-project-from-cli', handler);
+  },
   onFileSave: (callback: () => void) => {
     ipcRenderer.on('file-save', callback);
     return () => ipcRenderer.removeListener('file-save', callback);
@@ -121,12 +126,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteFile: (filePath: string) => ipcRenderer.invoke('delete-file', filePath),
   openFileInNewWindow: (filePath: string) => ipcRenderer.invoke('open-file-in-new-window', filePath),
   showInFinder: (filePath: string) => ipcRenderer.invoke('show-in-finder', filePath),
+  moveFile: (sourcePath: string, targetPath: string) => ipcRenderer.invoke('move-file', sourcePath, targetPath),
+  copyFile: (sourcePath: string, targetPath: string) => ipcRenderer.invoke('copy-file', sourcePath, targetPath),
   
   // File change event listeners
   onFileRenamed: (callback: (data: { oldPath: string; newPath: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('file-renamed', handler);
     return () => ipcRenderer.removeListener('file-renamed', handler);
+  },
+  
+  onFileMoved: (callback: (data: { sourcePath: string; destinationPath: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('file-moved', handler);
+    return () => ipcRenderer.removeListener('file-moved', handler);
+  },
+  
+  onFileCopied: (callback: (data: { sourcePath: string; destinationPath: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('file-copied', handler);
+    return () => ipcRenderer.removeListener('file-copied', handler);
   },
   
   onProjectFileTreeUpdated: (callback: (data: { fileTree: any[]; addedPath?: string; removedPath?: string }) => void) => {
@@ -138,6 +157,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Settings operations
   getSidebarWidth: () => ipcRenderer.invoke('get-sidebar-width'),
   setSidebarWidth: (width: number) => ipcRenderer.send('set-sidebar-width', width),
+  getAIChatState: () => ipcRenderer.invoke('get-ai-chat-state'),
+  setAIChatState: (state: { collapsed: boolean; width: number }) => ipcRenderer.send('set-ai-chat-state', state),
   
   // QuickOpen operations
   searchProjectFiles: (projectPath: string, query: string) => ipcRenderer.invoke('search-project-files', projectPath, query),
@@ -180,11 +201,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Claude AI operations
   claudeInitialize: (apiKey?: string) => ipcRenderer.invoke('claude:initialize', apiKey),
-  claudeCreateSession: (documentContext?: any) => ipcRenderer.invoke('claude:createSession', documentContext),
+  claudeCreateSession: (documentContext?: any, projectPath?: string) => ipcRenderer.invoke('claude:createSession', documentContext, projectPath),
   claudeSendMessage: (message: string, documentContext?: any) => ipcRenderer.invoke('claude:sendMessage', message, documentContext),
-  claudeGetSessions: () => ipcRenderer.invoke('claude:getSessions'),
-  claudeLoadSession: (sessionId: string) => ipcRenderer.invoke('claude:loadSession', sessionId),
+  claudeGetSessions: (projectPath?: string) => ipcRenderer.invoke('claude:getSessions', projectPath),
+  claudeLoadSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('claude:loadSession', sessionId, projectPath),
   claudeClearSession: () => ipcRenderer.invoke('claude:clearSession'),
+  claudeUpdateSessionMessages: (sessionId: string, messages: any[], projectPath?: string) => ipcRenderer.invoke('claude:updateSessionMessages', sessionId, messages, projectPath),
+  claudeSaveDraftInput: (sessionId: string, draftInput: string, projectPath?: string) => ipcRenderer.invoke('claude:saveDraftInput', sessionId, draftInput, projectPath),
+  claudeDeleteSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('claude:deleteSession', sessionId, projectPath),
   claudeApplyEdit: (edit: any) => ipcRenderer.invoke('claude:applyEdit', edit),
   getClaudeSettings: () => ipcRenderer.invoke('claude:getSettings'),
   saveClaudeSettings: (settings: any) => ipcRenderer.invoke('claude:saveSettings', settings),
