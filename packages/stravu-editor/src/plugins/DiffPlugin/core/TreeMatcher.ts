@@ -7,7 +7,7 @@
  */
 
 import type {Transformer} from '@lexical/markdown';
-import {$convertToMarkdownString} from '@lexical/markdown';
+import {$convertNodeToMarkdownString} from '../../../markdown/nodeMarkdownExport';
 import {
   $getNodeByKey,
   LexicalEditor,
@@ -61,7 +61,7 @@ export interface MatchingConfig {
 
 const DEFAULT_CONFIG: Partial<MatchingConfig> = {
   windowSize: 2,
-  similarityThreshold: 0.3,
+  similarityThreshold: 0.2, // Lowered from 0.3 to be more forgiving
   requireSameType: true,
 };
 
@@ -184,12 +184,13 @@ export class WindowedTreeMatcher {
     let markdown: string;
     try {
       if ($isElementNode(node)) {
-        markdown = $convertToMarkdownString(
+        // For element nodes, convert to markdown using our custom function
+        markdown = $convertNodeToMarkdownString(
           this.config.transformers,
-          node,
-          true,
+          node
         );
       } else {
+        // For text nodes, use text content
         markdown = node.getTextContent();
       }
     } catch (error) {
@@ -271,45 +272,79 @@ export class WindowedTreeMatcher {
    * Match the children of root nodes between source and target editors
    */
   matchRootChildren(): WindowedMatchResult {
-    let sourceNodes: LexicalNode[] = [];
-    let targetNodes: LexicalNode[] = [];
-
-    // Extract root children from both editors
-    this.sourceEditor.getEditorState().read(() => {
+    // Pre-calculate all markdown and serialized nodes WITHIN their own editor contexts
+    const sourceNodesWithMarkdown = this.sourceEditor.getEditorState().read(() => {
       const root = $getRoot();
-      sourceNodes = root.getChildren();
+      const children = root.getChildren();
+      const results: NodeWithMarkdown[] = [];
+      
+      for (const child of children) {
+        try {
+          const serialized = $getSerializedNode(child);
+          let markdown = '';
+          
+          if ($isElementNode(child)) {
+            markdown = $convertNodeToMarkdownString(this.config.transformers, child);
+          } else {
+            markdown = child.getTextContent();
+          }
+          
+          results.push({
+            node: serialized,
+            markdown: markdown.trim(),
+            key: child.getKey(),
+          });
+        } catch (error) {
+          // console.warn('Failed to process source node:', error);
+        }
+      }
+      return results;
     });
 
-    this.targetEditor.getEditorState().read(() => {
+    const targetNodesWithMarkdown = this.targetEditor.getEditorState().read(() => {
       const root = $getRoot();
-      targetNodes = root.getChildren();
+      const children = root.getChildren();
+      const results: NodeWithMarkdown[] = [];
+      
+      for (const child of children) {
+        try {
+          const serialized = $getSerializedNode(child);
+          let markdown = '';
+          
+          if ($isElementNode(child)) {
+            markdown = $convertNodeToMarkdownString(this.config.transformers, child);
+          } else {
+            markdown = child.getTextContent();
+          }
+          
+          results.push({
+            node: serialized,
+            markdown: markdown.trim(),
+            key: child.getKey(),
+          });
+        } catch (error) {
+          // console.warn('Failed to process target node:', error);
+        }
+      }
+      return results;
     });
 
-    return this.matchNodes(sourceNodes, targetNodes);
-  }
-
-  /**
-   * Match nodes between source and target arrays using content-first global optimization
-   */
-  matchNodes(
-    sourceNodes: LexicalNode[],
-    targetNodes: LexicalNode[],
-  ): WindowedMatchResult {
-    // Pre-calculate markdown for all nodes upfront
-    const sourceNodesWithMarkdown = this.preCalculateMarkdown(
-      sourceNodes,
-      this.sourceEditor,
-    );
-    const targetNodesWithMarkdown = this.preCalculateMarkdown(
-      targetNodes,
-      this.targetEditor,
-    );
-
-    return this.matchNodesWithMarkdown(
+    const result = this.matchNodesWithMarkdown(
       sourceNodesWithMarkdown,
       targetNodesWithMarkdown,
     );
+    
+    console.log('TreeMatcher results:');
+    console.log('  Source nodes:', sourceNodesWithMarkdown.map(n => `${n.node.type}: ${n.markdown.substring(0, 50)}`));
+    console.log('  Target nodes:', targetNodesWithMarkdown.map(n => `${n.node.type}: ${n.markdown.substring(0, 50)}`));
+    console.log('  Diffs found:', result.diffs.length);
+    result.diffs.forEach(diff => {
+      console.log(`    ${diff.changeType} ${diff.nodeType}: "${diff.sourceMarkdown?.substring(0, 30)}" -> "${diff.targetMarkdown?.substring(0, 30)}"`);
+    });
+    
+    return result;
   }
+
 
   /**
    * Match nodes using pre-calculated NodeWithMarkdown data (used for cached sub-tree diffing)
@@ -430,6 +465,9 @@ export class WindowedTreeMatcher {
         const targetNode = targetContentNodes[targetIdx];
 
         if (sourceNode.markdown === targetNode.markdown) {
+          // console.log(`  EXACT MATCH [${sourceIdx}]->[${targetIdx}]:`);
+          // console.log(`    Type: ${sourceNode.node.type}`);
+          // console.log(`    Markdown: "${sourceNode.markdown.substring(0, 80)}..."`);
           // Exact match found!
           // Include exact matches in sequence as position anchors, but not as changes
           sourceContentMatched.add(sourceIdx);
@@ -754,10 +792,34 @@ export class WindowedTreeMatcher {
       match: NodeDiff;
     }> = [];
 
-    console.log('\n=== SIMILARITY MATCHING DEBUG ===');
-    console.log(
-      `Checking ${sourceNodesWithMarkdown.length} source nodes against ${targetNodesWithMarkdown.length} target nodes`,
-    );
+    // console.log('\n=== SIMILARITY MATCHING DEBUG ===');
+    // console.log(
+    //   `Checking ${sourceNodesWithMarkdown.length} source nodes against ${targetNodesWithMarkdown.length} target nodes`,
+    // );
+    
+    // Debug: Show what nodes we're comparing
+          // console.log('Source nodes (unmatched):');
+    sourceNodesWithMarkdown.forEach((node, idx) => {
+      if (!sourceMatched.has(idx)) {
+          // console.log(`  [${idx}] ${node.node.type}: "${node.markdown}"`);
+      }
+    });
+          // console.log('Target nodes (unmatched):');
+    targetNodesWithMarkdown.forEach((node, idx) => {
+      if (!targetMatched.has(idx)) {
+          // console.log(`  [${idx}] ${node.node.type}: "${node.markdown}"`);
+      }
+    });
+    
+    // Also show ALL nodes for debugging
+          // console.log('\nALL Source nodes:');
+    sourceNodesWithMarkdown.forEach((node, idx) => {
+          // console.log(`  [${idx}] ${node.node.type}: "${node.markdown}"`);
+    });
+          // console.log('ALL Target nodes:');
+    targetNodesWithMarkdown.forEach((node, idx) => {
+          // console.log(`  [${idx}] ${node.node.type}: "${node.markdown}"`);
+    });
 
     for (
       let sourceIdx = 0;
@@ -804,20 +866,22 @@ export class WindowedTreeMatcher {
           sourceNode.node.type === 'paragraph' &&
           targetNode.node.type === 'paragraph'
         ) {
-          console.log(`\nParagraph similarity [${sourceIdx}->${targetIdx}]:`);
-          console.log(`  Source: "${sourceNode.markdown.substring(0, 50)}..."`);
-          console.log(`  Target: "${targetNode.markdown.substring(0, 50)}..."`);
-          console.log(`  Raw similarity: ${similarity.toFixed(3)}`);
-          console.log(`  Position penalty: ${positionPenalty.toFixed(3)}`);
-          console.log(
-            `  Adjusted similarity: ${adjustedSimilarity.toFixed(3)}`,
-          );
-          console.log(`  Threshold: ${this.config.similarityThreshold}`);
-          console.log(
-            `  Above threshold: ${
-              adjustedSimilarity >= this.config.similarityThreshold
-            }`,
-          );
+          // console.log(`\nParagraph similarity [${sourceIdx}->${targetIdx}]:`);
+          // console.log(`  Source: "${sourceNode.markdown.substring(0, 50)}..."`);
+          // console.log(`  Target: "${targetNode.markdown.substring(0, 50)}..."`);
+          // console.log(`  Source normalized: "${sourceNode.markdown.replace(/\s+/g, ' ').trim().substring(0, 50)}..."`);
+          // console.log(`  Target normalized: "${targetNode.markdown.replace(/\s+/g, ' ').trim().substring(0, 50)}..."`);
+          // console.log(`  Raw similarity: ${similarity.toFixed(3)}`);
+          // console.log(`  Position penalty: ${positionPenalty.toFixed(3)}`);
+          // console.log(
+          //   `  Adjusted similarity: ${adjustedSimilarity.toFixed(3)}`,
+          // );
+          // console.log(`  Threshold: ${this.config.similarityThreshold}`);
+          // console.log(
+          //   `  Above threshold: ${
+          //     adjustedSimilarity >= this.config.similarityThreshold
+          //   }`,
+          // );
         }
 
         if (adjustedSimilarity >= this.config.similarityThreshold) {
@@ -840,10 +904,10 @@ export class WindowedTreeMatcher {
       }
     }
 
-    console.log(
-      `Found ${possibleMatches.length} possible matches above threshold`,
-    );
-    console.log('=====================================\n');
+    // console.log(
+    //   `Found ${possibleMatches.length} possible matches above threshold`,
+    // );
+    // console.log('=====================================\n');
 
     // Greedy selection with position penalties - pick highest scoring non-conflicting matches
     // NOTE: Hungarian algorithm would provide theoretical global optimization, but current
@@ -870,68 +934,6 @@ export class WindowedTreeMatcher {
       sourceMatched: newSourceMatched,
       targetMatched: newTargetMatched,
     };
-  }
-
-  /**
-   * Pre-calculate markdown representation for all nodes upfront using their respective editors
-   */
-  private preCalculateMarkdown(
-    nodes: LexicalNode[],
-    editor: LexicalEditor,
-  ): NodeWithMarkdown[] {
-    const results: NodeWithMarkdown[] = [];
-
-    for (const node of nodes) {
-      try {
-        const {markdown, serializedNode} = editor.read(() => {
-          // Use our utility to get properly serialized node with children
-          const liveNode = $getNodeByKey(node.getKey());
-          if (!liveNode) {
-            throw new Error(
-              `Node with key ${node.getKey()} and type ${node.getType()} not found`,
-            );
-          }
-          const serialized = $getSerializedNode(liveNode);
-
-          if ($isElementNode(node)) {
-            // For element nodes, we can convert them directly to markdown
-            // This will include their children and full structure
-            return {
-              markdown: $convertToMarkdownString(
-                this.config.transformers,
-                node,
-                true,
-              ),
-              serializedNode: serialized,
-            };
-          } else {
-            // For text nodes, just get the text content
-            return {
-              markdown: node.getTextContent(),
-              serializedNode: serialized,
-            };
-          }
-        });
-
-        results.push({
-          node: serializedNode,
-          markdown: markdown.trim(),
-          key: node.getKey(),
-        });
-      } catch (error) {
-        console.warn(
-          'Failed to convert node to markdown, using text content',
-          error,
-        );
-        results.push({
-          node: $getSerializedNode(node),
-          markdown: node.getTextContent(),
-          key: node.getKey(),
-        });
-      }
-    }
-
-    return results;
   }
 
   /**
@@ -1077,10 +1079,17 @@ export class WindowedTreeMatcher {
     if (source === target) return 1.0;
     if (!source || !target) return 0.0;
 
+    // Normalize whitespace for comparison
+    const sourceNormalized = source.replace(/\s+/g, ' ').trim();
+    const targetNormalized = target.replace(/\s+/g, ' ').trim();
+    
+    // If normalized versions match, consider it a very high match
+    if (sourceNormalized === targetNormalized) return 0.95;
+
     // Check if one is a prefix of the other (common case for additions)
     // Remove trailing punctuation for comparison
-    const sourceTrimmed = source.replace(/[.,!?;:\s]+$/, '');
-    const targetTrimmed = target.replace(/[.,!?;:\s]+$/, '');
+    const sourceTrimmed = sourceNormalized.replace(/[.,!?;:\s]+$/, '');
+    const targetTrimmed = targetNormalized.replace(/[.,!?;:\s]+$/, '');
 
     if (target.startsWith(sourceTrimmed) || source.startsWith(targetTrimmed)) {
       const shorter = source.length < target.length ? source : target;
@@ -1089,9 +1098,9 @@ export class WindowedTreeMatcher {
       return shorter.length / longer.length;
     }
 
-    // Simple word-based similarity
-    const sourceWords = source.toLowerCase().split(/\s+/);
-    const targetWords = target.toLowerCase().split(/\s+/);
+    // Simple word-based similarity - use normalized versions
+    const sourceWords = sourceNormalized.toLowerCase().split(/\s+/);
+    const targetWords = targetNormalized.toLowerCase().split(/\s+/);
 
     if (sourceWords.length === 0 && targetWords.length === 0) return 1.0;
     if (sourceWords.length === 0 || targetWords.length === 0) return 0.0;

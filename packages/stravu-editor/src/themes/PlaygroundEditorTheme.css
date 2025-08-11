@@ -684,10 +684,11 @@
 
 /* Modified content (when both added and removed) */
 .PlaygroundEditorTheme__diffModify {
-  background-color: #fff5b1; /* Light yellow */
-  outline: 1px solid #f9c74f;
-  outline-offset: -1px;
-}
+     /*background-color: #fff5b152;*/
+     /*outline: 1px solid #f9c74f82;*/
+     /*outline-offset: -1px;*/
+     /*border-radius: 6px;*/
+ }
 
 /* Dark mode styles for diffs */
 [data-theme="dark"] .PlaygroundEditorTheme__diffAdd,
