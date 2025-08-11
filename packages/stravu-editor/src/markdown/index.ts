@@ -9,6 +9,9 @@ import { Transformer } from '@lexical/markdown';
 // Core transformers that are always available
 import { CORE_TRANSFORMERS } from './core-transformers';
 
+// Plugin registry for dynamic transformers
+import { pluginRegistry } from '../plugins/PluginRegistry';
+
 // Plugin-specific transformers - will be dynamically loaded in the future
 // For now, these are statically imported but will eventually be injected
 // via the plugin system based on configuration
@@ -51,6 +54,22 @@ export const MARKDOWN_TRANSFORMERS: Array<Transformer> = [
   // Core transformers (always included)
   ...CORE_TRANSFORMERS,
 ];
+
+/**
+ * Gets the complete set of transformers for the editor, including
+ * both core transformers and those from enabled plugins.
+ *
+ * This is the recommended way to get transformers for editor operations
+ * to ensure consistency with the plugin system.
+ *
+ * @returns Complete transformer array based on enabled plugins
+ */
+export function getEditorTransformers(): Transformer[] {
+  return [
+    ...pluginRegistry.getAllTransformers(),
+    ...MARKDOWN_TRANSFORMERS,
+  ];
+}
 
 /**
  * Function to create a transformer set with specific plugins.

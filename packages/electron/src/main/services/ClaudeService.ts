@@ -106,7 +106,7 @@ export class ClaudeService extends EventEmitter {
         this.apiKey = apiKey;
         this.store.set('apiKey', apiKey);
       }
-      
+
       if (!this.apiKey) {
         throw new Error('API key required');
       }
@@ -120,23 +120,23 @@ export class ClaudeService extends EventEmitter {
       // Use provided project path or try to extract from document context
       const project = projectPath || documentContext?.filePath?.split('/').slice(0, -1).join('/') || 'default';
       this.currentProjectPath = project;
-      
+
       // Check if we already have a recent session (within 2 seconds) to avoid duplicates
       const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
       const projectSessions = sessionsByProject[project] || [];
       const now = Date.now();
-      
+
       // Find a session created within the last 2 seconds
-      const recentSession = projectSessions.find(s => 
+      const recentSession = projectSessions.find(s =>
         (now - s.timestamp) < 2000
       );
-      
+
       if (recentSession) {
         // Return existing recent session instead of creating a new one
         this.currentSession = recentSession;
         return recentSession;
       }
-      
+
       const sessionId = `session-${now}`;
       const session: SessionData = {
         id: sessionId,
@@ -149,12 +149,12 @@ export class ClaudeService extends EventEmitter {
 
       this.currentSession = session;
       this.saveSession(session);
-      
+
       // Set as current session for this project
       const currentByProject = this.store.get('currentSessionByProject', {}) as Record<string, string>;
       currentByProject[project] = sessionId;
       this.store.set('currentSessionByProject', currentByProject);
-      
+
       return session;
     });
 
@@ -175,15 +175,15 @@ export class ClaudeService extends EventEmitter {
         timestamp: Date.now()
       };
       this.currentSession.messages.push(userMessage);
-      
+
       // Clear draft input since message is being sent
       this.currentSession.draftInput = '';
-      
+
       // Generate title from first user message if not already set
       if (this.currentSession.messages.length === 1 && (!this.currentSession.title || this.currentSession.title === 'New conversation')) {
         this.currentSession.title = this.generateSessionTitle(message);
       }
-      
+
       // Save session after adding user message
       this.saveSession(this.currentSession);
 
@@ -210,7 +210,7 @@ export class ClaudeService extends EventEmitter {
         for await (const chunk of stream) {
           if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
             fullResponse += chunk.delta.text;
-            
+
             // Send partial response to renderer
             event.sender.send('claude:streamResponse', {
               partial: chunk.delta.text,
@@ -221,7 +221,7 @@ export class ClaudeService extends EventEmitter {
 
         // Parse any edit requests from the response
         const parsedEdits = this.parseEditRequests(fullResponse, documentContext);
-        
+
         // Add assistant message to session
         const assistantMessage: Message = {
           role: 'assistant',
@@ -261,18 +261,18 @@ export class ClaudeService extends EventEmitter {
       const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
       const sessions = sessionsByProject[project] || [];
       const session = sessions.find(s => s.id === sessionId);
-      
+
       if (session) {
         this.currentSession = session;
         this.currentProjectPath = project;
-        
+
         // Set as current session for this project
         const currentByProject = this.store.get('currentSessionByProject', {}) as Record<string, string>;
         currentByProject[project] = sessionId;
         this.store.set('currentSessionByProject', currentByProject);
         return session;
       }
-      
+
       throw new Error('Session not found');
     });
 
@@ -281,26 +281,26 @@ export class ClaudeService extends EventEmitter {
       this.currentSession = null;
       return { success: true };
     });
-    
+
     // Update session messages (for syncing streaming status messages)
     ipcMain.handle('claude:updateSessionMessages', async (event, sessionId: string, messages: Message[], projectPath?: string) => {
       const project = projectPath || this.currentProjectPath || 'default';
       const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
       const sessions = sessionsByProject[project] || [];
       const session = sessions.find(s => s.id === sessionId);
-      
+
       if (session) {
         session.messages = messages;
         this.saveSession(session);
-        
+
         // Update current session if it matches
         if (this.currentSession?.id === sessionId) {
           this.currentSession = session;
         }
-        
+
         return { success: true };
       }
-      
+
       return { success: false, error: 'Session not found' };
     });
 
@@ -310,19 +310,19 @@ export class ClaudeService extends EventEmitter {
       const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
       const sessions = sessionsByProject[project] || [];
       const session = sessions.find(s => s.id === sessionId);
-      
+
       if (session) {
         session.draftInput = draftInput;
         this.saveSession(session);
-        
+
         // Update current session if it matches
         if (this.currentSession?.id === sessionId) {
           this.currentSession.draftInput = draftInput;
         }
-        
+
         return { success: true };
       }
-      
+
       return { success: false, error: 'Session not found' };
     });
 
@@ -333,7 +333,7 @@ export class ClaudeService extends EventEmitter {
       BrowserWindow.getAllWindows().forEach(window => {
         window.webContents.send('claude:editRequest', edit);
       });
-      
+
       return { success: true };
     });
 
@@ -390,18 +390,18 @@ export class ClaudeService extends EventEmitter {
       const project = projectPath || this.currentProjectPath || 'default';
       const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
       const sessions = sessionsByProject[project] || [];
-      
+
       // Filter out the session to delete
       const updatedSessions = sessions.filter(s => s.id !== sessionId);
-      
+
       // Update the store
       sessionsByProject[project] = updatedSessions;
       this.store.set('sessionsByProject', sessionsByProject);
-      
+
       // If we deleted the current session, clear it
       if (this.currentSession?.id === sessionId) {
         this.currentSession = null;
-        
+
         // Clear from current session tracking
         const currentByProject = this.store.get('currentSessionByProject', {}) as Record<string, string>;
         if (currentByProject[project] === sessionId) {
@@ -409,7 +409,7 @@ export class ClaudeService extends EventEmitter {
           this.store.set('currentSessionByProject', currentByProject);
         }
       }
-      
+
       return { success: true };
     });
 
@@ -425,8 +425,8 @@ export class ClaudeService extends EventEmitter {
       } catch (error: any) {
         console.error('Failed to fetch models:', error);
         // Return fallback models if API call fails
-        return { 
-          success: false, 
+        return {
+          success: false,
           error: error.message,
           models: [
             { id: 'claude-3-5-sonnet-20241022', display_name: 'Claude 3.5 Sonnet' },
@@ -458,7 +458,7 @@ export class ClaudeService extends EventEmitter {
       }
 
       const data = await response.json();
-      
+
       // Filter and sort models to show only chat models
       const chatModels = data.data
         .filter((model: any) => model.type === 'model' && !model.id.includes('instant'))
@@ -494,49 +494,47 @@ export class ClaudeService extends EventEmitter {
     let prompt = `You are an AI assistant for Stravu Editor, a markdown-focused text editor built with Lexical.
 Your role is to help users edit and improve their documents. You can suggest edits, generate content, and answer questions about the document.
 
-STREAMING PROTOCOL:
-When the user asks you to add, insert, or create new content in their document (e.g., "add a section about X", "insert a paragraph", "write an introduction"), 
-you should stream the content directly into the editor instead of showing it in the chat. 
+IMPORTANT: You have TWO DIFFERENT WAYS to modify documents. NEVER mix them:
 
-You MUST specify WHERE to insert the content by using ONE of these options:
+METHOD 1 - STREAMING (for NEW content only):
+Use this ONLY when adding completely NEW content to the document.
+Format: <!-- STREAM_EDIT --> followed by markdown content, then <!-- STREAM_END -->
 
-1. To insert after specific text (finds the line containing this text and inserts after it):
-<!-- STREAM_EDIT: {"insertAfter": "last line or partial text to insert after", "mode": "after"} -->
+METHOD 2 - EDIT COMMANDS (for modifying EXISTING content):
+Use this for ALL modifications to existing content, including tables.
+Format: \`\`\`edit-command\`\`\` JSON blocks with oldText/newText replacements
 
-2. To insert at the end of the document:
+CRITICAL RULES:
+- NEVER use STREAM_EDIT for table modifications (adding rows, columns, etc.)
+- NEVER stream edit-command JSON blocks into the document
+- Table modifications MUST use edit-command with exact oldText/newText
+- If you're changing existing content in ANY way, use edit-command
+- Only use STREAM_EDIT for completely new paragraphs/sections
+
+STREAMING PROTOCOL (METHOD 1 - for NEW content only):
+When the user asks you to add completely NEW content (new sections, paragraphs, etc.), 
+stream it directly into the editor.
+
+Format for streaming NEW content:
+<!-- STREAM_EDIT: {"insertAfter": "text to insert after", "mode": "after"} -->
+New markdown content here...
+<!-- STREAM_END -->
+
+Or for end of document:
 <!-- STREAM_EDIT: {"insertAtEnd": true, "mode": "after"} -->
-
-Then provide the markdown content to be inserted, and end with:
+New content...
 <!-- STREAM_END -->
 
-IMPORTANT: For "insertAfter", provide enough unique text from the END of a line to identify where to insert.
-Examples:
-- If user says "add a section after the introduction", find the last line of the introduction section
-- If user says "add content after 'Features' section", find the last line of that section
-- If no location specified, use {"insertAtEnd": true}
+Use streaming ONLY when:
+- Adding new sections or paragraphs
+- Appending content at the end
+- Inserting completely new content between existing sections
 
-Example for adding after specific text:
-<!-- STREAM_EDIT: {"insertAfter": "This concludes the introduction.", "mode": "after"} -->
-## New Section
-Content to be inserted...
-<!-- STREAM_END -->
-
-Example for adding at document end:
-<!-- STREAM_EDIT: {"insertAtEnd": true, "mode": "after"} -->
-## Appendix
-Content to be added at the end...
-<!-- STREAM_END -->
-
-Use streaming mode when:
-- User asks to "add", "insert", "append", or "write" new content
-- User asks to create sections, paragraphs, or other new content blocks
-- User requests generation of new content for the document
-
-DO NOT use streaming mode when:
-- User asks questions about the document
-- User asks for suggestions or feedback
-- User asks to edit/modify existing content (use diff edits instead)
-- User is having a general conversation
+DO NOT use streaming when:
+- Modifying tables (adding/removing rows or columns)
+- Editing existing text
+- Replacing content
+- Making any changes to existing content
 
 When NOT streaming, provide specific edit instructions that can be applied to the document.
 Focus on being helpful and making precise, targeted edits rather than rewriting entire documents unless specifically asked.
@@ -566,25 +564,41 @@ Key capabilities:
       }
     }
 
-    prompt += `\n\nWhen the user asks you to make changes to their document, you can respond in two ways:
-
-1. For simple explanations or discussions, just respond normally.
-
-2. When you want to actually edit the document, include special edit command blocks in your response.
-   For each change you want to make, specify the old text to replace and the new text:
+    prompt += `\n\nEDIT COMMANDS (METHOD 2 - for modifying EXISTING content):
+When you need to MODIFY existing content (including tables), use edit-command blocks.
 
 \`\`\`edit-command
 {
   "replacements": [
     {
-      "oldText": "The exact text to find and replace (can be a paragraph or section)",
+      "oldText": "The exact text to find and replace",
       "newText": "The new text that will replace it"
     }
   ]
 }
 \`\`\`
 
-You can include multiple replacements in a single command. The system will show these as red/green diffs in the document.
+ALWAYS use edit-command for:
+- Adding/removing table rows or columns
+- Modifying table cells
+- Changing any existing text
+- Replacing paragraphs
+- Updating lists
+- ANY modification to existing content
+
+The system will show these as red/green diffs in the document.
+
+Example for adding a column to a table:
+\`\`\`edit-command
+{
+  "replacements": [
+    {
+      "oldText": "| Fruit | Color |\\n| --- | --- |\\n| Apple | Red |",
+      "newText": "| Fruit | Color | Size |\\n| --- | --- | --- |\\n| Apple | Red | Medium |"
+    }
+  ]
+}
+\`\`\`
 
 Example for fixing a typo:
 \`\`\`edit-command
@@ -598,29 +612,29 @@ Example for fixing a typo:
 }
 \`\`\`
 
-Example for adding a new section at the end:
+NEVER do this (wrong - streaming an edit command):
+<!-- STREAM_EDIT: {"insertAfter": "some text", "mode": "after"} -->
 \`\`\`edit-command
-{
-  "replacements": [
-    {
-      "oldText": "",
-      "newText": "## New Section\\n\\nThis is the content of the new section."
-    }
-  ]
-}
+...
 \`\`\`
+<!-- STREAM_END -->
 
 IMPORTANT: 
 - Match the oldText EXACTLY as it appears in the document (including line breaks)
 - For adding new content, use empty string for oldText
-- The changes will appear as visual diffs that the user can approve or reject`;
+- The changes will appear as visual diffs that the user can approve or reject
+- When editing markdown tables, preserve the EXACT formatting including:
+  - The exact number of dashes in separator rows (e.g., |---|---| not |-------|-------|)
+  - The spacing and alignment as it appears in the original
+  - Do NOT normalize or "improve" table formatting unless specifically asked
+- The document uses a specific markdown table format with 3 dashes per column separator`;
 
     return prompt;
   }
 
   private parseEditRequests(response: string, context?: DocumentContext): EditRequest[] {
     const edits: EditRequest[] = [];
-    
+
     // Look for ```edit-command blocks
     const editPattern = /```edit-command\s*\n([\s\S]*?)\n```/g;
     let match;
@@ -629,7 +643,7 @@ IMPORTANT:
       try {
         const editJson = match[1];
         const editCommand = JSON.parse(editJson);
-        
+
         if (editCommand.replacements && Array.isArray(editCommand.replacements)) {
           // Create a single EditRequest with all replacements
           edits.push({
@@ -663,14 +677,14 @@ IMPORTANT:
   private saveSession(session: SessionData) {
     const project = session.projectPath || this.currentProjectPath || 'default';
     const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
-    
+
     if (!sessionsByProject[project]) {
       sessionsByProject[project] = [];
     }
-    
+
     const sessions = sessionsByProject[project];
     const index = sessions.findIndex(s => s.id === session.id);
-    
+
     if (index >= 0) {
       sessions[index] = session;
     } else {
@@ -692,33 +706,33 @@ IMPORTANT:
       .replace(/[\n\r]+/g, ' ')  // Replace newlines with spaces
       .replace(/\s+/g, ' ')       // Normalize whitespace
       .trim();
-    
+
     // If message starts with common patterns, extract the main topic
     const patterns = [
       /^(can you |could you |please |help me |i need to |i want to |how do i |how to |what is |what are |where is |where are |why is |why are |when is |when are )/i,
       /^(add |create |make |build |implement |fix |update |modify |change |refactor |optimize |debug |test |write |generate )/i
     ];
-    
+
     for (const pattern of patterns) {
       if (pattern.test(title)) {
         title = title.replace(pattern, '');
         break;
       }
     }
-    
+
     // Capitalize first letter
     title = title.charAt(0).toUpperCase() + title.slice(1);
-    
+
     // Truncate to reasonable length (50 chars) and add ellipsis if needed
     if (title.length > 50) {
       title = title.substring(0, 47) + '...';
     }
-    
+
     // If title is too short or empty, use a default
     if (title.length < 3) {
       title = 'New conversation';
     }
-    
+
     return title;
   }
 
