@@ -10,6 +10,7 @@ import type { JSX } from 'react';
 import { useRef } from 'react';
 
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
+import { $convertFromMarkdownString } from '@lexical/markdown';
 import {
     $createParagraphNode,
     $createTextNode,
@@ -28,6 +29,7 @@ import Editor from './Editor';
 import PlaygroundEditorTheme from './themes/PlaygroundEditorTheme';
 import EditorNodes from "./nodes/EditorNodes";
 import { pluginRegistry } from './plugins/PluginRegistry';
+import { MARKDOWN_TRANSFORMERS } from './markdown';
 
 export interface StravuEditorProps {
     config?: EditorConfig;
@@ -40,8 +42,23 @@ function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
     const widthClass = useResponsiveWidth(containerRef);
 
     const initialConfig = {
-        editorState: config.emptyEditor ? undefined : $createEmptyEditor,
-        // html: {import: buildImportMap()},
+        // Set initial editor state based on whether we have initial content
+        editorState: (() => {
+            if (config.initialContent) {
+                // Load markdown content properly through the initialConfig
+                return () => {
+                    const root = $getRoot();
+                    root.clear();
+                    $convertFromMarkdownString(config.initialContent!, MARKDOWN_TRANSFORMERS, undefined, true);
+                    root.selectStart();
+                };
+            } else if (!config.emptyEditor) {
+                // Create an empty editor with a paragraph
+                return $createEmptyEditor;
+            }
+            // Return undefined for truly empty editor
+            return undefined;
+        })(),
         namespace: 'StravuEditor',
         nodes: [...EditorNodes,  ...pluginRegistry.getAllNodes()],
         onError: (error: Error) => {

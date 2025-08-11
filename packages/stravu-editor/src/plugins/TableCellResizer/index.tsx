@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-import type {TableCellNode, TableDOMCell, TableMapType} from '@lexical/table';
+import { $isTableNode, TableCellNode, TableDOMCell, TableMapType } from '@lexical/table';
 import type {LexicalEditor, NodeKey} from 'lexical';
 import type {JSX} from 'react';
 
@@ -89,6 +89,7 @@ function TableCellResizer({editor}: {editor: LexicalEditor}): JSX.Element {
             }),
             editor.registerNodeTransform(TableNode, (tableNode) => {
                 // Don't set initial widths - let browser handle auto-sizing
+                console.log('TableCellResizer: Transforming TableNode', tableNode.getKey(), $isTableNode(tableNode));
                 const tableElement = editor.getElementByKey(tableNode.getKey());
                 if (tableElement && isHTMLElement(tableElement)) {
                     const table = tableElement.querySelector('table') || tableElement;
