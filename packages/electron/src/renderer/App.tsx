@@ -14,6 +14,7 @@ import { QuickOpen } from './components/QuickOpen';
 import { AIChat } from './components/AIChat';
 import { HistoryDialog } from './components/HistoryDialog';
 import { PreferencesDialog } from './components/Preferences/PreferencesDialog';
+import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import './ProjectWelcome.css';
 
 // File tree interface
@@ -108,6 +109,14 @@ export default function App() {
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
   const [sessionToLoad, setSessionToLoad] = useState<{ sessionId: string; projectPath?: string } | null>(null);
+  const [diffError, setDiffError] = useState<{ isOpen: boolean; title: string; message: string; details?: any }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    details: undefined
+  });
+  const [lastPrompt, setLastPrompt] = useState<string>('');
+  const [lastClaudeResponse, setLastClaudeResponse] = useState<string>('');
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
@@ -410,7 +419,7 @@ export default function App() {
         if (getContentRef.current) {
           initialContentRef.current = getContentRef.current();
         }
-        
+
         // Create a history snapshot for manual save
         console.log('Checking history API:', !!window.electronAPI?.history);
         if (window.electronAPI?.history) {
@@ -429,7 +438,7 @@ export default function App() {
         } else {
           console.log('History API not available');
         }
-        
+
         console.log('File saved successfully');
       } else {
         console.log('Save returned null - no current file in main process');
@@ -692,7 +701,7 @@ export default function App() {
 
     // Set up auto-snapshot if we have a file path
     if (currentFilePath && getContentRef.current && window.electronAPI?.history) {
-      console.log('Starting auto-snapshot interval');
+      // console.log('Starting auto-snapshot interval');
       autoSnapshotIntervalRef.current = setInterval(async () => {
         if (currentFilePath && getContentRef.current && window.electronAPI?.history) {
           try {
@@ -752,7 +761,7 @@ export default function App() {
       setIsDirty(false);
       contentVersionRef.current += 1;
       isInitializedRef.current = false;
-      
+
       // Restore AI Chat state when opening a project
       try {
         const aiChatState = await window.electronAPI.getAIChatState();
@@ -768,7 +777,7 @@ export default function App() {
         setIsAIChatStateLoaded(true);
       }
     }));
-    
+
     // Handle project open from CLI
     if (window.electronAPI.onOpenProjectFromCLI) {
       cleanupFns.push(window.electronAPI.onOpenProjectFromCLI(async (projectPath) => {
@@ -779,7 +788,7 @@ export default function App() {
         }
       }));
     }
-    
+
     cleanupFns.push(window.electronAPI.onFileOpenedFromOS(async (data) => {
       console.log('File opened from OS:', data.filePath);
       contentVersionRef.current += 1;
@@ -910,7 +919,7 @@ export default function App() {
     if (window.electronAPI.onLoadSessionFromManager) {
       cleanupFns.push(window.electronAPI.onLoadSessionFromManager(async (data: { sessionId: string; projectPath?: string }) => {
         console.log('Loading session from manager:', data);
-        
+
         // If there's a project path and we're not in project mode, open the project first
         if (data.projectPath && !projectMode) {
           // Open the project
@@ -921,10 +930,10 @@ export default function App() {
           setProjectName(projectName);
           setFileTree(fileTree);
         }
-        
+
         // Set the session to load - AIChat will pick this up
         setSessionToLoad(data);
-        
+
         // Make sure AI Chat is visible
         setIsAIChatCollapsed(false);
       }));
@@ -950,7 +959,7 @@ export default function App() {
 
     // Clean up listeners when dependencies change
     return () => {
-      console.log('Cleaning up IPC listeners');
+      // console.log('Cleaning up IPC listeners');
       cleanupFns.forEach(cleanup => cleanup());
     };
   }, [handleNew, handleOpen, handleSave, handleSaveAs, currentFilePath]);
@@ -1026,7 +1035,7 @@ export default function App() {
             if (getContentRef.current) {
               const currentContent = getContentRef.current();
               const hasChanged = currentContent !== initialContentRef.current;
-              
+
               // On first onChange, mark as initialized
               if (!isInitializedRef.current) {
                 isInitializedRef.current = true;
@@ -1038,7 +1047,7 @@ export default function App() {
                 // If content is same, it's just initialization - no need to set dirty
                 return;
               }
-              
+
               // After initialization, normal dirty checking
               if (hasChanged !== isDirty) {
                 logger.log('editor', 'Dirty state changed to:', hasChanged);
@@ -1077,38 +1086,27 @@ export default function App() {
             fileType: 'markdown',
             content: getContentRef.current ? getContentRef.current() : content,
             cursorPosition: undefined, // TODO: Get from Lexical editor
-            selection: undefined // TODO: Get selected text from Lexical
+            selection: undefined, // TODO: Get selected text from Lexical
+            getLatestContent: getContentRef.current // Pass the function itself
           }}
-          onApplyEdit={(edit) => {
-            console.log('Applying edit:', edit);
-            if (edit.type === 'diff' && edit.replacements) {
-              try {
-                // Convert the replacements to the TextReplacement format
-                const textReplacements: TextReplacement[] = edit.replacements.map((r: any) => ({
-                  oldText: r.oldText,
-                  newText: r.newText
-                }));
+          onApplyEdit={(edit, prompt, claudeResponse) => {
+            console.log('Edit already applied by AIChat component, updating UI state');
+            // Store the prompt and response for error reporting
+            setLastPrompt(prompt || '');
+            setLastClaudeResponse(claudeResponse || '');
 
-                // Apply through the AI chat bridge which will dispatch to the DiffPlugin
-                aiChatBridge.applyReplacements(textReplacements).then(result => {
-                  if (result.success) {
-                    console.log('Diff applied successfully - showing red/green preview');
-                    // Document will show diffs but not marked as dirty yet
-                    // User needs to approve/reject the diffs
-                  } else {
-                    console.error('Failed to apply diff:', result.error);
-                    alert(`Failed to apply changes: ${result.error || 'Unknown error'}`);
-                  }
-                }).catch(err => {
-                  console.error('Error applying diff:', err);
-                  alert('Failed to apply changes. Please try again.');
-                });
-              } catch (error) {
-                console.error('Failed to apply diff:', error);
-                alert('Failed to apply diff. Please try again.');
-              }
-            } else {
-              console.error('Diff service not initialized or invalid edit type');
+            // The edit has already been applied by AIChat.tsx through claudeApi.applyEdit()
+            // This callback is just for UI state updates, not for applying the edit
+            // We just need to handle any UI updates or error display
+            
+            if (edit.type === 'diff' && edit.replacements) {
+              // The edit was already applied, just log for debugging
+              console.log('Diff applied successfully - showing red/green preview');
+              // Document will show diffs but not marked as dirty yet
+              // User needs to approve/reject the diffs
+              
+              // Note: Error handling is done in AIChat.tsx now
+              // If there was an error, AIChat.tsx will handle the retry and show error messages
             }
           }}
         />
@@ -1131,6 +1129,13 @@ export default function App() {
       <PreferencesDialog
         isOpen={isPreferencesOpen}
         onClose={() => setIsPreferencesOpen(false)}
+      />
+      <ErrorDialog
+        isOpen={diffError.isOpen}
+        onClose={() => setDiffError(prev => ({ ...prev, isOpen: false }))}
+        title={diffError.title}
+        message={diffError.message}
+        details={diffError.details}
       />
     </div>
   );

@@ -496,13 +496,17 @@ Your role is to help users edit and improve their documents. You can suggest edi
 
 IMPORTANT: You have TWO DIFFERENT WAYS to modify documents. NEVER mix them:
 
+CRITICAL: Always work from the CURRENT document content shown above. Do not assume your previous edits succeeded.
+
 METHOD 1 - STREAMING (for NEW content only):
 Use this ONLY when adding completely NEW content to the document.
 Format: <!-- STREAM_EDIT --> followed by markdown content, then <!-- STREAM_END -->
+NOTE: After streaming, if you need to modify that content later, use edit-command with the ACTUAL text in the document.
 
 METHOD 2 - EDIT COMMANDS (for modifying EXISTING content):
 Use this for ALL modifications to existing content, including tables.
 Format: \`\`\`edit-command\`\`\` JSON blocks with oldText/newText replacements
+The oldText MUST exactly match what's currently in the document above.
 
 CRITICAL RULES:
 - NEVER use STREAM_EDIT for table modifications (adding rows, columns, etc.)
@@ -510,6 +514,7 @@ CRITICAL RULES:
 - Table modifications MUST use edit-command with exact oldText/newText
 - If you're changing existing content in ANY way, use edit-command
 - Only use STREAM_EDIT for completely new paragraphs/sections
+- Always verify the exact text in the current document before using edit-command
 
 STREAMING PROTOCOL (METHOD 1 - for NEW content only):
 When the user asks you to add completely NEW content (new sections, paragraphs, etc.), 
@@ -560,23 +565,39 @@ Key capabilities:
       }
 
       if (context.content) {
-        prompt += `\n\nDocument content:\n${context.content}`;
+        prompt += `\n\nCURRENT DOCUMENT CONTENT (THIS IS THE ACTUAL, LIVE STATE):\n\`\`\`markdown\n${context.content}\n\`\`\`\n\nCRITICAL: The content above is the EXACT current state of the document. Ignore what you think you changed previously - work ONLY with what's shown above.`;
       }
     }
 
-    prompt += `\n\nEDIT COMMANDS (METHOD 2 - for modifying EXISTING content):
+    prompt += `\n\nIMPORTANT: The document content shown above is the CURRENT state of the document. Do not assume any of your previous edits have been applied. Always work from the current document content shown above.
+
+When using edit-command:
+1. Look at the CURRENT DOCUMENT CONTENT above
+2. Find the EXACT text you want to replace (copy it exactly as shown)
+3. Do NOT reference text from your previous messages
+4. Do NOT assume previous edits worked
+
+EDIT COMMANDS (METHOD 2 - for modifying EXISTING content):
 When you need to MODIFY existing content (including tables), use edit-command blocks.
 
 \`\`\`edit-command
 {
   "replacements": [
     {
-      "oldText": "The exact text to find and replace",
+      "oldText": "COPY THE EXACT TEXT FROM THE 'CURRENT DOCUMENT CONTENT' SECTION ABOVE",
       "newText": "The new text that will replace it"
     }
   ]
 }
 \`\`\`
+
+CRITICAL REQUIREMENTS FOR oldText:
+- Must be COPIED EXACTLY from the 'CURRENT DOCUMENT CONTENT' section above
+- Do NOT use text from your previous messages
+- Do NOT use text you think you inserted
+- Do NOT use text from earlier in this conversation
+- ONLY use text that is CURRENTLY in the document as shown above
+- If the text you want to change is not in the current document, you cannot change it
 
 ALWAYS use edit-command for:
 - Adding/removing table rows or columns
@@ -588,17 +609,27 @@ ALWAYS use edit-command for:
 
 The system will show these as red/green diffs in the document.
 
-Example for adding a column to a table:
+Example - if the CURRENT DOCUMENT CONTENT shows:
+\`\`\`markdown
+## Bears
+Mighty paws thunder,
+Forest echoes with deep growls—
+Wild strength roams freely.
+\`\`\`
+
+And you want to change it, use:
 \`\`\`edit-command
 {
   "replacements": [
     {
-      "oldText": "| Fruit | Color |\\n| --- | --- |\\n| Apple | Red |",
-      "newText": "| Fruit | Color | Size |\\n| --- | --- | --- |\\n| Apple | Red | Medium |"
+      "oldText": "Mighty paws thunder,\\nForest echoes with deep growls—\\nWild strength roams freely.",
+      "newText": "Your new text here"
     }
   ]
 }
 \`\`\`
+
+NEVER try to replace text that isn't in the current document!
 
 Example for fixing a typo:
 \`\`\`edit-command

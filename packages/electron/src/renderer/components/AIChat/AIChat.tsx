@@ -12,8 +12,8 @@ interface AIChatProps {
   onToggleCollapse: () => void;
   width: number;
   onWidthChange: (width: number) => void;
-  documentContext?: DocumentContext;
-  onApplyEdit?: (edit: any) => void;
+  documentContext?: DocumentContext & { getLatestContent?: () => string };
+  onApplyEdit?: (edit: any, prompt?: string, claudeResponse?: string) => void;
   projectPath?: string;
   sessionToLoad?: { sessionId: string; projectPath?: string } | null;
   onSessionLoaded?: () => void;
@@ -54,6 +54,7 @@ export function AIChat({
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [tempInput, setTempInput] = useState('');
+  const [currentUserMessage, setCurrentUserMessage] = useState<string>(''); // Track current user message for error reporting
   const isResizingRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const streamingEditIdRef = useRef<string | null>(null);
@@ -95,10 +96,36 @@ export function AIChat({
         setIsLoading(false);
         
         // Auto-apply edits when they arrive
-        if (data.edits && data.edits.length > 0 && onApplyEdit) {
-          data.edits.forEach((edit: any) => {
+        if (data.edits && data.edits.length > 0) {
+          data.edits.forEach(async (edit: any) => {
             logger.log('bridge', 'Auto-applying edit from Claude:', edit);
-            onApplyEdit(edit);
+            
+            // Apply the edit through the API (which handles both applying and error reporting)
+            const result = await claudeApi.applyEdit(edit);
+            
+            // If we have onApplyEdit callback, notify the parent AFTER the edit is applied
+            // This is for UI updates, not for actually applying the edit
+            if (onApplyEdit) {
+              // Pass the result so the parent knows if it succeeded
+              onApplyEdit(edit, currentUserMessage, data.content);
+            }
+            
+            if (!result.success) {
+              // Edit failed - send an automatic follow-up message to Claude
+              const currentContent = documentContext?.getLatestContent ? documentContext.getLatestContent() : documentContext?.content || '';
+              const errorMessage = `The previous edit command failed because: "${result.error}"\n\nThe current document contains:\n\`\`\`markdown\n${currentContent}\n\`\`\`\n\nPlease provide a corrected edit command using the EXACT text from the document above.`;
+              
+              // Add error notification to chat
+              setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: `⚠️ Edit failed: ${result.error}\n\nAutomatically asking Claude to correct...`
+              }]);
+              
+              // Send the error back to Claude so it can correct itself
+              setTimeout(() => {
+                handleSendMessage(errorMessage);
+              }, 500);
+            }
           });
         }
       } else if (data.partial) {
@@ -112,7 +139,8 @@ export function AIChat({
     // Set up edit request listener
     const handleEditRequest = (edit: any) => {
       if (onApplyEdit) {
-        onApplyEdit(edit);
+        // Pass current context for error reporting
+        onApplyEdit(edit, currentUserMessage, '');
       }
     };
 
@@ -323,7 +351,15 @@ export function AIChat({
           session = await claudeApi.loadSession(existingSessions[0].id, projectPath);
         } else {
           // Create new session only if none exists
-          session = await claudeApi.createSession(documentContext, projectPath);
+          // Clean the document context for IPC (remove functions)
+          const cleanDocumentContext = documentContext ? {
+            filePath: documentContext.filePath,
+            fileType: documentContext.fileType,
+            content: documentContext.getLatestContent ? documentContext.getLatestContent() : documentContext.content,
+            cursorPosition: documentContext.cursorPosition,
+            selection: documentContext.selection
+          } : undefined;
+          session = await claudeApi.createSession(cleanDocumentContext, projectPath);
         }
         
         if (mounted) {
@@ -413,10 +449,17 @@ export function AIChat({
   const handleSendMessage = useCallback(async (message: string) => {
     if (!message.trim() || !isInitialized) return;
     
+    // Store the current message for error reporting
+    setCurrentUserMessage(message);
+    
     // Get fresh document context with latest content
     const freshDocumentContext = {
-      ...documentContext,
-      content: documentContext?.content || '' // This will get the latest from getContentRef
+      filePath: documentContext?.filePath || '',
+      fileType: documentContext?.fileType || 'markdown',
+      content: documentContext?.getLatestContent ? documentContext.getLatestContent() : documentContext?.content || '',
+      cursorPosition: documentContext?.cursorPosition,
+      selection: documentContext?.selection
+      // Note: Don't include getLatestContent function as it can't be serialized for IPC
     };
     
     // If no current session, create one first
@@ -503,7 +546,16 @@ export function AIChat({
   // Session management handlers
   const handleNewSession = useCallback(async () => {
     try {
-      const session = await claudeApi.createSession(documentContext, projectPath);
+      // Create a clean document context without functions for IPC
+      const cleanDocumentContext = documentContext ? {
+        filePath: documentContext.filePath,
+        fileType: documentContext.fileType,
+        content: documentContext.getLatestContent ? documentContext.getLatestContent() : documentContext.content,
+        cursorPosition: documentContext.cursorPosition,
+        selection: documentContext.selection
+      } : undefined;
+      
+      const session = await claudeApi.createSession(cleanDocumentContext, projectPath);
       setCurrentSessionId(session.id);
       setMessages([]);
       setInputValue(''); // Clear input for new session

@@ -1,0 +1,349 @@
+.history-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.history-window.loading,
+.history-window.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+}
+
+.history-window.error {
+  color: #ef4444;
+}
+
+.history-header {
+  padding: 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.history-header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.file-path {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #6b7280;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+}
+
+.history-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.snapshots-list {
+  width: 320px;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+}
+
+.snapshots-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.snapshots-header h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.snapshots {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.no-snapshots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: #9ca3af;
+}
+
+.no-snapshots p {
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+
+.snapshot-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  cursor: pointer;
+  border-bottom: 1px solid #f3f4f6;
+  transition: background-color 0.15s;
+  position: relative;
+}
+
+.snapshot-item:hover {
+  background: #f9fafb;
+}
+
+.snapshot-item.selected {
+  background: #eff6ff;
+  border-left: 3px solid #3b82f6;
+  padding-left: 17px;
+}
+
+.snapshot-icon {
+  margin-right: 12px;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+}
+
+.snapshot-item.selected .snapshot-icon {
+  color: #3b82f6;
+}
+
+.snapshot-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.snapshot-date {
+  font-size: 14px;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.snapshot-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.snapshot-type {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.snapshot-item.selected .snapshot-type {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.snapshot-delete {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px;
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, background-color 0.15s;
+}
+
+.snapshot-item:hover .snapshot-delete {
+  opacity: 1;
+}
+
+.snapshot-delete:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.snapshot-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.preview-header h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-restore {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.btn-restore:hover {
+  background: #2563eb;
+}
+
+.preview-content {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+  background: #f9fafb;
+}
+
+.preview-content pre {
+  margin: 0;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #111827;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.no-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+}
+
+.no-preview p {
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .history-window {
+    background: #1f2937;
+  }
+  
+  .history-header {
+    background: #111827;
+    border-bottom-color: #374151;
+  }
+  
+  .history-header h1 {
+    color: #f9fafb;
+  }
+  
+  .file-path {
+    color: #9ca3af;
+  }
+  
+  .snapshots-list {
+    border-right-color: #374151;
+  }
+  
+  .snapshots-header {
+    border-bottom-color: #374151;
+  }
+  
+  .snapshots-header h2,
+  .preview-header h2 {
+    color: #d1d5db;
+  }
+  
+  .snapshot-item {
+    border-bottom-color: #374151;
+  }
+  
+  .snapshot-item:hover {
+    background: #374151;
+  }
+  
+  .snapshot-item.selected {
+    background: #1e3a8a;
+    border-left-color: #60a5fa;
+  }
+  
+  .snapshot-icon {
+    color: #9ca3af;
+  }
+  
+  .snapshot-item.selected .snapshot-icon {
+    color: #60a5fa;
+  }
+  
+  .snapshot-date {
+    color: #f3f4f6;
+  }
+  
+  .snapshot-meta {
+    color: #9ca3af;
+  }
+  
+  .snapshot-type {
+    background: #374151;
+  }
+  
+  .snapshot-item.selected .snapshot-type {
+    background: #1e3a8a;
+    color: #93c5fd;
+  }
+  
+  .snapshot-delete {
+    color: #6b7280;
+  }
+  
+  .snapshot-delete:hover {
+    background: #7f1d1d;
+    color: #fca5a5;
+  }
+  
+  .preview-header {
+    border-bottom-color: #374151;
+  }
+  
+  .preview-content {
+    background: #111827;
+  }
+  
+  .preview-content pre {
+    color: #f3f4f6;
+  }
+  
+  .no-snapshots,
+  .no-preview {
+    color: #6b7280;
+  }
+}

@@ -61,26 +61,74 @@ export function ChatMessage({
   };
 
   const renderContent = () => {
+    // Remove edit-command blocks from the content
+    // They should only appear in the collapsible edit UI
+    const cleanContent = content.replace(/```edit-command[\s\S]*?```/g, '').trim();
+    
+    // If there's no content left after removing edit commands, don't render anything
+    if (!cleanContent) {
+      return null;
+    }
+    
     // Simple markdown rendering (can be enhanced)
-    const lines = content.split('\n');
-    return lines.map((line, index) => {
+    const lines = cleanContent.split('\n');
+    let inCodeBlock = false;
+    let codeBlockLines: string[] = [];
+    const result: JSX.Element[] = [];
+    
+    lines.forEach((line, index) => {
       // Code blocks
       if (line.startsWith('```')) {
-        return <div key={index} className="ai-chat-code-fence">{line}</div>;
+        if (!inCodeBlock) {
+          inCodeBlock = true;
+          codeBlockLines = [line];
+        } else {
+          codeBlockLines.push(line);
+          inCodeBlock = false;
+          // Render the complete code block
+          result.push(
+            <pre key={`code-${index}`} className="ai-chat-code-block">
+              <code>{codeBlockLines.slice(1, -1).join('\n')}</code>
+            </pre>
+          );
+          codeBlockLines = [];
+        }
+        return;
       }
+      
+      if (inCodeBlock) {
+        codeBlockLines.push(line);
+        return;
+      }
+      
       // Headers
       if (line.startsWith('#')) {
         const level = line.match(/^#+/)?.[0].length || 1;
         const text = line.replace(/^#+\s*/, '');
-        return <div key={index} className={`ai-chat-heading ai-chat-heading--h${level}`}>{text}</div>;
+        result.push(<div key={index} className={`ai-chat-heading ai-chat-heading--h${level}`}>{text}</div>);
+        return;
       }
+      
       // Lists
       if (line.match(/^[\*\-]\s+/)) {
-        return <div key={index} className="ai-chat-list-item">• {line.replace(/^[\*\-]\s+/, '')}</div>;
+        result.push(<div key={index} className="ai-chat-list-item">• {line.replace(/^[\*\-]\s+/, '')}</div>);
+        return;
       }
+      
       // Regular paragraph
-      return <div key={index}>{line || '\u00A0'}</div>;
+      result.push(<div key={index}>{line || '\u00A0'}</div>);
     });
+    
+    // Handle unclosed code block
+    if (inCodeBlock && codeBlockLines.length > 0) {
+      result.push(
+        <pre key={`code-unclosed`} className="ai-chat-code-block">
+          <code>{codeBlockLines.slice(1).join('\n')}</code>
+        </pre>
+      );
+    }
+    
+    return result;
   };
 
   return (
@@ -102,23 +150,35 @@ export function ChatMessage({
         {/* Show edits if available */}
         {edits && edits.length > 0 && (
           <div className="ai-chat-edits">
-            <button 
-              className="ai-chat-edits-toggle"
-              onClick={() => setExpandedEdits(!expandedEdits)}
-            >
-              {expandedEdits ? '▼' : '▶'} {edits.length} suggested edit{edits.length > 1 ? 's' : ''}
-            </button>
-            
-            {expandedEdits && (
-              <div className="ai-chat-edits-list">
-                {edits.map((edit, index) => (
-                  <div key={index} className="ai-chat-edit">
-                    <div className="ai-chat-edit-header">
+            {edits.map((edit, index) => (
+              <div key={index} className="ai-chat-edit-box">
+                <div 
+                  className="ai-chat-edit-header"
+                  onClick={() => setExpandedEdits(!expandedEdits)}
+                >
+                  <span className="ai-chat-edit-toggle">
+                    {expandedEdits ? '▼' : '▶'}
+                  </span>
+                  <span className="ai-chat-edit-title">
+                    {edits.length} suggested edit{edits.length > 1 ? 's' : ''}
+                  </span>
+                  {editStatus[index]?.status === 'applied' && (
+                    <span className="ai-chat-edit-badge ai-chat-edit-badge--success">Applied</span>
+                  )}
+                  {editStatus[index]?.status === 'failed' && (
+                    <span className="ai-chat-edit-badge ai-chat-edit-badge--error">Failed</span>
+                  )}
+                </div>
+                
+                {expandedEdits && (
+                  <div className="ai-chat-edit-content-wrapper">
+                    <div className="ai-chat-edit-metadata">
                       <span className="ai-chat-edit-type">DIFF</span>
                       <span className="ai-chat-edit-location">
                         {edit.replacements.length} replacement{edit.replacements.length > 1 ? 's' : ''}
                       </span>
                     </div>
+                    
                     {edit.replacements.map((replacement, repIndex) => (
                       <div key={repIndex} className="ai-chat-edit-replacement">
                         {replacement.oldText && (
@@ -139,6 +199,7 @@ export function ChatMessage({
                         )}
                       </div>
                     ))}
+                    
                     <div className={`ai-chat-edit-status ${editStatus[index]?.status ? `ai-chat-edit-status--${editStatus[index].status}` : ''}`}>
                       {editStatus[index]?.status === 'pending' ? (
                         <span className="ai-chat-edit-status-text">
@@ -177,9 +238,9 @@ export function ChatMessage({
                       )}
                     </div>
                   </div>
-                ))}
+                )}
               </div>
-            )}
+            ))}
           </div>
         )}
         

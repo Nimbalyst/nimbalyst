@@ -19,7 +19,7 @@ interface ChatMessagesProps {
   messages: Message[];
   isLoading: boolean;
   currentStreamContent?: string;
-  onApplyEdit?: (edit: any) => void;
+  onApplyEdit?: (edit: any) => Promise<{ success: boolean; error?: string }>;
 }
 
 export function ChatMessages({ 
