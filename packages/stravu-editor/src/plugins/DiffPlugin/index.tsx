@@ -1,6 +1,6 @@
 /**
  * Lexical Diff Plugin
- * 
+ *
  * Provides visual diff functionality with approve/reject capabilities
  * for the Stravu Editor. This plugin handles:
  * - Visual diff rendering with CSS classes
@@ -74,20 +74,20 @@ export function DiffPlugin(): JSX.Element | null {
           // Skip table internal nodes as they don't have direct DOM elements
           // Only process table cells which do have DOM elements
           const isTableInternalNode = $isTableNode(node) || $isTableRowNode(node);
-          
+
           if (!isTableInternalNode) {
             const diffState = $getDiffState(node);
             const element = editor.getElementByKey(node.getKey());
-            
+
             if (element) {
               // Clear existing diff classes
-              if (diffAddClass) {
+              if (diffAddClass && element.classList.contains(diffAddClass)) {
                 element.classList.remove(diffAddClass);
               }
-              if (diffRemoveClass) {
+              if (diffRemoveClass && element.classList.contains(diffRemoveClass)) {
                 element.classList.remove(diffRemoveClass);
               }
-              if (diffModifyClass) {
+              if (diffModifyClass && element.classList.contains(diffModifyClass)) {
                 element.classList.remove(diffModifyClass);
               }
 
@@ -190,10 +190,10 @@ export function DiffPlugin(): JSX.Element | null {
           return true;
         } catch (error: any) {
           console.error('Failed to apply diff:', error);
-          
+
           // Extract meaningful error message
           let errorMessage = 'Failed to apply changes';
-          
+
           if (error?.context?.errorType === 'TEXT_REPLACEMENT_ERROR') {
             // Whitespace or text mismatch error
             const replacement = error.context?.additionalInfo?.replacement;
@@ -203,7 +203,7 @@ export function DiffPlugin(): JSX.Element | null {
           } else if (error?.message) {
             errorMessage = error.message;
           }
-          
+
           // Re-throw with a more user-friendly error
           throw new Error(errorMessage);
         }
