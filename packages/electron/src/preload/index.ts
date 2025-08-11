@@ -234,10 +234,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Preferences operations
-  getGeneralSettings: () => ipcRenderer.invoke('preferences:getGeneral'),
-  saveGeneralSettings: (settings: any) => ipcRenderer.invoke('preferences:saveGeneral', settings),
-  getEditorSettings: () => ipcRenderer.invoke('preferences:getEditor'),
-  saveEditorSettings: (settings: any) => ipcRenderer.invoke('preferences:saveEditor', settings),
+  openDataFolder: () => ipcRenderer.invoke('preferences:openDataFolder'),
   onShowPreferences: (callback: () => void) => {
     ipcRenderer.on('show-preferences', callback);
     return () => ipcRenderer.removeListener('show-preferences', callback);

@@ -2,10 +2,6 @@ import React, { useState, useEffect } from 'react';
 
 export function GeneralPreferences() {
   const [theme, setTheme] = useState('system');
-  const [autoSave, setAutoSave] = useState(true);
-  const [autoSaveInterval, setAutoSaveInterval] = useState(60);
-  const [showLineNumbers, setShowLineNumbers] = useState(true);
-  const [showWordCount, setShowWordCount] = useState(true);
 
   useEffect(() => {
     loadSettings();
@@ -15,15 +11,6 @@ export function GeneralPreferences() {
     try {
       const currentTheme = await window.electronAPI.getTheme();
       setTheme(currentTheme || 'system');
-      
-      // Load other settings from store
-      const settings = await window.electronAPI.getGeneralSettings();
-      if (settings) {
-        setAutoSave(settings.autoSave ?? true);
-        setAutoSaveInterval(settings.autoSaveInterval ?? 60);
-        setShowLineNumbers(settings.showLineNumbers ?? true);
-        setShowWordCount(settings.showWordCount ?? true);
-      }
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
@@ -34,16 +21,9 @@ export function GeneralPreferences() {
     await window.electronAPI.setTheme(newTheme);
   };
 
-  const handleSave = async () => {
-    try {
-      await window.electronAPI.saveGeneralSettings({
-        autoSave,
-        autoSaveInterval,
-        showLineNumbers,
-        showWordCount
-      });
-    } catch (error) {
-      console.error('Failed to save settings:', error);
+  const handleOpenDataFolder = async () => {
+    if (window.electronAPI.openDataFolder) {
+      await window.electronAPI.openDataFolder();
     }
   };
 
@@ -70,75 +50,20 @@ export function GeneralPreferences() {
       </div>
 
       <div className="preference-group">
-        <label className="preference-checkbox-label">
-          <input
-            type="checkbox"
-            checked={autoSave}
-            onChange={(e) => {
-              setAutoSave(e.target.checked);
-              handleSave();
-            }}
-            className="preference-checkbox"
-          />
-          <span>Enable auto-save</span>
-        </label>
+        <h4>Application Data</h4>
         <p className="preference-description">
-          Automatically save changes to your documents
+          Access your history, sessions, and other application data
         </p>
-        
-        {autoSave && (
-          <div className="preference-subgroup">
-            <label htmlFor="autosave-interval">Auto-save interval (seconds)</label>
-            <input
-              id="autosave-interval"
-              type="number"
-              min="10"
-              max="300"
-              value={autoSaveInterval}
-              onChange={(e) => {
-                setAutoSaveInterval(parseInt(e.target.value) || 60);
-                handleSave();
-              }}
-              className="preference-input-small"
-            />
-          </div>
-        )}
-      </div>
-
-      <div className="preference-group">
-        <label className="preference-checkbox-label">
-          <input
-            type="checkbox"
-            checked={showLineNumbers}
-            onChange={(e) => {
-              setShowLineNumbers(e.target.checked);
-              handleSave();
-            }}
-            className="preference-checkbox"
-          />
-          <span>Show line numbers</span>
-        </label>
-        <p className="preference-description">
-          Display line numbers in the editor
-        </p>
-      </div>
-
-      <div className="preference-group">
-        <label className="preference-checkbox-label">
-          <input
-            type="checkbox"
-            checked={showWordCount}
-            onChange={(e) => {
-              setShowWordCount(e.target.checked);
-              handleSave();
-            }}
-            className="preference-checkbox"
-          />
-          <span>Show word count</span>
-        </label>
-        <p className="preference-description">
-          Display word and character count in the status bar
-        </p>
+        <button
+          onClick={handleOpenDataFolder}
+          className="preference-button-secondary"
+          style={{ marginTop: '8px' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ marginRight: '6px' }}>
+            <path d="M2 3.5C2 2.67157 2.67157 2 3.5 2H6L7.5 4H12.5C13.3284 4 14 4.67157 14 5.5V12.5C14 13.3284 13.3284 14 12.5 14H3.5C2.67157 14 2 13.3284 2 12.5V3.5Z" stroke="currentColor" strokeWidth="1.5"/>
+          </svg>
+          Open Data Folder
+        </button>
       </div>
     </div>
   );

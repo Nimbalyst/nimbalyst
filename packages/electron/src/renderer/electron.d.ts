@@ -79,10 +79,7 @@ interface ElectronAPI {
   onClaudeEditRequest?: (callback: (edit: any) => void) => () => void;
   
   // Preferences operations
-  getGeneralSettings?: () => Promise<any>;
-  saveGeneralSettings?: (settings: any) => Promise<any>;
-  getEditorSettings?: () => Promise<any>;
-  saveEditorSettings?: (settings: any) => Promise<any>;
+  openDataFolder?: () => Promise<{ success: boolean }>;
   onShowPreferences?: (callback: () => void) => () => void;
 }
 
