@@ -137,6 +137,14 @@ export function registerFileHandlers() {
         }
     });
     
+    // Show error dialog
+    ipcMain.handle('show-error-dialog', async (event, title: string, message: string) => {
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) return;
+        
+        dialog.showErrorBox(title, message);
+    });
+    
     // Update current file path from renderer (for drag-drop)
     ipcMain.handle('set-current-file', async (event, filePath: string | null) => {
         const window = BrowserWindow.fromWebContents(event.sender);

@@ -115,6 +115,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openFile: () => ipcRenderer.invoke('open-file'),
   saveFile: (content: string) => ipcRenderer.invoke('save-file', content),
   saveFileAs: (content: string) => ipcRenderer.invoke('save-file-as', content),
+  showErrorDialog: (title: string, message: string) => ipcRenderer.invoke('show-error-dialog', title, message),
 
   // Window operations
   setDocumentEdited: (edited: boolean) => ipcRenderer.send('set-document-edited', edited),
@@ -131,6 +132,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   renameFile: (oldPath: string, newName: string) => ipcRenderer.invoke('rename-file', oldPath, newName),
   deleteFile: (filePath: string) => ipcRenderer.invoke('delete-file', filePath),
   openFileInNewWindow: (filePath: string) => ipcRenderer.invoke('open-file-in-new-window', filePath),
+  openSessionManager: (filterProject?: string) => ipcRenderer.invoke('open-session-manager', filterProject),
   showInFinder: (filePath: string) => ipcRenderer.invoke('show-in-finder', filePath),
   moveFile: (sourcePath: string, targetPath: string) => ipcRenderer.invoke('move-file', sourcePath, targetPath),
   copyFile: (sourcePath: string, targetPath: string) => ipcRenderer.invoke('copy-file', sourcePath, targetPath),

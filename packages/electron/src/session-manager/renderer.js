@@ -5,6 +5,7 @@ const path = require('path');
 let allSessions = [];
 let filteredSessions = [];
 let selectedSession = null;
+let filterProject = null;
 
 // Initialize
 async function init() {
@@ -25,6 +26,13 @@ async function init() {
   ipcRenderer.on('theme-change', (event, theme) => {
     applyTheme(theme);
   });
+
+  // Listen for project filter
+  ipcRenderer.on('filter-project', (event, projectPath) => {
+    filterProject = projectPath;
+    applyProjectFilter();
+    updateProjectFilterBadge();
+  });
 }
 
 // Apply theme
@@ -41,22 +49,38 @@ function applyTheme(theme) {
 async function loadSessions() {
   try {
     allSessions = await ipcRenderer.invoke('session-manager:get-all-sessions');
-    filteredSessions = [...allSessions];
-    renderSessionsList();
-    updateStats();
+    applyProjectFilter();
   } catch (error) {
     console.error('Failed to load sessions:', error);
     showError('Failed to load sessions');
   }
 }
 
+// Apply project filter
+function applyProjectFilter() {
+  if (filterProject) {
+    filteredSessions = allSessions.filter(session => 
+      session.projectPath === filterProject
+    );
+  } else {
+    filteredSessions = [...allSessions];
+  }
+  renderSessionsList();
+  updateStats();
+}
+
 // Filter sessions based on search query
 function filterSessions(query) {
+  // Start with project-filtered sessions
+  let baseList = filterProject 
+    ? allSessions.filter(s => s.projectPath === filterProject)
+    : allSessions;
+    
   if (!query) {
-    filteredSessions = [...allSessions];
+    filteredSessions = [...baseList];
   } else {
     const lowerQuery = query.toLowerCase();
-    filteredSessions = allSessions.filter(session => {
+    filteredSessions = baseList.filter(session => {
       // Search in title (first message or id)
       const title = getSessionTitle(session).toLowerCase();
       if (title.includes(lowerQuery)) return true;
@@ -259,10 +283,21 @@ async function deleteSession(sessionId, projectPath) {
 // Update session count
 function updateStats() {
   const count = filteredSessions.length;
-  const total = allSessions.length;
-  const text = count === total 
-    ? `${count} session${count !== 1 ? 's' : ''} across all projects`
-    : `${count} of ${total} sessions`;
+  const total = filterProject 
+    ? allSessions.filter(s => s.projectPath === filterProject).length
+    : allSessions.length;
+    
+  let text;
+  if (filterProject) {
+    const projectName = getProjectName(filterProject);
+    text = count === total 
+      ? `${count} session${count !== 1 ? 's' : ''} in ${projectName}`
+      : `${count} of ${total} sessions in ${projectName}`;
+  } else {
+    text = count === total 
+      ? `${count} session${count !== 1 ? 's' : ''} across all projects`
+      : `${count} of ${total} sessions`;
+  }
   document.getElementById('sessionCount').textContent = text;
 }
 
@@ -350,6 +385,17 @@ function showError(message) {
 function showSuccess(message) {
   // Could implement a toast notification here
   console.log(message);
+}
+
+function updateProjectFilterBadge() {
+  const badge = document.getElementById('projectFilter');
+  if (filterProject) {
+    const projectName = getProjectName(filterProject);
+    badge.textContent = `Project: ${projectName}`;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
 }
 
 // Make functions available globally for onclick handlers

@@ -7,10 +7,14 @@ import { getTitleBarColors } from '../theme/ThemeManager';
 
 let sessionManagerWindow: BrowserWindow | null = null;
 
-export function createSessionManagerWindow() {
+export function createSessionManagerWindow(filterProject?: string) {
   // If window already exists, focus it
   if (sessionManagerWindow && !sessionManagerWindow.isDestroyed()) {
     sessionManagerWindow.focus();
+    // Send filter update if provided
+    if (filterProject) {
+      sessionManagerWindow.webContents.send('filter-project', filterProject);
+    }
     return;
   }
 
@@ -42,18 +46,19 @@ export function createSessionManagerWindow() {
   // Show window when ready
   sessionManagerWindow.once('ready-to-show', () => {
     sessionManagerWindow?.show();
+    // Send filter if provided
+    if (filterProject) {
+      sessionManagerWindow?.webContents.send('filter-project', filterProject);
+    }
   });
 
   // Clean up when closed
   sessionManagerWindow.on('closed', () => {
     sessionManagerWindow = null;
   });
-
-  // Handle window events
-  setupSessionManagerHandlers();
 }
 
-function setupSessionManagerHandlers() {
+export function registerSessionManagerHandlers() {
   // Get all sessions from all projects
   ipcMain.handle('session-manager:get-all-sessions', async () => {
     const store = new Store({ name: 'claude-sessions' });

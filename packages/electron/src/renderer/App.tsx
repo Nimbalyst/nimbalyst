@@ -337,7 +337,7 @@ export default function App() {
                 latestSnapshot.timestamp
               );
               if (lastContent !== result.content) {
-                // Content changed externally, create snapshot
+                // Content actually changed, create snapshot
                 await window.electronAPI.history.createSnapshot(
                   result.filePath,
                   result.content,
@@ -410,6 +410,26 @@ export default function App() {
         if (getContentRef.current) {
           initialContentRef.current = getContentRef.current();
         }
+        
+        // Create a history snapshot for manual save
+        console.log('Checking history API:', !!window.electronAPI?.history);
+        if (window.electronAPI?.history) {
+          try {
+            console.log('Creating snapshot for:', result.filePath, 'content length:', content.length);
+            await window.electronAPI.history.createSnapshot(
+              result.filePath,
+              content,
+              'manual',
+              'Manual save'
+            );
+            console.log('Created history snapshot for manual save');
+          } catch (error) {
+            console.error('Failed to create history snapshot:', error);
+          }
+        } else {
+          console.log('History API not available');
+        }
+        
         console.log('File saved successfully');
       } else {
         console.log('Save returned null - no current file in main process');
@@ -476,7 +496,7 @@ export default function App() {
                 latestSnapshot.timestamp
               );
               if (lastContent !== result.content) {
-                // Content changed externally, create snapshot
+                // Content actually changed, create snapshot
                 await window.electronAPI.history.createSnapshot(
                   result.filePath,
                   result.content,
@@ -530,8 +550,8 @@ export default function App() {
       // Cmd+Y (Mac) or Ctrl+Y (Windows/Linux) for History
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
         e.preventDefault();
-        // Save current state as manual snapshot before opening history
-        if (currentFilePath && getContentRef.current && window.electronAPI?.history) {
+        // Save current state as manual snapshot before opening history (only if dirty)
+        if (isDirty && currentFilePath && getContentRef.current && window.electronAPI?.history) {
           const content = getContentRef.current();
           window.electronAPI.history.createSnapshot(
             currentFilePath,
@@ -623,10 +643,24 @@ export default function App() {
               initialContentRef.current = content;
               console.log('[AUTOSAVE] Autosaved successfully');
             } else {
-              console.log('[AUTOSAVE] Save returned null');
+              console.error('[AUTOSAVE] Save failed - returned null');
+              // Show user notification about save failure
+              if (window.electronAPI?.showErrorDialog) {
+                window.electronAPI.showErrorDialog(
+                  'Auto-save Failed',
+                  'Failed to auto-save document. Your changes may not be saved.'
+                );
+              }
             }
           } catch (error) {
             console.error('[AUTOSAVE] Autosave failed:', error);
+            // Show user notification about save failure
+            if (window.electronAPI?.showErrorDialog) {
+              window.electronAPI.showErrorDialog(
+                'Auto-save Error',
+                `Failed to save document: ${error.message}`
+              );
+            }
           }
         } else {
           logger.log('autosave', 'Skipping autosave:', {
@@ -646,7 +680,7 @@ export default function App() {
         autoSaveIntervalRef.current = null;
       }
     };
-  }, [currentFilePath, isDirty]);
+  }, [currentFilePath, isDirty])
 
   // Automatic snapshot functionality
   useEffect(() => {
@@ -681,10 +715,7 @@ export default function App() {
       }, 300000); // Create snapshot every 5 minutes
     }
 
-    // Update last snapshot content when file changes
-    if (getContentRef.current) {
-      lastSnapshotContentRef.current = getContentRef.current();
-    }
+    // Don't update last snapshot content here - let the interval handle it
 
     // Cleanup on unmount or when dependencies change
     return () => {
@@ -780,7 +811,7 @@ export default function App() {
               latestSnapshot.timestamp
             );
             if (lastContent !== data.content) {
-              // Content changed externally, create snapshot
+              // Content actually changed, create snapshot
               await window.electronAPI.history.createSnapshot(
                 data.filePath,
                 data.content,
@@ -903,8 +934,8 @@ export default function App() {
     if (window.electronAPI.onViewHistory) {
       cleanupFns.push(window.electronAPI.onViewHistory(() => {
         console.log('View history menu triggered');
-        // Save current state as manual snapshot before opening history
-        if (currentFilePath && getContentRef.current && window.electronAPI?.history) {
+        // Save current state as manual snapshot before opening history (only if dirty)
+        if (isDirty && currentFilePath && getContentRef.current && window.electronAPI?.history) {
           const content = getContentRef.current();
           window.electronAPI.history.createSnapshot(
             currentFilePath,
@@ -991,21 +1022,24 @@ export default function App() {
               onContentChange: (newContent) => {
             logger.log('editor', 'Content changed:', newContent.length, 'initialized:', isInitializedRef.current);
 
-            // Mark as initialized after first content change
-            if (!isInitializedRef.current) {
-              isInitializedRef.current = true;
-              // Update initial content reference on first change
-              if (getContentRef.current) {
-                initialContentRef.current = getContentRef.current();
-                console.log('Set initial content on first change');
-              }
-              return;
-            }
-
             // Check if content actually changed from initial
             if (getContentRef.current) {
               const currentContent = getContentRef.current();
               const hasChanged = currentContent !== initialContentRef.current;
+              
+              // On first onChange, mark as initialized
+              if (!isInitializedRef.current) {
+                isInitializedRef.current = true;
+                // If content is different on first change, it's a real user edit
+                if (hasChanged) {
+                  logger.log('editor', 'First change is a real user edit');
+                  setIsDirty(true);
+                }
+                // If content is same, it's just initialization - no need to set dirty
+                return;
+              }
+              
+              // After initialization, normal dirty checking
               if (hasChanged !== isDirty) {
                 logger.log('editor', 'Dirty state changed to:', hasChanged);
                 setIsDirty(hasChanged);

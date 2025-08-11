@@ -92,15 +92,17 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
   const getSnapshotIcon = (type: string) => {
     switch (type) {
       case 'auto-save':
-        return '💾';
+        return 'save';
       case 'manual':
-        return '📌';
+        return 'push_pin';
       case 'ai-diff':
-        return '🤖';
+        return 'smart_toy';
       case 'pre-apply':
-        return '⚡';
+        return 'bolt';
+      case 'auto':
+        return 'schedule';
       default:
-        return '📄';
+        return 'description';
     }
   };
 
@@ -110,16 +112,19 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
     <div className="history-dialog-overlay" onClick={onClose}>
       <div className="history-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="history-dialog-header">
-          <h2>Document History</h2>
+          <div className="history-dialog-title">
+            <h2>{filePath ? filePath.split('/').pop() : 'Document History'}</h2>
+            {filePath && <span className="history-dialog-path">{filePath}</span>}
+          </div>
           <button className="history-dialog-close" onClick={onClose}>
-            ✕
+            <span className="material-symbols-outlined">close</span>
           </button>
         </div>
         
         <div className="history-dialog-content">
           <div className="history-list">
             <div className="history-list-header">
-              <h3>Snapshots</h3>
+              <h3>Snapshots ({snapshots.length})</h3>
               {loading && <span className="history-loading">Loading...</span>}
             </div>
             
@@ -135,25 +140,27 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
                     className={`history-item ${selectedSnapshot === snapshot.timestamp ? 'selected' : ''}`}
                     onClick={() => handleSnapshotSelect(snapshot.timestamp)}
                   >
-                    <div className="history-item-header">
-                      <span className="history-item-icon">{getSnapshotIcon(snapshot.type)}</span>
-                      <span className="history-item-type">{snapshot.type.replace('-', ' ')}</span>
-                      <button
-                        className="history-item-delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(snapshot.timestamp);
-                        }}
-                        title="Delete snapshot"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                    <div className="history-item-time">
-                      {formatTimestamp(snapshot.timestamp)}
-                    </div>
-                    <div className="history-item-size">
-                      {(snapshot.size / 1024).toFixed(1)} KB
+                    <div className="history-item-content">
+                      <div className="history-item-main">
+                        <span className="history-item-icon material-symbols-outlined">{getSnapshotIcon(snapshot.type)}</span>
+                        <div className="history-item-info">
+                          <span className="history-item-type">{snapshot.type.replace('-', ' ')}</span>
+                          <span className="history-item-time">{formatTimestamp(snapshot.timestamp)}</span>
+                        </div>
+                      </div>
+                      <div className="history-item-actions">
+                        <span className="history-item-size">{(snapshot.size / 1024).toFixed(1)} KB</span>
+                        <button
+                          className="history-item-delete"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(snapshot.timestamp);
+                          }}
+                          title="Delete snapshot"
+                        >
+                          <span className="material-symbols-outlined">delete</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

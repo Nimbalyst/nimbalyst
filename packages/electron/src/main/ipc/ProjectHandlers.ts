@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron';
 import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { join, basename } from 'path';
 import { windowStates } from '../window/WindowManager';
+import { createSessionManagerWindow } from '../window/SessionManagerWindow';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { getFolderContents } from '../utils/FileTree';
 import { getProjectRecentFiles, addProjectRecentFile, store } from '../utils/store';
@@ -327,6 +328,16 @@ export function registerProjectHandlers() {
             return { success: true };
         } catch (error: any) {
             console.error('Error opening file in new window:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('open-session-manager', async (event, filterProject?: string) => {
+        try {
+            createSessionManagerWindow(filterProject);
+            return { success: true };
+        } catch (error: any) {
+            console.error('Error opening session manager:', error);
             return { success: false, error: error.message };
         }
     });

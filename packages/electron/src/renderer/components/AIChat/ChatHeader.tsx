@@ -4,10 +4,11 @@ import { MaterialSymbol } from '../MaterialSymbol';
 interface ChatHeaderProps {
   onToggleCollapse: () => void;
   onNewSession?: () => void;
+  onOpenSessionManager?: () => void;
   children?: React.ReactNode;
 }
 
-export function ChatHeader({ onToggleCollapse, onNewSession, children }: ChatHeaderProps) {
+export function ChatHeader({ onToggleCollapse, onNewSession, onOpenSessionManager, children }: ChatHeaderProps) {
   return (
     <div className="ai-chat-header">
       <h3 className="ai-chat-title">AI Assistant</h3>
@@ -17,6 +18,16 @@ export function ChatHeader({ onToggleCollapse, onNewSession, children }: ChatHea
         </div>
       )}
       <div className="ai-chat-header-actions">
+        {onOpenSessionManager && (
+          <button
+            className="ai-chat-action-button"
+            onClick={onOpenSessionManager}
+            title="Session Manager (⌥⌘S)"
+            aria-label="Open Session Manager"
+          >
+            <MaterialSymbol icon="history" size={20} />
+          </button>
+        )}
         {onNewSession && (
           <button
             className="ai-chat-action-button"

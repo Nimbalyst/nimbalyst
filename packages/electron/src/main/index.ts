@@ -7,6 +7,7 @@ import { createApplicationMenu, updateApplicationMenu } from './menu/Application
 import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
 import { saveSessionState, restoreSessionState } from './session/SessionState';
 import { createProjectManagerWindow, setupProjectManagerHandlers } from './window/ProjectManagerWindow';
+import { registerSessionManagerHandlers } from './window/SessionManagerWindow';
 import { registerFileHandlers } from './ipc/FileHandlers';
 import { registerProjectHandlers } from './ipc/ProjectHandlers';
 import { registerSettingsHandlers } from './ipc/SettingsHandlers';
@@ -162,6 +163,7 @@ app.whenReady().then(async () => {
     await registerHistoryHandlers();
     await registerSessionHandlers();
     registerPreferencesHandlers();
+    registerSessionManagerHandlers();
     setupProjectManagerHandlers();
     
     // Initialize Claude service

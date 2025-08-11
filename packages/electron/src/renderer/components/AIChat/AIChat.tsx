@@ -512,6 +512,14 @@ export function AIChat({
       logger.log('session', 'Failed to create new session:', error);
     }
   }, [documentContext, projectPath, loadSessions]);
+
+  const handleOpenSessionManager = useCallback(async () => {
+    try {
+      await (window as any).electronAPI.openSessionManager(projectPath);
+    } catch (error) {
+      logger.log('session', 'Failed to open session manager:', error);
+    }
+  }, [projectPath]);
   
   // Sync messages to backend whenever they change
   useEffect(() => {
@@ -647,7 +655,11 @@ export function AIChat({
         onMouseDown={handleMouseDown}
       />
       
-      <ChatHeader onToggleCollapse={onToggleCollapse} onNewSession={handleNewSession}>
+      <ChatHeader 
+        onToggleCollapse={onToggleCollapse} 
+        onNewSession={handleNewSession}
+        onOpenSessionManager={handleOpenSessionManager}
+      >
         <SessionDropdown
           currentSessionId={currentSessionId}
           sessions={sessions.map(s => ({
