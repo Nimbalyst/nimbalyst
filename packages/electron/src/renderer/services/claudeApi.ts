@@ -43,6 +43,19 @@ class ClaudeAPI {
   private streamBuffer: string = ''; // Buffer for detecting split markers
 
   constructor() {
+    // Set up IPC listener for errors
+    window.electronAPI.onClaudeError((error: any) => {
+      console.error('Claude API Error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        type: error.type,
+        stack: error.stack
+      });
+      
+      // Emit error event so UI can handle it
+      this.emit('error', error);
+    });
+    
     // Set up IPC listeners for streaming responses
     window.electronAPI.onClaudeStreamResponse((data: any) => {
       logger.log('api', 'Received stream response:', {
@@ -199,9 +212,11 @@ class ClaudeAPI {
 
   async sendMessage(
     message: string, 
-    documentContext?: DocumentContext
+    documentContext?: DocumentContext,
+    sessionId?: string,
+    projectPath?: string
   ): Promise<{ content: string; edits: EditRequest[] }> {
-    return window.electronAPI.claudeSendMessage(message, documentContext);
+    return window.electronAPI.claudeSendMessage(message, documentContext, sessionId, projectPath);
   }
 
   async getSessions(projectPath?: string): Promise<Session[]> {

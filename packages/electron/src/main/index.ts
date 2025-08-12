@@ -16,7 +16,8 @@ import { registerHistoryHandlers } from './ipc/HistoryHandlers';
 import { registerSessionHandlers } from './ipc/SessionHandlers';
 import { registerPreferencesHandlers } from './ipc/PreferencesHandlers';
 import { getTheme } from './utils/store';
-import { ClaudeService } from './services/ClaudeService';
+import { ClaudeCodeSDKService } from './services/ClaudeCodeSDKService';
+import { startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 
 // Track pending file to open
 let pendingFilePath: string | null = null;
@@ -27,7 +28,7 @@ let pendingProjectPath: string | null = null;
 let sessionSaveInterval: NodeJS.Timeout | null = null;
 
 // Claude service instance
-let claudeService: ClaudeService | null = null;
+let claudeService: ClaudeCodeSDKService | null = null;
 
 // Initialize debug logging in development
 function initializeDebugLogging() {
@@ -167,7 +168,20 @@ app.whenReady().then(async () => {
     setupProjectManagerHandlers();
     
     // Initialize Claude service
-    claudeService = new ClaudeService();
+    claudeService = new ClaudeCodeSDKService();
+    
+    // Start MCP SSE server
+    try {
+        await startMcpHttpServer(3456);
+        console.log('[MAIN] MCP SSE server started on port 3456');
+    } catch (error) {
+        console.error('[MAIN] Failed to start MCP SSE server:', error);
+    }
+    
+    // Set up IPC handler to update document state for MCP
+    ipcMain.on('mcp:updateDocumentState', (event, state) => {
+        updateDocumentState(state);
+    });
     
     // Try to restore session, otherwise show Project Manager
     const sessionRestored = restoreSessionState();

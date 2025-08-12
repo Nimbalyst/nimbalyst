@@ -39,6 +39,7 @@ interface ElectronAPI {
   onToggleSearchReplace: (callback: () => void) => () => void;
   onFileDeleted: (callback: (data: { filePath: string }) => void) => () => void;
   onFileRenamed: (callback: (data: { oldPath: string; newPath: string }) => void) => () => void;
+  onFileMoved: (callback: (data: { sourcePath: string; destinationPath: string }) => void) => () => void;
   onProjectFileTreeUpdated: (callback: (data: { fileTree: FileTreeItem[]; addedPath?: string; removedPath?: string }) => void) => () => void;
   onThemeChange: (callback: (theme: string) => void) => () => void;
   onShowAbout: (callback: () => void) => () => void;
@@ -80,6 +81,13 @@ interface ElectronAPI {
     resolveConflict: (session: any, resolution: string, newBaseHash?: string) => Promise<void>;
     createCheckpoint: (sessionId: string, state: string) => Promise<void>;
   };
+  // MCP Server operations
+  onMcpApplyDiff?: (callback: (data: { replacements: any[], resultChannel: string }) => void) => () => void;
+  onMcpStreamContent?: (callback: (data: { streamId: string, content: string, position: string, insertAfter?: string, mode?: string }) => void) => () => void;
+  onMcpNavigateTo?: (callback: (data: { line: number, column: number }) => void) => () => void;
+  sendMcpApplyDiffResult?: (resultChannel: string, result: any) => void;
+  updateMcpDocumentState?: (state: any) => Promise<void>;
+  clearMcpDocumentState?: () => Promise<void>;
 }
 
 declare global {
@@ -869,6 +877,26 @@ export default function App() {
         alert('The file has been deleted from disk.');
       }
     }));
+    cleanupFns.push(window.electronAPI.onFileMoved(async (data) => {
+      console.log('File moved:', data);
+      if (currentFilePath === data.sourcePath) {
+        // The current file was moved, update the path and reload it
+        console.log('Current file was moved, updating to new path:', data.destinationPath);
+        
+        // Update the current file path
+        setCurrentFilePath(data.destinationPath);
+        setCurrentFileName(data.destinationPath.split('/').pop() || data.destinationPath);
+        
+        // Update the file in main process
+        if (window.electronAPI.setCurrentFile) {
+          window.electronAPI.setCurrentFile(data.destinationPath);
+        }
+        
+        // If we're dirty, just update the path but keep the current content
+        // If not dirty, we could optionally reload from the new location
+        // but since it's the same content, we don't need to
+      }
+    }));
     cleanupFns.push(window.electronAPI.onThemeChange((newTheme) => {
       console.log('Theme changed to:', newTheme);
       // Map 'system' to 'auto' for the editor
@@ -955,6 +983,74 @@ export default function App() {
         }
         setIsHistoryDialogOpen(true);
       }));
+    }
+
+    // MCP Server handlers
+    if (window.electronAPI.onMcpApplyDiff) {
+      cleanupFns.push(window.electronAPI.onMcpApplyDiff(async ({ replacements, resultChannel }) => {
+        console.log('MCP applyDiff request:', replacements);
+        try {
+          // Use the AI chat bridge to apply replacements
+          const result = await aiChatBridge.applyReplacements(replacements);
+          if (window.electronAPI.sendMcpApplyDiffResult) {
+            window.electronAPI.sendMcpApplyDiffResult(resultChannel, result);
+          }
+        } catch (error) {
+          console.error('MCP applyDiff error:', error);
+          if (window.electronAPI.sendMcpApplyDiffResult) {
+            window.electronAPI.sendMcpApplyDiffResult(resultChannel, {
+              success: false,
+              error: error instanceof Error ? error.message : 'Unknown error'
+            });
+          }
+        }
+      }));
+    }
+
+    if (window.electronAPI.onMcpStreamContent) {
+      cleanupFns.push(window.electronAPI.onMcpStreamContent(({ streamId, content, position, insertAfter, mode }) => {
+        console.log('MCP streamContent request:', { streamId, position, mode });
+        // Start streaming
+        aiChatBridge.startStreamingEdit({
+          id: streamId,
+          position: position || 'cursor',
+          mode: mode || 'after',
+          insertAfter,
+          insertAtEnd: position === 'end'
+        });
+        // Stream the content
+        aiChatBridge.streamContent(streamId, content);
+        // End streaming
+        aiChatBridge.endStreamingEdit(streamId);
+      }));
+    }
+
+    if (window.electronAPI.onMcpNavigateTo) {
+      cleanupFns.push(window.electronAPI.onMcpNavigateTo(({ line, column }) => {
+        console.log('MCP navigateTo request:', { line, column });
+        // TODO: Implement navigation to specific line/column in editor
+        // This would require adding a navigation command to the editor
+      }));
+    }
+
+    // Update MCP document state whenever content or selection changes
+    const updateDocumentState = () => {
+      if (window.electronAPI?.updateMcpDocumentState && getContentRef.current) {
+        const content = getContentRef.current();
+        window.electronAPI.updateMcpDocumentState({
+          content,
+          filePath: currentFilePath || 'untitled.md',
+          fileType: 'markdown',
+          // TODO: Get actual cursor position and selection from editor
+          cursorPosition: undefined,
+          selection: undefined
+        });
+      }
+    };
+
+    // Update document state on content change
+    if (isDirty) {
+      updateDocumentState();
     }
 
     // Clean up listeners when dependencies change

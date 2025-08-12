@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { DiffPreview } from '../DiffPreview/DiffPreview';
+import { ToolCallBlock } from './ToolCallBlock';
 
 interface EditRequest {
   type: 'diff';
@@ -11,19 +12,25 @@ interface EditRequest {
 }
 
 interface ChatMessageProps {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool';
   content: string;
   edits?: EditRequest[];
+  toolCall?: {
+    name: string;
+    arguments?: any;
+    result?: any;
+  };
   isStreaming?: boolean;
   onApplyEdit?: (edit: EditRequest) => Promise<{ success: boolean; error?: string }>;
 }
 
-export function ChatMessage({ 
-  role, 
-  content, 
+export function ChatMessage({
+  role,
+  content,
   edits,
+  toolCall,
   isStreaming,
-  onApplyEdit 
+  onApplyEdit
 }: ChatMessageProps) {
   const [expandedEdits, setExpandedEdits] = useState(false);
   const [appliedEdits, setAppliedEdits] = useState<Set<number>>(new Set());
@@ -31,31 +38,31 @@ export function ChatMessage({
 
   const handleApplyEdit = async (edit: EditRequest, index: number) => {
     if (!onApplyEdit) return;
-    
+
     setEditStatus(prev => ({ ...prev, [index]: { status: 'pending' } }));
-    
+
     try {
       const result = await onApplyEdit(edit);
-      
+
       if (result.success) {
         setAppliedEdits(prev => new Set(prev).add(index));
         setEditStatus(prev => ({ ...prev, [index]: { status: 'applied' } }));
       } else {
-        setEditStatus(prev => ({ 
-          ...prev, 
-          [index]: { 
-            status: 'failed', 
-            error: result.error || 'Failed to apply changes' 
-          } 
+        setEditStatus(prev => ({
+          ...prev,
+          [index]: {
+            status: 'failed',
+            error: result.error || 'Failed to apply changes'
+          }
         }));
       }
     } catch (error) {
-      setEditStatus(prev => ({ 
-        ...prev, 
-        [index]: { 
-          status: 'failed', 
-          error: error instanceof Error ? error.message : 'Unexpected error occurred' 
-        } 
+      setEditStatus(prev => ({
+        ...prev,
+        [index]: {
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Unexpected error occurred'
+        }
       }));
     }
   };
@@ -64,18 +71,18 @@ export function ChatMessage({
     // Remove edit-command blocks from the content
     // They should only appear in the collapsible edit UI
     const cleanContent = content.replace(/```edit-command[\s\S]*?```/g, '').trim();
-    
-    // If there's no content left after removing edit commands, don't render anything
+
+    // If there's no content left after removing edit commands, don't render text
     if (!cleanContent) {
       return null;
     }
-    
+
     // Simple markdown rendering (can be enhanced)
     const lines = cleanContent.split('\n');
     let inCodeBlock = false;
     let codeBlockLines: string[] = [];
     const result: JSX.Element[] = [];
-    
+
     lines.forEach((line, index) => {
       // Code blocks
       if (line.startsWith('```')) {
@@ -95,12 +102,12 @@ export function ChatMessage({
         }
         return;
       }
-      
+
       if (inCodeBlock) {
         codeBlockLines.push(line);
         return;
       }
-      
+
       // Headers
       if (line.startsWith('#')) {
         const level = line.match(/^#+/)?.[0].length || 1;
@@ -108,17 +115,17 @@ export function ChatMessage({
         result.push(<div key={index} className={`ai-chat-heading ai-chat-heading--h${level}`}>{text}</div>);
         return;
       }
-      
+
       // Lists
       if (line.match(/^[\*\-]\s+/)) {
         result.push(<div key={index} className="ai-chat-list-item">• {line.replace(/^[\*\-]\s+/, '')}</div>);
         return;
       }
-      
+
       // Regular paragraph
       result.push(<div key={index}>{line || '\u00A0'}</div>);
     });
-    
+
     // Handle unclosed code block
     if (inCodeBlock && codeBlockLines.length > 0) {
       result.push(
@@ -127,9 +134,24 @@ export function ChatMessage({
         </pre>
       );
     }
-    
+
     return result;
   };
+
+  // For tool messages, render just the tool call block without avatar
+  if (role === 'tool' && toolCall) {
+    return (
+      <div className="ai-chat-message ai-chat-message--tool ai-chat-message--no-avatar">
+        <div className="ai-chat-message-content">
+          <ToolCallBlock
+            toolName={toolCall.name}
+            arguments={toolCall.arguments}
+            result={toolCall.result}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`ai-chat-message ai-chat-message--${role} ${isStreaming ? 'ai-chat-message--streaming' : ''}`}>
@@ -146,13 +168,13 @@ export function ChatMessage({
       </div>
       <div className="ai-chat-message-content">
         {renderContent()}
-        
+
         {/* Show edits if available */}
         {edits && edits.length > 0 && (
           <div className="ai-chat-edits">
             {edits.map((edit, index) => (
               <div key={index} className="ai-chat-edit-box">
-                <div 
+                <div
                   className="ai-chat-edit-header"
                   onClick={() => setExpandedEdits(!expandedEdits)}
                 >
@@ -169,7 +191,7 @@ export function ChatMessage({
                     <span className="ai-chat-edit-badge ai-chat-edit-badge--error">Failed</span>
                   )}
                 </div>
-                
+
                 {expandedEdits && (
                   <div className="ai-chat-edit-content-wrapper">
                     <div className="ai-chat-edit-metadata">
@@ -178,7 +200,7 @@ export function ChatMessage({
                         {edit.replacements.length} replacement{edit.replacements.length > 1 ? 's' : ''}
                       </span>
                     </div>
-                    
+
                     {edit.replacements.map((replacement, repIndex) => (
                       <div key={repIndex} className="ai-chat-edit-replacement">
                         {replacement.oldText && (
@@ -199,7 +221,7 @@ export function ChatMessage({
                         )}
                       </div>
                     ))}
-                    
+
                     <div className={`ai-chat-edit-status ${editStatus[index]?.status ? `ai-chat-edit-status--${editStatus[index].status}` : ''}`}>
                       {editStatus[index]?.status === 'pending' ? (
                         <span className="ai-chat-edit-status-text">
@@ -210,7 +232,7 @@ export function ChatMessage({
                           <span className="ai-chat-edit-status-text ai-chat-edit-status-text--error">
                             ✗ {editStatus[index].error}
                           </span>
-                          <button 
+                          <button
                             className="ai-chat-edit-retry"
                             onClick={() => handleApplyEdit(edit, index)}
                             title="Retry applying this edit"
@@ -227,7 +249,7 @@ export function ChatMessage({
                           <span className="ai-chat-edit-status-text">
                             Ready to apply changes
                           </span>
-                          <button 
+                          <button
                             className="ai-chat-edit-apply ai-chat-edit-apply--inline"
                             onClick={() => handleApplyEdit(edit, index)}
                             title="Apply this edit"
@@ -243,7 +265,7 @@ export function ChatMessage({
             ))}
           </div>
         )}
-        
+
         {isStreaming && (
           <span className="ai-chat-cursor">▊</span>
         )}

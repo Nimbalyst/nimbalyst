@@ -3,9 +3,14 @@ import { ChatMessage } from './ChatMessage';
 import { StreamingStatus } from './StreamingStatus';
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool';
   content: string;
   edits?: any[];
+  toolCall?: {
+    name: string;
+    arguments?: any;
+    result?: any;
+  };
   isStreamingStatus?: boolean;
   streamingData?: {
     position: string;
@@ -45,25 +50,40 @@ export function ChatMessages({
         </div>
       )}
       
-      {messages.map((message, index) => (
-        message.isStreamingStatus ? (
-          <StreamingStatus
-            key={index}
-            isActive={message.streamingData?.isActive || false}
-            content={message.streamingData?.content}
-            position={message.streamingData?.position}
-            mode={message.streamingData?.mode}
-          />
-        ) : (
-          <ChatMessage
-            key={index}
-            role={message.role}
-            content={message.content}
-            edits={message.edits}
-            onApplyEdit={onApplyEdit}
-          />
-        )
-      ))}
+      {messages.map((message, index) => {
+        if (message.isStreamingStatus) {
+          return (
+            <StreamingStatus
+              key={index}
+              isActive={message.streamingData?.isActive || false}
+              content={message.streamingData?.content}
+              position={message.streamingData?.position}
+              mode={message.streamingData?.mode}
+            />
+          );
+        } else if (message.role === 'tool' && message.toolCall) {
+          // Render tool call as a standalone block
+          return (
+            <ChatMessage
+              key={index}
+              role={message.role}
+              content={message.content}
+              toolCall={message.toolCall}
+              onApplyEdit={onApplyEdit}
+            />
+          );
+        } else {
+          return (
+            <ChatMessage
+              key={index}
+              role={message.role}
+              content={message.content}
+              edits={message.edits}
+              onApplyEdit={onApplyEdit}
+            />
+          );
+        }
+      })}
       
       {/* Show streaming content */}
       {currentStreamContent && (

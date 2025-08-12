@@ -31,9 +31,14 @@ export function AIChat({
   onSessionLoaded
 }: AIChatProps) {
   const [messages, setMessages] = useState<Array<{ 
-    role: 'user' | 'assistant'; 
+    role: 'user' | 'assistant' | 'tool'; 
     content: string; 
     edits?: any[];
+    toolCall?: {  // For tool role messages, this contains the tool call data
+      name: string;
+      arguments?: any;
+      result?: any;
+    };
     isStreamingStatus?: boolean;
     streamingData?: {
       position: string;
@@ -87,7 +92,7 @@ export function AIChat({
             newMessages.push({ 
               role: 'assistant', 
               content: data.content,
-              edits: data.edits 
+              edits: data.edits
             });
           }
           return newMessages;
@@ -128,9 +133,41 @@ export function AIChat({
             }
           });
         }
-      } else if (data.partial) {
+      } else if (data.partial || data.edits || data.toolCalls) {
         // Streaming partial response
-        setCurrentStreamContent(prev => prev + data.partial);
+        if (data.partial) {
+          setCurrentStreamContent(prev => prev + data.partial);
+        }
+        
+        // Handle edits that come during streaming (before isComplete)
+        if (data.edits && data.edits.length > 0) {
+          // Update the assistant message with edits even during streaming
+          setMessages(prev => {
+            const newMessages = [...prev];
+            if (newMessages.length > 0 && newMessages[newMessages.length - 1].role === 'assistant') {
+              // Accumulate edits - merge with existing edits if any
+              const existingEdits = newMessages[newMessages.length - 1].edits || [];
+              newMessages[newMessages.length - 1].edits = [...existingEdits, ...data.edits];
+            }
+            return newMessages;
+          });
+        }
+        
+        // Handle tool calls that come during streaming
+        if (data.toolCalls && data.toolCalls.length > 0) {
+          // Add each tool call as a separate message to maintain ordering
+          setMessages(prev => {
+            const newMessages = [...prev];
+            for (const toolCall of data.toolCalls) {
+              newMessages.push({
+                role: 'tool',
+                content: '', // Tool messages don't have text content
+                toolCall: toolCall
+              });
+            }
+            return newMessages;
+          });
+        }
       }
     };
 
@@ -372,6 +409,7 @@ export function AIChat({
               role: msg.role,
               content: msg.content,
               edits: msg.edits,
+              toolCall: msg.toolCall,
               isStreamingStatus: msg.isStreamingStatus,
               streamingData: msg.streamingData
             }));
@@ -477,8 +515,8 @@ export function AIChat({
     setCurrentStreamContent('');
     
     try {
-      // Send message to Claude with fresh document context
-      await claudeApi.sendMessage(message, freshDocumentContext);
+      // Send message to Claude with fresh document context and session ID
+      await claudeApi.sendMessage(message, freshDocumentContext, currentSessionId!, projectPath);
       // Reload sessions to update message counts
       await loadSessions();
     } catch (error) {
@@ -619,6 +657,7 @@ export function AIChat({
         role: msg.role,
         content: msg.content,
         edits: msg.edits,
+        toolCall: msg.toolCall,
         isStreamingStatus: msg.isStreamingStatus,
         streamingData: msg.streamingData
       }));

@@ -159,6 +159,15 @@ export function registerProjectHandlers() {
 
         try {
             const newPath = join(dirname(oldPath), newName);
+            
+            // Stop watching before rename to prevent false delete detection
+            for (const [windowId, state] of windowStates) {
+                if (state?.filePath === oldPath) {
+                    console.log('[RENAME] Stopping file watcher before rename for:', oldPath);
+                    stopFileWatcher(windowId);
+                }
+            }
+            
             await rename(oldPath, newPath);
 
             // Update windows that have this file open
@@ -167,8 +176,13 @@ export function registerProjectHandlers() {
                     state.filePath = newPath;
                     // Update represented filename for macOS
                     const window = BrowserWindow.getAllWindows().find(w => w.id === windowId);
-                    if (window && process.platform === 'darwin') {
-                        window.setRepresentedFilename(newPath);
+                    if (window) {
+                        if (process.platform === 'darwin') {
+                            window.setRepresentedFilename(newPath);
+                        }
+                        // Start watching the renamed file
+                        console.log('[RENAME] Starting file watcher after rename for:', newPath);
+                        startFileWatcher(window, newPath);
                     }
                 }
             }
@@ -239,18 +253,37 @@ export function registerProjectHandlers() {
                 // Target doesn't exist, use it as the new path
             }
 
-            // Perform the move
-            await rename(sourcePath, destinationPath);
-
-            // Update windows that have this file open
+            // Update windows that have this file open - BEFORE the move
+            // This prevents the file watcher from detecting an unlink event
             if (!sourceStats.isDirectory()) {
                 for (const [windowId, state] of windowStates) {
                     if (state?.filePath === sourcePath) {
+                        // Stop watching the old file BEFORE moving
+                        console.log('[MOVE] Stopping file watcher before move for:', sourcePath);
+                        stopFileWatcher(windowId);
+                    }
+                }
+            }
+
+            // Perform the move
+            await rename(sourcePath, destinationPath);
+
+            // Update windows that have this file open - AFTER the move
+            if (!sourceStats.isDirectory()) {
+                for (const [windowId, state] of windowStates) {
+                    if (state?.filePath === sourcePath) {
+                        // Update the file path
                         state.filePath = destinationPath;
+                        
                         // Update represented filename for macOS
                         const window = BrowserWindow.getAllWindows().find(w => w.id === windowId);
-                        if (window && process.platform === 'darwin') {
-                            window.setRepresentedFilename(destinationPath);
+                        if (window) {
+                            if (process.platform === 'darwin') {
+                                window.setRepresentedFilename(destinationPath);
+                            }
+                            // Start watching the new file
+                            console.log('[MOVE] Starting file watcher after move for:', destinationPath);
+                            startFileWatcher(window, destinationPath);
                         }
                     }
                 }

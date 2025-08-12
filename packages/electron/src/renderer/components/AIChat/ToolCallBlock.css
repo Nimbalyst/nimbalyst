@@ -1,0 +1,277 @@
+/* Tool call blocks styled like edit command blocks */
+.ai-chat-tool-box {
+  background: var(--background-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.ai-chat-tool-header {
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+}
+
+.ai-chat-tool-header:hover {
+  background: var(--background-hover);
+}
+
+.ai-chat-tool-toggle {
+  color: var(--text-secondary);
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+
+.ai-chat-tool-title {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.ai-chat-tool-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.ai-chat-tool-badge--loading {
+  background: var(--accent-color-light);
+  color: var(--accent-color);
+}
+
+.ai-chat-tool-badge--success {
+  background: var(--success-background);
+  color: var(--success-color);
+}
+
+.ai-chat-tool-badge--error {
+  background: var(--error-background);
+  color: var(--error-color);
+}
+
+.ai-chat-tool-content-wrapper {
+  padding: 12px;
+  background: var(--background-primary);
+  border-top: 1px solid var(--border-color);
+}
+
+.ai-chat-tool-metadata {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.ai-chat-tool-type {
+  background: var(--accent-color);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.ai-chat-tool-location {
+  font-family: 'SF Mono', Monaco, monospace;
+  color: var(--text-secondary);
+}
+
+/* Replacements for applyDiff */
+.ai-chat-tool-replacements {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ai-chat-tool-replacement {
+  border-left: 3px solid var(--border-color);
+  padding-left: 12px;
+}
+
+.ai-chat-tool-old,
+.ai-chat-tool-new {
+  margin: 8px 0;
+}
+
+.ai-chat-tool-label {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ai-chat-tool-old .ai-chat-tool-label {
+  color: var(--error-color);
+}
+
+.ai-chat-tool-new .ai-chat-tool-label {
+  color: var(--success-color);
+}
+
+.ai-chat-tool-content {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--background-secondary);
+  padding: 8px;
+  border-radius: 4px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+}
+
+.ai-chat-tool-content--remove {
+  background: var(--error-background-light);
+  color: var(--error-color);
+}
+
+.ai-chat-tool-content--add {
+  background: var(--success-background-light);
+  color: var(--success-color);
+}
+
+/* File operations */
+.ai-chat-tool-file {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.ai-chat-tool-file-path {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+  background: var(--background-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: var(--text-primary);
+}
+
+/* Generic arguments */
+.ai-chat-tool-args {
+  margin: 8px 0;
+}
+
+.ai-chat-tool-args-content {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 11px;
+  background: var(--background-secondary);
+  padding: 8px;
+  border-radius: 4px;
+  overflow-x: auto;
+  color: var(--text-secondary);
+  margin: 4px 0 0 0;
+}
+
+/* Tool results */
+.ai-chat-tool-result {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.ai-chat-tool-result-content {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 11px;
+  background: var(--background-secondary);
+  padding: 8px;
+  border-radius: 4px;
+  overflow-x: auto;
+  color: var(--text-secondary);
+  margin: 4px 0 0 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Status messages */
+.ai-chat-tool-status {
+  margin-top: 12px;
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.ai-chat-tool-status--pending {
+  background: var(--info-background);
+  color: var(--info-color);
+}
+
+.ai-chat-tool-status--success {
+  background: var(--success-background);
+  color: var(--success-color);
+}
+
+.ai-chat-tool-status--failed {
+  background: var(--error-background);
+  color: var(--error-color);
+}
+
+.ai-chat-tool-status-text {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-chat-loading-indicator {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* CSS Variables (already defined in AIChat.css, but here for reference) */
+:root {
+  --background-primary: white;
+  --background-secondary: #f5f5f5;
+  --background-hover: rgba(0, 0, 0, 0.05);
+  --border-color: #e0e0e0;
+  --text-primary: #1e1e1e;
+  --text-secondary: #666;
+  --accent-color: #0066cc;
+  --accent-color-light: #e3f2fd;
+  --success-color: #2e7d32;
+  --success-background: #e8f5e9;
+  --success-background-light: #f1f8f1;
+  --error-color: #c62828;
+  --error-background: #ffebee;
+  --error-background-light: #fff5f5;
+  --info-color: #1976d2;
+  --info-background: #e3f2fd;
+}
+
+/* Dark theme overrides */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background-primary: #1e1e1e;
+    --background-secondary: #2a2a2a;
+    --background-hover: rgba(255, 255, 255, 0.05);
+    --border-color: #404040;
+    --text-primary: #e0e0e0;
+    --text-secondary: #999;
+    --accent-color: #4a9eff;
+    --accent-color-light: #1a2535;
+    --success-color: #66bb6a;
+    --success-background: #1b3a1b;
+    --success-background-light: #0f1f0f;
+    --error-color: #ef5350;
+    --error-background: #3a1b1b;
+    --error-background-light: #2a0f0f;
+    --info-color: #42a5f5;
+    --info-background: #1a2535;
+  }
+}

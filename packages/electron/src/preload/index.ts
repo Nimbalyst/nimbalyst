@@ -210,7 +210,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Claude AI operations
   claudeInitialize: (apiKey?: string) => ipcRenderer.invoke('claude:initialize', apiKey),
   claudeCreateSession: (documentContext?: any, projectPath?: string) => ipcRenderer.invoke('claude:createSession', documentContext, projectPath),
-  claudeSendMessage: (message: string, documentContext?: any) => ipcRenderer.invoke('claude:sendMessage', message, documentContext),
+  claudeSendMessage: (message: string, documentContext?: any, sessionId?: string, projectPath?: string) => ipcRenderer.invoke('claude:sendMessage', message, documentContext, sessionId, projectPath),
   claudeGetSessions: (projectPath?: string) => ipcRenderer.invoke('claude:getSessions', projectPath),
   claudeLoadSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('claude:loadSession', sessionId, projectPath),
   claudeClearSession: () => ipcRenderer.invoke('claude:clearSession'),
@@ -229,6 +229,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('claude:streamResponse', handler);
     return () => ipcRenderer.removeListener('claude:streamResponse', handler);
   },
+  onClaudeError: (callback: (error: any) => void) => {
+    const handler = (_event: any, error: any) => callback(error);
+    ipcRenderer.on('claude:error', handler);
+    return () => ipcRenderer.removeListener('claude:error', handler);
+  },
   onClaudeEditRequest: (callback: (edit: any) => void) => {
     const handler = (_event: any, edit: any) => callback(edit);
     ipcRenderer.on('claude:editRequest', handler);
@@ -241,4 +246,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('show-preferences', callback);
     return () => ipcRenderer.removeListener('show-preferences', callback);
   },
+
+  // MCP Server operations
+  onMcpApplyDiff: (callback: (data: { replacements: any[], resultChannel: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('mcp:applyDiff', handler);
+    return () => ipcRenderer.removeListener('mcp:applyDiff', handler);
+  },
+  onMcpStreamContent: (callback: (data: { streamId: string, content: string, position: string, insertAfter?: string, mode?: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('mcp:streamContent', handler);
+    return () => ipcRenderer.removeListener('mcp:streamContent', handler);
+  },
+  onMcpNavigateTo: (callback: (data: { line: number, column: number }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('mcp:navigateTo', handler);
+    return () => ipcRenderer.removeListener('mcp:navigateTo', handler);
+  },
+  sendMcpApplyDiffResult: (resultChannel: string, result: any) => {
+    ipcRenderer.send(resultChannel, result);
+  },
+  updateMcpDocumentState: (state: any) => 
+    ipcRenderer.send('mcp:updateDocumentState', state),
+  clearMcpDocumentState: () => ipcRenderer.invoke('mcp:clearDocumentState'),
 });

@@ -150,6 +150,15 @@
   animation: messageSlideIn 0.3s ease;
 }
 
+/* Tool messages without avatar */
+.ai-chat-message--no-avatar {
+  margin-left: 36px; /* Align with other messages that have avatars */
+}
+
+.ai-chat-message--no-avatar .ai-chat-message-content {
+  margin-left: 0;
+}
+
 @keyframes messageSlideIn {
   from {
     opacity: 0;
