@@ -190,11 +190,26 @@ export class WindowedTreeMatcher {
           node
         );
       } else {
-        // For text nodes, use text content
-        markdown = node.getTextContent();
+        // For text nodes, we need to preserve markdown formatting
+        // Text nodes don't have markdown conversion, but their parent might contain links
+        const parent = node.getParent();
+        if (parent && $isElementNode(parent) && parent.getType() === 'paragraph') {
+          try {
+            // Convert parent to markdown to preserve link formatting
+            markdown = $convertNodeToMarkdownString(
+              this.config.transformers,
+              parent
+            );
+          } catch {
+            markdown = node.getTextContent();
+          }
+        } else {
+          markdown = node.getTextContent();
+        }
       }
     } catch (error) {
-      // Fallback to text content if markdown conversion fails
+      // Fallback for error cases
+      console.warn('Error converting node to markdown:', error);
       markdown = node.getTextContent();
     }
 
@@ -277,18 +292,45 @@ export class WindowedTreeMatcher {
       const root = $getRoot();
       const children = root.getChildren();
       const results: NodeWithMarkdown[] = [];
-      
+
       for (const child of children) {
         try {
           const serialized = $getSerializedNode(child);
           let markdown = '';
-          
+
           if ($isElementNode(child)) {
+            // if (child.getType() === 'table') {
+            //   console.log('🔍 SOURCE: Converting table node to markdown');
+            //   console.log('  Number of transformers:', this.config.transformers.length);
+            //   const tableTransformer = this.config.transformers.find(t =>
+            //     t.type === 'element' && t.dependencies?.some?.(d =>
+            //       typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
+            //     )
+            //   );
+            //   console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
+            //   if (tableTransformer) {
+            //     console.log('  Transformer export function exists:', !!tableTransformer.export);
+            //   }
+            // }
             markdown = $convertNodeToMarkdownString(this.config.transformers, child);
+            // if (child.getType() === 'table') {
+            //   console.log('  Result markdown:', markdown);
+            // }
           } else {
-            markdown = child.getTextContent();
+            // For text nodes within paragraphs, we need the parent's markdown
+            // to preserve link formatting
+            const parent = child.getParent();
+            if (parent && $isElementNode(parent) && parent.getType() === 'paragraph') {
+              try {
+                markdown = $convertNodeToMarkdownString(this.config.transformers, parent);
+              } catch {
+                markdown = child.getTextContent();
+              }
+            } else {
+              markdown = child.getTextContent();
+            }
           }
-          
+
           results.push({
             node: serialized,
             markdown: markdown.trim(),
@@ -305,18 +347,45 @@ export class WindowedTreeMatcher {
       const root = $getRoot();
       const children = root.getChildren();
       const results: NodeWithMarkdown[] = [];
-      
+
       for (const child of children) {
         try {
           const serialized = $getSerializedNode(child);
           let markdown = '';
-          
+
           if ($isElementNode(child)) {
+            // if (child.getType() === 'table') {
+            //   console.log('🔍 TARGET: Converting table node to markdown');
+            //   console.log('  Number of transformers:', this.config.transformers.length);
+            //   const tableTransformer = this.config.transformers.find(t =>
+            //     t.type === 'element' && t.dependencies?.some?.(d =>
+            //       typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
+            //     )
+            //   );
+            //   console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
+            //   if (tableTransformer) {
+            //     console.log('  Transformer export function exists:', !!tableTransformer.export);
+            //   }
+            // }
             markdown = $convertNodeToMarkdownString(this.config.transformers, child);
+            // if (child.getType() === 'table') {
+            //   console.log('  Result markdown:', markdown);
+            // }
           } else {
-            markdown = child.getTextContent();
+            // For text nodes within paragraphs, we need the parent's markdown
+            // to preserve link formatting
+            const parent = child.getParent();
+            if (parent && $isElementNode(parent)) {
+              try {
+                markdown = $convertNodeToMarkdownString(this.config.transformers, parent);
+              } catch {
+                markdown = child.getTextContent();
+              }
+            } else {
+              markdown = child.getTextContent();
+            }
           }
-          
+
           results.push({
             node: serialized,
             markdown: markdown.trim(),
@@ -333,7 +402,7 @@ export class WindowedTreeMatcher {
       sourceNodesWithMarkdown,
       targetNodesWithMarkdown,
     );
-    
+
     console.log('TreeMatcher results:');
     console.log('  Source nodes:', sourceNodesWithMarkdown.map(n => `${n.node.type}: ${n.markdown.substring(0, 50)}`));
     console.log('  Target nodes:', targetNodesWithMarkdown.map(n => `${n.node.type}: ${n.markdown.substring(0, 50)}`));
@@ -341,7 +410,7 @@ export class WindowedTreeMatcher {
     result.diffs.forEach(diff => {
       console.log(`    ${diff.changeType} ${diff.nodeType}: "${diff.sourceMarkdown?.substring(0, 30)}" -> "${diff.targetMarkdown?.substring(0, 30)}"`);
     });
-    
+
     return result;
   }
 
@@ -796,7 +865,7 @@ export class WindowedTreeMatcher {
     // console.log(
     //   `Checking ${sourceNodesWithMarkdown.length} source nodes against ${targetNodesWithMarkdown.length} target nodes`,
     // );
-    
+
     // Debug: Show what nodes we're comparing
           // console.log('Source nodes (unmatched):');
     sourceNodesWithMarkdown.forEach((node, idx) => {
@@ -810,7 +879,7 @@ export class WindowedTreeMatcher {
           // console.log(`  [${idx}] ${node.node.type}: "${node.markdown}"`);
       }
     });
-    
+
     // Also show ALL nodes for debugging
           // console.log('\nALL Source nodes:');
     sourceNodesWithMarkdown.forEach((node, idx) => {
@@ -1082,7 +1151,7 @@ export class WindowedTreeMatcher {
     // Normalize whitespace for comparison
     const sourceNormalized = source.replace(/\s+/g, ' ').trim();
     const targetNormalized = target.replace(/\s+/g, ' ').trim();
-    
+
     // If normalized versions match, consider it a very high match
     if (sourceNormalized === targetNormalized) return 0.95;
 

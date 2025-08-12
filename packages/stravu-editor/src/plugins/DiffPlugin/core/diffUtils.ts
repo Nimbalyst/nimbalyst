@@ -188,7 +188,7 @@ export type TextReplacement = {
 function normalizeWhitespace(text: string): string {
   // Count trailing newlines
   const trailingNewlines = text.match(/\n*$/)?.[0] || '';
-  
+
   // Normalize line endings and trim trailing spaces from each line
   const normalized = text
     .replace(/\r\n/g, '\n')  // Windows -> Unix
@@ -196,7 +196,7 @@ function normalizeWhitespace(text: string): string {
     .split('\n')
     .map(line => line.trimEnd())  // Remove trailing spaces from each line
     .join('\n');
-  
+
   // Preserve original trailing newlines
   return normalized.trimEnd() + trailingNewlines;
 }
@@ -211,14 +211,14 @@ function _applyMarkdownEdits(
     // Normalize whitespace for matching
     const normalizedOriginal = normalizeWhitespace(originalMarkdown);
     const normalizedOldText = normalizeWhitespace(replacement.oldText);
-    
+
     // Debug: Replacement attempt details
     // console.log('\n🔍 Attempting replacement:');
     // console.log('  Looking for:', JSON.stringify(replacement.oldText));
     // console.log('  Replace with:', JSON.stringify(replacement.newText));
     // console.log('  Exact match found:', originalMarkdown.includes(replacement.oldText));
     // console.log('  Normalized match found:', normalizedOriginal.includes(normalizedOldText));
-    
+
     // Try exact match first
     if (originalMarkdown.includes(replacement.oldText)) {
       // console.log('  ✅ Using exact match replacement');
@@ -227,53 +227,53 @@ function _applyMarkdownEdits(
         new RegExp(escapeRegExp(replacement.oldText), 'g'),
         replacement.newText,
       );
-    } 
+    }
     // Try normalized match if exact match fails
     else if (normalizedOriginal.includes(normalizedOldText)) {
       // console.log('  ⚠️ Using normalized match replacement');
       // Find the position in the normalized text
       const normalizedIndex = normalizedOriginal.indexOf(normalizedOldText);
-      
+
       // Try to find the corresponding position in the original text
       // This is a best-effort approach
       const lines = originalMarkdown.split(/\r?\n/);
       const normalizedLines = lines.map(line => line.trimEnd());
-      
+
       // Reconstruct with normalized matching
       let currentPos = 0;
       let found = false;
-      
+
       for (let i = 0; i < lines.length; i++) {
         const normalizedLine = normalizedLines[i];
         const originalLine = lines[i];
-        
+
         // Check if this is where our replacement should start
         const lineStart = normalizedLines.slice(0, i).join('\n').length + (i > 0 ? 1 : 0);
         const lineEnd = lineStart + normalizedLine.length;
-        
+
         if (!found && normalizedIndex >= lineStart && normalizedIndex < lineEnd + 1) {
           // This is where the replacement starts
           const beforeReplacement = originalMarkdown.substring(0, currentPos);
-          
+
           // Find the end of the replacement in the original
           let endPos = currentPos;
           let replacementLines = normalizedOldText.split('\n');
-          
+
           for (let j = 0; j < replacementLines.length; j++) {
             if (i + j < lines.length) {
               endPos += lines[i + j].length + (j > 0 ? 1 : 0);
             }
           }
-          
+
           const afterReplacement = originalMarkdown.substring(endPos);
           newMarkdown = beforeReplacement + replacement.newText + afterReplacement;
           found = true;
           break;
         }
-        
+
         currentPos += originalLine.length + (i < lines.length - 1 ? 1 : 0);
       }
-      
+
       if (!found) {
         console.log('  ❌ Normalized replacement position not found');
         throw createTextReplacementError(originalMarkdown, replacement);
@@ -282,7 +282,7 @@ function _applyMarkdownEdits(
       console.log('  ❌ Text not found in document');
       console.log('  Document preview (first 500 chars):', originalMarkdown.substring(0, 500));
       console.log('  Document preview (last 500 chars):', originalMarkdown.substring(Math.max(0, originalMarkdown.length - 500)));
-      
+
       // Try to find similar text for debugging
       const searchText = replacement.oldText.substring(0, 50);
       const similarIndex = originalMarkdown.indexOf(searchText);
@@ -292,7 +292,7 @@ function _applyMarkdownEdits(
         console.log('  🔍 Found similar text at position', similarIndex);
         console.log('  Context:', JSON.stringify(originalMarkdown.substring(contextStart, contextEnd)));
       }
-      
+
       throw createTextReplacementError(originalMarkdown, replacement);
     }
   }
@@ -327,7 +327,7 @@ export function applyMarkdownReplace(
     // This is normal for structural changes like tables and lists
     // console.log('⚠️ Text replacement failed, constructing new markdown from replacements');
     textReplacementError = error as Error;
-    
+
     // Build the new markdown by applying replacements in a best-effort manner
     // For now, we'll use the first replacement's newText as a hint
     // The TreeMatcher will handle the actual structural diff
@@ -336,14 +336,14 @@ export function applyMarkdownReplace(
       // This is a fallback - TreeMatcher will do the real work
       const oldText = replacements[0].oldText;
       const newText = replacements[0].newText;
-      
+
       // For list replacements, try to identify and replace the list
       if (oldText.startsWith('- ') && newText.startsWith('- ')) {
         // Find the list in the original markdown
         const lines = originalMarkdown.split('\n');
         let listStart = -1;
         let listEnd = -1;
-        
+
         for (let i = 0; i < lines.length; i++) {
           if (lines[i].startsWith('- ')) {
             if (listStart === -1) listStart = i;
@@ -353,7 +353,7 @@ export function applyMarkdownReplace(
             break;
           }
         }
-        
+
         if (listStart !== -1 && listEnd !== -1) {
           // Replace the list section
           const newLines = [...lines];
@@ -370,7 +370,7 @@ export function applyMarkdownReplace(
         const lines = originalMarkdown.split('\n');
         let tableStart = -1;
         let tableEnd = -1;
-        
+
         for (let i = 0; i < lines.length; i++) {
           if (lines[i].includes('|')) {
             if (tableStart === -1) tableStart = i;
@@ -380,7 +380,7 @@ export function applyMarkdownReplace(
             break;
           }
         }
-        
+
         if (tableStart !== -1 && tableEnd !== -1) {
           // Replace the table section
           const newLines = [...lines];
@@ -415,7 +415,7 @@ export function applyMarkdownReplace(
       transformers,
     );
     // console.log('✅ applyMarkdownDiffToDocument completed successfully');
-    
+
     // If we got here, the diff was applied successfully
     // Text replacement error is expected when TreeMatcher handles structural changes
     // Don't log this as it's normal behavior and causes confusion
@@ -424,12 +424,12 @@ export function applyMarkdownReplace(
     // }
   } catch (error) {
     console.error('❌ Error in applyMarkdownDiffToDocument:', error);
-    
+
     // If both text replacement and TreeMatcher failed, throw the original error
     if (textReplacementError) {
       throw textReplacementError;
     }
-    
+
     // Wrap in DiffError if not already one
     if (error instanceof DiffError) {
       error.context.additionalInfo = {
@@ -844,7 +844,7 @@ export function $applyNodeDiff(
       const liveNodeKey = liveNodesByMarkdown.get(diff.sourceMarkdown);
       console.log('  Looking for node with markdown:', diff.sourceMarkdown?.substring(0, 50));
       console.log('  Found key:', liveNodeKey);
-      
+
       if (!liveNodeKey) {
         console.warn(
           `Could not find live node with markdown: ${diff.sourceMarkdown}`,
@@ -858,7 +858,7 @@ export function $applyNodeDiff(
         console.warn(`Could not find element node with key: ${liveNodeKey}`);
         return;
       }
-      
+
       console.log('  Found live node:', liveNode.getType());
 
       // Only mark as modified if it's not an exact match
@@ -1015,25 +1015,34 @@ export function $applySubTreeDiff(
   // Create position tracking for child nodes by their markdown content
   const liveChildNodesByMarkdown = new Map<string, string>();
   const liveChildren = liveParentNode.getChildren();
-  
+
   // For list items, we need to match on text content, not full markdown
   const isListParent = liveParentNode.getType() === 'list';
 
   for (const child of liveChildren) {
     if ($isElementNode(child)) {
       let markdown: string;
+
+      // For list items and other special children that don't have their own transformers,
+      // use text content for matching
       if (isListParent && child.getType() === 'listitem') {
-        // For list items, use text content for matching
-        // This matches what TreeMatcher uses for list item comparison
+        // List items should match by their text content
         markdown = child.getTextContent().trim();
       } else {
-        // For other nodes, use full markdown conversion
-        markdown = $convertToMarkdownString(
-          transformers,
-          child
-        ).trim();
+        // For other nodes, try full markdown conversion
+        try {
+          markdown = $convertNodeToMarkdownString(
+            transformers,
+            child
+          ).trim();
+        } catch {
+          // Fallback to text content if markdown conversion fails
+          markdown = child.getTextContent().trim();
+        }
       }
+
       liveChildNodesByMarkdown.set(markdown, child.getKey());
+      console.log(`  Mapped child node: "${markdown}" -> ${child.getKey()}`);
     }
   }
 

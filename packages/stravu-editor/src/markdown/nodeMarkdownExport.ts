@@ -2,7 +2,7 @@
  * Custom markdown export for individual nodes.
  * This fixes the issue where the standard Lexical $convertToMarkdownString
  * doesn't properly handle exporting individual non-root nodes.
- * 
+ *
  * Based on the fix from our fork of lexical-markdown.
  */
 
@@ -114,10 +114,15 @@ function exportTopLevelElements(
   textMatchTransformers: Array<TextMatchTransformer>,
   shouldPreserveNewLines: boolean = false,
 ): string | null {
+  // Debug: log what node type we're exporting
+  // console.log('exportTopLevelElements called with node type:', node.getType());
+  // console.log('Number of element transformers:', elementTransformers.length);
+
   for (const transformer of elementTransformers) {
     if (!transformer.export) {
       continue;
     }
+    // console.log('  Trying transformer:', transformer.type, transformer.dependencies?.map?.(d => typeof d === 'function' ? d.name : d));
     const result = transformer.export(node, (_node) =>
       exportChildren(
         _node,
@@ -126,15 +131,18 @@ function exportTopLevelElements(
         undefined,
         undefined,
         shouldPreserveNewLines,
+        elementTransformers,
       ),
     );
 
     if (result != null) {
+      // console.log('  ✅ Transformer matched and returned:', result.substring(0, 100));
       return result;
     }
   }
 
   if ($isElementNode(node)) {
+    // console.log('  No transformer matched, falling back to exportChildren for:', node.getType());
     return exportChildren(
       node,
       textFormatTransformers,
@@ -142,6 +150,7 @@ function exportTopLevelElements(
       undefined,
       undefined,
       shouldPreserveNewLines,
+      elementTransformers,
     );
   } else if ($isDecoratorNode(node)) {
     return node.getTextContent();
@@ -158,6 +167,7 @@ function exportChildren(
   textContent?: string,
   textTransformer?: TextFormatTransformer | null,
   shouldPreserveNewLines: boolean = false,
+  elementTransformers?: Array<ElementTransformer | MultilineElementTransformer>,
 ): string {
   const output = [];
   const children = node.getChildren();
@@ -184,6 +194,7 @@ function exportChildren(
                 textContent,
                 null,
                 shouldPreserveNewLines,
+                elementTransformers,
               ),
           ),
         );
@@ -206,10 +217,11 @@ function exportChildren(
                 textContent,
                 tag,
                 shouldPreserveNewLines,
+                elementTransformers,
               ),
           ));
         } else {
-          // Text matching
+          // Text matching transformers for text nodes
           for (const transformer of textMatchTransformers) {
             if (!transformer.export) {
               continue;
@@ -225,6 +237,7 @@ function exportChildren(
                   textContent,
                   textTransformer,
                   shouldPreserveNewLines,
+                  elementTransformers,
                 ),
             );
 
@@ -238,16 +251,47 @@ function exportChildren(
         }
       }
     } else if ($isElementNode(child)) {
-      const result = exportTopLevelElements(
-        child,
-        [...elementTransformers],
-        textFormatTransformers,
-        textMatchTransformers,
-        shouldPreserveNewLines,
-      );
+      // First check if any text-match transformer handles this element node (like LINK for LinkNode)
+      let handled = false;
+      for (const transformer of textMatchTransformers) {
+        if (!transformer.export) {
+          continue;
+        }
+        const result = transformer.export(
+          child,
+          (_node) =>
+            exportChildren(
+              _node,
+              textFormatTransformers,
+              textMatchTransformers,
+              undefined,
+              undefined,
+              shouldPreserveNewLines,
+              elementTransformers,
+            ),
+        );
 
-      if (result != null) {
-        output.push(result);
+        if (result != null) {
+          output.push(result);
+          handled = true;
+          break;
+        }
+      }
+
+      if (!handled) {
+        // We need to get the element transformers from the parent scope
+        // The module-level elementTransformers is empty, we need the actual ones
+        const result = exportTopLevelElements(
+          child,
+          elementTransformers,
+          textFormatTransformers,
+          textMatchTransformers,
+          shouldPreserveNewLines,
+        );
+
+        if (result != null) {
+          output.push(result);
+        }
       }
     } else if ($isDecoratorNode(child)) {
       output.push(child.getTextContent());
@@ -277,19 +321,19 @@ function isEmptyParagraph(node: LexicalNode): boolean {
   if (!$isElementNode(node)) {
     return false;
   }
-  
+
   const children = node.getChildren();
   if (children.length === 0) {
     return true;
   }
-  
+
   if (children.length === 1) {
     const child = children[0];
     if ($isTextNode(child) && child.getTextContent().trim() === '') {
       return true;
     }
   }
-  
+
   return false;
 }
 
@@ -321,6 +365,3 @@ function transformersByType(transformers: Array<Transformer>) {
 
   return byType;
 }
-
-// Need to define elementTransformers at module level for exportTopLevelElements
-let elementTransformers: Array<ElementTransformer | MultilineElementTransformer> = [];

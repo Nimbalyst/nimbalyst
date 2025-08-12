@@ -5,7 +5,7 @@ import { WindowState, FileTreeItem } from '../types';
 import { WINDOW_CASCADE_OFFSET } from '../utils/constants';
 import { getTheme, saveProjectWindowState } from '../utils/store';
 import { stopFileWatcher } from '../file/FileWatcher';
-import { stopProjectWatcher } from '../file/ProjectWatcher';
+import { stopProjectWatcher, startProjectWatcher } from '../file/ProjectWatcher';
 import { getFolderContents } from '../utils/FileTree';
 import { getTitleBarColors } from '../theme/ThemeManager';
 
@@ -261,6 +261,8 @@ export function createWindow(
                         projectName: basename(projectPath),
                         fileTree
                     });
+                    // Start watching the project directory for changes
+                    startProjectWatcher(window, projectPath);
                 }, 100);
             } else if (!isOpeningFile) {
                 // Create new untitled document

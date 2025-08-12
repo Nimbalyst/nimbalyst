@@ -22,6 +22,7 @@ interface ChatMessageProps {
   };
   isStreaming?: boolean;
   onApplyEdit?: (edit: EditRequest) => Promise<{ success: boolean; error?: string }>;
+  onReapply?: (args: any) => void;
 }
 
 export function ChatMessage({
@@ -30,7 +31,8 @@ export function ChatMessage({
   edits,
   toolCall,
   isStreaming,
-  onApplyEdit
+  onApplyEdit,
+  onReapply
 }: ChatMessageProps) {
   const [expandedEdits, setExpandedEdits] = useState(false);
   const [appliedEdits, setAppliedEdits] = useState<Set<number>>(new Set());
@@ -147,6 +149,7 @@ export function ChatMessage({
             toolName={toolCall.name}
             arguments={toolCall.arguments}
             result={toolCall.result}
+            onReapply={onReapply}
           />
         </div>
       </div>
@@ -241,9 +244,18 @@ export function ChatMessage({
                           </button>
                         </>
                       ) : editStatus[index]?.status === 'applied' ? (
-                        <span className="ai-chat-edit-status-text ai-chat-edit-status-text--success">
-                          ✓ Changes applied - use the diff toolbar to approve or reject
-                        </span>
+                        <>
+                          <span className="ai-chat-edit-status-text ai-chat-edit-status-text--success">
+                            ✓ Changes applied
+                          </span>
+                          <button
+                            className="ai-chat-edit-retry"
+                            onClick={() => handleApplyEdit(edit, index)}
+                            title="Reapply this edit"
+                          >
+                            Reapply
+                          </button>
+                        </>
                       ) : (
                         <>
                           <span className="ai-chat-edit-status-text">

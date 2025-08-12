@@ -7,7 +7,7 @@ import {
   McpError
 } from '@modelcontextprotocol/sdk/types.js';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import { parse as parseUrl } from 'url';
 
 let documentState: any = null;
@@ -104,10 +104,28 @@ export async function startMcpHttpServer(port: number = 3456) {
           case 'applyDiff': {
             const windows = BrowserWindow.getAllWindows();
             if (windows.length > 0) {
-              windows[0].webContents.send('mcp:applyDiff', {
-                replacements: args.replacements
+              // Create a unique channel for the result
+              const resultChannel = `mcp-result-${Date.now()}-${Math.random()}`;
+              
+              // Set up a one-time listener for the result
+              return new Promise((resolve) => {
+                const timeout = setTimeout(() => {
+                  ipcMain.removeHandler(resultChannel);
+                  resolve({ success: false, error: 'Timeout waiting for diff application' });
+                }, 5000);
+                
+                ipcMain.once(resultChannel, (event, result) => {
+                  clearTimeout(timeout);
+                  console.log('[MCP Server] Received applyDiff result:', result);
+                  resolve(result || { success: false, error: 'No result received' });
+                });
+                
+                // Send the request with the result channel
+                windows[0].webContents.send('mcp:applyDiff', {
+                  replacements: args.replacements,
+                  resultChannel
+                });
               });
-              return { success: true };
             }
             return { success: false, error: 'No window available' };
           }

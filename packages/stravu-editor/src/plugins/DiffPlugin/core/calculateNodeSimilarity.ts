@@ -16,6 +16,7 @@ import type {
 
 import {$convertToMarkdownString, TRANSFORMERS} from '@lexical/markdown';
 import {$isElementNode} from 'lexical';
+import { $convertNodeToMarkdownString } from "../../../markdown/nodeMarkdownExport.ts";
 
 /**
  * Calculate similarity between two nodes based on content and structure
@@ -100,8 +101,12 @@ export function $getNodeMarkdown(
   // For live nodes, use $convertToMarkdownString on the node directly
   if ('getTextContent' in node && typeof node.getTextContent === 'function') {
     if ($isElementNode(node)) {
+      // return $convertNodeToMarkdownString(TRANSFORMERS, node);
       return $convertToMarkdownString(TRANSFORMERS, node);
     } else {
+      // For text nodes, we need to check if parent has special formatting like links
+      // Since we can't access parent from here, return text content
+      // The TreeMatcher handles this case by converting parent instead
       return node.getTextContent();
     }
   }

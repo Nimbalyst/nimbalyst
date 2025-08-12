@@ -35,10 +35,22 @@ export function ProjectSidebar({
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   
   const handleNewFile = () => {
+    // If a file is currently selected, use its parent directory
+    // Otherwise use the project root
+    if (currentFilePath) {
+      const parentDir = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
+      setTargetFolder(parentDir);
+    }
     setIsFileModalOpen(true);
   };
   
   const handleNewFolder = () => {
+    // If a file is currently selected, use its parent directory
+    // Otherwise use the project root
+    if (currentFilePath) {
+      const parentDir = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
+      setTargetFolder(parentDir);
+    }
     setIsFolderModalOpen(true);
   };
   
@@ -163,20 +175,26 @@ export function ProjectSidebar({
       
       <InputModal
         isOpen={isFileModalOpen}
-        title="New File"
+        title={targetFolder ? `New File in ${targetFolder.split('/').pop()}` : "New File"}
         placeholder="Enter file name (e.g., document.md)"
         defaultValue=""
         onConfirm={handleCreateFile}
-        onCancel={() => setIsFileModalOpen(false)}
+        onCancel={() => {
+          setIsFileModalOpen(false);
+          setTargetFolder(null);
+        }}
       />
       
       <InputModal
         isOpen={isFolderModalOpen}
-        title="New Folder"
+        title={targetFolder ? `New Folder in ${targetFolder.split('/').pop()}` : "New Folder"}
         placeholder="Enter folder name"
         defaultValue=""
         onConfirm={handleCreateFolder}
-        onCancel={() => setIsFolderModalOpen(false)}
+        onCancel={() => {
+          setIsFolderModalOpen(false);
+          setTargetFolder(null);
+        }}
       />
     </div>
   );

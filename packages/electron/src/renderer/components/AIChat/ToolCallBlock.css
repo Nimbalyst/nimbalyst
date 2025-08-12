@@ -8,7 +8,7 @@
 }
 
 .ai-chat-tool-header {
-  padding: 10px 12px;
+  padding: 6px 10px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -200,6 +200,27 @@
   margin-top: 12px;
   padding: 8px;
   border-radius: 4px;
+}
+
+/* Reapply button */
+.ai-chat-tool-reapply {
+  padding: 4px 12px;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.ai-chat-tool-reapply:hover {
+  background: var(--accent-color-hover, #0052a3);
+}
+
+.ai-chat-tool-reapply:active {
+  transform: translateY(1px);
 }
 
 .ai-chat-tool-status--pending {

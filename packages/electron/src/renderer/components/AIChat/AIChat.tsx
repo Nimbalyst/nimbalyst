@@ -155,7 +155,8 @@ export function AIChat({
         
         // Handle tool calls that come during streaming
         if (data.toolCalls && data.toolCalls.length > 0) {
-          // Add each tool call as a separate message to maintain ordering
+          // For now, just show all tool calls as tool messages
+          // We'll handle applyDiff specially when it's actually applied through the MCP handler
           setMessages(prev => {
             const newMessages = [...prev];
             for (const toolCall of data.toolCalls) {

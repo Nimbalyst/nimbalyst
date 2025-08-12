@@ -264,7 +264,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('mcp:navigateTo', handler);
   },
   sendMcpApplyDiffResult: (resultChannel: string, result: any) => {
-    ipcRenderer.send(resultChannel, result);
+    // Ensure result has the required structure
+    const safeResult = {
+      success: result?.success ?? false,
+      error: result?.error || (result?.success === false ? 'Unknown error' : undefined)
+    };
+    ipcRenderer.send(resultChannel, safeResult);
   },
   updateMcpDocumentState: (state: any) => 
     ipcRenderer.send('mcp:updateDocumentState', state),

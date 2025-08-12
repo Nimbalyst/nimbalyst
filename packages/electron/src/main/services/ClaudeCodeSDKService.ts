@@ -154,7 +154,7 @@ export class ClaudeCodeSDKService extends EventEmitter {
         const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
         const sessions = sessionsByProject[project] || [];
         const session = sessions.find(s => s.id === sessionId);
-        
+
         if (session) {
           this.currentSession = session;
           this.currentSessionId = session.id;
@@ -285,13 +285,17 @@ Remember: The user can SEE the changes in their editor. They don't need you to d
         // Set API key in environment for the CLI
         process.env.ANTHROPIC_API_KEY = this.apiKey;
 
+        const claudeProjectPath = this.currentProjectPath || process.cwd();
+
+        console.log(`Sending message to Claude (model: ${this.settings.model}) in project: ${claudeProjectPath}`);
+
         // Build options object conditionally
         const options: any = {
           pathToClaudeCodeExecutable: cliPath, // Explicitly provide the CLI path
           customSystemPrompt: systemPrompt,
           mcpServers: this.getMcpServersConfig(),
           allowedTools: ['*'], // Allow all tools
-          cwd: this.currentProjectPath || process.cwd(),
+          cwd: claudeProjectPath,
           abortController: this.abortController,
           model: this.settings.model,
           permissionMode: 'bypassPermissions', // Automatically grant permissions for all tools
@@ -330,7 +334,7 @@ Remember: The user can SEE the changes in their editor. They don't need you to d
 
         // Track tool calls separately from message content
         const toolCalls: Array<{ name: string; arguments?: any; result?: any }> = [];
-        
+
         // Stream the response
         for await (const chunk of queryIterator) {
           // Handle different message types from the SDK
@@ -370,7 +374,7 @@ Remember: The user can SEE the changes in their editor. They don't need you to d
                   } else if (block.type === 'tool_use') {
                     // Handle tool calls from Claude
                     console.log('Tool use detected:', block);
-                    
+
                     // Add to tool calls array
                     toolCalls.push({
                       name: block.name,
@@ -429,7 +433,7 @@ Remember: The user can SEE the changes in their editor. They don't need you to d
             } else if (chunk.type === 'tool_call' || chunk.type === 'tool_use') {
               // Handle standalone tool call events
               console.log('Standalone tool call detected:', chunk);
-              
+
               // Add to tool calls array
               toolCalls.push({
                 name: chunk.name || 'unknown',

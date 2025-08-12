@@ -62,7 +62,22 @@ export function ChatMessages({
             />
           );
         } else if (message.role === 'tool' && message.toolCall) {
-          // Render tool call as a standalone block
+          // Render tool call as a standalone block with reapply for applyDiff
+          const handleReapply = (message.toolCall.name === 'applyDiff' || 
+                                 message.toolCall.name?.endsWith('__applyDiff')) 
+            ? (args: any) => {
+                // Reapply the diff using the onApplyEdit handler
+                if (onApplyEdit && args?.replacements) {
+                  const edit = {
+                    type: 'diff',
+                    file: args.filePath || 'current',
+                    replacements: args.replacements
+                  };
+                  onApplyEdit(edit);
+                }
+              }
+            : undefined;
+          
           return (
             <ChatMessage
               key={index}
@@ -70,6 +85,7 @@ export function ChatMessages({
               content={message.content}
               toolCall={message.toolCall}
               onApplyEdit={onApplyEdit}
+              onReapply={handleReapply}
             />
           );
         } else {

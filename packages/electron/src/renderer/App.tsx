@@ -992,17 +992,42 @@ export default function App() {
         try {
           // Use the AI chat bridge to apply replacements
           const result = await aiChatBridge.applyReplacements(replacements);
+          
+          // Ensure result is defined and has the expected shape
+          const finalResult = result || { success: false, error: 'No result returned from diff application' };
+          
           if (window.electronAPI.sendMcpApplyDiffResult) {
-            window.electronAPI.sendMcpApplyDiffResult(resultChannel, result);
+            // Make sure we have all required properties and no undefined values
+            const resultToSend = {
+              success: finalResult.success ?? false
+            };
+            // Only add error if it exists (IPC can't handle undefined values)
+            if (finalResult.error) {
+              (resultToSend as any).error = finalResult.error;
+            }
+            window.electronAPI.sendMcpApplyDiffResult(resultChannel, resultToSend);
+          }
+          
+          // Show error in UI if the diff failed
+          if (!finalResult.success) {
+            console.error('Diff application failed:', finalResult.error);
+            // You could also show a toast or notification here
+            // For now, we'll just make sure it's visible in the console
           }
         } catch (error) {
           console.error('MCP applyDiff error:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          
           if (window.electronAPI.sendMcpApplyDiffResult) {
+            // Ensure we're sending a clean object without undefined values
             window.electronAPI.sendMcpApplyDiffResult(resultChannel, {
               success: false,
-              error: error instanceof Error ? error.message : 'Unknown error'
+              error: errorMessage || 'Unknown error'
             });
           }
+          
+          // Could show error notification here
+          // alert(`Failed to apply edit: ${errorMessage}`);
         }
       }));
     }
@@ -1048,8 +1073,9 @@ export default function App() {
       }
     };
 
-    // Update document state on content change
-    if (isDirty) {
+    // Update document state when file is opened or content changes
+    // We need to send the initial state when a file is opened, not just when it's dirty
+    if (currentFilePath || isDirty) {
       updateDocumentState();
     }
 
@@ -1058,7 +1084,7 @@ export default function App() {
       // console.log('Cleaning up IPC listeners');
       cleanupFns.forEach(cleanup => cleanup());
     };
-  }, [handleNew, handleOpen, handleSave, handleSaveAs, currentFilePath]);
+  }, [handleNew, handleOpen, handleSave, handleSaveAs, currentFilePath, isDirty, getContentRef.current]);
 
   logger.log('ui', 'Rendering App with config:', {
     contentLength: content.length,
