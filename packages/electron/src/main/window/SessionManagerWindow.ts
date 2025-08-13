@@ -61,7 +61,7 @@ export function createSessionManagerWindow(filterProject?: string) {
 export function registerSessionManagerHandlers() {
   // Get all sessions from all projects
   ipcMain.handle('session-manager:get-all-sessions', async () => {
-    const store = new Store({ name: 'claude-sessions' });
+    const store = new Store({ name: 'ai-sessions' });
     const sessionsByProject = store.get('sessionsByProject', {}) as Record<string, any[]>;
     
     // Flatten all sessions from all projects

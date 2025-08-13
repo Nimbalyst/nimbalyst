@@ -108,6 +108,24 @@
   min-width: 0;
 }
 
+.session-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-provider-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
 .session-name {
   overflow: hidden;
   text-overflow: ellipsis;

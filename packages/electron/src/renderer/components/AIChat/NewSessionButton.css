@@ -2,20 +2,24 @@
   position: relative;
   display: flex;
   align-items: center;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .new-session-button-main {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 8px;
+  padding: 6px 10px;
   background: transparent;
   border: none;
-  color: var(--text-secondary);
+  color: var(--text-primary, #333);
   cursor: pointer;
   transition: all 0.2s ease;
-  border-radius: 4px 0 0 4px;
-  height: 32px;
+  border-radius: 0;
+  height: auto;
+  font-size: 13px;
 }
 
 .new-session-button-main:hover:not(:disabled) {
@@ -32,15 +36,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  padding: 6px 8px;
   background: transparent;
   border: none;
-  border-left: 1px solid var(--border-color);
-  color: var(--text-secondary);
+  border-left: 1px solid var(--border-color, #e0e0e0);
+  color: var(--text-primary, #333);
   cursor: pointer;
   transition: all 0.2s ease;
-  border-radius: 0 4px 4px 0;
-  height: 32px;
+  border-radius: 0;
+  height: auto;
 }
 
 .new-session-button-dropdown:hover:not(:disabled) {

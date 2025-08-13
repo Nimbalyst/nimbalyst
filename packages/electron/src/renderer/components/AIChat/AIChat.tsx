@@ -780,6 +780,7 @@ export function AIChat({
       <ChatHeader 
         onToggleCollapse={onToggleCollapse} 
         onOpenSessionManager={handleOpenSessionManager}
+        provider={currentProvider}
       >
         <SessionDropdown
           currentSessionId={currentSessionId}

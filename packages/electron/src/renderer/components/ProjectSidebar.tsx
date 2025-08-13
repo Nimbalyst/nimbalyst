@@ -33,6 +33,8 @@ export function ProjectSidebar({
 }: ProjectSidebarProps) {
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
+  const [isDragOverRoot, setIsDragOverRoot] = useState(false);
+  const [draggedItem, setDraggedItem] = useState<any | null>(null);
   
   const handleNewFile = () => {
     // If a file is currently selected, use its parent directory
@@ -121,8 +123,78 @@ export function ProjectSidebar({
     setIsFolderModalOpen(true);
   };
 
+  // Root folder drag and drop handlers
+  const handleRootDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Get the drag data to check if it's a valid file/folder
+    const dragPath = e.dataTransfer.types.includes('text/plain');
+    if (dragPath) {
+      setIsDragOverRoot(true);
+      e.dataTransfer.dropEffect = e.altKey || e.metaKey ? 'copy' : 'move';
+    }
+  };
+
+  const handleRootDragLeave = (e: React.DragEvent) => {
+    // Only clear if we're leaving the root drop zone entirely
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    const dropZone = e.currentTarget as HTMLElement;
+    if (!dropZone.contains(relatedTarget)) {
+      setIsDragOverRoot(false);
+    }
+  };
+
+  const handleRootDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverRoot(false);
+    
+    const sourcePath = e.dataTransfer.getData('text/plain');
+    if (!sourcePath) return;
+    
+    const isCopy = e.altKey || e.metaKey;
+    
+    try {
+      if (isCopy) {
+        const result = await (window as any).electronAPI.copyFile(sourcePath, projectPath);
+        if (!result.success) {
+          console.error('Failed to copy to root:', result.error);
+        } else if (onRefreshFileTree) {
+          onRefreshFileTree();
+        }
+      } else {
+        const result = await (window as any).electronAPI.moveFile(sourcePath, projectPath);
+        if (!result.success) {
+          console.error('Failed to move to root:', result.error);
+        } else if (onRefreshFileTree) {
+          onRefreshFileTree();
+        }
+      }
+    } catch (error) {
+      console.error('Error during drop to root:', error);
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent) => {
+    // Store the dragged item info for visual feedback
+    const dragPath = e.dataTransfer.getData('text/plain');
+    setDraggedItem({ path: dragPath });
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+    setIsDragOverRoot(false);
+  };
+
   return (
-    <div className="project-sidebar">
+    <div className="project-sidebar"
+      onDragOver={handleRootDragOver}
+      onDragLeave={handleRootDragLeave}
+      onDrop={handleRootDrop}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
       <div className="project-sidebar-header">
         <h3 className="project-name">{projectName}</h3>
         <div className="project-sidebar-actions">
@@ -161,7 +233,12 @@ export function ProjectSidebar({
         </div>
       </div>
 
-      <div className="project-file-tree">
+      <div className={`project-file-tree ${isDragOverRoot ? 'drag-over-root' : ''}`}>
+        {isDragOverRoot && (
+          <div className="root-drop-indicator">
+            Drop here to move to project root
+          </div>
+        )}
         <FileTree
           items={fileTree}
           currentFilePath={currentFilePath}

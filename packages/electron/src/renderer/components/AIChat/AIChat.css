@@ -8,6 +8,44 @@
   position: relative;
 }
 
+/* Provider Badge Styles */
+.provider-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  margin-left: 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.provider-badge-claude,
+.provider-claude {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.provider-badge-claude-code,
+.provider-claude-code {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+/* Dark mode provider badges */
+.dark-theme .provider-badge-claude,
+.dark-theme .provider-claude {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.dark-theme .provider-badge-claude-code,
+.dark-theme .provider-claude-code {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
 /* Floating Toggle Button (Collapsed State) */
 .ai-chat-floating-toggle {
   position: fixed;

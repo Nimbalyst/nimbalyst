@@ -5,12 +5,20 @@ interface ChatHeaderProps {
   onToggleCollapse: () => void;
   onOpenSessionManager?: () => void;
   children?: React.ReactNode;
+  provider?: 'claude' | 'claude-code';
 }
 
-export function ChatHeader({ onToggleCollapse, onOpenSessionManager, children }: ChatHeaderProps) {
+export function ChatHeader({ onToggleCollapse, onOpenSessionManager, children, provider }: ChatHeaderProps) {
   return (
     <div className="ai-chat-header">
-      <h3 className="ai-chat-title">AI Assistant</h3>
+      <h3 className="ai-chat-title">
+        AI Assistant
+        {provider && (
+          <span className={`provider-badge provider-badge-${provider}`}>
+            {provider === 'claude' ? 'SDK' : 'Code'}
+          </span>
+        )}
+      </h3>
       {children && (
         <div className="ai-chat-header-controls">
           {children}

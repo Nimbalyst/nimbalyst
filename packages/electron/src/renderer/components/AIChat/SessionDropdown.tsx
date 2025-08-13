@@ -128,7 +128,14 @@ export function SessionDropdown({
                           setIsOpen(false);
                         }}
                       >
-                        <span className="session-name">{formatSessionName(session)}</span>
+                        <div className="session-name-row">
+                          <span className="session-name">{formatSessionName(session)}</span>
+                          {session.provider && (
+                            <span className={`session-provider-badge provider-${session.provider}`}>
+                              {session.provider === 'claude' ? 'SDK' : 'Code'}
+                            </span>
+                          )}
+                        </div>
                         {session.messageCount !== undefined && (
                           <span className="session-message-count">{session.messageCount} messages</span>
                         )}
