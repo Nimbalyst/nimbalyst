@@ -21,8 +21,39 @@ export function updateDocumentState(state: any) {
   console.log('[MCP Server] Document state updated');
 }
 
-export async function startMcpHttpServer(port: number = 3456) {
-  const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+export async function startMcpHttpServer(startPort: number = 3456): Promise<{ httpServer: any; port: number }> {
+  // Try to find an available port starting from the given port
+  let port = startPort;
+  let httpServer: any = null;
+  let maxAttempts = 100; // Try up to 100 ports
+  
+  while (maxAttempts > 0) {
+    try {
+      httpServer = await tryCreateServer(port);
+      console.log(`[MCP Server] Successfully started on port ${port}`);
+      break;
+    } catch (error: any) {
+      if (error.code === 'EADDRINUSE') {
+        console.log(`[MCP Server] Port ${port} is in use, trying ${port + 1}...`);
+        port++;
+        maxAttempts--;
+      } else {
+        // Some other error, re-throw it
+        throw error;
+      }
+    }
+  }
+  
+  if (!httpServer) {
+    throw new Error(`[MCP Server] Could not find an available port after trying ${100} ports starting from ${startPort}`);
+  }
+  
+  return { httpServer, port };
+}
+
+async function tryCreateServer(port: number): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const parsedUrl = parseUrl(req.url || '', true);
     const pathname = parsedUrl.pathname;
     
@@ -193,12 +224,23 @@ export async function startMcpHttpServer(port: number = 3456) {
       res.writeHead(404);
       res.end('Not found');
     }
+    });
+    
+    // Try to listen on the port
+    httpServer.listen(port, '127.0.0.1', (err?: Error) => {
+      if (err) {
+        reject(err);
+      }
+    });
+    
+    httpServer.on('listening', () => {
+      console.log(`[MCP Server] Running on http://127.0.0.1:${port}/mcp`);
+      console.log('[MCP Server] Ready to accept SSE connections and POST messages');
+      resolve(httpServer);
+    });
+    
+    httpServer.on('error', (err: any) => {
+      reject(err);
+    });
   });
-  
-  httpServer.listen(port, '127.0.0.1', () => {
-    console.log(`[MCP Server] Running on http://127.0.0.1:${port}/mcp`);
-    console.log('[MCP Server] Ready to accept SSE connections and POST messages');
-  });
-  
-  return { httpServer, port };
 }
