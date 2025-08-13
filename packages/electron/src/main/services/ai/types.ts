@@ -1,0 +1,84 @@
+/**
+ * Common types for AI provider abstraction
+ */
+
+export interface DocumentContext {
+  filePath: string;
+  fileType: string;
+  content: string;
+  cursorPosition?: { line: number; column: number };
+  selection?: { 
+    start: { line: number; column: number }; 
+    end: { line: number; column: number } 
+  };
+}
+
+export interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
+
+export interface SessionData {
+  id: string;  // Our session ID
+  provider: 'claude' | 'claude-code';  // Provider type, locked per session
+  timestamp: number;
+  messages: Message[];
+  documentContext?: DocumentContext;
+  projectPath?: string;
+  name?: string;
+  title?: string;
+  draftInput?: string;
+  
+  // Provider-specific data
+  providerSessionId?: string;  // For Claude Code's internal session ID
+  providerConfig?: {
+    model?: string;
+    apiKey?: string;  // If using per-session keys
+  };
+}
+
+export interface ProviderConfig {
+  apiKey?: string;
+  model?: string;
+  maxTokens?: number;
+  temperature?: number;
+}
+
+export interface ProviderCapabilities {
+  streaming: boolean;
+  tools: boolean;
+  mcpSupport: boolean;
+  edits: boolean;
+  resumeSession: boolean;
+}
+
+export interface StreamChunk {
+  type: 'text' | 'tool_call' | 'error' | 'complete';
+  content?: string;
+  toolCall?: {
+    name: string;
+    arguments?: any;
+    result?: any;
+  };
+  error?: string;
+  isComplete?: boolean;
+}
+
+export interface DiffArgs {
+  replacements: Array<{
+    oldText: string;
+    newText: string;
+  }>;
+}
+
+export interface DiffResult {
+  success: boolean;
+  error?: string;
+  appliedCount?: number;
+}
+
+export interface ToolHandler {
+  applyDiff(args: DiffArgs): Promise<DiffResult>;
+  // Other common tools can be added here
+}

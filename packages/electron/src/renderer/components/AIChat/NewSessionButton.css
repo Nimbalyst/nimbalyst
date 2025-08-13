@@ -1,0 +1,146 @@
+.new-session-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.new-session-button-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 4px 0 0 4px;
+  height: 32px;
+}
+
+.new-session-button-main:hover:not(:disabled) {
+  background: var(--background-hover);
+  color: var(--text-primary);
+}
+
+.new-session-button-main:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.new-session-button-dropdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 0 4px 4px 0;
+  height: 32px;
+}
+
+.new-session-button-dropdown:hover:not(:disabled) {
+  background: var(--background-hover);
+  color: var(--text-primary);
+}
+
+.new-session-button-dropdown:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.new-session-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  min-width: 220px;
+  padding: 4px;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.new-session-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  text-align: left;
+}
+
+.new-session-option:hover {
+  background: var(--background-hover);
+}
+
+.new-session-option.selected {
+  background: var(--accent-background);
+  color: var(--accent-color);
+}
+
+.new-session-option-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.new-session-option-name {
+  font-weight: 500;
+}
+
+.new-session-option-description {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  opacity: 0.8;
+}
+
+.new-session-option-check {
+  color: var(--accent-color);
+}
+
+/* Dark theme adjustments */
+.dark .new-session-button-main,
+.dark .new-session-button-dropdown {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.dark .new-session-button-main:hover:not(:disabled),
+.dark .new-session-button-dropdown:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dark .new-session-button-dropdown {
+  border-left-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark .new-session-dropdown {
+  background: var(--background-secondary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}

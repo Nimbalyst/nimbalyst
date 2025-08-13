@@ -3,6 +3,7 @@ import { ChatHeader } from './ChatHeader';
 import { ChatMessages } from './ChatMessages';
 import { ChatInput } from './ChatInput';
 import { SessionDropdown } from './SessionDropdown';
+import { NewSessionButton } from './NewSessionButton';
 import { claudeApi, DocumentContext } from '../../services/claudeApi';
 import { logger } from '../../utils/logger';
 import './AIChat.css';
@@ -28,8 +29,9 @@ export function AIChat({
   onApplyEdit,
   projectPath,
   sessionToLoad,
-  onSessionLoaded
-}: AIChatProps) {
+  onSessionLoaded,
+  onShowApiKeyError
+}: AIChatProps & { onShowApiKeyError?: () => void }) {
   const [messages, setMessages] = useState<Array<{ 
     role: 'user' | 'assistant' | 'tool'; 
     content: string; 
@@ -60,6 +62,11 @@ export function AIChat({
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [tempInput, setTempInput] = useState('');
   const [currentUserMessage, setCurrentUserMessage] = useState<string>(''); // Track current user message for error reporting
+  const [currentProvider, setCurrentProvider] = useState<'claude' | 'claude-code'>(() => {
+    // Load last used provider from localStorage
+    const saved = localStorage.getItem('ai-last-provider');
+    return (saved === 'claude' || saved === 'claude-code') ? saved : 'claude-code';
+  });
   const isResizingRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const streamingEditIdRef = useRef<string | null>(null);
@@ -583,8 +590,14 @@ export function AIChat({
   }, []);
 
   // Session management handlers
-  const handleNewSession = useCallback(async () => {
+  const handleNewSession = useCallback(async (provider?: 'claude' | 'claude-code') => {
     try {
+      // Use provided provider or current provider
+      const sessionProvider = provider || currentProvider;
+      
+      // Update current provider to the one being created
+      setCurrentProvider(sessionProvider);
+      
       // Create a clean document context without functions for IPC
       const cleanDocumentContext = documentContext ? {
         filePath: documentContext.filePath,
@@ -594,15 +607,27 @@ export function AIChat({
         selection: documentContext.selection
       } : undefined;
       
-      const session = await claudeApi.createSession(cleanDocumentContext, projectPath);
+      const session = await claudeApi.createSession(cleanDocumentContext, projectPath, sessionProvider);
       setCurrentSessionId(session.id);
       setMessages([]);
       setInputValue(''); // Clear input for new session
       await loadSessions();
-    } catch (error) {
+      
+      // Store the last used provider preference
+      localStorage.setItem('ai-last-provider', sessionProvider);
+    } catch (error: any) {
       logger.log('session', 'Failed to create new session:', error);
+      
+      // Check if it's an API key error
+      if (error?.message?.includes('API key not configured') || 
+          error?.message?.includes('Anthropic API key not configured')) {
+        // Show API key error dialog
+        if (onShowApiKeyError) {
+          onShowApiKeyError();
+        }
+      }
     }
-  }, [documentContext, projectPath, loadSessions]);
+  }, [documentContext, projectPath, currentProvider, loadSessions]);
 
   const handleOpenSessionManager = useCallback(async () => {
     try {
@@ -653,6 +678,11 @@ export function AIChat({
       const session = await claudeApi.loadSession(sessionId, projectPath);
       setCurrentSessionId(session.id);
       
+      // Update provider based on session's provider
+      if (session.provider) {
+        setCurrentProvider(session.provider);
+      }
+      
       // Convert session messages to chat format, preserving streaming status
       const chatMessages = session.messages.map((msg: any) => ({
         role: msg.role,
@@ -670,7 +700,7 @@ export function AIChat({
     } catch (error) {
       logger.log('session', 'Failed to load session:', error);
     }
-  }, []);
+  }, [projectPath]);
 
   const handleDeleteSession = useCallback(async (sessionId: string) => {
     try {
@@ -749,7 +779,6 @@ export function AIChat({
       
       <ChatHeader 
         onToggleCollapse={onToggleCollapse} 
-        onNewSession={handleNewSession}
         onOpenSessionManager={handleOpenSessionManager}
       >
         <SessionDropdown
@@ -759,12 +788,18 @@ export function AIChat({
             timestamp: s.timestamp,
             name: s.name,
             title: s.title,
-            messageCount: s.messages?.length || 0
+            messageCount: s.messages?.length || 0,
+            provider: s.provider
           }))}
           onSessionSelect={handleSessionSelect}
-          onNewSession={handleNewSession}
+          onNewSession={() => handleNewSession()}
           onDeleteSession={handleDeleteSession}
           onRenameSession={handleRenameSession}
+        />
+        <NewSessionButton
+          currentProvider={currentProvider}
+          onNewSession={handleNewSession}
+          disabled={isLoading}
         />
       </ChatHeader>
       

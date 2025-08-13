@@ -16,7 +16,7 @@ import { registerHistoryHandlers } from './ipc/HistoryHandlers';
 import { registerSessionHandlers } from './ipc/SessionHandlers';
 import { registerPreferencesHandlers } from './ipc/PreferencesHandlers';
 import { getTheme } from './utils/store';
-import { ClaudeCodeSDKService } from './services/ClaudeCodeSDKService';
+import { AIService } from './services/ai/AIService';
 import { startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 
 // Track pending file to open
@@ -27,8 +27,8 @@ let pendingProjectPath: string | null = null;
 // Session save interval
 let sessionSaveInterval: NodeJS.Timeout | null = null;
 
-// Claude service instance
-let claudeService: ClaudeCodeSDKService | null = null;
+// AI service instance
+let aiService: AIService | null = null;
 
 // Initialize debug logging in development
 function initializeDebugLogging() {
@@ -167,8 +167,8 @@ app.whenReady().then(async () => {
     registerSessionManagerHandlers();
     setupProjectManagerHandlers();
     
-    // Initialize Claude service
-    claudeService = new ClaudeCodeSDKService();
+    // Initialize AI service
+    aiService = new AIService();
     
     // Start MCP SSE server
     try {
@@ -254,10 +254,10 @@ app.on('before-quit', () => {
         sessionSaveInterval = null;
     }
     
-    // Clean up Claude service
-    if (claudeService) {
-        claudeService.destroy();
-        claudeService = null;
+    // Clean up AI service
+    if (aiService) {
+        aiService.destroy();
+        aiService = null;
     }
     
     // Save session state

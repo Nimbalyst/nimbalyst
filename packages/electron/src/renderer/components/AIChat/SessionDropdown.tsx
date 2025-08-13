@@ -8,6 +8,7 @@ interface Session {
   name?: string;
   title?: string;
   messageCount?: number;
+  provider?: 'claude' | 'claude-code';
 }
 
 interface SessionDropdownProps {

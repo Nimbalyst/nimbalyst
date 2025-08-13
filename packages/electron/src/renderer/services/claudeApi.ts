@@ -32,6 +32,8 @@ interface Session {
   timestamp: number;
   messages: Message[];
   documentContext?: DocumentContext;
+  provider?: 'claude' | 'claude-code';
+  providerConfig?: any;
 }
 
 class ClaudeAPI {
@@ -41,9 +43,10 @@ class ClaudeAPI {
   private accumulatedContent: string = '';
   private streamStartDetected: boolean = false;
   private streamBuffer: string = ''; // Buffer for detecting split markers
+  private defaultProvider: 'claude' | 'claude-code' = 'claude-code';
 
   constructor() {
-    // Set up IPC listener for errors
+    // Set up IPC listener for errors (both legacy and new)
     window.electronAPI.onClaudeError((error: any) => {
       console.error('Claude API Error:', error);
       console.error('Error details:', {
@@ -56,8 +59,21 @@ class ClaudeAPI {
       this.emit('error', error);
     });
     
-    // Set up IPC listeners for streaming responses
-    window.electronAPI.onClaudeStreamResponse((data: any) => {
+    // Also listen for new AI error events
+    window.electronAPI.onAIError((error: any) => {
+      console.error('AI API Error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        type: error.type,
+        stack: error.stack
+      });
+      
+      // Emit error event so UI can handle it
+      this.emit('error', error);
+    });
+    
+    // Set up IPC listeners for streaming responses (both legacy and new)
+    const handleStreamResponse = (data: any) => {
       logger.log('api', 'Received stream response:', {
         hasPartial: !!data.partial,
         partialLength: data.partial?.length,
@@ -195,19 +211,78 @@ class ClaudeAPI {
       // Normal streaming response
       logger.log('api', 'Normal (non-streaming) response');
       this.emit('streamResponse', data);
-    });
+    };
 
+    // Listen for both legacy and new stream response events
+    window.electronAPI.onClaudeStreamResponse(handleStreamResponse);
+    window.electronAPI.onAIStreamResponse(handleStreamResponse);
+
+    // Listen for edit requests
     window.electronAPI.onClaudeEditRequest((edit: EditRequest) => {
       this.emit('editRequest', edit);
     });
+    
+    // Listen for new AI applyDiff events
+    window.electronAPI.onAIApplyDiff(async (data: { replacements: any[], resultChannel: string }) => {
+      try {
+        // Try to access the bridge if it's available on the window
+        const aiChatBridge = (window as any).aiChatBridge;
+        
+        if (aiChatBridge) {
+          const result = await aiChatBridge.applyReplacements(data.replacements);
+          // Send result back through the result channel
+          window.electronAPI.sendMcpApplyDiffResult(data.resultChannel, result);
+        } else {
+          // No bridge available, send error
+          window.electronAPI.sendMcpApplyDiffResult(data.resultChannel, {
+            success: false,
+            error: 'Editor bridge not available'
+          });
+        }
+      } catch (error) {
+        console.error('Failed to apply diff:', error);
+        window.electronAPI.sendMcpApplyDiffResult(data.resultChannel, {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to apply diff'
+        });
+      }
+    });
   }
 
-  async initialize(apiKey?: string): Promise<{ success: boolean }> {
+  // Provider management
+  setDefaultProvider(provider: 'claude' | 'claude-code') {
+    this.defaultProvider = provider;
+  }
+
+  getDefaultProvider(): 'claude' | 'claude-code' {
+    return this.defaultProvider;
+  }
+
+  // Initialize with optional provider selection
+  async initialize(apiKey?: string, provider?: 'claude' | 'claude-code'): Promise<{ success: boolean }> {
+    // Use new AI initialize for specific provider, or legacy for backward compat
+    if (provider) {
+      return window.electronAPI.aiInitialize(provider, apiKey);
+    }
     return window.electronAPI.claudeInitialize(apiKey);
   }
 
-  async createSession(documentContext?: DocumentContext, projectPath?: string): Promise<Session> {
+  // Create session with provider selection
+  async createSession(documentContext?: DocumentContext, projectPath?: string, provider?: 'claude' | 'claude-code'): Promise<Session> {
+    // Use new AI method if provider specified, otherwise use legacy
+    if (provider) {
+      return window.electronAPI.aiCreateSession(provider, documentContext, projectPath);
+    }
     return window.electronAPI.claudeCreateSession(documentContext, projectPath);
+  }
+
+  // New method specifically for creating session with provider
+  async createSessionWithProvider(
+    provider: 'claude' | 'claude-code',
+    documentContext?: DocumentContext,
+    projectPath?: string
+  ): Promise<Session> {
+    return window.electronAPI.aiCreateSession(provider, documentContext, projectPath);
   }
 
   async sendMessage(
@@ -294,6 +369,33 @@ class ClaudeAPI {
         }
       });
     }
+  }
+
+  // Settings management
+  async getSettings(): Promise<{
+    defaultProvider: 'claude' | 'claude-code';
+    apiKeys: Record<string, string>;
+    providerSettings: any;
+  }> {
+    return window.electronAPI.getAISettings();
+  }
+
+  async saveSettings(settings: {
+    defaultProvider?: 'claude' | 'claude-code';
+    apiKeys?: Record<string, string>;
+    providerSettings?: any;
+  }): Promise<{ success: boolean }> {
+    return window.electronAPI.saveAISettings(settings);
+  }
+
+  // Test connection for a specific provider
+  async testConnection(provider: 'claude' | 'claude-code'): Promise<{ success: boolean; error?: string }> {
+    return window.electronAPI.testAIConnection(provider);
+  }
+
+  // Get available models
+  async getModels(): Promise<{ success: boolean; models?: any[] }> {
+    return window.electronAPI.getAIModels();
   }
 }
 

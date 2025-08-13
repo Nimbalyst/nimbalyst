@@ -15,6 +15,7 @@ import { AIChat } from './components/AIChat';
 import { HistoryDialog } from './components/HistoryDialog';
 import { PreferencesDialog } from './components/Preferences/PreferencesDialog';
 import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
+import { ApiKeyDialog } from './components/ApiKeyDialog';
 import './ProjectWelcome.css';
 
 // File tree interface
@@ -116,6 +117,7 @@ export default function App() {
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
+  const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
   const [sessionToLoad, setSessionToLoad] = useState<{ sessionId: string; projectPath?: string } | null>(null);
   const [diffError, setDiffError] = useState<{ isOpen: boolean; title: string; message: string; details?: any }>({
     isOpen: false,
@@ -631,6 +633,14 @@ export default function App() {
     // Close the history dialog
     setIsHistoryDialogOpen(false);
   }, []);
+
+  // Sync current file path with backend whenever it changes
+  useEffect(() => {
+    if (window.electronAPI && currentFilePath !== null) {
+      console.log('[APP] Syncing current file path to backend:', currentFilePath);
+      window.electronAPI.setCurrentFile(currentFilePath);
+    }
+  }, [currentFilePath]);
 
   // Autosave functionality
   useEffect(() => {
@@ -1203,6 +1213,7 @@ export default function App() {
           projectPath={projectPath || undefined}
           sessionToLoad={sessionToLoad}
           onSessionLoaded={() => setSessionToLoad(null)}
+          onShowApiKeyError={() => setIsApiKeyDialogOpen(true)}
           documentContext={{
             filePath: currentFilePath || '',
             fileType: 'markdown',
@@ -1251,6 +1262,14 @@ export default function App() {
       <PreferencesDialog
         isOpen={isPreferencesOpen}
         onClose={() => setIsPreferencesOpen(false)}
+      />
+      <ApiKeyDialog
+        isOpen={isApiKeyDialogOpen}
+        onClose={() => setIsApiKeyDialogOpen(false)}
+        onOpenPreferences={() => {
+          setIsApiKeyDialogOpen(false);
+          setIsPreferencesOpen(true);
+        }}
       />
       <ErrorDialog
         isOpen={diffError.isOpen}

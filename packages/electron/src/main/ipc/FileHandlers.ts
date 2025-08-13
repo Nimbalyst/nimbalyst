@@ -52,11 +52,14 @@ export function registerFileHandlers() {
         const state = windowStates.get(windowId);
         const filePath = state?.filePath;
         
-        console.log('[SAVE] save-file handler called, filePath:', filePath, 'window:', windowId);
+        console.log('[SAVE] save-file handler called');
+        console.log('[SAVE] Window ID:', windowId);
+        console.log('[SAVE] Window state:', state);
+        console.log('[SAVE] File path from state:', filePath);
         
         try {
             if (!filePath) {
-                console.log('[SAVE] No current file path for this window');
+                console.log('[SAVE] No current file path for this window - state exists:', !!state);
                 return null;
             }
             

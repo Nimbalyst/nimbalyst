@@ -207,32 +207,72 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('session:create-checkpoint', sessionId, state),
   },
 
-  // Claude AI operations
-  claudeInitialize: (apiKey?: string) => ipcRenderer.invoke('claude:initialize', apiKey),
-  claudeCreateSession: (documentContext?: any, projectPath?: string) => ipcRenderer.invoke('claude:createSession', documentContext, projectPath),
-  claudeSendMessage: (message: string, documentContext?: any, sessionId?: string, projectPath?: string) => ipcRenderer.invoke('claude:sendMessage', message, documentContext, sessionId, projectPath),
-  claudeGetSessions: (projectPath?: string) => ipcRenderer.invoke('claude:getSessions', projectPath),
-  claudeLoadSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('claude:loadSession', sessionId, projectPath),
-  claudeClearSession: () => ipcRenderer.invoke('claude:clearSession'),
-  claudeUpdateSessionMessages: (sessionId: string, messages: any[], projectPath?: string) => ipcRenderer.invoke('claude:updateSessionMessages', sessionId, messages, projectPath),
-  claudeSaveDraftInput: (sessionId: string, draftInput: string, projectPath?: string) => ipcRenderer.invoke('claude:saveDraftInput', sessionId, draftInput, projectPath),
-  claudeDeleteSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('claude:deleteSession', sessionId, projectPath),
-  claudeApplyEdit: (edit: any) => ipcRenderer.invoke('claude:applyEdit', edit),
-  getClaudeSettings: () => ipcRenderer.invoke('claude:getSettings'),
-  saveClaudeSettings: (settings: any) => ipcRenderer.invoke('claude:saveSettings', settings),
-  testClaudeConnection: () => ipcRenderer.invoke('claude:testConnection'),
-  getClaudeModels: () => ipcRenderer.invoke('claude:getModels'),
+  // AI operations (new unified interface)
+  aiInitialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
+  aiCreateSession: (provider: 'claude' | 'claude-code', documentContext?: any, projectPath?: string) => 
+    ipcRenderer.invoke('ai:createSession', provider, documentContext, projectPath),
+  aiSendMessage: (message: string, documentContext?: any, sessionId?: string, projectPath?: string) => 
+    ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, projectPath),
+  aiGetSessions: (projectPath?: string) => ipcRenderer.invoke('ai:getSessions', projectPath),
+  aiLoadSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:loadSession', sessionId, projectPath),
+  aiClearSession: () => ipcRenderer.invoke('ai:clearSession'),
+  aiUpdateSessionMessages: (sessionId: string, messages: any[], projectPath?: string) => 
+    ipcRenderer.invoke('ai:updateSessionMessages', sessionId, messages, projectPath),
+  aiSaveDraftInput: (sessionId: string, draftInput: string, projectPath?: string) => 
+    ipcRenderer.invoke('ai:saveDraftInput', sessionId, draftInput, projectPath),
+  aiDeleteSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:deleteSession', sessionId, projectPath),
+  getAISettings: () => ipcRenderer.invoke('ai:getSettings'),
+  saveAISettings: (settings: any) => ipcRenderer.invoke('ai:saveSettings', settings),
+  testAIConnection: (provider: 'claude' | 'claude-code') => ipcRenderer.invoke('ai:testConnection', provider),
+  getAIModels: () => ipcRenderer.invoke('ai:getModels'),
   
-  // Claude AI event listeners
+  // AI event listeners (new)
+  onAIStreamResponse: (callback: (data: any) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('ai:streamResponse', handler);
+    return () => ipcRenderer.removeListener('ai:streamResponse', handler);
+  },
+  onAIError: (callback: (error: any) => void) => {
+    const handler = (_event: any, error: any) => callback(error);
+    ipcRenderer.on('ai:error', handler);
+    return () => ipcRenderer.removeListener('ai:error', handler);
+  },
+  onAIApplyDiff: (callback: (data: { replacements: any[], resultChannel: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('ai:applyDiff', handler);
+    return () => ipcRenderer.removeListener('ai:applyDiff', handler);
+  },
+  
+  // Legacy Claude AI operations (for backward compatibility)
+  claudeInitialize: (apiKey?: string) => ipcRenderer.invoke('ai:initialize', 'claude-code', apiKey),
+  claudeCreateSession: (documentContext?: any, projectPath?: string) => 
+    ipcRenderer.invoke('ai:createSession', 'claude-code', documentContext, projectPath),
+  claudeSendMessage: (message: string, documentContext?: any, sessionId?: string, projectPath?: string) => 
+    ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, projectPath),
+  claudeGetSessions: (projectPath?: string) => ipcRenderer.invoke('ai:getSessions', projectPath),
+  claudeLoadSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:loadSession', sessionId, projectPath),
+  claudeClearSession: () => ipcRenderer.invoke('ai:clearSession'),
+  claudeUpdateSessionMessages: (sessionId: string, messages: any[], projectPath?: string) => 
+    ipcRenderer.invoke('ai:updateSessionMessages', sessionId, messages, projectPath),
+  claudeSaveDraftInput: (sessionId: string, draftInput: string, projectPath?: string) => 
+    ipcRenderer.invoke('ai:saveDraftInput', sessionId, draftInput, projectPath),
+  claudeDeleteSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:deleteSession', sessionId, projectPath),
+  claudeApplyEdit: (edit: any) => ipcRenderer.invoke('claude:applyEdit', edit),
+  getClaudeSettings: () => ipcRenderer.invoke('ai:getSettings'),
+  saveClaudeSettings: (settings: any) => ipcRenderer.invoke('ai:saveSettings', settings),
+  testClaudeConnection: () => ipcRenderer.invoke('ai:testConnection', 'claude-code'),
+  getClaudeModels: () => ipcRenderer.invoke('ai:getModels'),
+  
+  // Legacy Claude AI event listeners (redirect to new AI events)
   onClaudeStreamResponse: (callback: (data: any) => void) => {
     const handler = (_event: any, data: any) => callback(data);
-    ipcRenderer.on('claude:streamResponse', handler);
-    return () => ipcRenderer.removeListener('claude:streamResponse', handler);
+    ipcRenderer.on('ai:streamResponse', handler);
+    return () => ipcRenderer.removeListener('ai:streamResponse', handler);
   },
   onClaudeError: (callback: (error: any) => void) => {
     const handler = (_event: any, error: any) => callback(error);
-    ipcRenderer.on('claude:error', handler);
-    return () => ipcRenderer.removeListener('claude:error', handler);
+    ipcRenderer.on('ai:error', handler);
+    return () => ipcRenderer.removeListener('ai:error', handler);
   },
   onClaudeEditRequest: (callback: (edit: any) => void) => {
     const handler = (_event: any, edit: any) => callback(edit);

@@ -140,6 +140,29 @@
       max-width: 150px;
     }
 
+    /* Provider badges */
+    .session-item-provider,
+    .provider-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .provider-claude {
+      background: #e0f2fe;
+      color: #075985;
+    }
+
+    .provider-claude-code {
+      background: #dcfce7;
+      color: #166534;
+    }
+
     /* Right content area */
     .content {
       flex: 1;
@@ -361,6 +384,16 @@
 
       .session-item-meta {
         color: #9ca3af;
+      }
+
+      .provider-claude {
+        background: #1e3a8a;
+        color: #93c5fd;
+      }
+
+      .provider-claude-code {
+        background: #14532d;
+        color: #86efac;
       }
 
       .content {

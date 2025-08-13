@@ -37,6 +37,8 @@ export function registerWindowHandlers() {
 
         const windowId = window.id;
         const state = windowStates.get(windowId);
+        console.log('[SET_FILE] Updating file path for window', windowId, 'from', state?.filePath, 'to', filePath);
+        
         if (state) {
             // Stop watching the old file
             if (state.filePath && state.filePath !== filePath) {
@@ -45,6 +47,7 @@ export function registerWindowHandlers() {
             }
 
             state.filePath = filePath;
+            console.log('[SET_FILE] Window state after update:', { windowId, filePath: state.filePath });
 
             // Update menu to reflect new file
             updateApplicationMenu();
@@ -54,6 +57,8 @@ export function registerWindowHandlers() {
                 console.log('[SET_FILE] Starting watcher for new file:', filePath);
                 startFileWatcher(window, filePath);
             }
+        } else {
+            console.log('[SET_FILE] WARNING: No window state found for window', windowId);
         }
         console.log('[SET_FILE] Current file path updated from renderer:', filePath);
     });

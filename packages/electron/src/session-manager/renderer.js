@@ -123,11 +123,15 @@ function renderSessionsList() {
     const date = formatDate(session.timestamp);
     const messageCount = session.messages ? session.messages.length : 0;
     const isSelected = selectedSession && selectedSession.id === session.id;
+    const provider = session.provider || 'claude-code';
+    const providerLabel = provider === 'claude' ? 'SDK' : 'Code';
     
     return `
       <div class="session-item ${isSelected ? 'selected' : ''}" data-session-id="${session.id}">
         <div class="session-item-title">${escapeHtml(title)}</div>
         <div class="session-item-meta">
+          <span class="session-item-provider provider-${provider}">${providerLabel}</span>
+          <span>•</span>
           <span class="session-item-project">${escapeHtml(projectName)}</span>
           <span>•</span>
           <span>${messageCount} messages</span>
@@ -174,6 +178,8 @@ function renderSessionContent(session) {
   const projectName = getProjectName(session.projectPath);
   const date = formatDate(session.timestamp);
   const messageCount = session.messages ? session.messages.length : 0;
+  const provider = session.provider || 'claude-code';
+  const providerLabel = provider === 'claude' ? 'Claude SDK' : 'Claude Code';
   
   let messagesHtml = '';
   if (session.messages && session.messages.length > 0) {
@@ -197,6 +203,8 @@ function renderSessionContent(session) {
     <div class="content-header">
       <div class="content-title">${escapeHtml(title)}</div>
       <div class="content-meta">
+        <span class="provider-badge provider-${provider}">${providerLabel}</span>
+        <span>•</span>
         <span>${escapeHtml(projectName)}</span>
         <span>•</span>
         <span>${messageCount} messages</span>
