@@ -15,6 +15,9 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "build:dist": "npm run build && electron-builder",
     "build:mac": "npm run build && electron-builder --mac",
+    "build:mac:signed": "npm run build && electron-builder --mac",
+    "build:mac:notarized": "npm run build && REQUIRE_NOTARIZE=true electron-builder --mac",
+    "build:mac:local": "npm run build && SKIP_NOTARIZE=true electron-builder --mac",
     "build:win": "npm run build && electron-builder --win",
     "build:linux": "npm run build && electron-builder --linux"
   },
@@ -32,6 +35,7 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "@electron/notarize": "^2.3.2",
     "@types/node": "^20.0.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
@@ -51,7 +55,8 @@
       "output": "release"
     },
     "files": [
-      "out/**/*"
+      "out/**/*",
+      "icon.png"
     ],
     "fileAssociations": [
       {
@@ -72,6 +77,14 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "icon.png",
+      "identity": "Developer ID Application",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "signIgnore": [
+        "node_modules/.*"
+      ],
       "fileAssociations": [
         {
           "ext": "md",
@@ -85,6 +98,7 @@
         }
       ]
     },
+    "afterSign": "build/notarize.js",
     "win": {
       "target": "nsis"
     },

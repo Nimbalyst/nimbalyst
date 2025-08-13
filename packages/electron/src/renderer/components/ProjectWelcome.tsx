@@ -4,12 +4,30 @@ interface ProjectWelcomeProps {
   projectName: string;
 }
 
+// Try to import the icon if it exists in the build
+let iconUrl: string | undefined;
+try {
+  iconUrl = new URL('/icon.png', import.meta.url).href;
+} catch {
+  // Icon not available in this build
+  iconUrl = undefined;
+}
+
 export function ProjectWelcome({ projectName }: ProjectWelcomeProps) {
   return (
     <div className="project-welcome">
       <div className="project-welcome-content">
         <div className="project-welcome-icon">
-          <img src="../../../icon.png" alt="Stravu Editor" />
+          {iconUrl && (
+            <img 
+              src={iconUrl} 
+              alt="Stravu Editor" 
+              onError={(e) => {
+                // Hide the image if it fails to load
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          )}
         </div>
         <h1 className="project-welcome-title">{projectName}</h1>
         <p className="project-welcome-text">

@@ -37,11 +37,14 @@ export function createSessionManagerWindow(filterProject?: string) {
   });
 
   // Load the HTML file
-  if (process.env.NODE_ENV === 'development') {
-    sessionManagerWindow.loadFile(join(__dirname, '../../src/session-manager/index.html'));
-  } else {
-    sessionManagerWindow.loadFile(join(__dirname, '../session-manager/index.html'));
-  }
+  // Use loadURL with file protocol to handle App Translocation properly
+  const htmlPath = process.env.NODE_ENV === 'development'
+    ? join(__dirname, '../../src/session-manager/index.html')
+    : join(__dirname, '../session-manager/index.html');
+  
+  // Use pathToFileURL to create proper file URL that works with App Translocation
+  const { pathToFileURL } = require('url');
+  sessionManagerWindow.loadURL(pathToFileURL(htmlPath).href);
 
   // Show window when ready
   sessionManagerWindow.once('ready-to-show', () => {

@@ -235,7 +235,10 @@ export function createWindow(
             window.loadURL('http://localhost:5273');
         } else {
             console.log('[MAIN] Loading from built files');
-            window.loadFile(join(__dirname, '../renderer/index.html'));
+            // Use loadURL with file protocol to handle App Translocation properly
+            const htmlPath = join(__dirname, '../renderer/index.html');
+            const { pathToFileURL } = require('url');
+            window.loadURL(pathToFileURL(htmlPath).href);
         }
 
         // Show window when ready
