@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, KeyboardEvent } from 'react';
+import React, { useRef, useEffect, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
 
 interface ChatInputProps {
   value: string;
@@ -9,8 +9,12 @@ interface ChatInputProps {
   placeholder?: string;
 }
 
-export function ChatInput({ value, onChange, onSend, onNavigateHistory, disabled, placeholder = "Ask a question..." }: ChatInputProps) {
+export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
+  ({ value, onChange, onSend, onNavigateHistory, disabled, placeholder = "Ask a question..." }, ref) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Expose the textarea element through the ref
+  useImperativeHandle(ref, () => textareaRef.current!);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -96,4 +100,6 @@ export function ChatInput({ value, onChange, onSend, onNavigateHistory, disabled
       </button>
     </div>
   );
-}
+});
+
+ChatInput.displayName = 'ChatInput';

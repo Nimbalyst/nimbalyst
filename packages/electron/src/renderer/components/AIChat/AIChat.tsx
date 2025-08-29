@@ -72,6 +72,7 @@ export function AIChat({
   const streamingEditIdRef = useRef<string | null>(null);
   const isStreamingToEditorRef = useRef(false);
   const streamTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Load sessions on mount
   const loadSessions = useCallback(async () => {
@@ -629,6 +630,11 @@ export function AIChat({
       
       // Store the last used provider preference
       localStorage.setItem('ai-last-provider', sessionProvider);
+      
+      // Focus the input field after creating new session
+      setTimeout(() => {
+        chatInputRef.current?.focus();
+      }, 100);
     } catch (error: any) {
       logger.log('session', 'Failed to create new session:', error);
       
@@ -641,7 +647,7 @@ export function AIChat({
         }
       }
     }
-  }, [documentContext, projectPath, currentProvider, loadSessions]);
+  }, [documentContext, projectPath, currentProvider, loadSessions, onShowApiKeyError]);
 
   const handleOpenSessionManager = useCallback(async () => {
     try {
@@ -711,6 +717,11 @@ export function AIChat({
       
       // Restore draft input for this session
       setInputValue(session.draftInput || '');
+      
+      // Focus the input field after loading session
+      setTimeout(() => {
+        chatInputRef.current?.focus();
+      }, 100);
     } catch (error) {
       logger.log('session', 'Failed to load session:', error);
     }
@@ -834,6 +845,7 @@ export function AIChat({
           />
           
           <ChatInput 
+            ref={chatInputRef}
             value={inputValue}
             onChange={setInputValue}
             onSend={handleSendMessage}
