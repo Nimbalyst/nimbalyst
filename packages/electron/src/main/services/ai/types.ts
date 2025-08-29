@@ -14,9 +14,23 @@ export interface DocumentContext {
 }
 
 export interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool';
   content: string;
   timestamp: number;
+  // Additional fields for rich message types
+  edits?: any[];
+  toolCall?: {
+    name: string;
+    arguments?: any;
+    result?: any;
+  };
+  isStreamingStatus?: boolean;
+  streamingData?: {
+    position: string;
+    mode: string;
+    content: string;
+    isActive: boolean;
+  };
 }
 
 export interface SessionData {

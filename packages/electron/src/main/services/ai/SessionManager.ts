@@ -73,10 +73,16 @@ export class SessionManager {
     
     if (session) {
       // Clean up any empty messages that might have been saved before the fix
+      // BUT keep tool messages that have toolCall data
       const originalMessageCount = session.messages.length;
-      session.messages = session.messages.filter(msg => 
-        msg.content && msg.content.trim() !== ''
-      );
+      session.messages = session.messages.filter(msg => {
+        // Keep messages with content
+        if (msg.content && msg.content.trim() !== '') return true;
+        // Also keep tool messages with toolCall data
+        if (msg.role === 'tool' && msg.toolCall) return true;
+        // Filter out truly empty messages
+        return false;
+      });
       
       if (session.messages.length < originalMessageCount) {
         console.log(`[SessionManager] Cleaned ${originalMessageCount - session.messages.length} empty messages from session ${sessionId}`);
@@ -124,9 +130,10 @@ export class SessionManager {
       throw new Error('No session loaded');
     }
 
-    // Validate message content
-    if (!message.content || message.content.trim() === '') {
-      console.warn('Attempted to add message with empty content, skipping:', message);
+    // Validate message content - but allow tool messages with toolCall data
+    if ((!message.content || message.content.trim() === '') && 
+        !(message.role === 'tool' && message.toolCall)) {
+      console.warn('Attempted to add message with empty content and no toolCall, skipping:', message);
       return;
     }
 
@@ -285,9 +292,14 @@ export class SessionManager {
       const sessions = sessionsByProject[project];
       for (const session of sessions) {
         const originalCount = session.messages.length;
-        session.messages = session.messages.filter(msg => 
-          msg.content && msg.content.trim() !== ''
-        );
+        session.messages = session.messages.filter(msg => {
+          // Keep messages with content
+          if (msg.content && msg.content.trim() !== '') return true;
+          // Also keep tool messages with toolCall data
+          if (msg.role === 'tool' && msg.toolCall) return true;
+          // Filter out truly empty messages
+          return false;
+        });
         
         const cleaned = originalCount - session.messages.length;
         if (cleaned > 0) {

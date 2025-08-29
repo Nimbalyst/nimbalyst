@@ -192,6 +192,8 @@ export class AIService {
       try {
         let fullResponse = '';
         const toolCalls: any[] = [];
+        const edits: any[] = [];  // Track edits for the assistant message
+        let hasStreamingContent = false;  // Track if we used streamContent tool
 
         // Get existing messages from session for context
         const sessionMessages = session.messages || [];
@@ -212,17 +214,33 @@ export class AIService {
               if (chunk.toolCall) {
                 toolCalls.push(chunk.toolCall);
                 
+                // Save tool call as a separate message in the session
+                const toolMessage: Message = {
+                  role: 'tool',
+                  content: '',  // Tool messages don't have text content
+                  timestamp: Date.now(),
+                  toolCall: chunk.toolCall
+                };
+                this.sessionManager.addMessage(toolMessage);
+                
                 // Send tool call to renderer
-                // For applyDiff, include it as an edit
+                // For applyDiff, include it as BOTH an edit AND a toolCall
                 if (chunk.toolCall.name === 'applyDiff') {
+                  const edit = {
+                    type: 'diff',
+                    replacements: chunk.toolCall.arguments.replacements
+                  };
+                  edits.push(edit);  // Save edit for the assistant message
+                  
                   event.sender.send('ai:streamResponse', {
                     partial: '',
                     isComplete: false,
-                    edits: [{
-                      type: 'diff',
-                      replacements: chunk.toolCall.arguments.replacements
-                    }]
+                    edits: [edit],
+                    toolCalls: [chunk.toolCall]  // Also send as toolCall so it displays in chat
                   });
+                } else if (chunk.toolCall.name === 'streamContent') {
+                  // Mark that we used streamContent - we'll handle this specially
+                  hasStreamingContent = true;
                 } else {
                   // For other tools, just send the tool call
                   event.sender.send('ai:streamResponse', {
@@ -238,6 +256,7 @@ export class AIService {
               // Forward streaming edit start event to renderer
               console.log('[AIService] Forwarding stream_edit_start to renderer:', chunk.config);
               event.sender.send('ai:streamEditStart', chunk.config);
+              hasStreamingContent = true;  // Mark that we're doing streaming
               break;
 
             case 'stream_edit_content':
@@ -260,16 +279,41 @@ export class AIService {
               break;
 
             case 'complete':
-              // Only add assistant message if there's actual content
+              // Only add assistant message if there's actual content or edits
               if (fullResponse && fullResponse.trim() !== '') {
                 const assistantMessage: Message = {
                   role: 'assistant',
                   content: fullResponse,
-                  timestamp: Date.now()
+                  timestamp: Date.now(),
+                  ...(edits.length > 0 && { edits })  // Include edits if any
+                };
+                this.sessionManager.addMessage(assistantMessage);
+              } else if (edits.length > 0) {
+                // If there were edits but no text response
+                const assistantMessage: Message = {
+                  role: 'assistant',
+                  content: '',  // Empty content since the action was just edits
+                  timestamp: Date.now(),
+                  edits
+                };
+                this.sessionManager.addMessage(assistantMessage);
+              } else if (hasStreamingContent) {
+                // If we used streamContent, add a message to track it
+                const assistantMessage: Message = {
+                  role: 'assistant',
+                  content: '',  // Content was streamed directly to editor
+                  timestamp: Date.now(),
+                  isStreamingStatus: true,
+                  streamingData: {
+                    position: 'document',
+                    mode: 'after',
+                    content: '[Content streamed to editor]',
+                    isActive: false
+                  }
                 };
                 this.sessionManager.addMessage(assistantMessage);
               } else if (toolCalls.length > 0) {
-                // If there were only tool calls and no text, create a minimal message
+                // If there were only other tool calls and no text
                 const assistantMessage: Message = {
                   role: 'assistant',
                   content: '[Tool calls executed]',

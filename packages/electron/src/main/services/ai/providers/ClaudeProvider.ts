@@ -395,7 +395,7 @@ Tool Usage Guidelines:
 Current document context:
 - File: ${documentContext?.filePath || 'untitled'}
 - Type: ${documentContext?.fileType || 'markdown'}
-${documentContext?.content ? `- Content preview: ${documentContext.content.substring(0, 200)}...` : ''}
+${documentContext?.content ? `- Full document content:\n${documentContext.content}` : ''}
 
 CRITICAL RESPONSE RULES - YOU MUST FOLLOW THESE:
 1. When editing documents, your ENTIRE response should be 1 short sentence MAX
