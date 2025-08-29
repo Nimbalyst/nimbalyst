@@ -298,16 +298,17 @@ export class ClaudeProvider extends BaseAIProvider {
                 isStreamingContent = false;
                 streamContentBuffer = '';
                 streamConfig = null;
+              } else {
+                // Only emit tool call event for non-streaming tools
+                // streamContent is handled entirely through streaming events
+                yield {
+                  type: 'tool_call',
+                  toolCall: {
+                    name: currentToolUse.name,
+                    arguments: currentToolUse.input
+                  }
+                };
               }
-              
-              // Emit tool call event
-              yield {
-                type: 'tool_call',
-                toolCall: {
-                  name: currentToolUse.name,
-                  arguments: currentToolUse.input
-                }
-              };
 
               // If it's an applyDiff tool and we have a handler, execute it
               if (currentToolUse.name === 'applyDiff' && this.toolHandler) {
