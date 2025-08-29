@@ -72,6 +72,22 @@ class ClaudeAPI {
       this.emit('error', error);
     });
     
+    // Set up IPC listeners for streaming edit events from AI service
+    window.electronAPI.onAIStreamEditStart((config: any) => {
+      logger.log('streaming', '🚀 Stream edit started from AI service:', config);
+      this.emit('streamEditStart', config);
+    });
+
+    window.electronAPI.onAIStreamEditContent((content: string) => {
+      logger.log('streaming', 'Stream edit content from AI service:', content.substring(0, 50));
+      this.emit('streamEditContent', content);
+    });
+
+    window.electronAPI.onAIStreamEditEnd((data: any) => {
+      logger.log('streaming', '🏁 Stream edit ended from AI service:', data);
+      this.emit('streamEditEnd', data);
+    });
+
     // Set up IPC listeners for streaming responses (both legacy and new)
     const handleStreamResponse = (data: any) => {
       logger.log('api', 'Received stream response:', {

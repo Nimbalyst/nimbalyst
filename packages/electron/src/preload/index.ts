@@ -242,6 +242,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('ai:applyDiff', handler);
     return () => ipcRenderer.removeListener('ai:applyDiff', handler);
   },
+  onAIStreamEditStart: (callback: (config: any) => void) => {
+    const handler = (_event: any, config: any) => callback(config);
+    ipcRenderer.on('ai:streamEditStart', handler);
+    return () => ipcRenderer.removeListener('ai:streamEditStart', handler);
+  },
+  onAIStreamEditContent: (callback: (content: string) => void) => {
+    const handler = (_event: any, content: string) => callback(content);
+    ipcRenderer.on('ai:streamEditContent', handler);
+    return () => ipcRenderer.removeListener('ai:streamEditContent', handler);
+  },
+  onAIStreamEditEnd: (callback: (data: any) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('ai:streamEditEnd', handler);
+    return () => ipcRenderer.removeListener('ai:streamEditEnd', handler);
+  },
   
   // Legacy Claude AI operations (for backward compatibility)
   claudeInitialize: (apiKey?: string) => ipcRenderer.invoke('ai:initialize', 'claude-code', apiKey),

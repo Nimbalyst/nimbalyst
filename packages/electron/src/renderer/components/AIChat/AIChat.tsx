@@ -162,16 +162,30 @@ export function AIChat({
         
         // Handle tool calls that come during streaming
         if (data.toolCalls && data.toolCalls.length > 0) {
-          // For now, just show all tool calls as tool messages
-          // We'll handle applyDiff specially when it's actually applied through the MCP handler
+          // Track tool calls to avoid duplicates
           setMessages(prev => {
             const newMessages = [...prev];
+            
+            // Create a set of existing tool call signatures for deduplication
+            const existingToolCalls = new Set(
+              newMessages
+                .filter(m => m.role === 'tool' && m.toolCall)
+                .map(m => `${m.toolCall?.name}-${JSON.stringify(m.toolCall?.arguments)}`)
+            );
+            
             for (const toolCall of data.toolCalls) {
-              newMessages.push({
-                role: 'tool',
-                content: '', // Tool messages don't have text content
-                toolCall: toolCall
-              });
+              // Create a unique signature for this tool call
+              const signature = `${toolCall.name}-${JSON.stringify(toolCall.arguments)}`;
+              
+              // Only add if we haven't seen this exact tool call before
+              if (!existingToolCalls.has(signature)) {
+                newMessages.push({
+                  role: 'tool',
+                  content: '', // Tool messages don't have text content
+                  toolCall: toolCall
+                });
+                existingToolCalls.add(signature);
+              }
             }
             return newMessages;
           });

@@ -54,7 +54,7 @@ export interface ProviderCapabilities {
 }
 
 export interface StreamChunk {
-  type: 'text' | 'tool_call' | 'error' | 'complete';
+  type: 'text' | 'tool_call' | 'error' | 'complete' | 'stream_edit_start' | 'stream_edit_content' | 'stream_edit_end';
   content?: string;
   toolCall?: {
     name: string;
@@ -63,6 +63,7 @@ export interface StreamChunk {
   };
   error?: string;
   isComplete?: boolean;
+  config?: any; // For stream_edit_start
 }
 
 export interface DiffArgs {

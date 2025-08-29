@@ -44,6 +44,12 @@ export class AIService {
 
     this.initializeApiKeys();
     this.setupIpcHandlers();
+    
+    // Clean up any empty messages from existing sessions on startup
+    const cleaned = this.sessionManager.cleanupAllSessions();
+    if (cleaned > 0) {
+      console.log(`[AIService] Cleaned ${cleaned} empty messages from existing sessions on startup`);
+    }
   }
 
   private initializeApiKeys() {
@@ -228,6 +234,24 @@ export class AIService {
               }
               break;
 
+            case 'stream_edit_start':
+              // Forward streaming edit start event to renderer
+              console.log('[AIService] Forwarding stream_edit_start to renderer:', chunk.config);
+              event.sender.send('ai:streamEditStart', chunk.config);
+              break;
+
+            case 'stream_edit_content':
+              // Forward streaming content to renderer
+              console.log('[AIService] Forwarding stream_edit_content to renderer:', chunk.content?.substring(0, 50));
+              event.sender.send('ai:streamEditContent', chunk.content);
+              break;
+
+            case 'stream_edit_end':
+              // Forward streaming end event to renderer
+              console.log('[AIService] Forwarding stream_edit_end to renderer');
+              event.sender.send('ai:streamEditEnd', chunk.error ? { error: chunk.error } : {});
+              break;
+
             case 'error':
               console.error('Provider error:', chunk.error);
               event.sender.send('ai:error', {
@@ -236,13 +260,23 @@ export class AIService {
               break;
 
             case 'complete':
-              // Add assistant message to session
-              const assistantMessage: Message = {
-                role: 'assistant',
-                content: fullResponse,
-                timestamp: Date.now()
-              };
-              this.sessionManager.addMessage(assistantMessage);
+              // Only add assistant message if there's actual content
+              if (fullResponse && fullResponse.trim() !== '') {
+                const assistantMessage: Message = {
+                  role: 'assistant',
+                  content: fullResponse,
+                  timestamp: Date.now()
+                };
+                this.sessionManager.addMessage(assistantMessage);
+              } else if (toolCalls.length > 0) {
+                // If there were only tool calls and no text, create a minimal message
+                const assistantMessage: Message = {
+                  role: 'assistant',
+                  content: '[Tool calls executed]',
+                  timestamp: Date.now()
+                };
+                this.sessionManager.addMessage(assistantMessage);
+              }
 
               // Update provider session data if available
               if (provider.getProviderSessionData) {
@@ -320,6 +354,13 @@ export class AIService {
     ) => {
       const success = this.sessionManager.saveDraftInput(sessionId, draftInput, projectPath);
       return { success };
+    });
+
+    // Clean up empty messages from all sessions
+    ipcMain.handle('ai:cleanupEmptyMessages', async () => {
+      const cleaned = this.sessionManager.cleanupAllSessions();
+      console.log(`[AIService] Manual cleanup: removed ${cleaned} empty messages`);
+      return { success: true, cleaned };
     });
 
     // Delete session

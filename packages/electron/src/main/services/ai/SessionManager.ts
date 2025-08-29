@@ -72,6 +72,18 @@ export class SessionManager {
     const session = sessions.find(s => s.id === sessionId);
     
     if (session) {
+      // Clean up any empty messages that might have been saved before the fix
+      const originalMessageCount = session.messages.length;
+      session.messages = session.messages.filter(msg => 
+        msg.content && msg.content.trim() !== ''
+      );
+      
+      if (session.messages.length < originalMessageCount) {
+        console.log(`[SessionManager] Cleaned ${originalMessageCount - session.messages.length} empty messages from session ${sessionId}`);
+        // Save the cleaned session
+        this.saveSession(session);
+      }
+      
       this.currentSession = session;
       this.currentProjectPath = project;
 
@@ -110,6 +122,12 @@ export class SessionManager {
   addMessage(message: Message): void {
     if (!this.currentSession) {
       throw new Error('No session loaded');
+    }
+
+    // Validate message content
+    if (!message.content || message.content.trim() === '') {
+      console.warn('Attempted to add message with empty content, skipping:', message);
+      return;
     }
 
     this.currentSession.messages.push(message);
@@ -254,6 +272,37 @@ export class SessionManager {
     
     sessionsByProject[project] = sessions;
     this.store.set('sessionsByProject', sessionsByProject);
+  }
+
+  /**
+   * Clean up empty messages from all sessions
+   */
+  cleanupAllSessions(): number {
+    const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+    let totalCleaned = 0;
+    
+    for (const project in sessionsByProject) {
+      const sessions = sessionsByProject[project];
+      for (const session of sessions) {
+        const originalCount = session.messages.length;
+        session.messages = session.messages.filter(msg => 
+          msg.content && msg.content.trim() !== ''
+        );
+        
+        const cleaned = originalCount - session.messages.length;
+        if (cleaned > 0) {
+          totalCleaned += cleaned;
+          console.log(`[SessionManager] Cleaned ${cleaned} empty messages from session ${session.id} in project ${project}`);
+        }
+      }
+    }
+    
+    if (totalCleaned > 0) {
+      this.store.set('sessionsByProject', sessionsByProject);
+      console.log(`[SessionManager] Total cleaned: ${totalCleaned} empty messages across all sessions`);
+    }
+    
+    return totalCleaned;
   }
 
   /**

@@ -4,7 +4,7 @@
   align-items: center;
   border: 1px solid var(--border-color, #e0e0e0);
   border-radius: 6px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .new-session-button-main {

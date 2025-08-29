@@ -8,6 +8,12 @@ import type { LexicalCommand, ConfigTheme, TextReplacement } from 'stravu-editor
 // Import styles - handled by vite plugin for both dev and prod
 import 'stravu-editor/styles';
 logger.log('ui', 'StravuEditor imported at', new Date().toISOString());
+
+// Ensure aiChatBridge is available globally
+if (typeof window !== 'undefined' && !window.aiChatBridge) {
+  (window as any).aiChatBridge = aiChatBridge;
+  logger.log('ui', 'Set window.aiChatBridge manually');
+}
 import { ProjectSidebar } from './components/ProjectSidebar';
 import { ProjectWelcome } from './components/ProjectWelcome';
 import { QuickOpen } from './components/QuickOpen';
