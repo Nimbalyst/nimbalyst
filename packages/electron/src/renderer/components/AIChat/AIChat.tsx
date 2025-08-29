@@ -51,7 +51,6 @@ export function AIChat({
   }>>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [currentStreamContent, setCurrentStreamContent] = useState('');
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [isStreamingToEditor, setIsStreamingToEditor] = useState(false);
@@ -93,19 +92,30 @@ export function AIChat({
         // Final response with edits
         setMessages(prev => {
           const newMessages = [...prev];
-          if (newMessages.length > 0 && newMessages[newMessages.length - 1].role === 'assistant') {
-            newMessages[newMessages.length - 1].content = data.content;
-            newMessages[newMessages.length - 1].edits = data.edits;
+          
+          // Check if we have an existing assistant message (might have been created during streaming)
+          const lastMessage = newMessages.length > 0 ? newMessages[newMessages.length - 1] : null;
+          const hasAssistantMessage = lastMessage && lastMessage.role === 'assistant';
+          
+          if (hasAssistantMessage) {
+            // Keep existing content if no new content provided (preserves streaming text like "Adding haiku")
+            if (!lastMessage.content && data.content) {
+              lastMessage.content = data.content;
+            }
+            // Only add edits if they don't already exist
+            if (data.edits && !lastMessage.edits) {
+              lastMessage.edits = data.edits;
+            }
           } else {
+            // Create new assistant message
             newMessages.push({ 
               role: 'assistant', 
-              content: data.content,
+              content: data.content || '',
               edits: data.edits
             });
           }
           return newMessages;
         });
-        setCurrentStreamContent('');
         setIsLoading(false);
         
         // Auto-apply edits when they arrive
@@ -144,18 +154,52 @@ export function AIChat({
       } else if (data.partial || data.edits || data.toolCalls) {
         // Streaming partial response
         if (data.partial) {
-          setCurrentStreamContent(prev => prev + data.partial);
+          // Update or create the assistant message with streaming content
+          setMessages(prev => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            
+            if (lastMessage && lastMessage.role === 'assistant') {
+              // Update existing assistant message
+              lastMessage.content = (lastMessage.content || '') + data.partial;
+            } else {
+              // Create new assistant message
+              newMessages.push({
+                role: 'assistant',
+                content: data.partial
+              });
+            }
+            return newMessages;
+          });
         }
         
         // Handle edits that come during streaming (before isComplete)
         if (data.edits && data.edits.length > 0) {
-          // Update the assistant message with edits even during streaming
+          // Update the assistant message with edits
           setMessages(prev => {
             const newMessages = [...prev];
-            if (newMessages.length > 0 && newMessages[newMessages.length - 1].role === 'assistant') {
-              // Accumulate edits - merge with existing edits if any
-              const existingEdits = newMessages[newMessages.length - 1].edits || [];
-              newMessages[newMessages.length - 1].edits = [...existingEdits, ...data.edits];
+            const lastMessage = newMessages[newMessages.length - 1];
+            
+            if (lastMessage && lastMessage.role === 'assistant') {
+              // Only add edits if they haven't been added yet
+              if (!lastMessage.edits) {
+                lastMessage.edits = data.edits;
+              } else {
+                // Check if these are new edits (simple comparison by length for now)
+                const existingCount = lastMessage.edits.length;
+                const newCount = data.edits.length;
+                if (newCount > existingCount) {
+                  // Add only the new edits
+                  lastMessage.edits = [...lastMessage.edits, ...data.edits.slice(existingCount)];
+                }
+              }
+            } else {
+              // Create new assistant message with edits
+              newMessages.push({
+                role: 'assistant',
+                content: '',
+                edits: data.edits
+              });
             }
             return newMessages;
           });
@@ -175,6 +219,11 @@ export function AIChat({
             );
             
             for (const toolCall of data.toolCalls) {
+              // Skip applyDiff tool calls since they're already shown as edits on the assistant message
+              if (toolCall.name === 'applyDiff') {
+                continue;
+              }
+              
               // Create a unique signature for this tool call
               const signature = `${toolCall.name}-${JSON.stringify(toolCall.arguments)}`;
               
@@ -409,6 +458,12 @@ export function AIChat({
         if (existingSessions && existingSessions.length > 0) {
           // Load the most recent session
           session = await claudeApi.loadSession(existingSessions[0].id, projectPath);
+          
+          // Update provider based on loaded session
+          if (session.provider) {
+            setCurrentProvider(session.provider);
+            localStorage.setItem('ai-last-provider', session.provider);
+          }
         } else {
           // Create new session only if none exists
           // Clean the document context for IPC (remove functions)
@@ -419,7 +474,7 @@ export function AIChat({
             cursorPosition: documentContext.cursorPosition,
             selection: documentContext.selection
           } : undefined;
-          session = await claudeApi.createSession(cleanDocumentContext, projectPath);
+          session = await claudeApi.createSession(cleanDocumentContext, projectPath, currentProvider);
         }
         
         if (mounted) {
@@ -535,7 +590,6 @@ export function AIChat({
     setHistoryIndex(-1); // Reset history navigation
     setTempInput(''); // Clear temp input
     setIsLoading(true);
-    setCurrentStreamContent('');
     
     try {
       // Send message to Claude with fresh document context and session ID
@@ -701,6 +755,7 @@ export function AIChat({
       // Update provider based on session's provider
       if (session.provider) {
         setCurrentProvider(session.provider);
+        localStorage.setItem('ai-last-provider', session.provider);
       }
       
       // Convert session messages to chat format, preserving streaming status
@@ -840,7 +895,6 @@ export function AIChat({
           <ChatMessages 
             messages={messages}
             isLoading={isLoading}
-            currentStreamContent={currentStreamContent}
             onApplyEdit={handleApplyEdit}
           />
           

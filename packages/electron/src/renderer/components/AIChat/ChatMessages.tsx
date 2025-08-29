@@ -23,14 +23,12 @@ interface Message {
 interface ChatMessagesProps {
   messages: Message[];
   isLoading: boolean;
-  currentStreamContent?: string;
   onApplyEdit?: (edit: any) => Promise<{ success: boolean; error?: string }>;
 }
 
 export function ChatMessages({ 
   messages, 
   isLoading, 
-  currentStreamContent,
   onApplyEdit 
 }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -39,7 +37,7 @@ export function ChatMessages({
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, currentStreamContent]);
+  }, [messages]);
 
   return (
     <div className="ai-chat-messages" ref={containerRef}>
@@ -101,16 +99,7 @@ export function ChatMessages({
         }
       })}
       
-      {/* Show streaming content */}
-      {currentStreamContent && (
-        <ChatMessage
-          role="assistant"
-          content={currentStreamContent}
-          isStreaming={true}
-        />
-      )}
-      
-      {isLoading && !currentStreamContent && (
+      {isLoading && (
         <div className="ai-chat-loading">
           <div className="ai-chat-loading-dots">
             <span></span>

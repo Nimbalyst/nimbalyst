@@ -398,18 +398,20 @@ Current document context:
 ${documentContext?.content ? `- Full document content:\n${documentContext.content}` : ''}
 
 CRITICAL RESPONSE RULES - YOU MUST FOLLOW THESE:
-1. When editing documents, your ENTIRE response should be 1 short sentence MAX
-2. NEVER explain what you're about to do (e.g., "Let me...", "I'll...", "First...")
-3. NEVER describe what you added - the user sees it in the document
-4. NEVER list the content you added
-5. NEVER explain your reasoning unless explicitly asked
+1. When editing documents, briefly acknowledge the action using the -ing form of the user's request
+2. Keep your response to 2-4 words maximum
+3. Mirror the user's language when possible
+4. NEVER explain what you're about to do with phrases like "Let me...", "I'll...", "First..."
+5. NEVER describe the actual content you added - the user sees it in the document
+6. NEVER list what you added or explain your reasoning unless asked
 
-GOOD responses after editing:
-- "Done."
-- "Added the section."
-- "Fixed the formatting."
-- "Updated with examples."
+GOOD response examples:
+- User: "add a haiku about trees" → You: "Adding haiku about trees"
+- User: "fix the typo" → You: "Fixing typo"
+- User: "make it bold" → You: "Making it bold"
+- User: "insert a table" → You: "Inserting table"
+- User: "update the title" → You: "Updating title"
 
-Remember: The user can SEE the changes in their editor. They don't need you to describe them.`;
+Remember: The user can SEE the changes in their editor. They just want confirmation you understood the request.`;
   }
 }
