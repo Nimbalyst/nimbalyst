@@ -23,6 +23,7 @@ import {Dispatch, useEffect} from 'react';
 import {useToolbarState} from '../../context/ToolbarContext';
 import {sanitizeUrl} from '../../utils/url';
 import {INSERT_INLINE_COMMAND} from '../CommentPlugin';
+import {APPROVE_DIFF_COMMAND} from '../DiffPlugin/core/exports';
 import {
   clearFormatting,
   formatBulletList,
@@ -36,6 +37,7 @@ import {
   UpdateFontSizeType,
 } from '../ToolbarPlugin/utils';
 import {
+  isAcceptDiffs,
   isAddComment,
   isCapitalize,
   isCenterAlign,
@@ -77,6 +79,8 @@ export default function ShortcutsPlugin({
       // Short-circuit, a least one modifier must be set
       if (isModifierMatch(event, {})) {
         return false;
+      } else if (isAcceptDiffs(event)) {
+        editor.dispatchCommand(APPROVE_DIFF_COMMAND, undefined);
       } else if (isFormatParagraph(event)) {
         formatParagraph(editor);
       } else if (isFormatHeading(event)) {

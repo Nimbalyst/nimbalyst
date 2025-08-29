@@ -49,6 +49,9 @@ export const SHORTCUTS = Object.freeze({
   ITALIC: IS_APPLE ? '⌘+I' : 'Ctrl+I',
   UNDERLINE: IS_APPLE ? '⌘+U' : 'Ctrl+U',
   INSERT_LINK: IS_APPLE ? '⌘+K' : 'Ctrl+K',
+  
+  // Diff-related shortcuts
+  ACCEPT_DIFFS: IS_APPLE ? '⌘+Enter' : 'Ctrl+Enter',
 });
 
 const CONTROL_OR_META = {ctrlKey: !IS_APPLE, metaKey: IS_APPLE};
@@ -245,4 +248,9 @@ export function isAddComment(event: KeyboardEvent): boolean {
     code === 'KeyM' &&
     isModifierMatch(event, {...CONTROL_OR_META, altKey: true})
   );
+}
+
+export function isAcceptDiffs(event: KeyboardEvent): boolean {
+  const {code} = event;
+  return code === 'Enter' && isModifierMatch(event, CONTROL_OR_META);
 }
