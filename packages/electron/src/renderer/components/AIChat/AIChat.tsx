@@ -580,7 +580,7 @@ export function AIChat({
     
     // If no current session, create one first
     if (!currentSessionId) {
-      const session = await claudeApi.createSession(freshDocumentContext, projectPath);
+      const session = await claudeApi.createSession(freshDocumentContext, projectPath, currentProvider);
       setCurrentSessionId(session.id);
     }
     
