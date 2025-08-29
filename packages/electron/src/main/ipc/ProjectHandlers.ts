@@ -40,39 +40,71 @@ export function registerProjectHandlers() {
     // Switch project file
     ipcMain.handle('switch-project-file', async (event, filePath: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
-        if (!window) return null;
+        if (!window) {
+            console.error('[SWITCH_FILE] ✗ No window found for event sender');
+            return null;
+        }
 
+        console.log('[SWITCH_FILE] Switching to file:', filePath);
+        const windowId = window.id;
+        
         try {
             const content = readFileSync(filePath, 'utf-8');
-            const windowId = window.id;
-            const state = windowStates.get(windowId);
-
-            if (state) {
-                // Stop watching the old file
-                if (state.filePath && state.filePath !== filePath) {
-                    stopFileWatcher(windowId);
-                }
-
-                state.filePath = filePath;
-                state.documentEdited = false;
-                
-                // Add to recent project files
-                if (state.projectPath) {
-                    addProjectRecentFile(state.projectPath, filePath);
-                }
-
-                // Start watching the new file
-                startFileWatcher(window, filePath);
+            console.log('[SWITCH_FILE] File read successfully, length:', content.length);
+            
+            let state = windowStates.get(windowId);
+            console.log('[SWITCH_FILE] Window state exists:', !!state);
+            
+            // Create state if it doesn't exist
+            if (!state) {
+                console.log('[SWITCH_FILE] Creating new window state for window:', windowId);
+                state = {
+                    filePath: null,
+                    documentEdited: false,
+                    projectPath: null
+                };
+                windowStates.set(windowId, state);
             }
+
+            const oldFilePath = state.filePath;
+            console.log('[SWITCH_FILE] Previous file:', oldFilePath);
+            
+            // Stop watching the old file
+            if (oldFilePath && oldFilePath !== filePath) {
+                console.log('[SWITCH_FILE] Stopping watcher for old file');
+                stopFileWatcher(windowId);
+            }
+
+            // Update state
+            state.filePath = filePath;
+            state.documentEdited = false;
+            console.log('[SWITCH_FILE] Updated window state with new file path');
+            
+            // Add to recent project files
+            if (state.projectPath) {
+                addProjectRecentFile(state.projectPath, filePath);
+                console.log('[SWITCH_FILE] Added to recent files');
+            }
+
+            // Start watching the new file
+            startFileWatcher(window, filePath);
+            console.log('[SWITCH_FILE] Started file watcher');
 
             // Set represented filename for macOS
             if (process.platform === 'darwin') {
                 window.setRepresentedFilename(filePath);
+                console.log('[SWITCH_FILE] Updated macOS represented filename');
             }
+
+            console.log('[SWITCH_FILE] ✓ Switch complete, state:', {
+                filePath: state.filePath,
+                projectPath: state.projectPath,
+                documentEdited: state.documentEdited
+            });
 
             return { filePath, content };
         } catch (error) {
-            console.error('Error switching project file:', error);
+            console.error('[SWITCH_FILE] ✗ Error switching project file:', error);
             return null;
         }
     });

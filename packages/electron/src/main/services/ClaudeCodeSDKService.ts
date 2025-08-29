@@ -237,24 +237,23 @@ Remember: The user can SEE the changes in their editor. They don't need you to d
         this.abortController = new AbortController();
 
         // Find the claude-code CLI executable
-        // The SDK expects to find cli.js in the same directory as sdk.mjs
-        // We need to provide the absolute path to the actual CLI file
         let cliPath: string;
-
+        
         // Try to find the CLI in various locations
         const possiblePaths = [
-          // Development path - monorepo root node_modules
+          // Production paths - in app.asar.unpacked
+          path.join(process.resourcesPath, 'app.asar.unpacked/node_modules/@anthropic-ai/claude-code/cli.js'),
+          // Development paths
           path.join(__dirname, '../../../../node_modules/@anthropic-ai/claude-code/cli.js'),
           path.join(__dirname, '../../../../../node_modules/@anthropic-ai/claude-code/cli.js'),
-          // Electron app node_modules
           path.join(__dirname, '../../node_modules/@anthropic-ai/claude-code/cli.js'),
           path.join(__dirname, '../node_modules/@anthropic-ai/claude-code/cli.js'),
-          // Try process.cwd() based paths
+          // Process.cwd() based paths
           path.join(process.cwd(), 'node_modules/@anthropic-ai/claude-code/cli.js'),
           path.join(process.cwd(), '../node_modules/@anthropic-ai/claude-code/cli.js'),
           path.join(process.cwd(), '../../node_modules/@anthropic-ai/claude-code/cli.js'),
         ];
-
+        
         // Find the first path that exists
         let found = false;
         for (const testPath of possiblePaths) {
@@ -265,7 +264,7 @@ Remember: The user can SEE the changes in their editor. They don't need you to d
             break;
           }
         }
-
+        
         if (!found) {
           // Last resort - try require.resolve
           try {
@@ -275,10 +274,7 @@ Remember: The user can SEE the changes in their editor. They don't need you to d
             console.log('Resolved claude-code CLI at:', cliPath);
           } catch (err) {
             console.error('Failed to resolve claude-code package:', err);
-            console.error('Tried paths:', possiblePaths);
-            console.error('__dirname:', __dirname);
-            console.error('process.cwd():', process.cwd());
-            throw new Error('Could not find claude-code CLI executable. Tried: ' + possiblePaths.join(', '));
+            throw new Error('Could not find claude-code CLI executable');
           }
         }
 
@@ -699,24 +695,23 @@ Remember: The user can SEE the changes in their editor. They don't need you to d
 
       try {
         // Find the claude-code CLI executable
-        // The SDK expects to find cli.js in the same directory as sdk.mjs
-        // We need to provide the absolute path to the actual CLI file
         let cliPath: string;
-
+        
         // Try to find the CLI in various locations
         const possiblePaths = [
-          // Development path - monorepo root node_modules
+          // Production paths - in app.asar.unpacked
+          path.join(process.resourcesPath, 'app.asar.unpacked/node_modules/@anthropic-ai/claude-code/cli.js'),
+          // Development paths
           path.join(__dirname, '../../../../node_modules/@anthropic-ai/claude-code/cli.js'),
           path.join(__dirname, '../../../../../node_modules/@anthropic-ai/claude-code/cli.js'),
-          // Electron app node_modules
           path.join(__dirname, '../../node_modules/@anthropic-ai/claude-code/cli.js'),
           path.join(__dirname, '../node_modules/@anthropic-ai/claude-code/cli.js'),
-          // Try process.cwd() based paths
+          // Process.cwd() based paths
           path.join(process.cwd(), 'node_modules/@anthropic-ai/claude-code/cli.js'),
           path.join(process.cwd(), '../node_modules/@anthropic-ai/claude-code/cli.js'),
           path.join(process.cwd(), '../../node_modules/@anthropic-ai/claude-code/cli.js'),
         ];
-
+        
         // Find the first path that exists
         let found = false;
         for (const testPath of possiblePaths) {
@@ -727,7 +722,7 @@ Remember: The user can SEE the changes in their editor. They don't need you to d
             break;
           }
         }
-
+        
         if (!found) {
           // Last resort - try require.resolve
           try {
@@ -737,10 +732,7 @@ Remember: The user can SEE the changes in their editor. They don't need you to d
             console.log('Resolved claude-code CLI at:', cliPath);
           } catch (err) {
             console.error('Failed to resolve claude-code package:', err);
-            console.error('Tried paths:', possiblePaths);
-            console.error('__dirname:', __dirname);
-            console.error('process.cwd():', process.cwd());
-            throw new Error('Could not find claude-code CLI executable. Tried: ' + possiblePaths.join(', '));
+            throw new Error('Could not find claude-code CLI executable');
           }
         }
 

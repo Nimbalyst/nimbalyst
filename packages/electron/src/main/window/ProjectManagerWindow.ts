@@ -33,14 +33,12 @@ export function createProjectManagerWindow() {
   });
 
   // Load the HTML file
-  // Use loadURL with file protocol to handle App Translocation properly
   const htmlPath = process.env.NODE_ENV === 'development'
     ? join(__dirname, '../../src/project-manager/index.html')
     : join(__dirname, '../project-manager/index.html');
   
-  // Use pathToFileURL to create proper file URL that works with App Translocation
-  const { pathToFileURL } = require('url');
-  projectManagerWindow.loadURL(pathToFileURL(htmlPath).href);
+  // Use loadFile which handles App Translocation properly
+  projectManagerWindow.loadFile(htmlPath);
 
   // Show window when ready
   projectManagerWindow.once('ready-to-show', () => {

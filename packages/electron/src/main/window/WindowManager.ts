@@ -119,7 +119,7 @@ export function createWindow(
                 nodeIntegration: false,
                 contextIsolation: true,
                 preload: join(__dirname, '../preload/index.js'),
-                webSecurity: true
+                webSecurity: false
             },
             show: false,
             titleBarStyle: process.platform === 'darwin' ? undefined : 'hidden',
@@ -235,10 +235,9 @@ export function createWindow(
             window.loadURL('http://localhost:5273');
         } else {
             console.log('[MAIN] Loading from built files');
-            // Use loadURL with file protocol to handle App Translocation properly
+            // Use loadFile which handles App Translocation properly
             const htmlPath = join(__dirname, '../renderer/index.html');
-            const { pathToFileURL } = require('url');
-            window.loadURL(pathToFileURL(htmlPath).href);
+            window.loadFile(htmlPath);
         }
 
         // Show window when ready

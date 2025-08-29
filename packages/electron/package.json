@@ -17,12 +17,12 @@
     "build:mac": "npm run build && electron-builder --mac",
     "build:mac:signed": "npm run build && electron-builder --mac",
     "build:mac:notarized": "npm run build && REQUIRE_NOTARIZE=true electron-builder --mac",
-    "build:mac:local": "npm run build && SKIP_NOTARIZE=true electron-builder --mac",
+    "build:mac:local": "SKIP_NOTARIZE=true npm run build && SKIP_NOTARIZE=true electron-builder --mac",
     "build:win": "npm run build && electron-builder --win",
     "build:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {
-    "@anthropic-ai/claude-code": "^1.0.72",
+    "@anthropic-ai/claude-code": "^1.0.77",
     "@anthropic-ai/sdk": "^0.58.0",
     "@modelcontextprotocol/sdk": "^1.17.2",
     "chokidar": "^3.6.0",
@@ -55,6 +55,10 @@
     "directories": {
       "output": "release"
     },
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/@anthropic-ai/claude-code/**/*"
+    ],
     "files": [
       "out/**/*",
       "icon.png"
@@ -77,15 +81,7 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "icon": "icon.png",
-      "identity": "Developer ID Application",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
-      "signIgnore": [
-        "node_modules/.*"
-      ],
+      "icon": "icon.icns",
       "fileAssociations": [
         {
           "ext": "md",
@@ -99,9 +95,12 @@
         }
       ]
     },
-    "afterSign": "build/notarize.js",
     "win": {
       "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "packElevateHelper": false
     },
     "linux": {
       "target": "AppImage"

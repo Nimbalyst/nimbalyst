@@ -188,6 +188,12 @@ class Logger {
     console.log('%c🎯 Focused on file logs', 'color: #aa96da; font-weight: bold;');
   }
 
+  public focusOnAutosave() {
+    this.enableOnly('autosave', 'file');
+    console.log('%c💾 Focused on autosave debugging', 'color: #c7ceea; font-weight: bold;');
+    console.log('%cUse console logs to see detailed autosave behavior', 'color: #c7ceea;');
+  }
+
   public quiet() {
     this.enableOnly('general');
     console.log('%c🤫 Quiet mode - only general logs', 'color: #b2bec3; font-weight: bold;');
@@ -201,5 +207,6 @@ export const logger = new Logger();
 if (typeof window !== 'undefined') {
   console.log('%c📊 Logger initialized. Use window.logger to configure.', 'color: #00d2d3; font-weight: bold;');
   console.log('Commands: logger.printStatus(), logger.enable("category"), logger.disable("category")');
-  console.log('Quick modes: logger.focusOnStreaming(), logger.focusOnSessions(), logger.quiet()');
+  console.log('Quick modes: logger.focusOnStreaming(), logger.focusOnSessions(), logger.focusOnAutosave(), logger.quiet()');
+  console.log('For autosave debugging: logger.focusOnAutosave()');
 }

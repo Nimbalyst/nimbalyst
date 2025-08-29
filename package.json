@@ -21,7 +21,14 @@
     "analyze": "node scripts/bundle-size.js",
     "analyze:top": "node scripts/bundle-size.js --top",
     "clean": "rm -rf packages/*/node_modules/.vite packages/*/dist node_modules/.cache",
-    "clean:full": "rm -rf packages/*/node_modules packages/*/dist node_modules && npm install"
+    "clean:full": "rm -rf packages/*/node_modules packages/*/dist node_modules && npm install",
+    "tauri:dev": "npm run tauri dev --prefix packages/tauri",
+    "tauri:build": "npm run tauri build --prefix packages/tauri",
+    "cap:dev": "npm run dev --prefix packages/capacitor",
+    "cap:build": "npm run build --prefix packages/capacitor",
+    "cap:ios": "npm run ios --prefix packages/capacitor",
+    "cap:android": "npm run android --prefix packages/capacitor",
+    "cap:sync": "npm run cap:sync --prefix packages/capacitor"
   },
   "devDependencies": {
     "@babel/plugin-transform-flow-strip-types": "^7.24.7",
@@ -34,6 +41,13 @@
   "workspaces": [
     "packages/stravu-editor",
     "packages/playground",
-    "packages/electron"
-  ]
+    "packages/electron",
+    "packages/tauri",
+    "packages/core",
+    "packages/capacitor"
+  ],
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0"
+  }
 }

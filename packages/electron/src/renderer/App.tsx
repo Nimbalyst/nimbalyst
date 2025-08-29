@@ -474,6 +474,8 @@ export default function App() {
   const handleProjectFileSelect = useCallback(async (filePath: string) => {
     if (!window.electronAPI) return;
 
+    console.log('[PROJECT_FILE_SELECT] Selecting file:', filePath);
+
     // Auto-save current file if dirty (no prompt needed with autosave)
     if (isDirty && getContentRef.current && currentFilePath && currentFilePath !== filePath) {
       console.log('[PROJECT_FILE_SELECT] Auto-saving current file before switching');
@@ -483,6 +485,7 @@ export default function App() {
     try {
       const result = await window.electronAPI.switchProjectFile(filePath);
       if (result) {
+        console.log('[PROJECT_FILE_SELECT] File loaded successfully');
         contentVersionRef.current += 1;
         isInitializedRef.current = false;
         setContent(result.content);
@@ -491,8 +494,12 @@ export default function App() {
         setIsDirty(false);
         initialContentRef.current = result.content;
 
-        // Update the current file in main process
-        window.electronAPI.setCurrentFile(filePath);
+        // Explicitly update the current file in main process (redundant but safe)
+        console.log('[PROJECT_FILE_SELECT] Ensuring backend has correct file path');
+        const syncResult = window.electronAPI.setCurrentFile(filePath);
+        if (syncResult && typeof syncResult.then === 'function') {
+          await syncResult;
+        }
 
         // Create automatic snapshot when switching to file
         if (window.electronAPI.history) {
@@ -637,8 +644,21 @@ export default function App() {
   // Sync current file path with backend whenever it changes
   useEffect(() => {
     if (window.electronAPI && currentFilePath !== null) {
-      console.log('[APP] Syncing current file path to backend:', currentFilePath);
-      window.electronAPI.setCurrentFile(currentFilePath);
+      console.log('[FILE_SYNC] Syncing current file path to backend:', currentFilePath);
+      const result = window.electronAPI.setCurrentFile(currentFilePath);
+      // Handle both promise and non-promise returns
+      if (result && typeof result.then === 'function') {
+        result.then(() => {
+          console.log('[FILE_SYNC] ✓ File path synced successfully');
+        }).catch((error) => {
+          console.error('[FILE_SYNC] ✗ Failed to sync file path:', error);
+        });
+      } else {
+        console.log('[FILE_SYNC] File path sync called (no promise returned)');
+      }
+    } else if (window.electronAPI && currentFilePath === null) {
+      console.log('[FILE_SYNC] Clearing file path in backend');
+      window.electronAPI.setCurrentFile(null);
     }
   }, [currentFilePath]);
 
@@ -652,45 +672,78 @@ export default function App() {
 
     // Set up autosave if we have a file path and the document is dirty
     if (currentFilePath && isDirty && getContentRef.current) {
-      logger.log('autosave', 'Starting autosave interval');
+      console.log('[AUTOSAVE] Setting up autosave for:', currentFilePath);
+      
       autoSaveIntervalRef.current = setInterval(async () => {
         if (isDirty && currentFilePath && getContentRef.current && window.electronAPI) {
-          console.log('[AUTOSAVE] Autosaving...', {
+          console.log('[AUTOSAVE] Starting save attempt...');
+          console.log('[AUTOSAVE] Current state:', {
             isDirty,
             currentFilePath,
-            hasGetContent: !!getContentRef.current
+            hasGetContent: !!getContentRef.current,
+            timestamp: new Date().toISOString()
           });
+          
           try {
             const content = getContentRef.current();
-            console.log('[AUTOSAVE] Content length:', content.length);
+            console.log('[AUTOSAVE] Got content, length:', content.length);
+            
+            // First ensure the backend knows the current file path
+            console.log('[AUTOSAVE] Ensuring backend has current file path...');
+            const setFileResult = window.electronAPI.setCurrentFile(currentFilePath);
+            // Handle both promise and non-promise returns
+            if (setFileResult && typeof setFileResult.then === 'function') {
+              await setFileResult;
+            }
+            
+            // Small delay to ensure the backend has processed the file path update
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            console.log('[AUTOSAVE] Calling saveFile...');
             const result = await window.electronAPI.saveFile(content);
             console.log('[AUTOSAVE] Save result:', result);
-            if (result) {
+            
+            if (result && result.success) {
               setIsDirty(false);
               initialContentRef.current = content;
-              console.log('[AUTOSAVE] Autosaved successfully');
+              console.log('[AUTOSAVE] ✓ Autosaved successfully to:', result.filePath);
             } else {
-              console.error('[AUTOSAVE] Save failed - returned null');
+              console.error('[AUTOSAVE] ✗ Save failed - result:', result);
+              console.error('[AUTOSAVE] This typically means the backend lost track of the file path');
+              
+              // Try to recover by re-syncing the file path
+              console.log('[AUTOSAVE] Attempting recovery by re-syncing file path...');
+              const recoverResult = window.electronAPI.setCurrentFile(currentFilePath);
+              if (recoverResult && typeof recoverResult.then === 'function') {
+                await recoverResult;
+              }
+              
               // Show user notification about save failure
               if (window.electronAPI?.showErrorDialog) {
                 window.electronAPI.showErrorDialog(
                   'Auto-save Failed',
-                  'Failed to auto-save document. Your changes may not be saved.'
+                  `Failed to auto-save to: ${currentFilePath}\n\nYour changes may not be saved. Please try saving manually (Cmd+S).`
                 );
               }
             }
           } catch (error) {
-            console.error('[AUTOSAVE] Autosave failed:', error);
+            console.error('[AUTOSAVE] ✗ Exception during autosave:', error);
+            console.error('[AUTOSAVE] Error details:', {
+              message: error.message,
+              stack: error.stack,
+              currentFilePath
+            });
+            
             // Show user notification about save failure
             if (window.electronAPI?.showErrorDialog) {
               window.electronAPI.showErrorDialog(
                 'Auto-save Error',
-                `Failed to save document: ${error.message}`
+                `Failed to save document: ${error.message}\n\nFile: ${currentFilePath}`
               );
             }
           }
         } else {
-          logger.log('autosave', 'Skipping autosave:', {
+          console.log('[AUTOSAVE] Skipping autosave - conditions not met:', {
             isDirty,
             currentFilePath,
             hasGetContent: !!getContentRef.current,
@@ -698,11 +751,18 @@ export default function App() {
           });
         }
       }, 10000); // Autosave every 10 seconds
+    } else {
+      console.log('[AUTOSAVE] Not setting up autosave:', {
+        hasPath: !!currentFilePath,
+        isDirty,
+        hasGetContent: !!getContentRef.current
+      });
     }
 
     // Cleanup on unmount or when dependencies change
     return () => {
       if (autoSaveIntervalRef.current) {
+        console.log('[AUTOSAVE] Cleaning up autosave interval');
         clearInterval(autoSaveIntervalRef.current);
         autoSaveIntervalRef.current = null;
       }

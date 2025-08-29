@@ -46,20 +46,38 @@ export function registerFileHandlers() {
     // Save file
     ipcMain.handle('save-file', async (event, content: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
-        if (!window) return null;
+        if (!window) {
+            console.error('[SAVE] ✗ No window found for event sender');
+            return null;
+        }
         
         const windowId = window.id;
         const state = windowStates.get(windowId);
         const filePath = state?.filePath;
         
-        console.log('[SAVE] save-file handler called');
+        console.log('[SAVE] save-file handler called at', new Date().toISOString());
         console.log('[SAVE] Window ID:', windowId);
-        console.log('[SAVE] Window state:', state);
-        console.log('[SAVE] File path from state:', filePath);
+        console.log('[SAVE] Window state exists:', !!state);
+        console.log('[SAVE] Current state:', {
+            hasState: !!state,
+            filePath: state?.filePath,
+            projectPath: state?.projectPath,
+            documentEdited: state?.documentEdited
+        });
+        console.log('[SAVE] All window states:', Array.from(windowStates.entries()).map(([id, s]) => ({
+            windowId: id,
+            filePath: s?.filePath,
+            projectPath: s?.projectPath
+        })));
         
         try {
             if (!filePath) {
-                console.log('[SAVE] No current file path for this window - state exists:', !!state);
+                console.error('[SAVE] ✗ No file path in window state!');
+                console.error('[SAVE] State details:', {
+                    stateExists: !!state,
+                    stateKeys: state ? Object.keys(state) : [],
+                    windowStatesSize: windowStates.size
+                });
                 return null;
             }
             
@@ -68,10 +86,12 @@ export function registerFileHandlers() {
             console.log('[SAVE] Marked window as saving:', windowId);
             
             console.log('[SAVE] Writing to file:', filePath);
+            console.log('[SAVE] Content preview (first 100 chars):', content.substring(0, 100));
             saveFile(filePath, content);
             
             if (state) {
                 state.documentEdited = false; // Reset dirty state after save
+                console.log('[SAVE] ✓ Reset documentEdited flag');
             }
             
             // Clear the saving flag after a delay to ensure the file watcher doesn't react
@@ -80,9 +100,11 @@ export function registerFileHandlers() {
                 console.log('[SAVE] Cleared saving flag for window:', windowId);
             }, AUTOSAVE_DELAY);
             
+            console.log('[SAVE] ✓ Save successful to:', filePath);
             return { success: true, filePath };
         } catch (error) {
-            console.error('Error saving file:', error);
+            console.error('[SAVE] ✗ Error saving file:', error);
+            savingWindows.delete(windowId); // Clean up on error
             return null;
         }
     });
@@ -148,30 +170,65 @@ export function registerFileHandlers() {
         dialog.showErrorBox(title, message);
     });
     
-    // Update current file path from renderer (for drag-drop)
+    // Update current file path from renderer (for drag-drop and file creation)
     ipcMain.handle('set-current-file', async (event, filePath: string | null) => {
         const window = BrowserWindow.fromWebContents(event.sender);
-        if (!window) return;
+        if (!window) {
+            console.error('[SET_FILE] ✗ No window found for event sender');
+            return { success: false, error: 'No window found' };
+        }
         
         const windowId = window.id;
-        const state = windowStates.get(windowId);
+        let state = windowStates.get(windowId);
         
-        if (state) {
-            // Stop watching the old file
-            if (state.filePath && state.filePath !== filePath) {
-                console.log('[SET_FILE] Stopping watcher for old file:', state.filePath);
-                stopFileWatcher(windowId);
-            }
+        console.log('[SET_FILE] set-current-file called at', new Date().toISOString());
+        console.log('[SET_FILE] Window ID:', windowId);
+        console.log('[SET_FILE] New file path:', filePath);
+        console.log('[SET_FILE] State exists:', !!state);
+        
+        // Create state if it doesn't exist (can happen with new windows)
+        if (!state) {
+            console.log('[SET_FILE] Creating new window state for window:', windowId);
+            state = {
+                filePath: null,
+                documentEdited: false,
+                projectPath: null
+            };
+            windowStates.set(windowId, state);
+        }
+        
+        const oldFilePath = state.filePath;
+        console.log('[SET_FILE] Previous file path:', oldFilePath);
+        
+        // Stop watching the old file
+        if (oldFilePath && oldFilePath !== filePath) {
+            console.log('[SET_FILE] Stopping watcher for old file:', oldFilePath);
+            stopFileWatcher(windowId);
+        }
+        
+        // Update the file path
+        state.filePath = filePath;
+        console.log('[SET_FILE] Updated state with new file path');
+        
+        // Start watching the new file
+        if (filePath) {
+            console.log('[SET_FILE] Starting watcher for new file:', filePath);
+            startFileWatcher(window, filePath);
             
-            state.filePath = filePath;
-            
-            // Start watching the new file
-            if (filePath) {
-                console.log('[SET_FILE] Starting watcher for new file:', filePath);
-                startFileWatcher(window, filePath);
+            // Update represented filename for macOS
+            if (process.platform === 'darwin') {
+                window.setRepresentedFilename(filePath);
+                console.log('[SET_FILE] Updated macOS represented filename');
             }
         }
         
-        console.log('[SET_FILE] Current file path updated from renderer:', filePath);
+        console.log('[SET_FILE] ✓ File path update complete');
+        console.log('[SET_FILE] Final state:', {
+            filePath: state.filePath,
+            projectPath: state.projectPath,
+            documentEdited: state.documentEdited
+        });
+        
+        return { success: true };
     });
 }
