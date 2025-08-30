@@ -75,23 +75,23 @@ class ClaudeAPI {
     
     // Set up IPC listeners for streaming edit events from AI service
     window.electronAPI.onAIStreamEditStart((config: any) => {
-      logger.log('streaming', '🚀 Stream edit started from AI service:', config);
+      logger.streaming.info('🚀 Stream edit started from AI service:', config);
       this.emit('streamEditStart', config);
     });
 
     window.electronAPI.onAIStreamEditContent((content: string) => {
-      logger.log('streaming', 'Stream edit content from AI service:', content.substring(0, 50));
+      logger.streaming.info('Stream edit content from AI service:', content.substring(0, 50));
       this.emit('streamEditContent', content);
     });
 
     window.electronAPI.onAIStreamEditEnd((data: any) => {
-      logger.log('streaming', '🏁 Stream edit ended from AI service:', data);
+      logger.streaming.info('🏁 Stream edit ended from AI service:', data);
       this.emit('streamEditEnd', data);
     });
 
     // Set up IPC listeners for streaming responses (both legacy and new)
     const handleStreamResponse = (data: any) => {
-      logger.log('api', 'Received stream response:', {
+      logger.api.info('Received stream response:', {
         hasPartial: !!data.partial,
         partialLength: data.partial?.length,
         isComplete: data.isComplete,
@@ -107,7 +107,7 @@ class ClaudeAPI {
       if (!this.isStreamingEdit && !this.streamStartDetected) {
         // Check accumulated content for streaming marker
         const { isStreaming, streamConfig, cleanContent } = detectStreamingIntent(this.accumulatedContent);
-        logger.log('api', 'Stream detection on accumulated content:', {
+        logger.api.info('Stream detection on accumulated content:', {
           isStreaming,
           streamConfig,
           accumulatedLength: this.accumulatedContent.length,
@@ -115,7 +115,7 @@ class ClaudeAPI {
         });
         
         if (isStreaming) {
-          logger.log('streaming', '🚀 STREAMING MODE ACTIVATED', streamConfig);
+          logger.streaming.info('🚀 STREAMING MODE ACTIVATED', streamConfig);
           this.isStreamingEdit = true;
           this.streamStartDetected = true;
           this.streamingConfig = streamConfig;
@@ -124,7 +124,7 @@ class ClaudeAPI {
           this.accumulatedContent = cleanContent;
           
           // Emit streaming edit start event
-          logger.log('streaming', 'Emitting streamEditStart event with config:', streamConfig);
+          logger.streaming.info('Emitting streamEditStart event with config:', streamConfig);
           this.emit('streamEditStart', streamConfig);
           
           // If there's content after the marker, process it
@@ -132,14 +132,14 @@ class ClaudeAPI {
           if (cleanContent) {
             setTimeout(() => {
               if (!this.isStreamingEdit) {
-                logger.log('streaming', 'Streaming was cancelled, not emitting initial content');
+                logger.streaming.info('Streaming was cancelled, not emitting initial content');
                 return;
               }
               
               // Check if we have the end marker already
               if (cleanContent.includes('<!-- STREAM_END -->')) {
                 const contentBeforeEnd = cleanContent.split('<!-- STREAM_END -->')[0];
-                logger.log('streaming', 'Found complete stream in one chunk');
+                logger.streaming.info('Found complete stream in one chunk');
                 this.emit('streamEditContent', contentBeforeEnd);
                 this.emit('streamEditEnd', {});
                 this.isStreamingEdit = false;
@@ -147,7 +147,7 @@ class ClaudeAPI {
                 this.accumulatedContent = '';
                 this.streamStartDetected = false;
               } else {
-                logger.log('streaming', 'Emitting initial clean content after delay:', cleanContent.substring(0, 100));
+                logger.streaming.info('Emitting initial clean content after delay:', cleanContent.substring(0, 100));
                 this.emit('streamEditContent', cleanContent);
                 this.accumulatedContent = ''; // Clear for next chunks
               }
@@ -170,11 +170,11 @@ class ClaudeAPI {
           
           // Only emit if there's actual content
           if (contentToStream.trim()) {
-            logger.log('streaming', 'Final content before end:', contentToStream.substring(0, 100));
+            logger.streaming.info('Final content before end:', contentToStream.substring(0, 100));
             this.emit('streamEditContent', contentToStream);
           }
           
-          logger.log('streaming', '🏁 STREAMING MODE ENDED');
+          logger.streaming.info('🏁 STREAMING MODE ENDED');
           this.emit('streamEditEnd', {});
           this.isStreamingEdit = false;
           this.streamingConfig = null;
@@ -195,7 +195,7 @@ class ClaudeAPI {
           
           // If no partial marker at the end, emit accumulated content and clear buffer
           if (!hasPartialMarker && this.streamBuffer.length > 0) {
-            logger.log('streaming', 'Streaming content chunk:', this.streamBuffer.substring(0, 50));
+            logger.streaming.info('Streaming content chunk:', this.streamBuffer.substring(0, 50));
             this.emit('streamEditContent', this.streamBuffer);
             this.streamBuffer = '';
           }
@@ -208,7 +208,7 @@ class ClaudeAPI {
       if (data.isComplete) {
         // If we were still in streaming mode, end it with error
         if (this.isStreamingEdit) {
-          logger.log('streaming', '⚠️ Stream ended unexpectedly without STREAM_END marker');
+          logger.streaming.warn('⚠️ Stream ended unexpectedly without STREAM_END marker');
           
           // Emit any remaining buffer content
           if (this.streamBuffer.trim()) {
@@ -226,7 +226,7 @@ class ClaudeAPI {
       }
       
       // Normal streaming response
-      logger.log('api', 'Normal (non-streaming) response');
+      logger.api.info('Normal (non-streaming) response');
       this.emit('streamResponse', data);
     };
 
@@ -382,7 +382,7 @@ class ClaudeAPI {
 
   private emit(event: string, data: any) {
     const callbacks = this.listeners.get(event);
-    logger.log('api', `Emitting event '${event}' with ${callbacks?.size || 0} listeners`, data);
+    logger.api.info(`Emitting event '${event}' with ${callbacks?.size || 0} listeners`, data);
     if (callbacks) {
       callbacks.forEach(callback => {
         try {

@@ -6,6 +6,7 @@ import { loadFileIntoWindow, saveFile } from '../file/FileOperations';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { AUTOSAVE_DELAY } from '../utils/constants';
 import { addProjectRecentFile } from '../utils/store';
+import { logger } from '../utils/logger';
 
 export function registerFileHandlers() {
     // Open file dialog

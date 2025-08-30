@@ -1,6 +1,9 @@
-import log from 'electron-log';
+import log from 'electron-log/main';
 import Store from 'electron-store';
 import { app } from 'electron';
+
+// Initialize electron-log for IPC
+log.initialize();
 
 // Define component scopes for logging
 export enum LogComponent {
@@ -9,6 +12,8 @@ export enum LogComponent {
   PROJECT_WATCHER = 'PROJECT_WATCHER',
   FILE_OPERATIONS = 'FILE_OPERATIONS',
   FILE_TREE = 'FILE_TREE',
+  FILE = 'FILE',
+  AUTOSAVE = 'AUTOSAVE',
   
   // Window management
   WINDOW = 'WINDOW',
@@ -22,17 +27,27 @@ export enum LogComponent {
   AI_LMSTUDIO = 'AI_LMSTUDIO',
   AI_OPENAI = 'AI_OPENAI',
   AI_SESSION = 'AI_SESSION',
+  API = 'API',
+  
+  // Renderer specific
+  STREAMING = 'STREAMING',
+  UI = 'UI',
+  EDITOR = 'EDITOR',
+  BRIDGE = 'BRIDGE',
+  PROTOCOL = 'PROTOCOL',
   
   // Other services
   MCP = 'MCP',
   IPC = 'IPC',
   THEME = 'THEME',
   STORE = 'STORE',
+  SAVE = 'SAVE',
   
   // General
   MAIN = 'MAIN',
   RENDERER = 'RENDERER',
-  DEBUG = 'DEBUG'
+  DEBUG = 'DEBUG',
+  GENERAL = 'GENERAL'
 }
 
 // Log levels
@@ -81,6 +96,14 @@ const defaultConfig: LoggerConfig = {
       enabled: true,
       level: LogLevel.INFO
     },
+    [LogComponent.FILE]: {
+      enabled: true,
+      level: LogLevel.INFO
+    },
+    [LogComponent.AUTOSAVE]: {
+      enabled: false,
+      level: LogLevel.INFO
+    },
     
     // Window management
     [LogComponent.WINDOW]: {
@@ -121,6 +144,32 @@ const defaultConfig: LoggerConfig = {
       enabled: true,
       level: LogLevel.INFO
     },
+    [LogComponent.API]: {
+      enabled: true,
+      level: LogLevel.INFO
+    },
+    
+    // Renderer specific - noisy ones disabled by default
+    [LogComponent.STREAMING]: {
+      enabled: true,
+      level: LogLevel.INFO
+    },
+    [LogComponent.UI]: {
+      enabled: false,
+      level: LogLevel.DEBUG
+    },
+    [LogComponent.EDITOR]: {
+      enabled: false,
+      level: LogLevel.DEBUG
+    },
+    [LogComponent.BRIDGE]: {
+      enabled: true,
+      level: LogLevel.INFO
+    },
+    [LogComponent.PROTOCOL]: {
+      enabled: true,
+      level: LogLevel.INFO
+    },
     
     // Other services
     [LogComponent.MCP]: {
@@ -139,6 +188,10 @@ const defaultConfig: LoggerConfig = {
       enabled: true,
       level: LogLevel.INFO
     },
+    [LogComponent.SAVE]: {
+      enabled: true,
+      level: LogLevel.INFO
+    },
     
     // General
     [LogComponent.MAIN]: {
@@ -152,6 +205,10 @@ const defaultConfig: LoggerConfig = {
     [LogComponent.DEBUG]: {
       enabled: process.env.NODE_ENV === 'development',
       level: LogLevel.DEBUG
+    },
+    [LogComponent.GENERAL]: {
+      enabled: true,
+      level: LogLevel.INFO
     }
   }
 };
@@ -179,14 +236,15 @@ function configureLogger() {
   log.transports.file.level = config.fileLogging ? config.globalLevel : false;
   log.transports.console.level = config.consoleLogging ? config.globalLevel : false;
   
-  // Format for better readability with scope
-  log.transports.console.format = '[{level}] [{scope}] [{h}:{i}:{s}.{ms}] {text}';
-  log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] [{scope}] {text}';
+  // Clean, readable format
+  log.transports.console.format = '[{h}:{i}:{s}] {scope}: {text}';
+  log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] {scope}: {text}';
 }
 
 // Create a scoped logger for a component
 function createComponentLogger(component: LogComponent) {
-  const scope = log.scope(component);
+  // Use component name directly without parentheses
+  const scope = log.scope(component.replace('_', '-'));
   
   // Create a wrapped logger that checks component configuration
   return {
@@ -247,6 +305,8 @@ export const logger = {
   projectWatcher: createComponentLogger(LogComponent.PROJECT_WATCHER),
   fileOperations: createComponentLogger(LogComponent.FILE_OPERATIONS),
   fileTree: createComponentLogger(LogComponent.FILE_TREE),
+  file: createComponentLogger(LogComponent.FILE),
+  autosave: createComponentLogger(LogComponent.AUTOSAVE),
   
   // Window management
   window: createComponentLogger(LogComponent.WINDOW),
@@ -260,17 +320,27 @@ export const logger = {
   aiLMStudio: createComponentLogger(LogComponent.AI_LMSTUDIO),
   aiOpenAI: createComponentLogger(LogComponent.AI_OPENAI),
   aiSession: createComponentLogger(LogComponent.AI_SESSION),
+  api: createComponentLogger(LogComponent.API),
+  
+  // Renderer specific
+  streaming: createComponentLogger(LogComponent.STREAMING),
+  ui: createComponentLogger(LogComponent.UI),
+  editor: createComponentLogger(LogComponent.EDITOR),
+  bridge: createComponentLogger(LogComponent.BRIDGE),
+  protocol: createComponentLogger(LogComponent.PROTOCOL),
   
   // Other services
   mcp: createComponentLogger(LogComponent.MCP),
   ipc: createComponentLogger(LogComponent.IPC),
   theme: createComponentLogger(LogComponent.THEME),
   store: createComponentLogger(LogComponent.STORE),
+  save: createComponentLogger(LogComponent.SAVE),
   
   // General
   main: createComponentLogger(LogComponent.MAIN),
   renderer: createComponentLogger(LogComponent.RENDERER),
-  debug: createComponentLogger(LogComponent.DEBUG)
+  debug: createComponentLogger(LogComponent.DEBUG),
+  general: createComponentLogger(LogComponent.GENERAL)
 };
 
 // Export configuration functions

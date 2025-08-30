@@ -1,18 +1,18 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { logger } from './utils/logger';
 
-logger.log('ui', 'App.tsx loading at', new Date().toISOString());
-logger.log('ui', 'About to import StravuEditor at', new Date().toISOString());
+logger.ui.info('App.tsx loading');
+logger.ui.info('About to import StravuEditor');
 import { StravuEditor, TOGGLE_SEARCH_COMMAND, MARKDOWN_TRANSFORMERS, aiChatBridge } from 'stravu-editor';
 import type { LexicalCommand, ConfigTheme, TextReplacement } from 'stravu-editor';
 // Import styles - handled by vite plugin for both dev and prod
 import 'stravu-editor/styles';
-logger.log('ui', 'StravuEditor imported at', new Date().toISOString());
+logger.ui.info('StravuEditor imported');
 
 // Ensure aiChatBridge is available globally
 if (typeof window !== 'undefined' && !window.aiChatBridge) {
   (window as any).aiChatBridge = aiChatBridge;
-  logger.log('ui', 'Set window.aiChatBridge manually');
+  logger.ui.info('Set window.aiChatBridge manually');
 }
 import { ProjectSidebar } from './components/ProjectSidebar';
 import { ProjectWelcome } from './components/ProjectWelcome';
@@ -109,7 +109,7 @@ declare global {
 
 
 export default function App() {
-  logger.log('ui', 'App component rendering at', new Date().toISOString());
+  logger.ui.info('App component rendering');
   
   // Check for special window modes
   const urlParams = new URLSearchParams(window.location.search);
@@ -188,9 +188,9 @@ export default function App() {
 
   // Log mount/unmount
   useEffect(() => {
-    logger.log('ui', 'App component mounted at', new Date().toISOString());
+    logger.ui.info('App component mounted');
     return () => {
-      logger.log('ui', 'App component unmounting at', new Date().toISOString());
+      logger.ui.info('App component unmounting');
     };
   }, []);
 
@@ -960,7 +960,7 @@ export default function App() {
       }
     }));
     cleanupFns.push(window.electronAPI.onNewUntitledDocument((data) => {
-      logger.log('file', 'Received new-untitled-document event:', data.untitledName);
+      logger.file.log('Received new-untitled-document event:', data.untitledName);
       setContent('');
       setCurrentFilePath(null);
       setCurrentFileName(data.untitledName);
@@ -1203,13 +1203,13 @@ export default function App() {
     };
   }, [handleNew, handleOpen, handleSave, handleSaveAs, currentFilePath, isDirty, getContentRef.current]);
 
-  logger.log('ui', 'Rendering App with config:', {
+  logger.ui.info('Rendering App with config:', {
     contentLength: content.length,
     currentFileName,
     theme
   });
 
-  logger.log('ui', 'About to render StravuEditor at', new Date().toISOString());
+  logger.ui.info('About to render StravuEditor');
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: projectMode ? 'row' : 'column' }}>
@@ -1268,7 +1268,7 @@ export default function App() {
             config={{
               initialContent: content,
               onContentChange: (newContent) => {
-            logger.log('editor', 'Content changed:', newContent.length, 'initialized:', isInitializedRef.current);
+            logger.editor.log('Content changed:', newContent.length, 'initialized:', isInitializedRef.current);
 
             // Check if content actually changed from initial
             if (getContentRef.current) {
@@ -1280,7 +1280,7 @@ export default function App() {
                 isInitializedRef.current = true;
                 // If content is different on first change, it's a real user edit
                 if (hasChanged) {
-                  logger.log('editor', 'First change is a real user edit');
+                  logger.editor.log('First change is a real user edit');
                   setIsDirty(true);
                 }
                 // If content is same, it's just initialization - no need to set dirty
@@ -1289,17 +1289,17 @@ export default function App() {
 
               // After initialization, normal dirty checking
               if (hasChanged !== isDirty) {
-                logger.log('editor', 'Dirty state changed to:', hasChanged);
+                logger.editor.log('Dirty state changed to:', hasChanged);
                 setIsDirty(hasChanged);
               }
             }
           },
           onGetContent: (getContentFn) => {
-            logger.log('ui', 'Received getContent function at', new Date().toISOString());
+            logger.ui.info('Received getContent function');
             getContentRef.current = getContentFn;
           },
           onEditorReady: (editor) => {
-            logger.log('ui', 'Editor ready at', new Date().toISOString());
+            logger.ui.info('Editor ready');
             editorRef.current = editor;
             searchCommandRef.current = TOGGLE_SEARCH_COMMAND;
           },

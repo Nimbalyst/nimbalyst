@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, app, nativeImage } from 'electron';
+import { BrowserWindow, dialog, app, nativeImage, ipcMain } from 'electron';
 import { join, basename } from 'path';
 import { existsSync } from 'fs';
 import { WindowState, FileTreeItem } from '../types';
@@ -145,6 +145,26 @@ export function createWindow(
             documentEdited: false
         });
         windowFocusOrder.set(windowId, ++focusOrderCounter); // Track initial focus order
+        
+        // Capture console messages from renderer (for debugging)
+        if (process.env.NODE_ENV !== 'production') {
+            window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+                const levelNames = ['verbose', 'info', 'warning', 'error'];
+                const levelName = levelNames[level] || 'unknown';
+                
+                // Send to main process for file logging
+                const timestamp = new Date().toISOString();
+                const logData = {
+                    timestamp,
+                    level: levelName,
+                    source: sourceId || 'renderer',
+                    message: `${message} ${line ? `(line ${line})` : ''}`
+                };
+                
+                // Emit to IPC for file logging
+                ipcMain.emit('console-log', null, logData);
+            });
+        }
 
         // Handle window close with unsaved changes
         window.on('close', (event) => {

@@ -38,7 +38,7 @@ export function detectStreamingIntent(content: string): {
   };
   cleanContent: string;
 } {
-  logger.log('protocol', 'Detecting streaming intent in content:', {
+  logger.protocol.info('Detecting streaming intent in content:', {
     length: content.length,
     first100: content.substring(0, 100),
     startsWithHTML: content.startsWith('<!--'),
@@ -52,10 +52,10 @@ export function detectStreamingIntent(content: string): {
   const match = content.match(streamingPattern);
   
   if (match) {
-    logger.log('protocol', 'Found STREAM_EDIT marker:', match[0]);
+    logger.protocol.info('Found STREAM_EDIT marker:', match[0]);
     try {
       const config = JSON.parse(match[1]);
-      logger.log('protocol', 'Parsed config:', config);
+      logger.protocol.info('Parsed config:', config);
       // Extract clean content - everything after the STREAM_EDIT marker
       const markerIndex = content.indexOf(match[0]);
       const afterMarker = content.substring(markerIndex + match[0].length);
@@ -68,7 +68,7 @@ export function detectStreamingIntent(content: string): {
         cleanContent: cleanContent
       };
     } catch (e) {
-      logger.log('protocol', 'Failed to parse streaming config:', e);
+      logger.protocol.warn('Failed to parse streaming config:', e);
     }
   }
   
@@ -77,13 +77,13 @@ export function detectStreamingIntent(content: string): {
   const mcpMatch = content.match(mcpPattern);
   
   if (mcpMatch) {
-    logger.log('protocol', 'Found @stream-to-editor marker:', mcpMatch[0]);
+    logger.protocol.info('Found @stream-to-editor marker:', mcpMatch[0]);
     const params = mcpMatch[1].split(/\s+/);
     const config = {
       position: params[0] || 'cursor',
       mode: (params[1] as 'extend' | 'after') || 'after'
     };
-    logger.log('protocol', 'Parsed MCP config:', config);
+    logger.protocol.info('Parsed MCP config:', config);
     return {
       isStreaming: true,
       streamConfig: config,
@@ -91,7 +91,7 @@ export function detectStreamingIntent(content: string): {
     };
   }
   
-  logger.log('protocol', 'No streaming markers found');
+  logger.protocol.info('No streaming markers found');
   return {
     isStreaming: false,
     cleanContent: content
@@ -117,7 +117,7 @@ export function parseStreamingChunk(chunk: string): {
       try {
         return { type: 'metadata', data: JSON.parse(metaMatch[1]) };
       } catch (e) {
-        logger.log('protocol', 'Failed to parse stream metadata:', e);
+        logger.protocol.warn('Failed to parse stream metadata:', e);
       }
     }
   }

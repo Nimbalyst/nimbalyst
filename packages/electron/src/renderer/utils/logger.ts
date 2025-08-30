@@ -1,212 +1,145 @@
-/**
- * Configurable logging system with categories
- * Allows enabling/disabling specific log categories to reduce noise
- */
+import log from 'electron-log/renderer';
 
-export type LogCategory = 
-  | 'streaming'      // Streaming content to editor
-  | 'api'           // Claude API calls
-  | 'session'       // Session management
-  | 'ui'            // UI events and rendering
-  | 'editor'        // Editor content changes
-  | 'file'          // File operations
-  | 'bridge'        // AI Chat Bridge communication
-  | 'protocol'      // Stream protocol parsing
-  | 'autosave'      // Autosave operations
-  | 'general';      // General logs
-
-interface LogConfig {
-  enabled: boolean;
-  color?: string;
-  prefix?: string;
+// Define component scopes for logging (duplicated from main for renderer)
+export enum LogComponent {
+  // File operations
+  FILE_WATCHER = 'FILE_WATCHER',
+  PROJECT_WATCHER = 'PROJECT_WATCHER',
+  FILE_OPERATIONS = 'FILE_OPERATIONS',
+  FILE_TREE = 'FILE_TREE',
+  FILE = 'FILE',
+  AUTOSAVE = 'AUTOSAVE',
+  
+  // Window management
+  WINDOW = 'WINDOW',
+  SESSION = 'SESSION',
+  MENU = 'MENU',
+  
+  // AI services
+  AI = 'AI',
+  AI_CLAUDE = 'AI_CLAUDE',
+  AI_CLAUDE_CODE = 'AI_CLAUDE_CODE',
+  AI_LMSTUDIO = 'AI_LMSTUDIO',
+  AI_OPENAI = 'AI_OPENAI',
+  AI_SESSION = 'AI_SESSION',
+  API = 'API',
+  
+  // Renderer specific
+  STREAMING = 'STREAMING',
+  UI = 'UI',
+  EDITOR = 'EDITOR',
+  BRIDGE = 'BRIDGE',
+  PROTOCOL = 'PROTOCOL',
+  
+  // Other services
+  MCP = 'MCP',
+  IPC = 'IPC',
+  THEME = 'THEME',
+  STORE = 'STORE',
+  SAVE = 'SAVE',
+  
+  // General
+  MAIN = 'MAIN',
+  RENDERER = 'RENDERER',
+  DEBUG = 'DEBUG',
+  GENERAL = 'GENERAL'
 }
 
-class Logger {
-  private categories: Map<LogCategory, LogConfig> = new Map();
-  private globalEnabled: boolean = true;
-
-  constructor() {
-    // Initialize default categories
-    this.initializeCategories();
-    
-    // Load saved preferences from localStorage
-    this.loadPreferences();
-    
-    // Expose to window for easy runtime configuration
-    (window as any).logger = this;
-  }
-
-  private initializeCategories() {
-    // Set default configurations for each category
-    const defaults: Record<LogCategory, LogConfig> = {
-      streaming: { enabled: true, color: '#00a8ff', prefix: '🔄' },
-      api: { enabled: true, color: '#ff6b6b', prefix: '🌐' },
-      session: { enabled: true, color: '#4ecdc4', prefix: '📋' },
-      ui: { enabled: false, color: '#95e1d3', prefix: '🎨' },  // Disabled by default (noisy)
-      editor: { enabled: false, color: '#f38181', prefix: '📝' },  // Disabled by default (noisy)
-      file: { enabled: true, color: '#aa96da', prefix: '📁' },
-      bridge: { enabled: true, color: '#fcbad3', prefix: '🌉' },
-      protocol: { enabled: true, color: '#ffffd2', prefix: '📡' },
-      autosave: { enabled: false, color: '#c7ceea', prefix: '💾' },  // Disabled by default (noisy)
-      general: { enabled: true, color: '#b2bec3', prefix: '📌' }
-    };
-
-    for (const [category, config] of Object.entries(defaults)) {
-      this.categories.set(category as LogCategory, config);
-    }
-  }
-
-  private loadPreferences() {
-    try {
-      const saved = localStorage.getItem('loggerConfig');
-      if (saved) {
-        const config = JSON.parse(saved);
-        for (const [category, enabled] of Object.entries(config)) {
-          const cat = this.categories.get(category as LogCategory);
-          if (cat) {
-            cat.enabled = enabled as boolean;
-          }
-        }
-      }
-    } catch (error) {
-      // Ignore errors loading preferences
-    }
-  }
-
-  private savePreferences() {
-    try {
-      const config: Record<string, boolean> = {};
-      for (const [category, { enabled }] of this.categories) {
-        config[category] = enabled;
-      }
-      localStorage.setItem('loggerConfig', JSON.stringify(config));
-    } catch (error) {
-      // Ignore errors saving preferences
-    }
-  }
-
-  public log(category: LogCategory, message: string, ...args: any[]) {
-    if (!this.globalEnabled) return;
-    
-    const config = this.categories.get(category);
-    if (!config || !config.enabled) return;
-
-    const prefix = config.prefix || '';
-    const label = `[${category.toUpperCase()}]`;
-    
-    if (config.color) {
-      console.log(
-        `%c${prefix} ${label}%c ${message}`,
-        `color: ${config.color}; font-weight: bold;`,
-        'color: inherit;',
-        ...args
-      );
-    } else {
-      console.log(`${prefix} ${label} ${message}`, ...args);
-    }
-  }
-
-  public enable(category: LogCategory) {
-    const config = this.categories.get(category);
-    if (config) {
-      config.enabled = true;
-      this.savePreferences();
-    }
-  }
-
-  public disable(category: LogCategory) {
-    const config = this.categories.get(category);
-    if (config) {
-      config.enabled = false;
-      this.savePreferences();
-    }
-  }
-
-  public enableAll() {
-    for (const config of this.categories.values()) {
-      config.enabled = true;
-    }
-    this.savePreferences();
-  }
-
-  public disableAll() {
-    for (const config of this.categories.values()) {
-      config.enabled = false;
-    }
-    this.savePreferences();
-  }
-
-  public enableOnly(...categories: LogCategory[]) {
-    // Disable all first
-    for (const config of this.categories.values()) {
-      config.enabled = false;
-    }
-    // Then enable specified categories
-    for (const category of categories) {
-      const config = this.categories.get(category);
-      if (config) {
-        config.enabled = true;
-      }
-    }
-    this.savePreferences();
-  }
-
-  public getStatus(): Record<LogCategory, boolean> {
-    const status: Partial<Record<LogCategory, boolean>> = {};
-    for (const [category, config] of this.categories) {
-      status[category] = config.enabled;
-    }
-    return status as Record<LogCategory, boolean>;
-  }
-
-  public printStatus() {
-    console.log('%c=== Logger Status ===', 'color: #00d2d3; font-weight: bold; font-size: 14px;');
-    for (const [category, config] of this.categories) {
-      const status = config.enabled ? '✅' : '❌';
-      const color = config.enabled ? '#00d2d3' : '#ee5a6f';
-      console.log(
-        `%c${status} ${category}`,
-        `color: ${color}; padding-left: 10px;`
-      );
-    }
-    console.log('%c==================', 'color: #00d2d3; font-weight: bold;');
-  }
-
-  // Convenience methods for common debugging scenarios
-  public focusOnStreaming() {
-    this.enableOnly('streaming', 'bridge', 'protocol', 'api');
-    console.log('%c🎯 Focused on streaming logs', 'color: #00a8ff; font-weight: bold;');
-  }
-
-  public focusOnSessions() {
-    this.enableOnly('session', 'api');
-    console.log('%c🎯 Focused on session logs', 'color: #4ecdc4; font-weight: bold;');
-  }
-
-  public focusOnFiles() {
-    this.enableOnly('file', 'autosave');
-    console.log('%c🎯 Focused on file logs', 'color: #aa96da; font-weight: bold;');
-  }
-
-  public focusOnAutosave() {
-    this.enableOnly('autosave', 'file');
-    console.log('%c💾 Focused on autosave debugging', 'color: #c7ceea; font-weight: bold;');
-    console.log('%cUse console logs to see detailed autosave behavior', 'color: #c7ceea;');
-  }
-
-  public quiet() {
-    this.enableOnly('general');
-    console.log('%c🤫 Quiet mode - only general logs', 'color: #b2bec3; font-weight: bold;');
-  }
+export enum LogLevel {
+  ERROR = 'error',
+  WARN = 'warn',
+  INFO = 'info',
+  VERBOSE = 'verbose',
+  DEBUG = 'debug',
+  SILLY = 'silly'
 }
 
-// Create singleton instance
-export const logger = new Logger();
+// Configure electron-log for renderer
+log.transports.console.level = 'info';
 
-// Print initial status and instructions
+// Clean, readable format
+log.transports.console.format = '{scope}: {text}';
+
+// Disabled components
+const disabledComponents = new Set([
+  LogComponent.UI,
+  LogComponent.EDITOR,
+  LogComponent.AUTOSAVE
+]);
+
+// Create a scoped logger for a component
+function createComponentLogger(component: LogComponent) {
+  const scope = log.scope(component);
+  const isDisabled = disabledComponents.has(component);
+  
+  return {
+    error: (message: string, ...args: any[]) => {
+      if (!isDisabled) scope.error(message, ...args);
+    },
+    warn: (message: string, ...args: any[]) => {
+      if (!isDisabled) scope.warn(message, ...args);
+    },
+    info: (message: string, ...args: any[]) => {
+      if (!isDisabled) scope.info(message, ...args);
+    },
+    verbose: (message: string, ...args: any[]) => {
+      if (!isDisabled) scope.verbose(message, ...args);
+    },
+    debug: (message: string, ...args: any[]) => {
+      if (!isDisabled) scope.debug(message, ...args);
+    },
+    silly: (message: string, ...args: any[]) => {
+      if (!isDisabled) scope.silly(message, ...args);
+    },
+    // Convenience method for backward compatibility with old logger
+    log: (message: string, ...args: any[]) => {
+      if (!isDisabled) scope.info(message, ...args);
+    }
+  };
+}
+
+// Export component loggers for renderer
+export const logger = {
+  // Renderer specific
+  streaming: createComponentLogger(LogComponent.STREAMING),
+  ui: createComponentLogger(LogComponent.UI),
+  editor: createComponentLogger(LogComponent.EDITOR),
+  bridge: createComponentLogger(LogComponent.BRIDGE),
+  protocol: createComponentLogger(LogComponent.PROTOCOL),
+  api: createComponentLogger(LogComponent.API),
+  
+  // File operations
+  file: createComponentLogger(LogComponent.FILE),
+  autosave: createComponentLogger(LogComponent.AUTOSAVE),
+  
+  // Session management
+  session: createComponentLogger(LogComponent.SESSION),
+  aiSession: createComponentLogger(LogComponent.AI_SESSION),
+  
+  // General
+  renderer: createComponentLogger(LogComponent.RENDERER),
+  general: createComponentLogger(LogComponent.GENERAL)
+};
+
+// Add compatibility method for old logger API
+(logger as any).getStatus = () => {
+  // Return a mock status object for compatibility
+  return {
+    streaming: true,
+    bridge: true, 
+    editor: false,
+    general: true,
+    api: true,
+    session: true,
+    ui: false,
+    file: true,
+    autosave: false,
+    protocol: true
+  };
+};
+
+// Expose to window for debugging (like the old logger)
 if (typeof window !== 'undefined') {
-  console.log('%c📊 Logger initialized. Use window.logger to configure.', 'color: #00d2d3; font-weight: bold;');
-  console.log('Commands: logger.printStatus(), logger.enable("category"), logger.disable("category")');
-  console.log('Quick modes: logger.focusOnStreaming(), logger.focusOnSessions(), logger.focusOnAutosave(), logger.quiet()');
-  console.log('For autosave debugging: logger.focusOnAutosave()');
+  (window as any).logger = logger;
+  console.log('%c📊 Unified logger initialized. Use window.logger to log.', 'color: #00d2d3; font-weight: bold;');
 }

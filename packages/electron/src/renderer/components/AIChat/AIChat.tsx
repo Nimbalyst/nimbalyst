@@ -83,13 +83,13 @@ export function AIChat({
       const allSessions = await claudeApi.getSessions(projectPath);
       setSessions(allSessions || []);
     } catch (error) {
-      logger.log('session', 'Failed to load sessions:', error);
+      logger.session.info('Failed to load sessions:', error);
     }
   }, [projectPath]);
 
   // Set up all event listeners FIRST (before initialization)
   useEffect(() => {
-    logger.log('ui', 'Setting up event listeners...');
+    logger.ui.info('Setting up event listeners...');
     // Set up streaming response listener
     const handleStreamResponse = (data: any) => {
       if (data.isComplete) {
@@ -125,7 +125,7 @@ export function AIChat({
         // Auto-apply edits when they arrive
         if (data.edits && data.edits.length > 0) {
           data.edits.forEach(async (edit: any) => {
-            logger.log('bridge', 'Auto-applying edit from Claude:', edit);
+            logger.bridge.info('Auto-applying edit from Claude:', edit);
             
             // Apply the edit through the API (which handles both applying and error reporting)
             const result = await claudeApi.applyEdit(edit);
@@ -262,7 +262,7 @@ export function AIChat({
 
     // Set up streaming edit listeners
     const handleStreamEditStart = (config: any) => {
-      logger.log('streaming', '🎯 Stream Edit Start Event Received:', config);
+      logger.streaming.info('🎯 Stream Edit Start Event Received:', config);
       console.log('[AIChat] Full streaming config:', JSON.stringify(config, null, 2));
       setIsStreamingToEditor(true);
       isStreamingToEditorRef.current = true; // Set ref immediately
@@ -276,7 +276,7 @@ export function AIChat({
       // Set a timeout to detect stuck streaming (30 seconds)
       streamTimeoutRef.current = setTimeout(() => {
         if (isStreamingToEditorRef.current) {
-          logger.log('streaming', '⚠️ Streaming timeout - ending stuck session');
+          logger.streaming.info('⚠️ Streaming timeout - ending stuck session');
           handleStreamEditEnd({ error: 'Streaming timeout after 30 seconds' });
         }
       }, 30000);
@@ -285,19 +285,19 @@ export function AIChat({
       const editId = `stream-${Date.now()}`;
       setStreamingEditId(editId);
       streamingEditIdRef.current = editId; // Set ref immediately
-      logger.log('streaming', 'Generated stream ID:', editId);
+      logger.streaming.info('Generated stream ID:', editId);
       
       // Initialize the streaming edit in the editor
       const aiChatBridge = (window as any).aiChatBridge;
-      logger.log('bridge', 'AI Chat Bridge available:', !!aiChatBridge);
-      logger.log('bridge', 'Bridge methods:', {
+      logger.bridge.info('AI Chat Bridge available:', !!aiChatBridge);
+      logger.bridge.info('Bridge methods:', {
         startStreamingEdit: !!aiChatBridge?.startStreamingEdit,
         streamContent: !!aiChatBridge?.streamContent,
         endStreamingEdit: !!aiChatBridge?.endStreamingEdit
       });
       
       if (aiChatBridge?.startStreamingEdit) {
-        logger.log('bridge', 'Calling bridge.startStreamingEdit with:', {
+        logger.bridge.info('Calling bridge.startStreamingEdit with:', {
           id: editId,
           ...config
         });
@@ -306,7 +306,7 @@ export function AIChat({
           ...config
         });
       } else {
-        logger.log('bridge', '❌ Bridge method startStreamingEdit not available!');
+        logger.bridge.info('❌ Bridge method startStreamingEdit not available!');
       }
       
       // Determine position text for display
@@ -322,7 +322,7 @@ export function AIChat({
         positionText = 'at cursor position';
       }
       
-      logger.log('streaming', `📍 Streaming to: ${positionText}`);
+      logger.streaming.info(`📍 Streaming to: ${positionText}`);
       
       // Add a streaming status message
       setMessages(prev => [...prev, {
@@ -341,7 +341,7 @@ export function AIChat({
     const handleStreamEditContent = (content: string) => {
       const currentStreamId = streamingEditIdRef.current || streamingEditId;
       const isStreaming = isStreamingToEditorRef.current || isStreamingToEditor;
-      logger.log('streaming', 'Stream content received:', {
+      logger.streaming.info('Stream content received:', {
         hasStreamingEditId: !!currentStreamId,
         isStreamingToEditor: isStreaming,
         contentLength: content?.length,
@@ -349,7 +349,7 @@ export function AIChat({
       });
       
       if (!isStreaming || !currentStreamId) {
-        logger.log('streaming', 'Ignoring stream content - not in streaming mode');
+        logger.streaming.info('Ignoring stream content - not in streaming mode');
         return;
       }
       
@@ -373,17 +373,17 @@ export function AIChat({
       // Stream the content to the editor
       const aiChatBridge = (window as any).aiChatBridge;
       if (aiChatBridge?.streamContent) {
-        logger.log('bridge', 'Calling bridge.streamContent');
+        logger.bridge.info('Calling bridge.streamContent');
         aiChatBridge.streamContent(currentStreamId, content);
       } else {
-        logger.log('bridge', '❌ Bridge method streamContent not available!');
+        logger.bridge.info('❌ Bridge method streamContent not available!');
       }
     };
 
     const handleStreamEditEnd = async (data?: { error?: string }) => {
       const currentStreamId = streamingEditIdRef.current || streamingEditId;
       const isStreaming = isStreamingToEditorRef.current || isStreamingToEditor;
-      logger.log('streaming', '🏁 Stream Edit End Event Received:', {
+      logger.streaming.info('🏁 Stream Edit End Event Received:', {
         streamingEditId: currentStreamId,
         isStreamingToEditor: isStreaming,
         streamingContentLength: streamingContent.length,
@@ -391,17 +391,17 @@ export function AIChat({
       });
       
       if (!currentStreamId) {
-        logger.log('streaming', 'No streaming edit ID to end');
+        logger.streaming.info('No streaming edit ID to end');
         return;
       }
       
       // Finalize the streaming edit in the editor
       const aiChatBridge = (window as any).aiChatBridge;
       if (aiChatBridge?.endStreamingEdit) {
-        logger.log('bridge', 'Calling bridge.endStreamingEdit');
+        logger.bridge.info('Calling bridge.endStreamingEdit');
         aiChatBridge.endStreamingEdit(currentStreamId);
       } else {
-        logger.log('bridge', '❌ Bridge method endStreamingEdit not available!');
+        logger.bridge.info('❌ Bridge method endStreamingEdit not available!');
       }
       
       // Update the streaming status to complete or error
@@ -434,13 +434,13 @@ export function AIChat({
     };
 
     // Register all event handlers
-    logger.log('ui', 'Registering event handlers...');
+    logger.ui.info('Registering event handlers...');
     claudeApi.on('streamEditStart', handleStreamEditStart);
     claudeApi.on('streamEditContent', handleStreamEditContent);
     claudeApi.on('streamEditEnd', handleStreamEditEnd);
     
     // Test that handlers are registered
-    logger.log('ui', 'Event handlers registered:', {
+    logger.ui.info('Event handlers registered:', {
       streamResponse: true,
       editRequest: true,
       streamEditStart: true,
@@ -449,7 +449,7 @@ export function AIChat({
     });
 
     return () => {
-      logger.log('ui', 'Cleaning up event handlers...');
+      logger.ui.info('Cleaning up event handlers...');
       claudeApi.off('streamResponse', handleStreamResponse);
       claudeApi.off('editRequest', handleEditRequest);
       claudeApi.off('streamEditStart', handleStreamEditStart);
@@ -525,7 +525,7 @@ export function AIChat({
         }
       } catch (error: any) {
         if (mounted) {
-          logger.log('api', 'Failed to initialize Claude:', error);
+          logger.api.info('Failed to initialize Claude:', error);
           setInitError(error.message || 'Failed to initialize Claude');
         }
       }
@@ -626,7 +626,7 @@ export function AIChat({
       // Reload sessions to update message counts
       await loadSessions();
     } catch (error) {
-      logger.log('api', 'Failed to send message:', error);
+      logger.api.info('Failed to send message:', error);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: 'Sorry, I encountered an error processing your request. Please try again.' 
@@ -679,7 +679,7 @@ export function AIChat({
       const result = await claudeApi.applyEdit(edit);
       return result;
     } catch (error) {
-      logger.log('bridge', 'Failed to apply edit:', error);
+      logger.bridge.info('Failed to apply edit:', error);
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Failed to apply changes' 
@@ -727,7 +727,7 @@ export function AIChat({
         chatInputRef.current?.focus();
       }, 100);
     } catch (error: any) {
-      logger.log('session', 'Failed to create new session:', error);
+      logger.session.info('Failed to create new session:', error);
       
       // Check if it's an API key error
       if (error?.message?.includes('API key not configured') || 
@@ -744,7 +744,7 @@ export function AIChat({
     try {
       await (window as any).electronAPI.openSessionManager(projectPath);
     } catch (error) {
-      logger.log('session', 'Failed to open session manager:', error);
+      logger.session.info('Failed to open session manager:', error);
     }
   }, [projectPath]);
   
@@ -758,7 +758,7 @@ export function AIChat({
         // Reload sessions to update message counts
         await loadSessions();
       } catch (error) {
-        logger.log('session', 'Failed to sync messages:', error);
+        logger.session.info('Failed to sync messages:', error);
       }
     };
     
@@ -775,7 +775,7 @@ export function AIChat({
       try {
         await claudeApi.saveDraftInput(currentSessionId, inputValue, projectPath);
       } catch (error) {
-        logger.log('session', 'Failed to save draft input:', error);
+        logger.session.info('Failed to save draft input:', error);
       }
     };
     
@@ -820,7 +820,7 @@ export function AIChat({
         chatInputRef.current?.focus();
       }, 100);
     } catch (error) {
-      logger.log('session', 'Failed to load session:', error);
+      logger.session.info('Failed to load session:', error);
     }
   }, [projectPath]);
 
@@ -838,7 +838,7 @@ export function AIChat({
       // Reload sessions list
       await loadSessions();
     } catch (error) {
-      logger.log('session', 'Failed to delete session:', error);
+      logger.session.info('Failed to delete session:', error);
     }
   }, [currentSessionId, projectPath, loadSessions]);
 
@@ -849,7 +849,7 @@ export function AIChat({
       
       await loadSessions();
     } catch (error) {
-      logger.log('session', 'Failed to rename session:', error);
+      logger.session.info('Failed to rename session:', error);
     }
   }, [loadSessions]);
   
@@ -864,7 +864,7 @@ export function AIChat({
           onSessionLoaded();
         }
       } catch (error) {
-        logger.log('session', 'Failed to load requested session:', error);
+        logger.session.info('Failed to load requested session:', error);
       }
     };
     

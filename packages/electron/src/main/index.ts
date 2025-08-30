@@ -31,17 +31,20 @@ let sessionSaveInterval: NodeJS.Timeout | null = null;
 // AI service instance
 let aiService: AIService | null = null;
 
-// Initialize debug logging in development
-function initializeDebugLogging() {
+// Initialize logging
+function initializeLogging() {
+    // electron-log handles main process logging
+    logger.main.info('Application logging initialized');
+    
+    // Capture renderer console logs to a file so Claude can read them
     if (process.env.NODE_ENV !== 'production') {
-        const debugLogPath = join(app.getPath('userData'), 'stravu-editor-debug.log');
+        const debugLogPath = join(app.getPath('userData'), 'renderer-console.log');
         
         // Clear log on startup
         try {
-            writeFileSync(debugLogPath, `=== Stravu Editor Debug Log Started ${new Date().toISOString()} ===\n`);
-            logger.main.info(`Debug logging enabled. Browser console logs will be written to: ${debugLogPath}`);
+            writeFileSync(debugLogPath, `=== Renderer Console Log Started ${new Date().toISOString()} ===\n`);
         } catch (error) {
-            logger.main.error('Failed to initialize debug log:', error);
+            logger.main.error('Failed to initialize renderer console log:', error);
         }
 
         // Listen for console logs from renderer
@@ -50,51 +53,11 @@ function initializeDebugLogging() {
             try {
                 appendFileSync(debugLogPath, logEntry);
             } catch (error) {
-                logger.main.error('Failed to write to debug log:', error);
+                // Ignore write errors
             }
         });
-
-        // Also capture main process logs
-        const originalConsole = {
-            log: console.log,
-            warn: console.warn,
-            error: console.error,
-            info: console.info,
-            debug: console.debug
-        };
-
-        const captureMainLog = (level: string, ...args: any[]) => {
-            // Call original console method first with try-catch
-            try {
-                originalConsole[level as keyof typeof originalConsole](...args);
-            } catch (error) {
-                // Ignore console errors (EPIPE, etc)
-            }
-
-            const timestamp = new Date().toISOString();
-            const message = args.map(arg => {
-                try {
-                    return typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg);
-                } catch (e) {
-                    return '[Circular or unstringifiable object]';
-                }
-            }).join(' ');
-
-            const logEntry = `[${timestamp}] [${level.toUpperCase()}] [main] ${message}\n`;
-            try {
-                appendFileSync(debugLogPath, logEntry);
-            } catch (error) {
-                // Don't log this error to avoid infinite loop
-            }
-        };
-
-        console.log = (...args) => captureMainLog('log', ...args);
-        console.warn = (...args) => captureMainLog('warn', ...args);
-        console.error = (...args) => captureMainLog('error', ...args);
-        console.info = (...args) => captureMainLog('info', ...args);
-        console.debug = (...args) => captureMainLog('debug', ...args);
-
-        logger.main.info(`Debug logging enabled. Logs will be written to: ${debugLogPath}`);
+        
+        logger.main.info(`Renderer console logs will be written to: ${debugLogPath}`);
     }
 }
 
@@ -142,8 +105,8 @@ app.whenReady().then(async () => {
     // Parse command line arguments
     parseCommandLineArgs();
     
-    // Initialize debug logging
-    initializeDebugLogging();
+    // Initialize logging
+    initializeLogging();
     
     // Set dock icon for macOS
     if (process.platform === 'darwin' && app.dock) {
