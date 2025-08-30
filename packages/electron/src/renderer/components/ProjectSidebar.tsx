@@ -205,7 +205,7 @@ export function ProjectSidebar({
             aria-label="New file"
           >
             <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-              note_add
+              edit_square
             </span>
           </button>
           <button

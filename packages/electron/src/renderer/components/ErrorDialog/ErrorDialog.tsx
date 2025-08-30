@@ -4,7 +4,7 @@ import './ErrorDialog.css';
 interface DiffErrorDetails {
   originalMarkdown: string;
   prompt: string;
-  claudeResponse: string;
+  aiResponse: string;
   replacements: Array<{
     oldText: string;
     newText: string;
@@ -48,7 +48,7 @@ export function ErrorDialog({ isOpen, onClose, title, message, details }: ErrorD
         filePath: details.filePath
       },
       prompt: details.prompt,
-      claudeResponse: details.claudeResponse,
+      aiResponse: details.aiResponse,
       replacements: details.replacements,
       documentContent: details.originalMarkdown
     };
@@ -71,13 +71,13 @@ ${JSON.stringify(debugInfo, null, 2)}
 ${details.originalMarkdown}
 \`\`\`
 
-## Prompt Sent to Claude
+## Prompt Sent to AI
 
 ${details.prompt}
 
-## Claude's Response
+## AI Response
 
-${details.claudeResponse}
+${details.aiResponse}
 
 ## Attempted Replacements
 
@@ -174,11 +174,11 @@ ${r.newText}
                     onClick={() => toggleSection('response')}
                   >
                     <span className="section-arrow">▶</span>
-                    Claude's Response
+                    AI Response
                   </button>
                   {expandedSections.has('response') && (
                     <div className="section-content">
-                      <pre className="code-block">{details.claudeResponse}</pre>
+                      <pre className="code-block">{details.aiResponse}</pre>
                     </div>
                   )}
                 </div>
@@ -233,8 +233,8 @@ ${r.newText}
               <div className="error-dialog-help">
                 <p><strong>What to do next:</strong></p>
                 <ul>
-                  <li>Check if the document was modified after Claude started processing</li>
-                  <li>Verify that the text Claude is trying to replace exists exactly as shown</li>
+                  <li>Check if the document was modified after the AI started processing</li>
+                  <li>Verify that the text the AI is trying to replace exists exactly as shown</li>
                   <li>Try making the request again with the current document state</li>
                   <li>If the problem persists, copy the debug info and report the issue</li>
                 </ul>

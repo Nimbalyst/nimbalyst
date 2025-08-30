@@ -14,7 +14,7 @@ interface AIChatProps {
   width: number;
   onWidthChange: (width: number) => void;
   documentContext?: DocumentContext & { getLatestContent?: () => string };
-  onApplyEdit?: (edit: any, prompt?: string, claudeResponse?: string) => void;
+  onApplyEdit?: (edit: any, prompt?: string, aiResponse?: string) => void;
   projectPath?: string;
   sessionToLoad?: { sessionId: string; projectPath?: string } | null;
   onSessionLoaded?: () => void;

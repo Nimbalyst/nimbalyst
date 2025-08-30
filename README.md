@@ -11,9 +11,11 @@ While heavily leveraging the Lexical playground environment, this editor works t
 
 ## Packages
 
-- **`packages/stravu-editor`** - The core library (published to npm)
+- **`packages/core`** - The core library
 - **`packages/playground`** - Demo and testing playground web app
 - **`packages/electron`** - Desktop application (Electron)
+- **`packages/capacitor`** - Mobile application (Capacitor)
+- **`packages/tauri`** - Desktop application (Tauri)
 
 ## Getting Started
 
@@ -82,7 +84,7 @@ npm run dist
 ```
 
 The Electron app features:
-- **Latest Electron version (37.x)** for improved performance and security
+- **Modern Electron version** for improved performance and security
 - **Native About window** that respects the current theme
 - **Dark mode support** with automatic title bar theming
 - **Code highlighting** using Prism.js with full dark theme support
@@ -104,7 +106,7 @@ The monorepo uses a simplified development setup with hot module replacement (HM
 # Start development server
 npm run dev
 
-# This runs the playground dev server on port 3000
+# This runs the playground dev server on port 4101
 # The playground imports directly from the library source files via custom Vite plugin
 
 # Build playground for deployment
@@ -137,7 +139,7 @@ The project runs in development mode with full file management capabilities:
 npm run dev
 ```
 
-Visit `http://localhost:3000` to access the editor with:
+Visit `http://localhost:4101` to access the editor with:
 - File management toolbar (New File, Load File, Open File, Save File)
 - URL-based file naming
 - Auto-save functionality
@@ -322,32 +324,17 @@ Custom Lexical nodes extend base functionality:
 
 ### Project Structure
 ```javascript
-src/
-├── App.tsx                 # Main app and dev mode
-├── Editor.tsx             # Core editor component
-├── EditorConfig.ts        # Configuration interface
-├── FileService.ts         # File system abstraction
-├── plugins/               # Feature plugins
-├── nodes/                 # Custom Lexical nodes
-├── ui/                    # Reusable UI components
-├── themes/                # Editor themes
-└── utils/                 # Utility functions
+packages/
+├── core/                  # Core editor library
+├── playground/            # Development playground
+├── electron/              # Electron desktop app
+├── capacitor/             # Mobile app (Capacitor)
+└── tauri/                 # Desktop app (Tauri)
 ```
 
 ### Testing
 
-The project includes comprehensive testing:
-
-```bash
-# Unit tests (Jest)
-__tests__/unit/
-
-# End-to-end tests (Playwright)
-__tests__/e2e/
-
-# Regression tests (Playwright)
-__tests__/regression/
-```
+The project's test infrastructure is under active development. Future updates will include comprehensive testing with Jest and Playwright.
 
 ### Key Commands
 

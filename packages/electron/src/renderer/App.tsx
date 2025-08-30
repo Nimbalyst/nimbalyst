@@ -187,7 +187,7 @@ export default function App() {
     details: undefined
   });
   const [lastPrompt, setLastPrompt] = useState<string>('');
-  const [lastClaudeResponse, setLastClaudeResponse] = useState<string>('');
+  const [lastAIResponse, setLastAIResponse] = useState<string>('');
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
@@ -1362,11 +1362,11 @@ export default function App() {
             selection: undefined, // TODO: Get selected text from Lexical
             getLatestContent: getContentRef.current // Pass the function itself
           }}
-          onApplyEdit={(edit, prompt, claudeResponse) => {
+          onApplyEdit={(edit, prompt, aiResponse) => {
             console.log('Edit already applied by AIChat component, updating UI state');
             // Store the prompt and response for error reporting
             setLastPrompt(prompt || '');
-            setLastClaudeResponse(claudeResponse || '');
+            setLastAIResponse(aiResponse || '');
 
             // The edit has already been applied by AIChat.tsx through aiApi.applyEdit()
             // This callback is just for UI state updates, not for applying the edit

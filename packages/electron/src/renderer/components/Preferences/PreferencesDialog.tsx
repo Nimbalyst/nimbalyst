@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { GeneralPreferences } from './GeneralPreferences';
-import { ClaudePreferences } from './ClaudePreferences';
+import { AIPreferences } from './AIPreferences';
 import './PreferencesDialog.css';
 
 interface PreferencesDialogProps {
@@ -8,7 +8,7 @@ interface PreferencesDialogProps {
   onClose: () => void;
 }
 
-type TabId = 'general' | 'claude';
+type TabId = 'general' | 'ai';
 
 export function PreferencesDialog({ isOpen, onClose }: PreferencesDialogProps) {
   const [activeTab, setActiveTab] = useState<TabId>('general');
@@ -53,21 +53,21 @@ export function PreferencesDialog({ isOpen, onClose }: PreferencesDialogProps) {
             </button>
 
             <button
-              className={`preferences-tab ${activeTab === 'claude' ? 'active' : ''}`}
-              onClick={() => setActiveTab('claude')}
+              className={`preferences-tab ${activeTab === 'ai' ? 'active' : ''}`}
+              onClick={() => setActiveTab('ai')}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path d="M8 1L9 5L13 6L9 7L8 11L7 7L3 6L7 5L8 1Z" fill="currentColor"/>
                 <path d="M3 2L3.5 3.5L5 4L3.5 4.5L3 6L2.5 4.5L1 4L2.5 3.5L3 2Z" fill="currentColor" opacity="0.5"/>
                 <path d="M13 10L13.5 11.5L15 12L13.5 12.5L13 14L12.5 12.5L11 12L12.5 11.5L13 10Z" fill="currentColor" opacity="0.5"/>
               </svg>
-              Claude AI
+              AI
             </button>
           </div>
 
           <div className="preferences-panel">
             {activeTab === 'general' && <GeneralPreferences />}
-            {activeTab === 'claude' && <ClaudePreferences />}
+            {activeTab === 'ai' && <AIPreferences />}
           </div>
         </div>
       </div>

@@ -169,7 +169,7 @@ export function FileContextMenu({
         <>
           {onNewFile && (
             <div className="context-menu-item" onClick={() => { onNewFile(filePath); onClose(); }}>
-              <MaterialSymbol icon="note_add" size={18} />
+              <MaterialSymbol icon="edit_square" size={18} />
               <span>New File</span>
             </div>
           )}

@@ -1,4 +1,4 @@
-import { detectStreamingIntent, parseStreamingChunk, StreamingEditRequest } from './claudeStreamProtocol';
+import { detectStreamingIntent, parseStreamingChunk, StreamingEditRequest } from './aiStreamProtocol';
 import { logger } from '../utils/logger';
 
 interface DocumentContext {
@@ -47,20 +47,7 @@ class AIApi {
   private defaultProvider: 'claude' | 'claude-code' = 'claude-code';
 
   constructor() {
-    // Set up IPC listener for errors (both legacy and new)
-    window.electronAPI.onClaudeError((error: any) => {
-      console.error('Claude API Error:', error);
-      console.error('Error details:', {
-        message: error.message,
-        type: error.type,
-        stack: error.stack
-      });
-      
-      // Emit error event so UI can handle it
-      this.emit('error', error);
-    });
-    
-    // Also listen for new AI error events
+    // Set up IPC listener for errors
     window.electronAPI.onAIError((error: any) => {
       console.error('AI API Error:', error);
       console.error('Error details:', {
@@ -230,12 +217,11 @@ class AIApi {
       this.emit('streamResponse', data);
     };
 
-    // Listen for both legacy and new stream response events
-    window.electronAPI.onClaudeStreamResponse(handleStreamResponse);
+    // Listen for stream response events
     window.electronAPI.onAIStreamResponse(handleStreamResponse);
 
     // Listen for edit requests
-    window.electronAPI.onClaudeEditRequest((edit: EditRequest) => {
+    window.electronAPI.onAIEditRequest((edit: EditRequest) => {
       this.emit('editRequest', edit);
     });
     
@@ -277,11 +263,7 @@ class AIApi {
 
   // Initialize with optional provider selection
   async initialize(apiKey?: string, provider?: 'claude' | 'claude-code' | 'openai'): Promise<{ success: boolean }> {
-    // Use new AI initialize for specific provider, or legacy for backward compat
-    if (provider) {
-      return window.electronAPI.aiInitialize(provider, apiKey);
-    }
-    return window.electronAPI.claudeInitialize(apiKey);
+    return window.electronAPI.aiInitialize(provider || 'claude-code', apiKey);
   }
 
   // Create session with provider and model selection
@@ -291,11 +273,7 @@ class AIApi {
     provider?: 'claude' | 'claude-code' | 'openai',
     modelId?: string
   ): Promise<Session> {
-    // Use new AI method if provider specified, otherwise use legacy
-    if (provider) {
-      return window.electronAPI.aiCreateSession(provider, documentContext, projectPath, modelId);
-    }
-    return window.electronAPI.claudeCreateSession(documentContext, projectPath);
+    return window.electronAPI.aiCreateSession(provider || 'claude-code', documentContext, projectPath, modelId);
   }
 
   // New method specifically for creating session with provider
@@ -314,35 +292,35 @@ class AIApi {
     sessionId?: string,
     projectPath?: string
   ): Promise<{ content: string; edits: EditRequest[] }> {
-    return window.electronAPI.claudeSendMessage(message, documentContext, sessionId, projectPath);
+    return window.electronAPI.aiSendMessage(message, documentContext, sessionId, projectPath);
   }
 
   async getSessions(projectPath?: string): Promise<Session[]> {
-    return window.electronAPI.claudeGetSessions(projectPath);
+    return window.electronAPI.aiGetSessions(projectPath);
   }
 
   async loadSession(sessionId: string, projectPath?: string): Promise<Session> {
-    return window.electronAPI.claudeLoadSession(sessionId, projectPath);
+    return window.electronAPI.aiLoadSession(sessionId, projectPath);
   }
 
   async clearSession(): Promise<{ success: boolean }> {
-    return window.electronAPI.claudeClearSession();
+    return window.electronAPI.aiClearSession();
   }
   
   async updateSessionMessages(sessionId: string, messages: any[], projectPath?: string): Promise<{ success: boolean; error?: string }> {
-    return window.electronAPI.claudeUpdateSessionMessages(sessionId, messages, projectPath);
+    return window.electronAPI.aiUpdateSessionMessages(sessionId, messages, projectPath);
   }
   
   async saveDraftInput(sessionId: string, draftInput: string, projectPath?: string): Promise<{ success: boolean; error?: string }> {
-    return window.electronAPI.claudeSaveDraftInput(sessionId, draftInput, projectPath);
+    return window.electronAPI.aiSaveDraftInput(sessionId, draftInput, projectPath);
   }
 
   async deleteSession(sessionId: string, projectPath?: string): Promise<{ success: boolean }> {
-    return window.electronAPI.claudeDeleteSession(sessionId, projectPath);
+    return window.electronAPI.aiDeleteSession(sessionId, projectPath);
   }
 
   async cancelRequest(): Promise<{ success: boolean; error?: string }> {
-    return window.electronAPI.claudeCancelRequest();
+    return window.electronAPI.aiCancelRequest();
   }
 
   async applyEdit(edit: EditRequest): Promise<{ success: boolean; error?: string }> {
@@ -358,7 +336,7 @@ class AIApi {
       }
       
       // For other edit types or if bridge not available, use the IPC method
-      const result = await window.electronAPI.claudeApplyEdit(edit);
+      const result = await window.electronAPI.aiApplyEdit(edit);
       return { success: result.success, error: result.success ? undefined : 'Failed to apply edit' };
     } catch (error) {
       console.error('Failed to apply edit:', error);
@@ -392,7 +370,7 @@ class AIApi {
         try {
           callback(data);
         } catch (error) {
-          console.error(`[ClaudeAPI] Error in event handler for '${event}':`, error);
+          console.error(`[AIApi] Error in event handler for '${event}':`, error);
         }
       });
     }

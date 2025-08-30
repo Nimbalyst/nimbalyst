@@ -58,26 +58,21 @@ interface ElectronAPI {
   // Project file tree operations
   onProjectFileTreeUpdated: (callback: (data: { fileTree: FileTreeItem[]; addedPath?: string; removedPath?: string }) => void) => () => void;
   
-  // Claude AI operations
-  claudeInitialize?: (apiKey?: string) => Promise<any>;
-  claudeCreateSession?: (documentContext?: any, projectPath?: string) => Promise<any>;
-  claudeSendMessage?: (message: string, documentContext?: any) => Promise<any>;
-  claudeGetSessions?: (projectPath?: string) => Promise<any>;
-  claudeLoadSession?: (sessionId: string, projectPath?: string) => Promise<any>;
-  claudeClearSession?: () => Promise<any>;
-  claudeUpdateSessionMessages?: (sessionId: string, messages: any[], projectPath?: string) => Promise<{ success: boolean; error?: string }>;
-  claudeSaveDraftInput?: (sessionId: string, draftInput: string, projectPath?: string) => Promise<{ success: boolean; error?: string }>;
-  claudeDeleteSession?: (sessionId: string, projectPath?: string) => Promise<{ success: boolean }>;
-  claudeCancelRequest?: () => Promise<{ success: boolean; error?: string }>;
-  claudeApplyEdit?: (edit: any) => Promise<any>;
-  getClaudeSettings?: () => Promise<any>;
-  saveClaudeSettings?: (settings: any) => Promise<any>;
-  testClaudeConnection?: () => Promise<any>;
-  getClaudeModels?: () => Promise<{ success: boolean; models: Array<{ id: string; display_name: string }>; error?: string }>;
+  // AI operations
+  aiSendMessage?: (message: string, documentContext?: any, sessionId?: string, projectPath?: string) => Promise<any>;
+  aiGetSessions?: (projectPath?: string) => Promise<any>;
+  aiLoadSession?: (sessionId: string, projectPath?: string) => Promise<any>;
+  aiClearSession?: () => Promise<any>;
+  aiUpdateSessionMessages?: (sessionId: string, messages: any[], projectPath?: string) => Promise<{ success: boolean; error?: string }>;
+  aiSaveDraftInput?: (sessionId: string, draftInput: string, projectPath?: string) => Promise<{ success: boolean; error?: string }>;
+  aiDeleteSession?: (sessionId: string, projectPath?: string) => Promise<{ success: boolean }>;
+  aiCancelRequest?: () => Promise<{ success: boolean; error?: string }>;
+  aiApplyEdit?: (edit: any) => Promise<any>;
   
-  // Claude AI event listeners
-  onClaudeStreamResponse?: (callback: (data: any) => void) => () => void;
-  onClaudeEditRequest?: (callback: (edit: any) => void) => () => void;
+  // AI event listeners
+  onAIStreamResponse?: (callback: (data: any) => void) => () => void;
+  onAIEditRequest?: (callback: (edit: any) => void) => () => void;
+  onAIError?: (callback: (error: any) => void) => () => void;
   
   // Preferences operations
   openDataFolder?: () => Promise<{ success: boolean }>;
