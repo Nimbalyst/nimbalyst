@@ -1,6 +1,10 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { join, basename } from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 import { windowStates } from '../window/WindowManager';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
@@ -109,49 +113,98 @@ export function registerProjectHandlers() {
         }
     });
 
-    // Search project files
+    // Search project files and content using ripgrep
     ipcMain.handle('search-project-files', async (event, projectPath: string, query: string) => {
         try {
-            const results: string[] = [];
-            const searchLower = query.toLowerCase();
-            const maxResults = 50;
+            const trimmedQuery = query.trim();
+            if (!trimmedQuery) return [];
             
-            // Recursive function to search files
-            const searchDir = (dir: string) => {
-                if (results.length >= maxResults) return;
+            // Escape special characters for shell
+            const escapedTerm = trimmedQuery.replace(/["'\\]/g, '\\$&');
+            
+            // Search both file names and content using ripgrep
+            // Use --files-with-matches to get file list, then search content
+            const allResults = [];
+            
+            // First, search file names
+            try {
+                const fileNameCommand = `find "${projectPath}" -name "*.md" -o -name "*.markdown" 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
+                const { stdout: fileMatches } = await execAsync(fileNameCommand);
                 
-                try {
-                    const items = readdirSync(dir);
+                if (fileMatches) {
+                    const files = fileMatches.split('\n').filter(f => f.trim());
+                    for (const file of files) {
+                        allResults.push({
+                            path: file,
+                            isFileNameMatch: true,
+                            matches: []
+                        });
+                    }
+                }
+            } catch (e) {
+                // Ignore file name search errors
+            }
+            
+            // Then search content using ripgrep
+            try {
+                const contentCommand = `rg --type md -i --json "${escapedTerm}" "${projectPath}" 2>/dev/null || true`;
+                const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
+                
+                if (stdout) {
+                    const lines = stdout.split('\n').filter(line => line.trim());
+                    const contentMatches = new Map<string, any>();
                     
-                    for (const item of items) {
-                        if (results.length >= maxResults) break;
-                        
-                        const fullPath = join(dir, item);
-                        
-                        // Skip node_modules, .git, and other common directories
-                        if (item === 'node_modules' || item === '.git' || item === 'dist' || item === 'build' || item.startsWith('.')) {
-                            continue;
-                        }
-                        
-                        const stat = statSync(fullPath);
-                        
-                        if (stat.isDirectory()) {
-                            searchDir(fullPath);
-                        } else if (stat.isFile()) {
-                            // Check if filename matches query and is a markdown file
-                            if (item.toLowerCase().includes(searchLower) && 
-                                (item.endsWith('.md') || item.endsWith('.markdown'))) {
-                                results.push(fullPath);
+                    for (const line of lines) {
+                        try {
+                            const item = JSON.parse(line);
+                            if (item.type === 'match') {
+                                const filePath = item.data.path.text;
+                                if (!contentMatches.has(filePath)) {
+                                    contentMatches.set(filePath, {
+                                        path: filePath,
+                                        isContentMatch: true,
+                                        matches: []
+                                    });
+                                }
+                                
+                                // Add match with line number and text
+                                contentMatches.get(filePath).matches.push({
+                                    line: item.data.line_number,
+                                    text: item.data.lines.text.trim(),
+                                    start: item.data.submatches[0]?.start || 0,
+                                    end: item.data.submatches[0]?.end || item.data.lines.text.length
+                                });
                             }
+                        } catch (e) {
+                            // Skip invalid JSON lines
                         }
                     }
-                } catch (error) {
-                    console.error(`Error searching directory ${dir}:`, error);
+                    
+                    // Merge content matches with existing results
+                    for (const [filePath, data] of contentMatches) {
+                        const existing = allResults.find(r => r.path === filePath);
+                        if (existing) {
+                            // File matches both name and content
+                            existing.matches = data.matches;
+                            existing.isContentMatch = true;
+                        } else {
+                            allResults.push(data);
+                        }
+                    }
                 }
-            };
+            } catch (error) {
+                console.error('Error executing ripgrep:', error);
+            }
             
-            searchDir(projectPath);
-            return results;
+            // Sort by relevance: files matching both name and content first
+            allResults.sort((a, b) => {
+                const aScore = (a.isFileNameMatch ? 2 : 0) + (a.isContentMatch ? 1 : 0);
+                const bScore = (b.isFileNameMatch ? 2 : 0) + (b.isContentMatch ? 1 : 0);
+                return bScore - aScore;
+            });
+            
+            return allResults.slice(0, 50);
+            
         } catch (error) {
             console.error('Error searching project files:', error);
             return [];

@@ -610,10 +610,16 @@ export default function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd+E (Mac) or Ctrl+E (Windows/Linux) for Quick Open
-      if (projectMode && (e.metaKey || e.ctrlKey) && e.key === 'e') {
+      // Cmd+K (Mac) or Ctrl+K (Windows/Linux) for Quick Open
+      // This takes priority over Lexical's link plugin
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        setIsQuickOpenVisible(true);
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        if (projectMode) {
+          setIsQuickOpenVisible(true);
+        }
+        return false;
       }
       // Cmd+Shift+A (Mac) or Ctrl+Shift+A (Windows/Linux) for AI Chat
       if (projectMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'a') {
@@ -637,8 +643,9 @@ export default function App() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // Use capture phase to intercept before any other handlers (like Lexical's)
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [projectMode, currentFilePath]);
 
   // Save AI Chat state when it changes (but only after initial load)
@@ -1212,7 +1219,19 @@ export default function App() {
   logger.ui.info('About to render StravuEditor');
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: projectMode ? 'row' : 'column' }}>
+    <div 
+      style={{ height: '100vh', display: 'flex', flexDirection: projectMode ? 'row' : 'column' }}
+      onKeyDown={(e) => {
+        // Intercept Cmd+K/Ctrl+K before it reaches Lexical editor
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+          e.preventDefault();
+          e.stopPropagation();
+          if (projectMode) {
+            setIsQuickOpenVisible(true);
+          }
+        }
+      }}
+    >
       {projectMode && projectName && (
         <>
           <div ref={sidebarRef} style={{ width: sidebarWidth, position: 'relative' }}>
