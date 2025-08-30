@@ -18,6 +18,7 @@ import { registerPreferencesHandlers } from './ipc/PreferencesHandlers';
 import { getTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
 import { startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
+import { logger } from './utils/logger';
 
 // Track pending file to open
 let pendingFilePath: string | null = null;
@@ -38,9 +39,9 @@ function initializeDebugLogging() {
         // Clear log on startup
         try {
             writeFileSync(debugLogPath, `=== Stravu Editor Debug Log Started ${new Date().toISOString()} ===\n`);
-            console.log('[MAIN] Debug logging enabled. Browser console logs will be written to:', debugLogPath);
+            logger.main.info(`Debug logging enabled. Browser console logs will be written to: ${debugLogPath}`);
         } catch (error) {
-            console.error('Failed to initialize debug log:', error);
+            logger.main.error('Failed to initialize debug log:', error);
         }
 
         // Listen for console logs from renderer
@@ -49,7 +50,7 @@ function initializeDebugLogging() {
             try {
                 appendFileSync(debugLogPath, logEntry);
             } catch (error) {
-                console.error('Failed to write to debug log:', error);
+                logger.main.error('Failed to write to debug log:', error);
             }
         });
 
@@ -93,14 +94,14 @@ function initializeDebugLogging() {
         console.info = (...args) => captureMainLog('info', ...args);
         console.debug = (...args) => captureMainLog('debug', ...args);
 
-        console.log('Debug logging enabled. Logs will be written to:', debugLogPath);
+        logger.main.info(`Debug logging enabled. Logs will be written to: ${debugLogPath}`);
     }
 }
 
 // Handle file open from OS (macOS)
 app.on('open-file', (event, path) => {
     event.preventDefault();
-    console.log('[MAIN] open-file event received:', path);
+    logger.main.info(`open-file event received: ${path}`);
     
     if (app.isReady()) {
         // Check if file is already open in a window
@@ -128,7 +129,7 @@ function parseCommandLineArgs() {
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--project' && i + 1 < args.length) {
             pendingProjectPath = args[i + 1];
-            console.log('[MAIN] Project path from CLI:', pendingProjectPath);
+            logger.main.info(`Project path from CLI: ${pendingProjectPath}`);
         }
     }
 }
@@ -136,7 +137,7 @@ function parseCommandLineArgs() {
 
 // App ready handler
 app.whenReady().then(async () => {
-    console.log('[MAIN] App ready');
+    logger.main.info('App ready');
     
     // Parse command line arguments
     parseCommandLineArgs();
@@ -150,9 +151,9 @@ app.whenReady().then(async () => {
         if (existsSync(iconPath)) {
             const dockIcon = nativeImage.createFromPath(iconPath);
             app.dock.setIcon(dockIcon);
-            console.log('Dock icon set successfully from resources');
+            logger.main.info('Dock icon set successfully from resources');
         } else {
-            console.log('icon not found at:', iconPath);
+            logger.main.warn(`icon not found at: ${iconPath}`);
         }
     }
     
@@ -173,9 +174,9 @@ app.whenReady().then(async () => {
     // Start MCP SSE server
     try {
         await startMcpHttpServer(3456);
-        console.log('[MAIN] MCP SSE server started on port 3456');
+        logger.mcp.info('MCP SSE server started on port 3456');
     } catch (error) {
-        console.error('[MAIN] Failed to start MCP SSE server:', error);
+            logger.mcp.error('Failed to start MCP SSE server:', error);
     }
     
     // Set up IPC handler to update document state for MCP
@@ -246,7 +247,7 @@ app.on('activate', () => {
 
 // Before quit handler
 app.on('before-quit', () => {
-    console.log('[SESSION] App quitting, saving session state');
+    logger.session.info('App quitting, saving session state');
     
     // Clear the session save interval
     if (sessionSaveInterval) {
@@ -266,7 +267,7 @@ app.on('before-quit', () => {
 
 // Window all closed handler
 app.on('window-all-closed', () => {
-    console.log('[MAIN] All windows closed');
+    logger.main.info('All windows closed');
     // On macOS, keep app running when all windows are closed
     // and show the Project Manager
     if (process.platform === 'darwin') {

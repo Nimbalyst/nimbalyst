@@ -11,6 +11,7 @@ import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme,
 import { updateWindowTitleBars } from '../theme/ThemeManager';
 import { getFileWatcherStatus, refreshProjectFileTree } from '../file/FileWatcherDebug';
 import { getFolderContents } from '../utils/FileTree';
+import { logger } from '../utils/logger';
 
 // Create window list menu items
 function createWindowListMenu(): any[] {
@@ -650,7 +651,7 @@ export function updateApplicationMenu() {
     try {
         createApplicationMenu();
     } catch (error) {
-        console.error('[MENU] Error updating application menu:', error);
+        logger.menu.error('Error updating application menu:', error);
     }
 }
 

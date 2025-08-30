@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron';
 import * as chokidar from 'chokidar';
 import { getFolderContents } from '../utils/FileTree';
+import { logger } from '../utils/logger';
 
 // Project watchers management  
 export const projectWatchers = new Map<number, chokidar.FSWatcher>();
@@ -12,7 +13,7 @@ export function startProjectWatcher(window: BrowserWindow, projectPath: string) 
     // Stop any existing project watcher for this window
     stopProjectWatcher(windowId);
     
-    console.log('[PROJECT_WATCHER] Starting project watcher for:', projectPath, 'window:', windowId);
+    logger.projectWatcher.info(`Starting project watcher for: ${projectPath} window: ${windowId}`);
     
     // Debounce timer for file tree updates
     let updateTimer: NodeJS.Timeout | null = null;
@@ -51,45 +52,45 @@ export function startProjectWatcher(window: BrowserWindow, projectPath: string) 
         });
         
         watcher.on('ready', () => {
-            console.log('[PROJECT_WATCHER] Watcher ready for:', projectPath);
+            logger.projectWatcher.info(`Watcher ready for: ${projectPath}`);
         });
         
         // Handle file/folder additions
         watcher.on('add', (path) => {
-            console.log('[PROJECT_WATCHER] File added:', path);
+            logger.projectWatcher.debug(`File added: ${path}`);
             if (path.endsWith('.md') || path.endsWith('.markdown')) {
                 debounceUpdate();
             }
         });
         
         watcher.on('addDir', (path) => {
-            console.log('[PROJECT_WATCHER] Directory added:', path);
+            logger.projectWatcher.debug(`Directory added: ${path}`);
             debounceUpdate();
         });
         
         // Handle file/folder removals
         watcher.on('unlink', (path) => {
-            console.log('[PROJECT_WATCHER] File removed:', path);
+            logger.projectWatcher.debug(`File removed: ${path}`);
             if (path.endsWith('.md') || path.endsWith('.markdown')) {
                 debounceUpdate();
             }
         });
         
         watcher.on('unlinkDir', (path) => {
-            console.log('[PROJECT_WATCHER] Directory removed:', path);
+            logger.projectWatcher.debug(`Directory removed: ${path}`);
             debounceUpdate();
         });
         
         // Handle errors
         watcher.on('error', (error) => {
-            console.error('[PROJECT_WATCHER] Project watcher error:', error);
+            logger.projectWatcher.error('Project watcher error:', error);
         });
         
         projectWatchers.set(windowId, watcher);
-        console.log('[PROJECT_WATCHER] Watcher stored for window:', windowId);
+        logger.projectWatcher.debug(`Watcher stored for window: ${windowId}`);
         
     } catch (error) {
-        console.error('[PROJECT_WATCHER] Failed to create watcher:', error);
+        logger.projectWatcher.error('Failed to create watcher:', error);
     }
 }
 
@@ -97,7 +98,7 @@ export function startProjectWatcher(window: BrowserWindow, projectPath: string) 
 export function stopProjectWatcher(windowId: number) {
     const watcher = projectWatchers.get(windowId);
     if (watcher) {
-        console.log('[PROJECT_WATCHER] Stopping project watcher for window:', windowId);
+        logger.projectWatcher.info(`Stopping project watcher for window: ${windowId}`);
         watcher.close();
         projectWatchers.delete(windowId);
     }
@@ -128,7 +129,7 @@ export function getProjectWatcherInfo(windowId: number): any {
 // Restart the project watcher
 export function restartProjectWatcher(window: BrowserWindow, projectPath: string) {
     const windowId = window.id;
-    console.log('[PROJECT_WATCHER] Restarting project watcher for:', projectPath);
+    logger.projectWatcher.info(`Restarting project watcher for: ${projectPath}`);
     
     // Stop existing watcher
     stopProjectWatcher(windowId);

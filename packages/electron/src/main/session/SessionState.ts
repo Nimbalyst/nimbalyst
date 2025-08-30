@@ -6,6 +6,7 @@ import { getSessionState, saveSessionState as saveToStore, SessionState } from '
 import { startProjectWatcher } from '../file/ProjectWatcher';
 import { getFolderContents } from '../utils/FileTree';
 import { basename } from 'path';
+import { logger } from '../utils/logger';
 
 // Save session state
 export function saveSessionState() {
@@ -46,7 +47,7 @@ export function saveSessionState() {
     };
 
     saveToStore(sessionState);
-    // console.log('[SESSION] Saved session state:', sessionState);
+    // logger.session.debug('Saved session state:', sessionState);
 }
 
 // Restore session state
@@ -54,11 +55,11 @@ export function restoreSessionState(): boolean {
     const sessionState = getSessionState();
 
     if (!sessionState || !sessionState.windows || sessionState.windows.length === 0) {
-        console.log('[SESSION] No session to restore');
+        logger.session.info('No session to restore');
         return false;
     }
 
-    console.log('[SESSION] Restoring session:', sessionState);
+    logger.session.info('Restoring session:', sessionState);
 
     // Sort windows by focus order (lower order first, so they're created in background)
     const sortedWindows = [...sessionState.windows].sort((a, b) => {
@@ -82,7 +83,7 @@ export function restoreSessionState(): boolean {
                 if (existsSync(sessionWindow.projectPath)) {
                     // Restore project window
                     window = createWindow(false, true, sessionWindow.projectPath, sessionWindow.bounds);
-                    console.log('[SESSION] Restored project window:', sessionWindow.projectPath);
+                    logger.session.info(`Restored project window: ${sessionWindow.projectPath}`);
 
                     // If there was a file open in the project, restore it
                     if (sessionWindow.filePath && existsSync(sessionWindow.filePath)) {
@@ -102,10 +103,10 @@ export function restoreSessionState(): boolean {
                                 }
                             }, 500);
                         });
-                        console.log('[SESSION] Restored file in project:', sessionWindow.filePath);
+                        logger.session.info(`Restored file in project: ${sessionWindow.filePath}`);
                     }
                 } else {
-                    console.log('[SESSION] Project path no longer exists:', sessionWindow.projectPath);
+                    logger.session.warn(`Project path no longer exists: ${sessionWindow.projectPath}`);
                 }
             } else if (sessionWindow.mode === 'document' && sessionWindow.filePath) {
                 // Check if file still exists
@@ -115,9 +116,9 @@ export function restoreSessionState(): boolean {
                     window.once('ready-to-show', () => {
                         loadFileIntoWindow(window, sessionWindow.filePath!);
                     });
-                    console.log('[SESSION] Restored document window:', sessionWindow.filePath);
+                    logger.session.info(`Restored document window: ${sessionWindow.filePath}`);
                 } else {
-                    console.log('[SESSION] File no longer exists:', sessionWindow.filePath);
+                    logger.session.warn(`File no longer exists: ${sessionWindow.filePath}`);
                 }
             }
 
@@ -145,7 +146,7 @@ export function restoreSessionState(): boolean {
         setTimeout(() => {
             if (lastFocusedWindow && !lastFocusedWindow.isDestroyed()) {
                 lastFocusedWindow.focus();
-                console.log('[SESSION] Focused last active window');
+                logger.session.debug('Focused last active window');
             }
         }, sortedWindows.length * 100 + 200);
     }

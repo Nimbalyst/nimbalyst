@@ -3,6 +3,7 @@ import * as chokidar from 'chokidar';
 import { windowStates, savingWindows } from '../window/WindowManager';
 import { FILE_WATCHER_POLL_INTERVAL, FILE_WATCHER_STABILITY_THRESHOLD } from '../utils/constants';
 import { loadFileIntoWindow } from './FileOperations';
+import { logger } from '../utils/logger';
 
 // File watchers management
 export const fileWatchers = new Map<number, chokidar.FSWatcher>();
@@ -14,7 +15,7 @@ export function startFileWatcher(window: BrowserWindow, filePath: string) {
     // Stop any existing watcher for this window
     stopFileWatcher(windowId);
     
-    console.log('[FILE_WATCHER] Starting file watcher for:', filePath, 'window:', windowId);
+    logger.fileWatcher.info(`Starting file watcher for: ${filePath} window: ${windowId}`);
     
     try {
         const watcher = chokidar.watch(filePath, {
@@ -35,27 +36,27 @@ export function startFileWatcher(window: BrowserWindow, filePath: string) {
         
         // Add ready event to confirm watcher is active
         watcher.on('ready', () => {
-            console.log('[FILE_WATCHER] Watcher ready for:', filePath);
+            logger.fileWatcher.debug(`Watcher ready for: ${filePath}`);
         });
         
         watcher.on('add', (path) => {
-            console.log('[FILE_WATCHER] File added:', path);
+            logger.fileWatcher.debug(`File added: ${path}`);
         });
         
         watcher.on('change', (path, stats) => {
-            console.log('[FILE_WATCHER] File changed on disk:', path, 'stats:', stats);
+            logger.fileWatcher.info(`File changed on disk: ${path}`, stats);
             
             // Check if we're currently saving this window
             if (savingWindows.has(windowId)) {
-                console.log('[FILE_WATCHER] Ignoring change - window is currently saving');
+                logger.fileWatcher.debug('Ignoring change - window is currently saving');
                 return;
             }
             
             const state = windowStates.get(windowId);
-            console.log('[FILE_WATCHER] Window state:', state);
+            logger.fileWatcher.debug('Window state:', state);
             
             if (state?.documentEdited) {
-                console.log('[FILE_WATCHER] Document has unsaved changes, showing dialog');
+                logger.fileWatcher.info('Document has unsaved changes, showing dialog');
                 // File has unsaved changes, ask user what to do
                 const choice = dialog.showMessageBoxSync(window, {
                     type: 'question',
@@ -66,46 +67,46 @@ export function startFileWatcher(window: BrowserWindow, filePath: string) {
                     detail: `File: ${filePath}`
                 });
                 
-                console.log('[FILE_WATCHER] User choice:', choice);
+                logger.fileWatcher.debug(`User choice: ${choice}`);
                 
                 if (choice === 1) {
                     // Load from disk
-                    console.log('[FILE_WATCHER] Loading file from disk');
+                    logger.fileWatcher.info('Loading file from disk');
                     loadFileIntoWindow(window, filePath);
                 }
                 // choice === 0 or 2: keep current changes
             } else {
                 // No unsaved changes, just reload
-                console.log('[FILE_WATCHER] No unsaved changes, reloading file');
+                logger.fileWatcher.info('No unsaved changes, reloading file');
                 loadFileIntoWindow(window, filePath);
             }
         });
         
         watcher.on('unlink', (path) => {
-            console.log('[FILE_WATCHER] File deleted:', path);
+            logger.fileWatcher.warn(`File deleted: ${path}`);
             window.webContents.send('file-deleted', { filePath });
         });
         
         // Handle file rename/move
         watcher.on('error', (error) => {
-            console.error('[FILE_WATCHER] File watcher error:', error);
+            logger.fileWatcher.error('File watcher error:', error);
         });
         
         watcher.on('raw', (event, path, details) => {
-            // console.log('[FILE_WATCHER] Raw event:', event, path, details);
+            // logger.fileWatcher.silly(`Raw event: ${event} ${path}`, details);
         });
         
         fileWatchers.set(windowId, watcher);
-        console.log('[FILE_WATCHER] Watcher stored for window:', windowId);
+        logger.fileWatcher.debug(`Watcher stored for window: ${windowId}`);
         
         // Log what files are being watched after a short delay
         setTimeout(() => {
             const watched = watcher.getWatched();
-            // console.log('[FILE_WATCHER] Currently watching:', watched);
+            // logger.fileWatcher.silly('Currently watching:', watched);
         }, 1000);
         
     } catch (error) {
-        console.error('[FILE_WATCHER] Failed to create watcher:', error);
+        logger.fileWatcher.error('Failed to create watcher:', error);
     }
 }
 
@@ -113,11 +114,11 @@ export function startFileWatcher(window: BrowserWindow, filePath: string) {
 export function stopFileWatcher(windowId: number) {
     const watcher = fileWatchers.get(windowId);
     if (watcher) {
-        console.log('[FILE_WATCHER] Stopping file watcher for window:', windowId);
+        logger.fileWatcher.info(`Stopping file watcher for window: ${windowId}`);
         watcher.close();
         fileWatchers.delete(windowId);
     } else {
-        console.log('[FILE_WATCHER] No watcher found for window:', windowId);
+        logger.fileWatcher.debug(`No watcher found for window: ${windowId}`);
     }
 }
 
@@ -138,7 +139,7 @@ export function getFileWatcherInfo(windowId: number): any {
 
 // Check file for changes manually
 export function checkFileForChanges(window: BrowserWindow, filePath: string) {
-    console.log('[FILE_WATCHER] Manual check for file changes:', filePath);
+    logger.fileWatcher.debug(`Manual check for file changes: ${filePath}`);
     const windowId = window.id;
     
     // Restart the watcher to ensure it picks up changes
