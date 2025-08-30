@@ -84,7 +84,7 @@ function createWindowListMenu(): any[] {
         if (menuItems.length > 0) {
             menuItems.push({ type: 'separator' });
         }
-        menuItems.push({ label: 'Projects', enabled: false });
+        menuItems.push({ label: 'Open Projects', enabled: false });
         projectWindows.forEach(({ window, title }) => {
             const accelerator = shortcutIndex < 9 ? `CmdOrCtrl+${shortcutIndex + 1}` : undefined;
             shortcutIndex++;
@@ -105,7 +105,7 @@ function createWindowListMenu(): any[] {
         if (menuItems.length > 0) {
             menuItems.push({ type: 'separator' });
         }
-        menuItems.push({ label: 'Documents', enabled: false });
+        menuItems.push({ label: 'Open Documents', enabled: false });
         documentWindows.forEach(({ window, title }) => {
             const accelerator = shortcutIndex < 9 ? `CmdOrCtrl+${shortcutIndex + 1}` : undefined;
             shortcutIndex++;
@@ -122,25 +122,25 @@ function createWindowListMenu(): any[] {
     }
 
     // Add other windows
-    if (otherWindows.length > 0) {
-        if (menuItems.length > 0) {
-            menuItems.push({ type: 'separator' });
-        }
-        menuItems.push({ label: 'Other Windows', enabled: false });
-        otherWindows.forEach(({ window, title }) => {
-            const accelerator = shortcutIndex < 9 ? `CmdOrCtrl+${shortcutIndex + 1}` : undefined;
-            shortcutIndex++;
-            menuItems.push({
-                label: title,
-                accelerator,
-                type: 'checkbox',
-                checked: window.isFocused(),
-                click: () => {
-                    window.focus();
-                }
-            });
-        });
-    }
+    // if (otherWindows.length > 0) {
+    //     if (menuItems.length > 0) {
+    //         menuItems.push({ type: 'separator' });
+    //     }
+    //     menuItems.push({ label: 'Other Windows', enabled: false });
+    //     otherWindows.forEach(({ window, title }) => {
+    //         const accelerator = shortcutIndex < 9 ? `CmdOrCtrl+${shortcutIndex + 1}` : undefined;
+    //         shortcutIndex++;
+    //         menuItems.push({
+    //             label: title,
+    //             accelerator,
+    //             type: 'checkbox',
+    //             checked: window.isFocused(),
+    //             click: () => {
+    //                 window.focus();
+    //             }
+    //         });
+    //     });
+    // }
 
     return menuItems;
 }
