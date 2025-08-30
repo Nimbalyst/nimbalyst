@@ -28,6 +28,20 @@ import { ProjectManager } from './components/ProjectManager/ProjectManager';
 import './ProjectWelcome.css';
 import './components/AIModels/AIModels.css';
 
+// Logging configuration - control which categories are logged
+const LOG_CONFIG = {
+  AUTOSAVE: false,  // Set to true to enable autosave logging
+  FILE_SYNC: false,  // File sync operations
+  PROJECT_FILE_SELECT: false,  // Project file selection
+  HMR: false,  // Hot Module Replacement
+  AUTO_SNAPSHOT: false,  // Automatic snapshots
+  IPC_LISTENERS: false,  // IPC listener setup (very verbose!)
+  AI_CHAT_STATE: false,  // AI Chat state save/load
+  THEME: false,  // Theme changes
+  FILE_OPS: false,  // File open/save operations
+  PROJECT_OPS: false,  // Project open/close operations
+};
+
 // File tree interface
 interface FileTreeItem {
   name: string;
@@ -202,7 +216,7 @@ export default function App() {
       if (savedState) {
         try {
           const state = JSON.parse(savedState);
-          console.log('[HMR] Restoring dev state:', state);
+          if (LOG_CONFIG.HMR) console.log('[HMR] Restoring dev state:', state);
 
           // Restore the state
           if (state.projectMode) {
@@ -241,7 +255,7 @@ export default function App() {
           // Clear the saved state
           sessionStorage.removeItem('stravu-editor-dev-state');
         } catch (error) {
-          console.error('[HMR] Failed to restore dev state:', error);
+          if (LOG_CONFIG.HMR) console.error('[HMR] Failed to restore dev state:', error);
         }
       }
     }
@@ -263,7 +277,7 @@ export default function App() {
           isDirty: isDirty,
           theme: theme
         };
-        console.log('[HMR] Saving dev state:', state);
+        if (LOG_CONFIG.HMR) console.log('[HMR] Saving dev state:', state);
         sessionStorage.setItem('stravu-editor-dev-state', JSON.stringify(state));
       };
 
@@ -286,7 +300,7 @@ export default function App() {
       });
 
       window.electronAPI.getAIChatState().then((state) => {
-        console.log('Loaded AI Chat state:', state);
+        if (LOG_CONFIG.AI_CHAT_STATE) console.log('[AI_CHAT] Loaded AI Chat state:', state);
         if (state) {
           setIsAIChatCollapsed(state.collapsed);
           setAIChatWidth(state.width);
@@ -424,17 +438,17 @@ export default function App() {
 
   // Handle save as
   const handleSaveAs = useCallback(async () => {
-    console.log('handleSaveAs called');
+    if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] handleSaveAs called');
     if (!window.electronAPI || !getContentRef.current) return;
 
     const content = getContentRef.current();
 
     try {
-      console.log('Calling electronAPI.saveFileAs');
+      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Calling electronAPI.saveFileAs');
       const result = await window.electronAPI.saveFileAs(content);
-      console.log('Save as result:', result);
+      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Save as result:', result);
       if (result) {
-        console.log('Setting current file path to:', result.filePath);
+        if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Setting current file path to:', result.filePath);
         setCurrentFilePath(result.filePath);
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
         setIsDirty(false);
@@ -450,14 +464,14 @@ export default function App() {
 
   // Handle save
   const handleSave = useCallback(async () => {
-    console.log('handleSave called, currentFilePath:', currentFilePath);
+    if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] handleSave called, currentFilePath:', currentFilePath);
     if (!window.electronAPI || !getContentRef.current) return;
 
     const content = getContentRef.current();
-    console.log('Saving content:', { contentLength: content.length, hasFilePath: !!currentFilePath, currentFilePath });
+    if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Saving content:', { contentLength: content.length, hasFilePath: !!currentFilePath, currentFilePath });
 
     if (!currentFilePath) {
-      console.log('No file path, triggering save as');
+      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] No file path, triggering save as');
       // No file loaded, for Cmd+S we should trigger save as
       // This matches typical editor behavior
       await handleSaveAs();
@@ -465,9 +479,9 @@ export default function App() {
     }
 
     try {
-      console.log('Calling electronAPI.saveFile');
+      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Calling electronAPI.saveFile');
       const result = await window.electronAPI.saveFile(content);
-      console.log('Save result:', result);
+      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Save result:', result);
       if (result) {
         setCurrentFilePath(result.filePath);
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
@@ -478,25 +492,25 @@ export default function App() {
         }
 
         // Create a history snapshot for manual save
-        console.log('Checking history API:', !!window.electronAPI?.history);
+        if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Checking history API:', !!window.electronAPI?.history);
         if (window.electronAPI?.history) {
           try {
-            console.log('Creating snapshot for:', result.filePath, 'content length:', content.length);
+            if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Creating snapshot for:', result.filePath, 'content length:', content.length);
             await window.electronAPI.history.createSnapshot(
               result.filePath,
               content,
               'manual',
               'Manual save'
             );
-            console.log('Created history snapshot for manual save');
+            if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Created history snapshot for manual save');
           } catch (error) {
             console.error('Failed to create history snapshot:', error);
           }
         } else {
-          console.log('History API not available');
+          if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] History API not available');
         }
 
-        console.log('File saved successfully');
+        if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] File saved successfully');
       } else {
         console.log('Save returned null - no current file in main process');
       }
@@ -509,7 +523,7 @@ export default function App() {
   const handleCloseProject = useCallback(async () => {
     // Auto-save current file if dirty (no prompt needed with autosave)
     if (isDirty && getContentRef.current) {
-      console.log('[CLOSE_PROJECT] Auto-saving current file before closing');
+      if (LOG_CONFIG.PROJECT_OPS) console.log('[CLOSE_PROJECT] Auto-saving current file before closing');
       await handleSave();
     }
 
@@ -521,18 +535,18 @@ export default function App() {
   const handleProjectFileSelect = useCallback(async (filePath: string) => {
     if (!window.electronAPI) return;
 
-    console.log('[PROJECT_FILE_SELECT] Selecting file:', filePath);
+    if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] Selecting file:', filePath);
 
     // Auto-save current file if dirty (no prompt needed with autosave)
     if (isDirty && getContentRef.current && currentFilePath && currentFilePath !== filePath) {
-      console.log('[PROJECT_FILE_SELECT] Auto-saving current file before switching');
+      if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] Auto-saving current file before switching');
       await handleSave();
     }
 
     try {
       const result = await window.electronAPI.switchProjectFile(filePath);
       if (result) {
-        console.log('[PROJECT_FILE_SELECT] File loaded successfully');
+        if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] File loaded successfully');
         contentVersionRef.current += 1;
         isInitializedRef.current = false;
         setContent(result.content);
@@ -542,7 +556,7 @@ export default function App() {
         initialContentRef.current = result.content;
 
         // Explicitly update the current file in main process (redundant but safe)
-        console.log('[PROJECT_FILE_SELECT] Ensuring backend has correct file path');
+        if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] Ensuring backend has correct file path');
         const syncResult = window.electronAPI.setCurrentFile(filePath);
         if (syncResult && typeof syncResult.then === 'function') {
           await syncResult;
@@ -652,7 +666,7 @@ export default function App() {
   useEffect(() => {
     if (isAIChatStateLoaded && window.electronAPI.setAIChatState) {
       const state = { collapsed: isAIChatCollapsed, width: aiChatWidth };
-      console.log('Saving AI Chat state:', state);
+      if (LOG_CONFIG.AI_CHAT_STATE) console.log('[AI_CHAT] Saving AI Chat state:', state);
       window.electronAPI.setAIChatState(state);
     }
   }, [isAIChatCollapsed, aiChatWidth, isAIChatStateLoaded]);
@@ -698,20 +712,20 @@ export default function App() {
   // Sync current file path with backend whenever it changes
   useEffect(() => {
     if (window.electronAPI && currentFilePath !== null) {
-      console.log('[FILE_SYNC] Syncing current file path to backend:', currentFilePath);
+      if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] Syncing current file path to backend:', currentFilePath);
       const result = window.electronAPI.setCurrentFile(currentFilePath);
       // Handle both promise and non-promise returns
       if (result && typeof result.then === 'function') {
         result.then(() => {
-          console.log('[FILE_SYNC] ✓ File path synced successfully');
+          if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] ✓ File path synced successfully');
         }).catch((error) => {
-          console.error('[FILE_SYNC] ✗ Failed to sync file path:', error);
+          if (LOG_CONFIG.FILE_SYNC) console.error('[FILE_SYNC] ✗ Failed to sync file path:', error);
         });
       } else {
-        console.log('[FILE_SYNC] File path sync called (no promise returned)');
+        if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] File path sync called (no promise returned)');
       }
     } else if (window.electronAPI && currentFilePath === null) {
-      console.log('[FILE_SYNC] Clearing file path in backend');
+      if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] Clearing file path in backend');
       window.electronAPI.setCurrentFile(null);
     }
   }, [currentFilePath]);
@@ -726,12 +740,12 @@ export default function App() {
 
     // Set up autosave if we have a file path and the document is dirty
     if (currentFilePath && isDirty && getContentRef.current) {
-      console.log('[AUTOSAVE] Setting up autosave for:', currentFilePath);
+      if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Setting up autosave for:', currentFilePath);
       
       autoSaveIntervalRef.current = setInterval(async () => {
         if (isDirty && currentFilePath && getContentRef.current && window.electronAPI) {
-          console.log('[AUTOSAVE] Starting save attempt...');
-          console.log('[AUTOSAVE] Current state:', {
+          if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Starting save attempt...');
+          if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Current state:', {
             isDirty,
             currentFilePath,
             hasGetContent: !!getContentRef.current,
@@ -740,10 +754,10 @@ export default function App() {
           
           try {
             const content = getContentRef.current();
-            console.log('[AUTOSAVE] Got content, length:', content.length);
+            if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Got content, length:', content.length);
             
             // First ensure the backend knows the current file path
-            console.log('[AUTOSAVE] Ensuring backend has current file path...');
+            if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Ensuring backend has current file path...');
             const setFileResult = window.electronAPI.setCurrentFile(currentFilePath);
             // Handle both promise and non-promise returns
             if (setFileResult && typeof setFileResult.then === 'function') {
@@ -753,20 +767,20 @@ export default function App() {
             // Small delay to ensure the backend has processed the file path update
             await new Promise(resolve => setTimeout(resolve, 100));
             
-            console.log('[AUTOSAVE] Calling saveFile...');
+            if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Calling saveFile...');
             const result = await window.electronAPI.saveFile(content);
-            console.log('[AUTOSAVE] Save result:', result);
+            if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Save result:', result);
             
             if (result && result.success) {
               setIsDirty(false);
               initialContentRef.current = content;
-              console.log('[AUTOSAVE] ✓ Autosaved successfully to:', result.filePath);
+              if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] ✓ Autosaved successfully to:', result.filePath);
             } else {
-              console.error('[AUTOSAVE] ✗ Save failed - result:', result);
-              console.error('[AUTOSAVE] This typically means the backend lost track of the file path');
+              if (LOG_CONFIG.AUTOSAVE) console.error('[AUTOSAVE] ✗ Save failed - result:', result);
+              if (LOG_CONFIG.AUTOSAVE) console.error('[AUTOSAVE] This typically means the backend lost track of the file path');
               
               // Try to recover by re-syncing the file path
-              console.log('[AUTOSAVE] Attempting recovery by re-syncing file path...');
+              if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Attempting recovery by re-syncing file path...');
               const recoverResult = window.electronAPI.setCurrentFile(currentFilePath);
               if (recoverResult && typeof recoverResult.then === 'function') {
                 await recoverResult;
@@ -781,8 +795,8 @@ export default function App() {
               }
             }
           } catch (error) {
-            console.error('[AUTOSAVE] ✗ Exception during autosave:', error);
-            console.error('[AUTOSAVE] Error details:', {
+            if (LOG_CONFIG.AUTOSAVE) console.error('[AUTOSAVE] ✗ Exception during autosave:', error);
+            if (LOG_CONFIG.AUTOSAVE) console.error('[AUTOSAVE] Error details:', {
               message: error.message,
               stack: error.stack,
               currentFilePath
@@ -797,7 +811,7 @@ export default function App() {
             }
           }
         } else {
-          console.log('[AUTOSAVE] Skipping autosave - conditions not met:', {
+          if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Skipping autosave - conditions not met:', {
             isDirty,
             currentFilePath,
             hasGetContent: !!getContentRef.current,
@@ -806,7 +820,7 @@ export default function App() {
         }
       }, 10000); // Autosave every 10 seconds
     } else {
-      console.log('[AUTOSAVE] Not setting up autosave:', {
+      if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Not setting up autosave:', {
         hasPath: !!currentFilePath,
         isDirty,
         hasGetContent: !!getContentRef.current
@@ -816,7 +830,7 @@ export default function App() {
     // Cleanup on unmount or when dependencies change
     return () => {
       if (autoSaveIntervalRef.current) {
-        console.log('[AUTOSAVE] Cleaning up autosave interval');
+        if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Cleaning up autosave interval');
         clearInterval(autoSaveIntervalRef.current);
         autoSaveIntervalRef.current = null;
       }
@@ -840,7 +854,7 @@ export default function App() {
             const content = getContentRef.current();
             // Only create snapshot if content changed since last snapshot
             if (content !== lastSnapshotContentRef.current && content !== '') {
-              console.log('[AUTO-SNAPSHOT] Creating periodic snapshot');
+              if (LOG_CONFIG.AUTO_SNAPSHOT) console.log('[AUTO-SNAPSHOT] Creating periodic snapshot');
               await window.electronAPI.history.createSnapshot(
                 currentFilePath,
                 content,
@@ -850,7 +864,7 @@ export default function App() {
               lastSnapshotContentRef.current = content;
             }
           } catch (error) {
-            console.error('[AUTO-SNAPSHOT] Failed to create snapshot:', error);
+            if (LOG_CONFIG.AUTO_SNAPSHOT) console.error('[AUTO-SNAPSHOT] Failed to create snapshot:', error);
           }
         }
       }, 300000); // Create snapshot every 5 minutes
@@ -871,7 +885,7 @@ export default function App() {
   useEffect(() => {
     if (!window.electronAPI) return;
 
-    console.log('Setting up IPC listeners, currentFilePath:', currentFilePath);
+    if (LOG_CONFIG.IPC_LISTENERS) console.log('[IPC] Setting up IPC listeners, currentFilePath:', currentFilePath);
 
     // Set up listeners and store cleanup functions
     const cleanupFns: Array<() => void> = [];
@@ -881,7 +895,7 @@ export default function App() {
     cleanupFns.push(window.electronAPI.onFileSave(handleSave));
     cleanupFns.push(window.electronAPI.onFileSaveAs(handleSaveAs));
     cleanupFns.push(window.electronAPI.onProjectOpened(async (data) => {
-      console.log('Project opened:', data);
+      if (LOG_CONFIG.PROJECT_OPS) console.log('[PROJECT] Project opened:', data);
       setProjectMode(true);
       setProjectPath(data.projectPath);
       setProjectName(data.projectName);
@@ -922,7 +936,7 @@ export default function App() {
     }
 
     cleanupFns.push(window.electronAPI.onFileOpenedFromOS(async (data) => {
-      console.log('File opened from OS:', data.filePath);
+      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] File opened from OS:', data.filePath);
       contentVersionRef.current += 1;
       isInitializedRef.current = false;
       setContent(data.content);
@@ -1022,11 +1036,11 @@ export default function App() {
       }
     }));
     cleanupFns.push(window.electronAPI.onThemeChange((newTheme) => {
-      console.log('Theme changed to:', newTheme);
+      if (LOG_CONFIG.THEME) console.log('[THEME] Theme changed to:', newTheme);
       // Map 'system' to 'auto' for the editor
       const editorTheme = newTheme === 'system' ? 'auto' : newTheme;
       setTheme(editorTheme as ConfigTheme);
-      console.log('Editor theme set to:', editorTheme);
+      if (LOG_CONFIG.THEME) console.log('[THEME] Editor theme set to:', editorTheme);
     }));
 
     // Listen for show preferences event

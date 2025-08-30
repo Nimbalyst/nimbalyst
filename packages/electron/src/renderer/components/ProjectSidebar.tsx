@@ -35,7 +35,7 @@ export function ProjectSidebar({
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [isDragOverRoot, setIsDragOverRoot] = useState(false);
   const [draggedItem, setDraggedItem] = useState<any | null>(null);
-  
+
   const handleNewFile = () => {
     // If a file is currently selected, use its parent directory
     // Otherwise use the project root
@@ -45,7 +45,7 @@ export function ProjectSidebar({
     }
     setIsFileModalOpen(true);
   };
-  
+
   const handleNewFolder = () => {
     // If a file is currently selected, use its parent directory
     // Otherwise use the project root
@@ -55,22 +55,22 @@ export function ProjectSidebar({
     }
     setIsFolderModalOpen(true);
   };
-  
+
   const [targetFolder, setTargetFolder] = useState<string | null>(null);
-  
+
   const handleCreateFile = async (fileName: string) => {
     setIsFileModalOpen(false);
-    
+
     // Ensure it has .md extension
-    const fullFileName = fileName.endsWith('.md') || fileName.endsWith('.markdown') 
-      ? fileName 
+    const fullFileName = fileName.endsWith('.md') || fileName.endsWith('.markdown')
+      ? fileName
       : `${fileName}.md`;
-    
+
     try {
       const basePath = targetFolder || projectPath;
       const filePath = `${basePath}/${fullFileName}`;
       const content = `# ${fullFileName.replace('.md', '')}\n\n`;
-      
+
       const result = await (window as any).electronAPI?.createFile?.(filePath, content);
       if (result?.success) {
         // Refresh file tree and open the new file
@@ -88,14 +88,14 @@ export function ProjectSidebar({
       setTargetFolder(null);
     }
   };
-  
+
   const handleCreateFolder = async (folderName: string) => {
     setIsFolderModalOpen(false);
-    
+
     try {
       const basePath = targetFolder || projectPath;
       const folderPath = `${basePath}/${folderName}`;
-      
+
       const result = await (window as any).electronAPI?.createFolder?.(folderPath);
       if (result?.success) {
         // Refresh file tree
@@ -112,12 +112,12 @@ export function ProjectSidebar({
       setTargetFolder(null);
     }
   };
-  
+
   const handleNewFileInFolder = (folderPath: string) => {
     setTargetFolder(folderPath);
     setIsFileModalOpen(true);
   };
-  
+
   const handleNewFolderInFolder = (folderPath: string) => {
     setTargetFolder(folderPath);
     setIsFolderModalOpen(true);
@@ -127,7 +127,7 @@ export function ProjectSidebar({
   const handleRootDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     // Get the drag data to check if it's a valid file/folder
     const dragPath = e.dataTransfer.types.includes('text/plain');
     if (dragPath) {
@@ -149,12 +149,12 @@ export function ProjectSidebar({
     e.preventDefault();
     e.stopPropagation();
     setIsDragOverRoot(false);
-    
+
     const sourcePath = e.dataTransfer.getData('text/plain');
     if (!sourcePath) return;
-    
+
     const isCopy = e.altKey || e.metaKey;
-    
+
     try {
       if (isCopy) {
         const result = await (window as any).electronAPI.copyFile(sourcePath, projectPath);
@@ -234,11 +234,7 @@ export function ProjectSidebar({
       </div>
 
       <div className={`project-file-tree ${isDragOverRoot ? 'drag-over-root' : ''}`}>
-        {isDragOverRoot && (
-          <div className="root-drop-indicator">
-            Drop here to move to project root
-          </div>
-        )}
+
         <FileTree
           items={fileTree}
           currentFilePath={currentFilePath}
@@ -248,8 +244,13 @@ export function ProjectSidebar({
           onNewFolder={handleNewFolderInFolder}
           onRefreshFileTree={onRefreshFileTree}
         />
+          {isDragOverRoot && (
+              <div className="root-drop-indicator">
+                  Drop here to move to project root
+              </div>
+          )}
       </div>
-      
+
       <InputModal
         isOpen={isFileModalOpen}
         title={targetFolder ? `New File in ${targetFolder.split('/').pop()}` : "New File"}
@@ -261,7 +262,7 @@ export function ProjectSidebar({
           setTargetFolder(null);
         }}
       />
-      
+
       <InputModal
         isOpen={isFolderModalOpen}
         title={targetFolder ? `New Folder in ${targetFolder.split('/').pop()}` : "New Folder"}
