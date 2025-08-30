@@ -209,8 +209,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // AI operations (new unified interface)
   aiInitialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
-  aiCreateSession: (provider: 'claude' | 'claude-code', documentContext?: any, projectPath?: string) => 
-    ipcRenderer.invoke('ai:createSession', provider, documentContext, projectPath),
+  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, projectPath?: string, modelId?: string) => 
+    ipcRenderer.invoke('ai:createSession', provider, documentContext, projectPath, modelId),
   aiSendMessage: (message: string, documentContext?: any, sessionId?: string, projectPath?: string) => 
     ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, projectPath),
   aiGetSessions: (projectPath?: string) => ipcRenderer.invoke('ai:getSessions', projectPath),
@@ -223,8 +223,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   aiDeleteSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:deleteSession', sessionId, projectPath),
   getAISettings: () => ipcRenderer.invoke('ai:getSettings'),
   saveAISettings: (settings: any) => ipcRenderer.invoke('ai:saveSettings', settings),
-  testAIConnection: (provider: 'claude' | 'claude-code') => ipcRenderer.invoke('ai:testConnection', provider),
+  testAIConnection: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio') => ipcRenderer.invoke('ai:testConnection', provider),
   getAIModels: () => ipcRenderer.invoke('ai:getModels'),
+  // Aliases for consistency with component naming
+  aiGetSettings: () => ipcRenderer.invoke('ai:getSettings'),
+  aiSaveSettings: (settings: any) => ipcRenderer.invoke('ai:saveSettings', settings),
+  aiTestConnection: (provider: string) => ipcRenderer.invoke('ai:testConnection', provider),
+  aiGetModels: () => ipcRenderer.invoke('ai:getModels'),
+  aiGetAllModels: () => ipcRenderer.invoke('ai:getAllModels'),
   
   // AI event listeners (new)
   onAIStreamResponse: (callback: (data: any) => void) => {
@@ -329,4 +335,41 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateMcpDocumentState: (state: any) => 
     ipcRenderer.send('mcp:updateDocumentState', state),
   clearMcpDocumentState: () => ipcRenderer.invoke('mcp:clearDocumentState'),
+
+  // AI object wrapper for cleaner component access
+  ai: {
+    initialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
+    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, projectPath?: string, modelId?: string) => 
+      ipcRenderer.invoke('ai:createSession', provider, documentContext, projectPath, modelId),
+    sendMessage: (message: string, documentContext?: any, sessionId?: string, projectPath?: string) => 
+      ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, projectPath),
+    getSessions: (projectPath?: string) => ipcRenderer.invoke('ai:getSessions', projectPath),
+    loadSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:loadSession', sessionId, projectPath),
+    clearSession: () => ipcRenderer.invoke('ai:clearSession'),
+    updateSessionMessages: (sessionId: string, messages: any[], projectPath?: string) => 
+      ipcRenderer.invoke('ai:updateSessionMessages', sessionId, messages, projectPath),
+    saveDraftInput: (sessionId: string, draftInput: string, projectPath?: string) => 
+      ipcRenderer.invoke('ai:saveDraftInput', sessionId, draftInput, projectPath),
+    deleteSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:deleteSession', sessionId, projectPath),
+    getSettings: () => ipcRenderer.invoke('ai:getSettings'),
+    saveSettings: (settings: any) => ipcRenderer.invoke('ai:saveSettings', settings),
+    testConnection: (provider: string) => ipcRenderer.invoke('ai:testConnection', provider),
+    getModels: () => ipcRenderer.invoke('ai:getModels'),
+    
+    // Session Manager specific methods
+    getAllSessions: () => ipcRenderer.invoke('session-manager:get-all-sessions'),
+    openSessionInWindow: (sessionId: string, projectPath?: string) => 
+      ipcRenderer.invoke('session-manager:open-session', sessionId, projectPath),
+    exportSession: (session: any) => ipcRenderer.invoke('session-manager:export-session', session),
+  },
+
+  // Project Manager
+  projectManager: {
+    getRecentProjects: () => ipcRenderer.invoke('project-manager:get-recent-projects'),
+    getProjectStats: (projectPath: string) => ipcRenderer.invoke('project-manager:get-project-stats', projectPath),
+    openFolderDialog: () => ipcRenderer.invoke('project-manager:open-folder-dialog'),
+    createProjectDialog: () => ipcRenderer.invoke('project-manager:create-project-dialog'),
+    openProject: (projectPath: string) => ipcRenderer.invoke('project-manager:open-project', projectPath),
+    removeRecent: (projectPath: string) => ipcRenderer.invoke('project-manager:remove-recent', projectPath),
+  }
 });

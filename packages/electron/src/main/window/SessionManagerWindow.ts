@@ -2,8 +2,6 @@ import { BrowserWindow, ipcMain, dialog, app } from 'electron';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
 import Store from 'electron-store';
-import { getTheme } from '../utils/store';
-import { getTitleBarColors } from '../theme/ThemeManager';
 
 let sessionManagerWindow: BrowserWindow | null = null;
 
@@ -25,32 +23,35 @@ export function createSessionManagerWindow(filterProject?: string) {
     minWidth: 600,
     minHeight: 400,
     title: 'AI Chat Sessions - All Projects',
-    backgroundColor: getTheme() === 'dark' || getTheme() === 'crystal-dark' ? '#1e1e1e' : '#ffffff',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      webSecurity: true
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: join(__dirname, '../preload/index.js')
     },
     show: false,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
-    titleBarOverlay: process.platform !== 'darwin' ? getTitleBarColors() : false,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    trafficLightPosition: { x: 10, y: 10 },
+    vibrancy: 'sidebar',
+    backgroundColor: '#1e1e1e'
   });
 
-  // Load the HTML file
-  const htmlPath = process.env.NODE_ENV === 'development'
-    ? join(__dirname, '../../src/session-manager/index.html')
-    : join(__dirname, '../session-manager/index.html');
-  
-  // Use loadFile which handles App Translocation properly
-  sessionManagerWindow.loadFile(htmlPath);
+  // Load the main app with a query parameter to indicate Session Manager mode
+  if (process.env.NODE_ENV === 'development') {
+    const url = filterProject 
+      ? `http://localhost:5273/?mode=session-manager&filterProject=${encodeURIComponent(filterProject)}`
+      : 'http://localhost:5273/?mode=session-manager';
+    sessionManagerWindow.loadURL(url);
+  } else {
+    const query: any = { mode: 'session-manager' };
+    if (filterProject) {
+      query.filterProject = filterProject;
+    }
+    sessionManagerWindow.loadFile(join(__dirname, '../../renderer/index.html'), { query });
+  }
 
   // Show window when ready
   sessionManagerWindow.once('ready-to-show', () => {
     sessionManagerWindow?.show();
-    // Send filter if provided
-    if (filterProject) {
-      sessionManagerWindow?.webContents.send('filter-project', filterProject);
-    }
   });
 
   // Clean up when closed

@@ -61,10 +61,14 @@ export function AIChat({
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [tempInput, setTempInput] = useState('');
   const [currentUserMessage, setCurrentUserMessage] = useState<string>(''); // Track current user message for error reporting
-  const [currentProvider, setCurrentProvider] = useState<'claude' | 'claude-code'>(() => {
+  const [currentProvider, setCurrentProvider] = useState<string>(() => {
     // Load last used provider from localStorage
     const saved = localStorage.getItem('ai-last-provider');
-    return (saved === 'claude' || saved === 'claude-code') ? saved : 'claude-code';
+    return saved || 'claude-code';
+  });
+  const [currentModel, setCurrentModel] = useState<string | undefined>(() => {
+    // Load last used model from localStorage
+    return localStorage.getItem('ai-last-model') || undefined;
   });
   const isResizingRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -154,16 +158,17 @@ export function AIChat({
       } else if (data.partial || data.edits || data.toolCalls) {
         // Streaming partial response
         if (data.partial) {
-          // Update or create the assistant message with streaming content
+          // Track accumulated content separately to avoid duplication
           setMessages(prev => {
             const newMessages = [...prev];
             const lastMessage = newMessages[newMessages.length - 1];
             
-            if (lastMessage && lastMessage.role === 'assistant') {
-              // Update existing assistant message
-              lastMessage.content = (lastMessage.content || '') + data.partial;
-            } else {
-              // Create new assistant message
+            if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.isStreamingStatus) {
+              // Update existing assistant message - replace content, don't append
+              // The partial already contains the full accumulated text
+              lastMessage.content = data.partial;
+            } else if (!lastMessage || lastMessage.role !== 'assistant' || lastMessage.isStreamingStatus) {
+              // Create new assistant message only if there isn't one yet
               newMessages.push({
                 role: 'assistant',
                 content: data.partial
@@ -258,6 +263,7 @@ export function AIChat({
     // Set up streaming edit listeners
     const handleStreamEditStart = (config: any) => {
       logger.log('streaming', '🎯 Stream Edit Start Event Received:', config);
+      console.log('[AIChat] Full streaming config:', JSON.stringify(config, null, 2));
       setIsStreamingToEditor(true);
       isStreamingToEditorRef.current = true; // Set ref immediately
       setStreamingContent(''); // Reset streaming content
@@ -304,12 +310,19 @@ export function AIChat({
       }
       
       // Determine position text for display
-      let positionText = 'document';
-      if (config.insertAtEnd) {
+      let positionText = 'at cursor position';
+      if (config.insertAtEnd || config.position === 'end') {
         positionText = 'end of document';
       } else if (config.insertAfter) {
-        positionText = `after "${config.insertAfter.substring(0, 30)}..."`;
+        const snippet = config.insertAfter.substring(0, 50);
+        positionText = `after "${snippet}${config.insertAfter.length > 50 ? '...' : ''}"`;
+      } else if (config.position === 'after-selection') {
+        positionText = 'after selected text';
+      } else if (config.position === 'cursor') {
+        positionText = 'at cursor position';
       }
+      
+      logger.log('streaming', `📍 Streaming to: ${positionText}`);
       
       // Add a streaming status message
       setMessages(prev => [...prev, {
@@ -341,16 +354,20 @@ export function AIChat({
       }
       
       // Accumulate streaming content for display
-      setStreamingContent(prev => prev + content);
-      
-      // Update the streaming status message with accumulated content
-      setMessages(prev => {
-        const newMessages = [...prev];
-        const lastMsg = newMessages[newMessages.length - 1];
-        if (lastMsg && lastMsg.isStreamingStatus && lastMsg.streamingData) {
-          lastMsg.streamingData.content = streamingContent + content;
-        }
-        return newMessages;
+      setStreamingContent(prev => {
+        const newContent = prev + content;
+        
+        // Update the streaming status message with accumulated content
+        setMessages(messages => {
+          const newMessages = [...messages];
+          const lastMsg = newMessages[newMessages.length - 1];
+          if (lastMsg && lastMsg.isStreamingStatus && lastMsg.streamingData) {
+            lastMsg.streamingData.content = newContent;
+          }
+          return newMessages;
+        });
+        
+        return newContent;
       });
       
       // Stream the content to the editor
@@ -459,10 +476,15 @@ export function AIChat({
           // Load the most recent session
           session = await claudeApi.loadSession(existingSessions[0].id, projectPath);
           
-          // Update provider based on loaded session
+          // Update provider and model based on loaded session
           if (session.provider) {
             setCurrentProvider(session.provider);
             localStorage.setItem('ai-last-provider', session.provider);
+          }
+          
+          if (session.model) {
+            setCurrentModel(session.model);
+            localStorage.setItem('ai-last-model', session.model);
           }
         } else {
           // Create new session only if none exists
@@ -474,7 +496,7 @@ export function AIChat({
             cursorPosition: documentContext.cursorPosition,
             selection: documentContext.selection
           } : undefined;
-          session = await claudeApi.createSession(cleanDocumentContext, projectPath, currentProvider);
+          session = await claudeApi.createSession(cleanDocumentContext, projectPath, currentProvider, currentModel);
         }
         
         if (mounted) {
@@ -578,9 +600,16 @@ export function AIChat({
       // Note: Don't include getLatestContent function as it can't be serialized for IPC
     };
     
+    console.log('[AIChat] Sending document context:', {
+      hasSelection: !!freshDocumentContext.selection,
+      selectionLength: freshDocumentContext.selection?.length,
+      hasCursorPosition: !!freshDocumentContext.cursorPosition,
+      cursorPosition: freshDocumentContext.cursorPosition
+    });
+    
     // If no current session, create one first
     if (!currentSessionId) {
-      const session = await claudeApi.createSession(freshDocumentContext, projectPath, currentProvider);
+      const session = await claudeApi.createSession(freshDocumentContext, projectPath, currentProvider, currentModel);
       setCurrentSessionId(session.id);
     }
     
@@ -659,13 +688,21 @@ export function AIChat({
   }, []);
 
   // Session management handlers
-  const handleNewSession = useCallback(async (provider?: 'claude' | 'claude-code') => {
+  const handleNewSession = useCallback(async (provider?: string, modelId?: string) => {
     try {
       // Use provided provider or current provider
       const sessionProvider = provider || currentProvider;
+      const sessionModel = modelId || currentModel;
       
-      // Update current provider to the one being created
+      // Update current provider and model
       setCurrentProvider(sessionProvider);
+      setCurrentModel(sessionModel);
+      
+      // Save to localStorage
+      localStorage.setItem('ai-last-provider', sessionProvider);
+      if (sessionModel) {
+        localStorage.setItem('ai-last-model', sessionModel);
+      }
       
       // Create a clean document context without functions for IPC
       const cleanDocumentContext = documentContext ? {
@@ -676,7 +713,7 @@ export function AIChat({
         selection: documentContext.selection
       } : undefined;
       
-      const session = await claudeApi.createSession(cleanDocumentContext, projectPath, sessionProvider);
+      const session = await claudeApi.createSession(cleanDocumentContext, projectPath, sessionProvider as any, sessionModel);
       setCurrentSessionId(session.id);
       setMessages([]);
       setInputValue(''); // Clear input for new session
@@ -752,10 +789,15 @@ export function AIChat({
       const session = await claudeApi.loadSession(sessionId, projectPath);
       setCurrentSessionId(session.id);
       
-      // Update provider based on session's provider
+      // Update provider and model based on session
       if (session.provider) {
         setCurrentProvider(session.provider);
         localStorage.setItem('ai-last-provider', session.provider);
+      }
+      
+      if (session.model) {
+        setCurrentModel(session.model);
+        localStorage.setItem('ai-last-model', session.model);
       }
       
       // Convert session messages to chat format, preserving streaming status
@@ -861,6 +903,7 @@ export function AIChat({
         onToggleCollapse={onToggleCollapse} 
         onOpenSessionManager={handleOpenSessionManager}
         provider={currentProvider}
+        model={currentModel}
       >
         <SessionDropdown
           currentSessionId={currentSessionId}
@@ -870,7 +913,8 @@ export function AIChat({
             name: s.name,
             title: s.title,
             messageCount: s.messages?.length || 0,
-            provider: s.provider
+            provider: s.provider,
+            model: s.model
           }))}
           onSessionSelect={handleSessionSelect}
           onNewSession={() => handleNewSession()}
@@ -879,6 +923,7 @@ export function AIChat({
         />
         <NewSessionButton
           currentProvider={currentProvider}
+          currentModel={currentModel}
           onNewSession={handleNewSession}
           disabled={isLoading}
         />

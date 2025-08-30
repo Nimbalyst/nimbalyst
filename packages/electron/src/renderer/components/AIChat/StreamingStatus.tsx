@@ -14,9 +14,10 @@ export function StreamingStatus({ isActive, content, position, mode, onCancel }:
 
   const getStatusText = () => {
     if (!isActive) {
-      return '✅ Content streamed to editor';
+      const location = position || 'editor';
+      return `✅ Content streamed to ${location}`;
     }
-    return `📝 Streaming to ${position || 'cursor'} (${mode || 'after'} mode)...`;
+    return `📝 Streaming to ${position || 'cursor position'}...`;
   };
 
   return (

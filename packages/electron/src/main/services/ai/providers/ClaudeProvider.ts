@@ -203,15 +203,18 @@ export class ClaudeProvider extends BaseAIProvider {
               if (!streamConfig && toolInputBuffer.includes('"content"')) {
                 // Extract position if available
                 const positionMatch = toolInputBuffer.match(/"position"\s*:\s*"([^"]+)"/);
+                const insertAfterMatch = toolInputBuffer.match(/"insertAfter"\s*:\s*"([^"]+)"/);
+                
+                const position = positionMatch ? positionMatch[1] : 'cursor';
                 
                 streamConfig = {
-                  position: positionMatch ? positionMatch[1] : 'cursor',
-                  insertAfter: undefined,
-                  insertAtEnd: positionMatch && positionMatch[1] === 'end',
+                  position: position,
+                  insertAfter: insertAfterMatch ? insertAfterMatch[1] : undefined,
+                  insertAtEnd: position === 'end',
                   mode: 'after'
                 };
                 
-                console.log('[ClaudeProvider] 🚀 Emitting stream_edit_start:', streamConfig);
+                console.log('[ClaudeProvider] 🚀 Emitting stream_edit_start with config:', JSON.stringify(streamConfig, null, 2));
                 
                 yield {
                   type: 'stream_edit_start',
@@ -395,7 +398,24 @@ Tool Usage Guidelines:
 Current document context:
 - File: ${documentContext?.filePath || 'untitled'}
 - Type: ${documentContext?.fileType || 'markdown'}
+${documentContext?.cursorPosition ? `- Cursor position: Line ${documentContext.cursorPosition.line}, Column ${documentContext.cursorPosition.column}` : ''}
+${documentContext?.selection ? `- Selected text: "${documentContext.selection.substring(0, 100)}${documentContext.selection.length > 100 ? '...' : ''}"` : ''}
 ${documentContext?.content ? `- Full document content:\n${documentContext.content}` : ''}
+
+SMART INSERTION RULES for streamContent tool - YOU MUST ANALYZE THE USER'S REQUEST:
+1. If user says "at the end", "append", or "add to the bottom" → use position='end'
+2. If user references specific text like "after the fruits list", "below the purple section", "after ## Purple" → use:
+   - insertAfter="## Purple" (or whatever unique text they reference)
+   - position='cursor' (as fallback)
+3. If user has text selected (check selection field above) → use position='after-selection'
+4. If user says "here" or "at cursor" → use position='cursor'
+5. If unclear but adding new content → use position='end' (safer than overwriting at cursor)
+
+EXAMPLE: If user says "add pink fruits" and document has "## Purple" section:
+- Use: insertAfter="## Purple" to place it after that section
+- Or use: position='end' to append at the end
+
+ALWAYS include BOTH position AND insertAfter when appropriate!
 
 CRITICAL RESPONSE RULES - YOU MUST FOLLOW THESE:
 1. When editing documents, briefly acknowledge the action using the -ing form of the user's request

@@ -66,9 +66,32 @@
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   z-index: 1000;
-  min-width: 220px;
+  min-width: 280px;
+  max-width: 400px;
   padding: 4px;
   animation: slideDown 0.2s ease;
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Custom scrollbar for the dropdown */
+.new-session-dropdown::-webkit-scrollbar {
+  width: 8px;
+}
+
+.new-session-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+.new-session-dropdown::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.new-session-dropdown::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 @keyframes slideDown {
@@ -126,6 +149,35 @@
 
 .new-session-option-check {
   color: var(--accent-color);
+  margin-left: auto;
+}
+
+.new-session-provider-group {
+  margin-bottom: 8px;
+}
+
+.new-session-provider-group:last-child {
+  margin-bottom: 0;
+}
+
+.new-session-provider-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.new-session-loading,
+.new-session-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 /* Dark theme adjustments */

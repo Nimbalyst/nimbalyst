@@ -8,7 +8,8 @@ interface Session {
   name?: string;
   title?: string;
   messageCount?: number;
-  provider?: 'claude' | 'claude-code';
+  provider?: string;
+  model?: string;
 }
 
 interface SessionDropdownProps {
@@ -32,6 +33,35 @@ export function SessionDropdown({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const getProviderLabel = (provider: string) => {
+    switch (provider) {
+      case 'claude': return 'SDK';
+      case 'claude-code': return 'CODE';
+      case 'openai': return 'GPT';
+      case 'lmstudio': return 'LOCAL';
+      default: return provider.toUpperCase();
+    }
+  };
+
+  const getModelShortName = (model: string) => {
+    // Shorten model names for display
+    if (model.includes('claude-opus-4-1')) return '4.1 Opus';
+    if (model.includes('claude-opus-4')) return '4 Opus';
+    if (model.includes('claude-sonnet-4')) return '4 Sonnet';
+    if (model.includes('claude-3-7-sonnet')) return '3.7 Sonnet';
+    if (model.includes('claude-3-5-sonnet')) return '3.5 Sonnet';
+    if (model.includes('claude-3-5-haiku')) return '3.5 Haiku';
+    if (model.includes('claude-3-opus')) return '3 Opus';
+    if (model.includes('claude-3-sonnet')) return '3 Sonnet';
+    if (model.includes('claude-3-haiku')) return '3 Haiku';
+    if (model.includes('gpt-4-turbo')) return 'GPT-4T';
+    if (model.includes('gpt-4')) return 'GPT-4';
+    if (model.includes('gpt-3.5')) return 'GPT-3.5';
+    // For local models, truncate if too long
+    if (model.length > 15) return model.substring(0, 12) + '...';
+    return model;
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -132,7 +162,12 @@ export function SessionDropdown({
                           <span className="session-name">{formatSessionName(session)}</span>
                           {session.provider && (
                             <span className={`session-provider-badge provider-${session.provider}`}>
-                              {session.provider === 'claude' ? 'SDK' : 'Code'}
+                              {getProviderLabel(session.provider)}
+                            </span>
+                          )}
+                          {session.model && (
+                            <span className="session-model-badge">
+                              {getModelShortName(session.model)}
                             </span>
                           )}
                         </div>

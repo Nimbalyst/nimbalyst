@@ -32,7 +32,8 @@ interface Session {
   timestamp: number;
   messages: Message[];
   documentContext?: DocumentContext;
-  provider?: 'claude' | 'claude-code';
+  provider?: 'claude' | 'claude-code' | 'openai';
+  model?: string;
   providerConfig?: any;
 }
 
@@ -266,16 +267,16 @@ class ClaudeAPI {
   }
 
   // Provider management
-  setDefaultProvider(provider: 'claude' | 'claude-code') {
-    this.defaultProvider = provider;
+  setDefaultProvider(provider: 'claude' | 'claude-code' | 'openai') {
+    this.defaultProvider = provider as any;
   }
 
-  getDefaultProvider(): 'claude' | 'claude-code' {
-    return this.defaultProvider;
+  getDefaultProvider(): 'claude' | 'claude-code' | 'openai' {
+    return this.defaultProvider as any;
   }
 
   // Initialize with optional provider selection
-  async initialize(apiKey?: string, provider?: 'claude' | 'claude-code'): Promise<{ success: boolean }> {
+  async initialize(apiKey?: string, provider?: 'claude' | 'claude-code' | 'openai'): Promise<{ success: boolean }> {
     // Use new AI initialize for specific provider, or legacy for backward compat
     if (provider) {
       return window.electronAPI.aiInitialize(provider, apiKey);
@@ -283,22 +284,28 @@ class ClaudeAPI {
     return window.electronAPI.claudeInitialize(apiKey);
   }
 
-  // Create session with provider selection
-  async createSession(documentContext?: DocumentContext, projectPath?: string, provider?: 'claude' | 'claude-code'): Promise<Session> {
+  // Create session with provider and model selection
+  async createSession(
+    documentContext?: DocumentContext,
+    projectPath?: string,
+    provider?: 'claude' | 'claude-code' | 'openai',
+    modelId?: string
+  ): Promise<Session> {
     // Use new AI method if provider specified, otherwise use legacy
     if (provider) {
-      return window.electronAPI.aiCreateSession(provider, documentContext, projectPath);
+      return window.electronAPI.aiCreateSession(provider, documentContext, projectPath, modelId);
     }
     return window.electronAPI.claudeCreateSession(documentContext, projectPath);
   }
 
   // New method specifically for creating session with provider
   async createSessionWithProvider(
-    provider: 'claude' | 'claude-code',
+    provider: 'claude' | 'claude-code' | 'openai',
     documentContext?: DocumentContext,
-    projectPath?: string
+    projectPath?: string,
+    modelId?: string
   ): Promise<Session> {
-    return window.electronAPI.aiCreateSession(provider, documentContext, projectPath);
+    return window.electronAPI.aiCreateSession(provider, documentContext, projectPath, modelId);
   }
 
   async sendMessage(

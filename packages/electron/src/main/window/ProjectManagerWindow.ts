@@ -1,8 +1,7 @@
 import { BrowserWindow, ipcMain, dialog, app } from 'electron';
 import { join, basename } from 'path';
 import { existsSync, mkdirSync, statSync, readdirSync } from 'fs';
-import { getTheme, getRecentItems, addToRecentItems, store, getProjectWindowState } from '../utils/store';
-import { getTitleBarColors } from '../theme/ThemeManager';
+import { getRecentItems, addToRecentItems, store, getProjectWindowState } from '../utils/store';
 import { createWindow } from './WindowManager';
 
 let projectManagerWindow: BrowserWindow | null = null;
@@ -21,24 +20,26 @@ export function createProjectManagerWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'Project Manager - Stravu Editor',
-    backgroundColor: getTheme() === 'dark' || getTheme() === 'crystal-dark' ? '#1f2937' : '#ffffff',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      webSecurity: true
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: join(__dirname, '../preload/index.js')
     },
     show: false,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
-    titleBarOverlay: process.platform !== 'darwin' ? getTitleBarColors() : false,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    trafficLightPosition: { x: 10, y: 10 },
+    vibrancy: 'sidebar',
+    backgroundColor: '#1e1e1e'
   });
 
-  // Load the HTML file
-  const htmlPath = process.env.NODE_ENV === 'development'
-    ? join(__dirname, '../../src/project-manager/index.html')
-    : join(__dirname, '../project-manager/index.html');
-  
-  // Use loadFile which handles App Translocation properly
-  projectManagerWindow.loadFile(htmlPath);
+  // Load the main app with a query parameter to indicate Project Manager mode
+  if (process.env.NODE_ENV === 'development') {
+    projectManagerWindow.loadURL('http://localhost:5273/?mode=project-manager');
+  } else {
+    projectManagerWindow.loadFile(join(__dirname, '../../renderer/index.html'), {
+      query: { mode: 'project-manager' }
+    });
+  }
 
   // Show window when ready
   projectManagerWindow.once('ready-to-show', () => {

@@ -5,7 +5,9 @@
 import { AIProvider } from './AIProvider';
 import { ClaudeProvider } from './providers/ClaudeProvider';
 import { ClaudeCodeProvider } from './providers/ClaudeCodeProvider';
-import { ProviderConfig } from './types';
+import { OpenAIProvider } from './providers/OpenAIProvider';
+import { LMStudioProvider } from './providers/LMStudioProvider';
+import { ProviderConfig, AIProviderType } from './types';
 
 export class ProviderFactory {
   private static providers: Map<string, AIProvider> = new Map();
@@ -15,7 +17,7 @@ export class ProviderFactory {
    * Returns null if provider doesn't exist
    */
   static getProvider(
-    type: 'claude' | 'claude-code',
+    type: AIProviderType,
     sessionId: string
   ): AIProvider | null {
     const key = `${type}-${sessionId}`;
@@ -27,7 +29,7 @@ export class ProviderFactory {
    * Always creates a new provider, doesn't check cache
    */
   static createProvider(
-    type: 'claude' | 'claude-code',
+    type: AIProviderType,
     sessionId: string
   ): AIProvider {
     const key = `${type}-${sessionId}`;
@@ -40,6 +42,12 @@ export class ProviderFactory {
         break;
       case 'claude-code':
         provider = new ClaudeCodeProvider();
+        break;
+      case 'openai':
+        provider = new OpenAIProvider();
+        break;
+      case 'lmstudio':
+        provider = new LMStudioProvider();
         break;
       default:
         throw new Error(`Unknown provider type: ${type}`);
@@ -54,7 +62,7 @@ export class ProviderFactory {
   /**
    * Clean up a provider instance
    */
-  static destroyProvider(sessionId: string, type?: 'claude' | 'claude-code'): void {
+  static destroyProvider(sessionId: string, type?: AIProviderType): void {
     if (type) {
       const key = `${type}-${sessionId}`;
       const provider = this.providers.get(key);

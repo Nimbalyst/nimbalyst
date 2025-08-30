@@ -29,6 +29,7 @@
     "dexie": "^4.0.11",
     "diff": "^5.2.0",
     "electron-store": "^8.2.0",
+    "openai": "^5.16.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "stravu-editor": "*",

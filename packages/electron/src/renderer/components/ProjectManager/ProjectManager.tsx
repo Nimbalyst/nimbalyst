@@ -1,0 +1,270 @@
+import React, { useState, useEffect } from 'react';
+import './ProjectManager.css';
+
+// Apply theme to document on mount
+if (typeof window !== 'undefined') {
+  // Get theme from localStorage or system preference
+  const savedTheme = localStorage.getItem('theme');
+  const root = document.documentElement;
+  
+  if (savedTheme === 'dark' || savedTheme === 'crystal-dark') {
+    root.setAttribute('data-theme', savedTheme);
+  } else if (savedTheme === 'light') {
+    root.setAttribute('data-theme', 'light');
+  } else {
+    // Auto - check system preference
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+  }
+}
+
+interface ProjectInfo {
+  path: string;
+  name: string;
+  lastOpened: number;
+  lastModified?: number;
+  fileCount?: number;
+  markdownCount?: number;
+  exists: boolean;
+}
+
+interface ProjectStats {
+  fileCount: number;
+  markdownCount: number;
+  totalSize: number;
+  recentFiles: string[];
+}
+
+export const ProjectManager: React.FC = () => {
+  const [projects, setProjects] = useState<ProjectInfo[]>([]);
+  const [selectedProject, setSelectedProject] = useState<ProjectInfo | null>(null);
+  const [projectStats, setProjectStats] = useState<ProjectStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  useEffect(() => {
+    if (selectedProject) {
+      loadProjectStats(selectedProject.path);
+    }
+  }, [selectedProject]);
+
+  const loadProjects = async () => {
+    try {
+      const recentProjects = await window.electronAPI.projectManager.getRecentProjects();
+      setProjects(recentProjects);
+      if (recentProjects.length > 0) {
+        setSelectedProject(recentProjects[0]);
+      }
+    } catch (error) {
+      console.error('Failed to load projects:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadProjectStats = async (projectPath: string) => {
+    try {
+      const stats = await window.electronAPI.projectManager.getProjectStats(projectPath);
+      setProjectStats(stats);
+    } catch (error) {
+      console.error('Failed to load project stats:', error);
+    }
+  };
+
+  const handleOpenProject = async () => {
+    if (!selectedProject) return;
+    
+    try {
+      await window.electronAPI.projectManager.openProject(selectedProject.path);
+    } catch (error) {
+      console.error('Failed to open project:', error);
+    }
+  };
+
+  const handleBrowse = async () => {
+    try {
+      const result = await window.electronAPI.projectManager.openFolderDialog();
+      if (result.success) {
+        await window.electronAPI.projectManager.openProject(result.path);
+      }
+    } catch (error) {
+      console.error('Failed to browse for project:', error);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    try {
+      const result = await window.electronAPI.projectManager.createProjectDialog();
+      if (result.success) {
+        await window.electronAPI.projectManager.openProject(result.path);
+      }
+    } catch (error) {
+      console.error('Failed to create project:', error);
+    }
+  };
+
+  const handleRemoveFromRecent = async () => {
+    if (!selectedProject) return;
+    
+    try {
+      await window.electronAPI.projectManager.removeRecent(selectedProject.path);
+      await loadProjects();
+    } catch (error) {
+      console.error('Failed to remove from recent:', error);
+    }
+  };
+
+  const formatDate = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    
+    if (days === 0) {
+      return 'Today';
+    } else if (days === 1) {
+      return 'Yesterday';
+    } else if (days < 7) {
+      return `${days} days ago`;
+    } else {
+      return date.toLocaleDateString();
+    }
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  return (
+    <div className="project-manager">
+      <div className="sidebar">
+        <div className="sidebar-header">
+          <h2>Recent Projects</h2>
+          <div className="action-buttons">
+            <button className="btn btn-primary" onClick={handleCreateProject}>
+              New Project
+            </button>
+            <button className="btn" onClick={handleBrowse}>
+              Open Folder
+            </button>
+          </div>
+        </div>
+
+        <div className="projects-list">
+          {loading ? (
+            <div className="loading">
+              <div className="spinner"></div>
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="empty-state">
+              <p>No recent projects</p>
+              <button className="btn btn-primary" onClick={handleBrowse}>
+                Open Your First Project
+              </button>
+            </div>
+          ) : (
+            projects.map(project => (
+              <div
+                key={project.path}
+                className={`project-item ${selectedProject?.path === project.path ? 'selected' : ''}`}
+                onClick={() => setSelectedProject(project)}
+                onDoubleClick={handleOpenProject}
+              >
+                <div className="project-icon">📁</div>
+                <div className="project-info">
+                  <div className="project-name">{project.name}</div>
+                  <div className="project-path">{project.path}</div>
+                  <div className="project-meta">
+                    {project.markdownCount !== undefined && (
+                      <span>{project.markdownCount} markdown files</span>
+                    )}
+                    <span>{formatDate(project.lastOpened)}</span>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="content">
+        {selectedProject ? (
+          <>
+            <div className="content-header">
+              <div className="project-title">
+                <h1>{selectedProject.name}</h1>
+                <div className="project-path">{selectedProject.path}</div>
+              </div>
+              <div className="content-actions">
+                <button className="btn btn-primary" onClick={handleOpenProject}>
+                  Open Project
+                </button>
+                <button className="btn btn-danger" onClick={handleRemoveFromRecent}>
+                  Remove from Recent
+                </button>
+              </div>
+            </div>
+
+            <div className="project-details">
+              {projectStats ? (
+                <>
+                  <div className="stats-grid">
+                    <div className="stat-card">
+                      <div className="stat-value">{projectStats.fileCount}</div>
+                      <div className="stat-label">Total Files</div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-value">{projectStats.markdownCount}</div>
+                      <div className="stat-label">Markdown Files</div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-value">{formatSize(projectStats.totalSize)}</div>
+                      <div className="stat-label">Total Size</div>
+                    </div>
+                    <div className="stat-card">
+                      <div className="stat-value">{formatDate(selectedProject.lastOpened)}</div>
+                      <div className="stat-label">Last Opened</div>
+                    </div>
+                  </div>
+
+                  {projectStats.recentFiles.length > 0 && (
+                    <div className="recent-files">
+                      <h3>Recent Files</h3>
+                      <ul>
+                        {projectStats.recentFiles.map(file => (
+                          <li key={file}>📄 {file}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="loading">
+                  <div className="spinner"></div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="empty-state">
+            <h2>Select a Project</h2>
+            <p>Choose a project from the list or open a new folder</p>
+            <div className="empty-actions">
+              <button className="btn btn-primary" onClick={handleCreateProject}>
+                Create New Project
+              </button>
+              <button className="btn" onClick={handleBrowse}>
+                Open Existing Folder
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

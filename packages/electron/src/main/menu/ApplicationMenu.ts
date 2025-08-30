@@ -5,6 +5,7 @@ import { windows, windowStates, createWindow, findWindowByFilePath } from '../wi
 import { createAboutWindow } from '../window/AboutWindow';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
 import { createProjectManagerWindow } from '../window/ProjectManagerWindow';
+import { createAIModelsWindow } from '../window/AIModelsWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getProjectWindowState } from '../utils/store';
 import { updateWindowTitleBars } from '../theme/ThemeManager';
@@ -447,6 +448,13 @@ export function createApplicationMenu() {
                     accelerator: 'CmdOrCtrl+Alt+S',
                     click: () => {
                         createSessionManagerWindow();
+                    }
+                },
+                {
+                    label: 'AI Models...',
+                    accelerator: 'CmdOrCtrl+Alt+M',
+                    click: () => {
+                        createAIModelsWindow();
                     }
                 },
                 { type: 'separator' },

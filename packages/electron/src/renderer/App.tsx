@@ -22,7 +22,11 @@ import { HistoryDialog } from './components/HistoryDialog';
 import { PreferencesDialog } from './components/Preferences/PreferencesDialog';
 import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import { ApiKeyDialog } from './components/ApiKeyDialog';
+import { AIModels } from './components/AIModels/AIModels';
+import { SessionManager } from './components/SessionManager/SessionManager';
+import { ProjectManager } from './components/ProjectManager/ProjectManager';
 import './ProjectWelcome.css';
+import './components/AIModels/AIModels.css';
 
 // File tree interface
 interface FileTreeItem {
@@ -106,6 +110,25 @@ declare global {
 
 export default function App() {
   logger.log('ui', 'App component rendering at', new Date().toISOString());
+  
+  // Check for special window modes
+  const urlParams = new URLSearchParams(window.location.search);
+  const windowMode = urlParams.get('mode');
+  
+  // Handle special window modes
+  if (windowMode === 'ai-models') {
+    return <AIModels onClose={() => window.close()} />;
+  }
+  
+  if (windowMode === 'session-manager') {
+    const filterProject = urlParams.get('filterProject') || undefined;
+    return <SessionManager filterProject={filterProject} />;
+  }
+  
+  if (windowMode === 'project-manager') {
+    return <ProjectManager />;
+  }
+  
   const [content, setContent] = useState('');
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
   const [currentFileName, setCurrentFileName] = useState<string | null>(null);

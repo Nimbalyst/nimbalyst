@@ -136,11 +136,14 @@ export class HeadingDiffHandler implements DiffNodeHandler {
     const targetTag = (targetNode as any).tag;
 
     if (sourceTag !== targetTag) {
-      // Store the original tag for rejection purposes
-      (liveNode as any).__originalTag = sourceTag;
       // Update to the target tag
       if ($isHeadingNode(liveNode)) {
-        (liveNode as any).setTag(targetTag);
+        // Create a writable version of the node first
+        const writableNode = liveNode.getWritable();
+        // Store the original tag for rejection purposes
+        (writableNode as any).__originalTag = sourceTag;
+        // Update to the target tag
+        (writableNode as any).setTag(targetTag);
       }
     }
 
@@ -172,7 +175,9 @@ export class HeadingDiffHandler implements DiffNodeHandler {
     // Handle tag changes
     if ((element as any).__originalTag) {
       // Keep the new tag (approval)
-      delete (element as any).__originalTag;
+      // Get writable node to delete property
+      const writableElement = element.getWritable();
+      delete (writableElement as any).__originalTag;
     }
 
     // Process text diff markers
@@ -191,9 +196,11 @@ export class HeadingDiffHandler implements DiffNodeHandler {
       // Restore the original tag (rejection)
       const originalTag = (element as any).__originalTag;
       if ($isHeadingNode(element)) {
-        (element as any).setTag(originalTag);
+        // Get writable node to modify
+        const writableElement = element.getWritable();
+        (writableElement as any).setTag(originalTag);
+        delete (writableElement as any).__originalTag;
       }
-      delete (element as any).__originalTag;
     }
 
     // Process text diff markers

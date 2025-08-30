@@ -4,7 +4,7 @@
 
 import Store from 'electron-store';
 import { v4 as uuidv4 } from 'uuid';
-import { SessionData, Message, DocumentContext } from './types';
+import { SessionData, Message, DocumentContext, AIProviderType } from './types';
 
 export class SessionManager {
   private store: Store;
@@ -31,10 +31,11 @@ export class SessionManager {
    * Create a new session
    */
   async createSession(
-    provider: 'claude' | 'claude-code',
+    provider: AIProviderType,
     documentContext?: DocumentContext,
     projectPath?: string,
-    providerConfig?: any
+    providerConfig?: any,
+    model?: string
   ): Promise<SessionData> {
     const sessionId = uuidv4();
     const project = projectPath || documentContext?.filePath?.split('/').slice(0, -1).join('/') || 'default';
@@ -42,6 +43,7 @@ export class SessionManager {
     const session: SessionData = {
       id: sessionId,
       provider,
+      model,
       timestamp: Date.now(),
       messages: [],
       documentContext,

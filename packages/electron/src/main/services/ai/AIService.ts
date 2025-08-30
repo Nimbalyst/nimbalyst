@@ -6,6 +6,7 @@ import { ipcMain, BrowserWindow } from 'electron';
 import Store from 'electron-store';
 import { SessionManager } from './SessionManager';
 import { ProviderFactory } from './ProviderFactory';
+import { ModelRegistry } from './ModelRegistry';
 import { AIProvider } from './AIProvider';
 import { 
   DocumentContext, 
@@ -13,7 +14,9 @@ import {
   ProviderConfig,
   ToolHandler,
   DiffArgs,
-  DiffResult
+  DiffResult,
+  AIProviderType,
+  AIModel
 } from './types';
 import { updateDocumentState } from '../../mcp/httpServer';
 
@@ -77,19 +80,46 @@ export class AIService {
       return { success: true };
     });
 
-    // Create new session with provider selection
+    // Create new session with provider and model selection
     ipcMain.handle('ai:createSession', async (
       event, 
-      provider: 'claude' | 'claude-code',
+      provider: AIProviderType,
       documentContext?: DocumentContext,
-      projectPath?: string
+      projectPath?: string,
+      modelId?: string
     ) => {
-      // Get API key from settings or environment - always use 'anthropic' key
+      // Get API key based on provider
       const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
-      const apiKey = apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
+      let apiKey: string | undefined;
+      
+      switch (provider) {
+        case 'claude':
+        case 'claude-code':
+          apiKey = apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
+          if (!apiKey) {
+            throw new Error('Anthropic API key not configured');
+          }
+          break;
+        case 'openai':
+          apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
+          if (!apiKey) {
+            throw new Error('OpenAI API key not configured');
+          }
+          break;
+        case 'lmstudio':
+          // LMStudio doesn't need an API key, just the base URL
+          apiKey = 'not-required';
+          break;
+        default:
+          throw new Error(`Unknown provider: ${provider}`);
+      }
 
-      if (!apiKey) {
-        throw new Error('Anthropic API key not configured');
+      // Get model details if specified
+      let model = modelId;
+      if (!model) {
+        // Use default model for provider
+        const defaultModel = ModelRegistry.getDefaultModel(provider);
+        model = defaultModel?.id;
       }
 
       // Create session
@@ -98,20 +128,31 @@ export class AIService {
         documentContext,
         projectPath,
         {
-          model: this.getProviderSetting(provider, 'model'),
+          model: model || this.getProviderSetting(provider, 'model'),
           maxTokens: this.getProviderSetting(provider, 'maxTokens'),
           temperature: this.getProviderSetting(provider, 'temperature')
-        }
+        },
+        model
       );
 
       // Create and initialize provider
       const providerInstance = ProviderFactory.createProvider(provider, session.id);
-      await providerInstance.initialize({
+      
+      // Build config based on provider type
+      const initConfig: any = {
         apiKey,
         model: session.providerConfig?.model,
         maxTokens: session.providerConfig?.maxTokens,
         temperature: session.providerConfig?.temperature
-      });
+      };
+      
+      // Add LMStudio-specific config
+      if (provider === 'lmstudio') {
+        const lmstudioSettings = this.settingsStore.get('providerSettings.lmstudio', {}) as any;
+        initConfig.baseUrl = lmstudioSettings.baseUrl || apiKeys['lmstudio_url'] || 'http://127.0.0.1:8234';
+      }
+      
+      await providerInstance.initialize(initConfig);
 
       // Register tool handler
       const toolHandler = this.createToolHandler(event.sender);
@@ -177,7 +218,7 @@ export class AIService {
         
         await provider.initialize({
           apiKey,
-          model: session.providerConfig?.model,
+          model: session.model || session.providerConfig?.model,
           maxTokens: session.providerConfig?.maxTokens,
           temperature: session.providerConfig?.temperature
         });
@@ -490,15 +531,101 @@ export class AIService {
       }
     });
 
-    // Get available models
-    ipcMain.handle('ai:getModels', async () => {
+    // Get ALL available models for configuration UI
+    ipcMain.handle('ai:getAllModels', async () => {
+      // Clear cache to get fresh models
+      ModelRegistry.clearCache();
+      
+      const providerSettings = this.settingsStore.get('providerSettings', {}) as Record<AIProviderType, any>;
+      const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
+      
+      // Get all models - pass provider settings for LMStudio URL
+      const modelsConfig = {
+        ...apiKeys,
+        lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
+      };
+      const allModels = await ModelRegistry.getAllModels(modelsConfig);
+      
+      // Group ALL models by provider (for configuration UI)
+      const grouped: Record<string, any[]> = {};
+      for (const model of allModels) {
+        if (!grouped[model.provider]) {
+          grouped[model.provider] = [];
+        }
+        grouped[model.provider].push(model);
+      }
+      
       return {
         success: true,
-        models: [
-          { id: 'claude-3-5-sonnet-20241022', display_name: 'Claude 3.5 Sonnet' },
-          { id: 'claude-3-5-haiku-20241022', display_name: 'Claude 3.5 Haiku' },
-          { id: 'claude-3-opus-20240229', display_name: 'Claude 3 Opus' }
-        ]
+        models: allModels,
+        grouped
+      };
+    });
+    
+    // Get ENABLED models for actual use
+    ipcMain.handle('ai:getModels', async () => {
+      const providerSettings = this.settingsStore.get('providerSettings', {}) as Record<AIProviderType, any>;
+      const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
+      
+      // Get all models - pass provider settings for LMStudio URL
+      const modelsConfig = {
+        ...apiKeys,
+        lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
+      };
+      const allModels = await ModelRegistry.getAllModels(modelsConfig);
+      
+      // Build enabled providers map
+      const enabledProviders: Record<AIProviderType, { enabled: boolean; models?: string[] }> = {
+        'claude': {
+          enabled: providerSettings['claude']?.enabled === true && !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY),
+          models: providerSettings['claude']?.models
+        },
+        'claude-code': {
+          // Claude Code is always available if API key exists (it's the MCP integration)
+          enabled: !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY),
+          models: providerSettings['claude-code']?.models
+        },
+        'openai': {
+          enabled: providerSettings['openai']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY),
+          models: providerSettings['openai']?.models
+        },
+        'lmstudio': {
+          enabled: providerSettings['lmstudio']?.enabled === true,
+          models: providerSettings['lmstudio']?.models
+        }
+      };
+      
+      // Filter to only enabled models
+      const enabledModels = allModels.filter(model => {
+        const provider = enabledProviders[model.provider as AIProviderType];
+        if (!provider?.enabled) return false;
+        // If specific models are selected, filter to those
+        if (provider.models && provider.models.length > 0) {
+          return provider.models.includes(model.id);
+        }
+        // Otherwise include all models for this provider
+        return true;
+      });
+      
+      // Group ENABLED models by provider (not all models)
+      const grouped: Record<string, any[]> = {};
+      for (const model of enabledModels) {
+        if (!grouped[model.provider]) {
+          grouped[model.provider] = [];
+        }
+        grouped[model.provider].push(model);
+      }
+      
+      return {
+        success: true,
+        models: enabledModels.map(m => ({
+          id: m.id,
+          display_name: m.name,
+          provider: m.provider,
+          maxTokens: m.maxTokens
+        })),
+        grouped,  // This now contains only enabled models
+        providers: enabledProviders
       };
     });
 

@@ -126,6 +126,18 @@
   flex-shrink: 0;
 }
 
+.session-model-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  background: var(--background-tertiary, #f0f0f0);
+  color: var(--text-secondary, #666);
+  flex-shrink: 0;
+}
+
 .session-name {
   overflow: hidden;
   text-overflow: ellipsis;

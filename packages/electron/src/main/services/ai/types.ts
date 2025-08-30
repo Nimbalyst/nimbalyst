@@ -33,9 +33,20 @@ export interface Message {
   };
 }
 
+export type AIProviderType = 'claude' | 'claude-code' | 'openai' | 'lmstudio';
+
+export interface AIModel {
+  id: string;           // e.g., 'gpt-4', 'claude-3-5-sonnet-20241022'
+  name: string;         // e.g., 'GPT-4', 'Claude 3.5 Sonnet'
+  provider: AIProviderType;
+  maxTokens?: number;
+  contextWindow?: number;
+}
+
 export interface SessionData {
   id: string;  // Our session ID
-  provider: 'claude' | 'claude-code';  // Provider type, locked per session
+  provider: AIProviderType;  // Provider type, locked per session
+  model?: string;  // Specific model used (e.g., 'gpt-4', 'claude-3-5-sonnet')
   timestamp: number;
   messages: Message[];
   documentContext?: DocumentContext;
@@ -65,6 +76,14 @@ export interface ProviderCapabilities {
   mcpSupport: boolean;
   edits: boolean;
   resumeSession: boolean;
+}
+
+export interface ProviderSettings {
+  enabled: boolean;
+  apiKey?: string;
+  models?: string[];  // List of enabled model IDs for this provider
+  defaultModel?: string;
+  baseUrl?: string;  // For custom endpoints
 }
 
 export interface StreamChunk {
