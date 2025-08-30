@@ -5,12 +5,14 @@ interface ChatInputProps {
   onChange: (value: string) => void;
   onSend: (message: string) => void;
   onNavigateHistory?: (direction: 'up' | 'down') => void;
+  onCancel?: () => void;
   disabled?: boolean;
+  isLoading?: boolean;
   placeholder?: string;
 }
 
 export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
-  ({ value, onChange, onSend, onNavigateHistory, disabled, placeholder = "Ask a question..." }, ref) => {
+  ({ value, onChange, onSend, onNavigateHistory, onCancel, disabled, isLoading, placeholder = "Ask a question..." }, ref) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   // Expose the textarea element through the ref
@@ -25,6 +27,13 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
   }, [value]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle Escape to cancel
+    if (e.key === 'Escape' && isLoading && onCancel) {
+      e.preventDefault();
+      onCancel();
+      return;
+    }
+
      // Handle Cmd+A / Ctrl+A for select all
     if ((e.metaKey || e.ctrlKey) && e.key === 'a' && !e.shiftKey) {
       e.stopPropagation(); // Prevent bubbling to global handlers
@@ -87,17 +96,30 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         disabled={disabled}
         rows={1}
       />
-      <button
-        className="ai-chat-send-button"
-        onClick={handleSend}
-        disabled={disabled || !value.trim()}
-        title="Send message (Enter)"
-        aria-label="Send message"
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M2 8L14 2L11 14L8 9L2 8Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </button>
+      {isLoading && onCancel ? (
+        <button
+          className="ai-chat-cancel-button"
+          onClick={onCancel}
+          title="Cancel request (Esc)"
+          aria-label="Cancel request"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      ) : (
+        <button
+          className="ai-chat-send-button"
+          onClick={handleSend}
+          disabled={disabled || !value.trim()}
+          title="Send message (Enter)"
+          aria-label="Send message"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 8L14 2L11 14L8 9L2 8Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      )}
     </div>
   );
 });

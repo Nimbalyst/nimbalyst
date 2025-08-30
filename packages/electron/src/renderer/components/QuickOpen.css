@@ -24,7 +24,7 @@
   z-index: 99999;
   display: flex;
   flex-direction: column;
-  animation: slideDown 0.2s ease-out;
+  /*animation: slideDown 0.2s ease-out;*/
   overflow: hidden;
 }
 

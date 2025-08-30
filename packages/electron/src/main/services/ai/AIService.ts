@@ -116,10 +116,24 @@ export class AIService {
 
       // Get model details if specified
       let model = modelId;
-      if (!model) {
-        // Use default model for provider
+      if (!model && provider !== 'claude-code') {
+        // For non-claude-code providers, try to get a default model
         const defaultModel = ModelRegistry.getDefaultModel(provider);
         model = defaultModel?.id;
+      }
+      
+      // For claude-code, don't pass a model at all - let it handle its own selection
+      const providerConfig: any = {
+        maxTokens: this.getProviderSetting(provider, 'maxTokens'),
+        temperature: this.getProviderSetting(provider, 'temperature')
+      };
+      
+      // Only add model to config if we have one and it's not claude-code
+      if (model && provider !== 'claude-code') {
+        providerConfig.model = model;
+      } else if (provider !== 'claude-code') {
+        // For other providers, fall back to settings
+        providerConfig.model = this.getProviderSetting(provider, 'model');
       }
 
       // Create session
@@ -127,11 +141,7 @@ export class AIService {
         provider,
         documentContext,
         projectPath,
-        {
-          model: model || this.getProviderSetting(provider, 'model'),
-          maxTokens: this.getProviderSetting(provider, 'maxTokens'),
-          temperature: this.getProviderSetting(provider, 'temperature')
-        },
+        providerConfig,
         model
       );
 
@@ -141,10 +151,14 @@ export class AIService {
       // Build config based on provider type
       const initConfig: any = {
         apiKey,
-        model: session.providerConfig?.model,
         maxTokens: session.providerConfig?.maxTokens,
         temperature: session.providerConfig?.temperature
       };
+      
+      // Only add model if it exists and provider isn't claude-code
+      if (session.providerConfig?.model && provider !== 'claude-code') {
+        initConfig.model = session.providerConfig.model;
+      }
       
       // Add LMStudio-specific config
       if (provider === 'lmstudio') {
@@ -182,10 +196,13 @@ export class AIService {
       if (!session) {
         if (sessionId) {
           session = this.sessionManager.loadSession(sessionId, projectPath);
+          console.log(`[AIService] Loaded session ${sessionId} with provider: ${session?.provider}, model: ${session?.model}`);
         }
         if (!session) {
           throw new Error('No session available');
         }
+      } else {
+        console.log(`[AIService] Using current session with provider: ${session.provider}, model: ${session.model}`);
       }
 
       // Add user message to session
@@ -202,26 +219,60 @@ export class AIService {
       }
 
       // Get or create provider for this session
+      console.log(`[AIService] Getting provider for: ${session.provider}, sessionId: ${session.id}`);
       let provider = ProviderFactory.getProvider(session.provider, session.id);
       
       // If provider doesn't exist, create and initialize it
       if (!provider) {
+        console.log(`[AIService] Provider not found, creating new ${session.provider} provider`);
         const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
-        const apiKey = apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
+        
+        // Get the correct API key based on provider
+        let apiKey: string | undefined;
+        let errorMessage: string;
+        
+        switch (session.provider) {
+          case 'claude':
+          case 'claude-code':
+            apiKey = apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
+            errorMessage = 'Anthropic API key not configured';
+            break;
+          case 'openai':
+            apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
+            errorMessage = 'OpenAI API key not configured';
+            break;
+          case 'lmstudio':
+            // LMStudio doesn't need an API key, just the base URL
+            apiKey = 'not-required'; // Dummy value since LMStudio doesn't need a key
+            break;
+          default:
+            throw new Error(`Unknown provider: ${session.provider}`);
+        }
         
         if (!apiKey) {
-          throw new Error('Anthropic API key not configured');
+          throw new Error(errorMessage);
         }
         
         // Create the provider
         provider = ProviderFactory.createProvider(session.provider, session.id);
         
-        await provider.initialize({
+        const reinitConfig: any = {
           apiKey,
-          model: session.model || session.providerConfig?.model,
           maxTokens: session.providerConfig?.maxTokens,
           temperature: session.providerConfig?.temperature
-        });
+        };
+        
+        // Add baseUrl for LMStudio
+        if (session.provider === 'lmstudio') {
+          reinitConfig.baseUrl = apiKeys['lmstudio_url'] || 'http://127.0.0.1:8234';
+        }
+        
+        // Only add model if it exists and provider isn't claude-code
+        if ((session.model || session.providerConfig?.model) && session.provider !== 'claude-code') {
+          reinitConfig.model = session.model || session.providerConfig?.model;
+        }
+        
+        await provider.initialize(reinitConfig);
 
         // Register tool handler
         const toolHandler = this.createToolHandler(event.sender);
@@ -460,6 +511,15 @@ export class AIService {
       return { success };
     });
 
+    // Cancel current request
+    ipcMain.handle('ai:cancelRequest', async () => {
+      if (this.currentProvider) {
+        this.currentProvider.abort();
+        return { success: true };
+      }
+      return { success: false, error: 'No active request to cancel' };
+    });
+
     // Settings handlers
     ipcMain.handle('ai:getSettings', async () => {
       const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
@@ -481,13 +541,27 @@ export class AIService {
         // Only update changed API keys
         const currentKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
         
-        // Always use 'anthropic' key for both providers
-        if (settings.apiKeys.anthropic) {
+        // Save Anthropic key
+        if (settings.apiKeys.anthropic !== undefined) {
           const key = settings.apiKeys.anthropic;
           if (key && key !== this.maskApiKey(currentKeys['anthropic'] || '')) {
             currentKeys['anthropic'] = key as string;
           }
         }
+        
+        // Save OpenAI key
+        if (settings.apiKeys.openai !== undefined) {
+          const key = settings.apiKeys.openai;
+          if (key && key !== this.maskApiKey(currentKeys['openai'] || '')) {
+            currentKeys['openai'] = key as string;
+          }
+        }
+        
+        // Save LMStudio URL
+        if (settings.apiKeys.lmstudio_url !== undefined) {
+          currentKeys['lmstudio_url'] = settings.apiKeys.lmstudio_url as string;
+        }
+        
         this.settingsStore.set('apiKeys', currentKeys);
       }
       
@@ -499,31 +573,67 @@ export class AIService {
     });
 
     // Test connection
-    ipcMain.handle('ai:testConnection', async (event, provider: 'claude' | 'claude-code') => {
+    ipcMain.handle('ai:testConnection', async (event, provider: string) => {
       const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
-      const apiKey = apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
       
-      if (!apiKey) {
-        return { success: false, error: 'Anthropic API key not configured' };
+      // Get the appropriate API key based on provider
+      let apiKey: string | undefined;
+      switch (provider) {
+        case 'claude':
+        case 'claude-code':
+          apiKey = apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
+          if (!apiKey) {
+            return { success: false, error: 'Anthropic API key not configured' };
+          }
+          break;
+        case 'openai':
+          apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
+          if (!apiKey) {
+            return { success: false, error: 'OpenAI API key not configured' };
+          }
+          break;
+        case 'lmstudio':
+          // LMStudio doesn't need an API key, just test the connection
+          apiKey = 'not-required';
+          break;
+        default:
+          return { success: false, error: `Unknown provider: ${provider}` };
       }
       
       try {
-        // Create a temporary provider instance for testing
-        const testProvider = provider === 'claude' 
-          ? new (await import('./providers/ClaudeProvider')).ClaudeProvider()
-          : new (await import('./providers/ClaudeCodeProvider')).ClaudeCodeProvider();
-        
-        await testProvider.initialize({ apiKey });
-        
-        // Try a simple message
-        const response = testProvider.sendMessage('Say "Hello" in one word');
-        for await (const chunk of response) {
-          if (chunk.type === 'error') {
-            throw new Error(chunk.error);
-          }
+        // For OpenAI, just try to list models as a connection test
+        if (provider === 'openai') {
+          const models = await ModelRegistry.getModelsForProvider('openai', apiKey);
+          return { success: models.length > 0, provider };
         }
         
-        testProvider.destroy();
+        // For Claude providers, use the existing test
+        if (provider === 'claude' || provider === 'claude-code') {
+          const testProvider = provider === 'claude' 
+            ? new (await import('./providers/ClaudeProvider')).ClaudeProvider()
+            : new (await import('./providers/ClaudeCodeProvider')).ClaudeCodeProvider();
+          
+          await testProvider.initialize({ apiKey });
+          
+          // Try a simple message
+          const response = testProvider.sendMessage('Say "Hello" in one word');
+          for await (const chunk of response) {
+            if (chunk.type === 'error') {
+              throw new Error(chunk.error);
+            }
+          }
+          
+          testProvider.destroy();
+        }
+        
+        // For LMStudio, test the endpoint
+        if (provider === 'lmstudio') {
+          const baseUrl = apiKeys['lmstudio_url'] || 'http://127.0.0.1:8234';
+          const response = await fetch(`${baseUrl}/v1/models`);
+          if (!response.ok) {
+            throw new Error(`LMStudio server not responding at ${baseUrl}`);
+          }
+        }
         
         return { success: true, provider };
       } catch (error: any) {
@@ -560,6 +670,12 @@ export class AIService {
         models: allModels,
         grouped
       };
+    });
+    
+    // Clear model cache
+    ipcMain.handle('ai:clearModelCache', async () => {
+      ModelRegistry.clearCache();
+      return { success: true };
     });
     
     // Get ENABLED models for actual use

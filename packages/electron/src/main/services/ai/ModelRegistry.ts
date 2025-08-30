@@ -15,33 +15,34 @@ export class ModelRegistry {
    * Get models for a specific provider (with caching)
    */
   static async getModelsForProvider(
-    provider: AIProviderType, 
+    provider: AIProviderType,
     apiKey?: string,
     baseUrl?: string
   ): Promise<AIModel[]> {
-    // Check cache first
-    const lastFetchTime = this.lastFetch.get(provider) || 0;
-    const cached = this.cachedModels.get(provider);
-    
-    if (cached && Date.now() - lastFetchTime < this.CACHE_DURATION) {
-      return cached;
-    }
+    // SKIP CACHE FOR NOW - always fetch fresh
+    // const lastFetchTime = this.lastFetch.get(provider) || 0;
+    // const cached = this.cachedModels.get(provider);
+
+    // if (cached && Date.now() - lastFetchTime < this.CACHE_DURATION) {
+    //   return cached;
+    // }
 
     // Fetch fresh models
     let models: AIModel[] = [];
-    
+
     try {
       switch (provider) {
         case 'claude':
           models = await this.fetchAnthropicModels(apiKey);
           break;
         case 'claude-code':
-          // Claude Code uses MCP, single option
+          // Claude Code uses MCP and handles its own model selection internally
+          // Don't specify a model ID - the provider will use its own defaults
           models = [{
-            id: 'claude-code',
+            id: undefined as any,  // Let the provider handle model selection
             name: 'Claude Code (MCP)',
             provider: 'claude-code',
-            maxTokens: 4096,
+            maxTokens: 8192,
             contextWindow: 200000
           }];
           break;
@@ -52,17 +53,17 @@ export class ModelRegistry {
           models = await this.fetchLMStudioModels(baseUrl || 'http://127.0.0.1:8234');
           break;
       }
-      
+
       // Update cache
       this.cachedModels.set(provider, models);
       this.lastFetch.set(provider, Date.now());
-      
+
     } catch (error) {
       console.error(`Failed to fetch models for ${provider}:`, error);
       // Return fallback models
       models = this.getFallbackModels(provider);
     }
-    
+
     return models;
   }
 
@@ -78,12 +79,12 @@ export class ModelRegistry {
         'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json'
       };
-      
+
       // Only add API key if provided
       if (apiKey) {
         headers['x-api-key'] = apiKey;
       }
-      
+
       // Call the Anthropic models API directly
       const response = await fetch('https://api.anthropic.com/v1/models', {
         method: 'GET',
@@ -95,9 +96,9 @@ export class ModelRegistry {
       }
 
       const data = await response.json();
-      
+
       console.log('[ModelRegistry] Anthropic API returned models:', data.data?.map((m: any) => ({ id: m.id, name: m.display_name })));
-      
+
       // Map the response to our format
       const models = data.data.map((model: any) => ({
         id: model.id,
@@ -106,7 +107,7 @@ export class ModelRegistry {
         maxTokens: this.getAnthropicMaxTokens(model.id),
         contextWindow: 200000 // Anthropic models generally have 200k context
       }));
-      
+
       console.log('[ModelRegistry] Mapped Anthropic models:', models);
       return models;
     } catch (error) {
@@ -115,7 +116,7 @@ export class ModelRegistry {
       return this.getFallbackModels('claude');
     }
   }
-  
+
   /**
    * Get max tokens for Anthropic model
    */
@@ -138,32 +139,85 @@ export class ModelRegistry {
     try {
       const openai = new OpenAI({ apiKey });
       const response = await openai.models.list();
+
+      console.log('[ModelRegistry] Raw OpenAI models from API:', response.data.map(m => m.id));
+
+      // Priority order - find the FIRST available model from each group
+      const modelPriority = [
+        // GPT-5 family - pick first available
+        ['gpt-5-turbo', 'gpt-5'],
+        // GPT-4.5 family
+        ['gpt-4.5-turbo', 'gpt-4.5'],  
+        // GPT-4.1 family
+        ['gpt-4.1-turbo', 'gpt-4.1'],
+        // GPT-4o family
+        ['gpt-4o', 'chatgpt-4o-latest'],
+        // GPT-4o-mini
+        ['gpt-4o-mini'],
+        // o1 preview
+        ['o1-preview'],
+        // o1 mini
+        ['o1-mini'],
+        // GPT-4 turbo
+        ['gpt-4-turbo'],
+        // GPT-3.5 turbo
+        ['gpt-3.5-turbo']
+      ];
+
+      const selectedModels: any[] = [];
+      const availableIds = new Set(response.data.map(m => m.id));
       
-      // Filter for chat models and map to our format
-      const chatModels = response.data
-        .filter(model => 
-          model.id.includes('gpt') && 
-          !model.id.includes('instruct') &&
-          !model.id.includes('vision')
-        )
+      for (const options of modelPriority) {
+        // Find the first available model from this priority group
+        const found = options.find(id => availableIds.has(id));
+        if (found) {
+          const model = response.data.find(m => m.id === found);
+          if (model) {
+            selectedModels.push(model);
+            console.log(`[ModelRegistry] Selected ${found}`);
+          }
+        }
+      }
+
+      const chatModels = selectedModels
         .map(model => ({
           id: model.id,
-          name: this.formatModelName(model.id),
+          name: model.id,
           provider: 'openai' as AIProviderType,
-          maxTokens: this.getOpenAIMaxTokens(model.id),
-          contextWindow: this.getOpenAIContextWindow(model.id)
+          maxTokens: 128000,
+          contextWindow: 128000
         }));
-      
-      // Sort by capability (newest/best first)
+
+      console.log('[ModelRegistry] Selected exactly', chatModels.length, 'OpenAI models:', chatModels.map(m => m.id));
+
+      // Sort by our preferred order
       return chatModels.sort((a, b) => {
-        const order = ['gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'];
-        const aIndex = order.findIndex(o => a.id.includes(o));
-        const bIndex = order.findIndex(o => b.id.includes(o));
-        if (aIndex === -1) return 1;
-        if (bIndex === -1) return -1;
-        return aIndex - bIndex;
+        // Define the exact order we want
+        const getOrder = (id: string): number => {
+          if (id.includes('gpt-5')) return 0;
+          if (id.includes('gpt-4.5')) return 1;
+          if (id.includes('gpt-4.1')) return 2;
+          if (id.includes('chatgpt-4o-latest')) return 3;
+          if (id.includes('gpt-4o-2024')) return 4;
+          if (id.includes('gpt-4o-mini')) return 5;
+          if (id.includes('gpt-4o')) return 6;
+          if (id.includes('o1-preview')) return 7;
+          if (id.includes('o1-mini')) return 8;
+          if (id.includes('o1')) return 9;
+          if (id.includes('gpt-4-turbo')) return 10;
+          if (id.includes('gpt-3.5-turbo')) return 11;
+          return 12;
+        };
+
+        const aOrder = getOrder(a.id);
+        const bOrder = getOrder(b.id);
+
+        if (aOrder !== bOrder) return aOrder - bOrder;
+
+        // Within same family, newer dates first
+        return b.id.localeCompare(a.id);
       });
-      
+
     } catch (error) {
       console.error('Failed to fetch OpenAI models:', error);
       return this.getFallbackModels('openai');
@@ -177,13 +231,13 @@ export class ModelRegistry {
     try {
       // LMStudio implements OpenAI-compatible API
       const response = await fetch(`${baseUrl}/v1/models`);
-      
+
       if (!response.ok) {
         throw new Error(`LMStudio returned ${response.status}`);
       }
-      
+
       const data = await response.json();
-      
+
       // Map LMStudio models to our format
       return data.data.map((model: any) => ({
         id: model.id,
@@ -192,7 +246,7 @@ export class ModelRegistry {
         maxTokens: model.max_tokens || 4096,
         contextWindow: model.context_length || 4096
       }));
-      
+
     } catch (error) {
       console.error('Failed to fetch LMStudio models:', error);
       // Return a generic local model option
@@ -210,18 +264,8 @@ export class ModelRegistry {
    * Helper to format OpenAI model names for display
    */
   private static formatModelName(modelId: string): string {
-    const nameMap: Record<string, string> = {
-      'gpt-4-turbo-preview': 'GPT-4 Turbo',
-      'gpt-4-turbo': 'GPT-4 Turbo',
-      'gpt-4': 'GPT-4',
-      'gpt-4-32k': 'GPT-4 32K',
-      'gpt-3.5-turbo': 'GPT-3.5 Turbo',
-      'gpt-3.5-turbo-16k': 'GPT-3.5 Turbo 16K'
-    };
-    
-    return nameMap[modelId] || modelId
-      .replace(/-/g, ' ')
-      .replace(/\b\w/g, l => l.toUpperCase());
+    // Just return the model ID as-is - OpenAI knows what they're called
+    return modelId;
   }
 
   /**
@@ -240,24 +284,16 @@ export class ModelRegistry {
    * Get max tokens for OpenAI models
    */
   private static getOpenAIMaxTokens(modelId: string): number {
-    if (modelId.includes('gpt-4-turbo')) return 4096;
-    if (modelId.includes('gpt-4-32k')) return 32768;
-    if (modelId.includes('gpt-4')) return 8192;
-    if (modelId.includes('gpt-3.5-turbo-16k')) return 16384;
-    if (modelId.includes('gpt-3.5-turbo')) return 4096;
-    return 4096;
+    // We don't know - let the API tell us when we use it
+    return 128000;
   }
 
   /**
    * Get context window for OpenAI models
    */
   private static getOpenAIContextWindow(modelId: string): number {
-    if (modelId.includes('gpt-4-turbo')) return 128000;
-    if (modelId.includes('gpt-4-32k')) return 32768;
-    if (modelId.includes('gpt-4')) return 8192;
-    if (modelId.includes('gpt-3.5-turbo-16k')) return 16384;
-    if (modelId.includes('gpt-3.5-turbo')) return 16384;
-    return 4096;
+    // We don't know - let the API tell us when we use it
+    return 128000;
   }
 
   /**
@@ -311,22 +347,8 @@ export class ModelRegistry {
           }
         ];
       case 'openai':
-        return [
-          {
-            id: 'gpt-4-turbo-preview',
-            name: 'GPT-4 Turbo',
-            provider: 'openai',
-            maxTokens: 4096,
-            contextWindow: 128000
-          },
-          {
-            id: 'gpt-3.5-turbo',
-            name: 'GPT-3.5 Turbo',
-            provider: 'openai',
-            maxTokens: 4096,
-            contextWindow: 16384
-          }
-        ];
+        // Just return empty - if the API fails, we can't know what models exist
+        return [];
       case 'lmstudio':
         return [{
           id: 'local-model',
@@ -345,7 +367,7 @@ export class ModelRegistry {
    */
   static async getAllModels(apiKeys: Record<string, string>): Promise<AIModel[]> {
     const allModels: AIModel[] = [];
-    
+
     // Fetch from each provider in parallel
     const promises = [
       this.getModelsForProvider('claude', apiKeys['anthropic']),
@@ -353,16 +375,25 @@ export class ModelRegistry {
       this.getModelsForProvider('openai', apiKeys['openai']),
       this.getModelsForProvider('lmstudio', undefined, apiKeys['lmstudio_url'])
     ];
-    
+
     const results = await Promise.allSettled(promises);
-    
+
     for (const result of results) {
       if (result.status === 'fulfilled') {
         allModels.push(...result.value);
       }
     }
-    
+
     return allModels;
+  }
+
+  /**
+   * Get the default model for a provider
+   */
+  static getDefaultModel(provider: AIProviderType): AIModel | undefined {
+    // Don't hardcode models - let each provider handle its own defaults
+    // This just returns undefined so providers use their own logic
+    return undefined;
   }
 
   /**

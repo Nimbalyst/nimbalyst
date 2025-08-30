@@ -4,7 +4,7 @@ import { ChatMessages } from './ChatMessages';
 import { ChatInput } from './ChatInput';
 import { SessionDropdown } from './SessionDropdown';
 import { NewSessionButton } from './NewSessionButton';
-import { claudeApi, DocumentContext } from '../../services/claudeApi';
+import { aiApi, DocumentContext } from '../../services/aiApi';
 import { logger } from '../../utils/logger';
 import './AIChat.css';
 
@@ -80,7 +80,7 @@ export function AIChat({
   // Load sessions on mount
   const loadSessions = useCallback(async () => {
     try {
-      const allSessions = await claudeApi.getSessions(projectPath);
+      const allSessions = await aiApi.getSessions(projectPath);
       setSessions(allSessions || []);
     } catch (error) {
       logger.session.info('Failed to load sessions:', error);
@@ -128,7 +128,7 @@ export function AIChat({
             logger.bridge.info('Auto-applying edit from Claude:', edit);
             
             // Apply the edit through the API (which handles both applying and error reporting)
-            const result = await claudeApi.applyEdit(edit);
+            const result = await aiApi.applyEdit(edit);
             
             // If we have onApplyEdit callback, notify the parent AFTER the edit is applied
             // This is for UI updates, not for actually applying the edit
@@ -248,7 +248,23 @@ export function AIChat({
       }
     };
 
-    claudeApi.on('streamResponse', handleStreamResponse);
+    aiApi.on('streamResponse', handleStreamResponse);
+
+    // Set up error listener
+    const handleError = (error: any) => {
+      logger.api.info('Received error from API:', error);
+      setIsLoading(false);
+      
+      // Add error message to chat
+      const errorMessage = error.message || 'An error occurred while processing your request';
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: `❌ Error: ${errorMessage}`,
+        isError: true
+      }]);
+    };
+    
+    aiApi.on('error', handleError);
 
     // Set up edit request listener
     const handleEditRequest = (edit: any) => {
@@ -258,7 +274,7 @@ export function AIChat({
       }
     };
 
-    claudeApi.on('editRequest', handleEditRequest);
+    aiApi.on('editRequest', handleEditRequest);
 
     // Set up streaming edit listeners
     const handleStreamEditStart = (config: any) => {
@@ -435,9 +451,9 @@ export function AIChat({
 
     // Register all event handlers
     logger.ui.info('Registering event handlers...');
-    claudeApi.on('streamEditStart', handleStreamEditStart);
-    claudeApi.on('streamEditContent', handleStreamEditContent);
-    claudeApi.on('streamEditEnd', handleStreamEditEnd);
+    aiApi.on('streamEditStart', handleStreamEditStart);
+    aiApi.on('streamEditContent', handleStreamEditContent);
+    aiApi.on('streamEditEnd', handleStreamEditEnd);
     
     // Test that handlers are registered
     logger.ui.info('Event handlers registered:', {
@@ -450,11 +466,12 @@ export function AIChat({
 
     return () => {
       logger.ui.info('Cleaning up event handlers...');
-      claudeApi.off('streamResponse', handleStreamResponse);
-      claudeApi.off('editRequest', handleEditRequest);
-      claudeApi.off('streamEditStart', handleStreamEditStart);
-      claudeApi.off('streamEditContent', handleStreamEditContent);
-      claudeApi.off('streamEditEnd', handleStreamEditEnd);
+      aiApi.off('streamResponse', handleStreamResponse);
+      aiApi.off('error', handleError);
+      aiApi.off('editRequest', handleEditRequest);
+      aiApi.off('streamEditStart', handleStreamEditStart);
+      aiApi.off('streamEditContent', handleStreamEditContent);
+      aiApi.off('streamEditEnd', handleStreamEditEnd);
     };
   }, [documentContext, onApplyEdit, loadSessions, streamingContent]); // Add missing dependencies
 
@@ -466,15 +483,15 @@ export function AIChat({
     let mounted = true;
     const initClaude = async () => {
       try {
-        await claudeApi.initialize();
+        await aiApi.initialize();
         
         // First check if there's an existing session for this project
-        const existingSessions = await claudeApi.getSessions(projectPath);
+        const existingSessions = await aiApi.getSessions(projectPath);
         let session;
         
         if (existingSessions && existingSessions.length > 0) {
           // Load the most recent session
-          session = await claudeApi.loadSession(existingSessions[0].id, projectPath);
+          session = await aiApi.loadSession(existingSessions[0].id, projectPath);
           
           // Update provider and model based on loaded session
           if (session.provider) {
@@ -496,7 +513,7 @@ export function AIChat({
             cursorPosition: documentContext.cursorPosition,
             selection: documentContext.selection
           } : undefined;
-          session = await claudeApi.createSession(cleanDocumentContext, projectPath, currentProvider, currentModel);
+          session = await aiApi.createSession(cleanDocumentContext, projectPath, currentProvider, currentModel);
         }
         
         if (mounted) {
@@ -609,8 +626,12 @@ export function AIChat({
     
     // If no current session, create one first
     if (!currentSessionId) {
-      const session = await claudeApi.createSession(freshDocumentContext, projectPath, currentProvider, currentModel);
+      console.log(`[AIChat] Creating new session with provider: ${currentProvider}, model: ${currentModel}`);
+      const session = await aiApi.createSession(freshDocumentContext, projectPath, currentProvider, currentModel);
       setCurrentSessionId(session.id);
+      console.log(`[AIChat] Created session ${session.id} with provider: ${session.provider}`);
+    } else {
+      console.log(`[AIChat] Using existing session ${currentSessionId} with provider: ${currentProvider}`);
     }
     
     // Add user message
@@ -622,7 +643,7 @@ export function AIChat({
     
     try {
       // Send message to Claude with fresh document context and session ID
-      await claudeApi.sendMessage(message, freshDocumentContext, currentSessionId!, projectPath);
+      await aiApi.sendMessage(message, freshDocumentContext, currentSessionId!, projectPath);
       // Reload sessions to update message counts
       await loadSessions();
     } catch (error) {
@@ -676,7 +697,7 @@ export function AIChat({
   const handleApplyEdit = useCallback(async (edit: any): Promise<{ success: boolean; error?: string }> => {
     try {
       // Apply the edit through the API - this should return a promise
-      const result = await claudeApi.applyEdit(edit);
+      const result = await aiApi.applyEdit(edit);
       return result;
     } catch (error) {
       logger.bridge.info('Failed to apply edit:', error);
@@ -684,6 +705,31 @@ export function AIChat({
         success: false, 
         error: error instanceof Error ? error.message : 'Failed to apply changes' 
       };
+    }
+  }, []);
+
+  const handleCancelRequest = useCallback(async () => {
+    try {
+      const result = await aiApi.cancelRequest();
+      if (result.success) {
+        setIsLoading(false);
+        setIsStreamingToEditor(false);
+        isStreamingToEditorRef.current = false;
+        
+        // Clear any streaming timeouts
+        if (streamTimeoutRef.current) {
+          clearTimeout(streamTimeoutRef.current);
+          streamTimeoutRef.current = null;
+        }
+        
+        // Add a cancelled message to the chat
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: 'Request cancelled by user.' 
+        }]);
+      }
+    } catch (error) {
+      logger.api.info('Failed to cancel request:', error);
     }
   }, []);
 
@@ -713,7 +759,7 @@ export function AIChat({
         selection: documentContext.selection
       } : undefined;
       
-      const session = await claudeApi.createSession(cleanDocumentContext, projectPath, sessionProvider as any, sessionModel);
+      const session = await aiApi.createSession(cleanDocumentContext, projectPath, sessionProvider as any, sessionModel);
       setCurrentSessionId(session.id);
       setMessages([]);
       setInputValue(''); // Clear input for new session
@@ -754,7 +800,7 @@ export function AIChat({
     
     const syncMessages = async () => {
       try {
-        await claudeApi.updateSessionMessages(currentSessionId, messages, projectPath);
+        await aiApi.updateSessionMessages(currentSessionId, messages, projectPath);
         // Reload sessions to update message counts
         await loadSessions();
       } catch (error) {
@@ -773,7 +819,7 @@ export function AIChat({
     
     const saveDraft = async () => {
       try {
-        await claudeApi.saveDraftInput(currentSessionId, inputValue, projectPath);
+        await aiApi.saveDraftInput(currentSessionId, inputValue, projectPath);
       } catch (error) {
         logger.session.info('Failed to save draft input:', error);
       }
@@ -786,7 +832,7 @@ export function AIChat({
 
   const handleSessionSelect = useCallback(async (sessionId: string) => {
     try {
-      const session = await claudeApi.loadSession(sessionId, projectPath);
+      const session = await aiApi.loadSession(sessionId, projectPath);
       setCurrentSessionId(session.id);
       
       // Update provider and model based on session
@@ -827,7 +873,7 @@ export function AIChat({
   const handleDeleteSession = useCallback(async (sessionId: string) => {
     try {
       // Delete the session
-      await claudeApi.deleteSession(sessionId, projectPath);
+      await aiApi.deleteSession(sessionId, projectPath);
       
       // If we deleted the current session, clear the UI but don't create a new one yet
       if (sessionId === currentSessionId) {
@@ -845,7 +891,7 @@ export function AIChat({
   const handleRenameSession = useCallback(async (sessionId: string, newName: string) => {
     try {
       // TODO: Add rename session API call when available
-      // await claudeApi.renameSession(sessionId, newName);
+      // await aiApi.renameSession(sessionId, newName);
       
       await loadSessions();
     } catch (error) {
@@ -949,8 +995,10 @@ export function AIChat({
             onChange={setInputValue}
             onSend={handleSendMessage}
             onNavigateHistory={handleNavigateHistory}
+            onCancel={handleCancelRequest}
             disabled={isLoading || !isInitialized}
-            placeholder={!isInitialized ? "Initializing Claude..." : "Ask Claude anything..."}
+            isLoading={isLoading}
+            placeholder={!isInitialized ? "Initializing AI..." : "Ask anything..."}
           />
         </>
       )}

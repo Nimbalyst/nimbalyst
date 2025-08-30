@@ -231,6 +231,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   aiTestConnection: (provider: string) => ipcRenderer.invoke('ai:testConnection', provider),
   aiGetModels: () => ipcRenderer.invoke('ai:getModels'),
   aiGetAllModels: () => ipcRenderer.invoke('ai:getAllModels'),
+  aiClearModelCache: () => ipcRenderer.invoke('ai:clearModelCache'),
   
   // AI event listeners (new)
   onAIStreamResponse: (callback: (data: any) => void) => {
@@ -278,6 +279,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   claudeSaveDraftInput: (sessionId: string, draftInput: string, projectPath?: string) => 
     ipcRenderer.invoke('ai:saveDraftInput', sessionId, draftInput, projectPath),
   claudeDeleteSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:deleteSession', sessionId, projectPath),
+  claudeCancelRequest: () => ipcRenderer.invoke('ai:cancelRequest'),
   claudeApplyEdit: (edit: any) => ipcRenderer.invoke('claude:applyEdit', edit),
   getClaudeSettings: () => ipcRenderer.invoke('ai:getSettings'),
   saveClaudeSettings: (settings: any) => ipcRenderer.invoke('ai:saveSettings', settings),

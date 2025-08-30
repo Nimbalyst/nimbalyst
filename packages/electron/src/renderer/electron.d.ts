@@ -68,6 +68,7 @@ interface ElectronAPI {
   claudeUpdateSessionMessages?: (sessionId: string, messages: any[], projectPath?: string) => Promise<{ success: boolean; error?: string }>;
   claudeSaveDraftInput?: (sessionId: string, draftInput: string, projectPath?: string) => Promise<{ success: boolean; error?: string }>;
   claudeDeleteSession?: (sessionId: string, projectPath?: string) => Promise<{ success: boolean }>;
+  claudeCancelRequest?: () => Promise<{ success: boolean; error?: string }>;
   claudeApplyEdit?: (edit: any) => Promise<any>;
   getClaudeSettings?: () => Promise<any>;
   saveClaudeSettings?: (settings: any) => Promise<any>;

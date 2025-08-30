@@ -140,7 +140,7 @@ export function NewSessionButton({
                 </div>
                 {providerModels.map(model => (
                   <button
-                    key={model.id}
+                    key={`${provider}-${model.id}`}
                     className={`new-session-option ${
                       provider === currentProvider && model.id === currentModel ? 'selected' : ''
                     }`}

@@ -21,6 +21,7 @@ interface ChatMessageProps {
     result?: any;
   };
   isStreaming?: boolean;
+  isError?: boolean;
   onApplyEdit?: (edit: EditRequest) => Promise<{ success: boolean; error?: string }>;
   onReapply?: (args: any) => void;
 }
@@ -31,6 +32,7 @@ export function ChatMessage({
   edits,
   toolCall,
   isStreaming,
+  isError,
   onApplyEdit,
   onReapply
 }: ChatMessageProps) {
@@ -157,7 +159,7 @@ export function ChatMessage({
   }
 
   return (
-    <div className={`ai-chat-message ai-chat-message--${role} ${isStreaming ? 'ai-chat-message--streaming' : ''}`}>
+    <div className={`ai-chat-message ai-chat-message--${role} ${isStreaming ? 'ai-chat-message--streaming' : ''} ${isError ? 'ai-chat-message--error' : ''}`}>
       <div className="ai-chat-message-avatar">
         {role === 'user' ? (
           'U'

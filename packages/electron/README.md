@@ -53,9 +53,9 @@ npm run dist
 ## Architecture
 
 - `src/main/` - Main process code
-  - `index.ts` - Application entry point and window management
-  - `services/` - Core services (Claude API, file operations, session management)
-  - `ipc/` - IPC handlers for renderer communication
+- `index.ts` - Application entry point and window management
+- `services/` - Core services (Claude API, file operations, session management)
+- `ipc/` - IPC handlers for renderer communication
 - `src/preload/` - Preload scripts for security
 - `src/renderer/` - Renderer process (uses the main stravu-editor library)
 

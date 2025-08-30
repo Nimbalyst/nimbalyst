@@ -103,8 +103,18 @@
 }
 
 .provider-icon {
-  font-size: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
+  color: var(--text-primary);
+}
+
+.provider-icon svg {
+  width: 20px;
+  height: 20px;
 }
 
 .provider-info {

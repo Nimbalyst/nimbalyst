@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getProviderIcon } from '../icons/ProviderIcons';
 import './AIModels.css';
 
 // Apply theme to document on mount
@@ -36,13 +37,6 @@ interface Model {
 interface AIModelsProps {
   onClose: () => void;
 }
-
-// Define which models are "recent/relevant" for each provider
-const FEATURED_MODELS: Record<string, string[]> = {
-  claude: [], // Show all available models
-  openai: [], // Show all available models
-  lmstudio: [] // All local models are shown
-};
 
 export function AIModels({ onClose }: AIModelsProps) {
   const [providers, setProviders] = useState<Record<string, ProviderConfig>>({
@@ -140,6 +134,13 @@ export function AIModels({ onClose }: AIModelsProps) {
       [provider]: { ...prev[provider], testStatus: 'testing', testMessage: undefined }
     }));
     
+    // IMPORTANT: Save the current API keys FIRST so the test uses the new keys!
+    const settings = {
+      apiKeys,
+      providerSettings: providers
+    };
+    await window.electronAPI.aiSaveSettings(settings);
+    
     try {
       const result = await window.electronAPI.aiTestConnection(provider);
       
@@ -153,8 +154,9 @@ export function AIModels({ onClose }: AIModelsProps) {
       }));
       
       if (result.success) {
-        // Refresh models on successful connection
-        fetchModels(provider);
+        // Clear cache and refresh models on successful connection
+        await window.electronAPI.aiClearModelCache?.();
+        await fetchModels(provider);
       }
     } catch (error) {
       setProviders(prev => ({
@@ -190,6 +192,17 @@ export function AIModels({ onClose }: AIModelsProps) {
     };
     
     await window.electronAPI.aiSaveSettings(settings);
+    
+    // Clear the model cache to force refresh with new API keys
+    await window.electronAPI.aiClearModelCache?.();
+    
+    // Refresh models for all enabled providers with new API keys
+    for (const [provider, config] of Object.entries(providers)) {
+      if (config.enabled) {
+        await fetchModels(provider);
+      }
+    }
+    
     setHasChanges(false);
     onClose();
   };
@@ -199,7 +212,7 @@ export function AIModels({ onClose }: AIModelsProps) {
       case 'claude':
         return {
           name: 'Claude (Anthropic)',
-          icon: '🤖',
+          icon: getProviderIcon('claude', { size: 20 }),
           keyName: 'anthropic',
           keyPlaceholder: 'sk-ant-...',
           description: 'Direct API access to Claude models'
@@ -207,7 +220,7 @@ export function AIModels({ onClose }: AIModelsProps) {
       case 'claude-code':
         return {
           name: 'Claude Code (MCP)',
-          icon: '🔧',
+          icon: getProviderIcon('claude-code', { size: 20 }),
           keyName: 'anthropic',
           keyPlaceholder: 'Uses same key as Claude',
           description: 'Model Context Protocol integration',
@@ -216,7 +229,7 @@ export function AIModels({ onClose }: AIModelsProps) {
       case 'openai':
         return {
           name: 'OpenAI',
-          icon: '🧠',
+          icon: getProviderIcon('openai', { size: 20 }),
           keyName: 'openai',
           keyPlaceholder: 'sk-...',
           description: 'GPT-4, GPT-3.5, and other OpenAI models'
@@ -224,7 +237,7 @@ export function AIModels({ onClose }: AIModelsProps) {
       case 'lmstudio':
         return {
           name: 'LMStudio',
-          icon: '💻',
+          icon: getProviderIcon('lmstudio', { size: 20 }),
           keyName: 'lmstudio_url',
           keyPlaceholder: 'http://127.0.0.1:8234',
           description: 'Local models running on your machine',
@@ -233,7 +246,7 @@ export function AIModels({ onClose }: AIModelsProps) {
       default:
         return {
           name: provider,
-          icon: '🤖',
+          icon: getProviderIcon('default', { size: 20 }),
           keyName: provider,
           keyPlaceholder: '',
           description: ''
@@ -244,17 +257,8 @@ export function AIModels({ onClose }: AIModelsProps) {
   const getFilteredModels = (provider: string) => {
     const models = availableModels[provider] || [];
     console.log(`[AIModels] Models for ${provider}:`, models);
-    const featured = FEATURED_MODELS[provider];
-    
-    if (!featured || featured.length === 0) {
-      console.log(`[AIModels] No featured list for ${provider}, showing all ${models.length} models`);
-      return models; // Show all for providers without featured list
-    }
-    
-    // Filter to only featured models
-    const filtered = models.filter(m => featured.includes(m.id));
-    console.log(`[AIModels] Filtered to ${filtered.length} featured models for ${provider}`);
-    return filtered;
+    // Backend already filters - just return what we got
+    return models;
   };
 
   const renderProviderSection = (providerId: string) => {
@@ -288,6 +292,8 @@ export function AIModels({ onClose }: AIModelsProps) {
                   type={info.isUrl ? 'text' : 'password'}
                   value={apiKeys[info.keyName] || ''}
                   onChange={(e) => handleApiKeyChange(info.keyName, e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  onClick={(e) => e.currentTarget.select()}
                   placeholder={info.keyPlaceholder}
                   className="api-key-input"
                 />

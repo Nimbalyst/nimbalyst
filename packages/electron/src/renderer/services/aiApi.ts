@@ -37,7 +37,7 @@ interface Session {
   providerConfig?: any;
 }
 
-class ClaudeAPI {
+class AIApi {
   private listeners: Map<string, Set<Function>> = new Map();
   private isStreamingEdit: boolean = false;
   private streamingConfig: any = null;
@@ -341,6 +341,10 @@ class ClaudeAPI {
     return window.electronAPI.claudeDeleteSession(sessionId, projectPath);
   }
 
+  async cancelRequest(): Promise<{ success: boolean; error?: string }> {
+    return window.electronAPI.claudeCancelRequest();
+  }
+
   async applyEdit(edit: EditRequest): Promise<{ success: boolean; error?: string }> {
     // Check if we have access to the AI chat bridge (only available when editor is loaded)
     try {
@@ -422,5 +426,6 @@ class ClaudeAPI {
   }
 }
 
-export const claudeApi = new ClaudeAPI();
+export const aiApi = new AIApi();
+export default aiApi;
 export type { DocumentContext, EditRequest, Message, Session };

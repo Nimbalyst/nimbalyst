@@ -18,6 +18,7 @@ interface Message {
     content: string;
     isActive: boolean;
   };
+  isError?: boolean;
 }
 
 interface ChatMessagesProps {
@@ -82,6 +83,7 @@ export function ChatMessages({
               role={message.role}
               content={message.content}
               toolCall={message.toolCall}
+              isError={message.isError}
               onApplyEdit={onApplyEdit}
               onReapply={handleReapply}
             />
@@ -93,6 +95,7 @@ export function ChatMessages({
               role={message.role}
               content={message.content}
               edits={message.edits}
+              isError={message.isError}
               onApplyEdit={onApplyEdit}
             />
           );

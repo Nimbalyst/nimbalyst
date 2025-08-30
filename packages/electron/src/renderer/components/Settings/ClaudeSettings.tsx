@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { claudeApi } from '../../services/claudeApi';
+import { aiApi } from '../../services/aiApi';
 
 interface ClaudeSettingsProps {
   onClose?: () => void;
@@ -38,7 +38,7 @@ export function ClaudeSettings({ onClose }: ClaudeSettingsProps) {
     setSaveMessage('');
 
     try {
-      await claudeApi.initialize(apiKey);
+      await aiApi.initialize(apiKey);
       
       // Store masked version in localStorage for display
       const maskedKey = apiKey.substring(0, 10) + '...' + apiKey.substring(apiKey.length - 4);

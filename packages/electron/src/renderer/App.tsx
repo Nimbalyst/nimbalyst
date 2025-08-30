@@ -1368,7 +1368,7 @@ export default function App() {
             setLastPrompt(prompt || '');
             setLastClaudeResponse(claudeResponse || '');
 
-            // The edit has already been applied by AIChat.tsx through claudeApi.applyEdit()
+            // The edit has already been applied by AIChat.tsx through aiApi.applyEdit()
             // This callback is just for UI state updates, not for applying the edit
             // We just need to handle any UI updates or error display
             

@@ -23,7 +23,17 @@
 }
 
 .model-selector-icon {
-  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: inherit;
+}
+
+.model-selector-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .model-selector-label {
@@ -104,7 +114,17 @@
 }
 
 .model-selector-group-icon {
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: inherit;
+}
+
+.model-selector-group-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .model-selector-group-items {

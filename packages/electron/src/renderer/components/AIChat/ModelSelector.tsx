@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getProviderIcon } from '../icons/ProviderIcons';
 import './ModelSelector.css';
 
 interface Model {
@@ -79,19 +80,6 @@ export function ModelSelector({ onSelectModel, currentProvider, currentModel }: 
     }
   };
 
-  const getProviderIcon = (provider: string) => {
-    switch (provider) {
-      case 'claude':
-      case 'claude-code':
-        return '🤖';
-      case 'openai':
-        return '🧠';
-      case 'lmstudio':
-        return '💻';
-      default:
-        return '🤖';
-    }
-  };
 
   return (
     <div className="model-selector" ref={dropdownRef}>
@@ -101,7 +89,7 @@ export function ModelSelector({ onSelectModel, currentProvider, currentModel }: 
         title="Select AI Model"
       >
         <span className="model-selector-icon">
-          {currentProvider ? getProviderIcon(currentProvider) : '🤖'}
+          {getProviderIcon(currentProvider || 'default', { size: 16 })}
         </span>
         <span className="model-selector-label">
           {getCurrentModelName()}
@@ -132,7 +120,7 @@ export function ModelSelector({ onSelectModel, currentProvider, currentModel }: 
                 <div key={provider} className="model-selector-group">
                   <div className="model-selector-group-header">
                     <span className="model-selector-group-icon">
-                      {getProviderIcon(provider)}
+                      {getProviderIcon(provider, { size: 16 })}
                     </span>
                     {getProviderLabel(provider)}
                   </div>

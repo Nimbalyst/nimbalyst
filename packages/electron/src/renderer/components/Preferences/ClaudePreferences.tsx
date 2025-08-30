@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { claudeApi } from '../../services/claudeApi';
+import { aiApi } from '../../services/aiApi';
 
 export function ClaudePreferences() {
   const [apiKey, setApiKey] = useState('');
@@ -77,7 +77,7 @@ export function ClaudePreferences() {
 
       // Initialize Claude with new settings
       if (apiKey) {
-        await claudeApi.initialize(apiKey);
+        await aiApi.initialize(apiKey);
         // Reload available models with new API key
         loadAvailableModels();
       }
@@ -102,7 +102,7 @@ export function ClaudePreferences() {
 
     try {
       // Test the API key by initializing and sending a simple message
-      await claudeApi.initialize(apiKey);
+      await aiApi.initialize(apiKey);
       const response = await window.electronAPI.testClaudeConnection();
       
       if (response.success) {

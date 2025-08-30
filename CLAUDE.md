@@ -108,6 +108,13 @@ The Electron app includes comprehensive window state persistence:
 
 ## AI Features
 
+### AI Providers
+- **Claude**: Direct Claude API integration with streaming support and tool use
+- **Claude Code**: MCP (Model Context Protocol) integration for advanced code editing capabilities
+  - Handles its own model selection internally - do not pass model IDs
+  - Provides enhanced code-aware features through MCP
+- **Multiple provider support**: Extensible architecture for adding new AI providers
+
 ### AI Chat Panel
 - **Claude integration**: Built-in AI assistant powered by Claude API
 - **Context-aware**: Sends current document context with messages
@@ -121,6 +128,11 @@ The Electron app includes comprehensive window state persistence:
 - **Session details**: View full conversation history for any session
 - **Session actions**: Open, export, or delete sessions
 - **Left navigation design**: Clean interface with session list on left, details on right
+
+### AI Model Configuration
+- **Dynamic model selection**: Models are fetched from provider APIs when available
+- **No hardcoded models**: Providers manage their own model defaults
+- **Claude Code specifics**: Never pass model IDs to claude-code provider - it manages its own model selection
 
 ## File Operations
 

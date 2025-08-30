@@ -136,15 +136,41 @@ export class OpenAIProvider extends BaseAIProvider {
       }];
 
       // Create the chat completion with streaming
-      const response = await this.openai.chat.completions.create({
-        model: this.config.model || 'gpt-4-turbo-preview',
+      const modelId = this.config.model || 'gpt-4-turbo-preview';
+      
+      const completionParams: any = {
+        model: modelId,
         messages: apiMessages,
         tools,
         tool_choice: 'auto',
-        max_tokens: this.config.maxTokens || 4000,
-        temperature: this.config.temperature || 0,
         stream: true
-      }, {
+      };
+      
+      // Some models (o1 series, gpt-5, gpt-4.5) don't support temperature parameter
+      // They only work with the default temperature of 1
+      const supportsTemperature = 
+        !modelId.startsWith('o1') && 
+        !modelId.startsWith('gpt-5') && 
+        !modelId.startsWith('gpt-4.5');
+      if (supportsTemperature) {
+        completionParams.temperature = this.config.temperature || 0;
+      }
+      
+      // All recent models use max_completion_tokens
+      // Only legacy models (gpt-3.5-turbo, gpt-4-turbo) use max_tokens
+      const usesLegacyMaxTokens = 
+        modelId.startsWith('gpt-3.5') || 
+        modelId === 'gpt-4-turbo' ||
+        modelId === 'gpt-4-turbo-preview';
+      
+      if (usesLegacyMaxTokens) {
+        completionParams.max_tokens = this.config.maxTokens || 4000;
+      } else {
+        // All other models (gpt-4o, gpt-4.5, gpt-5, o1, etc.) use max_completion_tokens
+        completionParams.max_completion_tokens = this.config.maxTokens || 4000;
+      }
+      
+      const response = await this.openai.chat.completions.create(completionParams, {
         signal: this.abortController.signal
       });
 
