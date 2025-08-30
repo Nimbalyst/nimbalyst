@@ -244,9 +244,9 @@ export class AIService {
           switch (chunk.type) {
             case 'text':
               fullResponse += chunk.content || '';
-              // Send partial response to renderer
+              // Send ACCUMULATED response to renderer (not just the chunk)
               event.sender.send('ai:streamResponse', {
-                partial: chunk.content,
+                partial: fullResponse,  // Send the full accumulated text
                 isComplete: false
               });
               break;

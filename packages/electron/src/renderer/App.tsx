@@ -117,15 +117,33 @@ export default function App() {
   
   // Handle special window modes
   if (windowMode === 'ai-models') {
+    // Set window title for AI Models
+    React.useEffect(() => {
+      if (window.electronAPI) {
+        window.electronAPI.setTitle('AI Models');
+      }
+    }, []);
     return <AIModels onClose={() => window.close()} />;
   }
   
   if (windowMode === 'session-manager') {
+    // Set window title for Session Manager
+    React.useEffect(() => {
+      if (window.electronAPI) {
+        window.electronAPI.setTitle('AI Chat Sessions - All Projects');
+      }
+    }, []);
     const filterProject = urlParams.get('filterProject') || undefined;
     return <SessionManager filterProject={filterProject} />;
   }
   
   if (windowMode === 'project-manager') {
+    // Set window title for Project Manager
+    React.useEffect(() => {
+      if (window.electronAPI) {
+        window.electronAPI.setTitle('Project Manager - Stravu Editor');
+      }
+    }, []);
     return <ProjectManager />;
   }
   

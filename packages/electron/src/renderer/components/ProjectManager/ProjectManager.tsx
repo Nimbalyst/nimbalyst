@@ -21,8 +21,8 @@ if (typeof window !== 'undefined') {
 interface ProjectInfo {
   path: string;
   name: string;
-  lastOpened: number;
-  lastModified?: number;
+  lastOpened: number | string;
+  lastModified?: number | string;
   fileCount?: number;
   markdownCount?: number;
   exists: boolean;
@@ -54,6 +54,7 @@ export const ProjectManager: React.FC = () => {
   const loadProjects = async () => {
     try {
       const recentProjects = await window.electronAPI.projectManager.getRecentProjects();
+      console.log('Loaded projects:', recentProjects);
       setProjects(recentProjects);
       if (recentProjects.length > 0) {
         setSelectedProject(recentProjects[0]);
@@ -117,24 +118,57 @@ export const ProjectManager: React.FC = () => {
     }
   };
 
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp);
+  const formatDate = (timestamp: number | string | undefined) => {
+    if (!timestamp) {
+      return 'Unknown';
+    }
+    
+    // Convert string to number if needed
+    let ts = typeof timestamp === 'string' ? parseInt(timestamp, 10) : timestamp;
+    
+    // If timestamp is in seconds (Unix timestamp), convert to milliseconds
+    // Unix timestamps are typically 10 digits, JS timestamps are 13
+    if (ts && ts < 10000000000) {
+      ts = ts * 1000;
+    }
+    
+    if (!ts || isNaN(ts) || ts === 0) {
+      return 'Unknown';
+    }
+    
+    const date = new Date(ts);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return 'Never';
+    }
+    
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     
-    if (days === 0) {
+    if (days < 0) {
+      return date.toLocaleDateString();
+    } else if (days === 0) {
       return 'Today';
     } else if (days === 1) {
       return 'Yesterday';
     } else if (days < 7) {
       return `${days} days ago`;
+    } else if (days < 30) {
+      const weeks = Math.floor(days / 7);
+      return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
     } else {
       return date.toLocaleDateString();
     }
   };
 
   const formatSize = (bytes: number) => {
+    // Validate bytes
+    if (!bytes || isNaN(bytes) || bytes < 0) {
+      return '0 B';
+    }
+    
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -175,7 +209,9 @@ export const ProjectManager: React.FC = () => {
                 onClick={() => setSelectedProject(project)}
                 onDoubleClick={handleOpenProject}
               >
-                <div className="project-icon">📁</div>
+                <div className="project-icon">
+                  <span className="material-symbols-outlined">folder</span>
+                </div>
                 <div className="project-info">
                   <div className="project-name">{project.name}</div>
                   <div className="project-path">{project.path}</div>
@@ -237,7 +273,10 @@ export const ProjectManager: React.FC = () => {
                       <h3>Recent Files</h3>
                       <ul>
                         {projectStats.recentFiles.map(file => (
-                          <li key={file}>📄 {file}</li>
+                          <li key={file}>
+                            <span className="material-symbols-outlined">description</span>
+                            {file}
+                          </li>
                         ))}
                       </ul>
                     </div>

@@ -59,15 +59,20 @@ export class LMStudioProvider extends BaseAIProvider {
           continue;
         }
         
-        // Skip tool messages for now (LMStudio might not support function calling)
+        // Handle tool/function messages
         if (msg.role === 'tool') {
-          continue;
+          // LMStudio expects tool results in a specific format
+          apiMessages.push({
+            role: 'tool',
+            tool_call_id: msg.toolCall?.id || 'tool_' + Date.now(),
+            content: msg.content || JSON.stringify(msg.toolCall?.result || {})
+          });
+        } else {
+          apiMessages.push({
+            role: msg.role === 'user' ? 'user' : 'assistant',
+            content: msg.content
+          });
         }
-        
-        apiMessages.push({
-          role: msg.role === 'user' ? 'user' : 'assistant',
-          content: msg.content
-        });
       }
     }
     
@@ -77,8 +82,69 @@ export class LMStudioProvider extends BaseAIProvider {
     }
     apiMessages.push({ role: 'user', content: message });
 
+    // Define tools for LMStudio (OpenAI-compatible format)
+    const tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'applyDiff',
+          description: 'Apply text replacements to the document with diff preview',
+          parameters: {
+            type: 'object',
+            properties: {
+              replacements: {
+                type: 'array',
+                description: 'Array of text replacements to apply',
+                items: {
+                  type: 'object',
+                  properties: {
+                    oldText: { 
+                      type: 'string',
+                      description: 'The exact text to replace'
+                    },
+                    newText: { 
+                      type: 'string',
+                      description: 'The new text to insert'
+                    }
+                  },
+                  required: ['oldText', 'newText']
+                }
+              }
+            },
+            required: ['replacements']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'streamContent',
+          description: 'Stream new content into the document at a specific position',
+          parameters: {
+            type: 'object',
+            properties: {
+              content: {
+                type: 'string',
+                description: 'The content to stream into the document'
+              },
+              position: {
+                type: 'string',
+                enum: ['cursor', 'end', 'after-selection'],
+                description: 'Where to insert the content'
+              },
+              insertAfter: {
+                type: 'string',
+                description: 'Optional: Find this text and insert content after it'
+              }
+            },
+            required: ['content', 'position']
+          }
+        }
+      }
+    ];
+
     try {
-      // Make streaming request to LMStudio
+      // Make streaming request to LMStudio with tools
       const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
@@ -89,6 +155,8 @@ export class LMStudioProvider extends BaseAIProvider {
           messages: apiMessages,
           max_tokens: this.config.maxTokens || 4096,
           temperature: this.config.temperature || 0.7,
+          tools: tools,
+          tool_choice: 'auto',  // Let the model decide when to use tools
           stream: true
         }),
         signal: this.abortController.signal
@@ -106,6 +174,11 @@ export class LMStudioProvider extends BaseAIProvider {
       const decoder = new TextDecoder();
       let fullContent = '';
       let buffer = '';
+      let currentToolCall: any = null;
+      let toolCallBuffer = '';
+      let isStreamingContent = false;
+      let streamContentBuffer = '';
+      let streamConfig: any = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -131,12 +204,219 @@ export class LMStudioProvider extends BaseAIProvider {
               const json = JSON.parse(line.slice(6));
               const delta = json.choices?.[0]?.delta;
               
+              // Handle text content
               if (delta?.content) {
                 fullContent += delta.content;
                 yield {
                   type: 'text',
                   content: delta.content
                 };
+              }
+              
+              // Handle tool calls (OpenAI format)
+              if (delta?.tool_calls) {
+                console.log('[LMStudio] Tool calls detected:', delta.tool_calls);
+                for (const toolCall of delta.tool_calls) {
+                  if (toolCall.id) {
+                    // New tool call starting
+                    console.log('[LMStudio] Starting new tool call:', toolCall.function?.name);
+                    currentToolCall = {
+                      id: toolCall.id,
+                      type: toolCall.type,
+                      function: {
+                        name: toolCall.function?.name || '',
+                        arguments: ''
+                      }
+                    };
+                    toolCallBuffer = '';
+                  }
+                  
+                  if (toolCall.function?.arguments) {
+                    // Accumulate function arguments
+                    const chunk = toolCall.function.arguments;
+                    toolCallBuffer += chunk;
+                    console.log('[LMStudio] Tool call chunk received:', {
+                      toolName: currentToolCall?.function?.name,
+                      chunkLength: chunk.length,
+                      chunkPreview: chunk.substring(0, 50),
+                      totalBufferLength: toolCallBuffer.length,
+                      isStreamingContent: isStreamingContent
+                    });
+                    
+                    // Special handling for streamContent to enable true streaming
+                    if (currentToolCall?.function?.name === 'streamContent') {
+                      if (!isStreamingContent) {
+                        // Check if we have enough info to start streaming
+                        const positionMatch = toolCallBuffer.match(/"position"\s*:\s*"([^"]+)"/);
+                        const insertAfterMatch = toolCallBuffer.match(/"insertAfter"\s*:\s*"([^"]+)"/);
+                        
+                        // Start streaming as soon as we see the content field starting
+                        if (toolCallBuffer.includes('"content"')) {
+                          // Default to cursor if position not found yet
+                          const position = positionMatch ? positionMatch[1] : 'cursor';
+                          
+                          isStreamingContent = true;
+                          streamConfig = {
+                            position: position,
+                            insertAfter: insertAfterMatch ? insertAfterMatch[1] : undefined,
+                            insertAtEnd: position === 'end',
+                            mode: 'after'
+                          };
+                          
+                          console.log('[LMStudio] Starting streaming with config:', streamConfig);
+                          
+                          yield {
+                            type: 'stream_edit_start',
+                            config: streamConfig
+                          };
+                          
+                          // Initialize stream content buffer to track what we've sent
+                          streamContentBuffer = '';
+                        }
+                      }
+                    }
+                    
+                    // If we're streaming content, extract and stream it incrementally
+                    if (isStreamingContent && currentToolCall?.function?.name === 'streamContent') {
+                      // Extract content from the accumulated buffer
+                      // Look for the content field in the JSON
+                      const contentMatch = toolCallBuffer.match(/"content"\s*:\s*"/);
+                      
+                      if (contentMatch && contentMatch.index !== undefined) {
+                        // Find where content value starts (after the matched pattern)
+                        const contentStartIndex = contentMatch.index + contentMatch[0].length;
+                        
+                        // Find potential end of content (look for ", but handle escaped quotes)
+                        let contentEndIndex = -1;
+                        let escaped = false;
+                        for (let i = contentStartIndex; i < toolCallBuffer.length; i++) {
+                          if (toolCallBuffer[i] === '\\' && !escaped) {
+                            escaped = true;
+                            continue;
+                          }
+                          if (toolCallBuffer[i] === '"' && !escaped) {
+                            contentEndIndex = i;
+                            break;
+                          }
+                          escaped = false;
+                        }
+                        
+                        if (contentEndIndex > 0) {
+                          // We have complete content
+                          const rawContent = toolCallBuffer.substring(contentStartIndex, contentEndIndex);
+                          
+                          // Only send new content that hasn't been streamed yet
+                          if (rawContent.length > streamContentBuffer.length) {
+                            const newContent = rawContent.substring(streamContentBuffer.length);
+                            
+                            // Unescape the JSON string content
+                            const unescaped = newContent
+                              .replace(/\\n/g, '\n')
+                              .replace(/\\r/g, '\r')
+                              .replace(/\\t/g, '\t')
+                              .replace(/\\"/g, '"')
+                              .replace(/\\\\/g, '\\');
+                            
+                            if (unescaped.length > 0) {
+                              console.log('[LMStudio] 📝 Emitting stream_edit_content (complete):', {
+                                length: unescaped.length,
+                                preview: unescaped.substring(0, 30) + (unescaped.length > 30 ? '...' : '')
+                              });
+                              
+                              yield {
+                                type: 'stream_edit_content',
+                                content: unescaped
+                              };
+                            }
+                            
+                            streamContentBuffer = rawContent;
+                          }
+                          
+                          // End streaming since content is complete
+                          yield {
+                            type: 'stream_edit_end'
+                          };
+                          
+                          isStreamingContent = false;
+                          streamContentBuffer = '';
+                          streamConfig = null;
+                          currentToolCall = null;
+                          toolCallBuffer = '';
+                        } else {
+                          // Content not complete yet, but we can stream what we have so far
+                          const partialContent = toolCallBuffer.substring(contentStartIndex);
+                          
+                          // Only send new content
+                          if (partialContent.length > streamContentBuffer.length) {
+                            const newContent = partialContent.substring(streamContentBuffer.length);
+                            
+                            // Don't send incomplete escape sequences
+                            let safeEndIndex = newContent.length;
+                            
+                            // Check for incomplete escape sequence at the end
+                            if (newContent.endsWith('\\')) {
+                              // Don't include the trailing backslash as it might be part of an escape
+                              safeEndIndex = newContent.length - 1;
+                            }
+                            
+                            if (safeEndIndex > 0) {
+                              const safeContent = newContent.substring(0, safeEndIndex);
+                              
+                              // Unescape the JSON string content
+                              const unescaped = safeContent
+                                .replace(/\\n/g, '\n')
+                                .replace(/\\r/g, '\r')
+                                .replace(/\\t/g, '\t')
+                                .replace(/\\"/g, '"')
+                                .replace(/\\\\/g, '\\');
+                              
+                              if (unescaped.length > 0) {
+                                console.log('[LMStudio] 📝 Emitting stream_edit_content (partial):', {
+                                  length: unescaped.length,
+                                  preview: unescaped.substring(0, 30) + (unescaped.length > 30 ? '...' : ''),
+                                  totalBuffered: streamContentBuffer.length + safeEndIndex
+                                });
+                                
+                                yield {
+                                  type: 'stream_edit_content',
+                                  content: unescaped
+                                };
+                              }
+                              
+                              streamContentBuffer = partialContent.substring(0, streamContentBuffer.length + safeEndIndex);
+                            }
+                          }
+                        }
+                      }
+                    } else if (!isStreamingContent) {
+                      // Not streaming, try to parse complete arguments for other tools
+                      try {
+                        const args = JSON.parse(toolCallBuffer);
+                        
+                        // Emit as regular tool call
+                        yield {
+                          type: 'tool_call',
+                          toolCall: {
+                            id: currentToolCall.id,
+                            name: currentToolCall.function.name,
+                            arguments: args
+                          }
+                        };
+                        
+                        // Execute tool if handler available
+                        if (currentToolCall.function.name === 'applyDiff' && this.toolHandler) {
+                          await this.toolHandler.applyDiff(args);
+                        }
+                        
+                        // Reset for next tool call
+                        currentToolCall = null;
+                        toolCallBuffer = '';
+                      } catch (e) {
+                        // Arguments not complete yet, continue accumulating
+                      }
+                    }
+                  }
+                }
               }
               
               if (json.choices?.[0]?.finish_reason === 'stop') {
@@ -208,9 +488,9 @@ export class LMStudioProvider extends BaseAIProvider {
   getCapabilities(): ProviderCapabilities {
     return {
       streaming: true,
-      tools: false,  // Most local models don't support function calling yet
+      tools: true,  // LMStudio supports native OpenAI-style function calling
       mcpSupport: false,
-      edits: false,  // Simplified - no tool support
+      edits: true,  // Enable edits through native tool support
       resumeSession: false
     };
   }
@@ -220,13 +500,37 @@ export class LMStudioProvider extends BaseAIProvider {
   }
 
   private buildSystemPrompt(documentContext?: DocumentContext): string {
-    return `You are an AI assistant helping with a document in Stravu Editor, a markdown-focused text editor.
+    return `You are an AI assistant integrated into Stravu Editor, a markdown-focused text editor.
+
+CRITICAL: You MUST use the provided tools for ALL document editing operations. NEVER output content that should be added to the document as part of your text response.
+
+You have access to the following tools for document editing:
+- applyDiff: Apply text replacements to the document (use for replacing existing text)
+- streamContent: Stream new content into the document at a specific position (use for inserting new content)
+
+MANDATORY Tool Usage Rules:
+1. ALWAYS use 'streamContent' when the user asks you to add, insert, append, or create new content
+2. ALWAYS use 'applyDiff' when the user asks you to replace, modify, fix, or update existing text
+3. NEVER output document content in your text response - it should ONLY go through tools
+4. Your text response should be brief (2-4 words) acknowledging the action
+
+Tool Usage Guidelines:
+- Use 'applyDiff' when you need to REPLACE or MODIFY existing text
+- Use 'streamContent' when you need to INSERT NEW content without replacing anything
+- For streamContent, use position='cursor' to insert at cursor, position='end' to append, or provide 'insertAfter' to insert after specific text
 
 Current document context:
 - File: ${documentContext?.filePath || 'untitled'}
 - Type: ${documentContext?.fileType || 'markdown'}
-${documentContext?.content ? `- Full document content:\n${documentContext.content}` : ''}
+${documentContext?.cursorPosition ? `- Cursor position: Line ${documentContext.cursorPosition.line}, Column ${documentContext.cursorPosition.column}` : ''}
+${documentContext?.selection ? `- Selected text: "${documentContext.selection.substring(0, 100)}${documentContext.selection.length > 100 ? '...' : ''}"` : ''}
+${documentContext?.content ? `\nFull document content:\n${documentContext.content}` : ''}
 
-Please provide helpful, concise responses to assist with document editing and questions.`;
+Response Format Examples:
+- User: "add more quotes" → You: "Adding quotes" [USE streamContent tool]
+- User: "fix the typo" → You: "Fixing typo" [USE applyDiff tool]
+- User: "insert a list" → You: "Inserting list" [USE streamContent tool]
+
+Remember: ALL content changes MUST go through tools, not in your text response.`;
   }
 }

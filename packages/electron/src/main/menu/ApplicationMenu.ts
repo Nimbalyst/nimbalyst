@@ -21,16 +21,31 @@ function createWindowListMenu(): any[] {
         return [];
     }
 
-    // Sort windows by ID for consistent ordering
-    const sortedWindows = allWindows.sort((a, b) => a.id - b.id);
+    // Categorize windows
+    const projectWindows: { window: BrowserWindow; title: string }[] = [];
+    const documentWindows: { window: BrowserWindow; title: string }[] = [];
+    const otherWindows: { window: BrowserWindow; title: string }[] = [];
 
-    sortedWindows.forEach((window, index) => {
+    allWindows.forEach((window) => {
         const windowId = window.id;
         const state = windowStates.get(windowId);
-
         let title = 'Untitled';
+        let category: 'project' | 'document' | 'other' = 'document';
 
-        if (state) {
+        // Check for special windows first
+        if (isProjectManagerWindow(window)) {
+            title = 'Project Manager';
+            category = 'other';
+        } else if (isSessionManagerWindow(window)) {
+            title = 'Session Manager';
+            category = 'other';
+        } else if (isAIModelsWindow(window)) {
+            title = 'AI Models';
+            category = 'other';
+        } else if (isAboutWindow(window)) {
+            title = 'About';
+            category = 'other';
+        } else if (state) {
             if (state.mode === 'project' && state.projectPath) {
                 const projectName = basename(state.projectPath);
                 if (state.filePath) {
@@ -39,8 +54,10 @@ function createWindowListMenu(): any[] {
                 } else {
                     title = projectName;
                 }
+                category = 'project';
             } else if (state.filePath) {
                 title = basename(state.filePath);
+                category = 'document';
             }
 
             // Add dirty indicator
@@ -49,19 +66,81 @@ function createWindowListMenu(): any[] {
             }
         }
 
-        // Add keyboard shortcut for first 9 windows
-        const accelerator = index < 9 ? `CmdOrCtrl+${index + 1}` : undefined;
-
-        menuItems.push({
-            label: title,
-            accelerator,
-            type: 'checkbox',
-            checked: window.isFocused(),
-            click: () => {
-                window.focus();
-            }
-        });
+        // Add to appropriate category
+        if (category === 'project') {
+            projectWindows.push({ window, title });
+        } else if (category === 'document') {
+            documentWindows.push({ window, title });
+        } else {
+            otherWindows.push({ window, title });
+        }
     });
+
+    // Build menu items with groups
+    let shortcutIndex = 0;
+
+    // Add project windows
+    if (projectWindows.length > 0) {
+        if (menuItems.length > 0) {
+            menuItems.push({ type: 'separator' });
+        }
+        menuItems.push({ label: 'Projects', enabled: false });
+        projectWindows.forEach(({ window, title }) => {
+            const accelerator = shortcutIndex < 9 ? `CmdOrCtrl+${shortcutIndex + 1}` : undefined;
+            shortcutIndex++;
+            menuItems.push({
+                label: title,
+                accelerator,
+                type: 'checkbox',
+                checked: window.isFocused(),
+                click: () => {
+                    window.focus();
+                }
+            });
+        });
+    }
+
+    // Add document windows
+    if (documentWindows.length > 0) {
+        if (menuItems.length > 0) {
+            menuItems.push({ type: 'separator' });
+        }
+        menuItems.push({ label: 'Documents', enabled: false });
+        documentWindows.forEach(({ window, title }) => {
+            const accelerator = shortcutIndex < 9 ? `CmdOrCtrl+${shortcutIndex + 1}` : undefined;
+            shortcutIndex++;
+            menuItems.push({
+                label: title,
+                accelerator,
+                type: 'checkbox',
+                checked: window.isFocused(),
+                click: () => {
+                    window.focus();
+                }
+            });
+        });
+    }
+
+    // Add other windows
+    if (otherWindows.length > 0) {
+        if (menuItems.length > 0) {
+            menuItems.push({ type: 'separator' });
+        }
+        menuItems.push({ label: 'Other Windows', enabled: false });
+        otherWindows.forEach(({ window, title }) => {
+            const accelerator = shortcutIndex < 9 ? `CmdOrCtrl+${shortcutIndex + 1}` : undefined;
+            shortcutIndex++;
+            menuItems.push({
+                label: title,
+                accelerator,
+                type: 'checkbox',
+                checked: window.isFocused(),
+                click: () => {
+                    window.focus();
+                }
+            });
+        });
+    }
 
     return menuItems;
 }
@@ -579,4 +658,22 @@ export function updateApplicationMenu() {
 function isAboutWindow(window: BrowserWindow): boolean {
     // Check if this is the about window by checking the title
     return window.getTitle() === 'About Stravu Editor';
+}
+
+// Helper to check if window is project manager window
+function isProjectManagerWindow(window: BrowserWindow): boolean {
+    // Check if this is the project manager window by checking the title
+    return window.getTitle() === 'Project Manager - Stravu Editor';
+}
+
+// Helper to check if window is session manager window
+function isSessionManagerWindow(window: BrowserWindow): boolean {
+    // Check if this is the session manager window by checking the title
+    return window.getTitle() === 'AI Chat Sessions - All Projects';
+}
+
+// Helper to check if window is AI models window
+function isAIModelsWindow(window: BrowserWindow): boolean {
+    // Check if this is the AI models window by checking the title
+    return window.getTitle() === 'AI Models';
 }

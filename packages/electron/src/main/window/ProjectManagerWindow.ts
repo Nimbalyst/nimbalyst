@@ -76,6 +76,7 @@ export function setupProjectManagerHandlers() {
           
           return {
             ...project,
+            lastOpened: project.timestamp, // Use the timestamp from the recent items
             lastModified: stats.mtime.getTime(),
             fileCount: files.length,
             markdownCount: files.filter(f => f.endsWith('.md') || f.endsWith('.markdown')).length,
@@ -88,6 +89,7 @@ export function setupProjectManagerHandlers() {
       
       return {
         ...project,
+        lastOpened: project.timestamp || Date.now(), // Fallback to now if no timestamp
         exists: false
       };
     }).filter(p => p.exists);
