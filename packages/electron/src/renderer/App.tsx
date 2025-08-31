@@ -19,7 +19,6 @@ import { ProjectWelcome } from './components/ProjectWelcome';
 import { QuickOpen } from './components/QuickOpen';
 import { AIChat } from './components/AIChat';
 import { HistoryDialog } from './components/HistoryDialog';
-import { PreferencesDialog } from './components/Preferences/PreferencesDialog';
 import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import { ApiKeyDialog } from './components/ApiKeyDialog';
 import { AIModels } from './components/AIModels/AIModels';
@@ -176,7 +175,6 @@ export default function App() {
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
-  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
   const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
   const [sessionToLoad, setSessionToLoad] = useState<{ sessionId: string; projectPath?: string } | null>(null);
@@ -1044,12 +1042,6 @@ export default function App() {
     }));
 
     // Listen for show preferences event
-    if (window.electronAPI.onShowPreferences) {
-      cleanupFns.push(window.electronAPI.onShowPreferences(() => {
-        console.log('Show preferences requested');
-        setIsPreferencesOpen(true);
-      }));
-    }
     cleanupFns.push(window.electronAPI.onFileRenamed((data) => {
       console.log('File renamed:', data);
 
@@ -1399,16 +1391,13 @@ export default function App() {
         filePath={currentFilePath}
         onRestore={handleRestoreFromHistory}
       />
-      <PreferencesDialog
-        isOpen={isPreferencesOpen}
-        onClose={() => setIsPreferencesOpen(false)}
-      />
       <ApiKeyDialog
         isOpen={isApiKeyDialogOpen}
         onClose={() => setIsApiKeyDialogOpen(false)}
         onOpenPreferences={() => {
           setIsApiKeyDialogOpen(false);
-          setIsPreferencesOpen(true);
+          // Open AI Models window for settings
+          window.electronAPI.openAIModels();
         }}
       />
       <ErrorDialog

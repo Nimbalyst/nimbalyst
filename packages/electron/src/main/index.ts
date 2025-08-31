@@ -14,7 +14,6 @@ import { registerSettingsHandlers } from './ipc/SettingsHandlers';
 import { registerWindowHandlers } from './ipc/WindowHandlers';
 import { registerHistoryHandlers } from './ipc/HistoryHandlers';
 import { registerSessionHandlers } from './ipc/SessionHandlers';
-import { registerPreferencesHandlers } from './ipc/PreferencesHandlers';
 import { getTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
 import { startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
@@ -127,7 +126,6 @@ app.whenReady().then(async () => {
     registerWindowHandlers();
     await registerHistoryHandlers();
     await registerSessionHandlers();
-    registerPreferencesHandlers();
     registerSessionManagerHandlers();
     setupProjectManagerHandlers();
     

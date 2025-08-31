@@ -274,13 +274,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('ai:editRequest', handler);
   },
 
-  // Preferences operations
-  openDataFolder: () => ipcRenderer.invoke('preferences:openDataFolder'),
-  onShowPreferences: (callback: () => void) => {
-    ipcRenderer.on('show-preferences', callback);
-    return () => ipcRenderer.removeListener('show-preferences', callback);
-  },
-
   // MCP Server operations
   onMcpApplyDiff: (callback: (data: { replacements: any[], resultChannel: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);

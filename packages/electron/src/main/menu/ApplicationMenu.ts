@@ -609,13 +609,11 @@ export function createApplicationMenu() {
                 },
                 { type: 'separator' },
                 {
-                    label: 'Preferences...',
+                    label: 'Settings...',
                     accelerator: 'CmdOrCtrl+,',
                     click: () => {
-                        const focusedWindow = BrowserWindow.getFocusedWindow();
-                        if (focusedWindow) {
-                            focusedWindow.webContents.send('show-preferences');
-                        }
+                        createAIModelsWindow();
+
                     }
                 },
                 { type: 'separator' },
