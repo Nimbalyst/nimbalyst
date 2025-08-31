@@ -46,7 +46,7 @@ export function createSessionManagerWindow(filterProject?: string) {
     if (filterProject) {
       query.filterProject = filterProject;
     }
-    sessionManagerWindow.loadFile(join(__dirname, '../../renderer/index.html'), { query });
+    sessionManagerWindow.loadFile(join(__dirname, '../renderer/index.html'), { query });
   }
 
   // Show window when ready

@@ -32,7 +32,7 @@ export function createAboutWindow() {
     });
 
     // Load the about.html file
-    aboutWindow.loadFile(join(__dirname, '../../about.html'));
+    aboutWindow.loadFile(join(__dirname, '../renderer/about.html'));
 
     aboutWindow.once('ready-to-show', () => {
         aboutWindow?.show();

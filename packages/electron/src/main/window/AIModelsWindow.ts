@@ -31,7 +31,7 @@ export function createAIModelsWindow() {
     if (process.env.NODE_ENV === 'development') {
         aiModelsWindow.loadURL('http://localhost:5273/?mode=ai-models');
     } else {
-        aiModelsWindow.loadFile(join(__dirname, '../../renderer/index.html'), {
+        aiModelsWindow.loadFile(join(__dirname, '../renderer/index.html'), {
             query: { mode: 'ai-models' }
         });
     }

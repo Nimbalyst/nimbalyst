@@ -147,7 +147,22 @@ export function registerProjectHandlers() {
             
             // Then search content using ripgrep
             try {
-                const contentCommand = `rg --type md -i --json "${escapedTerm}" "${projectPath}" 2>/dev/null || true`;
+                // Try to use bundled ripgrep from claude-code, fall back to system rg
+                let rgPath = 'rg';
+                const possibleRgPaths = [
+                    path.join(__dirname, '../../node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg'),
+                    path.join(process.resourcesPath, 'app.asar.unpacked/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg'),
+                    path.join(process.resourcesPath, 'app/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg')
+                ];
+                
+                for (const testPath of possibleRgPaths) {
+                    if (fs.existsSync(testPath)) {
+                        rgPath = testPath;
+                        break;
+                    }
+                }
+                
+                const contentCommand = `"${rgPath}" --type md -i --json "${escapedTerm}" "${projectPath}" 2>/dev/null || true`;
                 const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
                 
                 if (stdout) {

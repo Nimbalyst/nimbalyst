@@ -14,10 +14,10 @@
     "postinstall": "electron-builder install-app-deps || true",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:dist": "npm run build && electron-builder",
-    "build:mac": "npm run build && electron-builder --mac",
-    "build:mac:signed": "npm run build && electron-builder --mac",
-    "build:mac:notarized": "npm run build && REQUIRE_NOTARIZE=true electron-builder --mac",
-    "build:mac:local": "SKIP_NOTARIZE=true npm run build && SKIP_NOTARIZE=true electron-builder --mac",
+    "build:mac": "npm run build && node build/configure-build.js && electron-builder --mac",
+    "build:mac:signed": "npm run build && node build/configure-build.js && electron-builder --mac",
+    "build:mac:notarized": "npm run build && node build/configure-build.js && REQUIRE_NOTARIZE=true electron-builder --mac",
+    "build:mac:local": "SKIP_NOTARIZE=true npm run build && SKIP_NOTARIZE=true node build/configure-build.js && electron-builder --mac",
     "build:win": "npm run build && electron-builder --win",
     "build:linux": "npm run build && electron-builder --linux"
   },
@@ -59,12 +59,16 @@
     },
     "asar": true,
     "asarUnpack": [
+      "node_modules/**/*.node",
       "node_modules/@anthropic-ai/claude-code/**/*"
     ],
     "files": [
       "out/**/*",
-      "icon.png"
+      "icon.png",
+      "node_modules/**/*",
+      "!node_modules/@anthropic-ai/claude-code/vendor/**/*.jar"
     ],
+    "afterSign": "build/afterSign.js",
     "fileAssociations": [
       {
         "ext": "md",
@@ -84,6 +88,11 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "signIgnore": [
+        "node_modules/@anthropic-ai/claude-code/vendor/.*\\.jar$"
+      ],
       "fileAssociations": [
         {
           "ext": "md",
@@ -95,7 +104,9 @@
           "name": "Markdown Document",
           "role": "Editor"
         }
-      ]
+      ],
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "win": {
       "target": "nsis"

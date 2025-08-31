@@ -36,7 +36,7 @@ export function createProjectManagerWindow() {
   if (process.env.NODE_ENV === 'development') {
     projectManagerWindow.loadURL('http://localhost:5273/?mode=project-manager');
   } else {
-    projectManagerWindow.loadFile(join(__dirname, '../../renderer/index.html'), {
+    projectManagerWindow.loadFile(join(__dirname, '../renderer/index.html'), {
       query: { mode: 'project-manager' }
     });
   }
