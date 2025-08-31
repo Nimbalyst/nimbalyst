@@ -136,7 +136,11 @@ export class OpenAIProvider extends BaseAIProvider {
       }];
 
       // Create the chat completion with streaming
-      const modelId = this.config.model || 'gpt-4-turbo-preview';
+      if (!this.config.model) {
+        throw new Error('No model specified for OpenAI provider');
+      }
+      
+      const modelId = this.config.model;
       
       const completionParams: any = {
         model: modelId,
@@ -320,7 +324,9 @@ export class OpenAIProvider extends BaseAIProvider {
   }
 
   private buildSystemPrompt(documentContext?: DocumentContext): string {
-    return `You are an AI assistant integrated into Stravu Editor, a markdown-focused text editor built with Lexical.
+    const basePrompt = super.buildSystemPrompt(documentContext);
+    
+    return `${basePrompt}
 
 You have access to the following tools for document editing:
 - applyDiff: Apply text replacements to the document with diff preview (use for replacing existing text)
@@ -330,11 +336,6 @@ Tool Usage Guidelines:
 - Use 'applyDiff' when you need to REPLACE or MODIFY existing text
 - Use 'streamContent' when you need to INSERT NEW content without replacing anything
 - For streamContent, use position='cursor' to insert at cursor, position='end' to append to document, or provide 'insertAfter' to insert after specific text
-
-Current document context:
-- File: ${documentContext?.filePath || 'untitled'}
-- Type: ${documentContext?.fileType || 'markdown'}
-${documentContext?.content ? `- Full document content:\n${documentContext.content}` : ''}
 
 CRITICAL RESPONSE RULES - YOU MUST FOLLOW THESE:
 1. When editing documents, briefly acknowledge the action using the -ing form of the user's request

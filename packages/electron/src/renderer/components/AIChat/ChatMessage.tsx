@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DiffPreview } from '../DiffPreview/DiffPreview';
 import { ToolCallBlock } from './ToolCallBlock';
+import { getProviderIcon } from '../icons/ProviderIcons';
 
 interface EditRequest {
   type: 'diff';
@@ -24,6 +25,7 @@ interface ChatMessageProps {
   isError?: boolean;
   onApplyEdit?: (edit: EditRequest) => Promise<{ success: boolean; error?: string }>;
   onReapply?: (args: any) => void;
+  provider?: string;  // Provider for showing appropriate icon
 }
 
 export function ChatMessage({
@@ -34,7 +36,8 @@ export function ChatMessage({
   isStreaming,
   isError,
   onApplyEdit,
-  onReapply
+  onReapply,
+  provider
 }: ChatMessageProps) {
   const [expandedEdits, setExpandedEdits] = useState(false);
   const [appliedEdits, setAppliedEdits] = useState<Set<number>>(new Set());
@@ -163,6 +166,8 @@ export function ChatMessage({
       <div className="ai-chat-message-avatar">
         {role === 'user' ? (
           'U'
+        ) : provider ? (
+          getProviderIcon(provider, { size: 16 })
         ) : (
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M8 1L9 5L13 6L9 7L8 11L7 7L3 6L7 5L8 1Z" fill="currentColor"/>

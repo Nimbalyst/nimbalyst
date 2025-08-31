@@ -130,10 +130,20 @@ export class AIService {
       
       // Only add model to config if we have one and it's not claude-code
       if (model && provider !== 'claude-code') {
-        providerConfig.model = model;
+        // Strip provider prefix if present (e.g., "openai:gpt-4" -> "gpt-4")
+        if (model.includes(':')) {
+          providerConfig.model = model.split(':').slice(1).join(':');
+        } else {
+          providerConfig.model = model;
+        }
       } else if (provider !== 'claude-code') {
         // For other providers, fall back to settings
-        providerConfig.model = this.getProviderSetting(provider, 'model');
+        const settingsModel = this.getProviderSetting(provider, 'model');
+        if (settingsModel && settingsModel.includes(':')) {
+          providerConfig.model = settingsModel.split(':').slice(1).join(':');
+        } else {
+          providerConfig.model = settingsModel;
+        }
       }
 
       // Create session

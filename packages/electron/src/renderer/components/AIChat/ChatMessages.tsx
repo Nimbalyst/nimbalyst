@@ -25,12 +25,14 @@ interface ChatMessagesProps {
   messages: Message[];
   isLoading: boolean;
   onApplyEdit?: (edit: any) => Promise<{ success: boolean; error?: string }>;
+  provider?: string;  // Provider to show appropriate icon
 }
 
 export function ChatMessages({ 
   messages, 
   isLoading, 
-  onApplyEdit 
+  onApplyEdit,
+  provider 
 }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,6 +88,7 @@ export function ChatMessages({
               isError={message.isError}
               onApplyEdit={onApplyEdit}
               onReapply={handleReapply}
+              provider={provider}
             />
           );
         } else {
@@ -97,6 +100,7 @@ export function ChatMessages({
               edits={message.edits}
               isError={message.isError}
               onApplyEdit={onApplyEdit}
+              provider={provider}
             />
           );
         }

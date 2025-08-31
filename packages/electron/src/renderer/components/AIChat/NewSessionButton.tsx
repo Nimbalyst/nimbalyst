@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MaterialSymbol } from '../MaterialSymbol';
+import { getProviderIcon } from '../icons/ProviderIcons';
 import './NewSessionButton.css';
 
 interface Model {
@@ -9,14 +10,12 @@ interface Model {
 }
 
 interface NewSessionButtonProps {
-  currentProvider: string;
-  currentModel?: string;
-  onNewSession: (provider: string, modelId?: string) => void;
+  currentModel: string;  // Full provider:model ID
+  onNewSession: (modelId: string) => void;  // Just pass the full model ID
   disabled?: boolean;
 }
 
 export function NewSessionButton({
-  currentProvider,
   currentModel,
   onNewSession,
   disabled = false
@@ -60,11 +59,11 @@ export function NewSessionButton({
   };
 
   const handleMainClick = () => {
-    onNewSession(currentProvider, currentModel);
+    onNewSession(currentModel);
   };
 
-  const handleModelSelect = (provider: string, modelId: string) => {
-    onNewSession(provider, modelId);
+  const handleModelSelect = (modelId: string) => {
+    onNewSession(modelId);  // Pass the full provider:model ID
     setIsOpen(false);
   };
 
@@ -78,28 +77,20 @@ export function NewSessionButton({
     }
   };
 
-  const getProviderIcon = (provider: string) => {
-    switch (provider) {
-      case 'claude': return 'api';
-      case 'claude-code': return 'code';
-      case 'openai': return 'psychology';
-      case 'lmstudio': return 'computer';
-      default: return 'smart_toy';
-    }
-  };
 
   const getCurrentModelName = () => {
-    if (!currentProvider || !currentModel) return 'New Session';
+    if (!currentModel) return 'New Session';
     
-    // Find the model in our list
-    const providerModels = models[currentProvider];
-    if (providerModels) {
+    // Find the model in our list by checking all providers
+    for (const providerModels of Object.values(models)) {
       const model = providerModels.find(m => m.id === currentModel);
       if (model) return model.name;
     }
     
-    // Fallback
-    return currentModel;
+    // Fallback - strip provider prefix for display
+    if (currentModel === 'claude-code') return 'Claude Code';
+    const [, ...modelParts] = currentModel.split(':');
+    return modelParts.join(':') || currentModel;
   };
 
   return (
@@ -135,21 +126,21 @@ export function NewSessionButton({
             Object.entries(models).map(([provider, providerModels]) => (
               <div key={provider} className="new-session-provider-group">
                 <div className="new-session-provider-header">
-                  <MaterialSymbol icon={getProviderIcon(provider)} size={14} />
+                  {getProviderIcon(provider, { size: 14 })}
                   {getProviderLabel(provider)}
                 </div>
                 {providerModels.map(model => (
                   <button
-                    key={`${provider}-${model.id}`}
+                    key={model.id}
                     className={`new-session-option ${
-                      provider === currentProvider && model.id === currentModel ? 'selected' : ''
+                      model.id === currentModel ? 'selected' : ''
                     }`}
-                    onClick={() => handleModelSelect(provider, model.id)}
+                    onClick={() => handleModelSelect(model.id)}
                   >
                     <div className="new-session-option-info">
                       <div className="new-session-option-name">{model.name}</div>
                     </div>
-                    {provider === currentProvider && model.id === currentModel && (
+                    {model.id === currentModel && (
                       <MaterialSymbol icon="check" size={16} className="new-session-option-check" />
                     )}
                   </button>

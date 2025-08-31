@@ -25,12 +25,17 @@ export class LMStudioProvider extends BaseAIProvider {
     
     // Test connection to LMStudio
     try {
-      const response = await fetch(`${this.baseUrl}/v1/models`);
+      const response = await fetch(`${this.baseUrl}/v1/models`, {
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
       if (!response.ok) {
-        throw new Error(`LMStudio server not responding at ${this.baseUrl}`);
+        throw new Error(`LMStudio server not responding at ${this.baseUrl}. Please ensure LMStudio is running and has a model loaded.`);
       }
-    } catch (error) {
-      throw new Error(`Failed to connect to LMStudio at ${this.baseUrl}: ${error}`);
+    } catch (error: any) {
+      if (error.cause?.code === 'ECONNREFUSED' || error.message?.includes('fetch failed')) {
+        throw new Error(`Cannot connect to LMStudio at ${this.baseUrl}. Please ensure:\n1. LMStudio is running\n2. A model is loaded in LMStudio\n3. The local server is started (look for "Local Server" in LMStudio)`);
+      }
+      throw new Error(`Failed to connect to LMStudio at ${this.baseUrl}: ${error.message || error}`);
     }
   }
 
@@ -500,7 +505,9 @@ export class LMStudioProvider extends BaseAIProvider {
   }
 
   private buildSystemPrompt(documentContext?: DocumentContext): string {
-    return `You are an AI assistant integrated into Stravu Editor, a markdown-focused text editor.
+    const basePrompt = super.buildSystemPrompt(documentContext);
+    
+    return `${basePrompt}
 
 CRITICAL: You MUST use the provided tools for ALL document editing operations. NEVER output content that should be added to the document as part of your text response.
 
@@ -518,13 +525,6 @@ Tool Usage Guidelines:
 - Use 'applyDiff' when you need to REPLACE or MODIFY existing text
 - Use 'streamContent' when you need to INSERT NEW content without replacing anything
 - For streamContent, use position='cursor' to insert at cursor, position='end' to append, or provide 'insertAfter' to insert after specific text
-
-Current document context:
-- File: ${documentContext?.filePath || 'untitled'}
-- Type: ${documentContext?.fileType || 'markdown'}
-${documentContext?.cursorPosition ? `- Cursor position: Line ${documentContext.cursorPosition.line}, Column ${documentContext.cursorPosition.column}` : ''}
-${documentContext?.selection ? `- Selected text: "${documentContext.selection.substring(0, 100)}${documentContext.selection.length > 100 ? '...' : ''}"` : ''}
-${documentContext?.content ? `\nFull document content:\n${documentContext.content}` : ''}
 
 Response Format Examples:
 - User: "add more quotes" → You: "Adding quotes" [USE streamContent tool]

@@ -265,26 +265,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('ai:streamEditEnd', handler);
   },
   
-  // AI operations
-  aiSendMessage: (message: string, documentContext?: any, sessionId?: string, projectPath?: string) => 
-    ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, projectPath),
-  aiGetSessions: (projectPath?: string) => ipcRenderer.invoke('ai:getSessions', projectPath),
-  aiLoadSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:loadSession', sessionId, projectPath),
-  aiClearSession: () => ipcRenderer.invoke('ai:clearSession'),
-  aiUpdateSessionMessages: (sessionId: string, messages: any[], projectPath?: string) => 
-    ipcRenderer.invoke('ai:updateSessionMessages', sessionId, messages, projectPath),
-  aiSaveDraftInput: (sessionId: string, draftInput: string, projectPath?: string) => 
-    ipcRenderer.invoke('ai:saveDraftInput', sessionId, draftInput, projectPath),
-  aiDeleteSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:deleteSession', sessionId, projectPath),
+  // Additional AI operations that weren't in the first block
   aiCancelRequest: () => ipcRenderer.invoke('ai:cancelRequest'),
   aiApplyEdit: (edit: any) => ipcRenderer.invoke('ai:applyEdit', edit),
-  
-  // AI event listeners
-  onAIStreamResponse: (callback: (data: any) => void) => {
-    const handler = (_event: any, data: any) => callback(data);
-    ipcRenderer.on('ai:streamResponse', handler);
-    return () => ipcRenderer.removeListener('ai:streamResponse', handler);
-  },
   onAIEditRequest: (callback: (edit: any) => void) => {
     const handler = (_event: any, edit: any) => callback(edit);
     ipcRenderer.on('ai:editRequest', handler);

@@ -126,8 +126,12 @@ export class ClaudeProvider extends BaseAIProvider {
       }];
 
       // Create the message with full conversation history
+      if (!this.config.model) {
+        throw new Error('No model specified for Claude provider');
+      }
+      
       const response = await this.anthropic.messages.create({
-        model: this.config.model || 'claude-3-5-sonnet-20241022',
+        model: this.config.model,
         max_tokens: this.config.maxTokens || 4000,
         temperature: this.config.temperature || 0,
         system: systemPrompt,
@@ -384,7 +388,9 @@ export class ClaudeProvider extends BaseAIProvider {
   }
 
   private buildSystemPrompt(documentContext?: DocumentContext): string {
-    return `You are an AI assistant integrated into Stravu Editor, a markdown-focused text editor built with Lexical.
+    const basePrompt = super.buildSystemPrompt(documentContext);
+    
+    return `${basePrompt}
 
 You have access to the following tools for document editing:
 - applyDiff: Apply text replacements to the document with diff preview (use for replacing existing text)
@@ -394,13 +400,6 @@ Tool Usage Guidelines:
 - Use 'applyDiff' when you need to REPLACE or MODIFY existing text
 - Use 'streamContent' when you need to INSERT NEW content without replacing anything
 - For streamContent, use position='cursor' to insert at cursor, position='end' to append to document, or provide 'insertAfter' to insert after specific text
-
-Current document context:
-- File: ${documentContext?.filePath || 'untitled'}
-- Type: ${documentContext?.fileType || 'markdown'}
-${documentContext?.cursorPosition ? `- Cursor position: Line ${documentContext.cursorPosition.line}, Column ${documentContext.cursorPosition.column}` : ''}
-${documentContext?.selection ? `- Selected text: "${documentContext.selection.substring(0, 100)}${documentContext.selection.length > 100 ? '...' : ''}"` : ''}
-${documentContext?.content ? `- Full document content:\n${documentContext.content}` : ''}
 
 SMART INSERTION RULES for streamContent tool - YOU MUST ANALYZE THE USER'S REQUEST:
 1. If user says "at the end", "append", or "add to the bottom" → use position='end'

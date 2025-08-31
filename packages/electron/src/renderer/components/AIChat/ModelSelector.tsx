@@ -9,12 +9,11 @@ interface Model {
 }
 
 interface ModelSelectorProps {
-  onSelectModel: (provider: string, modelId: string) => void;
-  currentProvider?: string;
-  currentModel?: string;
+  onSelectModel: (modelId: string) => void;  // Just pass the full provider:model ID
+  currentModel?: string;  // Full provider:model ID
 }
 
-export function ModelSelector({ onSelectModel, currentProvider, currentModel }: ModelSelectorProps) {
+export function ModelSelector({ onSelectModel, currentModel }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [models, setModels] = useState<Record<string, Model[]>>({});
   const [loading, setLoading] = useState(false);
@@ -51,23 +50,29 @@ export function ModelSelector({ onSelectModel, currentProvider, currentModel }: 
     }
   };
 
-  const handleSelectModel = (provider: string, modelId: string) => {
-    onSelectModel(provider, modelId);
+  const handleSelectModel = (modelId: string) => {
+    onSelectModel(modelId);  // Pass the full provider:model ID
     setIsOpen(false);
   };
 
   const getCurrentModelName = () => {
-    if (!currentProvider || !currentModel) return 'Select Model';
+    if (!currentModel) return 'Select Model';
     
-    // Find the model in our list
-    const providerModels = models[currentProvider];
-    if (providerModels) {
+    // Find the model in our list by checking all providers
+    for (const providerModels of Object.values(models)) {
       const model = providerModels.find(m => m.id === currentModel);
       if (model) return model.name;
     }
     
-    // Fallback to model ID
-    return currentModel;
+    // Fallback to model ID (strip provider prefix for display)
+    const [, ...modelParts] = currentModel.split(':');
+    return modelParts.join(':') || currentModel;
+  };
+  
+  const getCurrentProvider = () => {
+    if (!currentModel) return 'default';
+    const [provider] = currentModel.split(':');
+    return provider || 'default';
   };
 
   const getProviderLabel = (provider: string) => {
@@ -89,7 +94,7 @@ export function ModelSelector({ onSelectModel, currentProvider, currentModel }: 
         title="Select AI Model"
       >
         <span className="model-selector-icon">
-          {getProviderIcon(currentProvider || 'default', { size: 16 })}
+          {getProviderIcon(getCurrentProvider(), { size: 16 })}
         </span>
         <span className="model-selector-label">
           {getCurrentModelName()}
@@ -129,16 +134,16 @@ export function ModelSelector({ onSelectModel, currentProvider, currentModel }: 
                       <button
                         key={model.id}
                         className={`model-selector-item ${
-                          currentProvider === provider && currentModel === model.id 
+                          currentModel === model.id 
                             ? 'model-selector-item-active' 
                             : ''
                         }`}
-                        onClick={() => handleSelectModel(provider, model.id)}
+                        onClick={() => handleSelectModel(model.id)}
                       >
                         <span className="model-selector-item-name">
                           {model.name}
                         </span>
-                        {currentProvider === provider && currentModel === model.id && (
+                        {currentModel === model.id && (
                           <span className="model-selector-item-check">✓</span>
                         )}
                       </button>

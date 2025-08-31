@@ -21,6 +21,20 @@ interface ProjectSidebarProps {
   onRefreshFileTree?: () => void;
 }
 
+// Generate a consistent color based on project path
+function generateProjectColor(path: string): string {
+  let hash = 0;
+  for (let i = 0; i < path.length; i++) {
+    hash = ((hash << 5) - hash) + path.charCodeAt(i);
+    hash = hash & hash;
+  }
+  
+  // Generate a hue value (0-360)
+  const hue = Math.abs(hash) % 360;
+  // Use consistent saturation and lightness for pleasant colors
+  return `hsl(${hue}, 65%, 55%)`;
+}
+
 export function ProjectSidebar({
   projectName,
   projectPath,
@@ -187,6 +201,8 @@ export function ProjectSidebar({
     setIsDragOverRoot(false);
   };
 
+  const projectColor = generateProjectColor(projectPath);
+
   return (
     <div className="project-sidebar"
       onDragOver={handleRootDragOver}
@@ -195,8 +211,14 @@ export function ProjectSidebar({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
+      <div className="project-color-accent" style={{ backgroundColor: projectColor }} />
       <div className="project-sidebar-header">
-        <h3 className="project-name">{projectName}</h3>
+        <div className="project-identity">
+          <h3 className="project-name">{projectName}</h3>
+          <div className="project-path" title={projectPath}>
+            {projectPath}
+          </div>
+        </div>
         <div className="project-sidebar-actions">
           <button
             className="project-action-button"

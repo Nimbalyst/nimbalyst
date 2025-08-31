@@ -1,43 +1,54 @@
 import React from 'react';
 import { MaterialSymbol } from '../MaterialSymbol';
+import { getProviderIcon } from '../icons/ProviderIcons';
 
 interface ChatHeaderProps {
   onToggleCollapse: () => void;
   onOpenSessionManager?: () => void;
   children?: React.ReactNode;
   provider?: string;
-  model?: string;
+  model?: string;  // Full provider:model ID
 }
 
 export function ChatHeader({ onToggleCollapse, onOpenSessionManager, children, provider, model }: ChatHeaderProps) {
-  const getProviderLabel = (provider?: string) => {
-    if (!provider) return null;
-    switch (provider) {
-      case 'claude': return 'SDK';
-      case 'claude-code': return 'CODE';
-      case 'openai': return 'GPT';
-      case 'lmstudio': return 'LOCAL';
-      default: return provider.toUpperCase();
-    }
-  };
 
-  const getModelDisplayName = (modelId?: string) => {
-    if (!modelId) return '';
+  const parseModelInfo = (modelId?: string): { provider: string; modelName: string } | null => {
+    if (!modelId) return null;
+    
+    // Special case for Claude Code
+    if (modelId === 'claude-code') {
+      return { provider: 'Claude Code', modelName: 'MCP' };
+    }
+    
+    // Parse provider:model format
+    const [provider, ...modelParts] = modelId.split(':');
+    const model = modelParts.join(':');
+    
+    // Get provider display name
+    const providerName = provider === 'claude' ? 'Claude' :
+                        provider === 'openai' ? 'OpenAI' :
+                        provider === 'lmstudio' ? 'LMStudio' :
+                        provider;
+    
     // Shorten long model names for display
-    if (modelId.includes('claude-opus-4-1')) return 'Opus 4.1';
-    if (modelId.includes('claude-opus-4')) return 'Opus 4';
-    if (modelId.includes('claude-sonnet-4')) return 'Sonnet 4';
-    if (modelId.includes('claude-3-7-sonnet')) return 'Sonnet 3.7';
-    if (modelId.includes('claude-3-5-sonnet')) return 'Sonnet 3.5';
-    if (modelId.includes('claude-3-5-haiku')) return 'Haiku 3.5';
-    if (modelId.includes('claude-3-opus')) return 'Opus 3';
-    if (modelId.includes('claude-3-sonnet')) return 'Sonnet 3';
-    if (modelId.includes('claude-3-haiku')) return 'Haiku 3';
-    if (modelId.includes('gpt-4-turbo')) return 'GPT-4 Turbo';
-    if (modelId.includes('gpt-4')) return 'GPT-4';
-    if (modelId.includes('gpt-3.5')) return 'GPT-3.5';
-    // For local models, just use the ID
-    return modelId;
+    let modelName = model;
+    if (model.includes('claude-opus-4-1')) modelName = 'Opus 4.1';
+    else if (model.includes('claude-opus-4')) modelName = 'Opus 4';
+    else if (model.includes('claude-sonnet-4')) modelName = 'Sonnet 4';
+    else if (model.includes('claude-3-7-sonnet')) modelName = 'Sonnet 3.7';
+    else if (model.includes('claude-3-5-sonnet')) modelName = 'Sonnet 3.5';
+    else if (model.includes('claude-3-5-haiku')) modelName = 'Haiku 3.5';
+    else if (model.includes('claude-3-opus')) modelName = 'Opus 3';
+    else if (model.includes('claude-3-sonnet')) modelName = 'Sonnet 3';
+    else if (model.includes('claude-3-haiku')) modelName = 'Haiku 3';
+    else if (model.includes('gpt-4-turbo')) modelName = 'GPT-4 Turbo';
+    else if (model.includes('gpt-4o')) modelName = 'GPT-4o';
+    else if (model.includes('gpt-4')) modelName = 'GPT-4';
+    else if (model.includes('gpt-3.5')) modelName = 'GPT-3.5';
+    else if (model.includes('o1-preview')) modelName = 'o1 Preview';
+    else if (model.includes('o1-mini')) modelName = 'o1 Mini';
+    
+    return { provider: providerName, modelName };
   };
 
   return (
@@ -45,11 +56,6 @@ export function ChatHeader({ onToggleCollapse, onOpenSessionManager, children, p
       <div className="ai-chat-header-top">
         <h3 className="ai-chat-title">
           AI Assistant
-          {provider && (
-            <span className={`provider-badge provider-badge-${provider}`}>
-              {getProviderLabel(provider)}
-            </span>
-          )}
         </h3>
         <div className="ai-chat-header-actions">
           {onOpenSessionManager && (
@@ -74,12 +80,19 @@ export function ChatHeader({ onToggleCollapse, onOpenSessionManager, children, p
       </div>
       
       <div className="ai-chat-header-bottom">
-        {model && (
-          <div className="ai-chat-model-info">
-            <MaterialSymbol icon="smart_toy" size={14} />
-            <span className="ai-chat-model-name">{getModelDisplayName(model)}</span>
-          </div>
-        )}
+        {model && (() => {
+          const modelInfo = parseModelInfo(model);
+          if (!modelInfo) return null;
+          
+          return (
+            <div className="ai-chat-model-info">
+              {provider ? getProviderIcon(provider, { size: 14 }) : <MaterialSymbol icon="smart_toy" size={14} />}
+              <span className="ai-chat-provider-name">{modelInfo.provider}</span>
+              <span className="ai-chat-model-separator">•</span>
+              <span className="ai-chat-model-name">{modelInfo.modelName}</span>
+            </div>
+          );
+        })()}
         {children && (
           <div className="ai-chat-header-controls">
             {children}

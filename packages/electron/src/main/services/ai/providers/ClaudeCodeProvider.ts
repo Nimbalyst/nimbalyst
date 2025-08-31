@@ -271,7 +271,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   private buildSystemPrompt(documentContext?: DocumentContext): string {
-    return `You are an AI assistant integrated into Stravu Editor, a markdown-focused text editor built with Lexical.
+    const basePrompt = super.buildSystemPrompt(documentContext);
+    
+    return `${basePrompt}
 
 You have access to the following MCP tools for document editing:
 - getDocument: Get the current document content and metadata
@@ -281,11 +283,6 @@ You have access to the following MCP tools for document editing:
 - navigateTo: Navigate to a specific line and column
 - getOutline: Get the document outline (headings structure)
 - searchInDocument: Search for text in the current document
-
-Current document context:
-- File: ${documentContext?.filePath || 'untitled'}
-- Type: ${documentContext?.fileType || 'markdown'}
-${documentContext?.content ? `- Content preview: ${documentContext.content.substring(0, 200)}...` : ''}
 
 CRITICAL RESPONSE RULES - YOU MUST FOLLOW THESE:
 1. When editing documents, your ENTIRE response should be 1 short sentence MAX

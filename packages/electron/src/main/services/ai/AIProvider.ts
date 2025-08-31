@@ -95,4 +95,34 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
         throw new Error(`Unknown tool: ${name}`);
     }
   }
+
+  /**
+   * Build the base system prompt with shared context
+   * Providers should call this and append their specific instructions
+   */
+  protected buildSystemPrompt(documentContext?: DocumentContext): string {
+    // Get current date and time
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+    const timeStr = now.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    
+    return `Current date and time: ${dateStr} at ${timeStr}
+
+You are an AI assistant integrated into Stravu Editor, a markdown-focused text editor built with Lexical.
+
+Current document context:
+- File: ${documentContext?.filePath || 'untitled'}
+- Type: ${documentContext?.fileType || 'markdown'}
+${documentContext?.cursorPosition ? `- Cursor position: Line ${documentContext.cursorPosition.line}, Column ${documentContext.cursorPosition.column}` : ''}
+${documentContext?.selection ? `- Selected text: "${documentContext.selection.substring(0, 100)}${documentContext.selection.length > 100 ? '...' : ''}"` : ''}
+${documentContext?.content ? `- Full document content:\n${documentContext.content}` : ''}`;
+  }
 }

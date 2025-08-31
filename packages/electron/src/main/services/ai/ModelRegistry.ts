@@ -36,11 +36,10 @@ export class ModelRegistry {
           models = await this.fetchAnthropicModels(apiKey);
           break;
         case 'claude-code':
-          // Claude Code uses MCP and handles its own model selection internally
-          // Don't specify a model ID - the provider will use its own defaults
+          // Claude Code is exposed as a special "model" option
           models = [{
-            id: undefined as any,  // Let the provider handle model selection
-            name: 'Claude Code (MCP)',
+            id: 'claude-code',  // Special model ID - no suffix needed
+            name: 'Claude Code',
             provider: 'claude-code',
             maxTokens: 8192,
             contextWindow: 200000
@@ -99,9 +98,9 @@ export class ModelRegistry {
 
       console.log('[ModelRegistry] Anthropic API returned models:', data.data?.map((m: any) => ({ id: m.id, name: m.display_name })));
 
-      // Map the response to our format
+      // Map the response to our format with provider:model ID format
       const models = data.data.map((model: any) => ({
-        id: model.id,
+        id: `claude:${model.id}`,
         name: model.display_name || this.formatModelName(model.id),
         provider: 'claude' as AIProviderType,
         maxTokens: this.getAnthropicMaxTokens(model.id),
@@ -181,7 +180,7 @@ export class ModelRegistry {
 
       const chatModels = selectedModels
         .map(model => ({
-          id: model.id,
+          id: `openai:${model.id}`,
           name: model.id,
           provider: 'openai' as AIProviderType,
           maxTokens: 128000,
@@ -238,9 +237,9 @@ export class ModelRegistry {
 
       const data = await response.json();
 
-      // Map LMStudio models to our format
+      // Map LMStudio models to our format with provider:model ID format
       return data.data.map((model: any) => ({
-        id: model.id,
+        id: `lmstudio:${model.id}`,
         name: this.formatLocalModelName(model.id),
         provider: 'lmstudio' as AIProviderType,
         maxTokens: model.max_tokens || 4096,
@@ -251,7 +250,7 @@ export class ModelRegistry {
       console.error('Failed to fetch LMStudio models:', error);
       // Return a generic local model option
       return [{
-        id: 'local-model',
+        id: 'lmstudio:local-model',
         name: 'Local Model (LMStudio)',
         provider: 'lmstudio',
         maxTokens: 4096,
@@ -304,42 +303,42 @@ export class ModelRegistry {
       case 'claude':
         return [
           {
-            id: 'claude-3-5-sonnet-20241022',
+            id: 'claude:claude-3-5-sonnet-20241022',
             name: 'Claude 3.5 Sonnet (Latest)',
             provider: 'claude',
             maxTokens: 8192,
             contextWindow: 200000
           },
           {
-            id: 'claude-3-5-sonnet-20240620',
+            id: 'claude:claude-3-5-sonnet-20240620',
             name: 'Claude 3.5 Sonnet (June)',
             provider: 'claude',
             maxTokens: 8192,
             contextWindow: 200000
           },
           {
-            id: 'claude-3-opus-20240229',
+            id: 'claude:claude-3-opus-20240229',
             name: 'Claude 3 Opus',
             provider: 'claude',
             maxTokens: 4096,
             contextWindow: 200000
           },
           {
-            id: 'claude-3-sonnet-20240229',
+            id: 'claude:claude-3-sonnet-20240229',
             name: 'Claude 3 Sonnet',
             provider: 'claude',
             maxTokens: 4096,
             contextWindow: 200000
           },
           {
-            id: 'claude-3-haiku-20240307',
+            id: 'claude:claude-3-haiku-20240307',
             name: 'Claude 3 Haiku',
             provider: 'claude',
             maxTokens: 4096,
             contextWindow: 200000
           },
           {
-            id: 'claude-3-5-haiku-20241022',
+            id: 'claude:claude-3-5-haiku-20241022',
             name: 'Claude 3.5 Haiku',
             provider: 'claude',
             maxTokens: 8192,
@@ -351,7 +350,7 @@ export class ModelRegistry {
         return [];
       case 'lmstudio':
         return [{
-          id: 'local-model',
+          id: 'lmstudio:local-model',
           name: 'Local Model',
           provider: 'lmstudio',
           maxTokens: 4096,
