@@ -357,7 +357,20 @@ export function createApplicationMenu() {
                     }
                 },
                 { type: 'separator' },
-                { label: 'Quit', accelerator: 'CmdOrCtrl+Q', click: () => app.quit() }
+                { 
+                    label: 'Quit', 
+                    accelerator: 'CmdOrCtrl+Q', 
+                    click: () => {
+                        try {
+                            console.log('Quit menu item clicked');
+                            app.quit();
+                        } catch (error) {
+                            console.error('Error during quit:', error);
+                            // Force quit if normal quit fails
+                            process.exit(0);
+                        }
+                    }
+                }
             ]
         },
         {
@@ -577,8 +590,19 @@ export function createApplicationMenu() {
                 {
                     label: 'Open Debug Log',
                     click: () => {
-                        const logPath = app.getPath('userData') + '/stravu-editor-debug.log';
-                        require('electron').shell.openPath(logPath);
+                        const fs = require('fs');
+                        const path = require('path');
+                        const logPath = path.join(app.getPath('userData'), 'stravu-editor-debug.log');
+                        
+                        // Create the log file if it doesn't exist
+                        if (!fs.existsSync(logPath)) {
+                            fs.writeFileSync(logPath, `=== Stravu Editor Debug Log ===\nNo debug messages yet.\n\nDebug logging is only active in development mode.\nTo enable debug logging in production, set NODE_ENV=development\n`);
+                        }
+                        
+                        require('electron').shell.openPath(logPath).catch((err: any) => {
+                            console.error('Failed to open debug log:', err);
+                            require('electron').dialog.showErrorBox('Error', `Could not open debug log at: ${logPath}`);
+                        });
                     }
                 },
                 { type: 'separator' },
@@ -623,7 +647,20 @@ export function createApplicationMenu() {
                 { label: 'Hide Others', accelerator: 'Command+Shift+H', role: 'hideothers' },
                 { label: 'Show All', role: 'unhide' },
                 { type: 'separator' },
-                { label: 'Quit', accelerator: 'Command+Q', click: () => app.quit() }
+                { 
+                    label: 'Quit', 
+                    accelerator: 'Command+Q', 
+                    click: () => {
+                        try {
+                            console.log('Quit menu item clicked (macOS)');
+                            app.quit();
+                        } catch (error) {
+                            console.error('Error during quit:', error);
+                            // Force quit if normal quit fails
+                            process.exit(0);
+                        }
+                    }
+                }
             ]
         });
     } else {

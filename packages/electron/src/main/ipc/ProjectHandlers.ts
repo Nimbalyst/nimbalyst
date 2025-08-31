@@ -146,23 +146,50 @@ export function registerProjectHandlers() {
             }
             
             // Then search content using ripgrep
+            let contentCommand = ''; // Define at outer scope for error handling
             try {
                 // Try to use bundled ripgrep from claude-code, fall back to system rg
                 let rgPath = 'rg';
+                const app = require('electron').app;
+                const path = require('path'); // Ensure path is required locally
+                
+                // In production, files are in app.asar.unpacked
+                // Get the correct base path depending on environment
+                const resourcesPath = process.resourcesPath || path.join(__dirname, '../..');
+                const appPath = app.getAppPath();
+                const isPackaged = app.isPackaged;
+                
+                // Check all possible paths, both dev and production
                 const possibleRgPaths = [
+                    // Development path
                     path.join(__dirname, '../../node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg'),
-                    path.join(process.resourcesPath, 'app.asar.unpacked/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg'),
-                    path.join(process.resourcesPath, 'app/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg')
+                    // Production paths - ASAR unpacked
+                    path.join(resourcesPath, 'app.asar.unpacked/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg'),
+                    // Alternative production path
+                    path.join(appPath, '..', 'app.asar.unpacked/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg'),
+                    // More fallback paths
+                    path.join(process.execPath, '../../Resources/app.asar.unpacked/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg'),
+                    path.join(process.cwd(), 'node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg'),
                 ];
                 
+                console.log('[SEARCH] Looking for ripgrep. isPackaged:', isPackaged, 'resourcesPath:', resourcesPath);
+                console.log('[SEARCH] Checking paths:', possibleRgPaths);
+                
                 for (const testPath of possibleRgPaths) {
-                    if (fs.existsSync(testPath)) {
+                    if (existsSync(testPath)) {
                         rgPath = testPath;
+                        console.log('[SEARCH] Found ripgrep at:', rgPath);
                         break;
+                    } else {
+                        console.log('[SEARCH] Not found at:', testPath);
                     }
                 }
                 
-                const contentCommand = `"${rgPath}" --type md -i --json "${escapedTerm}" "${projectPath}" 2>/dev/null || true`;
+                if (rgPath === 'rg') {
+                    console.warn('[SEARCH] Could not find bundled ripgrep, falling back to system rg');
+                }
+                
+                contentCommand = `"${rgPath}" --type md -i --json "${escapedTerm}" "${projectPath}" 2>/dev/null || true`;
                 const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
                 
                 if (stdout) {
@@ -207,8 +234,11 @@ export function registerProjectHandlers() {
                         }
                     }
                 }
-            } catch (error) {
+            } catch (error: any) {
                 console.error('Error executing ripgrep:', error);
+                console.error('[SEARCH] Command was:', contentCommand);
+                console.error('[SEARCH] Error details:', error.message, error.code);
+                // Return empty results on error instead of throwing
             }
             
             // Sort by relevance: files matching both name and content first

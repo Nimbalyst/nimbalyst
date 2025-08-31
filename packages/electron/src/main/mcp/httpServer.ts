@@ -21,6 +21,21 @@ export function updateDocumentState(state: any) {
   console.log('[MCP Server] Document state updated');
 }
 
+export function cleanupMcpServer() {
+  // Close all active SSE transports
+  for (const [sessionId, transport] of activeTransports.entries()) {
+    console.log(`[MCP Server] Closing transport for session ${sessionId}`);
+    try {
+      if (transport.onclose) {
+        transport.onclose();
+      }
+    } catch (error) {
+      console.error(`[MCP Server] Error closing transport ${sessionId}:`, error);
+    }
+  }
+  activeTransports.clear();
+}
+
 export async function startMcpHttpServer(startPort: number = 3456): Promise<{ httpServer: any; port: number }> {
   // Try to find an available port starting from the given port
   let port = startPort;
@@ -236,6 +251,10 @@ async function tryCreateServer(port: number): Promise<any> {
     httpServer.on('listening', () => {
       console.log(`[MCP Server] Running on http://127.0.0.1:${port}/mcp`);
       console.log('[MCP Server] Ready to accept SSE connections and POST messages');
+      
+      // Unref the server so it doesn't keep the process alive
+      httpServer.unref();
+      
       resolve(httpServer);
     });
     
