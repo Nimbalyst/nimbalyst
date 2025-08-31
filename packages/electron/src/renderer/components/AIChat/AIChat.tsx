@@ -4,6 +4,7 @@ import { ChatMessages } from './ChatMessages';
 import { ChatInput } from './ChatInput';
 import { SessionDropdown } from './SessionDropdown';
 import { NewSessionButton } from './NewSessionButton';
+import { EmptyState } from './EmptyState';
 import { aiApi, DocumentContext } from '../../services/aiApi';
 import { logger } from '../../utils/logger';
 import './AIChat.css';
@@ -53,6 +54,7 @@ export function AIChat({
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null); // null = checking, true/false = result
   const [isStreamingToEditor, setIsStreamingToEditor] = useState(false);
   const [streamingEditId, setStreamingEditId] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState<string>('');
@@ -78,6 +80,38 @@ export function AIChat({
     const model = modelParts.join(':'); // Handle model IDs that might contain ':'
     
     return { provider, model };
+  };
+
+  const getModelDisplayName = (modelId: string): string => {
+    if (!modelId) return '';
+    
+    // Special cases
+    if (modelId === 'claude-code') return 'Claude Code';
+    
+    const { provider, model } = parseModelId(modelId);
+    
+    // Provider-specific display names
+    switch (provider) {
+      case 'claude':
+        return 'Claude';
+      case 'openai':
+        if (model?.includes('gpt-4')) return 'GPT-4';
+        if (model?.includes('gpt-3.5')) return 'GPT-3.5';
+        return 'OpenAI';
+      case 'lmstudio':
+        // Extract model name from path if possible
+        if (model) {
+          const parts = model.split('/');
+          if (parts.length > 0) {
+            const modelName = parts[parts.length - 1];
+            // Clean up common suffixes
+            return modelName.replace(/[-_]GGUF$/i, '').replace(/\.gguf$/i, '');
+          }
+        }
+        return 'LM Studio';
+      default:
+        return provider.charAt(0).toUpperCase() + provider.slice(1);
+    }
   };
   const isResizingRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -484,10 +518,48 @@ export function AIChat({
     };
   }, [documentContext, onApplyEdit, loadSessions, streamingContent]); // Add missing dependencies
 
+  // Check for API key/provider configuration on mount and when window gains focus
+  useEffect(() => {
+    const checkApiKey = async () => {
+      try {
+        const hasKey = await window.electronAPI.aiHasApiKey();
+        const previousHasKey = hasApiKey;
+        setHasApiKey(hasKey);
+        
+        // If we now have a provider configured and didn't before, reset initialization
+        if (hasKey && !previousHasKey) {
+          logger.api.info('AI provider now configured, resetting initialization');
+          setIsInitialized(false); // This will trigger re-initialization
+          setInitError(null); // Clear any previous errors
+        }
+      } catch (error) {
+        logger.api.info('Failed to check API key:', error);
+        setHasApiKey(false);
+      }
+    };
+    
+    checkApiKey();
+    
+    // Recheck when window gains focus (user might have configured provider in another window)
+    const handleFocus = () => {
+      checkApiKey();
+    };
+    
+    // Also check periodically in case settings were changed in the same window
+    const interval = setInterval(checkApiKey, 2000); // Check every 2 seconds
+    
+    window.addEventListener('focus', handleFocus);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
+  }, [hasApiKey]);
+
   // Initialize Claude AFTER event handlers are set up
   useEffect(() => {
-    // Prevent double initialization
-    if (isInitialized) return;
+    // Prevent double initialization or initialization without API key
+    if (isInitialized || hasApiKey === null || !hasApiKey) return;
     
     let mounted = true;
     const initClaude = async () => {
@@ -566,7 +638,7 @@ export function AIChat({
     return () => {
       mounted = false;
     };
-  }, [projectPath, documentContext, loadSessions]);
+  }, [projectPath, documentContext, loadSessions, hasApiKey]);
 
   // Update document context when it changes
   useEffect(() => {
@@ -619,15 +691,18 @@ export function AIChat({
     // Store the current message for error reporting
     setCurrentUserMessage(message);
     
+    // Check if we have a document open
+    const hasDocument = documentContext && (documentContext.filePath || documentContext.content);
+    
     // Get fresh document context with latest content
-    const freshDocumentContext = {
+    const freshDocumentContext = hasDocument ? {
       filePath: documentContext?.filePath || '',
       fileType: documentContext?.fileType || 'markdown',
       content: documentContext?.getLatestContent ? documentContext.getLatestContent() : documentContext?.content || '',
       cursorPosition: documentContext?.cursorPosition,
       selection: documentContext?.selection
       // Note: Don't include getLatestContent function as it can't be serialized for IPC
-    };
+    } : undefined;
     
     console.log('[AIChat] Sending document context:', {
       hasSelection: !!freshDocumentContext.selection,
@@ -1006,7 +1081,14 @@ export function AIChat({
         />
       </ChatHeader>
       
-      {initError ? (
+      {hasApiKey === false ? (
+        <EmptyState 
+          onOpenSettings={() => {
+            // Open AI Models window
+            window.electronAPI.openAIModels();
+          }}
+        />
+      ) : initError ? (
         <div className="ai-chat-error">
           <p>Failed to initialize Claude AI:</p>
           <p>{initError}</p>
@@ -1019,6 +1101,8 @@ export function AIChat({
             isLoading={isLoading}
             onApplyEdit={handleApplyEdit}
             provider={parseModelId(currentModel).provider}
+            modelName={getModelDisplayName(currentModel)}
+            hasDocument={!!documentContext && !!(documentContext.filePath || documentContext.content)}
           />
           
           <ChatInput 

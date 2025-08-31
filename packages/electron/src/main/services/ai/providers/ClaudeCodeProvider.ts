@@ -273,6 +273,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   private buildSystemPrompt(documentContext?: DocumentContext): string {
     const basePrompt = super.buildSystemPrompt(documentContext);
     
+    // If no document is open, return just the base prompt (which already has the no-document warning)
+    const hasDocument = documentContext && (documentContext.filePath || documentContext.content);
+    if (!hasDocument) {
+      return basePrompt;
+    }
+    
     return `${basePrompt}
 
 You have access to the following MCP tools for document editing:

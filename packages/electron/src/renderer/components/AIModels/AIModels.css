@@ -239,6 +239,33 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.models-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.models-action-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: normal;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.models-action-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-color-hover);
 }
 
 .models-grid {

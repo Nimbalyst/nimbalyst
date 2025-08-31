@@ -208,6 +208,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // AI operations (new unified interface)
+  aiHasApiKey: () => ipcRenderer.invoke('ai:hasApiKey'),
   aiInitialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
   aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, projectPath?: string, modelId?: string) => 
     ipcRenderer.invoke('ai:createSession', provider, documentContext, projectPath, modelId),
@@ -304,6 +305,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // AI object wrapper for cleaner component access
   ai: {
+    hasApiKey: () => ipcRenderer.invoke('ai:hasApiKey'),
     initialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
     createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, projectPath?: string, modelId?: string) => 
       ipcRenderer.invoke('ai:createSession', provider, documentContext, projectPath, modelId),
@@ -337,5 +339,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createProjectDialog: () => ipcRenderer.invoke('project-manager:create-project-dialog'),
     openProject: (projectPath: string) => ipcRenderer.invoke('project-manager:open-project', projectPath),
     removeRecent: (projectPath: string) => ipcRenderer.invoke('project-manager:remove-recent', projectPath),
-  }
+  },
+
+  // Open AI Models window
+  openAIModels: () => ipcRenderer.invoke('window:open-ai-models')
 });

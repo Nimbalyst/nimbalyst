@@ -68,6 +68,38 @@ export class AIService {
   }
 
   private setupIpcHandlers() {
+    // Check if any AI provider is configured with usable models
+    ipcMain.handle('ai:hasApiKey', async () => {  // Keeping the name for backward compatibility
+      const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
+      const providerSettings = this.settingsStore.get('providerSettings', {}) as any;
+      
+      // Check Claude/Claude Code (needs API key)
+      const hasAnthropicKey = !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY);
+      if (hasAnthropicKey) {
+        // Claude Code is always available with API key
+        // Regular Claude needs to be enabled with models
+        const hasClaudeCode = true; // Always available with key
+        const hasClaude = providerSettings['claude']?.enabled && 
+                         providerSettings['claude']?.models?.length > 0;
+        if (hasClaudeCode || hasClaude) return true;
+      }
+      
+      // Check OpenAI (needs API key and enabled models)
+      const hasOpenAIKey = !!(apiKeys['openai'] || process.env.OPENAI_API_KEY);
+      if (hasOpenAIKey) {
+        const hasOpenAI = providerSettings['openai']?.enabled && 
+                         providerSettings['openai']?.models?.length > 0;
+        if (hasOpenAI) return true;
+      }
+      
+      // Check LM Studio (doesn't need API key but needs enabled models)
+      const hasLMStudio = providerSettings['lmstudio']?.enabled === true &&
+                         providerSettings['lmstudio']?.models?.length > 0;
+      if (hasLMStudio) return true;
+      
+      return false;
+    });
+
     // Initialize/configure AI
     ipcMain.handle('ai:initialize', async (event, provider?: string, apiKey?: string) => {
       if (apiKey) {

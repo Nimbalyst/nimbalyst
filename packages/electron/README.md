@@ -14,8 +14,14 @@ npm run dev
 # Build for production
 npm run build
 
-# Package for distribution
+# Package for distribution (unsigned)
 npm run dist
+
+# Build notarized macOS app (requires signing certificates)
+npm run build:mac:notarized
+
+# Build local macOS app (skip notarization)
+npm run build:mac:local
 ```
 
 ## Features
@@ -37,12 +43,16 @@ npm run dist
 - Multiple windows support
 
 ### AI Integration
-- **Claude AI Assistant**: Built-in AI chat panel (Cmd+Shift+A)
-- **Context-aware suggestions**: Sends current document context with messages
-- **Edit streaming**: Real-time streaming of code edits directly to the editor
+- **Multiple AI Providers**: Support for Claude, Claude Code (MCP), OpenAI, and LM Studio
+- **AI Chat Panel**: Built-in chat interface (Cmd+Shift+A)
+- **Document-aware**: AI understands document context and can make edits
+- **Edit streaming**: Real-time streaming of edits directly to the editor
+- **No document handling**: Clear messaging when no document is open
 - **Session management**: Multiple chat sessions per project
 - **Session Manager**: Global view of all AI sessions (Cmd+Alt+S)
 - **Session persistence**: Chat sessions and drafts persist across app restarts
+- **Model Selection**: Easy switching between different AI models
+- **Smart Provider Detection**: Automatically detects configured providers
 
 ### Project Management
 - **Project Manager**: Create and manage projects (Cmd+P)
@@ -53,15 +63,29 @@ npm run dist
 ## Architecture
 
 - `src/main/` - Main process code
-- `index.ts` - Application entry point and window management
-- `services/` - Core services (Claude API, file operations, session management)
-- `ipc/` - IPC handlers for renderer communication
+  - `index.ts` - Application entry point and window management
+  - `services/` - Core services
+    - `ai/` - AI provider system (Claude, OpenAI, LM Studio)
+    - `FileService.ts` - File operations and watching
+    - `SessionManager.ts` - AI session management
+  - `ipc/` - IPC handlers for renderer communication
+  - `mcp/` - Model Context Protocol server for Claude Code
 - `src/preload/` - Preload scripts for security
 - `src/renderer/` - Renderer process (uses the main stravu-editor library)
+  - `components/AIChat/` - AI chat interface components
+  - `components/AIModels/` - AI model configuration UI
 
 ## Security
 
 The app uses context isolation and disables node integration in the renderer process for security. All file system operations are handled through IPC channels defined in the preload script.
+
+### Code Signing & Notarization (macOS)
+
+For distribution on macOS without security warnings:
+1. Requires Apple Developer ID Application certificate
+2. Automatically signs all binaries during build
+3. Notarizes the app with Apple for Gatekeeper approval
+4. Handles special requirements for bundled tools (ripgrep, etc.)
 
 ## Debug Logging
 

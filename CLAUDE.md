@@ -66,6 +66,16 @@ Custom nodes extend Lexical's base functionality:
 
 Built with modern React, TypeScript, and Vite. Uses extensive Lexical packages (@lexical/\*) for editor functionality, plus supporting libraries like KaTeX for equations, Prettier for code formatting, and Excalidraw for drawings.
 
+## macOS Code Signing & Notarization
+
+The Electron app supports notarized distribution for macOS:
+
+- **Signing configuration**: Uses Developer ID Application certificate
+- **Build scripts**: `npm run build:mac:notarized` for notarized build, `build:mac:local` for local testing
+- **Binary handling**: Properly signs ripgrep and other bundled tools
+- **JAR exclusion**: Automatically removes JAR files that can't be notarized
+- **Entitlements**: Configured for hardened runtime with necessary exceptions
+
 ## Electron App Debug Logging
 
 The Electron app (`packages/electron/`) includes a debug logging feature that captures all browser console messages in development mode. This is useful for debugging renderer-side issues and browser load problems.
@@ -113,13 +123,17 @@ The Electron app includes comprehensive window state persistence:
 - **Claude Code**: MCP (Model Context Protocol) integration for advanced code editing capabilities
   - Handles its own model selection internally - do not pass model IDs
   - Provides enhanced code-aware features through MCP
+- **OpenAI**: GPT-4 and GPT-3.5 models via OpenAI API
+- **LM Studio**: Local model support for privacy-focused usage
 - **Multiple provider support**: Extensible architecture for adding new AI providers
 
 ### AI Chat Panel
-- **Claude integration**: Built-in AI assistant powered by Claude API
-- **Context-aware**: Sends current document context with messages
+- **Multi-provider support**: Works with Claude, OpenAI, LM Studio, and Claude Code
+- **Document-aware**: Sends current document context with messages when a document is open
+- **No-document handling**: Clear messaging when no document is open, prevents edit attempts
 - **Session management**: Multiple chat sessions per project
 - **Edit streaming**: Real-time streaming of code edits directly to the editor
+- **Dynamic UI**: Provider-specific icons and names throughout the interface
 - **Keyboard shortcut**: Cmd+Shift+A to toggle the AI Chat panel
 
 ### Session Manager
@@ -133,6 +147,9 @@ The Electron app includes comprehensive window state persistence:
 - **Dynamic model selection**: Models are fetched from provider APIs when available
 - **No hardcoded models**: Providers manage their own model defaults
 - **Claude Code specifics**: Never pass model IDs to claude-code provider - it manages its own model selection
+- **LM Studio detection**: Automatically detects local models running in LM Studio
+- **Model management**: Select/deselect all buttons for bulk model configuration
+- **Smart defaults**: Doesn't auto-select all models when enabling a provider
 
 ## File Operations
 

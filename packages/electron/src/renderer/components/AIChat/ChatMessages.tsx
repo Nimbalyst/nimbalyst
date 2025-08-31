@@ -26,13 +26,17 @@ interface ChatMessagesProps {
   isLoading: boolean;
   onApplyEdit?: (edit: any) => Promise<{ success: boolean; error?: string }>;
   provider?: string;  // Provider to show appropriate icon
+  modelName?: string;  // Current model name for display
+  hasDocument?: boolean;  // Whether a document is open
 }
 
 export function ChatMessages({ 
   messages, 
   isLoading, 
   onApplyEdit,
-  provider 
+  provider,
+  modelName,
+  hasDocument = true 
 }: ChatMessagesProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,8 +50,17 @@ export function ChatMessages({
     <div className="ai-chat-messages" ref={containerRef}>
       {messages.length === 0 && !isLoading && (
         <div className="ai-chat-empty">
-          <p>Start a conversation with Claude</p>
-          <p className="ai-chat-empty-hint">Ask questions about your document or get help with editing</p>
+          {hasDocument ? (
+            <>
+              <p>Start a conversation{modelName ? ` with ${modelName}` : ''}</p>
+              <p className="ai-chat-empty-hint">Ask questions about your document or get help with editing</p>
+            </>
+          ) : (
+            <>
+              <p>No document open</p>
+              <p className="ai-chat-empty-hint">Open a document to start editing with AI assistance</p>
+            </>
+          )}
         </div>
       )}
       

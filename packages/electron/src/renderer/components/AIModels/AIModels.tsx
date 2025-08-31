@@ -93,7 +93,12 @@ export function AIModels({ onClose }: AIModelsProps) {
   const handleProviderToggle = (provider: string, enabled: boolean) => {
     setProviders(prev => ({
       ...prev,
-      [provider]: { ...prev[provider], enabled }
+      [provider]: { 
+        ...prev[provider], 
+        enabled,
+        // Don't auto-select models when enabling
+        models: prev[provider]?.models || []
+      }
     }));
     setHasChanges(true);
     
@@ -182,6 +187,24 @@ export function AIModels({ onClose }: AIModelsProps) {
         [provider]: { ...prev[provider], models: updated }
       };
     });
+    setHasChanges(true);
+  };
+
+  const handleSelectAllModels = (provider: string, selectAll: boolean) => {
+    if (selectAll) {
+      // Select all available models
+      const models = availableModels[provider] || [];
+      setProviders(prev => ({
+        ...prev,
+        [provider]: { ...prev[provider], models: models.map(m => m.id) }
+      }));
+    } else {
+      // Deselect all models
+      setProviders(prev => ({
+        ...prev,
+        [provider]: { ...prev[provider], models: [] }
+      }));
+    }
     setHasChanges(true);
   };
 
@@ -325,13 +348,31 @@ export function AIModels({ onClose }: AIModelsProps) {
             
             {!isLoading && models.length > 0 && (
               <div className="models-list">
-                <div className="models-header">Available Models:</div>
+                <div className="models-header">
+                  <span>Available Models:</span>
+                  <div className="models-actions">
+                    <button 
+                      type="button"
+                      className="models-action-btn"
+                      onClick={() => handleSelectAllModels(providerId, true)}
+                    >
+                      Select All
+                    </button>
+                    <button 
+                      type="button"
+                      className="models-action-btn"
+                      onClick={() => handleSelectAllModels(providerId, false)}
+                    >
+                      Deselect All
+                    </button>
+                  </div>
+                </div>
                 <div className="models-grid">
                   {models.map(model => (
                     <label key={model.id} className="model-checkbox">
                       <input
                         type="checkbox"
-                        checked={provider.models?.includes(model.id) ?? true}
+                        checked={provider.models?.includes(model.id) ?? false}
                         onChange={(e) => handleModelToggle(providerId, model.id, e.target.checked)}
                       />
                       <span>{model.name}</span>

@@ -2,8 +2,13 @@ import { ipcMain, BrowserWindow } from 'electron';
 import { windowStates } from '../window/WindowManager';
 import { updateApplicationMenu } from '../menu/ApplicationMenu';
 import { stopFileWatcher, startFileWatcher } from '../file/FileWatcher';
+import { createAIModelsWindow } from '../window/AIModelsWindow';
 
 export function registerWindowHandlers() {
+    // Open AI Models window
+    ipcMain.handle('window:open-ai-models', async () => {
+        createAIModelsWindow();
+    });
     // Set document edited state
     ipcMain.on('set-document-edited', (event, edited: boolean) => {
         const window = BrowserWindow.fromWebContents(event.sender);

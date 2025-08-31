@@ -114,9 +114,22 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
       minute: '2-digit' 
     });
     
-    return `Current date and time: ${dateStr} at ${timeStr}
+    // Check if we have a document context
+    const hasDocument = documentContext && (documentContext.filePath || documentContext.content);
+    
+    let basePrompt = `Current date and time: ${dateStr} at ${timeStr}
 
-You are an AI assistant integrated into Stravu Editor, a markdown-focused text editor built with Lexical.
+You are an AI assistant integrated into Stravu Editor, a markdown-focused text editor built with Lexical.`;
+    
+    if (!hasDocument) {
+      return basePrompt + `
+
+IMPORTANT: No document is currently open. You cannot perform any editing operations.
+The user needs to open a document first before you can help with editing.
+You can still answer questions, provide information, and have general conversations.`;
+    }
+    
+    return basePrompt;
 
 Current document context:
 - File: ${documentContext?.filePath || 'untitled'}

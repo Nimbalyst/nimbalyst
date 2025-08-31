@@ -123,11 +123,11 @@ declare global {
 
 export default function App() {
   logger.ui.info('App component rendering');
-  
+
   // Check for special window modes
   const urlParams = new URLSearchParams(window.location.search);
   const windowMode = urlParams.get('mode');
-  
+
   // Handle special window modes
   if (windowMode === 'ai-models') {
     // Set window title for AI Models
@@ -138,7 +138,7 @@ export default function App() {
     }, []);
     return <AIModels onClose={() => window.close()} />;
   }
-  
+
   if (windowMode === 'session-manager') {
     // Set window title for Session Manager
     React.useEffect(() => {
@@ -149,7 +149,7 @@ export default function App() {
     const filterProject = urlParams.get('filterProject') || undefined;
     return <SessionManager filterProject={filterProject} />;
   }
-  
+
   if (windowMode === 'project-manager') {
     // Set window title for Project Manager
     React.useEffect(() => {
@@ -159,7 +159,7 @@ export default function App() {
     }, []);
     return <ProjectManager />;
   }
-  
+
   const [content, setContent] = useState('');
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
   const [currentFileName, setCurrentFileName] = useState<string | null>(null);
@@ -739,7 +739,7 @@ export default function App() {
     // Set up autosave if we have a file path and the document is dirty
     if (currentFilePath && isDirty && getContentRef.current) {
       if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Setting up autosave for:', currentFilePath);
-      
+
       autoSaveIntervalRef.current = setInterval(async () => {
         if (isDirty && currentFilePath && getContentRef.current && window.electronAPI) {
           if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Starting save attempt...');
@@ -749,11 +749,11 @@ export default function App() {
             hasGetContent: !!getContentRef.current,
             timestamp: new Date().toISOString()
           });
-          
+
           try {
             const content = getContentRef.current();
             if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Got content, length:', content.length);
-            
+
             // First ensure the backend knows the current file path
             if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Ensuring backend has current file path...');
             const setFileResult = window.electronAPI.setCurrentFile(currentFilePath);
@@ -761,14 +761,14 @@ export default function App() {
             if (setFileResult && typeof setFileResult.then === 'function') {
               await setFileResult;
             }
-            
+
             // Small delay to ensure the backend has processed the file path update
             await new Promise(resolve => setTimeout(resolve, 100));
-            
+
             if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Calling saveFile...');
             const result = await window.electronAPI.saveFile(content);
             if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Save result:', result);
-            
+
             if (result && result.success) {
               setIsDirty(false);
               initialContentRef.current = content;
@@ -776,14 +776,14 @@ export default function App() {
             } else {
               if (LOG_CONFIG.AUTOSAVE) console.error('[AUTOSAVE] ✗ Save failed - result:', result);
               if (LOG_CONFIG.AUTOSAVE) console.error('[AUTOSAVE] This typically means the backend lost track of the file path');
-              
+
               // Try to recover by re-syncing the file path
               if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Attempting recovery by re-syncing file path...');
               const recoverResult = window.electronAPI.setCurrentFile(currentFilePath);
               if (recoverResult && typeof recoverResult.then === 'function') {
                 await recoverResult;
               }
-              
+
               // Show user notification about save failure
               if (window.electronAPI?.showErrorDialog) {
                 window.electronAPI.showErrorDialog(
@@ -799,7 +799,7 @@ export default function App() {
               stack: error.stack,
               currentFilePath
             });
-            
+
             // Show user notification about save failure
             if (window.electronAPI?.showErrorDialog) {
               window.electronAPI.showErrorDialog(
@@ -884,6 +884,24 @@ export default function App() {
     if (!window.electronAPI) return;
 
     if (LOG_CONFIG.IPC_LISTENERS) console.log('[IPC] Setting up IPC listeners, currentFilePath:', currentFilePath);
+
+    // Check for first launch (no API key configured)
+    const checkFirstLaunch = async () => {
+      try {
+        const hasApiKey = await window.electronAPI.aiHasApiKey();
+        if (!hasApiKey) {
+          // Show API key dialog on first launch
+          setIsApiKeyDialogOpen(true);
+        }
+      } catch (error) {
+        console.error('Failed to check for API key:', error);
+      }
+    };
+    
+    // Only check on initial mount (when currentFilePath is null)
+    if (!currentFilePath && !sessionToLoad) {
+      checkFirstLaunch();
+    }
 
     // Set up listeners and store cleanup functions
     const cleanupFns: Array<() => void> = [];
@@ -1018,16 +1036,16 @@ export default function App() {
       if (currentFilePath === data.sourcePath) {
         // The current file was moved, update the path and reload it
         console.log('Current file was moved, updating to new path:', data.destinationPath);
-        
+
         // Update the current file path
         setCurrentFilePath(data.destinationPath);
         setCurrentFileName(data.destinationPath.split('/').pop() || data.destinationPath);
-        
+
         // Update the file in main process
         if (window.electronAPI.setCurrentFile) {
           window.electronAPI.setCurrentFile(data.destinationPath);
         }
-        
+
         // If we're dirty, just update the path but keep the current content
         // If not dirty, we could optionally reload from the new location
         // but since it's the same content, we don't need to
@@ -1069,7 +1087,7 @@ export default function App() {
       }
     }));
     cleanupFns.push(window.electronAPI.onProjectFileTreeUpdated((data) => {
-      console.log('Project file tree updated:', data);
+      // console.log('Project file tree updated:', data);
       setFileTree(data.fileTree);
     }));
 
@@ -1122,10 +1140,10 @@ export default function App() {
         try {
           // Use the AI chat bridge to apply replacements
           const result = await aiChatBridge.applyReplacements(replacements);
-          
+
           // Ensure result is defined and has the expected shape
           const finalResult = result || { success: false, error: 'No result returned from diff application' };
-          
+
           if (window.electronAPI.sendMcpApplyDiffResult) {
             // Make sure we have all required properties and no undefined values
             const resultToSend = {
@@ -1137,7 +1155,7 @@ export default function App() {
             }
             window.electronAPI.sendMcpApplyDiffResult(resultChannel, resultToSend);
           }
-          
+
           // Show error in UI if the diff failed
           if (!finalResult.success) {
             console.error('Diff application failed:', finalResult.error);
@@ -1147,7 +1165,7 @@ export default function App() {
         } catch (error) {
           console.error('MCP applyDiff error:', error);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          
+
           if (window.electronAPI.sendMcpApplyDiffResult) {
             // Ensure we're sending a clean object without undefined values
             window.electronAPI.sendMcpApplyDiffResult(resultChannel, {
@@ -1155,7 +1173,7 @@ export default function App() {
               error: errorMessage || 'Unknown error'
             });
           }
-          
+
           // Could show error notification here
           // alert(`Failed to apply edit: ${errorMessage}`);
         }
@@ -1225,7 +1243,7 @@ export default function App() {
   logger.ui.info('About to render StravuEditor');
 
   return (
-    <div 
+    <div
       style={{ height: '100vh', display: 'flex', flexDirection: projectMode ? 'row' : 'column' }}
       onKeyDown={(e) => {
         // Intercept Cmd+K/Ctrl+K before it reaches Lexical editor
@@ -1363,13 +1381,13 @@ export default function App() {
             // The edit has already been applied by AIChat.tsx through aiApi.applyEdit()
             // This callback is just for UI state updates, not for applying the edit
             // We just need to handle any UI updates or error display
-            
+
             if (edit.type === 'diff' && edit.replacements) {
               // The edit was already applied, just log for debugging
               console.log('Diff applied successfully - showing red/green preview');
               // Document will show diffs but not marked as dirty yet
               // User needs to approve/reject the diffs
-              
+
               // Note: Error handling is done in AIChat.tsx now
               // If there was an error, AIChat.tsx will handle the retry and show error messages
             }

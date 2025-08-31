@@ -73,8 +73,9 @@ export class ClaudeProvider extends BaseAIProvider {
     apiMessages.push({ role: 'user', content: message });
 
     try {
-      // Define tools for Claude
-      const tools: Anthropic.Tool[] = [{
+      // Only define tools if we have a document open
+      const hasDocument = documentContext && (documentContext.filePath || documentContext.content);
+      const tools: Anthropic.Tool[] = hasDocument ? [{
         name: 'applyDiff',
         description: 'Apply text replacements to the document with diff preview',
         input_schema: {
@@ -123,7 +124,7 @@ export class ClaudeProvider extends BaseAIProvider {
           },
           required: ['content', 'position']
         }
-      }];
+      }] : [];
 
       // Create the message with full conversation history
       if (!this.config.model) {
@@ -136,7 +137,7 @@ export class ClaudeProvider extends BaseAIProvider {
         temperature: this.config.temperature || 0,
         system: systemPrompt,
         messages: apiMessages,
-        tools,
+        ...(tools.length > 0 ? { tools } : {}),
         stream: true
       }, {
         signal: this.abortController.signal
@@ -389,6 +390,12 @@ export class ClaudeProvider extends BaseAIProvider {
 
   private buildSystemPrompt(documentContext?: DocumentContext): string {
     const basePrompt = super.buildSystemPrompt(documentContext);
+    
+    // If no document is open, return just the base prompt (which already has the no-document warning)
+    const hasDocument = documentContext && (documentContext.filePath || documentContext.content);
+    if (!hasDocument) {
+      return basePrompt;
+    }
     
     return `${basePrompt}
 
