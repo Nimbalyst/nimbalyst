@@ -73,10 +73,6 @@ interface ElectronAPI {
   onAIStreamResponse?: (callback: (data: any) => void) => () => void;
   onAIEditRequest?: (callback: (edit: any) => void) => () => void;
   onAIError?: (callback: (error: any) => void) => () => void;
-  
-  // Preferences operations
-  openDataFolder?: () => Promise<{ success: boolean }>;
-  onShowPreferences?: (callback: () => void) => () => void;
 }
 
 interface Window {

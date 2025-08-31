@@ -602,7 +602,7 @@ export function createApplicationMenu() {
             label: app.getName(),
             submenu: [
                 {
-                    label: 'About Stravu Editor',
+                    label: 'About Preditor',
                     click: () => {
                         createAboutWindow();
                     }
@@ -632,7 +632,7 @@ export function createApplicationMenu() {
             label: 'Help',
             submenu: [
                 {
-                    label: 'About Stravu Editor',
+                    label: 'About Preditor',
                     click: () => {
                         createAboutWindow();
                     }
@@ -656,13 +656,13 @@ export function updateApplicationMenu() {
 // Helper to check if window is about window
 function isAboutWindow(window: BrowserWindow): boolean {
     // Check if this is the about window by checking the title
-    return window.getTitle() === 'About Stravu Editor';
+    return window.getTitle() === 'About Preditor';
 }
 
 // Helper to check if window is project manager window
 function isProjectManagerWindow(window: BrowserWindow): boolean {
     // Check if this is the project manager window by checking the title
-    return window.getTitle() === 'Project Manager - Stravu Editor';
+    return window.getTitle() === 'Project Manager - Preditor';
 }
 
 // Helper to check if window is session manager window

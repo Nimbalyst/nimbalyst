@@ -113,7 +113,7 @@ export function createWindow(
             height,
             x,
             y,
-            title: isProjectMode && projectPath ? basename(projectPath) : 'Stravu Editor',
+            title: isProjectMode && projectPath ? basename(projectPath) : 'Preditor',
             backgroundColor,
             webPreferences: {
                 nodeIntegration: false,

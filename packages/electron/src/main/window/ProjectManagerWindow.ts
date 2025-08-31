@@ -19,7 +19,7 @@ export function createProjectManagerWindow() {
     height: 700,
     minWidth: 900,
     minHeight: 600,
-    title: 'Project Manager - Stravu Editor',
+    title: 'Project Manager - Preditor',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

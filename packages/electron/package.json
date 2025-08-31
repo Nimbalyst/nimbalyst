@@ -52,7 +52,7 @@
   },
   "build": {
     "appId": "com.stravu.editor",
-    "productName": "Stravu Editor",
+    "productName": "Preditor",
     "electronVersion": "37.2.6",
     "directories": {
       "output": "release"

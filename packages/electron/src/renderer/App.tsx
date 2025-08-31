@@ -154,7 +154,7 @@ export default function App() {
     // Set window title for Project Manager
     React.useEffect(() => {
       if (window.electronAPI) {
-        window.electronAPI.setTitle('Project Manager - Stravu Editor');
+        window.electronAPI.setTitle('Project Manager - Preditor');
       }
     }, []);
     return <ProjectManager />;
@@ -604,15 +604,15 @@ export default function App() {
   useEffect(() => {
     if (!window.electronAPI) return;
 
-    let title = 'Stravu Editor';
+    let title = 'Preditor';
     if (projectMode && projectName) {
       if (currentFileName) {
-        title = `${currentFileName}${isDirty ? ' •' : ''} - ${projectName} - Stravu Editor`;
+        title = `${currentFileName}${isDirty ? ' •' : ''} - ${projectName} - Preditor`;
       } else {
-        title = `${projectName} - Stravu Editor`;
+        title = `${projectName} - Preditor`;
       }
     } else if (currentFileName) {
-      title = `${currentFileName}${isDirty ? ' •' : ''} - Stravu Editor`;
+      title = `${currentFileName}${isDirty ? ' •' : ''} - Preditor`;
     }
 
     window.electronAPI.setTitle(title);
@@ -987,7 +987,7 @@ export default function App() {
       initialContentRef.current = '';
       // Update the window title immediately
       if (window.electronAPI) {
-        window.electronAPI.setTitle(`${data.untitledName} • - Stravu Editor`);
+        window.electronAPI.setTitle(`${data.untitledName} • - Preditor`);
         window.electronAPI.setDocumentEdited(true);
       }
     }));

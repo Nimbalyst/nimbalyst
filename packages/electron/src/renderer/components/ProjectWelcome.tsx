@@ -21,7 +21,7 @@ export function ProjectWelcome({ projectName }: ProjectWelcomeProps) {
           {iconUrl && (
             <img 
               src={iconUrl} 
-              alt="Stravu Editor" 
+              alt="Preditor" 
               onError={(e) => {
                 // Hide the image if it fails to load
                 (e.target as HTMLImageElement).style.display = 'none';

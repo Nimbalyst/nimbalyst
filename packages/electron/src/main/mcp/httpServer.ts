@@ -75,7 +75,7 @@ async function tryCreateServer(port: number): Promise<any> {
       // Create a new MCP server instance for this connection
       const server = new Server(
         {
-          name: 'stravu-editor',
+          name: 'preditor',
           version: '1.0.0'
         },
         {
