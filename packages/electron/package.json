@@ -19,7 +19,13 @@
     "build:mac:notarized": "npm run build && node build/configure-build.js && REQUIRE_NOTARIZE=true electron-builder --mac",
     "build:mac:local": "SKIP_NOTARIZE=true npm run build && SKIP_NOTARIZE=true node build/configure-build.js && electron-builder --mac",
     "build:win": "npm run build && electron-builder --win",
-    "build:linux": "npm run build && electron-builder --linux"
+    "build:linux": "npm run build && electron-builder --linux",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "test:ai": "vitest run src/main/services/ai/__tests__/",
+    "test:ai:watch": "vitest watch src/main/services/ai/__tests__/"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "^1.0.77",
@@ -38,17 +44,22 @@
   },
   "devDependencies": {
     "@electron/notarize": "^2.3.2",
-    "@types/node": "^20.0.0",
+    "@types/dotenv": "^6.1.1",
+    "@types/node": "^20.19.11",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.0.0",
-    "dotenv": "^16.4.5",
+    "@vitest/ui": "^3.2.4",
+    "dotenv": "^16.6.1",
     "electron": "^37.2.6",
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.0",
+    "happy-dom": "^18.0.1",
+    "ts-node": "^10.9.2",
     "typescript": "^5.0.0",
     "vite": "^5.2.11",
-    "vite-plugin-static-copy": "^3.1.1"
+    "vite-plugin-static-copy": "^3.1.1",
+    "vitest": "^3.2.4"
   },
   "build": {
     "appId": "com.stravu.editor",

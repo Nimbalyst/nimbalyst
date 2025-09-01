@@ -2,7 +2,7 @@ import { logger } from '../utils/logger';
 
 /**
  * Protocol for handling streaming edits from AI providers
- * 
+ *
  * AI providers can signal streaming mode by including special markers in their response:
  * - STREAM_START: {position: "cursor" | "selection" | {line, column}, mode: "extend" | "after"}
  * - STREAM_CONTENT: markdown content to stream
@@ -46,11 +46,11 @@ export function detectStreamingIntent(content: string): {
     hasStreamEdit: content.includes('STREAM_EDIT'),
     hasStreamToEditor: content.includes('stream-to-editor')
   });
-  
+
   // Look for streaming directive anywhere in the response (not just at start)
   const streamingPattern = /<!--\s*STREAM_EDIT:\s*(.+?)\s*-->/;
   const match = content.match(streamingPattern);
-  
+
   if (match) {
     logger.protocol.info('Found STREAM_EDIT marker:', match[0]);
     try {
@@ -61,7 +61,7 @@ export function detectStreamingIntent(content: string): {
       const afterMarker = content.substring(markerIndex + match[0].length);
       // Remove leading newline if present
       const cleanContent = afterMarker.replace(/^\n/, '');
-      
+
       return {
         isStreaming: true,
         streamConfig: config,
@@ -71,11 +71,11 @@ export function detectStreamingIntent(content: string): {
       logger.protocol.warn('Failed to parse streaming config:', e);
     }
   }
-  
+
   // Alternative: Check for MCP-style directive
   const mcpPattern = /^@stream-to-editor\s+(.+?)\n/;
   const mcpMatch = content.match(mcpPattern);
-  
+
   if (mcpMatch) {
     logger.protocol.info('Found @stream-to-editor marker:', mcpMatch[0]);
     const params = mcpMatch[1].split(/\s+/);
@@ -90,8 +90,8 @@ export function detectStreamingIntent(content: string): {
       cleanContent: content.replace(mcpPattern, '')
     };
   }
-  
-  logger.protocol.info('No streaming markers found');
+
+  logger.protocol.info('No streaming markers found', content);
   return {
     isStreaming: false,
     cleanContent: content
@@ -109,7 +109,7 @@ export function parseStreamingChunk(chunk: string): {
   if (chunk.includes('<!-- STREAM_END -->') || chunk.includes('@end-stream')) {
     return { type: 'end' };
   }
-  
+
   // Check for metadata updates
   if (chunk.startsWith('<!-- STREAM_META:')) {
     const metaMatch = chunk.match(/<!-- STREAM_META:\s*(.+?)\s*-->/);
@@ -121,7 +121,7 @@ export function parseStreamingChunk(chunk: string): {
       }
     }
   }
-  
+
   // Otherwise treat as content
   return { type: 'content', data: chunk };
 }
