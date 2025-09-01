@@ -5,8 +5,8 @@
 .session-dropdown-trigger {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 4px;
+  padding: 6px 8px;
   background: transparent;
   border: 1px solid var(--border-color, #e0e0e0);
   border-radius: 6px;
@@ -14,7 +14,7 @@
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s ease;
-  max-width: 200px;
+  height: 32px;
 }
 
 .session-dropdown-trigger:hover:not(:disabled) {
@@ -27,13 +27,6 @@
   cursor: not-allowed;
 }
 
-.session-dropdown-label {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: left;
-}
 
 .session-dropdown-arrow {
   transition: transform 0.2s ease;
@@ -43,11 +36,44 @@
   transform: rotate(180deg);
 }
 
+.session-dropdown-all-sessions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary, #333);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  text-align: left;
+}
+
+.session-dropdown-all-sessions:hover {
+  background: var(--bg-hover, #f0f0f0);
+}
+
+.session-dropdown-divider {
+  height: 1px;
+  background: var(--border-color, #e0e0e0);
+  margin: 4px 0;
+}
+
+.session-dropdown-empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-secondary, #666);
+  font-size: 12px;
+  font-style: italic;
+}
+
 .session-dropdown-menu {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  right: 0;
+  min-width: 250px;
   min-width: 280px;
   background: var(--bg-primary, white);
   border: 1px solid var(--border-color, #e0e0e0);

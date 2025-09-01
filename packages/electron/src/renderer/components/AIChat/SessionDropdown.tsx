@@ -19,6 +19,7 @@ interface SessionDropdownProps {
   onNewSession: () => void;
   onDeleteSession: (sessionId: string) => void;
   onRenameSession?: (sessionId: string, newName: string) => void;
+  onOpenSessionManager?: () => void;
 }
 
 export function SessionDropdown({
@@ -27,7 +28,8 @@ export function SessionDropdown({
   onSessionSelect,
   onNewSession,
   onDeleteSession,
-  onRenameSession
+  onRenameSession,
+  onOpenSessionManager
 }: SessionDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -122,17 +124,30 @@ export function SessionDropdown({
     <div className="session-dropdown" ref={dropdownRef}>
       <button 
         className="session-dropdown-trigger"
-        onClick={() => sessions.length > 0 && setIsOpen(!isOpen)}
+        onClick={() => setIsOpen(!isOpen)}
         title="Session History"
-        disabled={sessions.length === 0}
       >
-        <MaterialSymbol icon="history" size={16} />
-        <span className="session-dropdown-label">{getCurrentSessionName()}</span>
+        <MaterialSymbol icon="history" size={18} />
         <MaterialSymbol icon="expand_more" size={16} className={`session-dropdown-arrow ${isOpen ? 'open' : ''}`} />
       </button>
 
-      {isOpen && sessions.length > 0 && (
+      {isOpen && (
         <div className="session-dropdown-menu">
+          {onOpenSessionManager && (
+            <button
+              className="session-dropdown-all-sessions"
+              onClick={() => {
+                onOpenSessionManager();
+                setIsOpen(false);
+              }}
+            >
+              <MaterialSymbol icon="folder_open" size={16} />
+              <span>All Sessions</span>
+            </button>
+          )}
+          {sessions.length > 0 && (
+            <div className="session-dropdown-divider" />
+          )}
           <div className="session-dropdown-sessions">
             {sessions.map(session => (
                   <div 
@@ -206,6 +221,11 @@ export function SessionDropdown({
                   </div>
             ))}
           </div>
+          {sessions.length === 0 && (
+            <div className="session-dropdown-empty">
+              <span>No sessions yet</span>
+            </div>
+          )}
         </div>
       )}
     </div>

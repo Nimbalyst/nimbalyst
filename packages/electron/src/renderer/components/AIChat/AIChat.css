@@ -141,7 +141,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   min-height: 0;
 }
 
@@ -165,20 +165,20 @@
   padding: 2px 8px;
   background: var(--background-tertiary);
   border-radius: 4px;
-  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ai-chat-model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ai-chat-model-name {
   font-weight: 500;
 }
 
-.ai-chat-header-controls {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-}
 
 .ai-chat-header-actions {
   display: flex;

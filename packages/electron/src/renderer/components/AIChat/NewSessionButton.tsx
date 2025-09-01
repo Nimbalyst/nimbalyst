@@ -12,12 +12,16 @@ interface Model {
 interface NewSessionButtonProps {
   currentModel: string;  // Full provider:model ID
   onNewSession: (modelId: string) => void;  // Just pass the full model ID
+  onModelChange?: (modelId: string) => void;  // For just changing model without new session
+  onOpenSettings?: () => void;  // Open AI settings
   disabled?: boolean;
 }
 
 export function NewSessionButton({
   currentModel,
   onNewSession,
+  onModelChange,
+  onOpenSettings,
   disabled = false
 }: NewSessionButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -63,7 +67,11 @@ export function NewSessionButton({
   };
 
   const handleModelSelect = (modelId: string) => {
-    onNewSession(modelId);  // Pass the full provider:model ID
+    if (onModelChange) {
+      onModelChange(modelId);  // Just change the model
+    } else {
+      onNewSession(modelId);  // Create new session with model
+    }
     setIsOpen(false);
   };
 
@@ -147,6 +155,21 @@ export function NewSessionButton({
                 ))}
               </div>
             ))
+          )}
+          {onOpenSettings && (
+            <>
+              <div className="new-session-divider" />
+              <button
+                className="new-session-configure"
+                onClick={() => {
+                  onOpenSettings();
+                  setIsOpen(false);
+                }}
+              >
+                <MaterialSymbol icon="settings" size={16} />
+                <span>Configure Models</span>
+              </button>
+            </>
           )}
         </div>
       )}

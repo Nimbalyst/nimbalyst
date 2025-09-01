@@ -4,13 +4,12 @@ import { getProviderIcon } from '../icons/ProviderIcons';
 
 interface ChatHeaderProps {
   onToggleCollapse: () => void;
-  onOpenSessionManager?: () => void;
   children?: React.ReactNode;
   provider?: string;
   model?: string;  // Full provider:model ID
 }
 
-export function ChatHeader({ onToggleCollapse, onOpenSessionManager, children, provider, model }: ChatHeaderProps) {
+export function ChatHeader({ onToggleCollapse, children, provider, model }: ChatHeaderProps) {
 
   const parseModelInfo = (modelId?: string): { provider: string; modelName: string } | null => {
     if (!modelId) return null;
@@ -58,16 +57,6 @@ export function ChatHeader({ onToggleCollapse, onOpenSessionManager, children, p
           AI Assistant
         </h3>
         <div className="ai-chat-header-actions">
-          {onOpenSessionManager && (
-            <button
-              className="ai-chat-action-button"
-              onClick={onOpenSessionManager}
-              title="Session Manager (⌥⌘S)"
-              aria-label="Open Session Manager"
-            >
-              <MaterialSymbol icon="history" size={20} />
-            </button>
-          )}
           <button
             className="ai-chat-action-button"
             onClick={onToggleCollapse}
@@ -80,24 +69,7 @@ export function ChatHeader({ onToggleCollapse, onOpenSessionManager, children, p
       </div>
       
       <div className="ai-chat-header-bottom">
-        {model && (() => {
-          const modelInfo = parseModelInfo(model);
-          if (!modelInfo) return null;
-          
-          return (
-            <div className="ai-chat-model-info">
-              {provider ? getProviderIcon(provider, { size: 14 }) : <MaterialSymbol icon="smart_toy" size={14} />}
-              <span className="ai-chat-provider-name">{modelInfo.provider}</span>
-              <span className="ai-chat-model-separator">•</span>
-              <span className="ai-chat-model-name">{modelInfo.modelName}</span>
-            </div>
-          );
-        })()}
-        {children && (
-          <div className="ai-chat-header-controls">
-            {children}
-          </div>
-        )}
+        {children}
       </div>
     </div>
   );

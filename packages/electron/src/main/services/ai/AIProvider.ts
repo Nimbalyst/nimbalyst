@@ -129,7 +129,7 @@ The user needs to open a document first before you can help with editing.
 You can still answer questions, provide information, and have general conversations.`;
     }
     
-    return basePrompt;
+    return basePrompt + `
 
 Current document context:
 - File: ${documentContext?.filePath || 'untitled'}

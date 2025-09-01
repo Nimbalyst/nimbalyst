@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { MaterialSymbol } from '../MaterialSymbol';
 import { getProviderIcon } from '../icons/ProviderIcons';
 import './ModelSelector.css';
 
@@ -11,9 +12,10 @@ interface Model {
 interface ModelSelectorProps {
   onSelectModel: (modelId: string) => void;  // Just pass the full provider:model ID
   currentModel?: string;  // Full provider:model ID
+  onOpenSettings?: () => void;  // Open AI settings
 }
 
-export function ModelSelector({ onSelectModel, currentModel }: ModelSelectorProps) {
+export function ModelSelector({ onSelectModel, currentModel, onOpenSettings }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [models, setModels] = useState<Record<string, Model[]>>({});
   const [loading, setLoading] = useState(false);
@@ -109,15 +111,17 @@ export function ModelSelector({ onSelectModel, currentModel }: ModelSelectorProp
           ) : Object.keys(models).length === 0 ? (
             <div className="model-selector-empty">
               <p>No models available</p>
-              <button 
-                className="model-selector-settings"
-                onClick={() => {
-                  // TODO: Open preferences
-                  setIsOpen(false);
-                }}
-              >
-                Configure Providers
-              </button>
+              {onOpenSettings && (
+                <button 
+                  className="model-selector-settings"
+                  onClick={() => {
+                    onOpenSettings();
+                    setIsOpen(false);
+                  }}
+                >
+                  Configure Providers
+                </button>
+              )}
             </div>
           ) : (
             <div className="model-selector-list">
@@ -152,17 +156,20 @@ export function ModelSelector({ onSelectModel, currentModel }: ModelSelectorProp
                 </div>
               ))}
               
-              <div className="model-selector-footer">
-                <button 
-                  className="model-selector-settings-link"
-                  onClick={() => {
-                    // TODO: Open preferences
-                    setIsOpen(false);
-                  }}
-                >
-                  ⚙️ Configure Providers
-                </button>
-              </div>
+              {onOpenSettings && (
+                <div className="model-selector-footer">
+                  <button 
+                    className="model-selector-settings-link"
+                    onClick={() => {
+                      onOpenSettings();
+                      setIsOpen(false);
+                    }}
+                  >
+                    <MaterialSymbol icon="settings" size={16} />
+                    <span>Configure Models</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

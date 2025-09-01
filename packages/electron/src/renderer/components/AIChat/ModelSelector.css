@@ -6,7 +6,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
@@ -14,7 +14,8 @@
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
-  min-width: 200px;
+  min-width: 120px;
+  max-width: 200px;
 }
 
 .model-selector-button:hover {
@@ -57,7 +58,6 @@
 .model-selector-dropdown {
   position: absolute;
   top: calc(100% + 4px);
-  left: 0;
   right: 0;
   min-width: 280px;
   max-height: 400px;
@@ -183,6 +183,10 @@
   border: none;
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.model-selector-settings-link span {
+  flex-shrink: 0;
   cursor: pointer;
   transition: all 0.2s;
   border-radius: 4px;

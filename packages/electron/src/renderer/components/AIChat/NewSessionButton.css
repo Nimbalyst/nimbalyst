@@ -5,20 +5,21 @@
   border: 1px solid var(--border-color, #e0e0e0);
   border-radius: 6px;
   overflow: visible;
+  height: 32px;
 }
 
 .new-session-button-main {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 10px;
+  padding: 0 10px;
   background: transparent;
   border: none;
   color: var(--text-primary, #333);
   cursor: pointer;
   transition: all 0.2s ease;
   border-radius: 0;
-  height: auto;
+  height: 100%;
   font-size: 13px;
 }
 
@@ -36,7 +37,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 8px;
+  padding: 0 8px;
   background: transparent;
   border: none;
   border-left: 1px solid var(--border-color, #e0e0e0);
@@ -44,7 +45,7 @@
   cursor: pointer;
   transition: all 0.2s ease;
   border-radius: 0;
-  height: auto;
+  height: 100%;
 }
 
 .new-session-button-dropdown:hover:not(:disabled) {
@@ -199,4 +200,29 @@
 .dark .new-session-dropdown {
   background: var(--background-secondary);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.new-session-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+.new-session-configure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+  text-align: left;
+}
+
+.new-session-configure:hover {
+  background: var(--background-hover);
+  color: var(--text-primary);
 }
