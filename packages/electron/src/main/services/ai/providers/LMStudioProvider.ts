@@ -148,6 +148,25 @@ export class LMStudioProvider extends BaseAIProvider {
       }
     ];
 
+    // Log the request for debugging
+    const requestBody = {
+      model: this.config.model || 'local-model',
+      messages: apiMessages,
+      max_tokens: this.config.maxTokens || 4096,
+      temperature: this.config.temperature || 0.7,
+      tools: tools,
+      tool_choice: 'auto',  // Let the model decide when to use tools
+      stream: true
+    };
+    
+    console.log('[LMStudio] Sending request with tools:', {
+      model: requestBody.model,
+      messagesCount: requestBody.messages.length,
+      toolsCount: requestBody.tools.length,
+      firstMessage: apiMessages[0],
+      lastMessage: apiMessages[apiMessages.length - 1]
+    });
+
     try {
       // Make streaming request to LMStudio with tools
       const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
@@ -155,17 +174,11 @@ export class LMStudioProvider extends BaseAIProvider {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model: this.config.model || 'local-model',
-          messages: apiMessages,
-          max_tokens: this.config.maxTokens || 4096,
-          temperature: this.config.temperature || 0.7,
-          tools: tools,
-          tool_choice: 'auto',  // Let the model decide when to use tools
-          stream: true
-        }),
+        body: JSON.stringify(requestBody),
         signal: this.abortController.signal
       });
+      
+      console.log('[LMStudio] Response status:', response.status, response.statusText);
 
       if (!response.ok) {
         throw new Error(`LMStudio returned ${response.status}: ${response.statusText}`);
@@ -184,10 +197,14 @@ export class LMStudioProvider extends BaseAIProvider {
       let isStreamingContent = false;
       let streamContentBuffer = '';
       let streamConfig: any = null;
+      let chunkCount = 0;
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log('[LMStudio] Stream done, total chunks:', chunkCount);
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
@@ -196,6 +213,7 @@ export class LMStudioProvider extends BaseAIProvider {
         for (const line of lines) {
           if (line.trim() === '') continue;
           if (line.trim() === 'data: [DONE]') {
+            console.log('[LMStudio] Received [DONE] marker');
             yield {
               type: 'complete',
               content: fullContent,
@@ -207,7 +225,18 @@ export class LMStudioProvider extends BaseAIProvider {
           if (line.startsWith('data: ')) {
             try {
               const json = JSON.parse(line.slice(6));
+              chunkCount++;
               const delta = json.choices?.[0]?.delta;
+              
+              // Log if this is the first chunk or if it's empty
+              if (chunkCount === 1) {
+                console.log('[LMStudio] First chunk from API:', JSON.stringify(json, null, 2));
+              }
+              
+              // Log if we get an empty response
+              if (!delta?.content && !delta?.tool_calls && json.choices?.[0]?.finish_reason) {
+                console.log('[LMStudio] Empty response with finish_reason:', json.choices[0].finish_reason);
+              }
               
               // Handle text content
               if (delta?.content) {
