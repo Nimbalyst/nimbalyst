@@ -28,6 +28,11 @@ function createWindowListMenu(): any[] {
     const otherWindows: { window: BrowserWindow; title: string }[] = [];
 
     allWindows.forEach((window) => {
+        // Skip destroyed windows
+        if (!window || window.isDestroyed()) {
+            return;
+        }
+        
         const windowId = window.id;
         const state = windowStates.get(windowId);
         let title = 'Untitled';
@@ -93,9 +98,11 @@ function createWindowListMenu(): any[] {
                 label: title,
                 accelerator,
                 type: 'checkbox',
-                checked: window.isFocused(),
+                checked: !window.isDestroyed() && window.isFocused(),
                 click: () => {
-                    window.focus();
+                    if (!window.isDestroyed()) {
+                        window.focus();
+                    }
                 }
             });
         });
@@ -114,9 +121,11 @@ function createWindowListMenu(): any[] {
                 label: title,
                 accelerator,
                 type: 'checkbox',
-                checked: window.isFocused(),
+                checked: !window.isDestroyed() && window.isFocused(),
                 click: () => {
-                    window.focus();
+                    if (!window.isDestroyed()) {
+                        window.focus();
+                    }
                 }
             });
         });
@@ -692,24 +701,40 @@ export function updateApplicationMenu() {
 
 // Helper to check if window is about window
 function isAboutWindow(window: BrowserWindow): boolean {
+    // Check if window is destroyed first
+    if (!window || window.isDestroyed()) {
+        return false;
+    }
     // Check if this is the about window by checking the title
     return window.getTitle() === 'About Preditor';
 }
 
 // Helper to check if window is project manager window
 function isProjectManagerWindow(window: BrowserWindow): boolean {
+    // Check if window is destroyed first
+    if (!window || window.isDestroyed()) {
+        return false;
+    }
     // Check if this is the project manager window by checking the title
     return window.getTitle() === 'Project Manager - Preditor';
 }
 
 // Helper to check if window is session manager window
 function isSessionManagerWindow(window: BrowserWindow): boolean {
+    // Check if window is destroyed first
+    if (!window || window.isDestroyed()) {
+        return false;
+    }
     // Check if this is the session manager window by checking the title
     return window.getTitle() === 'AI Chat Sessions - All Projects';
 }
 
 // Helper to check if window is AI models window
 function isAIModelsWindow(window: BrowserWindow): boolean {
+    // Check if window is destroyed first
+    if (!window || window.isDestroyed()) {
+        return false;
+    }
     // Check if this is the AI models window by checking the title
     return window.getTitle() === 'AI Models';
 }

@@ -28,6 +28,9 @@ let pendingProjectPath: string | null = null;
 let sessionSaveInterval: NodeJS.Timeout | null = null;
 let menuUpdateInterval: NodeJS.Timeout | null = null;
 
+// Track if app is quitting
+let isAppQuitting = false;
+
 // AI service instance
 let aiService: AIService | null = null;
 let mcpHttpServer: any = null;
@@ -187,12 +190,18 @@ app.whenReady().then(async () => {
     
     // Update menu periodically to catch any state changes
     menuUpdateInterval = setInterval(() => {
-        updateApplicationMenu();
+        // Check if app is still running and has windows
+        if (!isAppQuitting && BrowserWindow.getAllWindows().length > 0) {
+            updateApplicationMenu();
+        }
     }, 1000);
     
     // Save session periodically (every 30 seconds)
     sessionSaveInterval = setInterval(() => {
-        saveSessionState();
+        // Only save if app is not quitting
+        if (!isAppQuitting) {
+            saveSessionState();
+        }
     }, 30000);
     
     // Listen for system theme changes
@@ -220,6 +229,10 @@ app.on('activate', () => {
 // Before quit handler
 app.on('before-quit', (event) => {
     console.log('[QUIT] before-quit event triggered');
+    
+    // Mark app as quitting to prevent interval operations
+    isAppQuitting = true;
+    
     const fs = require('fs');
     const debugLog = require('path').join(app.getPath('userData'), 'stravu-editor-debug.log');
     
