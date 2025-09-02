@@ -127,6 +127,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setTitle: (title: string) => ipcRenderer.send('set-title', title),
   setCurrentFile: (filePath: string | null) => ipcRenderer.send('set-current-file', filePath),
 
+  // Get initial window state
+  getInitialState: () => ipcRenderer.invoke('get-initial-state'),
   // Project operations
   getFolderContents: (dirPath: string) => ipcRenderer.invoke('get-folder-contents', dirPath),
   createFile: (filePath: string, content: string) => ipcRenderer.invoke('create-file', filePath, content),

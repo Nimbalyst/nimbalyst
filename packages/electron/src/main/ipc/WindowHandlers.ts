@@ -1,10 +1,40 @@
 import { ipcMain, BrowserWindow } from 'electron';
-import { windowStates } from '../window/WindowManager';
+import { windowStates, windows } from '../window/WindowManager';
 import { updateApplicationMenu } from '../menu/ApplicationMenu';
 import { stopFileWatcher, startFileWatcher } from '../file/FileWatcher';
 import { createAIModelsWindow } from '../window/AIModelsWindow';
+import { basename } from 'path';
+import { getFolderContents } from '../utils/FileTree';
 
 export function registerWindowHandlers() {
+    // Get initial window state
+    ipcMain.handle('get-initial-state', (event) => {
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) return null;
+        
+        const windowId = [...windows.entries()].find(([, win]) => win === window)?.[0];
+        if (windowId === undefined) return null;
+        
+        const state = windowStates.get(windowId);
+        if (!state) return null;
+        
+        // If it's a project mode window, return the full initial state
+        if (state.mode === 'project' && state.projectPath) {
+            const fileTree = getFolderContents(state.projectPath);
+            return {
+                mode: 'project',
+                projectPath: state.projectPath,
+                projectName: basename(state.projectPath),
+                fileTree
+            };
+        }
+        
+        // For document mode, just return the mode
+        return {
+            mode: 'document'
+        };
+    });
+    
     // Open AI Models window
     ipcMain.handle('window:open-ai-models', async () => {
         createAIModelsWindow();

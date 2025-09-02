@@ -77,6 +77,8 @@ interface ElectronAPI {
   setDocumentEdited: (edited: boolean) => void;
   setTitle: (title: string) => void;
   setCurrentFile: (filePath: string | null) => void;
+  // Get initial window state
+  getInitialState?: () => Promise<{ mode: string; projectPath?: string; projectName?: string; fileTree?: FileTreeItem[] } | null>;
   // Project operations
   getFolderContents: (dirPath: string) => Promise<FileTreeItem[]>;
   switchProjectFile: (filePath: string) => Promise<{ filePath: string; content: string } | null>;
@@ -165,6 +167,7 @@ export default function App() {
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
   const [currentFileName, setCurrentFileName] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
   const [projectMode, setProjectMode] = useState(false);
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
@@ -880,6 +883,27 @@ export default function App() {
     };
   }, [currentFilePath]);
 
+  // Load initial state on mount
+  useEffect(() => {
+    if (!window.electronAPI?.getInitialState) {
+      setIsInitializing(false);
+      return;
+    }
+    
+    window.electronAPI.getInitialState().then((initialState) => {
+      if (initialState && initialState.mode === 'project') {
+        // Set project state immediately
+        setProjectMode(true);
+        setProjectPath(initialState.projectPath);
+        setProjectName(initialState.projectName);
+        setFileTree(initialState.fileTree || []);
+      }
+      setIsInitializing(false);
+    }).catch(() => {
+      setIsInitializing(false);
+    });
+  }, []);
+
   // Set up IPC listeners
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -1251,6 +1275,11 @@ export default function App() {
   });
 
   logger.ui.info('About to render StravuEditor');
+
+  // Show nothing while initializing to prevent flash
+  if (isInitializing) {
+    return <div style={{ height: '100vh', backgroundColor: '#1e1e1e' }} />;
+  }
 
   return (
     <div
