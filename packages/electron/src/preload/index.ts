@@ -51,6 +51,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('project-opened', handler);
     return () => ipcRenderer.removeListener('project-opened', handler);
   },
+  onOpenProjectFile: (callback: (filePath: string) => void) => {
+    const handler = (_event: any, filePath: string) => callback(filePath);
+    ipcRenderer.on('open-project-file', handler);
+    return () => ipcRenderer.removeListener('open-project-file', handler);
+  },
   onOpenProjectFromCLI: (callback: (projectPath: string) => void) => {
     const handler = (_event: any, projectPath: string) => callback(projectPath);
     ipcRenderer.on('open-project-from-cli', handler);

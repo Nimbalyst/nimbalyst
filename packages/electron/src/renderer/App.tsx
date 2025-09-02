@@ -54,6 +54,7 @@ interface ElectronAPI {
   onFileNew: (callback: () => void) => () => void;
   onFileOpen: (callback: () => void) => () => void;
   onProjectOpened: (callback: (data: { projectPath: string; projectName: string; fileTree: FileTreeItem[] }) => void) => () => void;
+  onOpenProjectFile?: (callback: (filePath: string) => void) => () => void;
   onOpenProjectFromCLI?: (callback: (projectPath: string) => void) => () => void;
   onFileSave: (callback: () => void) => () => void;
   onFileSaveAs: (callback: () => void) => () => void;
@@ -939,6 +940,15 @@ export default function App() {
         setIsAIChatStateLoaded(true);
       }
     }));
+
+    // Handle opening a specific file in a project (used when restoring project state)
+    if (window.electronAPI.onOpenProjectFile) {
+      cleanupFns.push(window.electronAPI.onOpenProjectFile(async (filePath) => {
+        console.log('Opening project file from saved state:', filePath);
+        // Use the existing file selection handler
+        await handleProjectFileSelect(filePath);
+      }));
+    }
 
     // Handle project open from CLI
     if (window.electronAPI.onOpenProjectFromCLI) {

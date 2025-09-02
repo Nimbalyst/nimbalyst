@@ -7,9 +7,28 @@ import { createWindow } from './WindowManager';
 let projectManagerWindow: BrowserWindow | null = null;
 
 export function createProjectManagerWindow() {
-  // If window already exists, focus it
+  // If window already exists, check if it's healthy
   if (projectManagerWindow && !projectManagerWindow.isDestroyed()) {
-    projectManagerWindow.focus();
+    // Check if the window content is corrupted
+    projectManagerWindow.webContents.executeJavaScript(`
+      document.body && document.body.textContent && document.body.textContent.length > 0
+    `).then(isHealthy => {
+      if (isHealthy) {
+        projectManagerWindow?.focus();
+      } else {
+        // Window content is corrupted, recreate it
+        console.warn('[ProjectManager] Window content corrupted, recreating window');
+        projectManagerWindow?.destroy();
+        projectManagerWindow = null;
+        createProjectManagerWindow();
+      }
+    }).catch(() => {
+      // Error checking health, recreate window
+      console.warn('[ProjectManager] Error checking window health, recreating window');
+      projectManagerWindow?.destroy();
+      projectManagerWindow = null;
+      createProjectManagerWindow();
+    });
     return projectManagerWindow;
   }
 
@@ -33,17 +52,61 @@ export function createProjectManagerWindow() {
   });
 
   // Load the main app with a query parameter to indicate Project Manager mode
-  if (process.env.NODE_ENV === 'development') {
-    projectManagerWindow.loadURL('http://localhost:5273/?mode=project-manager');
-  } else {
-    projectManagerWindow.loadFile(join(__dirname, '../renderer/index.html'), {
-      query: { mode: 'project-manager' }
-    });
-  }
+  const loadContent = () => {
+    if (process.env.NODE_ENV === 'development') {
+      return projectManagerWindow!.loadURL('http://localhost:5273/?mode=project-manager');
+    } else {
+      return projectManagerWindow!.loadFile(join(__dirname, '../renderer/index.html'), {
+        query: { mode: 'project-manager' }
+      });
+    }
+  };
+
+  loadContent().catch(err => {
+    console.error('[ProjectManager] Failed to load window content:', err);
+    // Try to reload once
+    setTimeout(() => {
+      if (projectManagerWindow && !projectManagerWindow.isDestroyed()) {
+        loadContent().catch(err2 => {
+          console.error('[ProjectManager] Failed to reload window content:', err2);
+        });
+      }
+    }, 1000);
+  });
 
   // Show window when ready
   projectManagerWindow.once('ready-to-show', () => {
     projectManagerWindow?.show();
+  });
+
+  // Handle renderer process crashes
+  projectManagerWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error('[ProjectManager] Renderer process gone:', details);
+    if (projectManagerWindow && !projectManagerWindow.isDestroyed()) {
+      // Reload the window
+      projectManagerWindow.reload();
+    }
+  });
+
+  // Handle unresponsive renderer
+  projectManagerWindow.webContents.on('unresponsive', () => {
+    console.warn('[ProjectManager] Window became unresponsive');
+    const choice = dialog.showMessageBoxSync(projectManagerWindow!, {
+      type: 'warning',
+      buttons: ['Reload', 'Keep Waiting'],
+      defaultId: 0,
+      message: 'Project Manager is not responding',
+      detail: 'Would you like to reload the window?'
+    });
+    
+    if (choice === 0 && projectManagerWindow && !projectManagerWindow.isDestroyed()) {
+      projectManagerWindow.reload();
+    }
+  });
+
+  // Handle responsive again
+  projectManagerWindow.webContents.on('responsive', () => {
+    console.log('[ProjectManager] Window became responsive again');
   });
 
   // Clean up when closed
@@ -198,6 +261,16 @@ export function setupProjectManagerHandlers() {
     if (savedState?.devToolsOpen) {
       window.webContents.once('did-finish-load', () => {
         window.webContents.openDevTools();
+      });
+    }
+    
+    // Restore last open file if available
+    if (savedState?.filePath && existsSync(savedState.filePath)) {
+      window.webContents.once('did-finish-load', () => {
+        // Give the renderer time to initialize
+        setTimeout(() => {
+          window.webContents.send('open-project-file', savedState.filePath);
+        }, 500);
       });
     }
     

@@ -21,19 +21,70 @@ export function updateDocumentState(state: any) {
   console.log('[MCP Server] Document state updated');
 }
 
+// Store the HTTP server instance
+let httpServerInstance: any = null;
+
 export function cleanupMcpServer() {
   // Close all active SSE transports
   for (const [sessionId, transport] of activeTransports.entries()) {
     console.log(`[MCP Server] Closing transport for session ${sessionId}`);
     try {
+      // Close the transport
       if (transport.onclose) {
         transport.onclose();
+      }
+      // Also try to end any underlying response
+      const res = (transport as any).res;
+      if (res && !res.headersSent) {
+        res.end();
       }
     } catch (error) {
       console.error(`[MCP Server] Error closing transport ${sessionId}:`, error);
     }
   }
   activeTransports.clear();
+  
+  // Clear the MCP server instance
+  if (mcpServer) {
+    mcpServer = null;
+  }
+}
+
+export function shutdownHttpServer(): Promise<void> {
+  return new Promise((resolve) => {
+    if (!httpServerInstance) {
+      resolve();
+      return;
+    }
+    
+    console.log('[MCP Server] Shutting down HTTP server');
+    
+    // First cleanup transports
+    cleanupMcpServer();
+    
+    // Force close all connections
+    if (typeof httpServerInstance.closeAllConnections === 'function') {
+      httpServerInstance.closeAllConnections();
+    }
+    
+    // Close the server
+    httpServerInstance.close((err?: Error) => {
+      if (err) {
+        console.error('[MCP Server] Error closing HTTP server:', err);
+      }
+      httpServerInstance = null;
+      resolve();
+    });
+    
+    // Timeout after 1 second
+    setTimeout(() => {
+      if (httpServerInstance) {
+        console.log('[MCP Server] Force destroying HTTP server');
+        httpServerInstance = null;
+      }
+      resolve();
+    }, 1000);
+  });
 }
 
 export async function startMcpHttpServer(startPort: number = 3456): Promise<{ httpServer: any; port: number }> {
@@ -62,6 +113,9 @@ export async function startMcpHttpServer(startPort: number = 3456): Promise<{ ht
   if (!httpServer) {
     throw new Error(`[MCP Server] Could not find an available port after trying ${100} ports starting from ${startPort}`);
   }
+  
+  // Store the instance for cleanup
+  httpServerInstance = httpServer;
   
   return { httpServer, port };
 }

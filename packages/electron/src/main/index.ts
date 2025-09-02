@@ -16,8 +16,9 @@ import { registerHistoryHandlers } from './ipc/HistoryHandlers';
 import { registerSessionHandlers } from './ipc/SessionHandlers';
 import { getTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
-import { startMcpHttpServer, updateDocumentState, cleanupMcpServer } from './mcp/httpServer';
+import { startMcpHttpServer, updateDocumentState, cleanupMcpServer, shutdownHttpServer } from './mcp/httpServer';
 import { logger } from './utils/logger';
+import { setupForceQuit, cancelForceQuit } from './utils/forceQuit';
 
 // Track pending file to open
 let pendingFilePath: string | null = null;
@@ -27,9 +28,13 @@ let pendingProjectPath: string | null = null;
 // Session save interval
 let sessionSaveInterval: NodeJS.Timeout | null = null;
 let menuUpdateInterval: NodeJS.Timeout | null = null;
+let memoryMonitorInterval: NodeJS.Timeout | null = null;
 
 // Track if app is quitting
 let isAppQuitting = false;
+
+// Track app start time for memory monitoring
+const appStartTime = Date.now();
 
 // AI service instance
 let aiService: AIService | null = null;
@@ -204,6 +209,44 @@ app.whenReady().then(async () => {
         }
     }, 30000);
     
+    // Monitor memory usage and perform cleanup for long-running sessions
+    memoryMonitorInterval = setInterval(() => {
+        if (!isAppQuitting) {
+            const memUsage = process.memoryUsage();
+            const uptime = Date.now() - appStartTime;
+            
+            // Log memory usage every hour
+            if (uptime % 3600000 < 60000) {
+                console.log('[Memory] Usage:', {
+                    rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
+                    heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+                    heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
+                    uptime: `${Math.round(uptime / 1000 / 60)} minutes`
+                });
+            }
+            
+            // If memory usage is high (>1GB heap), trigger garbage collection
+            if (memUsage.heapUsed > 1024 * 1024 * 1024) {
+                if (global.gc) {
+                    console.log('[Memory] High heap usage detected, running garbage collection');
+                    global.gc();
+                }
+                
+                // Also clear webContents caches for all windows
+                BrowserWindow.getAllWindows().forEach(window => {
+                    if (!window.isDestroyed()) {
+                        window.webContents.session.clearCache();
+                    }
+                });
+            }
+            
+            // After 12 hours of runtime, suggest restart
+            if (uptime > 12 * 60 * 60 * 1000) {
+                console.warn('[Memory] App has been running for over 12 hours, consider restarting');
+            }
+        }
+    }, 60000); // Check every minute
+    
     // Listen for system theme changes
     nativeTheme.on('updated', () => {
         const currentTheme = getTheme();
@@ -227,11 +270,23 @@ app.on('activate', () => {
 });
 
 // Before quit handler
-app.on('before-quit', (event) => {
+app.on('before-quit', async (event) => {
     console.log('[QUIT] before-quit event triggered');
+    
+    // If we're already quitting, don't prevent default to avoid infinite loop
+    if (isAppQuitting) {
+        console.log('[QUIT] Already quitting, allowing default behavior');
+        return;
+    }
+    
+    // Prevent default to do async cleanup
+    event.preventDefault();
     
     // Mark app as quitting to prevent interval operations
     isAppQuitting = true;
+    
+    // Setup force quit timer (2 seconds)
+    setupForceQuit(2000);
     
     const fs = require('fs');
     const debugLog = require('path').join(app.getPath('userData'), 'stravu-editor-debug.log');
@@ -252,6 +307,10 @@ app.on('before-quit', (event) => {
             clearInterval(menuUpdateInterval);
             menuUpdateInterval = null;
         }
+        if (memoryMonitorInterval) {
+            clearInterval(memoryMonitorInterval);
+            memoryMonitorInterval = null;
+        }
     } catch (error) {
         console.error('Error in before-quit handler:', error);
         fs.appendFileSync(debugLog, `[QUIT] Error in session save: ${error}\n`);
@@ -270,28 +329,11 @@ app.on('before-quit', (event) => {
     }
     
     try {
-        // Clean up MCP transports first
-        fs.appendFileSync(debugLog, '[QUIT] Cleaning up MCP transports\n');
-        cleanupMcpServer();
-        
-        // Close MCP HTTP server
-        if (mcpHttpServer) {
-            fs.appendFileSync(debugLog, '[QUIT] Closing MCP HTTP server\n');
-            // Force close all connections
-            mcpHttpServer.close((err?: Error) => {
-                if (err) {
-                    fs.appendFileSync(debugLog, `[QUIT] Error in server close callback: ${err}\n`);
-                } else {
-                    fs.appendFileSync(debugLog, '[QUIT] MCP server closed successfully\n');
-                }
-            });
-            // Also try to destroy all connections immediately
-            if (typeof mcpHttpServer.closeAllConnections === 'function') {
-                mcpHttpServer.closeAllConnections();
-                fs.appendFileSync(debugLog, '[QUIT] Called closeAllConnections\n');
-            }
-            mcpHttpServer = null;
-        }
+        // Shutdown MCP HTTP server properly
+        fs.appendFileSync(debugLog, '[QUIT] Shutting down MCP HTTP server\n');
+        await shutdownHttpServer();
+        fs.appendFileSync(debugLog, '[QUIT] MCP HTTP server shutdown complete\n');
+        mcpHttpServer = null;
     } catch (error) {
         console.error('[QUIT] Error closing MCP server:', error);
         fs.appendFileSync(debugLog, `[QUIT] Error closing MCP server: ${error}\n`);
@@ -307,109 +349,14 @@ app.on('before-quit', (event) => {
         fs.appendFileSync(debugLog, `[QUIT] Error saving session: ${error}\n`);
     }
     
-    // List all active handles to see what's keeping us alive
-    fs.appendFileSync(debugLog, '[QUIT] Checking what is keeping process alive...\n');
+    // After all cleanup, quit the app
+    fs.appendFileSync(debugLog, '[QUIT] All cleanup complete, quitting app\n');
     
-    // Don't try immediate exit - let cleanup happen first
-    // The timer will force quit if needed
-    fs.appendFileSync(debugLog, '[QUIT] Cleanup initiated, timer will force quit in 3s if needed\n');
+    // Cancel force quit if we're about to quit normally
+    cancelForceQuit();
     
-    // Also try process.nextTick
-    process.nextTick(() => {
-        fs.appendFileSync(debugLog, '[QUIT] nextTick fired\n');
-    });
-    
-    // Force quit after 3 seconds if still hanging
-    fs.appendFileSync(debugLog, '[QUIT] Setting up force quit timer for 3 seconds...\n');
-    const forceQuitTimer = setTimeout(() => {
-        fs.appendFileSync(debugLog, '[QUIT] === FORCE QUIT TIMER FIRED ===\n');
-        try {
-            fs.appendFileSync(debugLog, '[QUIT] Force quitting after 3 second timeout\n');
-            
-            // Try to force close the MCP server again
-            if (mcpHttpServer) {
-                fs.appendFileSync(debugLog, '[QUIT] MCP server still exists, trying to destroy it\n');
-                try {
-                    mcpHttpServer.unref?.();
-                    mcpHttpServer.close();
-                } catch (e) {
-                    fs.appendFileSync(debugLog, `[QUIT] Failed to destroy MCP server: ${e}\n`);
-                }
-            }
-            
-            // Log what's keeping the process alive
-            const activeHandles = (process as any)._getActiveHandles?.();
-            const activeRequests = (process as any)._getActiveRequests?.();
-            
-            if (activeHandles) {
-                fs.appendFileSync(debugLog, `[QUIT] Active handles: ${activeHandles.length}\n`);
-                activeHandles.forEach((handle: any, i: number) => {
-                    fs.appendFileSync(debugLog, `[QUIT]   Handle ${i}: ${handle.constructor.name}\n`);
-                });
-            }
-            
-            if (activeRequests) {
-                fs.appendFileSync(debugLog, `[QUIT] Active requests: ${activeRequests.length}\n`);
-                activeRequests.forEach((req: any, i: number) => {
-                    fs.appendFileSync(debugLog, `[QUIT]   Request ${i}: ${req.constructor.name}\n`);
-                });
-            }
-            
-            // List all windows
-            const windows = BrowserWindow.getAllWindows();
-            fs.appendFileSync(debugLog, `[QUIT] Open windows: ${windows.length}\n`);
-            windows.forEach((win, i) => {
-                fs.appendFileSync(debugLog, `[QUIT]   Window ${i}: ${win.getTitle()} (destroyed: ${win.isDestroyed()})\n`);
-                try {
-                    win.destroy();
-                    fs.appendFileSync(debugLog, `[QUIT]   Destroyed window ${i}\n`);
-                } catch (e) {
-                    fs.appendFileSync(debugLog, `[QUIT]   Failed to destroy window ${i}: ${e}\n`);
-                }
-            });
-            
-        } catch (e) {
-            fs.appendFileSync(debugLog, `[QUIT] Error in force quit: ${e}\n`);
-        }
-        
-        console.error('[QUIT] Force quitting after timeout');
-        
-        // Try multiple ways to force quit
-        try {
-            fs.appendFileSync(debugLog, '[QUIT] Trying app.exit(0)\n');
-            app.exit(0);  // Try app.exit first
-        } catch (e) {
-            fs.appendFileSync(debugLog, `[QUIT] app.exit failed: ${e}\n`);
-        }
-        
-        setTimeout(() => {
-            try {
-                fs.appendFileSync(debugLog, '[QUIT] Trying process.exit(0)\n');
-                process.exit(0);  // Then process.exit
-            } catch (e) {
-                fs.appendFileSync(debugLog, `[QUIT] process.exit failed: ${e}\n`);
-            }
-            
-            setTimeout(() => {
-                // Nuclear option - kill the process
-                try {
-                    fs.appendFileSync(debugLog, '[QUIT] Trying process.kill SIGKILL\n');
-                    process.kill(process.pid, 'SIGKILL');
-                } catch (e) {
-                    fs.appendFileSync(debugLog, `[QUIT] process.kill failed: ${e}\n`);
-                }
-            }, 500);
-        }, 500);
-    }, 3000);
-    
-    // Clear timer if we actually quit
-    app.on('will-quit', () => {
-        fs.appendFileSync(debugLog, '[QUIT] will-quit event fired!\n');
-        clearTimeout(forceQuitTimer);
-    });
-    
-    // Check if we're actually preventing the default quit
-    fs.appendFileSync(debugLog, `[QUIT] Event defaultPrevented: ${event.defaultPrevented}\n`);
+    // Now quit
+    app.quit();
 });
 
 // Window all closed handler

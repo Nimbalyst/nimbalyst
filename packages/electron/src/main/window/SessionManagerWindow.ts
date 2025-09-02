@@ -6,13 +6,32 @@ import Store from 'electron-store';
 let sessionManagerWindow: BrowserWindow | null = null;
 
 export function createSessionManagerWindow(filterProject?: string) {
-  // If window already exists, focus it
+  // If window already exists, check if it's healthy
   if (sessionManagerWindow && !sessionManagerWindow.isDestroyed()) {
-    sessionManagerWindow.focus();
-    // Send filter update if provided
-    if (filterProject) {
-      sessionManagerWindow.webContents.send('filter-project', filterProject);
-    }
+    // Check if the window content is corrupted
+    sessionManagerWindow.webContents.executeJavaScript(`
+      document.body && document.body.textContent && document.body.textContent.length > 0
+    `).then(isHealthy => {
+      if (isHealthy) {
+        sessionManagerWindow?.focus();
+        // Send filter update if provided
+        if (filterProject) {
+          sessionManagerWindow?.webContents.send('filter-project', filterProject);
+        }
+      } else {
+        // Window content is corrupted, recreate it
+        console.warn('[SessionManager] Window content corrupted, recreating window');
+        sessionManagerWindow?.destroy();
+        sessionManagerWindow = null;
+        createSessionManagerWindow(filterProject);
+      }
+    }).catch(() => {
+      // Error checking health, recreate window
+      console.warn('[SessionManager] Error checking window health, recreating window');
+      sessionManagerWindow?.destroy();
+      sessionManagerWindow = null;
+      createSessionManagerWindow(filterProject);
+    });
     return;
   }
 
@@ -36,22 +55,66 @@ export function createSessionManagerWindow(filterProject?: string) {
   });
 
   // Load the main app with a query parameter to indicate Session Manager mode
-  if (process.env.NODE_ENV === 'development') {
-    const url = filterProject 
-      ? `http://localhost:5273/?mode=session-manager&filterProject=${encodeURIComponent(filterProject)}`
-      : 'http://localhost:5273/?mode=session-manager';
-    sessionManagerWindow.loadURL(url);
-  } else {
-    const query: any = { mode: 'session-manager' };
-    if (filterProject) {
-      query.filterProject = filterProject;
+  const loadContent = () => {
+    if (process.env.NODE_ENV === 'development') {
+      const url = filterProject 
+        ? `http://localhost:5273/?mode=session-manager&filterProject=${encodeURIComponent(filterProject)}`
+        : 'http://localhost:5273/?mode=session-manager';
+      return sessionManagerWindow!.loadURL(url);
+    } else {
+      const query: any = { mode: 'session-manager' };
+      if (filterProject) {
+        query.filterProject = filterProject;
+      }
+      return sessionManagerWindow!.loadFile(join(__dirname, '../renderer/index.html'), { query });
     }
-    sessionManagerWindow.loadFile(join(__dirname, '../renderer/index.html'), { query });
-  }
+  };
+
+  loadContent().catch(err => {
+    console.error('[SessionManager] Failed to load window content:', err);
+    // Try to reload once
+    setTimeout(() => {
+      if (sessionManagerWindow && !sessionManagerWindow.isDestroyed()) {
+        loadContent().catch(err2 => {
+          console.error('[SessionManager] Failed to reload window content:', err2);
+        });
+      }
+    }, 1000);
+  });
 
   // Show window when ready
   sessionManagerWindow.once('ready-to-show', () => {
     sessionManagerWindow?.show();
+  });
+
+  // Handle renderer process crashes
+  sessionManagerWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error('[SessionManager] Renderer process gone:', details);
+    if (sessionManagerWindow && !sessionManagerWindow.isDestroyed()) {
+      // Reload the window
+      sessionManagerWindow.reload();
+    }
+  });
+
+  // Handle unresponsive renderer
+  sessionManagerWindow.webContents.on('unresponsive', () => {
+    console.warn('[SessionManager] Window became unresponsive');
+    const choice = dialog.showMessageBoxSync(sessionManagerWindow!, {
+      type: 'warning',
+      buttons: ['Reload', 'Keep Waiting'],
+      defaultId: 0,
+      message: 'Session Manager is not responding',
+      detail: 'Would you like to reload the window?'
+    });
+    
+    if (choice === 0 && sessionManagerWindow && !sessionManagerWindow.isDestroyed()) {
+      sessionManagerWindow.reload();
+    }
+  });
+
+  // Handle responsive again
+  sessionManagerWindow.webContents.on('responsive', () => {
+    console.log('[SessionManager] Window became responsive again');
   });
 
   // Clean up when closed

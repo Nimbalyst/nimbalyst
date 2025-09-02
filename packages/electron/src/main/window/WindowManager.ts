@@ -249,21 +249,66 @@ export function createWindow(
             windowDevToolsState.set(windowId, false);
         });
 
-        // Load the HTML file
-        if (process.env.NODE_ENV === 'development') {
-            console.log('[MAIN] Loading from dev server');
-            window.loadURL('http://localhost:5273');
-        } else {
-            console.log('[MAIN] Loading from built files');
-            // Use loadFile which handles App Translocation properly
-            const htmlPath = join(__dirname, '../renderer/index.html');
-            window.loadFile(htmlPath);
-        }
+        // Load the HTML file with error handling
+        const loadContent = () => {
+            if (process.env.NODE_ENV === 'development') {
+                console.log('[MAIN] Loading from dev server');
+                return window.loadURL('http://localhost:5273');
+            } else {
+                console.log('[MAIN] Loading from built files');
+                // Use loadFile which handles App Translocation properly
+                const htmlPath = join(__dirname, '../renderer/index.html');
+                return window.loadFile(htmlPath);
+            }
+        };
+        
+        loadContent().catch(err => {
+            console.error('[MAIN] Failed to load window content:', err);
+            // Try to reload once
+            setTimeout(() => {
+                if (!window.isDestroyed()) {
+                    loadContent().catch(err2 => {
+                        console.error('[MAIN] Failed to reload window content:', err2);
+                    });
+                }
+            }, 1000);
+        });
 
         // Show window when ready
         window.once('ready-to-show', () => {
             console.log('[MAIN] Window ready to show at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
             window.show();
+        });
+
+        // Handle renderer process crashes
+        window.webContents.on('render-process-gone', (event, details) => {
+            console.error('[MAIN] Renderer process gone:', details);
+            if (!window.isDestroyed()) {
+                // Reload the window
+                window.reload();
+            }
+        });
+
+        // Handle unresponsive renderer
+        window.webContents.on('unresponsive', () => {
+            console.warn('[MAIN] Window became unresponsive');
+            const { dialog } = require('electron');
+            const choice = dialog.showMessageBoxSync(window, {
+                type: 'warning',
+                buttons: ['Reload', 'Keep Waiting'],
+                defaultId: 0,
+                message: 'The window is not responding',
+                detail: 'Would you like to reload the window?'
+            });
+            
+            if (choice === 0 && !window.isDestroyed()) {
+                window.reload();
+            }
+        });
+
+        // Handle responsive again
+        window.webContents.on('responsive', () => {
+            console.log('[MAIN] Window became responsive again');
         });
 
         // When the window is ready, send initial data

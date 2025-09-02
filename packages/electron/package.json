@@ -14,10 +14,10 @@
     "postinstall": "electron-builder install-app-deps || true",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:dist": "npm run build && electron-builder",
-    "build:mac": "npm run build && node build/configure-build.js && electron-builder --mac",
-    "build:mac:signed": "npm run build && node build/configure-build.js && electron-builder --mac",
-    "build:mac:notarized": "npm run build && node build/configure-build.js && REQUIRE_NOTARIZE=true electron-builder --mac",
-    "build:mac:local": "SKIP_NOTARIZE=true npm run build && SKIP_NOTARIZE=true node build/configure-build.js && electron-builder --mac",
+    "build:mac": "npm run build && node -r dotenv/config build/configure-build.js && node build/build-with-env.js --mac",
+    "build:mac:signed": "npm run build && node -r dotenv/config build/configure-build.js && node build/build-with-env.js --mac",
+    "build:mac:notarized": "npm run build && node -r dotenv/config build/configure-build.js && REQUIRE_NOTARIZE=true node build/build-with-env.js --mac",
+    "build:mac:local": "SKIP_NOTARIZE=true npm run build && SKIP_NOTARIZE=true node -r dotenv/config build/configure-build.js && node build/build-with-env.js --mac",
     "build:win": "npm run build && electron-builder --win",
     "build:linux": "npm run build && electron-builder --linux",
     "test": "vitest",
@@ -101,6 +101,20 @@
       "icon": "icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "signIgnore": [
         "node_modules/@anthropic-ai/claude-code/vendor/.*\\.jar$"
       ],
@@ -118,6 +132,21 @@
       ],
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "dmg": {
+      "format": "UDZO",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     },
     "win": {
       "target": "nsis"
