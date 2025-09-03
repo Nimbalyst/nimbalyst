@@ -6,7 +6,7 @@ node_modules/
 
 # Build outputs
 dist/
-build/
+#build/
 esm/build/
 split/build/
 out/

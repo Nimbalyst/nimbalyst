@@ -70,6 +70,21 @@ export const GenericAIIcon: React.FC<IconProps> = ({ size = 20, className = '' }
   </svg>
 );
 
+// Component wrapper for provider icons
+export const ProviderIcon: React.FC<{ provider: string } & IconProps> = ({ provider, ...props }) => {
+  switch (provider) {
+    case 'claude':
+    case 'claude-code':
+      return <ClaudeIcon {...props} />;
+    case 'openai':
+      return <OpenAIIcon {...props} />;
+    case 'lmstudio':
+      return <LMStudioIcon {...props} />;
+    default:
+      return <GenericAIIcon {...props} />;
+  }
+};
+
 // Helper function to get the right icon
 export const getProviderIcon = (provider: string, props?: IconProps) => {
   switch (provider) {

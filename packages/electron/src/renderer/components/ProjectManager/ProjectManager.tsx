@@ -6,7 +6,7 @@ if (typeof window !== 'undefined') {
   // Get theme from localStorage or system preference
   const savedTheme = localStorage.getItem('theme');
   const root = document.documentElement;
-  
+
   if (savedTheme === 'dark' || savedTheme === 'crystal-dark') {
     root.setAttribute('data-theme', savedTheme);
   } else if (savedTheme === 'light') {
@@ -77,7 +77,7 @@ export const ProjectManager: React.FC = () => {
 
   const handleOpenProject = async () => {
     if (!selectedProject) return;
-    
+
     try {
       await window.electronAPI.projectManager.openProject(selectedProject.path);
     } catch (error) {
@@ -109,7 +109,7 @@ export const ProjectManager: React.FC = () => {
 
   const handleRemoveFromRecent = async () => {
     if (!selectedProject) return;
-    
+
     try {
       await window.electronAPI.projectManager.removeRecent(selectedProject.path);
       await loadProjects();
@@ -122,31 +122,31 @@ export const ProjectManager: React.FC = () => {
     if (!timestamp) {
       return 'Unknown';
     }
-    
+
     // Convert string to number if needed
     let ts = typeof timestamp === 'string' ? parseInt(timestamp, 10) : timestamp;
-    
+
     // If timestamp is in seconds (Unix timestamp), convert to milliseconds
     // Unix timestamps are typically 10 digits, JS timestamps are 13
     if (ts && ts < 10000000000) {
       ts = ts * 1000;
     }
-    
+
     if (!ts || isNaN(ts) || ts === 0) {
       return 'Unknown';
     }
-    
+
     const date = new Date(ts);
-    
+
     // Check if date is valid
     if (isNaN(date.getTime())) {
       return 'Never';
     }
-    
+
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    
+
     if (days < 0) {
       return date.toLocaleDateString();
     } else if (days === 0) {
@@ -168,7 +168,7 @@ export const ProjectManager: React.FC = () => {
     if (!bytes || isNaN(bytes) || bytes < 0) {
       return '0 B';
     }
-    
+
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -178,12 +178,12 @@ export const ProjectManager: React.FC = () => {
     <div className="project-manager">
       <div className="sidebar">
         <div className="sidebar-header">
-          <h2>Recent Projects</h2>
+          <div className="app-branding">
+            <img src="/icon.png" alt="Preditor" className="app-logo" />
+            <h2>Preditor</h2>
+          </div>
           <div className="action-buttons">
-            <button className="btn btn-primary" onClick={handleCreateProject}>
-              New Project
-            </button>
-            <button className="btn" onClick={handleBrowse}>
+            <button className="btn btn-primary" onClick={handleBrowse}>
               Open Folder
             </button>
           </div>
@@ -195,11 +195,8 @@ export const ProjectManager: React.FC = () => {
               <div className="spinner"></div>
             </div>
           ) : projects.length === 0 ? (
-            <div className="empty-state">
+            <div className="sidebar-empty">
               <p>No recent projects</p>
-              <button className="btn btn-primary" onClick={handleBrowse}>
-                Open Your First Project
-              </button>
             </div>
           ) : (
             projects.map(project => (
@@ -290,16 +287,28 @@ export const ProjectManager: React.FC = () => {
             </div>
           </>
         ) : (
-          <div className="empty-state">
-            <h2>Select a Project</h2>
-            <p>Choose a project from the list or open a new folder</p>
-            <div className="empty-actions">
-              <button className="btn btn-primary" onClick={handleCreateProject}>
-                Create New Project
-              </button>
-              <button className="btn" onClick={handleBrowse}>
-                Open Existing Folder
-              </button>
+          <div className="welcome-container">
+            <div className="welcome-content">
+              <div className="welcome-header">
+                <img src="/icon.png" alt="Preditor" className="welcome-logo" />
+                <div className="welcome-text">
+                  <h1 className="welcome-title">Preditor</h1>
+                  <p className="welcome-subtitle">AI-native markdown editor</p>
+                </div>
+              </div>
+
+              <div className="welcome-info-compact">
+                <p className="welcome-description">
+                  Projects are local folders on your computer. Open any folder to view and edit all markdown files within it.
+                </p>
+              </div>
+
+              <div className="welcome-actions">
+                <button className="btn btn-large btn-gradient" onClick={handleBrowse}>
+                  <span className="material-symbols-outlined">folder_open</span>
+                  Open Folder
+                </button>
+              </div>
             </div>
           </div>
         )}

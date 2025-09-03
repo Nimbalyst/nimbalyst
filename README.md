@@ -315,7 +315,6 @@ The editor uses a modular plugin architecture:
 ### Node System
 Custom Lexical nodes extend base functionality:
 - **ImageNode/InlineImageNode**: Image handling
-- **EquationNode**: KaTeX math equations
 - **EmojiNode, MentionNode, KeywordNode**: Special text elements
 - **ExcalidrawNode**: Drawing integration
 - **Layout nodes**: Column layouts

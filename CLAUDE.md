@@ -71,7 +71,7 @@ Built with modern React, TypeScript, and Vite. Uses extensive Lexical packages (
 The Electron app supports notarized distribution for macOS:
 
 - **Signing configuration**: Uses Developer ID Application certificate
-- **Build scripts**: `npm run build:mac:notarized` for notarized build, `build:mac:local` for local testing
+- **Build scripts**: \`npm run build:mac:notarized`&#32;for notarized build, `build:mac:local` for local testing
 - **Binary handling**: Properly signs ripgrep and other bundled tools
 - **JAR exclusion**: Automatically removes JAR files that can't be notarized
 - **Entitlements**: Configured for hardened runtime with necessary exceptions
@@ -121,8 +121,8 @@ The Electron app includes comprehensive window state persistence:
 ### AI Providers
 - **Claude**: Direct Claude API integration with streaming support and tool use
 - **Claude Code**: MCP (Model Context Protocol) integration for advanced code editing capabilities
-  - Handles its own model selection internally - do not pass model IDs
-  - Provides enhanced code-aware features through MCP
+- Handles its own model selection internally - do not pass model IDs
+- Provides enhanced code-aware features through MCP
 - **OpenAI**: GPT-4 and GPT-3.5 models via OpenAI API
 - **LM Studio**: Local model support for privacy-focused usage
 - **Multiple provider support**: Extensible architecture for adding new AI providers

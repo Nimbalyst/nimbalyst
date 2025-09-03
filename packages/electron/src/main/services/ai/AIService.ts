@@ -8,9 +8,9 @@ import { SessionManager } from './SessionManager';
 import { ProviderFactory } from './ProviderFactory';
 import { ModelRegistry } from './ModelRegistry';
 import { AIProvider } from './AIProvider';
-import { 
-  DocumentContext, 
-  Message, 
+import {
+  DocumentContext,
+  Message,
   ProviderConfig,
   ToolHandler,
   DiffArgs,
@@ -47,7 +47,7 @@ export class AIService {
 
     this.initializeApiKeys();
     this.setupIpcHandlers();
-    
+
     // Clean up any empty messages from existing sessions on startup
     const cleaned = this.sessionManager.cleanupAllSessions();
     if (cleaned > 0) {
@@ -58,7 +58,7 @@ export class AIService {
   private initializeApiKeys() {
     // Check if we have API key stored
     const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
-    
+
     // If we have an env variable and no stored key, save it
     if (process.env.ANTHROPIC_API_KEY && !apiKeys['anthropic']) {
       console.log('Initializing API key from environment variable');
@@ -72,31 +72,31 @@ export class AIService {
     ipcMain.handle('ai:hasApiKey', async () => {  // Keeping the name for backward compatibility
       const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
       const providerSettings = this.settingsStore.get('providerSettings', {}) as any;
-      
+
       // Check Claude/Claude Code (needs API key)
       const hasAnthropicKey = !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY);
       if (hasAnthropicKey) {
         // Claude Code is always available with API key
         // Regular Claude needs to be enabled with models
         const hasClaudeCode = true; // Always available with key
-        const hasClaude = providerSettings['claude']?.enabled && 
+        const hasClaude = providerSettings['claude']?.enabled &&
                          providerSettings['claude']?.models?.length > 0;
         if (hasClaudeCode || hasClaude) return true;
       }
-      
+
       // Check OpenAI (needs API key and enabled models)
       const hasOpenAIKey = !!(apiKeys['openai'] || process.env.OPENAI_API_KEY);
       if (hasOpenAIKey) {
-        const hasOpenAI = providerSettings['openai']?.enabled && 
+        const hasOpenAI = providerSettings['openai']?.enabled &&
                          providerSettings['openai']?.models?.length > 0;
         if (hasOpenAI) return true;
       }
-      
+
       // Check LM Studio (doesn't need API key but needs enabled models)
       const hasLMStudio = providerSettings['lmstudio']?.enabled === true &&
                          providerSettings['lmstudio']?.models?.length > 0;
       if (hasLMStudio) return true;
-      
+
       return false;
     });
 
@@ -114,16 +114,23 @@ export class AIService {
 
     // Create new session with provider and model selection
     ipcMain.handle('ai:createSession', async (
-      event, 
+      event,
       provider: AIProviderType,
       documentContext?: DocumentContext,
       projectPath?: string,
       modelId?: string
     ) => {
+      console.log('[AIService] ai:createSession called:', {
+        provider,
+        modelId,
+        hasDocumentContext: !!documentContext,
+        projectPath
+      });
+      
       // Get API key based on provider
       const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
       let apiKey: string | undefined;
-      
+
       switch (provider) {
         case 'claude':
         case 'claude-code':
@@ -153,13 +160,13 @@ export class AIService {
         const defaultModel = ModelRegistry.getDefaultModel(provider);
         model = defaultModel?.id;
       }
-      
+
       // For claude-code, don't pass a model at all - let it handle its own selection
       const providerConfig: any = {
         maxTokens: this.getProviderSetting(provider, 'maxTokens'),
         temperature: this.getProviderSetting(provider, 'temperature')
       };
-      
+
       // Only add model to config if we have one and it's not claude-code
       if (model && provider !== 'claude-code') {
         // Strip provider prefix if present (e.g., "openai:gpt-4" -> "gpt-4")
@@ -189,25 +196,25 @@ export class AIService {
 
       // Create and initialize provider
       const providerInstance = ProviderFactory.createProvider(provider, session.id);
-      
+
       // Build config based on provider type
       const initConfig: any = {
         apiKey,
         maxTokens: session.providerConfig?.maxTokens,
         temperature: session.providerConfig?.temperature
       };
-      
+
       // Only add model if it exists and provider isn't claude-code
       if (session.providerConfig?.model && provider !== 'claude-code') {
         initConfig.model = session.providerConfig.model;
       }
-      
+
       // Add LMStudio-specific config
       if (provider === 'lmstudio') {
         const lmstudioSettings = this.settingsStore.get('providerSettings.lmstudio', {}) as any;
         initConfig.baseUrl = lmstudioSettings.baseUrl || apiKeys['lmstudio_url'] || 'http://127.0.0.1:8234';
       }
-      
+
       await providerInstance.initialize(initConfig);
 
       // Register tool handler
@@ -234,7 +241,7 @@ export class AIService {
     ) => {
       // Get or load the session
       let session = this.sessionManager.getCurrentSession();
-      
+
       if (!session) {
         if (sessionId) {
           session = this.sessionManager.loadSession(sessionId, projectPath);
@@ -263,16 +270,16 @@ export class AIService {
       // Get or create provider for this session
       console.log(`[AIService] Getting provider for: ${session.provider}, sessionId: ${session.id}`);
       let provider = ProviderFactory.getProvider(session.provider, session.id);
-      
+
       // If provider doesn't exist, create and initialize it
       if (!provider) {
         console.log(`[AIService] Provider not found, creating new ${session.provider} provider`);
         const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
-        
+
         // Get the correct API key based on provider
         let apiKey: string | undefined;
         let errorMessage: string;
-        
+
         switch (session.provider) {
           case 'claude':
           case 'claude-code':
@@ -290,30 +297,48 @@ export class AIService {
           default:
             throw new Error(`Unknown provider: ${session.provider}`);
         }
-        
+
         if (!apiKey) {
           throw new Error(errorMessage);
         }
-        
+
         // Create the provider
         provider = ProviderFactory.createProvider(session.provider, session.id);
-        
+
         const reinitConfig: any = {
           apiKey,
           maxTokens: session.providerConfig?.maxTokens,
           temperature: session.providerConfig?.temperature
         };
-        
+
         // Add baseUrl for LMStudio
         if (session.provider === 'lmstudio') {
           reinitConfig.baseUrl = apiKeys['lmstudio_url'] || 'http://127.0.0.1:8234';
         }
-        
+
         // Only add model if it exists and provider isn't claude-code
         if ((session.model || session.providerConfig?.model) && session.provider !== 'claude-code') {
-          reinitConfig.model = session.model || session.providerConfig?.model;
+          const fullModel = session.model || session.providerConfig?.model;
+          console.log('[AIService] Reinitializing provider with model:', {
+            sessionModel: session.model,
+            providerConfigModel: session.providerConfig?.model,
+            fullModel,
+            provider: session.provider
+          });
+          
+          // Strip provider prefix if present (e.g., "claude:claude-sonnet-4" -> "claude-sonnet-4")
+          if (fullModel && fullModel.includes(':')) {
+            reinitConfig.model = fullModel.split(':').slice(1).join(':');
+            console.log('[AIService] Stripped model prefix:', {
+              original: fullModel,
+              stripped: reinitConfig.model
+            });
+          } else {
+            reinitConfig.model = fullModel;
+          }
         }
-        
+
+        console.log('[AIService] About to initialize provider with config:', reinitConfig);
         await provider.initialize(reinitConfig);
 
         // Register tool handler
@@ -347,7 +372,7 @@ export class AIService {
             case 'tool_call':
               if (chunk.toolCall) {
                 toolCalls.push(chunk.toolCall);
-                
+
                 // Save tool call as a separate message in the session
                 const toolMessage: Message = {
                   role: 'tool',
@@ -356,7 +381,7 @@ export class AIService {
                   toolCall: chunk.toolCall
                 };
                 this.sessionManager.addMessage(toolMessage);
-                
+
                 // Send tool call to renderer
                 // For applyDiff, include it as BOTH an edit AND a toolCall
                 if (chunk.toolCall.name === 'applyDiff') {
@@ -365,7 +390,7 @@ export class AIService {
                     replacements: chunk.toolCall.arguments.replacements
                   };
                   edits.push(edit);  // Save edit for the assistant message
-                  
+
                   event.sender.send('ai:streamResponse', {
                     partial: '',
                     isComplete: false,
@@ -476,12 +501,12 @@ export class AIService {
         return { content: fullResponse };
       } catch (error) {
         console.error('AI service error:', error);
-        
+
         // Send error to renderer
         event.sender.send('ai:error', {
           message: error instanceof Error ? error.message : 'Unknown error occurred'
         });
-        
+
         throw error;
       }
     });
@@ -503,12 +528,12 @@ export class AIService {
     // Clear session
     ipcMain.handle('ai:clearSession', async () => {
       this.sessionManager.clearCurrentSession();
-      
+
       // Abort any ongoing request
       if (this.currentProvider) {
         this.currentProvider.abort();
       }
-      
+
       return { success: true };
     });
 
@@ -544,12 +569,12 @@ export class AIService {
     // Delete session
     ipcMain.handle('ai:deleteSession', async (event, sessionId: string, projectPath?: string) => {
       const success = this.sessionManager.deleteSession(sessionId, projectPath);
-      
+
       // Clean up provider if it exists
       if (success) {
         ProviderFactory.destroyProvider(sessionId);
       }
-      
+
       return { success };
     });
 
@@ -566,7 +591,7 @@ export class AIService {
     ipcMain.handle('ai:getSettings', async () => {
       const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
       const providerSettings = this.settingsStore.get('providerSettings', {}) as any;
-      
+
       return {
         defaultProvider: this.settingsStore.get('defaultProvider', 'claude-code'),
         apiKeys: this.maskApiKeys(apiKeys),
@@ -578,11 +603,11 @@ export class AIService {
       if (settings.defaultProvider) {
         this.settingsStore.set('defaultProvider', settings.defaultProvider);
       }
-      
+
       if (settings.apiKeys) {
         // Only update changed API keys
         const currentKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
-        
+
         // Save Anthropic key
         if (settings.apiKeys.anthropic !== undefined) {
           const key = settings.apiKeys.anthropic;
@@ -590,7 +615,7 @@ export class AIService {
             currentKeys['anthropic'] = key as string;
           }
         }
-        
+
         // Save OpenAI key
         if (settings.apiKeys.openai !== undefined) {
           const key = settings.apiKeys.openai;
@@ -598,26 +623,26 @@ export class AIService {
             currentKeys['openai'] = key as string;
           }
         }
-        
+
         // Save LMStudio URL
         if (settings.apiKeys.lmstudio_url !== undefined) {
           currentKeys['lmstudio_url'] = settings.apiKeys.lmstudio_url as string;
         }
-        
+
         this.settingsStore.set('apiKeys', currentKeys);
       }
-      
+
       if (settings.providerSettings) {
         this.settingsStore.set('providerSettings', settings.providerSettings);
       }
-      
+
       return { success: true };
     });
 
     // Test connection
     ipcMain.handle('ai:testConnection', async (event, provider: string) => {
       const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
-      
+
       // Get the appropriate API key based on provider
       let apiKey: string | undefined;
       switch (provider) {
@@ -641,22 +666,35 @@ export class AIService {
         default:
           return { success: false, error: `Unknown provider: ${provider}` };
       }
-      
+
       try {
         // For OpenAI, just try to list models as a connection test
         if (provider === 'openai') {
           const models = await ModelRegistry.getModelsForProvider('openai', apiKey);
           return { success: models.length > 0, provider };
         }
-        
+
         // For Claude providers, use the existing test
         if (provider === 'claude' || provider === 'claude-code') {
-          const testProvider = provider === 'claude' 
+          console.log('[AIService] testConnection - Testing provider:', provider);
+          
+          const testProvider = provider === 'claude'
             ? new (await import('./providers/ClaudeProvider')).ClaudeProvider()
             : new (await import('./providers/ClaudeCodeProvider')).ClaudeCodeProvider();
+
+          // Initialize with a default model for testing
+          const config: any = { apiKey };
+          if (provider === 'claude') {
+            // Use the provider's default model for testing (already includes prefix)
+            const defaultModel = await ModelRegistry.getDefaultModel('claude');
+            console.log('[AIService] testConnection - Got default model:', defaultModel);
+            config.model = defaultModel;
+          }
           
-          await testProvider.initialize({ apiKey });
-          
+          console.log('[AIService] testConnection - Initializing with config:', config);
+          await testProvider.initialize(config);
+
+          console.log('[AIService] Testing connection by sending a simple message...');
           // Try a simple message
           const response = testProvider.sendMessage('Say "Hello" in one word');
           for await (const chunk of response) {
@@ -664,10 +702,10 @@ export class AIService {
               throw new Error(chunk.error);
             }
           }
-          
+
           testProvider.destroy();
         }
-        
+
         // For LMStudio, test the endpoint
         if (provider === 'lmstudio') {
           const baseUrl = apiKeys['lmstudio_url'] || 'http://127.0.0.1:8234';
@@ -676,7 +714,7 @@ export class AIService {
             throw new Error(`LMStudio server not responding at ${baseUrl}`);
           }
         }
-        
+
         return { success: true, provider };
       } catch (error: any) {
         return { success: false, error: error.message };
@@ -685,19 +723,27 @@ export class AIService {
 
     // Get ALL available models for configuration UI
     ipcMain.handle('ai:getAllModels', async () => {
+      console.log('[AIService] ai:getAllModels called');
+      
       // Clear cache to get fresh models
       ModelRegistry.clearCache();
-      
+
       const providerSettings = this.settingsStore.get('providerSettings', {}) as Record<AIProviderType, any>;
       const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
       
+      console.log('[AIService] ai:getAllModels - API keys available:', {
+        anthropic: !!apiKeys['anthropic'],
+        openai: !!apiKeys['openai'],
+        lmstudio_url: apiKeys['lmstudio_url']
+      });
+
       // Get all models - pass provider settings for LMStudio URL
       const modelsConfig = {
         ...apiKeys,
         lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
       };
       const allModels = await ModelRegistry.getAllModels(modelsConfig);
-      
+
       // Group ALL models by provider (for configuration UI)
       const grouped: Record<string, any[]> = {};
       for (const model of allModels) {
@@ -706,32 +752,32 @@ export class AIService {
         }
         grouped[model.provider].push(model);
       }
-      
+
       return {
         success: true,
         models: allModels,
         grouped
       };
     });
-    
+
     // Clear model cache
     ipcMain.handle('ai:clearModelCache', async () => {
       ModelRegistry.clearCache();
       return { success: true };
     });
-    
+
     // Get ENABLED models for actual use
     ipcMain.handle('ai:getModels', async () => {
       const providerSettings = this.settingsStore.get('providerSettings', {}) as Record<AIProviderType, any>;
       const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
-      
+
       // Get all models - pass provider settings for LMStudio URL
       const modelsConfig = {
         ...apiKeys,
         lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
       };
       const allModels = await ModelRegistry.getAllModels(modelsConfig);
-      
+
       // Build enabled providers map
       const enabledProviders: Record<AIProviderType, { enabled: boolean; models?: string[] }> = {
         'claude': {
@@ -752,7 +798,7 @@ export class AIService {
           models: providerSettings['lmstudio']?.models
         }
       };
-      
+
       // Filter to only enabled models
       const enabledModels = allModels.filter(model => {
         const provider = enabledProviders[model.provider as AIProviderType];
@@ -764,7 +810,7 @@ export class AIService {
         // Otherwise include all models for this provider
         return true;
       });
-      
+
       // Group ENABLED models by provider (not all models)
       const grouped: Record<string, any[]> = {};
       for (const model of enabledModels) {
@@ -773,7 +819,7 @@ export class AIService {
         }
         grouped[model.provider].push(model);
       }
-      
+
       return {
         success: true,
         models: enabledModels.map(m => ({
@@ -799,19 +845,19 @@ export class AIService {
       applyDiff: async (args: DiffArgs): Promise<DiffResult> => {
         // Send the diff to the renderer to apply
         const resultChannel = `applyDiff-result-${Date.now()}`;
-        
+
         return new Promise((resolve) => {
           // Set up one-time listener for result
           ipcMain.once(resultChannel, (event, result) => {
             resolve(result);
           });
-          
+
           // Send the diff to renderer
           webContents.send('ai:applyDiff', {
             replacements: args.replacements,
             resultChannel
           });
-          
+
           // Timeout after 10 seconds
           setTimeout(() => {
             resolve({

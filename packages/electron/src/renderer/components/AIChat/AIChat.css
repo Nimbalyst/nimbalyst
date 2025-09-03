@@ -156,17 +156,65 @@
   gap: 8px;
 }
 
-.ai-chat-model-info {
-  display: flex;
+.ai-chat-model-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+}
+
+.ai-chat-provider-tag {
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  padding: 2px 8px;
+  padding: 3px 8px;
   background: var(--background-tertiary);
-  border-radius: 4px;
-  min-width: 0;
-  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.ai-chat-model-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  background: var(--background-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  opacity: 0.9;
+}
+
+/* Provider-specific tag colors */
+.model-tag-claude {
+  background: rgba(239, 154, 58, 0.1);
+  border-color: rgba(239, 154, 58, 0.3);
+  color: #ef9a3a;
+}
+
+.model-tag-claude-code {
+  background: rgba(239, 154, 58, 0.15);
+  border-color: rgba(239, 154, 58, 0.4);
+  color: #ef9a3a;
+}
+
+.model-tag-openai {
+  background: rgba(16, 163, 127, 0.1);
+  border-color: rgba(16, 163, 127, 0.3);
+  color: #10a37f;
+}
+
+.model-tag-lmstudio {
+  background: rgba(156, 39, 176, 0.1);
+  border-color: rgba(156, 39, 176, 0.3);
+  color: #9c27b0;
 }
 
 .ai-chat-model-name {

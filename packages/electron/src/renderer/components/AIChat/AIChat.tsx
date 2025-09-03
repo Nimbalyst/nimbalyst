@@ -33,9 +33,9 @@ export function AIChat({
   onSessionLoaded,
   onShowApiKeyError
 }: AIChatProps & { onShowApiKeyError?: () => void }) {
-  const [messages, setMessages] = useState<Array<{ 
-    role: 'user' | 'assistant' | 'tool'; 
-    content: string; 
+  const [messages, setMessages] = useState<Array<{
+    role: 'user' | 'assistant' | 'tool';
+    content: string;
     edits?: any[];
     toolCall?: {  // For tool role messages, this contains the tool call data
       name: string;
@@ -68,28 +68,28 @@ export function AIChat({
     const saved = localStorage.getItem('ai-selected-model');
     return saved || 'claude-code';  // Default to Claude Code
   });
-  
+
   // Parse provider and model from the combined ID
   const parseModelId = (modelId: string): { provider: string; model: string | undefined } => {
     // Special case for claude-code which doesn't have a model suffix
     if (modelId === 'claude-code') {
       return { provider: 'claude-code', model: undefined };
     }
-    
+
     const [provider, ...modelParts] = modelId.split(':');
     const model = modelParts.join(':'); // Handle model IDs that might contain ':'
-    
+
     return { provider, model };
   };
 
   const getModelDisplayName = (modelId: string): string => {
     if (!modelId) return '';
-    
+
     // Special cases
     if (modelId === 'claude-code') return 'Claude Code';
-    
+
     const { provider, model } = parseModelId(modelId);
-    
+
     // Provider-specific display names
     switch (provider) {
       case 'claude':
@@ -139,11 +139,11 @@ export function AIChat({
         // Final response with edits
         setMessages(prev => {
           const newMessages = [...prev];
-          
+
           // Check if we have an existing assistant message (might have been created during streaming)
           const lastMessage = newMessages.length > 0 ? newMessages[newMessages.length - 1] : null;
           const hasAssistantMessage = lastMessage && lastMessage.role === 'assistant';
-          
+
           if (hasAssistantMessage) {
             // Keep existing content if no new content provided (preserves streaming text like "Adding haiku")
             if (!lastMessage.content && data.content) {
@@ -155,8 +155,8 @@ export function AIChat({
             }
           } else {
             // Create new assistant message
-            newMessages.push({ 
-              role: 'assistant', 
+            newMessages.push({
+              role: 'assistant',
               content: data.content || '',
               edits: data.edits
             });
@@ -164,33 +164,33 @@ export function AIChat({
           return newMessages;
         });
         setIsLoading(false);
-        
+
         // Auto-apply edits when they arrive
         if (data.edits && data.edits.length > 0) {
           data.edits.forEach(async (edit: any) => {
             logger.bridge.info('Auto-applying edit from Claude:', edit);
-            
+
             // Apply the edit through the API (which handles both applying and error reporting)
             const result = await aiApi.applyEdit(edit);
-            
+
             // If we have onApplyEdit callback, notify the parent AFTER the edit is applied
             // This is for UI updates, not for actually applying the edit
             if (onApplyEdit) {
               // Pass the result so the parent knows if it succeeded
               onApplyEdit(edit, currentUserMessage, data.content);
             }
-            
+
             if (!result.success) {
               // Edit failed - send an automatic follow-up message to Claude
               const currentContent = documentContext?.getLatestContent ? documentContext.getLatestContent() : documentContext?.content || '';
               const errorMessage = `The previous edit command failed because: "${result.error}"\n\nThe current document contains:\n\`\`\`markdown\n${currentContent}\n\`\`\`\n\nPlease provide a corrected edit command using the EXACT text from the document above.`;
-              
+
               // Add error notification to chat
               setMessages(prev => [...prev, {
                 role: 'assistant',
                 content: `⚠️ Edit failed: ${result.error}\n\nAutomatically asking Claude to correct...`
               }]);
-              
+
               // Send the error back to Claude so it can correct itself
               setTimeout(() => {
                 handleSendMessage(errorMessage);
@@ -205,7 +205,7 @@ export function AIChat({
           setMessages(prev => {
             const newMessages = [...prev];
             const lastMessage = newMessages[newMessages.length - 1];
-            
+
             if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.isStreamingStatus) {
               // Update existing assistant message - replace content, don't append
               // The partial already contains the full accumulated text
@@ -220,14 +220,14 @@ export function AIChat({
             return newMessages;
           });
         }
-        
+
         // Handle edits that come during streaming (before isComplete)
         if (data.edits && data.edits.length > 0) {
           // Update the assistant message with edits
           setMessages(prev => {
             const newMessages = [...prev];
             const lastMessage = newMessages[newMessages.length - 1];
-            
+
             if (lastMessage && lastMessage.role === 'assistant') {
               // Only add edits if they haven't been added yet
               if (!lastMessage.edits) {
@@ -252,29 +252,29 @@ export function AIChat({
             return newMessages;
           });
         }
-        
+
         // Handle tool calls that come during streaming
         if (data.toolCalls && data.toolCalls.length > 0) {
           // Track tool calls to avoid duplicates
           setMessages(prev => {
             const newMessages = [...prev];
-            
+
             // Create a set of existing tool call signatures for deduplication
             const existingToolCalls = new Set(
               newMessages
                 .filter(m => m.role === 'tool' && m.toolCall)
                 .map(m => `${m.toolCall?.name}-${JSON.stringify(m.toolCall?.arguments)}`)
             );
-            
+
             for (const toolCall of data.toolCalls) {
               // Skip applyDiff tool calls since they're already shown as edits on the assistant message
               if (toolCall.name === 'applyDiff') {
                 continue;
               }
-              
+
               // Create a unique signature for this tool call
               const signature = `${toolCall.name}-${JSON.stringify(toolCall.arguments)}`;
-              
+
               // Only add if we haven't seen this exact tool call before
               if (!existingToolCalls.has(signature)) {
                 newMessages.push({
@@ -297,16 +297,16 @@ export function AIChat({
     const handleError = (error: any) => {
       logger.api.info('Received error from API:', error);
       setIsLoading(false);
-      
+
       // Add error message to chat
       const errorMessage = error.message || 'An error occurred while processing your request';
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
+      setMessages(prev => [...prev, {
+        role: 'assistant',
         content: `❌ Error: ${errorMessage}`,
         isError: true
       }]);
     };
-    
+
     aiApi.on('error', handleError);
 
     // Set up edit request listener
@@ -326,26 +326,26 @@ export function AIChat({
       setIsStreamingToEditor(true);
       isStreamingToEditorRef.current = true; // Set ref immediately
       setStreamingContent(''); // Reset streaming content
-      
+
       // Clear any existing timeout
       if (streamTimeoutRef.current) {
         clearTimeout(streamTimeoutRef.current);
       }
-      
+
       // Set a timeout to detect stuck streaming (30 seconds)
       streamTimeoutRef.current = setTimeout(() => {
         if (isStreamingToEditorRef.current) {
           logger.streaming.info('⚠️ Streaming timeout - ending stuck session');
-          handleStreamEditEnd({ error: 'Streaming timeout after 30 seconds' });
+          handleStreamEditEnd({ error: 'Streaming timeout after 60 seconds' });
         }
-      }, 30000);
-      
+      }, 60000);
+
       // Generate a unique ID for this streaming session
       const editId = `stream-${Date.now()}`;
       setStreamingEditId(editId);
       streamingEditIdRef.current = editId; // Set ref immediately
       logger.streaming.info('Generated stream ID:', editId);
-      
+
       // Initialize the streaming edit in the editor
       const aiChatBridge = (window as any).aiChatBridge;
       logger.bridge.info('AI Chat Bridge available:', !!aiChatBridge);
@@ -354,7 +354,7 @@ export function AIChat({
         streamContent: !!aiChatBridge?.streamContent,
         endStreamingEdit: !!aiChatBridge?.endStreamingEdit
       });
-      
+
       if (aiChatBridge?.startStreamingEdit) {
         logger.bridge.info('Calling bridge.startStreamingEdit with:', {
           id: editId,
@@ -367,7 +367,7 @@ export function AIChat({
       } else {
         logger.bridge.info('❌ Bridge method startStreamingEdit not available!');
       }
-      
+
       // Determine position text for display
       let positionText = 'at cursor position';
       if (config.insertAtEnd || config.position === 'end') {
@@ -380,9 +380,9 @@ export function AIChat({
       } else if (config.position === 'cursor') {
         positionText = 'at cursor position';
       }
-      
+
       logger.streaming.info(`📍 Streaming to: ${positionText}`);
-      
+
       // Add a streaming status message
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -406,16 +406,16 @@ export function AIChat({
         contentLength: content?.length,
         preview: content?.substring(0, 50)
       });
-      
+
       if (!isStreaming || !currentStreamId) {
         logger.streaming.info('Ignoring stream content - not in streaming mode');
         return;
       }
-      
+
       // Accumulate streaming content for display
       setStreamingContent(prev => {
         const newContent = prev + content;
-        
+
         // Update the streaming status message with accumulated content
         setMessages(messages => {
           const newMessages = [...messages];
@@ -425,10 +425,10 @@ export function AIChat({
           }
           return newMessages;
         });
-        
+
         return newContent;
       });
-      
+
       // Stream the content to the editor
       const aiChatBridge = (window as any).aiChatBridge;
       if (aiChatBridge?.streamContent) {
@@ -448,12 +448,12 @@ export function AIChat({
         streamingContentLength: streamingContent.length,
         error: data?.error
       });
-      
+
       if (!currentStreamId) {
         logger.streaming.info('No streaming edit ID to end');
         return;
       }
-      
+
       // Finalize the streaming edit in the editor
       const aiChatBridge = (window as any).aiChatBridge;
       if (aiChatBridge?.endStreamingEdit) {
@@ -462,7 +462,7 @@ export function AIChat({
       } else {
         logger.bridge.info('❌ Bridge method endStreamingEdit not available!');
       }
-      
+
       // Update the streaming status to complete or error
       setMessages(prev => {
         const newMessages = [...prev];
@@ -473,17 +473,17 @@ export function AIChat({
         }
         return newMessages;
       });
-      
+
       // Save the streaming status message to the session
       // This ensures it persists when sessions are reloaded
       await loadSessions();
-      
+
       // Clear timeout
       if (streamTimeoutRef.current) {
         clearTimeout(streamTimeoutRef.current);
         streamTimeoutRef.current = null;
       }
-      
+
       setIsStreamingToEditor(false);
       isStreamingToEditorRef.current = false; // Clear ref
       setStreamingEditId(null);
@@ -497,7 +497,7 @@ export function AIChat({
     aiApi.on('streamEditStart', handleStreamEditStart);
     aiApi.on('streamEditContent', handleStreamEditContent);
     aiApi.on('streamEditEnd', handleStreamEditEnd);
-    
+
     // Test that handlers are registered
     logger.ui.info('Event handlers registered:', {
       streamResponse: true,
@@ -525,7 +525,7 @@ export function AIChat({
         const hasKey = await window.electronAPI.aiHasApiKey();
         const previousHasKey = hasApiKey;
         setHasApiKey(hasKey);
-        
+
         // If we now have a provider configured and didn't before, reset initialization
         if (hasKey && !previousHasKey) {
           logger.api.info('AI provider now configured, resetting initialization');
@@ -537,19 +537,19 @@ export function AIChat({
         setHasApiKey(false);
       }
     };
-    
+
     checkApiKey();
-    
+
     // Recheck when window gains focus (user might have configured provider in another window)
     const handleFocus = () => {
       checkApiKey();
     };
-    
+
     // Also check periodically in case settings were changed in the same window
     const interval = setInterval(checkApiKey, 2000); // Check every 2 seconds
-    
+
     window.addEventListener('focus', handleFocus);
-    
+
     return () => {
       window.removeEventListener('focus', handleFocus);
       clearInterval(interval);
@@ -560,32 +560,22 @@ export function AIChat({
   useEffect(() => {
     // Prevent double initialization or initialization without API key
     if (isInitialized || hasApiKey === null || !hasApiKey) return;
-    
+
     let mounted = true;
     const initClaude = async () => {
       try {
         await aiApi.initialize();
-        
+
         // First check if there's an existing session for this project
         const existingSessions = await aiApi.getSessions(projectPath);
         let session;
-        
+
         if (existingSessions && existingSessions.length > 0) {
           // Load the most recent session
           session = await aiApi.loadSession(existingSessions[0].id, projectPath);
-          
-          // Update model based on loaded session
-          if (session.provider) {
-            // Update model for the session (provider:model format)
-            if (session.provider === 'claude-code') {
-              setCurrentModel('claude-code');
-              localStorage.setItem('ai-selected-model', 'claude-code');
-            } else if (session.model) {
-              const modelId = `${session.provider}:${session.model}`;
-              setCurrentModel(modelId);
-              localStorage.setItem('ai-selected-model', modelId);
-            }
-          }
+
+          // Don't override user's selected model - they may have switched providers
+          // The user's selection should take precedence over the session's provider
         } else {
           // Create new session only if none exists
           // Clean the document context for IPC (remove functions)
@@ -599,11 +589,11 @@ export function AIChat({
           const { provider, model } = parseModelId(currentModel);
           session = await aiApi.createSession(cleanDocumentContext, projectPath, provider, model);
         }
-        
+
         if (mounted) {
           setCurrentSessionId(session.id);
           setIsInitialized(true);
-          
+
           // Load existing messages if any
           if (session.messages && session.messages.length > 0) {
             const chatMessages = session.messages.map((msg: any) => ({
@@ -616,12 +606,12 @@ export function AIChat({
             }));
             setMessages(chatMessages);
           }
-          
+
           // Restore draft input if it exists
           if (session.draftInput) {
             setInputValue(session.draftInput);
           }
-          
+
           await loadSessions();
         }
       } catch (error: any) {
@@ -634,7 +624,7 @@ export function AIChat({
 
     // Small delay to ensure event handlers are registered
     setTimeout(initClaude, 100);
-    
+
     return () => {
       mounted = false;
     };
@@ -659,7 +649,7 @@ export function AIChat({
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizingRef.current) return;
-      
+
       // Calculate new width from right edge
       const newWidth = window.innerWidth - e.clientX;
       // Allow up to 50% of window width, with minimum of 280px
@@ -670,7 +660,7 @@ export function AIChat({
 
     const handleMouseUp = () => {
       if (!isResizingRef.current) return;
-      
+
       isResizingRef.current = false;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
@@ -687,13 +677,13 @@ export function AIChat({
 
   const handleSendMessage = useCallback(async (message: string) => {
     if (!message.trim() || !isInitialized) return;
-    
+
     // Store the current message for error reporting
     setCurrentUserMessage(message);
-    
+
     // Check if we have a document open
     const hasDocument = documentContext && (documentContext.filePath || documentContext.content);
-    
+
     // Get fresh document context with latest content
     const freshDocumentContext = hasDocument ? {
       filePath: documentContext?.filePath || '',
@@ -703,33 +693,45 @@ export function AIChat({
       selection: documentContext?.selection
       // Note: Don't include getLatestContent function as it can't be serialized for IPC
     } : undefined;
-    
+
     console.log('[AIChat] Sending document context:', {
       hasSelection: !!freshDocumentContext.selection,
       selectionLength: freshDocumentContext.selection?.length,
       hasCursorPosition: !!freshDocumentContext.cursorPosition,
       cursorPosition: freshDocumentContext.cursorPosition
     });
-    
-    // If no current session, create one first
-    if (!currentSessionId) {
-      const { provider, model } = parseModelId(currentModel);
+
+    // Check if we need a new session (no session or provider changed)
+    const { provider, model } = parseModelId(currentModel);
+
+    // Get current session to check provider
+    let needNewSession = !currentSessionId;
+    if (currentSessionId && sessions.length > 0) {
+      const currentSession = sessions.find(s => s.id === currentSessionId);
+      if (currentSession && currentSession.provider !== provider) {
+        console.log(`[AIChat] Provider changed from ${currentSession.provider} to ${provider}, creating new session`);
+        needNewSession = true;
+      }
+    }
+
+    if (needNewSession) {
       console.log(`[AIChat] Creating new session with provider: ${provider}, model: ${model}`);
       const session = await aiApi.createSession(freshDocumentContext, projectPath, provider, model);
       setCurrentSessionId(session.id);
       console.log(`[AIChat] Created session ${session.id} with provider: ${session.provider}`);
+      // Reload sessions to include the new one
+      await loadSessions();
     } else {
-      const { provider } = parseModelId(currentModel);
       console.log(`[AIChat] Using existing session ${currentSessionId} with provider: ${provider}`);
     }
-    
+
     // Add user message
     setMessages(prev => [...prev, { role: 'user', content: message }]);
     setInputValue('');
     setHistoryIndex(-1); // Reset history navigation
     setTempInput(''); // Clear temp input
     setIsLoading(true);
-    
+
     try {
       // Send message to Claude with fresh document context and session ID
       await aiApi.sendMessage(message, freshDocumentContext, currentSessionId!, projectPath);
@@ -737,7 +739,7 @@ export function AIChat({
       await loadSessions();
     } catch (error: any) {
       logger.api.info('Failed to send message:', error);
-      
+
       // Provide specific error messages
       let errorMessage = 'Sorry, I encountered an error processing your request.';
       if (error?.message?.includes('LMStudio')) {
@@ -747,9 +749,9 @@ export function AIChat({
       } else if (error?.message) {
         errorMessage = `Error: ${error.message}`;
       }
-      
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
+
+      setMessages(prev => [...prev, {
+        role: 'assistant',
         content: errorMessage,
         isError: true
       }]);
@@ -760,9 +762,9 @@ export function AIChat({
   const handleNavigateHistory = useCallback((direction: 'up' | 'down') => {
     const userMessages = messages.filter(m => m.role === 'user');
     if (userMessages.length === 0) return;
-    
+
     let newIndex = historyIndex;
-    
+
     if (direction === 'up') {
       // Going back in history
       if (historyIndex === -1) {
@@ -788,7 +790,7 @@ export function AIChat({
         return;
       }
     }
-    
+
     if (newIndex >= 0 && newIndex < userMessages.length) {
       setHistoryIndex(newIndex);
       setInputValue(userMessages[newIndex].content);
@@ -802,9 +804,9 @@ export function AIChat({
       return result;
     } catch (error) {
       logger.bridge.info('Failed to apply edit:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Failed to apply changes' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to apply changes'
       };
     }
   }, []);
@@ -816,17 +818,17 @@ export function AIChat({
         setIsLoading(false);
         setIsStreamingToEditor(false);
         isStreamingToEditorRef.current = false;
-        
+
         // Clear any streaming timeouts
         if (streamTimeoutRef.current) {
           clearTimeout(streamTimeoutRef.current);
           streamTimeoutRef.current = null;
         }
-        
+
         // Add a cancelled message to the chat
-        setMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: 'Request cancelled by user.' 
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'Request cancelled by user.'
         }]);
       }
     } catch (error) {
@@ -846,11 +848,11 @@ export function AIChat({
       // Use provided model or current model
       const selectedModel = modelId || currentModel;
       const { provider, model } = parseModelId(selectedModel);
-      
+
       // Update current model
       setCurrentModel(selectedModel);
       localStorage.setItem('ai-selected-model', selectedModel);
-      
+
       // Create a clean document context without functions for IPC
       const cleanDocumentContext = documentContext ? {
         filePath: documentContext.filePath,
@@ -859,22 +861,22 @@ export function AIChat({
         cursorPosition: documentContext.cursorPosition,
         selection: documentContext.selection
       } : undefined;
-      
+
       const session = await aiApi.createSession(cleanDocumentContext, projectPath, provider as any, model);
       setCurrentSessionId(session.id);
       setMessages([]);
       setInputValue(''); // Clear input for new session
       await loadSessions();
-      
+
       // Focus the input field after creating new session
       setTimeout(() => {
         chatInputRef.current?.focus();
       }, 100);
     } catch (error: any) {
       logger.session.info('Failed to create new session:', error);
-      
+
       // Check if it's an API key error
-      if (error?.message?.includes('API key not configured') || 
+      if (error?.message?.includes('API key not configured') ||
           error?.message?.includes('Anthropic API key not configured')) {
         // Show API key error dialog
         if (onShowApiKeyError) {
@@ -905,11 +907,11 @@ export function AIChat({
       logger.session.info('Failed to open session manager:', error);
     }
   }, [projectPath]);
-  
+
   // Sync messages to backend whenever they change
   useEffect(() => {
     if (!currentSessionId || messages.length === 0) return;
-    
+
     const syncMessages = async () => {
       try {
         await aiApi.updateSessionMessages(currentSessionId, messages, projectPath);
@@ -919,7 +921,7 @@ export function AIChat({
         logger.session.info('Failed to sync messages:', error);
       }
     };
-    
+
     // Debounce to avoid too many updates
     const timeoutId = setTimeout(syncMessages, 500);
     return () => clearTimeout(timeoutId);
@@ -928,7 +930,7 @@ export function AIChat({
   // Save draft input whenever it changes
   useEffect(() => {
     if (!currentSessionId || !isInitialized) return;
-    
+
     const saveDraft = async () => {
       try {
         await aiApi.saveDraftInput(currentSessionId, inputValue, projectPath);
@@ -936,7 +938,7 @@ export function AIChat({
         logger.session.info('Failed to save draft input:', error);
       }
     };
-    
+
     // Debounce to avoid too many saves
     const timeoutId = setTimeout(saveDraft, 1000);
     return () => clearTimeout(timeoutId);
@@ -946,7 +948,7 @@ export function AIChat({
     try {
       const session = await aiApi.loadSession(sessionId, projectPath);
       setCurrentSessionId(session.id);
-      
+
       // Update model based on session (provider:model format)
       if (session.provider) {
         if (session.provider === 'claude-code') {
@@ -958,7 +960,7 @@ export function AIChat({
           localStorage.setItem('ai-selected-model', modelId);
         }
       }
-      
+
       // Convert session messages to chat format, preserving streaming status
       const chatMessages = session.messages.map((msg: any) => ({
         role: msg.role,
@@ -968,12 +970,12 @@ export function AIChat({
         isStreamingStatus: msg.isStreamingStatus,
         streamingData: msg.streamingData
       }));
-      
+
       setMessages(chatMessages);
-      
+
       // Restore draft input for this session
       setInputValue(session.draftInput || '');
-      
+
       // Focus the input field after loading session
       setTimeout(() => {
         chatInputRef.current?.focus();
@@ -987,13 +989,13 @@ export function AIChat({
     try {
       // Delete the session
       await aiApi.deleteSession(sessionId, projectPath);
-      
+
       // If we deleted the current session, clear the UI but don't create a new one yet
       if (sessionId === currentSessionId) {
         setCurrentSessionId(null);
         setMessages([]);
       }
-      
+
       // Reload sessions list
       await loadSessions();
     } catch (error) {
@@ -1005,17 +1007,17 @@ export function AIChat({
     try {
       // TODO: Add rename session API call when available
       // await aiApi.renameSession(sessionId, newName);
-      
+
       await loadSessions();
     } catch (error) {
       logger.session.info('Failed to rename session:', error);
     }
   }, [loadSessions]);
-  
+
   // Handle loading a specific session from Session Manager
   useEffect(() => {
     if (!sessionToLoad || !isInitialized) return;
-    
+
     const loadRequestedSession = async () => {
       try {
         await handleSessionSelect(sessionToLoad.sessionId);
@@ -1026,13 +1028,13 @@ export function AIChat({
         logger.session.info('Failed to load requested session:', error);
       }
     };
-    
+
     loadRequestedSession();
   }, [sessionToLoad, isInitialized, handleSessionSelect, onSessionLoaded]);
 
   if (isCollapsed) {
     return (
-      <button 
+      <button
         className="ai-chat-floating-toggle"
         onClick={onToggleCollapse}
         title="Open AI Assistant (⌘⇧A)"
@@ -1048,18 +1050,18 @@ export function AIChat({
   }
 
   return (
-    <div 
+    <div
       ref={panelRef}
-      className="ai-chat" 
+      className="ai-chat"
       style={{ width }}
     >
-      <div 
+      <div
         className="ai-chat-resize-handle"
         onMouseDown={handleMouseDown}
       />
-      
-      <ChatHeader 
-        onToggleCollapse={onToggleCollapse} 
+
+      <ChatHeader
+        onToggleCollapse={onToggleCollapse}
         provider={parseModelId(currentModel).provider}
         model={currentModel}
       >
@@ -1088,9 +1090,9 @@ export function AIChat({
           disabled={isLoading}
         />
       </ChatHeader>
-      
+
       {hasApiKey === false ? (
-        <EmptyState 
+        <EmptyState
           onOpenSettings={() => {
             // Open AI Models window
             window.electronAPI.openAIModels();
@@ -1104,7 +1106,7 @@ export function AIChat({
         </div>
       ) : (
         <>
-          <ChatMessages 
+          <ChatMessages
             messages={messages}
             isLoading={isLoading}
             onApplyEdit={handleApplyEdit}
@@ -1112,8 +1114,8 @@ export function AIChat({
             modelName={getModelDisplayName(currentModel)}
             hasDocument={!!documentContext && !!(documentContext.filePath || documentContext.content)}
           />
-          
-          <ChatInput 
+
+          <ChatInput
             ref={chatInputRef}
             value={inputValue}
             onChange={setInputValue}

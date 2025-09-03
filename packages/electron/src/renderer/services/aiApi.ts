@@ -44,7 +44,7 @@ class AIApi {
   private accumulatedContent: string = '';
   private streamStartDetected: boolean = false;
   private streamBuffer: string = ''; // Buffer for detecting split markers
-  private defaultProvider: 'claude' | 'claude-code' = 'claude-code';
+  // Removed defaultProvider - should always be specified explicitly
 
   constructor() {
     // Set up IPC listener for errors
@@ -270,10 +270,14 @@ class AIApi {
   async createSession(
     documentContext?: DocumentContext,
     projectPath?: string,
-    provider?: 'claude' | 'claude-code' | 'openai',
+    provider?: 'claude' | 'claude-code' | 'openai' | 'lmstudio',
     modelId?: string
   ): Promise<Session> {
-    return window.electronAPI.aiCreateSession(provider || 'claude-code', documentContext, projectPath, modelId);
+    // Provider must be explicitly specified, no default
+    if (!provider) {
+      throw new Error('Provider must be specified when creating a session');
+    }
+    return window.electronAPI.aiCreateSession(provider, documentContext, projectPath, modelId);
   }
 
   // New method specifically for creating session with provider

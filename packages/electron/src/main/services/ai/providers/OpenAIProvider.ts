@@ -9,12 +9,16 @@ import {
   ProviderConfig, 
   ProviderCapabilities, 
   StreamChunk,
-  Message
+  Message,
+  AIModel
 } from '../types';
+import { OPENAI_MODELS, DEFAULT_MODELS } from '../../../../shared/modelConstants';
 
 export class OpenAIProvider extends BaseAIProvider {
   private openai: OpenAI | null = null;
   private abortController: AbortController | null = null;
+
+  static readonly DEFAULT_MODEL = DEFAULT_MODELS.openai;
 
   async initialize(config: ProviderConfig): Promise<void> {
     this.config = config;
@@ -140,7 +144,8 @@ export class OpenAIProvider extends BaseAIProvider {
         throw new Error('No model specified for OpenAI provider');
       }
       
-      const modelId = this.config.model;
+      // Remove provider prefix from model ID for API call
+      const modelId = this.config.model.replace('openai:', '');
       
       const completionParams: any = {
         model: modelId,
@@ -353,5 +358,69 @@ GOOD response examples:
 - User: "update the title" → You: "Updating title"
 
 Remember: The user can SEE the changes in their editor. They just want confirmation you understood the request.`;
+  }
+
+  /**
+   * Get available OpenAI models (filtered from API response)
+   */
+  static async getModels(apiKey?: string): Promise<AIModel[]> {
+    if (!apiKey) return this.getDefaultModels();
+
+    try {
+      const openai = new OpenAI({ apiKey });
+      const response = await openai.models.list();
+      
+      // Filter to only allowed models
+      const availableIds = new Set(response.data.map(m => m.id));
+      const filtered: AIModel[] = [];
+      
+      for (const model of OPENAI_MODELS) {
+        if (availableIds.has(model.id)) {
+          filtered.push({
+            id: `openai:${model.id}`,
+            name: model.displayName,
+            provider: 'openai' as const,
+            maxTokens: model.maxTokens,
+            contextWindow: model.contextWindow
+          });
+        }
+      }
+      
+      return filtered.length > 0 ? filtered : [];
+    } catch (error) {
+      console.error('Failed to fetch OpenAI models:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get default models
+   */
+  static getDefaultModels(): AIModel[] {
+    return OPENAI_MODELS.map(model => ({
+      id: `openai:${model.id}`,
+      name: model.displayName,
+      provider: 'openai' as const,
+      maxTokens: model.maxTokens,
+      contextWindow: model.contextWindow
+    }));
+  }
+
+  /**
+   * Get default model
+   */
+  static getDefaultModel(): string {
+    return this.DEFAULT_MODEL;
+  }
+
+  /**
+   * Check if a model is allowed
+   */
+  static isModelAllowed(modelId: string): boolean {
+    const cleanId = modelId.replace('openai:', '');
+    // Check if it's in our allowed list
+    return OPENAI_MODELS.some(m => m.id === cleanId) ||
+           cleanId.startsWith('gpt-5') ||
+           cleanId.startsWith('gpt-4');
   }
 }

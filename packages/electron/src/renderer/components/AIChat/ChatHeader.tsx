@@ -1,6 +1,8 @@
 import React from 'react';
 import { MaterialSymbol } from '../MaterialSymbol';
 import { getProviderIcon } from '../icons/ProviderIcons';
+import { ProviderIcon } from '../icons/ProviderIcons';
+import { parseModelInfo } from '../../utils/modelUtils';
 
 interface ChatHeaderProps {
   onToggleCollapse: () => void;
@@ -10,44 +12,12 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader({ onToggleCollapse, children, provider, model }: ChatHeaderProps) {
+  const modelInfo = parseModelInfo(model);
 
-  const parseModelInfo = (modelId?: string): { provider: string; modelName: string } | null => {
-    if (!modelId) return null;
-    
-    // Special case for Claude Code
-    if (modelId === 'claude-code') {
-      return { provider: 'Claude Code', modelName: 'MCP' };
-    }
-    
-    // Parse provider:model format
-    const [provider, ...modelParts] = modelId.split(':');
-    const model = modelParts.join(':');
-    
-    // Get provider display name
-    const providerName = provider === 'claude' ? 'Claude' :
-                        provider === 'openai' ? 'OpenAI' :
-                        provider === 'lmstudio' ? 'LMStudio' :
-                        provider;
-    
-    // Shorten long model names for display
-    let modelName = model;
-    if (model.includes('claude-opus-4-1')) modelName = 'Opus 4.1';
-    else if (model.includes('claude-opus-4')) modelName = 'Opus 4';
-    else if (model.includes('claude-sonnet-4')) modelName = 'Sonnet 4';
-    else if (model.includes('claude-3-7-sonnet')) modelName = 'Sonnet 3.7';
-    else if (model.includes('claude-3-5-sonnet')) modelName = 'Sonnet 3.5';
-    else if (model.includes('claude-3-5-haiku')) modelName = 'Haiku 3.5';
-    else if (model.includes('claude-3-opus')) modelName = 'Opus 3';
-    else if (model.includes('claude-3-sonnet')) modelName = 'Sonnet 3';
-    else if (model.includes('claude-3-haiku')) modelName = 'Haiku 3';
-    else if (model.includes('gpt-4-turbo')) modelName = 'GPT-4 Turbo';
-    else if (model.includes('gpt-4o')) modelName = 'GPT-4o';
-    else if (model.includes('gpt-4')) modelName = 'GPT-4';
-    else if (model.includes('gpt-3.5')) modelName = 'GPT-3.5';
-    else if (model.includes('o1-preview')) modelName = 'o1 Preview';
-    else if (model.includes('o1-mini')) modelName = 'o1 Mini';
-    
-    return { provider: providerName, modelName };
+  // Get provider class name for styling
+  const getProviderClass = (providerId?: string) => {
+    if (!providerId) return '';
+    return `model-tag-${providerId}`;
   };
 
   return (
@@ -55,6 +25,17 @@ export function ChatHeader({ onToggleCollapse, children, provider, model }: Chat
       <div className="ai-chat-header-top">
         <h3 className="ai-chat-title">
           AI Assistant
+          {modelInfo && (
+            <div className="ai-chat-model-tags">
+              <span className={`ai-chat-provider-tag ${getProviderClass(modelInfo.providerId)}`}>
+                <ProviderIcon provider={modelInfo.providerId as any} size={12} />
+                {modelInfo.providerName}
+              </span>
+              <span className="ai-chat-model-tag">
+                {modelInfo.modelName}
+              </span>
+            </div>
+          )}
         </h3>
         <div className="ai-chat-header-actions">
           <button
@@ -67,7 +48,7 @@ export function ChatHeader({ onToggleCollapse, children, provider, model }: Chat
           </button>
         </div>
       </div>
-      
+
       <div className="ai-chat-header-bottom">
         {children}
       </div>

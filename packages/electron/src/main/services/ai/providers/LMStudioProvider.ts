@@ -8,7 +8,8 @@ import {
   ProviderConfig, 
   ProviderCapabilities, 
   StreamChunk,
-  Message
+  Message,
+  AIModel
 } from '../types';
 
 interface LMStudioConfig extends ProviderConfig {
@@ -18,6 +19,8 @@ interface LMStudioConfig extends ProviderConfig {
 export class LMStudioProvider extends BaseAIProvider {
   private baseUrl: string = 'http://127.0.0.1:8234';
   private abortController: AbortController | null = null;
+  
+  static readonly DEFAULT_MODEL = 'lmstudio:local-model';
 
   async initialize(config: LMStudioConfig): Promise<void> {
     this.config = config;
@@ -561,5 +564,64 @@ Response Format Examples:
 - User: "insert a list" → You: "Inserting list" [USE streamContent tool]
 
 Remember: ALL content changes MUST go through tools, not in your text response.`;
+  }
+
+  /**
+   * Get available models from LMStudio
+   */
+  static async getModels(baseUrl: string = 'http://127.0.0.1:8234'): Promise<AIModel[]> {
+    try {
+      const response = await fetch(`${baseUrl}/v1/models`);
+      
+      if (!response.ok) {
+        throw new Error(`LMStudio returned ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Map LMStudio models to our format
+      return data.data.map((model: any) => ({
+        id: `lmstudio:${model.id}`,
+        name: this.formatModelName(model.id),
+        provider: 'lmstudio' as const,
+        maxTokens: model.max_tokens || 4096,
+        contextWindow: model.context_length || 4096
+      }));
+      
+    } catch (error) {
+      console.error('Failed to fetch LMStudio models:', error);
+      return this.getDefaultModels();
+    }
+  }
+
+  /**
+   * Get default models
+   */
+  static getDefaultModels(): AIModel[] {
+    return [{
+      id: 'lmstudio:local-model',
+      name: 'Local Model',
+      provider: 'lmstudio' as const,
+      maxTokens: 4096,
+      contextWindow: 4096
+    }];
+  }
+
+  /**
+   * Get default model
+   */
+  static getDefaultModel(): string {
+    return this.DEFAULT_MODEL;
+  }
+
+  /**
+   * Format model name for display
+   */
+  private static formatModelName(modelId: string): string {
+    return modelId
+      .replace(/-GGUF$/i, '')
+      .replace(/-Q[0-9]_K_[A-Z]/i, '')
+      .replace(/[-_]/g, ' ')
+      .replace(/\b\w/g, l => l.toUpperCase());
   }
 }

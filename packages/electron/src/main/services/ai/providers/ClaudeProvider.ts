@@ -8,14 +8,24 @@ import {
   DocumentContext, 
   ProviderConfig, 
   ProviderCapabilities, 
-  StreamChunk 
+  StreamChunk,
+  AIModel 
 } from '../types';
+import { CLAUDE_MODELS, DEFAULT_MODELS } from '../../../../shared/modelConstants';
 
 export class ClaudeProvider extends BaseAIProvider {
   private anthropic: Anthropic | null = null;
   private abortController: AbortController | null = null;
 
+  static readonly DEFAULT_MODEL = DEFAULT_MODELS.claude;
+
   async initialize(config: ProviderConfig): Promise<void> {
+    console.log('[ClaudeProvider] initialize called with config:', {
+      hasApiKey: !!config.apiKey,
+      model: config.model,
+      maxTokens: config.maxTokens
+    });
+    
     this.config = config;
     
     if (!config.apiKey) {
@@ -131,8 +141,18 @@ export class ClaudeProvider extends BaseAIProvider {
         throw new Error('No model specified for Claude provider');
       }
       
+      // Remove provider prefix from model ID for API call
+      const modelId = this.config.model.replace('claude:', '');
+      console.log('[ClaudeProvider] sendMessage - model conversion:', {
+        original: this.config.model,
+        stripped: modelId
+      });
+      
+      console.log('[ClaudeProvider] About to call Anthropic API with model:', modelId);
+      console.log('[ClaudeProvider] Stack trace:', new Error().stack);
+      
       const response = await this.anthropic.messages.create({
-        model: this.config.model,
+        model: modelId,
         max_tokens: this.config.maxTokens || 4000,
         temperature: this.config.temperature || 0,
         system: systemPrompt,
@@ -439,5 +459,33 @@ GOOD response examples:
 - User: "update the title" → You: "Updating title"
 
 Remember: The user can SEE the changes in their editor. They just want confirmation you understood the request.`;
+  }
+
+  /**
+   * Get available Claude models
+   */
+  static getModels(): AIModel[] {
+    return CLAUDE_MODELS.map(model => ({
+      id: `claude:${model.id}`,
+      name: model.displayName,
+      provider: 'claude' as const,
+      maxTokens: model.maxTokens,
+      contextWindow: model.contextWindow
+    }));
+  }
+
+  /**
+   * Get default model
+   */
+  static getDefaultModel(): string {
+    return this.DEFAULT_MODEL;
+  }
+
+  /**
+   * Check if a model is allowed
+   */
+  static isModelAllowed(modelId: string): boolean {
+    const cleanId = modelId.replace('claude:', '');
+    return CLAUDE_MODELS.some(m => m.id === cleanId);
   }
 }

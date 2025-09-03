@@ -8,7 +8,8 @@ import {
   DocumentContext, 
   ProviderConfig, 
   ProviderCapabilities, 
-  StreamChunk 
+  StreamChunk,
+  AIModel 
 } from '../types';
 import path from 'path';
 import fs from 'fs';
@@ -16,6 +17,8 @@ import fs from 'fs';
 export class ClaudeCodeProvider extends BaseAIProvider {
   private abortController: AbortController | null = null;
   private claudeSessionIds: Map<string, string> = new Map(); // Our session ID -> Claude session ID
+  
+  static readonly DEFAULT_MODEL = 'claude-code';
 
   async initialize(config: ProviderConfig): Promise<void> {
     this.config = config;
@@ -304,5 +307,25 @@ GOOD responses after editing:
 - "Updated with examples."
 
 Remember: The user can SEE the changes in their editor. They don't need you to describe them.`;
+  }
+
+  /**
+   * Get Claude Code model
+   */
+  static getModels(): AIModel[] {
+    return [{
+      id: 'claude-code',
+      name: 'Claude Code',
+      provider: 'claude-code' as const,
+      maxTokens: 8192,
+      contextWindow: 200000
+    }];
+  }
+
+  /**
+   * Get default model
+   */
+  static getDefaultModel(): string {
+    return this.DEFAULT_MODEL;
   }
 }
