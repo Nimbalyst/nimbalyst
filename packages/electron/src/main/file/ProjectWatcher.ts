@@ -2,13 +2,18 @@ import { BrowserWindow } from 'electron';
 import * as chokidar from 'chokidar';
 import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
+import { getWindowId } from '../window/WindowManager';
 
 // Project watchers management  
 export const projectWatchers = new Map<number, chokidar.FSWatcher>();
 
 // Start watching a project directory for changes
 export function startProjectWatcher(window: BrowserWindow, projectPath: string) {
-    const windowId = window.id;
+    const windowId = getWindowId(window);
+    if (windowId === null) {
+        logger.projectWatcher.error('Failed to find custom window ID');
+        return;
+    }
     
     // Stop any existing project watcher for this window
     stopProjectWatcher(windowId);
@@ -128,7 +133,11 @@ export function getProjectWatcherInfo(windowId: number): any {
 
 // Restart the project watcher
 export function restartProjectWatcher(window: BrowserWindow, projectPath: string) {
-    const windowId = window.id;
+    const windowId = getWindowId(window);
+    if (windowId === null) {
+        logger.projectWatcher.error('Failed to find custom window ID');
+        return;
+    }
     logger.projectWatcher.info(`Restarting project watcher for: ${projectPath}`);
     
     // Stop existing watcher

@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { existsSync, readFileSync } from 'fs';
-import { windows, windowStates, createWindow, windowFocusOrder, windowDevToolsState } from '../window/WindowManager';
+import { windows, windowStates, createWindow, windowFocusOrder, windowDevToolsState, getWindowId } from '../window/WindowManager';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getSessionState, saveSessionState as saveToStore, SessionState } from '../utils/store';
 import { startProjectWatcher } from '../file/ProjectWatcher';
@@ -95,11 +95,15 @@ export function restoreSessionState(): boolean {
                                     content: readFileSync(sessionWindow.filePath, 'utf-8')
                                 });
 
-                                // Update window state
-                                const windowId = window.id;
-                                const state = windowStates.get(windowId);
-                                if (state) {
-                                    state.filePath = sessionWindow.filePath;
+                                // Update window state using custom window ID
+                                const windowId = getWindowId(window);
+                                if (windowId !== null) {
+                                    const state = windowStates.get(windowId);
+                                    if (state) {
+                                        state.filePath = sessionWindow.filePath;
+                                    }
+                                } else {
+                                    console.error('[SessionState] Failed to find custom window ID for window')
                                 }
                             }, 500);
                         });

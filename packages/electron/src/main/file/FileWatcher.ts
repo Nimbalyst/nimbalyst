@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog } from 'electron';
 import * as chokidar from 'chokidar';
-import { windowStates, savingWindows } from '../window/WindowManager';
+import { windowStates, savingWindows, getWindowId } from '../window/WindowManager';
 import { FILE_WATCHER_POLL_INTERVAL, FILE_WATCHER_STABILITY_THRESHOLD } from '../utils/constants';
 import { loadFileIntoWindow } from './FileOperations';
 import { logger } from '../utils/logger';
@@ -10,7 +10,11 @@ export const fileWatchers = new Map<number, chokidar.FSWatcher>();
 
 // Start watching a file for changes
 export function startFileWatcher(window: BrowserWindow, filePath: string) {
-    const windowId = window.id;
+    const windowId = getWindowId(window);
+    if (windowId === null) {
+        logger.fileWatcher.error('Failed to find custom window ID');
+        return;
+    }
     
     // Stop any existing watcher for this window
     stopFileWatcher(windowId);
@@ -140,7 +144,11 @@ export function getFileWatcherInfo(windowId: number): any {
 // Check file for changes manually
 export function checkFileForChanges(window: BrowserWindow, filePath: string) {
     logger.fileWatcher.debug(`Manual check for file changes: ${filePath}`);
-    const windowId = window.id;
+    const windowId = getWindowId(window);
+    if (windowId === null) {
+        logger.fileWatcher.error('Failed to find custom window ID');
+        return;
+    }
     
     // Restart the watcher to ensure it picks up changes
     stopFileWatcher(windowId);

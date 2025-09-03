@@ -5,7 +5,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
-import { windowStates } from '../window/WindowManager';
+import { windowStates, getWindowId } from '../window/WindowManager';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { getFolderContents } from '../utils/FileTree';
@@ -50,7 +50,11 @@ export function registerProjectHandlers() {
         }
 
         console.log('[SWITCH_FILE] Switching to file:', filePath);
-        const windowId = window.id;
+        const windowId = getWindowId(window);
+        if (windowId === null) {
+            console.error('[SWITCH_FILE] Failed to find custom window ID');
+            return null;
+        }
         
         try {
             const content = readFileSync(filePath, 'utf-8');

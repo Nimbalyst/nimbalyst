@@ -134,7 +134,7 @@ export function createWindow(
 
         // Generate a unique window ID
         const windowId = ++windowIdCounter;
-        console.log('[MAIN] Created window with ID:', windowId);
+        console.log('[MAIN] Created window with ID:', windowId, 'Electron ID:', window.id);
 
         // Store window and initial state
         windows.set(windowId, window);
@@ -145,6 +145,10 @@ export function createWindow(
             documentEdited: false
         });
         windowFocusOrder.set(windowId, ++focusOrderCounter); // Track initial focus order
+        
+        console.log('[MAIN] Window stored in maps. Mode:', isProjectMode ? 'project' : 'document');
+        console.log('[MAIN] Windows Map now has:', windows.size, 'windows');
+        console.log('[MAIN] Window IDs in map:', [...windows.keys()]);
         
         // Capture console messages from renderer (for debugging)
         if (process.env.NODE_ENV !== 'production') {
@@ -361,9 +365,23 @@ export function findWindowByFilePath(filePath: string): BrowserWindow | null {
     return null;
 }
 
+// Find custom window ID from BrowserWindow
+export function getWindowId(browserWindow: BrowserWindow): number | null {
+    for (const [windowId, window] of windows) {
+        if (window === browserWindow) {
+            return windowId;
+        }
+    }
+    return null;
+}
+
 // Update window title
 export function updateWindowTitle(window: BrowserWindow) {
-    const windowId = window.id;
+    const windowId = getWindowId(window);
+    if (windowId === null) {
+        console.error('[WindowManager] Failed to find custom window ID for title update');
+        return;
+    }
     const state = windowStates.get(windowId);
     let title = 'Untitled';
 

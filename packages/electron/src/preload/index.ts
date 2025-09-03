@@ -42,6 +42,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('file-new', callback);
     return () => ipcRenderer.removeListener('file-new', callback);
   },
+  onFileNewInProject: (callback: () => void) => {
+    ipcRenderer.on('file-new-in-project', callback);
+    return () => ipcRenderer.removeListener('file-new-in-project', callback);
+  },
   onFileOpen: (callback: () => void) => {
     ipcRenderer.on('file-open', callback);
     return () => ipcRenderer.removeListener('file-open', callback);

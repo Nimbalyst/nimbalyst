@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron';
 import { readFileSync, writeFileSync } from 'fs';
 import { basename } from 'path';
-import { windowStates } from '../window/WindowManager';
+import { windowStates, getWindowId } from '../window/WindowManager';
 import { addToRecentItems } from '../utils/store';
 import { startFileWatcher } from './FileWatcher';
 
@@ -10,12 +10,18 @@ export function loadFileIntoWindow(window: BrowserWindow, filePath: string) {
     try {
         console.log('[LOAD_FILE] Loading file into window:', filePath, 'window:', window.id);
         const content = readFileSync(filePath, 'utf-8');
-        const windowId = window.id;
+        const windowId = getWindowId(window);
+        if (windowId === null) {
+            console.error('[LOAD_FILE] Failed to find custom window ID');
+            return;
+        }
         const state = windowStates.get(windowId);
         
         if (state) {
             state.filePath = filePath;
             state.documentEdited = false;
+        } else {
+            console.error('[LOAD_FILE] No window state found for window ID:', windowId);
         }
         
         console.log('[LOAD_FILE] Sending file-opened-from-os event');

@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron';
-import { windowStates, windows } from '../window/WindowManager';
+import { windowStates, windows, getWindowId } from '../window/WindowManager';
 import { updateApplicationMenu } from '../menu/ApplicationMenu';
 import { stopFileWatcher, startFileWatcher } from '../file/FileWatcher';
 import { createAIModelsWindow } from '../window/AIModelsWindow';
@@ -44,7 +44,11 @@ export function registerWindowHandlers() {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return;
 
-        const windowId = window.id;
+        const windowId = getWindowId(window);
+        if (windowId === null) {
+            console.error('[SET_DOCUMENT_EDITED] Failed to find custom window ID');
+            return;
+        }
         const state = windowStates.get(windowId);
         if (state) {
             state.documentEdited = edited;
@@ -70,7 +74,11 @@ export function registerWindowHandlers() {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return;
 
-        const windowId = window.id;
+        const windowId = getWindowId(window);
+        if (windowId === null) {
+            console.error('[SET_CURRENT_FILE] Failed to find custom window ID');
+            return;
+        }
         const state = windowStates.get(windowId);
         console.log('[SET_FILE] Updating file path for window', windowId, 'from', state?.filePath, 'to', filePath);
         

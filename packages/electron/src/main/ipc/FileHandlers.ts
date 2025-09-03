@@ -1,7 +1,7 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
 import { readFileSync, existsSync } from 'fs';
 import { basename } from 'path';
-import { windowStates, savingWindows, findWindowByFilePath, createWindow } from '../window/WindowManager';
+ import { windowStates, savingWindows, findWindowByFilePath, createWindow, getWindowId, windows } from '../window/WindowManager';
 import { loadFileIntoWindow, saveFile } from '../file/FileOperations';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { AUTOSAVE_DELAY } from '../utils/constants';
@@ -25,7 +25,11 @@ export function registerFileHandlers() {
 
         if (!result.canceled && result.filePaths.length > 0) {
             const filePath = result.filePaths[0];
-            const windowId = window.id;
+            const windowId = getWindowId(window);
+            if (windowId === null) {
+                console.error('[FileHandlers] Failed to find custom window ID');
+                return null;
+            }
             const state = windowStates.get(windowId);
 
             if (state) {
@@ -52,7 +56,11 @@ export function registerFileHandlers() {
             return null;
         }
 
-        const windowId = window.id;
+        const windowId = getWindowId(window);
+        if (windowId === null) {
+            console.error('[FileHandlers] Failed to find custom window ID');
+            return null;
+        }
         const state = windowStates.get(windowId);
         const filePath = state?.filePath;
 
@@ -115,7 +123,11 @@ export function registerFileHandlers() {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return null;
 
-        const windowId = window.id;
+        const windowId = getWindowId(window);
+        if (windowId === null) {
+            console.error('[FileHandlers] Failed to find custom window ID');
+            return null;
+        }
         const state = windowStates.get(windowId);
 
         try {
@@ -179,7 +191,11 @@ export function registerFileHandlers() {
             return { success: false, error: 'No window found' };
         }
 
-        const windowId = window.id;
+        const windowId = getWindowId(window);
+        if (windowId === null) {
+            console.error('[SET_FILE] Failed to find custom window ID');
+            return { success: false, error: 'Window ID not found' };
+        }
         let state = windowStates.get(windowId);
 
         console.log('[SET_FILE] set-current-file called at', new Date().toISOString());

@@ -24,6 +24,7 @@ import { ApiKeyDialog } from './components/ApiKeyDialog';
 import { AIModels } from './components/AIModels/AIModels';
 import { SessionManager } from './components/SessionManager/SessionManager';
 import { ProjectManager } from './components/ProjectManager/ProjectManager';
+import { NewFileDialog } from './components/NewFileDialog';
 import './ProjectWelcome.css';
 import './components/AIModels/AIModels.css';
 
@@ -52,6 +53,7 @@ interface FileTreeItem {
 // Electron API interface
 interface ElectronAPI {
   onFileNew: (callback: () => void) => () => void;
+  onFileNewInProject?: (callback: () => void) => () => void;
   onFileOpen: (callback: () => void) => () => void;
   onProjectOpened: (callback: (data: { projectPath: string; projectName: string; fileTree: FileTreeItem[] }) => void) => () => void;
   onOpenProjectFile?: (callback: (filePath: string) => void) => () => void;
@@ -176,6 +178,8 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
   const [recentProjectFiles, setRecentProjectFiles] = useState<string[]>([]);
+  const [isNewFileDialogOpen, setIsNewFileDialogOpen] = useState(false);
+  const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
@@ -556,6 +560,10 @@ export default function App() {
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
         setIsDirty(false);
         initialContentRef.current = result.content;
+        
+        // Update current directory based on the file path
+        const dirPath = result.filePath.substring(0, result.filePath.lastIndexOf('/'));
+        setCurrentDirectory(dirPath);
 
         // Explicitly update the current file in main process (redundant but safe)
         if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] Ensuring backend has correct file path');
@@ -700,6 +708,30 @@ export default function App() {
       window.electronAPI.addToProjectRecentFiles(filePath);
     }
   }, [handleProjectFileSelect]);
+  
+  // Handle creating a new file in project
+  const handleCreateNewFile = useCallback(async (fileName: string) => {
+    if (!window.electronAPI || !currentDirectory) return;
+    
+    const filePath = `${currentDirectory}/${fileName}`;
+    
+    try {
+      // Create the file with empty content
+      await window.electronAPI.createFile(filePath, '');
+      
+      // Open the newly created file
+      await handleProjectFileSelect(filePath);
+      
+      // Refresh file tree
+      if (projectPath) {
+        const tree = await window.electronAPI.getFolderContents(projectPath);
+        setFileTree(tree);
+      }
+    } catch (error) {
+      console.error('Failed to create file:', error);
+      alert('Failed to create file: ' + error);
+    }
+  }, [currentDirectory, projectPath, handleProjectFileSelect]);
 
   // Handle restoring content from history
   const handleRestoreFromHistory = useCallback((content: string) => {
@@ -932,6 +964,19 @@ export default function App() {
     const cleanupFns: Array<() => void> = [];
 
     cleanupFns.push(window.electronAPI.onFileNew(handleNew));
+    
+    // Handle new file in project mode
+    if (window.electronAPI.onFileNewInProject) {
+      cleanupFns.push(window.electronAPI.onFileNewInProject(() => {
+        if (projectMode) {
+          // Use current directory or project root
+          if (!currentDirectory && projectPath) {
+            setCurrentDirectory(projectPath);
+          }
+          setIsNewFileDialogOpen(true);
+        }
+      }));
+    }
     cleanupFns.push(window.electronAPI.onFileOpen(handleOpen));
     cleanupFns.push(window.electronAPI.onFileSave(handleSave));
     cleanupFns.push(window.electronAPI.onFileSaveAs(handleSaveAs));
@@ -941,6 +986,8 @@ export default function App() {
       setProjectPath(data.projectPath);
       setProjectName(data.projectName);
       setFileTree(data.fileTree);
+      // Set current directory to project root
+      setCurrentDirectory(data.projectPath);
       // Clear current document
       setContent('');
       setCurrentFilePath(null);
@@ -1434,13 +1481,22 @@ export default function App() {
         />
       )}
       {projectMode && projectPath && (
-        <QuickOpen
-          isOpen={isQuickOpenVisible}
-          onClose={() => setIsQuickOpenVisible(false)}
-          projectPath={projectPath}
-          recentFiles={recentProjectFiles}
-          onFileSelect={handleQuickOpenFileSelect}
-        />
+        <>
+          <QuickOpen
+            isOpen={isQuickOpenVisible}
+            onClose={() => setIsQuickOpenVisible(false)}
+            projectPath={projectPath}
+            recentFiles={recentProjectFiles}
+            onFileSelect={handleQuickOpenFileSelect}
+          />
+          <NewFileDialog
+            isOpen={isNewFileDialogOpen}
+            onClose={() => setIsNewFileDialogOpen(false)}
+            currentDirectory={currentDirectory || projectPath}
+            projectPath={projectPath}
+            onCreateFile={handleCreateNewFile}
+          />
+        </>
       )}
       <HistoryDialog
         isOpen={isHistoryDialogOpen}

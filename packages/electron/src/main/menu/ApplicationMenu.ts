@@ -1,7 +1,7 @@
 import { Menu, BrowserWindow, app, dialog } from 'electron';
 import { basename } from 'path';
 import { existsSync } from 'fs';
-import { windows, windowStates, createWindow, findWindowByFilePath } from '../window/WindowManager';
+import { windows, windowStates, createWindow, findWindowByFilePath, getWindowId } from '../window/WindowManager';
 import { createAboutWindow } from '../window/AboutWindow';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
 import { createProjectManagerWindow } from '../window/ProjectManagerWindow';
@@ -33,8 +33,8 @@ function createWindowListMenu(): any[] {
             return;
         }
         
-        const windowId = window.id;
-        const state = windowStates.get(windowId);
+        const windowId = getWindowId(window);
+        const state = windowId !== null ? windowStates.get(windowId) : undefined;
         let title = 'Untitled';
         let category: 'project' | 'document' | 'other' = 'document';
 
@@ -272,7 +272,46 @@ export function createApplicationMenu() {
         {
             label: 'File',
             submenu: [
-                { label: 'New', accelerator: 'CmdOrCtrl+N', click: () => createWindow() },
+                { 
+                    label: 'New', 
+                    accelerator: 'CmdOrCtrl+N', 
+                    click: () => {
+                        console.log('[File->New] Menu clicked');
+                        const focusedWindow = BrowserWindow.getFocusedWindow();
+                        console.log('[File->New] Focused window:', focusedWindow ? `Electron ID: ${focusedWindow.id}` : 'none');
+                        
+                        if (focusedWindow) {
+                            // Find the custom window ID used by WindowManager
+                            const windowId = getWindowId(focusedWindow);
+                            console.log('[File->New] Custom window ID:', windowId);
+                            
+                            if (windowId !== null) {
+                                const state = windowStates.get(windowId);
+                                console.log('[File->New] Window state:', state);
+                                
+                                if (state?.mode === 'project') {
+                                    // In project mode, send event to create new file in project
+                                    console.log('[File->New] Project mode detected, sending file-new-in-project event');
+                                    focusedWindow.webContents.send('file-new-in-project');
+                                } else {
+                                    // In document mode, create new window
+                                    console.log('[File->New] Document mode or no mode, creating new window');
+                                    createWindow();
+                                }
+                            } else {
+                                // Window not found in our map, create new window
+                                console.log('[File->New] ERROR: Window not found in windows Map!');
+                                console.log('[File->New] Windows Map size:', windows.size);
+                                console.log('[File->New] Creating new window as fallback');
+                                createWindow();
+                            }
+                        } else {
+                            // No focused window, create new window
+                            console.log('[File->New] No focused window, creating new window');
+                            createWindow();
+                        }
+                    }
+                },
                 { type: 'separator' },
                 {
                     label: 'Open...',
