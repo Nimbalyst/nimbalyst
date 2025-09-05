@@ -276,6 +276,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('ai:streamEditEnd', handler);
     return () => ipcRenderer.removeListener('ai:streamEditEnd', handler);
   },
+  onAIPerformanceMetrics: (callback: (data: any) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('ai:performanceMetrics', handler);
+    return () => ipcRenderer.removeListener('ai:performanceMetrics', handler);
+  },
   
   // Additional AI operations that weren't in the first block
   aiCancelRequest: () => ipcRenderer.invoke('ai:cancelRequest'),

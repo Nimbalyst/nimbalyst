@@ -239,13 +239,24 @@ export class AIService {
       sessionId?: string,
       projectPath?: string
     ) => {
+      const startTime = Date.now();
+      const perfLog: any = {
+        startTime,
+        provider: '',
+        model: '',
+        messageLength: message.length,
+        hasDocumentContext: !!documentContext
+      };
+
       // Get or load the session
       let session = this.sessionManager.getCurrentSession();
 
       if (!session) {
         if (sessionId) {
+          const loadStartTime = Date.now();
           session = this.sessionManager.loadSession(sessionId, projectPath);
-          console.log(`[AIService] Loaded session ${sessionId} with provider: ${session?.provider}, model: ${session?.model}`);
+          perfLog.sessionLoadTime = Date.now() - loadStartTime;
+          console.log(`[AIService] Loaded session ${sessionId} with provider: ${session?.provider}, model: ${session?.model} (took ${perfLog.sessionLoadTime}ms)`);
         }
         if (!session) {
           throw new Error('No session available');
@@ -253,6 +264,9 @@ export class AIService {
       } else {
         console.log(`[AIService] Using current session with provider: ${session.provider}, model: ${session.model}`);
       }
+
+      perfLog.provider = session.provider;
+      perfLog.model = session.model || 'default';
 
       // Add user message to session
       const userMessage: Message = {
@@ -268,8 +282,10 @@ export class AIService {
       }
 
       // Get or create provider for this session
+      const providerStartTime = Date.now();
       console.log(`[AIService] Getting provider for: ${session.provider}, sessionId: ${session.id}`);
       let provider = ProviderFactory.getProvider(session.provider, session.id);
+      perfLog.getProviderTime = Date.now() - providerStartTime;
 
       // If provider doesn't exist, create and initialize it
       if (!provider) {
@@ -339,7 +355,10 @@ export class AIService {
         }
 
         console.log('[AIService] About to initialize provider with config:', reinitConfig);
+        const initStartTime = Date.now();
         await provider.initialize(reinitConfig);
+        perfLog.providerInitTime = Date.now() - initStartTime;
+        console.log(`[AIService] Provider initialization took ${perfLog.providerInitTime}ms`);
 
         // Register tool handler
         const toolHandler = this.createToolHandler(event.sender);
@@ -353,14 +372,44 @@ export class AIService {
         const toolCalls: any[] = [];
         const edits: any[] = [];  // Track edits for the assistant message
         let hasStreamingContent = false;  // Track if we used streamContent tool
+        let firstChunkTime: number | undefined;
+        let chunkCount = 0;
+        let textChunks = 0;
+        let toolCallCount = 0;
 
         // Get existing messages from session for context
         const sessionMessages = session.messages || [];
 
+        console.log(`[AIService] Starting message stream (${sessionMessages.length} context messages)`);
+        const streamStartTime = Date.now();
+        
+        // Send performance metrics to renderer
+        event.sender.send('ai:performanceMetrics', {
+          phase: 'start',
+          provider: session.provider,
+          model: session.model || 'default',
+          messageLength: message.length,
+          contextMessages: sessionMessages.length
+        });
+
         // Stream the response
         for await (const chunk of provider.sendMessage(message, documentContext, session.id, sessionMessages)) {
+          chunkCount++;
+          
+          if (!firstChunkTime) {
+            firstChunkTime = Date.now();
+            perfLog.timeToFirstChunk = firstChunkTime - startTime;
+            console.log(`[AIService] First chunk received after ${perfLog.timeToFirstChunk}ms`);
+            
+            // Send first chunk metrics
+            event.sender.send('ai:performanceMetrics', {
+              phase: 'firstChunk',
+              timeToFirstChunk: perfLog.timeToFirstChunk
+            });
+          }
           switch (chunk.type) {
             case 'text':
+              textChunks++;
               fullResponse += chunk.content || '';
               // Send ACCUMULATED response to renderer (not just the chunk)
               event.sender.send('ai:streamResponse', {
@@ -371,7 +420,9 @@ export class AIService {
 
             case 'tool_call':
               if (chunk.toolCall) {
+                toolCallCount++;
                 toolCalls.push(chunk.toolCall);
+                console.log(`[AIService] Tool call #${toolCallCount}: ${chunk.toolCall.name}`);
 
                 // Save tool call as a separate message in the session
                 const toolMessage: Message = {
@@ -438,6 +489,26 @@ export class AIService {
               break;
 
             case 'complete':
+              perfLog.totalTime = Date.now() - startTime;
+              perfLog.streamTime = Date.now() - streamStartTime;
+              perfLog.chunkCount = chunkCount;
+              perfLog.textChunks = textChunks;
+              perfLog.toolCallCount = toolCallCount;
+              perfLog.responseLength = fullResponse.length;
+              
+              console.log('[AIService] Stream complete - Performance metrics:', perfLog);
+              
+              // Send completion metrics
+              event.sender.send('ai:performanceMetrics', {
+                phase: 'complete',
+                totalTime: perfLog.totalTime,
+                streamTime: perfLog.streamTime,
+                chunkCount: chunkCount,
+                textChunks: textChunks,
+                toolCallCount: toolCallCount,
+                responseLength: fullResponse.length
+              });
+              
               // Only add assistant message if there's actual content or edits
               if (fullResponse && fullResponse.trim() !== '') {
                 const assistantMessage: Message = {
@@ -500,7 +571,15 @@ export class AIService {
 
         return { content: fullResponse };
       } catch (error) {
-        console.error('AI service error:', error);
+        const errorTime = Date.now() - startTime;
+        console.error(`[AIService] Error after ${errorTime}ms:`, error);
+        
+        // Send error metrics
+        event.sender.send('ai:performanceMetrics', {
+          phase: 'error',
+          errorTime,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
 
         // Send error to renderer
         event.sender.send('ai:error', {

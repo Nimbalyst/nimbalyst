@@ -80,6 +80,53 @@ describe('OpenAI Provider - Tool Usage', () => {
     console.log('✅ Edit verification passed!');
   }, 10000); // 10 second timeout for API call
 
+  it.skipIf(!apiKey)('should test GPT-5 response time', async () => {
+    const testDocument: DocumentContext = {
+      filePath: '/test/document.md',
+      fileType: 'markdown',
+      content: 'Test',
+      cursorPosition: { line: 1, column: 0 }
+    };
+
+    const provider = ProviderFactory.createProvider('openai', 'test-gpt5');
+    
+    console.log('\n=== TESTING GPT-5 TIMING ===');
+    const initStart = Date.now();
+    await provider.initialize({
+      apiKey: apiKey!,
+      model: 'gpt-5',
+      maxTokens: 10
+    });
+    console.log(`Initialization took: ${Date.now() - initStart}ms`);
+
+    provider.registerToolHandler({
+      applyDiff: async (args) => ({ success: true })
+    });
+
+    const messageStart = Date.now();
+    console.log('Sending message to GPT-5...');
+    
+    const stream = provider.sendMessage('Hi', testDocument);
+    
+    let firstChunkTime: number | undefined;
+    let chunkCount = 0;
+    
+    for await (const chunk of stream) {
+      chunkCount++;
+      if (!firstChunkTime) {
+        firstChunkTime = Date.now() - messageStart;
+        console.log(`FIRST CHUNK received after: ${firstChunkTime}ms`);
+      }
+      console.log(`Chunk ${chunkCount}:`, chunk.type);
+    }
+    
+    const totalTime = Date.now() - messageStart;
+    console.log(`\nTOTAL TIME: ${totalTime}ms`);
+    console.log(`Chunks received: ${chunkCount}`);
+    
+    expect(totalTime).toBeLessThan(5000); // Should be way faster than 15-30 seconds
+  }, 40000);
+
   it.skipIf(!apiKey)('should use streamContent tool to insert content', async () => {
     // Document where we'll insert content
     const testDocument: DocumentContext = {

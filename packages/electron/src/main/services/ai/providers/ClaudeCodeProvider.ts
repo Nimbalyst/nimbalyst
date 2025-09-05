@@ -36,6 +36,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     documentContext?: DocumentContext,
     sessionId?: string
   ): AsyncIterableIterator<StreamChunk> {
+    const startTime = Date.now();
+    console.log(`[ClaudeCodeProvider] Starting sendMessage - message length: ${message.length}, hasContext: ${!!documentContext}`);
+    
     if (!this.config.apiKey) {
       throw new Error('Claude Code provider not initialized');
     }
@@ -45,10 +48,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
     try {
       // Find the claude-code CLI executable
+      const cliPathStart = Date.now();
       const cliPath = await this.findCliPath();
+      console.log(`[ClaudeCodeProvider] CLI path resolution took ${Date.now() - cliPathStart}ms`);
       
       // Build system prompt with document context
+      const promptBuildStart = Date.now();
       const systemPrompt = this.buildSystemPrompt(documentContext);
+      console.log(`[ClaudeCodeProvider] System prompt build took ${Date.now() - promptBuildStart}ms, length: ${systemPrompt.length}`);
 
       // Get project path from document context
       const projectPath = documentContext?.filePath?.split('/').slice(0, -1).join('/') || process.cwd();
@@ -70,20 +77,41 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         const claudeSessionId = this.claudeSessionIds.get(sessionId);
         if (claudeSessionId) {
           options.resume = claudeSessionId;
-          console.log('Resuming claude-code session:', claudeSessionId);
+          console.log(`[ClaudeCodeProvider] Resuming claude-code session: ${claudeSessionId}`);
+        } else {
+          console.log(`[ClaudeCodeProvider] No existing Claude session for ID: ${sessionId}`);
         }
       }
 
       // Use claude-code-sdk query function
+      console.log(`[ClaudeCodeProvider] Calling query with options:`, {
+        model: options.model,
+        hasSystemPrompt: !!options.customSystemPrompt,
+        hasMcpServers: !!options.mcpServers,
+        cwd: options.cwd,
+        resume: options.resume
+      });
+      
+      const queryStartTime = Date.now();
       const queryIterator = query({
         prompt: message,
         options
       });
 
       let fullContent = '';
+      let chunkCount = 0;
+      let firstChunkTime: number | undefined;
+      let toolCallCount = 0;
 
       // Stream the response
       for await (const chunk of queryIterator) {
+        chunkCount++;
+        
+        if (!firstChunkTime) {
+          firstChunkTime = Date.now();
+          const timeToFirstChunk = firstChunkTime - queryStartTime;
+          console.log(`[ClaudeCodeProvider] First chunk received after ${timeToFirstChunk}ms (total: ${firstChunkTime - startTime}ms from start)`);
+        }
         if (typeof chunk === 'string') {
           // Text chunk
           fullContent += chunk;
@@ -110,7 +138,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   };
                 } else if (block.type === 'tool_use') {
                   // Handle tool calls from Claude
-                  console.log('Tool use detected:', block.name);
+                  toolCallCount++;
+                  console.log(`[ClaudeCodeProvider] Tool use #${toolCallCount} detected: ${block.name}`);
                   
                   // Emit tool call event
                   yield {
@@ -141,7 +170,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             }
           } else if (chunk.type === 'tool_call' || chunk.type === 'tool_use') {
             // Standalone tool call event
-            console.log('Standalone tool call:', chunk.name);
+            toolCallCount++;
+            console.log(`[ClaudeCodeProvider] Standalone tool call #${toolCallCount}: ${chunk.name}`);
             
             yield {
               type: 'tool_call',
@@ -176,6 +206,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       }
 
       // Send completion event
+      const totalTime = Date.now() - startTime;
+      console.log(`[ClaudeCodeProvider] Stream complete - Total time: ${totalTime}ms, Chunks: ${chunkCount}, Tool calls: ${toolCallCount}, Content length: ${fullContent.length}`);
+      
       yield {
         type: 'complete',
         content: fullContent,
@@ -183,14 +216,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       };
 
     } catch (error: any) {
+      const errorTime = Date.now() - startTime;
       if (error instanceof AbortError) {
-        console.log('Request was aborted');
+        console.log(`[ClaudeCodeProvider] Request was aborted after ${errorTime}ms`);
         yield {
           type: 'complete',
           isComplete: true
         };
       } else {
-        console.error('Claude Code SDK error:', error);
+        console.error(`[ClaudeCodeProvider] Error after ${errorTime}ms:`, error);
         yield {
           type: 'error',
           error: error.message
@@ -256,7 +290,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     // Find the first path that exists
     for (const testPath of possiblePaths) {
       if (fs.existsSync(testPath)) {
-        console.log('Found claude-code CLI at:', testPath);
+        console.log(`[ClaudeCodeProvider] Found claude-code CLI at: ${testPath}`);
         return testPath;
       }
     }
@@ -266,7 +300,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const claudeCodePath = require.resolve('@anthropic-ai/claude-code');
       const claudeCodeDir = path.dirname(claudeCodePath);
       const cliPath = path.join(claudeCodeDir, 'cli.js');
-      console.log('Resolved claude-code CLI at:', cliPath);
+      console.log(`[ClaudeCodeProvider] Resolved claude-code CLI at: ${cliPath}`);
       return cliPath;
     } catch (err) {
       throw new Error('Could not find claude-code CLI executable');

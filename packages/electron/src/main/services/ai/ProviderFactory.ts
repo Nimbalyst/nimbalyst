@@ -21,7 +21,9 @@ export class ProviderFactory {
     sessionId: string
   ): AIProvider | null {
     const key = `${type}-${sessionId}`;
-    return this.providers.get(key) || null;
+    const provider = this.providers.get(key) || null;
+    console.log(`[ProviderFactory] Getting provider ${key}: ${provider ? 'found' : 'not found'}`);
+    return provider;
   }
   
   /**
@@ -32,7 +34,9 @@ export class ProviderFactory {
     type: AIProviderType,
     sessionId: string
   ): AIProvider {
+    const startTime = Date.now();
     const key = `${type}-${sessionId}`;
+    console.log(`[ProviderFactory] Creating new ${type} provider for session ${sessionId}`);
     
     // Create new provider based on type
     let provider: AIProvider;
@@ -55,6 +59,7 @@ export class ProviderFactory {
     
     // Cache the provider
     this.providers.set(key, provider);
+    console.log(`[ProviderFactory] Created ${type} provider in ${Date.now() - startTime}ms`);
     
     return provider;
   }

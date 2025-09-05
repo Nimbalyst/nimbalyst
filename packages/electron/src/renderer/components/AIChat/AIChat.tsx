@@ -5,6 +5,7 @@ import { ChatInput } from './ChatInput';
 import { SessionDropdown } from './SessionDropdown';
 import { NewSessionButton } from './NewSessionButton';
 import { EmptyState } from './EmptyState';
+import { PerformanceMetrics } from './PerformanceMetrics';
 import { aiApi, DocumentContext } from '../../services/aiApi';
 import { logger } from '../../utils/logger';
 import './AIChat.css';
@@ -67,6 +68,10 @@ export function AIChat({
     // Load last used model from localStorage
     const saved = localStorage.getItem('ai-selected-model');
     return saved || 'claude-code';  // Default to Claude Code
+  });
+  const [showPerformanceMetrics, setShowPerformanceMetrics] = useState<boolean>(() => {
+    // Load performance metrics visibility from localStorage
+    return localStorage.getItem('ai-show-performance-metrics') === 'true';
   });
 
   // Parse provider and model from the combined ID
@@ -1064,6 +1069,12 @@ export function AIChat({
         onToggleCollapse={onToggleCollapse}
         provider={parseModelId(currentModel).provider}
         model={currentModel}
+        showPerformanceMetrics={showPerformanceMetrics}
+        onTogglePerformanceMetrics={() => {
+          const newValue = !showPerformanceMetrics;
+          setShowPerformanceMetrics(newValue);
+          localStorage.setItem('ai-show-performance-metrics', String(newValue));
+        }}
       >
         <SessionDropdown
           currentSessionId={currentSessionId}
@@ -1106,6 +1117,8 @@ export function AIChat({
         </div>
       ) : (
         <>
+          <PerformanceMetrics show={showPerformanceMetrics} />
+          
           <ChatMessages
             messages={messages}
             isLoading={isLoading}

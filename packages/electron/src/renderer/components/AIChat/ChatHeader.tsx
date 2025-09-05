@@ -9,9 +9,18 @@ interface ChatHeaderProps {
   children?: React.ReactNode;
   provider?: string;
   model?: string;  // Full provider:model ID
+  showPerformanceMetrics?: boolean;
+  onTogglePerformanceMetrics?: () => void;
 }
 
-export function ChatHeader({ onToggleCollapse, children, provider, model }: ChatHeaderProps) {
+export function ChatHeader({ 
+  onToggleCollapse, 
+  children, 
+  provider, 
+  model,
+  showPerformanceMetrics,
+  onTogglePerformanceMetrics 
+}: ChatHeaderProps) {
   const modelInfo = parseModelInfo(model);
 
   // Get provider class name for styling
@@ -38,6 +47,17 @@ export function ChatHeader({ onToggleCollapse, children, provider, model }: Chat
           )}
         </h3>
         <div className="ai-chat-header-actions">
+          {onTogglePerformanceMetrics && (
+            <button
+              className="ai-chat-action-button"
+              onClick={onTogglePerformanceMetrics}
+              title={showPerformanceMetrics ? "Hide Performance Metrics" : "Show Performance Metrics"}
+              aria-label="Toggle Performance Metrics"
+              style={{ opacity: showPerformanceMetrics ? 1 : 0.6 }}
+            >
+              <MaterialSymbol icon="speed" size={18} />
+            </button>
+          )}
           <button
             className="ai-chat-action-button"
             onClick={onToggleCollapse}

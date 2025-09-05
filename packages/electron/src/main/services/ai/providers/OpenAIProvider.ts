@@ -4,6 +4,9 @@
 
 import OpenAI from 'openai';
 import { BaseAIProvider } from '../AIProvider';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import { 
   DocumentContext, 
   ProviderConfig, 
@@ -21,15 +24,31 @@ export class OpenAIProvider extends BaseAIProvider {
   static readonly DEFAULT_MODEL = DEFAULT_MODELS.openai;
 
   async initialize(config: ProviderConfig): Promise<void> {
+    const initStartTime = Date.now();
+    console.log(`[OpenAIProvider] Initializing with config:`, {
+      hasApiKey: !!config.apiKey,
+      model: config.model,
+      temperature: config.temperature,
+      maxTokens: config.maxTokens
+    });
+    
     this.config = config;
     
     if (!config.apiKey) {
       throw new Error('API key required for OpenAI provider');
     }
 
+    // For GPT-5, use a shorter timeout to see if it helps
+    const timeout = config.model === 'gpt-5' ? 15000 : 60000;
+    console.log(`[OpenAIProvider] Creating OpenAI client with timeout: ${timeout}ms, maxRetries: 0`);
     this.openai = new OpenAI({
       apiKey: config.apiKey,
+      timeout,
+      maxRetries: 0,  // NO RETRIES - fail fast
+      dangerouslyAllowBrowser: false  // We're in Node.js/Electron main process
     });
+    console.log(`[OpenAIProvider] OpenAI client created`);
+    console.log(`[OpenAIProvider] Initialized in ${Date.now() - initStartTime}ms`);
   }
 
   async *sendMessage(
@@ -38,12 +57,17 @@ export class OpenAIProvider extends BaseAIProvider {
     sessionId?: string,
     messages?: Message[]
   ): AsyncIterableIterator<StreamChunk> {
+    const startTime = Date.now();
+    console.log(`[OpenAIProvider] Starting sendMessage - message length: ${message.length}, hasContext: ${!!documentContext}, contextMessages: ${messages?.length || 0}`);
+    
     if (!this.openai) {
       throw new Error('OpenAI provider not initialized');
     }
 
     // Build system prompt with document context
+    const promptStartTime = Date.now();
     const systemPrompt = this.buildSystemPrompt(documentContext);
+    console.log(`[OpenAIProvider] System prompt built in ${Date.now() - promptStartTime}ms, length: ${systemPrompt.length}`);
 
     // Create abort controller for this request
     this.abortController = new AbortController();
@@ -55,10 +79,11 @@ export class OpenAIProvider extends BaseAIProvider {
     
     // Add existing messages if provided
     if (messages && messages.length > 0) {
+      console.log(`[OpenAIProvider] Processing ${messages.length} context messages`);
       for (const msg of messages) {
         // Skip messages with empty content
         if (!msg.content || msg.content.trim() === '') {
-          console.warn('Skipping message with empty content:', msg);
+          console.warn('[OpenAIProvider] Skipping message with empty content:', msg);
           continue;
         }
         
@@ -146,6 +171,7 @@ export class OpenAIProvider extends BaseAIProvider {
       
       // Remove provider prefix from model ID for API call
       const modelId = this.config.model.replace('openai:', '');
+      console.log(`[OpenAIProvider] Using model: ${modelId}`);
       
       const completionParams: any = {
         model: modelId,
@@ -179,16 +205,97 @@ export class OpenAIProvider extends BaseAIProvider {
         completionParams.max_completion_tokens = this.config.maxTokens || 4000;
       }
       
-      const response = await this.openai.chat.completions.create(completionParams, {
-        signal: this.abortController.signal
+      console.log(`[OpenAIProvider] Calling OpenAI API with ${apiMessages.length} messages`);
+      console.log(`[OpenAIProvider] Request params:`, {
+        model: completionParams.model,
+        messageCount: completionParams.messages.length,
+        temperature: completionParams.temperature,
+        max_tokens: completionParams.max_tokens,
+        max_completion_tokens: completionParams.max_completion_tokens,
+        tools: completionParams.tools?.length,
+        stream: completionParams.stream
       });
+      console.log(`[OpenAIProvider] Actual completionParams keys:`, Object.keys(completionParams));
+      
+      const apiCallStartTime = Date.now();
+      
+      console.log(`[OpenAIProvider] About to call OpenAI completions.create...`);
+      console.log(`[OpenAIProvider] Full API URL: https://api.openai.com/v1/chat/completions`);
+      console.log(`[OpenAIProvider] Headers: Authorization: Bearer ${this.config.apiKey?.substring(0, 10)}...`);
+      
+      let response;
+      try {
+        const createStartTime = Date.now();
+        console.log(`[OpenAIProvider] Calling openai.chat.completions.create at ${new Date().toISOString()}`);
+        
+        const beforeAwait = Date.now();
+        
+        // Write debug info to file
+        const debugFile = path.join(os.tmpdir(), 'openai-debug.log');
+        fs.appendFileSync(debugFile, `\n[${new Date().toISOString()}] About to call OpenAI API with model: ${completionParams.model}\n`);
+        
+        // Track if we're in Electron
+        console.log(`[OpenAIProvider] Running in Electron: ${!!process.versions.electron}`);
+        console.log(`[OpenAIProvider] Process type: ${process.type || 'node'}`);
+        
+        response = await this.openai.chat.completions.create(completionParams, {
+          signal: this.abortController.signal
+        });
+        
+        const afterAwait = Date.now();
+        fs.appendFileSync(debugFile, `[${new Date().toISOString()}] API call returned after ${afterAwait - beforeAwait}ms\n`);
+        console.log(`[OpenAIProvider] await returned after ${afterAwait - beforeAwait}ms`);
+        
+        console.log(`[OpenAIProvider] completions.create returned after ${Date.now() - createStartTime}ms`);
+        console.log(`[OpenAIProvider] Response type: ${typeof response}, has Symbol.asyncIterator: ${!!response[Symbol.asyncIterator]}`);
+      } catch (error: any) {
+        console.error(`[OpenAIProvider] completions.create failed after ${Date.now() - apiCallStartTime}ms:`, error);
+        console.error(`[OpenAIProvider] Error details:`, {
+          name: error.name,
+          message: error.message,
+          status: error.status,
+          code: error.code,
+          type: error.type
+        });
+        throw error;
+      }
+      console.log(`[OpenAIProvider] Got response object after ${Date.now() - apiCallStartTime}ms`);
 
       let fullContent = '';
       let currentToolCall: any = null;
       let toolCallAccumulator: any = {};
+      let chunkCount = 0;
+      let firstChunkTime: number | undefined;
+      let toolCallCount = 0;
 
       // Stream the response
+      console.log(`[OpenAIProvider] About to start iterating response stream at ${new Date().toISOString()}`);
+      const iteratorStartTime = Date.now();
+      
+      // Add a timeout check
+      const timeoutCheck = setTimeout(() => {
+        if (!firstChunkTime) {
+          console.warn(`[OpenAIProvider] WARNING: No chunks received after 5 seconds of iteration`);
+        }
+      }, 5000);
+      
       for await (const chunk of response) {
+        if (chunkCount === 0) {
+          console.log(`[OpenAIProvider] Iteration started, first chunk arriving after ${Date.now() - iteratorStartTime}ms`);
+        }
+        chunkCount++;
+        
+        if (!firstChunkTime) {
+          firstChunkTime = Date.now();
+          clearTimeout(timeoutCheck);  // Clear the timeout check
+          const timeToFirstChunk = firstChunkTime - apiCallStartTime;
+          const timeFromIteratorStart = firstChunkTime - iteratorStartTime;
+          console.log(`[OpenAIProvider] First chunk received:`);
+          console.log(`  - Time from API call start: ${timeToFirstChunk}ms`);
+          console.log(`  - Time from iterator start: ${timeFromIteratorStart}ms`);
+          console.log(`  - Total time from request start: ${firstChunkTime - startTime}ms`);
+          console.log(`  - Chunk data:`, chunk?.choices?.[0]?.delta);
+        }
         const delta = chunk.choices[0]?.delta;
         
         if (delta?.content) {
@@ -230,8 +337,10 @@ export class OpenAIProvider extends BaseAIProvider {
           // Process accumulated tool calls
           for (const callId in toolCallAccumulator) {
             const toolCall = toolCallAccumulator[callId];
+            toolCallCount++;
             try {
               const args = JSON.parse(toolCall.function.arguments);
+              console.log(`[OpenAIProvider] Tool call #${toolCallCount}: ${toolCall.function.name}`);
               
               // Handle streamContent specially
               if (toolCall.function.name === 'streamContent') {
@@ -267,18 +376,22 @@ export class OpenAIProvider extends BaseAIProvider {
                 
                 // Execute applyDiff if handler is available
                 if (toolCall.function.name === 'applyDiff' && this.toolHandler) {
+                  const toolStartTime = Date.now();
                   const result = await this.toolHandler.applyDiff(args);
-                  console.log('Tool execution result:', result);
+                  console.log(`[OpenAIProvider] Tool execution completed in ${Date.now() - toolStartTime}ms:`, result);
                 }
               }
             } catch (error) {
-              console.error('Error parsing tool arguments:', error);
+              console.error(`[OpenAIProvider] Error parsing tool arguments for call ${callId}:`, error);
             }
           }
         }
         
         if (chunk.choices[0]?.finish_reason === 'stop') {
           // Message complete
+          const totalTime = Date.now() - startTime;
+          console.log(`[OpenAIProvider] Stream complete - Total time: ${totalTime}ms, Chunks: ${chunkCount}, Tool calls: ${toolCallCount}, Content length: ${fullContent.length}`);
+          
           yield {
             type: 'complete',
             content: fullContent,
@@ -288,14 +401,15 @@ export class OpenAIProvider extends BaseAIProvider {
       }
 
     } catch (error: any) {
+      const errorTime = Date.now() - startTime;
       if (error.name === 'AbortError') {
-        console.log('Request was aborted');
+        console.log(`[OpenAIProvider] Request was aborted after ${errorTime}ms`);
         yield {
           type: 'complete',
           isComplete: true
         };
       } else {
-        console.error('OpenAI API error:', error);
+        console.error(`[OpenAIProvider] Error after ${errorTime}ms:`, error);
         yield {
           type: 'error',
           error: error.message
@@ -367,8 +481,11 @@ Remember: The user can SEE the changes in their editor. They just want confirmat
     if (!apiKey) return this.getDefaultModels();
 
     try {
+      console.log('[OpenAIProvider] Fetching available models from OpenAI API');
+      const modelFetchStart = Date.now();
       const openai = new OpenAI({ apiKey });
       const response = await openai.models.list();
+      console.log(`[OpenAIProvider] Fetched ${response.data.length} models in ${Date.now() - modelFetchStart}ms`);
       
       // Filter to only allowed models
       const availableIds = new Set(response.data.map(m => m.id));
@@ -386,9 +503,10 @@ Remember: The user can SEE the changes in their editor. They just want confirmat
         }
       }
       
+      console.log(`[OpenAIProvider] Filtered to ${filtered.length} allowed models`);
       return filtered.length > 0 ? filtered : [];
     } catch (error) {
-      console.error('Failed to fetch OpenAI models:', error);
+      console.error('[OpenAIProvider] Failed to fetch models:', error);
       return [];
     }
   }
