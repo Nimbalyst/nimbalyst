@@ -325,7 +325,7 @@ export function applyMarkdownReplace(
     // Text replacement failed - construct the new markdown from the replacements
     // This allows TreeMatcher to still work even if exact text matching fails
     // This is normal for structural changes like tables and lists
-    // console.log('⚠️ Text replacement failed, constructing new markdown from replacements');
+    console.log('⚠️ Text replacement failed, constructing new markdown from replacements');
     textReplacementError = error as Error;
 
     // Build the new markdown by applying replacements in a best-effort manner
@@ -1016,29 +1016,20 @@ export function $applySubTreeDiff(
   const liveChildNodesByMarkdown = new Map<string, string>();
   const liveChildren = liveParentNode.getChildren();
 
-  // For list items, we need to match on text content, not full markdown
-  const isListParent = liveParentNode.getType() === 'list';
-
   for (const child of liveChildren) {
     if ($isElementNode(child)) {
+      // Always use proper markdown conversion to preserve formatting and structure
       let markdown: string;
-
-      // For list items and other special children that don't have their own transformers,
-      // use text content for matching
-      if (isListParent && child.getType() === 'listitem') {
-        // List items should match by their text content
+      try {
+        markdown = $convertNodeToMarkdownString(
+          transformers,
+          child
+        ).trim();
+      } catch (error) {
+        // This should rarely happen, but if it does, log it
+        console.warn('Failed to convert child to markdown:', error);
+        // Last resort fallback - this will lose formatting
         markdown = child.getTextContent().trim();
-      } else {
-        // For other nodes, try full markdown conversion
-        try {
-          markdown = $convertNodeToMarkdownString(
-            transformers,
-            child
-          ).trim();
-        } catch {
-          // Fallback to text content if markdown conversion fails
-          markdown = child.getTextContent().trim();
-        }
       }
 
       liveChildNodesByMarkdown.set(markdown, child.getKey());
@@ -1188,7 +1179,21 @@ export function $applyChildNodeDiff(
       const handler = diffHandlerRegistry.findHandler(context);
 
       if (handler) {
-        handler.handleUpdate(context);
+        const result = handler.handleUpdate(context);
+        
+        // If the handler says not to skip children, we need to recurse
+        if (result.handled && result.skipChildren === false && sourceEditor && targetEditor) {
+          console.log(`Handler for ${liveNode.getType()} requests recursion into children`);
+          // Recursively apply sub-tree diff to handle nested structures
+          $applySubTreeDiff(
+            liveNode,
+            diff.sourceNode,
+            diff.targetNode,
+            sourceEditor,
+            targetEditor,
+            transformers
+          );
+        }
       } else {
         console.warn(
           `No handler found for child node type: ${liveNode.getType()}`,

@@ -9,6 +9,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, lexical/no-optional-chaining */
 
 import {type TextReplacement} from '../../core/diffUtils';
+import {$getRoot} from 'lexical';
+import {$isListNode} from '@lexical/list';
 import {
   assertApproveProducesTarget,
   assertRejectProducesOriginal,
@@ -186,6 +188,10 @@ describe('List Replacement Changes', () => {
     ];
 
     const result = setupMarkdownReplaceTest(originalMarkdown, replacements);
+    
+    // Debug: Check what the target markdown should be
+    console.log('Debug - replacements:', replacements);
+    console.log('Debug - result.targetMarkdown:', result.targetMarkdown);
 
     // Word-level diff shows only the changed parts
     // assertReplacementApplied(result, ['Updated sub'], ['Sub']);
@@ -449,6 +455,16 @@ describe('List Replacement Changes', () => {
       originalMarkdown,
       targetMarkdown,
     );
+
+    // Debug: Check the list type change
+    result.replaceEditor.getEditorState().read(() => {
+      const root = $getRoot();
+      const list = root.getFirstChild();
+      if ($isListNode(list)) {
+        console.log('🔍 Before rejection - list type:', list.getListType());
+        console.log('🔍 Before rejection - __originalListType:', (list as any).__originalListType);
+      }
+    });
 
     // // The diff system should detect this as a complete replacement
     // assertReplacementApplied(

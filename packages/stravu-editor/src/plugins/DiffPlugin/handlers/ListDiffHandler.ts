@@ -148,19 +148,37 @@ export class ListDiffHandler implements DiffNodeHandler {
     targetNode: SerializedLexicalNode,
     context: DiffHandlerContext,
   ): DiffHandlerResult {
-    // Handle list type changes
+    // Check for list type changes
     if ($isListNode(liveNode)) {
       const sourceListType = (sourceNode as any).listType;
       const targetListType = (targetNode as any).listType;
 
       if (sourceListType !== targetListType) {
-        // Store the original list type for rejection purposes
-        (liveNode as any).__originalListType = sourceListType;
-        // Update to the target list type
-        (liveNode as any).setListType(targetListType);
-
-        // Mark the list as modified
-        $setDiffState(liveNode, 'modified');
+        console.log(`List type change detected: ${sourceListType} -> ${targetListType}`);
+        
+        // Instead of modifying the existing list, we need to:
+        // 1. Mark the old list as removed
+        // 2. Create a new list with the new type and mark it as added
+        
+        // Mark the existing list (with old type) as removed
+        $setDiffState(liveNode, 'removed');
+        
+        // Create a new list with the target type
+        const newList = createNodeFromSerialized(targetNode);
+        if ($isElementNode(newList)) {
+          // Mark the new list as added
+          $setDiffState(newList, 'added');
+          
+          // Insert the new list after the old one
+          liveNode.insertAfter(newList);
+          
+          // The new list now has all the content from targetNode
+          // Both lists will be visible in the diff view:
+          // - Old list (removed) with strike-through
+          // - New list (added) in green
+          
+          return {handled: true, skipChildren: true};
+        }
       }
     }
 
@@ -309,12 +327,6 @@ export class ListDiffHandler implements DiffNodeHandler {
     // Clear any diff state on the element itself
     $clearDiffState(element);
 
-    // Handle list type changes
-    if ($isListNode(element) && (element as any).__originalListType) {
-      // Keep the new list type (approval)
-      delete (element as any).__originalListType;
-    }
-
     // Process children
     const children = [...element.getChildren()];
 
@@ -351,14 +363,6 @@ export class ListDiffHandler implements DiffNodeHandler {
   private processListRejection(element: ElementNode): void {
     // Clear any diff state on the element itself
     $clearDiffState(element);
-
-    // Handle list type changes
-    if ($isListNode(element) && (element as any).__originalListType) {
-      // Restore the original list type (rejection)
-      const originalListType = (element as any).__originalListType;
-      (element as any).setListType(originalListType);
-      delete (element as any).__originalListType;
-    }
 
     // Process children
     const children = [...element.getChildren()];

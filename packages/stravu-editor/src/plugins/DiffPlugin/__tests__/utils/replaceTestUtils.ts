@@ -86,10 +86,16 @@ export function setupMarkdownReplaceTest(
     // Then normalize NBSP by replacing spaces (including NBSP) with a pattern that matches both
     // Use negative lookbehind to avoid matching spaces that are part of escape sequences
     const pattern = escaped.replace(/(?<!\\)[ \u00A0]/g, '[ \u00A0]');
-    targetMarkdown = targetMarkdown.replace(
-      new RegExp(pattern, 'g'),
-      replacement.newText,
-    );
+    const regex = new RegExp(pattern, 'g');
+    
+    // Check if the text exists in the markdown
+    if (!regex.test(targetMarkdown)) {
+      throw new Error(
+        `Text replacement failed: Old text "${replacement.oldText}" not found in original markdown`,
+      );
+    }
+    
+    targetMarkdown = targetMarkdown.replace(regex, replacement.newText);
   }
 
   // Create the main replace editor
