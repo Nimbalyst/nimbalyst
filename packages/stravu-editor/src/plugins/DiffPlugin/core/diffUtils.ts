@@ -140,6 +140,7 @@ import {ListDiffHandler} from '../handlers/ListDiffHandler';
 import {HeadingDiffHandler} from '../handlers/HeadingDiffHandler';
 import {ParagraphDiffHandler} from '../handlers/ParagraphDiffHandler';
 import {TableDiffHandler} from '../handlers/TableDiffHandler';
+import {CodeBlockDiffHandler} from '../handlers/CodeBlockDiffHandler';
 import {NodeStructureValidator} from './NodeStructureValidator';
 import {applyParsedDiffToMarkdown} from './standardDiffFormat';
 import {
@@ -160,6 +161,7 @@ export function initializeHandlers() {
 
   // Register the handlers (more specific first)
   diffHandlerRegistry.register(new TableDiffHandler());
+  diffHandlerRegistry.register(new CodeBlockDiffHandler());
   diffHandlerRegistry.register(new ParagraphDiffHandler());
   diffHandlerRegistry.register(new HeadingDiffHandler());
   diffHandlerRegistry.register(new ListDiffHandler());
