@@ -10,10 +10,12 @@ import type {JSX} from 'react';
 
 import './index.css';
 
-import {$isCodeHighlightNode} from '@lexical/code';
+import {$isCodeHighlightNode, $isCodeNode} from '@lexical/code';
 import {$isLinkNode, TOGGLE_LINK_COMMAND} from '@lexical/link';
+import {$isListNode, ListNode} from '@lexical/list';
+import {$isHeadingNode} from '@lexical/rich-text';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
-import {mergeRegister} from '@lexical/utils';
+import {$findMatchingParent, $getNearestNodeOfType, mergeRegister} from '@lexical/utils';
 import {
   $getSelection,
   $isParagraphNode,
@@ -24,14 +26,135 @@ import {
   getDOMSelection,
   LexicalEditor,
   SELECTION_CHANGE_COMMAND,
+  $isElementNode,
 } from 'lexical';
 import {Dispatch, useCallback, useEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 
+import {blockTypeToBlockName, useToolbarState} from '../../context/ToolbarContext';
+import DropDown, {DropDownItem} from '../../ui/DropDown';
 import {getDOMRangeRect} from '../../utils/getDOMRangeRect';
 import {getSelectedNode} from '../../utils/getSelectedNode';
 import {setFloatingElemPosition} from '../../utils/setFloatingElemPosition';
 import {INSERT_INLINE_COMMAND} from '../CommentPlugin';
+import {SHORTCUTS} from '../ShortcutsPlugin/shortcuts';
+import {
+  formatBulletList,
+  formatCheckList,
+  formatCode,
+  formatHeading,
+  formatNumberedList,
+  formatParagraph,
+  formatQuote,
+} from '../ToolbarPlugin/utils';
+
+function dropDownActiveClass(active: boolean) {
+  if (active) {
+    return 'active dropdown-item-active';
+  } else {
+    return '';
+  }
+}
+
+function BlockFormatDropDown({
+  editor,
+  blockType,
+}: {
+  blockType: keyof typeof blockTypeToBlockName;
+  editor: LexicalEditor;
+}): JSX.Element {
+  return (
+    <DropDown
+      buttonClassName="popup-item block-controls"
+      buttonIconClassName={'icon block-type ' + blockType}
+      buttonLabel=""
+      buttonAriaLabel="Formatting options for text style">
+      <DropDownItem
+        className={
+          'item wide ' + dropDownActiveClass(blockType === 'paragraph')
+        }
+        onClick={() => formatParagraph(editor)}>
+        <div className="icon-text-container">
+          <i className="icon paragraph" />
+          <span className="text">Normal</span>
+        </div>
+        <span className="shortcut">{SHORTCUTS.NORMAL}</span>
+      </DropDownItem>
+      <DropDownItem
+        className={'item wide ' + dropDownActiveClass(blockType === 'h1')}
+        onClick={() => formatHeading(editor, blockType, 'h1')}>
+        <div className="icon-text-container">
+          <i className="icon h1" />
+          <span className="text">Heading 1</span>
+        </div>
+        <span className="shortcut">{SHORTCUTS.HEADING1}</span>
+      </DropDownItem>
+      <DropDownItem
+        className={'item wide ' + dropDownActiveClass(blockType === 'h2')}
+        onClick={() => formatHeading(editor, blockType, 'h2')}>
+        <div className="icon-text-container">
+          <i className="icon h2" />
+          <span className="text">Heading 2</span>
+        </div>
+        <span className="shortcut">{SHORTCUTS.HEADING2}</span>
+      </DropDownItem>
+      <DropDownItem
+        className={'item wide ' + dropDownActiveClass(blockType === 'h3')}
+        onClick={() => formatHeading(editor, blockType, 'h3')}>
+        <div className="icon-text-container">
+          <i className="icon h3" />
+          <span className="text">Heading 3</span>
+        </div>
+        <span className="shortcut">{SHORTCUTS.HEADING3}</span>
+      </DropDownItem>
+      <DropDownItem
+        className={'item wide ' + dropDownActiveClass(blockType === 'number')}
+        onClick={() => formatNumberedList(editor, blockType)}>
+        <div className="icon-text-container">
+          <i className="icon numbered-list" />
+          <span className="text">Numbered List</span>
+        </div>
+        <span className="shortcut">{SHORTCUTS.NUMBERED_LIST}</span>
+      </DropDownItem>
+      <DropDownItem
+        className={'item wide ' + dropDownActiveClass(blockType === 'bullet')}
+        onClick={() => formatBulletList(editor, blockType)}>
+        <div className="icon-text-container">
+          <i className="icon bullet-list" />
+          <span className="text">Bullet List</span>
+        </div>
+        <span className="shortcut">{SHORTCUTS.BULLET_LIST}</span>
+      </DropDownItem>
+      <DropDownItem
+        className={'item wide ' + dropDownActiveClass(blockType === 'check')}
+        onClick={() => formatCheckList(editor, blockType)}>
+        <div className="icon-text-container">
+          <i className="icon check-list" />
+          <span className="text">Check List</span>
+        </div>
+        <span className="shortcut">{SHORTCUTS.CHECK_LIST}</span>
+      </DropDownItem>
+      <DropDownItem
+        className={'item wide ' + dropDownActiveClass(blockType === 'quote')}
+        onClick={() => formatQuote(editor, blockType)}>
+        <div className="icon-text-container">
+          <i className="icon quote" />
+          <span className="text">Quote</span>
+        </div>
+        <span className="shortcut">{SHORTCUTS.QUOTE}</span>
+      </DropDownItem>
+      <DropDownItem
+        className={'item wide ' + dropDownActiveClass(blockType === 'code')}
+        onClick={() => formatCode(editor, blockType)}>
+        <div className="icon-text-container">
+          <i className="icon code" />
+          <span className="text">Code Block</span>
+        </div>
+        <span className="shortcut">{SHORTCUTS.CODE_BLOCK}</span>
+      </DropDownItem>
+    </DropDown>
+  );
+}
 
 function TextFormatFloatingToolbar({
   editor,
@@ -47,6 +170,7 @@ function TextFormatFloatingToolbar({
   isStrikethrough,
   isSubscript,
   isSuperscript,
+  blockType,
   setIsLinkEditMode,
 }: {
   editor: LexicalEditor;
@@ -62,6 +186,7 @@ function TextFormatFloatingToolbar({
   isSubscript: boolean;
   isSuperscript: boolean;
   isUnderline: boolean;
+  blockType: keyof typeof blockTypeToBlockName;
   setIsLinkEditMode: Dispatch<boolean>;
 }): JSX.Element {
   const popupCharStylesEditorRef = useRef<HTMLDivElement | null>(null);
@@ -194,6 +319,11 @@ function TextFormatFloatingToolbar({
     <div ref={popupCharStylesEditorRef} className="floating-text-format-popup">
       {editor.isEditable() && (
         <>
+          <BlockFormatDropDown
+            blockType={blockType}
+            editor={editor}
+          />
+          <div className="divider" />
           <button
             type="button"
             onClick={() => {
@@ -234,6 +364,7 @@ function TextFormatFloatingToolbar({
             aria-label="Format text with a strikethrough">
             <i className="format strikethrough" />
           </button>
+          {/* Commented out non-markdown focused formatting options
           <button
             type="button"
             onClick={() => {
@@ -284,6 +415,7 @@ function TextFormatFloatingToolbar({
             aria-label="Format text to capitalize">
             <i className="format capitalize" />
           </button>
+          */}
           <button
             type="button"
             onClick={() => {
@@ -333,6 +465,7 @@ function useFloatingTextFormatToolbar(
   const [isSubscript, setIsSubscript] = useState(false);
   const [isSuperscript, setIsSuperscript] = useState(false);
   const [isCode, setIsCode] = useState(false);
+  const [blockType, setBlockType] = useState<keyof typeof blockTypeToBlockName>('paragraph');
 
   const updatePopup = useCallback(() => {
     editor.getEditorState().read(() => {
@@ -359,6 +492,37 @@ function useFloatingTextFormatToolbar(
       }
 
       const node = getSelectedNode(selection);
+      const anchorNode = selection.anchor.getNode();
+      let element =
+        anchorNode.getKey() === 'root'
+          ? anchorNode
+          : $findMatchingParent(anchorNode, (e) => {
+              const parent = e.getParent();
+              return parent !== null && parent.getKey() === 'root';
+            });
+
+      if (element === null) {
+        element = anchorNode.getTopLevelElementOrThrow();
+      }
+
+      // Update block type
+      if ($isListNode(element)) {
+        const parentList = $getNearestNodeOfType<ListNode>(
+          anchorNode,
+          ListNode,
+        );
+        const type = parentList
+          ? parentList.getListType()
+          : element.getListType();
+        setBlockType(type);
+      } else {
+        const type = $isHeadingNode(element)
+          ? element.getTag()
+          : element.getType();
+        if (type in blockTypeToBlockName) {
+          setBlockType(type as keyof typeof blockTypeToBlockName);
+        }
+      }
 
       // Update text format
       setIsBold(selection.hasFormat('bold'));
@@ -441,6 +605,7 @@ function useFloatingTextFormatToolbar(
       isSuperscript={isSuperscript}
       isUnderline={isUnderline}
       isCode={isCode}
+      blockType={blockType}
       setIsLinkEditMode={setIsLinkEditMode}
     />,
     anchorElem,

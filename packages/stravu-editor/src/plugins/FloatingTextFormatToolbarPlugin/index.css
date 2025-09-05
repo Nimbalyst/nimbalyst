@@ -8,6 +8,7 @@
 
 .floating-text-format-popup {
   display: flex;
+  align-items: center;
   background: #fff;
   padding: 4px;
   vertical-align: middle;
@@ -19,7 +20,7 @@
   box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.3);
   border-radius: 8px;
   transition: opacity 0.5s;
-  height: 35px;
+  min-height: 35px;
   will-change: transform;
 }
 
@@ -137,6 +138,31 @@
   width: 1px;
   background-color: #eee;
   margin: 0 4px;
+}
+
+.floating-text-format-popup .block-controls {
+  background: none;
+  border: 0;
+  display: flex;
+  align-items: center;
+  border-radius: 10px;
+  padding: 6px 8px;
+  cursor: pointer;
+  vertical-align: middle;
+  font-size: 14px;
+  min-width: 100px;
+  color: #777;
+}
+
+.floating-text-format-popup .block-controls:hover {
+  background-color: #eee;
+}
+
+.floating-text-format-popup .block-controls .icon {
+  background-size: contain;
+  height: 16px;
+  width: 16px;
+  margin-right: 8px;
 }
 
 @media (max-width: 1024px) {
