@@ -118,7 +118,7 @@ export class WindowedTreeMatcher {
   private targetEditor: LexicalEditor;
 
   private neverMatchNodes: Set<string> = new Set([
-    'code',
+    // 'code',
     'formula',
     'matrix',
     'diagram',

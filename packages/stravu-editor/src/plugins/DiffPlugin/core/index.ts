@@ -12,7 +12,6 @@ export type {Change} from './diffPluginUtils';
 // Plugin utilities (needed for React plugin and toolbar)
 export {
   $approveDiffs,
-  ,
   $rejectDiffs,
   APPLY_DIFF_COMMAND,
   APPROVE_DIFF_COMMAND,
