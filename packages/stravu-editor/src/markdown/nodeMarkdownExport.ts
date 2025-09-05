@@ -53,7 +53,16 @@ function createMarkdownExport(
 ): (node?: ElementNode | null) => string {
   const byType = transformersByType(transformers);
   const isNewlineDelimited = !byType.multilineElement.length;
-  const textFormatTransformers = byType.textFormat;
+  
+  // Like Lexical, only use single-format transformers and put code formats at the end
+  const textFormatTransformers = byType.textFormat
+    .filter((transformer) => transformer.format.length === 1)
+    .sort((a, b) => {
+      return (
+        Number(a.format.includes('code')) - Number(b.format.includes('code'))
+      );
+    });
+  
   const textMatchTransformers = byType.textMatch;
   const elementTransformers = [...byType.element, ...byType.multilineElement];
 
@@ -199,27 +208,19 @@ function exportChildren(
           ),
         );
       } else {
-        const tag = getTextFormatTransformerTag(
-          child,
-          textContentForTransform,
-          textFormatTransformers,
-        );
-
-        if (tag) {
-          output.push(tag.export(
+        // First check for text format transformers
+        const hasFormatting = child.getFormat() !== 0;
+        let handled = false;
+        
+        if (hasFormatting) {
+          // Use a simplified version of Lexical's exportTextFormat
+          const formattedText = exportTextFormat(
             child,
             textContentForTransform,
-            (node, textContent) =>
-              exportChildren(
-                node,
-                textFormatTransformers,
-                textMatchTransformers,
-                textContent,
-                tag,
-                shouldPreserveNewLines,
-                elementTransformers,
-              ),
-          ));
+            textFormatTransformers,
+          );
+          output.push(formattedText);
+          handled = true;
         } else {
           // Text matching transformers for text nodes
           for (const transformer of textMatchTransformers) {
@@ -243,10 +244,13 @@ function exportChildren(
 
             if (result != null) {
               output.push(result);
+              handled = true;
               continue mainLoop;
             }
           }
-
+        }
+        
+        if (!handled) {
           output.push(textContentForTransform);
         }
       }
@@ -301,20 +305,46 @@ function exportChildren(
   return output.join('');
 }
 
-function getTextFormatTransformerTag(
+function exportTextFormat(
   node: TextNode,
   textContent: string,
-  textFormatTransformers: Array<TextFormatTransformer>,
-): TextFormatTransformer | null {
-  // This needs to be in reverse order to match the nesting of formats
-  for (let i = textFormatTransformers.length - 1; i >= 0; i--) {
-    const transformer = textFormatTransformers[i];
-    if (transformer.format.includes(node.getFormat() as TextFormatType)) {
-      return transformer;
+  textTransformers: Array<TextFormatTransformer>,
+): string {
+  // Simplified version of Lexical's exportTextFormat
+  // We don't track unclosed tags across siblings since we're exporting individual nodes
+  
+  let output = textContent;
+  
+  // If node has no format, return original text
+  if (node.getFormat() === 0) {
+    return output;
+  }
+  
+  // Don't escape markdown characters if this is code
+  if (!node.hasFormat('code')) {
+    output = output.replace(/([*_`~\\])/g, '\\$1');
+  }
+  
+  // Collect applicable transformers
+  const applied: string[] = [];
+  
+  for (const transformer of textTransformers) {
+    // Only use single-format transformers for export
+    if (transformer.format.length !== 1) {
+      continue;
+    }
+    
+    const format = transformer.format[0];
+    if (node.hasFormat(format)) {
+      applied.push(transformer.tag);
     }
   }
-
-  return null;
+  
+  // Apply tags in order (opening at start, closing at end in reverse)
+  const openingTags = applied.join('');
+  const closingTags = applied.slice().reverse().join('');
+  
+  return openingTags + output + closingTags;
 }
 
 function isEmptyParagraph(node: LexicalNode): boolean {
