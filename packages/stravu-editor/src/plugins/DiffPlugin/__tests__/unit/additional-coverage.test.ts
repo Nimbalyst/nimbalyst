@@ -7,6 +7,8 @@
  */
 
 import {setupMarkdownDiffTest} from '../utils/diffTestUtils';
+import { MARKDOWN_TEST_TRANSFORMERS } from "@/plugins/DiffPlugin/__tests__/utils";
+import {$convertToMarkdownString} from '@lexical/markdown';
 
 describe('Additional Coverage Tests', () => {
   describe('Mixed Formatting Edge Cases', () => {
@@ -16,10 +18,6 @@ describe('Additional Coverage Tests', () => {
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -41,10 +39,6 @@ continues in next paragraph** end.`;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -67,10 +61,6 @@ continues in next paragraph** end.`;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -96,10 +86,6 @@ continues in next paragraph** end.`;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -129,10 +115,6 @@ continues in next paragraph** end.`;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -156,10 +138,6 @@ continues in next paragraph** end.`;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -185,10 +163,6 @@ continues in next paragraph** end.`;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -204,10 +178,6 @@ continues in next paragraph** end.`;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -223,10 +193,6 @@ continues in next paragraph** end.`;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -248,10 +214,6 @@ const x: number = 5;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -269,10 +231,6 @@ const x: number = 5;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -288,69 +246,7 @@ const x: number = 5;
     });
   });
 
-  describe('Table Edge Cases', () => {
-    test('Tables with empty cells', () => {
-      // Note: Table formatting may be normalized during processing
-      const original = `| Header 1 | Header 2 |
-|----------|----------|
-| Data 1   |          |
-|          | Data 2   |`;
-      const target = `| Header 1 | Header 2 |
-|----------|----------|
-| Data 1   | New Data |
-|          | Data 2   |`;
-
-      const result = setupMarkdownDiffTest(original, target);
-      const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
-        return $convertToMarkdownString(
-          MARKDOWN_TEST_TRANSFORMERS,
-          undefined,
-          true,
-        );
-      });
-
-      // The table system normalizes formatting and handles empty cells differently
-      // Note: Complex table diffs with empty cells may have limitations in content matching
-      const expectedNormalized = `| Header 1 | Header 2 |
-| --- | --- |
-| Data 1 |  |
-|  | Data 2 |`;
-      expect(actualMarkdown.trim()).toBe(expectedNormalized.trim());
-    });
-
-    test('Tables with formatting in cells', () => {
-      // Note: Table formatting may be normalized during processing
-      const original = `| Column A | Column B |
-|----------|----------|
-| **Bold** | *Italic* |`;
-      const target = `| Column A | Column B |
-|----------|----------|
-| **Bold** | *Italic* and ~~strike~~ |`;
-
-      const result = setupMarkdownDiffTest(original, target);
-      const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
-        return $convertToMarkdownString(
-          MARKDOWN_TEST_TRANSFORMERS,
-          undefined,
-          true,
-        );
-      });
-
-      // The table system normalizes separator rows while preserving formatting in cells
-      const expectedNormalized = `| Column A | Column B |
-| --- | --- |
-| **Bold** | *Italic* and ~~strike~~ |`;
-      expect(actualMarkdown.trim()).toBe(expectedNormalized.trim());
-    });
-  });
+  // Table tests have been moved to table.test.ts for better organization
 
   describe('Whitespace Edge Cases', () => {
     test('Multiple consecutive spaces', () => {
@@ -359,10 +255,6 @@ const x: number = 5;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -378,10 +270,6 @@ const x: number = 5;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -399,10 +287,6 @@ const x: number = 5;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,
@@ -424,10 +308,6 @@ $$`;
 
       const result = setupMarkdownDiffTest(original, target);
       const actualMarkdown = result.diffEditor.getEditorState().read(() => {
-        const {$convertToMarkdownString} = require('@lexical/markdown');
-        const {
-          MARKDOWN_TEST_TRANSFORMERS,
-        } = require('../../../lexical-markdown/src/__tests__/utils');
         return $convertToMarkdownString(
           MARKDOWN_TEST_TRANSFORMERS,
           undefined,

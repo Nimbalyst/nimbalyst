@@ -207,11 +207,11 @@ export function ChatMessage({
                     <div className="ai-chat-edit-metadata">
                       <span className="ai-chat-edit-type">DIFF</span>
                       <span className="ai-chat-edit-location">
-                        {edit.replacements.length} replacement{edit.replacements.length > 1 ? 's' : ''}
+                        {edit.replacements?.length} replacement{edit.replacements?.length > 1 ? 's' : ''}
                       </span>
                     </div>
 
-                    {edit.replacements.map((replacement, repIndex) => (
+                    {edit.replacements?.map((replacement, repIndex) => (
                       <div key={repIndex} className="ai-chat-edit-replacement">
                         {replacement.oldText && (
                           <div className="ai-chat-edit-old">

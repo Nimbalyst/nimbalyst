@@ -10,9 +10,13 @@ import type {
 } from './DiffNodeHandler';
 import type {ElementNode, LexicalNode, SerializedLexicalNode} from 'lexical';
 import {$isElementNode} from 'lexical';
-import {$isTableNode} from '@lexical/table';
+import {$isTableNode, $isTableRowNode, $isTableCellNode} from '@lexical/table';
 import {createNodeFromSerialized} from '../core/createNodeFromSerialized';
-import {$setDiffState} from '../core/DiffState';
+import {$setDiffState, $setOriginalMarkdown, $getOriginalMarkdown, $clearOriginalMarkdown, $getDiffState, $clearDiffState} from '../core/DiffState';
+import {$convertFromMarkdownString} from '@lexical/markdown';
+import {$applySubTreeDiff} from '../core/diffUtils';
+import {$convertNodeToMarkdownString} from '../../../markdown/nodeMarkdownExport';
+import {MARKDOWN_TRANSFORMERS} from '../../../markdown';
 
 export class TableDiffHandler implements DiffNodeHandler {
   readonly nodeType = 'table';
@@ -25,9 +29,9 @@ export class TableDiffHandler implements DiffNodeHandler {
   }
 
   handleUpdate(context: DiffHandlerContext): DiffHandlerResult {
-    const {liveNode, targetNode} = context;
+    const {liveNode, targetNode, sourceNode, sourceEditor, targetEditor, transformers} = context;
     
-    console.log('TableDiffHandler: Handling table update');
+    console.log('TableDiffHandler: Handling table update with sub-tree diff');
     
     if (!$isTableNode(liveNode)) {
       console.warn('TableDiffHandler: liveNode is not a table');
@@ -39,34 +43,115 @@ export class TableDiffHandler implements DiffNodeHandler {
       return {handled: false};
     }
 
+    if (!sourceNode || sourceNode.type !== 'table') {
+      console.warn('TableDiffHandler: sourceNode is not a table');
+      return {handled: false};
+    }
+
     try {
-      // For tables, we need to replace the entire structure
-      // Create a new table from the target serialized node
-      const newTable = createNodeFromSerialized(targetNode);
+      // Check if table structure (rows/cols) changed
+      const sourceRows = ('children' in sourceNode && sourceNode.children) || [];
+      const targetRows = ('children' in targetNode && targetNode.children) || [];
       
-      if (!$isElementNode(newTable)) {
-        console.error('TableDiffHandler: Failed to create new table node');
-        return {handled: false};
+      const sourceRowCount = sourceRows.length;
+      const targetRowCount = targetRows.length;
+      const sourceColCount = this.getMaxColCount(sourceRows);
+      const targetColCount = this.getMaxColCount(targetRows);
+      
+      // If structure changed significantly, replace the whole table
+      if (sourceRowCount !== targetRowCount || sourceColCount !== targetColCount) {
+        console.log('Table structure changed - replacing entire table');
+        $setDiffState(liveNode, 'removed');
+        const newTable = createNodeFromSerialized(targetNode);
+        if (!$isElementNode(newTable)) {
+          return {handled: false};
+        }
+        $setDiffState(newTable, 'added');
+        liveNode.insertAfter(newTable);
+        return {handled: true, skipChildren: true};
       }
       
-      // Mark the new table as modified (not the individual cells yet)
-      $setDiffState(newTable, 'modified');
+      // Table structure is the same, apply cell-level diffs
+      console.log('Table structure unchanged - applying cell-level diffs');
       
-      // Now we need to compare the old and new table structures to mark what changed
-      // Get the serialized versions to compare
-      const sourceTableData = context.sourceNode;
+      // Mark table as modified if any cell changed
+      const hasChanges = this.hasTableChanges(sourceNode, targetNode);
+      if (hasChanges) {
+        $setDiffState(liveNode, 'modified');
+      }
       
-      // Extract cell content from both tables for comparison
-      const sourceCells = this.extractTableCells(sourceTableData);
-      const targetCells = this.extractTableCells(targetNode);
+      // Apply sub-tree diff for cell-level changes
+      if (sourceEditor && targetEditor) {
+        // Process each row
+        const liveRows = liveNode.getChildren();
+        for (let rowIdx = 0; rowIdx < liveRows.length; rowIdx++) {
+          const liveRow = liveRows[rowIdx];
+          if (!$isTableRowNode(liveRow)) continue;
+          
+          const sourceRow = sourceRows[rowIdx];
+          const targetRow = targetRows[rowIdx];
+          
+          if (!sourceRow || !targetRow) continue;
+          
+          // Process each cell in the row
+          const liveCells = liveRow.getChildren();
+          const sourceCells = ('children' in sourceRow && sourceRow.children) || [];
+          const targetCells = ('children' in targetRow && targetRow.children) || [];
+          
+          for (let cellIdx = 0; cellIdx < liveCells.length; cellIdx++) {
+            const liveCell = liveCells[cellIdx];
+            if (!$isTableCellNode(liveCell)) continue;
+            
+            const sourceCell = sourceCells[cellIdx];
+            const targetCell = targetCells[cellIdx];
+            
+            if (!sourceCell || !targetCell) continue;
+            
+            // Get the actual cell nodes from the editors to compare markdown
+            let sourceCellMarkdown = '';
+            let targetCellMarkdown = '';
+            
+            // Get the live cell markdown (current state)
+            const liveCellMarkdown = $convertNodeToMarkdownString(transformers, liveCell);
+            
+            // We need to create temporary nodes to get markdown from serialized data
+            // Create nodes from serialized data and export their markdown
+            const tempSourceCell = createNodeFromSerialized(sourceCell);
+            const tempTargetCell = createNodeFromSerialized(targetCell);
+            
+            if ($isTableCellNode(tempSourceCell)) {
+              sourceCellMarkdown = $convertNodeToMarkdownString(transformers, tempSourceCell);
+            }
+            
+            if ($isTableCellNode(tempTargetCell)) {
+              targetCellMarkdown = $convertNodeToMarkdownString(transformers, tempTargetCell);
+            }
+            
+            console.log(`Cell [${rowIdx}][${cellIdx}] comparison:`);
+            console.log(`  Live: "${liveCellMarkdown}"`);
+            console.log(`  Source: "${sourceCellMarkdown}"`);
+            console.log(`  Target: "${targetCellMarkdown}"`);
+            
+            // Compare the markdown content
+            if (sourceCellMarkdown !== targetCellMarkdown) {
+              console.log(`  -> Cell content changed, replacing cell content...`);
+              
+              // Store the original markdown on the EXISTING cell so we can restore it on reject
+              $setOriginalMarkdown(liveCell, sourceCellMarkdown);
+              $setDiffState(liveCell, 'modified');
+              
+              // Clear the cell content before applying new content
+              liveCell.getChildren().forEach(child => child.remove());
+              
+              // Apply the new content from the target
+              if (targetCellMarkdown.trim()) {
+                $convertFromMarkdownString(targetCellMarkdown, transformers, liveCell);
+              }
+            }
+          }
+        }
+      }
       
-      // Mark cells in the new table based on what changed
-      this.markTableCellDiffs(newTable, sourceCells, targetCells);
-      
-      // Replace the old table with the new one
-      liveNode.replace(newTable);
-      
-      console.log('TableDiffHandler: Successfully replaced table with diff states');
       return {handled: true, skipChildren: true};
     } catch (error) {
       console.error('TableDiffHandler: Error updating table:', error);
@@ -131,11 +216,85 @@ export class TableDiffHandler implements DiffNodeHandler {
     return {handled: true, skipChildren: true};
   }
 
-  handleReject(liveNode: LexicalNode): DiffHandlerResult {
-    // Rejection is handled externally via DiffState
+  handleReject(liveNode: LexicalNode, validator?: any): DiffHandlerResult {
+    if (!$isTableNode(liveNode)) {
+      return {handled: false};
+    }
+
+    // Process each cell to restore original content if modified
+    const rows = liveNode.getChildren();
+    for (const row of rows) {
+      if (!$isTableRowNode(row)) continue;
+      
+      const cells = row.getChildren();
+      for (const cell of cells) {
+        if (!$isTableCellNode(cell)) continue;
+        
+        // Check if this cell was modified and has original markdown stored
+        const diffState = $getDiffState(cell);
+        const originalMarkdown = $getOriginalMarkdown(cell);
+        
+        if (diffState === 'modified' && originalMarkdown !== null) {
+          console.log(`Restoring cell to original markdown: "${originalMarkdown}"`);
+          
+          // Clear the cell content
+          cell.getChildren().forEach(child => child.remove());
+          
+          // Restore from original markdown
+          if (originalMarkdown.trim()) {
+            // Parse the markdown back into the cell
+            // Use the same transformers that were used originally
+            $convertFromMarkdownString(originalMarkdown, MARKDOWN_TRANSFORMERS, cell);
+          }
+          
+          // Clear the diff state and original markdown
+          $clearDiffState(cell);
+          $clearOriginalMarkdown(cell);
+        }
+      }
+    }
+    
     return {handled: true, skipChildren: true};
   }
 
+  /**
+   * Get maximum column count across all rows
+   */
+  private getMaxColCount(rows: any[]): number {
+    let maxCols = 0;
+    for (const row of rows) {
+      if ('children' in row && Array.isArray(row.children)) {
+        maxCols = Math.max(maxCols, row.children.length);
+      }
+    }
+    return maxCols;
+  }
+  
+  /**
+   * Check if table has any changes
+   */
+  private hasTableChanges(sourceNode: SerializedLexicalNode, targetNode: SerializedLexicalNode): boolean {
+    const sourceCells = this.extractTableCells(sourceNode);
+    const targetCells = this.extractTableCells(targetNode);
+    
+    // Check if any cells changed
+    for (const [key, sourceText] of sourceCells) {
+      const targetText = targetCells.get(key);
+      if (targetText !== sourceText) {
+        return true;
+      }
+    }
+    
+    // Check for added cells
+    for (const key of targetCells.keys()) {
+      if (!sourceCells.has(key)) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
   /**
    * Extract cell content from a serialized table for comparison
    */
@@ -167,13 +326,14 @@ export class TableDiffHandler implements DiffNodeHandler {
   }
   
   /**
-   * Extract text content from a table cell
+   * Extract plain text content from a table cell for basic comparison
    */
   private extractCellText(cell: any): string {
     if (!cell || !('children' in cell)) {
       return '';
     }
     
+    // Simple text extraction for backward compatibility
     let text = '';
     cell.children.forEach((child: any) => {
       if (child.type === 'paragraph' && 'children' in child) {
@@ -188,39 +348,4 @@ export class TableDiffHandler implements DiffNodeHandler {
     return text;
   }
   
-  /**
-   * Mark cells in the new table with appropriate diff states
-   */
-  private markTableCellDiffs(
-    newTable: LexicalNode,
-    sourceCells: Map<string, string>,
-    targetCells: Map<string, string>
-  ): void {
-    if (!$isTableNode(newTable)) {
-      return;
-    }
-    
-    // Get all table cells from the new table
-    const rows = newTable.getChildren();
-    
-    rows.forEach((row, rowIndex) => {
-      if ('getChildren' in row) {
-        const cells = (row as any).getChildren();
-        cells.forEach((cell: any, colIndex: number) => {
-          const cellKey = `${rowIndex}-${colIndex}`;
-          const sourceContent = sourceCells.get(cellKey);
-          const targetContent = targetCells.get(cellKey);
-          
-          if (sourceContent === undefined && targetContent !== undefined) {
-            // This is a new cell (added column)
-            $setDiffState(cell, 'added');
-          } else if (sourceContent !== targetContent) {
-            // This cell's content changed
-            $setDiffState(cell, 'modified');
-          }
-          // If sourceContent === targetContent, leave unmarked (no change)
-        });
-      }
-    });
-  }
 }

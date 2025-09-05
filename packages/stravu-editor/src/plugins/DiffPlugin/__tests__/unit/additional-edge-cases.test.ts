@@ -158,46 +158,7 @@ function test() {
     });
   });
 
-  describe('Complex Table Content', () => {
-    test('Table cells with formatting', () => {
-      const original = `| Header 1 | Header 2 |
-| --- | --- |
-| Plain text | Plain text |`;
-
-      const target = `| Header 1 | Header 2 |
-| --- | --- |
-| **Bold text** | *Italic text* |`;
-
-      const result = setupMarkdownDiffTest(original, target);
-      expectEditorMarkdownToMatch(result.diffEditor, result.expectedMarkdown);
-    });
-
-    test('Table cells with links', () => {
-      const original = `| Column 1 | Column 2 |
-| --- | --- |
-| Text | More text |`;
-
-      const target = `| Column 1 | Column 2 |
-| --- | --- |
-| [Link](url.com) | More text |`;
-
-      const result = setupMarkdownDiffTest(original, target);
-      expectEditorMarkdownToMatch(result.diffEditor, result.expectedMarkdown);
-    });
-
-    test('Table cells with code', () => {
-      const original = `| Function | Description |
-| --- | --- |
-| test | Does testing |`;
-
-      const target = `| Function | Description |
-| --- | --- |
-| \`test()\` | Does testing |`;
-
-      const result = setupMarkdownDiffTest(original, target);
-      expectEditorMarkdownToMatch(result.diffEditor, result.expectedMarkdown);
-    });
-  });
+  // Table tests have been moved to table.test.ts for better organization
 
   describe('Edge Cases with Line Endings', () => {
     test('Mixed line endings', () => {

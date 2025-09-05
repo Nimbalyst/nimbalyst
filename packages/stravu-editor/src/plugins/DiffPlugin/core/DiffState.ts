@@ -28,6 +28,16 @@ export const DiffState = createState('diff', {
 });
 
 /**
+ * Configuration for tracking original markdown content on nodes.
+ * This allows us to restore the original content when rejecting changes.
+ */
+export const OriginalMarkdownState = createState('originalMarkdown', {
+  parse: (value): string | null => {
+    return typeof value === 'string' ? value : null;
+  },
+});
+
+/**
  * Helper functions for working with DiffState
  */
 
@@ -61,4 +71,25 @@ export function $setDiffState(
  */
 export function $clearDiffState(node: LexicalNode): LexicalNode {
   return $setDiffState(node, null);
+}
+
+/**
+ * Get the original markdown of a node
+ */
+export function $getOriginalMarkdown(node: LexicalNode): string | null {
+  return $getState(node, OriginalMarkdownState);
+}
+
+/**
+ * Set the original markdown of a node
+ */
+export function $setOriginalMarkdown(node: LexicalNode, markdown: string): void {
+  $setState(node, OriginalMarkdownState, markdown);
+}
+
+/**
+ * Clear the original markdown of a node
+ */
+export function $clearOriginalMarkdown(node: LexicalNode): void {
+  $setState(node, OriginalMarkdownState, null);
 }
