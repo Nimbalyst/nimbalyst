@@ -156,33 +156,63 @@ export function registerProjectHandlers() {
                 let rgPath = 'rg';
                 const app = require('electron').app;
                 const path = require('path'); // Ensure path is required locally
+                const os = require('os');
+                const fs = require('fs');
+                
+                // Determine the platform-specific ripgrep binary
+                const platform = os.platform();
+                const arch = os.arch();
+                let rgBinaryDir = '';
+                
+                if (platform === 'darwin') {
+                    rgBinaryDir = arch === 'arm64' ? 'arm64-darwin' : 'x64-darwin';
+                } else if (platform === 'win32') {
+                    rgBinaryDir = 'x64-windows';
+                } else if (platform === 'linux') {
+                    rgBinaryDir = arch === 'arm64' ? 'arm64-linux' : 'x64-linux';
+                }
+                
+                const rgBinaryName = platform === 'win32' ? 'rg.exe' : 'rg';
                 
                 // In production, files are in app.asar.unpacked
-                // Get the correct base path depending on environment
-                const resourcesPath = process.resourcesPath || path.join(__dirname, '../..');
-                const appPath = app.getAppPath();
                 const isPackaged = app.isPackaged;
                 
                 // Check all possible paths, both dev and production
-                const possibleRgPaths = [
-                    // Development path
-                    path.join(__dirname, '../../node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg'),
-                    // Production paths - ASAR unpacked
-                    path.join(resourcesPath, 'app.asar.unpacked/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg'),
-                    // Alternative production path
-                    path.join(appPath, '..', 'app.asar.unpacked/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg'),
-                    // More fallback paths
-                    path.join(process.execPath, '../../Resources/app.asar.unpacked/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg'),
-                    path.join(process.cwd(), 'node_modules/@anthropic-ai/claude-code/vendor/ripgrep/arm64-darwin/rg'),
-                ];
+                const possibleRgPaths = [];
                 
-                console.log('[SEARCH] Looking for ripgrep. isPackaged:', isPackaged, 'resourcesPath:', resourcesPath);
+                if (isPackaged) {
+                    // Production paths - files are unpacked from ASAR
+                    const resourcesPath = process.resourcesPath;
+                    possibleRgPaths.push(
+                        // Standard unpacked location
+                        path.join(resourcesPath, 'app.asar.unpacked', 'node_modules', '@anthropic-ai', 'claude-code', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+                    );
+                } else {
+                    // Development paths
+                    possibleRgPaths.push(
+                        path.join(__dirname, '..', '..', 'node_modules', '@anthropic-ai', 'claude-code', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+                        path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+                    );
+                }
+                
+                console.log('[SEARCH] Looking for ripgrep. isPackaged:', isPackaged, 'platform:', platform, 'arch:', arch);
+                console.log('[SEARCH] Binary dir:', rgBinaryDir, 'Binary name:', rgBinaryName);
                 console.log('[SEARCH] Checking paths:', possibleRgPaths);
                 
                 for (const testPath of possibleRgPaths) {
                     if (existsSync(testPath)) {
                         rgPath = testPath;
                         console.log('[SEARCH] Found ripgrep at:', rgPath);
+                        
+                        // Make sure the binary is executable in production
+                        if (isPackaged && platform !== 'win32') {
+                            try {
+                                fs.chmodSync(rgPath, 0o755);
+                                console.log('[SEARCH] Set executable permission on ripgrep');
+                            } catch (e) {
+                                console.warn('[SEARCH] Could not set executable permission on ripgrep:', e);
+                            }
+                        }
                         break;
                     } else {
                         console.log('[SEARCH] Not found at:', testPath);

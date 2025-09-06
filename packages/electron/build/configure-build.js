@@ -62,8 +62,11 @@ function configureBuild() {
     packageJson.build.mac.entitlements = 'build/entitlements.mac.plist';
     packageJson.build.mac.entitlementsInherit = 'build/entitlements.mac.plist';
     
-    // Only enable notarization if we have all required credentials
-    if (canNotarize) {
+    // Disable electron-builder's built-in notarization when SKIP_NOTARIZE is set
+    if (skipNotarize) {
+      console.log('Disabling electron-builder notarization (SKIP_NOTARIZE=true)');
+      packageJson.build.mac.notarize = false;
+    } else if (canNotarize) {
       console.log('Notarization will be handled by afterSign.js');
     }
   }

@@ -7,8 +7,16 @@
 const path = require('path');
 const { spawn } = require('child_process');
 
+// Store SKIP_NOTARIZE before loading .env (which might override it)
+const skipNotarize = process.env.SKIP_NOTARIZE;
+
 // Load environment variables from .env file
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
+// Restore SKIP_NOTARIZE if it was set before dotenv
+if (skipNotarize) {
+  process.env.SKIP_NOTARIZE = skipNotarize;
+}
 
 // Get command line arguments (everything after the script name)
 const args = process.argv.slice(2);

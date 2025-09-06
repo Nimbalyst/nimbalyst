@@ -179,7 +179,7 @@ export const ProjectManager: React.FC = () => {
       <div className="sidebar">
         <div className="sidebar-header">
           <div className="app-branding">
-            <img src="/icon.png" alt="Preditor" className="app-logo" />
+            <img src="./icon.png" alt="Preditor" className="app-logo" />
             <h2>Preditor</h2>
           </div>
           <div className="action-buttons">
@@ -290,7 +290,7 @@ export const ProjectManager: React.FC = () => {
           <div className="welcome-container">
             <div className="welcome-content">
               <div className="welcome-header">
-                <img src="/icon.png" alt="Preditor" className="welcome-logo" />
+                <img src="./icon.png" alt="Preditor" className="welcome-logo" />
                 <div className="welcome-text">
                   <h1 className="welcome-title">Preditor</h1>
                   <p className="welcome-subtitle">AI-native markdown editor</p>

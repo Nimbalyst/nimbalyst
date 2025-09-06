@@ -13,6 +13,7 @@ import {
 } from '../types';
 import path from 'path';
 import fs from 'fs';
+import { app } from 'electron';
 
 export class ClaudeCodeProvider extends BaseAIProvider {
   private abortController: AbortController | null = null;
@@ -47,6 +48,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     this.abortController = new AbortController();
 
     try {
+      // In production, ensure we have node in PATH
+      this.ensureNodeInPath();
+      
       // Find the claude-code CLI executable
       const cliPathStart = Date.now();
       const cliPath = await this.findCliPath();
@@ -69,7 +73,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         cwd: projectPath,
         abortController: this.abortController,
         model: this.config.model || 'claude-3-5-sonnet-20241022',
-        permissionMode: 'bypassPermissions'
+        permissionMode: 'bypassPermissions',
+        // Specify node executable for production builds
+        nodeExecutable: this.getNodeExecutable()
       };
 
       // If we have a session ID and a claude session ID, resume
@@ -341,6 +347,36 @@ GOOD responses after editing:
 - "Updated with examples."
 
 Remember: The user can SEE the changes in their editor. They don't need you to describe them.`;
+  }
+
+  /**
+   * Ensure node is available in PATH for production builds
+   */
+  private ensureNodeInPath(): void {
+    if (!app.isPackaged) {
+      return; // In development, node is already available
+    }
+
+    // In production, add Electron's internal node to PATH
+    const electronPath = process.execPath;
+    const electronDir = path.dirname(electronPath);
+    
+    if (!process.env.PATH?.includes(electronDir)) {
+      process.env.PATH = `${electronDir}:${process.env.PATH}`;
+      console.log('[ClaudeCodeProvider] Added Electron dir to PATH:', electronDir);
+    }
+  }
+
+  /**
+   * Get the node executable path for claude-code to use
+   */
+  private getNodeExecutable(): string | undefined {
+    if (!app.isPackaged) {
+      return undefined; // Use system node in development
+    }
+
+    // In production, use Electron's node binary
+    return process.execPath;
   }
 
   /**

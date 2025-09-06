@@ -1,6 +1,7 @@
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 exports.default = async function(context) {
   const { appOutDir, packager } = context;
@@ -63,11 +64,36 @@ exports.default = async function(context) {
     }
     
     removeJarsRecursively(vendorPath);
+    
+    // Sign ripgrep binaries if we have signing credentials
+    if (hasSigningCredentials && packager.platform.name === 'mac') {
+      console.log('AfterSign: Signing ripgrep binaries...');
+      const arch = os.arch();
+      const rgBinaryDir = arch === 'arm64' ? 'arm64-darwin' : 'x64-darwin';
+      const rgPath = path.join(vendorPath, 'ripgrep', rgBinaryDir, 'rg');
+      
+      if (fs.existsSync(rgPath)) {
+        try {
+          // Sign the ripgrep binary
+          const signingIdentity = process.env.CSC_NAME || 'Developer ID Application';
+          execSync(`codesign --force --sign "${signingIdentity}" "${rgPath}"`, { stdio: 'inherit' });
+          console.log('AfterSign: Successfully signed ripgrep binary');
+        } catch (error) {
+          console.error('AfterSign: Failed to sign ripgrep binary:', error);
+        }
+      } else {
+        console.log('AfterSign: Ripgrep binary not found at:', rgPath);
+      }
+    }
   }
   
   console.log('AfterSign: JAR cleanup complete');
   
-  // Now handle notarization
-  const notarizeModule = require('./notarize.js');
-  await notarizeModule.default(context);
+  // Now handle notarization (only if not skipped)
+  if (process.env.SKIP_NOTARIZE !== 'true') {
+    const notarizeModule = require('./notarize.js');
+    await notarizeModule.default(context);
+  } else {
+    console.log('AfterSign: Skipping notarization (SKIP_NOTARIZE=true)');
+  }
 };
