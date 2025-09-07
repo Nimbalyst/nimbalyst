@@ -421,15 +421,19 @@ export default function App() {
     if (theme === 'dark') {
       root.classList.add('dark-theme');
       root.classList.remove('light-theme', 'crystal-dark-theme');
+      root.setAttribute('data-theme', 'dark');
     } else if (theme === 'light') {
       root.classList.add('light-theme');
       root.classList.remove('dark-theme', 'crystal-dark-theme');
+      root.setAttribute('data-theme', 'light');
     } else if (theme === 'crystal-dark') {
       root.classList.add('crystal-dark-theme');
       root.classList.remove('light-theme', 'dark-theme');
+      root.setAttribute('data-theme', 'crystal-dark');
     } else {
       // Auto theme - let CSS handle it with prefers-color-scheme
       root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
+      root.removeAttribute('data-theme');
     }
   }, [theme]);
 

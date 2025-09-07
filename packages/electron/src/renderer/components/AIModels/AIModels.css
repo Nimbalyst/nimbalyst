@@ -342,63 +342,16 @@
   opacity: 0.9;
 }
 
-/* CSS Variables for theming */
+/* Theme variables are now defined in index.css - use those globals */
+/* Map local aliases to global variables */
 :root {
-  /* Light theme */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f9fafb;
-  --background-primary: #ffffff;
-  --background-secondary: #f9fafb;
-  --background-hover: #f3f4f6;
-  
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
-  
-  --border-color: #e5e7eb;
-  
-  --accent-color: #3b82f6;
+  --bg-primary: var(--background-primary);
+  --bg-secondary: var(--background-secondary);
+  --bg-tertiary: var(--background-tertiary);
+  --background-hover: var(--background-tertiary);
+  --text-muted: var(--text-tertiary);
+  --accent-color: var(--primary-color);
   --success-color: #10b981;
   --error-color: #ef4444;
   --warning-color: #f59e0b;
-}
-
-/* Dark theme */
-[data-theme="dark"] {
-  --bg-primary: #111827;
-  --bg-secondary: #1f2937;
-  --background-primary: #111827;
-  --background-secondary: #1f2937;
-  --background-hover: #374151;
-  
-  --text-primary: #f9fafb;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
-  
-  --border-color: #374151;
-  
-  --accent-color: #3b82f6;
-  --success-color: #10b981;
-  --error-color: #ef4444;
-  --warning-color: #f59e0b;
-}
-
-/* Crystal Dark theme */
-[data-theme="crystal-dark"] {
-  --bg-primary: #0F172A;
-  --bg-secondary: #1F2837;
-  --background-primary: #0F172A;
-  --background-secondary: #1F2837;
-  --background-hover: #374151;
-  
-  --text-primary: #F3F4F6;
-  --text-secondary: #9CA3AF;
-  --text-muted: #6B7280;
-  
-  --border-color: #374151;
-  
-  --accent-color: #3B82F6;
-  --success-color: #10B981;
-  --error-color: #EF4444;
-  --warning-color: #F59E0B;
 }

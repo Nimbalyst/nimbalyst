@@ -1,6 +1,49 @@
 /* Material Symbols font */
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 
+/* THEME VARIABLES - SINGLE SOURCE OF TRUTH */
+/* Light theme (default) */
+:root {
+  --background-primary: #ffffff;
+  --background-secondary: #f9fafb;
+  --background-tertiary: #f3f4f6;
+  --background-hover: rgba(0, 0, 0, 0.05);
+  --border-color: #e5e7eb;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --primary-color: #3b82f6;
+  --primary-color-hover: #2563eb;
+}
+
+/* Dark theme */
+:root.dark-theme {
+  --background-primary: #2d2d2d;
+  --background-secondary: #1a1a1a;
+  --background-tertiary: #3a3a3a;
+  --background-hover: rgba(255, 255, 255, 0.05);
+  --border-color: #4a4a4a;
+  --text-primary: #ffffff;
+  --text-secondary: #b3b3b3;
+  --text-tertiary: #808080;
+  --primary-color: #60a5fa;
+  --primary-color-hover: #3b82f6;
+}
+
+/* Crystal Dark theme */
+:root.crystal-dark-theme {
+  --background-primary: #0f172a;
+  --background-secondary: #020617;
+  --background-tertiary: #1e293b;
+  --background-hover: rgba(255, 255, 255, 0.05);
+  --border-color: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-tertiary: #94a3b8;
+  --primary-color: #38bdf8;
+  --primary-color-hover: #7dd3fc;
+}
+
 /* Reset and base styles */
 * {
   box-sizing: border-box;

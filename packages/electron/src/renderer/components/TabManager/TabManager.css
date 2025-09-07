@@ -59,7 +59,7 @@
   margin-right: 1px;
   background: var(--tab-bg, #ffffff);
   border: 1px solid var(--tab-border, #e5e7eb);
-  border-bottom: none;
+  /*border-bottom: none;*/
   border-radius: 6px 6px 0 0;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -75,14 +75,15 @@
 
 .tab.active {
   background: var(--tab-active-bg, #ffffff);
-  border-color: var(--tab-active-border, #d1d5db);
+  /*border-color: var(--tab-active-border, #d1d5db);*/
   z-index: 1;
+  border-bottom: none;
 }
 
-.tab.active::after {
+.tab.active::before {
   content: '';
   position: absolute;
-  bottom: -1px;
+  top: 0px;
   left: 0;
   right: 0;
   height: 2px;
@@ -327,47 +328,30 @@
   margin: 4px 0;
 }
 
-/* Dark Theme Support */
-[data-theme="dark"] .tab-bar-container,
-[data-theme="crystal-dark"] .tab-bar-container {
-  --tab-bar-bg: #1f2937;
-  --tab-bar-border: #374151;
-  --tab-bg: #374151;
-  --tab-border: #4b5563;
-  --tab-hover-bg: #4b5563;
-  --tab-active-bg: #1f2937;
-  --tab-active-border: #4b5563;
-  --tab-active-indicator: #60a5fa;
-  --tab-text: #d1d5db;
-  --tab-active-text: #f9fafb;
-  --tab-close-color: #9ca3af;
+/* Tab bar specific variables - using global theme colors */
+.tab-bar-container {
+  --tab-bar-bg: transparent;
+  --tab-bar-border: var(--border-color);
+  --tab-bg: var(--background-secondary);
+  --tab-border: var(--border-color);
+  --tab-hover-bg: var(--background-tertiary);
+  --tab-active-bg: var(--background-primary);
+  --tab-active-border: var(--border-color);
+  --tab-active-indicator: var(--primary-color);
+  --tab-text: var(--text-secondary);
+  --tab-active-text: var(--text-primary);
+  --tab-close-color: var(--text-tertiary);
   --tab-close-hover-bg: #ef4444;
   --tab-close-hover-color: #ffffff;
   --tab-dirty-indicator: #fbbf24;
-  --scrollbar-thumb: #4b5563;
-  --menu-bg: #374151;
-  --menu-border: #4b5563;
-  --menu-text: #d1d5db;
-  --menu-hover-bg: #4b5563;
-  --menu-active-bg: #1f3a8a;
-  --menu-active-text: #60a5fa;
-  --menu-muted-text: #6b7280;
-  --menu-selected-bg: #374151;
-  --menu-selected-border: #60a5fa;
-}
-
-/* Crystal Dark Specific */
-[data-theme="crystal-dark"] .tab-bar-container {
-  --tab-bar-bg: #0f172a;
-  --tab-bar-border: #1e293b;
-  --tab-bg: #1e293b;
-  --tab-border: #334155;
-  --tab-hover-bg: #334155;
-  --tab-active-bg: #0f172a;
-  --tab-active-border: #334155;
-  --tab-active-indicator: #818cf8;
-  --menu-active-bg: #312e81;
-  --menu-active-text: #818cf8;
-  --menu-selected-bg: #334155;
-  --menu-selected-border: #818cf8;
+  --scrollbar-thumb: var(--border-color);
+  --menu-bg: var(--background-secondary);
+  --menu-border: var(--border-color);
+  --menu-text: var(--text-secondary);
+  --menu-hover-bg: var(--background-tertiary);
+  --menu-active-bg: var(--primary-color);
+  --menu-active-text: #ffffff;
+  --menu-muted-text: var(--text-tertiary);
+  --menu-selected-bg: var(--background-tertiary);
+  --menu-selected-border: var(--primary-color);
 }

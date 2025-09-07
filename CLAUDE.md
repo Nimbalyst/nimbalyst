@@ -89,11 +89,17 @@ The Electron app (`packages/electron/`) includes a debug logging feature that ca
 
 The editor supports multiple themes:
 - **Light**: Clean, bright theme for daytime use
-- **Dark**: Standard dark theme with good contrast
-- **Crystal Dark**: A premium dark theme with Tailwind gray scale colors and refined aesthetics
+- **Dark**: Standard dark theme with warm gray colors (#2d2d2d, #1a1a1a, #3a3a3a)
+- **Crystal Dark**: A premium dark theme with Tailwind gray scale colors (#0f172a, #020617, #1e293b)
 - **Auto**: Follows system preference
 
 The Electron app includes a Window > Theme menu to switch between all themes. The selected theme is persisted and applied to all windows.
+
+### CRITICAL THEMING RULES
+- **NEVER hardcode colors in CSS files** - Always use CSS variables
+- **Single source of truth**: `/packages/electron/src/renderer/index.css` is the ONLY place where theme colors are defined
+- **Always set both**: When applying themes, set both `data-theme` attribute AND CSS class on root element
+- **See THEMING.md**: Comprehensive theming documentation at `/packages/electron/THEMING.md`
 
 ## Window State Persistence
 

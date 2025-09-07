@@ -1,20 +1,57 @@
 import React, { useState, useEffect } from 'react';
 import './ProjectManager.css';
 
-// Apply theme to document on mount
-if (typeof window !== 'undefined') {
-  // Get theme from localStorage or system preference
+// Helper function to apply theme
+const applyTheme = () => {
+  if (typeof window === 'undefined') return;
+  
   const savedTheme = localStorage.getItem('theme');
   const root = document.documentElement;
-
-  if (savedTheme === 'dark' || savedTheme === 'crystal-dark') {
-    root.setAttribute('data-theme', savedTheme);
+  
+  // Clear all theme classes first
+  root.classList.remove('light-theme', 'dark-theme', 'crystal-dark-theme');
+  
+  if (savedTheme === 'dark') {
+    root.setAttribute('data-theme', 'dark');
+    root.classList.add('dark-theme');
+  } else if (savedTheme === 'crystal-dark') {
+    root.setAttribute('data-theme', 'crystal-dark');
+    root.classList.add('crystal-dark-theme');
   } else if (savedTheme === 'light') {
     root.setAttribute('data-theme', 'light');
+    root.classList.add('light-theme');
   } else {
     // Auto - check system preference
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    root.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+    if (prefersDark) {
+      root.setAttribute('data-theme', 'dark');
+      root.classList.add('dark-theme');
+    } else {
+      root.setAttribute('data-theme', 'light');
+      root.classList.add('light-theme');
+    }
+  }
+};
+
+// Apply theme on mount
+applyTheme();
+
+// Listen for theme changes
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'theme') {
+      applyTheme();
+    }
+  });
+  
+  // Also listen for IPC theme changes
+  if (window.electronAPI?.onThemeChange) {
+    const unsubscribe = window.electronAPI.onThemeChange((theme) => {
+      // Update localStorage with the new theme
+      localStorage.setItem('theme', theme);
+      applyTheme();
+    });
+    // Note: unsubscribe is returned but we're not cleaning it up since this is module-level
   }
 }
 

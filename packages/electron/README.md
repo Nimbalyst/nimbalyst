@@ -33,6 +33,15 @@ npm run build:mac:local
 - Excalidraw integration for drawings
 - Multiple editor themes (Light, Dark, Crystal Dark, Auto)
 
+### Theme System
+- **Light theme**: Clean, bright theme for daytime use
+- **Dark theme**: Standard dark theme with warm gray colors (#2d2d2d)
+- **Crystal Dark theme**: Premium theme with Tailwind gray scale (#0f172a)
+- **Auto theme**: Follows system preference
+- **Single source of truth**: All theme colors defined in `/src/renderer/index.css`
+- **CSS Variables**: All components use CSS variables, never hardcoded colors
+- **Documentation**: See `/packages/electron/THEMING.md` for theming guidelines
+
 ### Desktop Features
 - Native file system access with file watching
 - Project/folder view with file tree navigation
