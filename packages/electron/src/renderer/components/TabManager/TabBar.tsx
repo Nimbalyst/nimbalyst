@@ -20,7 +20,10 @@ export const TabBar: React.FC<TabBarProps> = ({
 }) => {
   const [contextMenuTab, setContextMenuTab] = useState<string | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [showTabMenu, setShowTabMenu] = useState(false);
+  const [menuSelectedIndex, setMenuSelectedIndex] = useState<number>(-1);
   const tabBarRef = useRef<HTMLDivElement>(null);
+  const tabMenuRef = useRef<HTMLDivElement>(null);
 
   // Handle tab click
   const handleTabClick = useCallback((e: React.MouseEvent, tabId: string) => {
@@ -92,6 +95,29 @@ export const TabBar: React.FC<TabBarProps> = ({
     closeContextMenu();
   }, [contextMenuTab, onTogglePin, closeContextMenu]);
 
+  // Toggle tab menu
+  const toggleTabMenu = useCallback(() => {
+    setShowTabMenu(!showTabMenu);
+    setMenuSelectedIndex(-1);
+  }, [showTabMenu]);
+
+  // Handle tab menu item click
+  const handleTabMenuSelect = useCallback((tabId: string) => {
+    onTabSelect(tabId);
+    setShowTabMenu(false);
+    setMenuSelectedIndex(-1);
+  }, [onTabSelect]);
+
+  // Close all tabs from menu
+  const handleCloseAllFromMenu = useCallback(() => {
+    tabs.forEach(tab => {
+      onTabClose(tab.id);
+    });
+    setShowTabMenu(false);
+    setMenuSelectedIndex(-1);
+  }, [tabs, onTabClose]);
+
+
   // Click outside to close context menu
   React.useEffect(() => {
     if (contextMenuTab) {
@@ -101,9 +127,84 @@ export const TabBar: React.FC<TabBarProps> = ({
     }
   }, [contextMenuTab, closeContextMenu]);
 
+  // Click outside to close tab menu
+  React.useEffect(() => {
+    if (showTabMenu) {
+      const handleClickOutside = (e: MouseEvent) => {
+        if (tabMenuRef.current && !tabMenuRef.current.contains(e.target as Node)) {
+          setShowTabMenu(false);
+          setMenuSelectedIndex(-1);
+        }
+      };
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showTabMenu]);
+
+  // Keyboard navigation for dropdown menu
+  React.useEffect(() => {
+    if (!showTabMenu) return;
+
+    const handleMenuKeyDown = (e: KeyboardEvent) => {
+      const totalItems = tabs.length + 1; // 1 for "Close All"
+      
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          setMenuSelectedIndex(prev => {
+            const next = prev + 1;
+            return next >= totalItems ? 0 : next;
+          });
+          break;
+          
+        case 'ArrowUp':
+          e.preventDefault();
+          setMenuSelectedIndex(prev => {
+            const next = prev - 1;
+            return next < 0 ? totalItems - 1 : next;
+          });
+          break;
+          
+        case 'Enter':
+        case ' ':
+          e.preventDefault();
+          if (menuSelectedIndex === 0) {
+            handleCloseAllFromMenu();
+          } else if (menuSelectedIndex >= 1 && menuSelectedIndex < totalItems) {
+            const tabIndex = menuSelectedIndex - 1;
+            handleTabMenuSelect(tabs[tabIndex].id);
+          }
+          break;
+          
+        case 'Escape':
+          e.preventDefault();
+          setShowTabMenu(false);
+          setMenuSelectedIndex(-1);
+          break;
+          
+        default:
+          // Number keys 1-9 for quick tab selection
+          if (e.key >= '1' && e.key <= '9') {
+            e.preventDefault();
+            const index = parseInt(e.key) - 1;
+            if (index < tabs.length) {
+              handleTabMenuSelect(tabs[index].id);
+            }
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleMenuKeyDown);
+    return () => window.removeEventListener('keydown', handleMenuKeyDown);
+  }, [showTabMenu, menuSelectedIndex, tabs, handleCloseAllFromMenu, handleTabMenuSelect]);
+
   // Keyboard shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle shortcuts if menu is open
+      if (showTabMenu) return;
+      
       // Cmd/Ctrl + T for new tab
       if ((e.metaKey || e.ctrlKey) && e.key === 't') {
         e.preventDefault();
@@ -141,7 +242,7 @@ export const TabBar: React.FC<TabBarProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [tabs, activeTabId, onTabSelect, onTabClose, onNewTab]);
+  }, [tabs, activeTabId, onTabSelect, onTabClose, onNewTab, showTabMenu]);
 
   if (tabs.length === 0) {
     return null;
@@ -149,38 +250,85 @@ export const TabBar: React.FC<TabBarProps> = ({
 
   return (
     <>
-      <div className="tab-bar" ref={tabBarRef}>
-        {tabs.map((tab, index) => (
-          <div
-            key={tab.id}
-            className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isDirty ? 'dirty' : ''} ${tab.isPinned ? 'pinned' : ''}`}
-            onMouseDown={(e) => handleTabClick(e, tab.id)}
-            onContextMenu={(e) => handleContextMenu(e, tab.id)}
-            title={tab.filePath}
-          >
-            {tab.isPinned && <span className="tab-pin-icon">📌</span>}
-            <span className="tab-title">
-              {tab.fileName}
-              {tab.isDirty && <span className="tab-dirty-indicator">•</span>}
-            </span>
-            {!tab.isPinned && (
-              <button
-                className="tab-close-button"
-                onClick={(e) => handleCloseClick(e, tab.id)}
-                title="Close tab"
-              >
-                ×
-              </button>
+      <div className="tab-bar-container">
+        <div className="tab-bar-scrollable" ref={tabBarRef}>
+          {tabs.map((tab, index) => (
+            <div
+              key={tab.id}
+              className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isDirty ? 'dirty' : ''} ${tab.isPinned ? 'pinned' : ''}`}
+              onMouseDown={(e) => handleTabClick(e, tab.id)}
+              onContextMenu={(e) => handleContextMenu(e, tab.id)}
+              title={tab.filePath}
+            >
+              {tab.isPinned && <span className="tab-pin-icon">📌</span>}
+              <span className="tab-title">
+                {tab.fileName}
+                {tab.isDirty && <span className="tab-dirty-indicator">•</span>}
+              </span>
+              {!tab.isPinned && (
+                <button
+                  className="tab-close-button"
+                  onClick={(e) => handleCloseClick(e, tab.id)}
+                  title="Close tab"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        
+        <div className="tab-bar-actions">
+          <div className="tab-menu-container" ref={tabMenuRef}>
+            <button
+              className="tab-menu-button"
+              onClick={toggleTabMenu}
+              title="Tab menu"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                <path d="M6 8L2 4h8z"/>
+              </svg>
+            </button>
+            
+            {showTabMenu && (
+              <div className="tab-menu-dropdown" role="menu" aria-label="Tab menu">
+                <div className="tab-menu-section">
+                  <div 
+                    className={`tab-menu-item tab-menu-action ${menuSelectedIndex === 0 ? 'selected' : ''}`}
+                    onClick={handleCloseAllFromMenu}
+                    role="menuitem"
+                    tabIndex={0}
+                  >
+                    Close All Tabs
+                  </div>
+                </div>
+                {tabs.length > 0 && (
+                  <>
+                    <div className="tab-menu-separator" />
+                    <div className="tab-menu-section tab-menu-list">
+                      {tabs.map((tab, index) => (
+                        <div
+                          key={tab.id}
+                          className={`tab-menu-item ${tab.id === activeTabId ? 'active' : ''} ${menuSelectedIndex === index + 1 ? 'selected' : ''}`}
+                          onClick={() => handleTabMenuSelect(tab.id)}
+                          role="menuitem"
+                          tabIndex={0}
+                        >
+                          <span className="tab-menu-index">{index + 1}</span>
+                          <span className="tab-menu-title">
+                            {tab.isPinned && '📌 '}
+                            {tab.fileName}
+                            {tab.isDirty && ' •'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
-        ))}
-        <button
-          className="new-tab-button"
-          onClick={onNewTab}
-          title="New tab (Cmd+T)"
-        >
-          +
-        </button>
+        </div>
       </div>
 
       {/* Context Menu */}
