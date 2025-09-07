@@ -79,11 +79,17 @@ export function AIModels({ onClose }: AIModelsProps) {
         });
       }
       
-      // Auto-fetch models for enabled providers
-      for (const [provider, config] of Object.entries(settings.providerSettings || {})) {
-        if (config.enabled) {
-          fetchModels(provider);
+      // Fetch ALL models once (not per provider)
+      // The backend will handle fetching for all enabled providers
+      try {
+        const response = await window.electronAPI.aiGetAllModels();
+        console.log('[AIModels] Initial models fetch response:', response);
+        
+        if (response.success && response.grouped) {
+          setAvailableModels(response.grouped);
         }
+      } catch (error) {
+        console.error('Failed to fetch initial models:', error);
       }
     } catch (error) {
       console.error('Failed to load settings:', error);

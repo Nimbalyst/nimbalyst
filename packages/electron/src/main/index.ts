@@ -18,6 +18,7 @@ import { getTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
 import { startMcpHttpServer, updateDocumentState, cleanupMcpServer, shutdownHttpServer } from './mcp/httpServer';
 import { logger } from './utils/logger';
+import { startPerformanceMonitoring } from './utils/performanceMonitor';
 import { setupForceQuit, cancelForceQuit } from './utils/forceQuit';
 
 // Track pending file to open
@@ -193,13 +194,16 @@ app.whenReady().then(async () => {
     // Set initial native theme
     updateNativeTheme();
     
-    // Update menu periodically to catch any state changes
-    menuUpdateInterval = setInterval(() => {
-        // Check if app is still running and has windows
-        if (!isAppQuitting && BrowserWindow.getAllWindows().length > 0) {
-            updateApplicationMenu();
-        }
-    }, 1000);
+    // Start performance monitoring
+    startPerformanceMonitoring();
+    
+    // Remove periodic menu updates - menus should update on events only
+    // This was causing high CPU usage by updating every second
+    // menuUpdateInterval = setInterval(() => {
+    //     if (!isAppQuitting && BrowserWindow.getAllWindows().length > 0) {
+    //         updateApplicationMenu();
+    //     }
+    // }, 1000);
     
     // Save session periodically (every 30 seconds)
     sessionSaveInterval = setInterval(() => {

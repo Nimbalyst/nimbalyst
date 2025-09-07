@@ -195,15 +195,15 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
 
   // Track if we've restored tabs (to avoid saving empty state on mount)
   const hasRestoredRef = useRef(false);
+  const lastSavedStateRef = useRef<string>('');
   
-  // Save state to Electron store periodically
+  // Save state to Electron store only when it changes
   useEffect(() => {
     if (!enabled || !window.electronAPI?.saveProjectTabState) return;
 
     const saveState = () => {
       // Don't save if we haven't restored yet and tabs are empty
       if (!hasRestoredRef.current && tabs.size === 0) {
-        console.log('[TABS] Skipping save - not restored yet and tabs are empty');
         return;
       }
       
@@ -223,27 +223,27 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
         tabOrder
       };
 
-      window.electronAPI.saveProjectTabState(tabState);
-      console.log('[TABS] Saved tab state to store:', {
-        numTabs: tabsArray.length,
-        activeTabId,
-        tabOrder
-      });
+      // Only save if state has actually changed
+      const stateString = JSON.stringify(tabState);
+      if (stateString !== lastSavedStateRef.current) {
+        window.electronAPI.saveProjectTabState(tabState);
+        lastSavedStateRef.current = stateString;
+        // Remove excessive logging - only log errors or important events
+      }
     };
 
-    // Save every 5 seconds and when tabs change (but not on initial mount)
-    const interval = setInterval(saveState, 5000);
-    
-    // Save when tabs change, but wait a bit on mount to allow restoration
-    const saveTimer = setTimeout(() => {
+    // Save immediately when tabs change (but not on initial mount)
+    if (hasRestoredRef.current) {
       saveState();
-    }, 1000); // Wait 1 second before first save (restoration happens at 500ms)
+    }
+    
+    // Also save periodically in case of crashes
+    const interval = setInterval(saveState, 30000); // Every 30 seconds instead of 5
     
     return () => {
       clearInterval(interval);
-      clearTimeout(saveTimer);
     };
-  }, [enabled, tabs, activeTabId, tabOrder]);
+  }, [enabled, tabs.size, activeTabId, tabOrder.length]); // Use primitive values instead of objects
 
   // Store onTabChange in a ref to avoid re-running effect
   const onTabChangeRef = useRef(onTabChange);
@@ -253,20 +253,15 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
 
   // Restore state from Electron store on mount (with delay for project to load)
   useEffect(() => {
-    console.log('[TABS] Tab restoration effect triggered, enabled:', enabled, 'hasAPI:', !!window.electronAPI?.getProjectTabState);
     if (!enabled || !window.electronAPI?.getProjectTabState) {
-      console.log('[TABS] Skipping restoration - not enabled or no API');
       return;
     }
 
     // Add a small delay to ensure project is loaded in main process
     const timer = setTimeout(async () => {
-      console.log('[TABS] Timer fired, attempting to restore tabs...');
       const loadTabState = async () => {
         try {
-          console.log('[TABS] Calling getProjectTabState...');
           const savedState = await window.electronAPI.getProjectTabState();
-          console.log('[TABS] Received saved state:', savedState);
           hasRestoredRef.current = true; // Mark as restored
           
           if (savedState && savedState.tabs && savedState.tabs.length > 0) {
@@ -293,18 +288,10 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
             
             // Restore the active tab if it exists
             if (savedState.activeTabId && restoredTabs.has(savedState.activeTabId)) {
-              console.log('[TABS] Setting active tab to:', savedState.activeTabId);
               setActiveTabId(savedState.activeTabId);
-              
-              // Don't call onTabChange here - let the App component handle it
-              // when it sees the activeTab has changed
-              const activeTab = restoredTabs.get(savedState.activeTabId);
-              console.log('[TABS] Active tab data:', activeTab);
-            } else {
-              console.log('[TABS] No active tab to restore or tab not found in restored tabs');
             }
             
-            console.log('[TABS] Restored', restoredTabs.size, 'tabs, active tab should be:', savedState.activeTabId);
+            console.log('[TABS] Restored', restoredTabs.size, 'tabs, active:', savedState.activeTabId);
           } else {
             console.log('[TABS] No saved tabs to restore');
           }
@@ -333,20 +320,6 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
     closeAllTabs,
     closeSavedTabs
   };
-  
-  // Log current state periodically
-  useEffect(() => {
-    const logInterval = setInterval(() => {
-      console.log('[TABS] Current hook state:', {
-        numTabs: tabs.size,
-        tabIds: Array.from(tabs.keys()),
-        activeTabId,
-        activeTab: activeTab ? { id: activeTab.id, file: activeTab.filePath } : null,
-        enabled
-      });
-    }, 3000);
-    return () => clearInterval(logInterval);
-  }, [tabs, activeTabId, activeTab, enabled]);
   
   return result;
 }

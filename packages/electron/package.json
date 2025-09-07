@@ -31,7 +31,6 @@
     "@anthropic-ai/claude-code": "^1.0.77",
     "@anthropic-ai/sdk": "^0.58.0",
     "@modelcontextprotocol/sdk": "^1.17.2",
-    "chokidar": "^3.6.0",
     "dexie": "^4.0.11",
     "diff": "^5.2.0",
     "electron-log": "^5.4.3",

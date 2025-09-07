@@ -1,12 +1,50 @@
 import { BrowserWindow } from 'electron';
-import * as chokidar from 'chokidar';
 import { windowStates } from '../window/WindowManager';
 import { getFolderContents } from '../utils/FileTree';
+import { simpleFileWatcher } from './SimpleFileWatcher';
+import { simpleProjectWatcher } from './SimpleProjectWatcher';
 
-// Access to the file watchers from FileWatcher.ts
-declare const fileWatchers: Map<number, chokidar.FSWatcher>;
-// Access to the project watchers from ProjectWatcher.ts  
-declare const projectWatchers: Map<number, chokidar.FSWatcher>;
+// Get global file watcher statistics
+export function getGlobalFileWatcherStats() {
+    const fileStats = simpleFileWatcher.getStats();
+    const projectStats = simpleProjectWatcher.getStats();
+    
+    const lines: string[] = [];
+    lines.push('=== File Watcher Statistics ===');
+    lines.push(`Type: ${fileStats.type}`);
+    lines.push(`Active file watchers: ${fileStats.activeWatchers}`);
+    
+    if (fileStats.watchers.length > 0) {
+        lines.push('\nWatched files:');
+        for (const watcher of fileStats.watchers) {
+            lines.push(`  Window ${watcher.windowId}: ${watcher.filePath}`);
+        }
+    }
+    
+    lines.push('\n=== Project Watcher Statistics ===');
+    lines.push(`Type: ${projectStats.type}`);
+    lines.push(`Active project watchers: ${projectStats.activeProjects}`);
+    
+    if (projectStats.projects.length > 0) {
+        lines.push('\nWatched projects:');
+        for (const project of projectStats.projects) {
+            lines.push(`  Window ${project.windowId}: ${project.projectPath}`);
+            lines.push(`    Directories watched: ${project.directoriesWatched}`);
+        }
+    }
+    
+    // Add performance metrics
+    lines.push('\n=== Performance Metrics ===');
+    const memUsage = process.memoryUsage();
+    lines.push(`Memory (RSS): ${Math.round(memUsage.rss / 1024 / 1024)}MB`);
+    lines.push(`Memory (Heap Used): ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`);
+    lines.push(`Memory (Heap Total): ${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`);
+    
+    const handles = (process as any)._getActiveHandles?.()?.length || 'N/A';
+    lines.push(`Active handles: ${handles}`);
+    
+    return lines.join('\n');
+}
 
 // Get file watcher status for debugging
 export function getFileWatcherStatus(windowId: number): string {
@@ -23,42 +61,31 @@ export function getFileWatcherStatus(windowId: number): string {
         lines.push('No window state found');
     }
     
+    // Get file watcher info for this window
+    const fileStats = simpleFileWatcher.getStats();
+    const fileWatcher = fileStats.watchers.find(w => w.windowId === windowId);
+    
     lines.push('\n=== File Watcher ===');
-    try {
-        // Import the maps dynamically to avoid circular dependencies
-        const { getFileWatcherInfo } = require('./FileWatcher');
-        const info = getFileWatcherInfo(windowId);
-        if (info) {
-            lines.push(`Status: Active`);
-            lines.push(`Watching: ${info.path}`);
-            lines.push(`Polling: ${info.usePolling ? 'Yes' : 'No'}`);
-            if (info.usePolling) {
-                lines.push(`Poll Interval: ${info.interval}ms`);
-            }
-            lines.push(`Files being watched: ${JSON.stringify(info.watched, null, 2)}`);
-        } else {
-            lines.push('Status: No active file watcher');
-        }
-    } catch (error) {
-        lines.push(`Error getting file watcher info: ${error}`);
+    if (fileWatcher) {
+        lines.push(`Status: Active`);
+        lines.push(`Type: ${fileStats.type}`);
+        lines.push(`Watching: ${fileWatcher.filePath}`);
+    } else {
+        lines.push('Status: No active file watcher');
     }
     
+    // Get project watcher info for this window
+    const projectStats = simpleProjectWatcher.getStats();
+    const projectWatcher = projectStats.projects.find(p => p.windowId === windowId);
+    
     lines.push('\n=== Project Watcher ===');
-    try {
-        // Import the maps dynamically to avoid circular dependencies
-        const { getProjectWatcherInfo } = require('./ProjectWatcher');
-        const info = getProjectWatcherInfo(windowId);
-        if (info) {
-            lines.push(`Status: Active`);
-            lines.push(`Watching: ${info.path}`);
-            lines.push(`Polling: ${info.usePolling ? 'Yes' : 'No'}`);
-            lines.push(`Depth: ${info.depth}`);
-            lines.push(`Files/Dirs watched: ${info.watchedCount} items`);
-        } else {
-            lines.push('Status: No active project watcher');
-        }
-    } catch (error) {
-        lines.push(`Error getting project watcher info: ${error}`);
+    if (projectWatcher) {
+        lines.push(`Status: Active`);
+        lines.push(`Type: ${projectStats.type}`);
+        lines.push(`Watching: ${projectWatcher.projectPath}`);
+        lines.push(`Directories watched: ${projectWatcher.directoriesWatched}`);
+    } else {
+        lines.push('Status: No active project watcher');
     }
     
     lines.push('\n=== System Info ===');

@@ -319,22 +319,12 @@ export function registerProjectHandlers() {
     // Get project tab state
     ipcMain.handle('get-project-tab-state', (event) => {
         const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
-        console.log('[IPC] get-project-tab-state: windowId =', windowId);
-        if (!windowId) {
-            console.log('[IPC] No window ID');
-            return null;
-        }
+        if (!windowId) return null;
         
         const state = windowStates.get(windowId);
-        console.log('[IPC] Window state:', { mode: state?.mode, projectPath: state?.projectPath });
-        if (!state || !state.projectPath) {
-            console.log('[IPC] No state or project path');
-            return null;
-        }
+        if (!state || !state.projectPath) return null;
         
-        const tabState = getProjectTabState(state.projectPath);
-        console.log('[IPC] Retrieved tab state:', tabState ? { numTabs: tabState.tabs?.length, hasActiveTab: !!tabState.activeTabId } : 'null');
-        return tabState;
+        return getProjectTabState(state.projectPath);
     });
 
     // Save project tab state

@@ -128,14 +128,12 @@ export interface TabManagerState {
 export function getProjectTabState(projectPath: string): TabManagerState | null {
     const key = `projectTabs.${projectPath}`;
     const state = store.get(key, null) as TabManagerState | null;
-    console.log('[STORE] Getting tab state for', projectPath, ':', state ? { numTabs: state.tabs?.length } : 'null');
     return state;
 }
 
 export function saveProjectTabState(projectPath: string, state: TabManagerState) {
     const key = `projectTabs.${projectPath}`;
     store.set(key, state);
-    console.log('[STORE] Saved tab state for', projectPath, ':', { numTabs: state.tabs?.length });
 }
 
 export function clearProjectTabState(projectPath: string) {

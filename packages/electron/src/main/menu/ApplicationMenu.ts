@@ -9,7 +9,7 @@ import { createAIModelsWindow } from '../window/AIModelsWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getProjectWindowState } from '../utils/store';
 import { updateWindowTitleBars } from '../theme/ThemeManager';
-import { getFileWatcherStatus, refreshProjectFileTree } from '../file/FileWatcherDebug';
+import { getFileWatcherStatus, refreshProjectFileTree, getGlobalFileWatcherStats } from '../file/FileWatcherDebug';
 import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
 
@@ -641,6 +641,22 @@ export function createApplicationMenu() {
                                 title: 'File Watcher Status',
                                 message: 'File Watcher Diagnostics',
                                 detail: status,
+                                buttons: ['OK']
+                            });
+                        }
+                    }
+                },
+                {
+                    label: 'Show Global Watcher Stats',
+                    click: () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            const stats = getGlobalFileWatcherStats();
+                            dialog.showMessageBox(focused, {
+                                type: 'info',
+                                title: 'Global File Watcher Statistics',
+                                message: 'File Watcher Performance & Statistics',
+                                detail: stats,
                                 buttons: ['OK']
                             });
                         }

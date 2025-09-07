@@ -550,14 +550,15 @@ export function AIChat({
       checkApiKey();
     };
 
-    // Also check periodically in case settings were changed in the same window
-    const interval = setInterval(checkApiKey, 2000); // Check every 2 seconds
+    // Only check on focus, not periodically
+    // Checking every 2 seconds was causing unnecessary CPU usage
+    // const interval = setInterval(checkApiKey, 2000);
 
     window.addEventListener('focus', handleFocus);
 
     return () => {
       window.removeEventListener('focus', handleFocus);
-      clearInterval(interval);
+      // clearInterval(interval);
     };
   }, [hasApiKey]);
 
