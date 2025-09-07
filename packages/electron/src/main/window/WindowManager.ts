@@ -324,15 +324,10 @@ export function createWindow(
             window.webContents.send('theme-change', theme);
 
             if (isProjectMode && projectPath) {
-                // Send project information to the renderer
-                const fileTree = getFolderContents(projectPath);
+                // Don't send 'project-opened' here - the renderer already knows it's in project mode
+                // from the initial state. Sending this event causes the tabs to be cleared.
+                // Just start watching the project directory for changes
                 setTimeout(() => {
-                    window.webContents.send('project-opened', {
-                        projectPath,
-                        projectName: basename(projectPath),
-                        fileTree
-                    });
-                    // Start watching the project directory for changes
                     startProjectWatcher(window, projectPath);
                 }, 100);
             } else if (!isOpeningFile) {

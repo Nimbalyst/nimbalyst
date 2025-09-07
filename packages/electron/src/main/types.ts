@@ -1,8 +1,29 @@
+export interface TabState {
+    id: string;                  // Unique tab identifier
+    filePath: string;            // Full file path
+    fileName: string;            // Display name
+    content?: string;            // Cached content (for inactive tabs)
+    isDirty: boolean;            // Unsaved changes
+    scrollPosition?: number;     // Preserve scroll position
+    cursorPosition?: {          // Preserve cursor position
+        line: number;
+        column: number;
+    };
+    editorState?: any;          // Serialized Lexical state
+    lastSaved?: Date;           // Last save timestamp
+    isPinned?: boolean;         // Pinned tabs don't auto-close
+}
+
 export interface WindowState {
     mode: 'document' | 'project';
     filePath: string | null;
     projectPath: string | null;
     documentEdited: boolean;
+    
+    // Tab management (optional for backward compatibility)
+    tabs?: TabState[];
+    activeTabId?: string;
+    tabsEnabled?: boolean;
 }
 
 export interface RecentItem {

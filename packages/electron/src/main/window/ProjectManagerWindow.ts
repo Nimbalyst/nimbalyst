@@ -264,15 +264,15 @@ export function setupProjectManagerHandlers() {
       });
     }
     
-    // Restore last open file if available
-    if (savedState?.filePath && existsSync(savedState.filePath)) {
-      window.webContents.once('did-finish-load', () => {
-        // Give the renderer time to initialize
-        setTimeout(() => {
-          window.webContents.send('open-project-file', savedState.filePath);
-        }, 500);
-      });
-    }
+    // Disable single file restoration - we now use tab restoration instead
+    // if (savedState?.filePath && existsSync(savedState.filePath)) {
+    //   window.webContents.once('did-finish-load', () => {
+    //     // Give the renderer time to initialize
+    //     setTimeout(() => {
+    //       window.webContents.send('open-project-file', savedState.filePath);
+    //     }, 500);
+    //   });
+    // }
     
     // Close project manager after opening project
     if (projectManagerWindow && !projectManagerWindow.isDestroyed()) {

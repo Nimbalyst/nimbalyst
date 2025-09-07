@@ -9,7 +9,7 @@ import { windowStates, getWindowId } from '../window/WindowManager';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { getFolderContents } from '../utils/FileTree';
-import { getProjectRecentFiles, addProjectRecentFile, store } from '../utils/store';
+import { getProjectRecentFiles, addProjectRecentFile, store, getProjectTabState, saveProjectTabState, clearProjectTabState } from '../utils/store';
 
 export function registerProjectHandlers() {
     // Get folder contents
@@ -314,6 +314,49 @@ export function registerProjectHandlers() {
         if (!state || !state.projectPath) return;
         
         addProjectRecentFile(state.projectPath, filePath);
+    });
+
+    // Get project tab state
+    ipcMain.handle('get-project-tab-state', (event) => {
+        const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
+        console.log('[IPC] get-project-tab-state: windowId =', windowId);
+        if (!windowId) {
+            console.log('[IPC] No window ID');
+            return null;
+        }
+        
+        const state = windowStates.get(windowId);
+        console.log('[IPC] Window state:', { mode: state?.mode, projectPath: state?.projectPath });
+        if (!state || !state.projectPath) {
+            console.log('[IPC] No state or project path');
+            return null;
+        }
+        
+        const tabState = getProjectTabState(state.projectPath);
+        console.log('[IPC] Retrieved tab state:', tabState ? { numTabs: tabState.tabs?.length, hasActiveTab: !!tabState.activeTabId } : 'null');
+        return tabState;
+    });
+
+    // Save project tab state
+    ipcMain.on('save-project-tab-state', (event, tabState) => {
+        const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
+        if (!windowId) return;
+        
+        const state = windowStates.get(windowId);
+        if (!state || !state.projectPath) return;
+        
+        saveProjectTabState(state.projectPath, tabState);
+    });
+
+    // Clear project tab state
+    ipcMain.on('clear-project-tab-state', (event) => {
+        const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
+        if (!windowId) return;
+        
+        const state = windowStates.get(windowId);
+        if (!state || !state.projectPath) return;
+        
+        clearProjectTabState(state.projectPath);
     });
 
     // File operations for project files

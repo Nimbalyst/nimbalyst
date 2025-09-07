@@ -1,0 +1,237 @@
+/* Tab Manager Container */
+.tab-manager {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+/* Tab Bar */
+.tab-bar {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  background: var(--tab-bar-bg, #f3f4f6);
+  border-bottom: 1px solid var(--tab-bar-border, #e5e7eb);
+  padding: 0 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  user-select: none;
+}
+
+.tab-bar::-webkit-scrollbar {
+  height: 4px;
+}
+
+.tab-bar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tab-bar::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb, #9ca3af);
+  border-radius: 2px;
+}
+
+/* Individual Tab */
+.tab {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  margin-right: 1px;
+  background: var(--tab-bg, #ffffff);
+  border: 1px solid var(--tab-border, #e5e7eb);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  min-width: 120px;
+  max-width: 200px;
+  flex-shrink: 0;
+}
+
+.tab:hover {
+  background: var(--tab-hover-bg, #f9fafb);
+}
+
+.tab.active {
+  background: var(--tab-active-bg, #ffffff);
+  border-color: var(--tab-active-border, #d1d5db);
+  z-index: 1;
+}
+
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--tab-active-indicator, #3b82f6);
+}
+
+.tab.dirty .tab-title::after {
+  content: ' •';
+  color: var(--tab-dirty-indicator, #ef4444);
+  font-weight: bold;
+  margin-left: 4px;
+}
+
+.tab.pinned {
+  min-width: 40px;
+  max-width: 150px;
+}
+
+/* Tab Content */
+.tab-pin-icon {
+  font-size: 10px;
+  margin-right: 4px;
+  opacity: 0.7;
+}
+
+.tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--tab-text, #374151);
+}
+
+.tab.active .tab-title {
+  color: var(--tab-active-text, #111827);
+  font-weight: 500;
+}
+
+.tab-dirty-indicator {
+  color: var(--tab-dirty-indicator, #ef4444);
+  font-weight: bold;
+  margin-left: 2px;
+}
+
+/* Close Button */
+.tab-close-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 8px;
+  border: none;
+  background: transparent;
+  color: var(--tab-close-color, #6b7280);
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.2s, background-color 0.2s;
+}
+
+.tab:hover .tab-close-button {
+  opacity: 1;
+}
+
+.tab-close-button:hover {
+  background: var(--tab-close-hover-bg, #ef4444);
+  color: var(--tab-close-hover-color, #ffffff);
+}
+
+/* New Tab Button */
+.new-tab-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  border: 1px solid var(--tab-border, #e5e7eb);
+  background: var(--tab-bg, #ffffff);
+  color: var(--tab-text, #6b7280);
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.new-tab-button:hover {
+  background: var(--tab-hover-bg, #f9fafb);
+  color: var(--tab-active-text, #111827);
+}
+
+/* Tab Content Area */
+.tab-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Context Menu */
+.tab-context-menu {
+  background: var(--menu-bg, #ffffff);
+  border: 1px solid var(--menu-border, #e5e7eb);
+  border-radius: 6px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  padding: 4px 0;
+  z-index: 1000;
+  min-width: 150px;
+}
+
+.context-menu-item {
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--menu-text, #374151);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.context-menu-item:hover {
+  background: var(--menu-hover-bg, #f3f4f6);
+}
+
+.context-menu-separator {
+  height: 1px;
+  background: var(--menu-border, #e5e7eb);
+  margin: 4px 0;
+}
+
+/* Dark Theme Support */
+[data-theme="dark"] .tab-bar,
+[data-theme="crystal-dark"] .tab-bar {
+  --tab-bar-bg: #1f2937;
+  --tab-bar-border: #374151;
+  --tab-bg: #374151;
+  --tab-border: #4b5563;
+  --tab-hover-bg: #4b5563;
+  --tab-active-bg: #1f2937;
+  --tab-active-border: #4b5563;
+  --tab-active-indicator: #60a5fa;
+  --tab-text: #d1d5db;
+  --tab-active-text: #f9fafb;
+  --tab-close-color: #9ca3af;
+  --tab-close-hover-bg: #ef4444;
+  --tab-close-hover-color: #ffffff;
+  --tab-dirty-indicator: #fbbf24;
+  --scrollbar-thumb: #4b5563;
+  --menu-bg: #374151;
+  --menu-border: #4b5563;
+  --menu-text: #d1d5db;
+  --menu-hover-bg: #4b5563;
+}
+
+/* Crystal Dark Specific */
+[data-theme="crystal-dark"] .tab-bar {
+  --tab-bar-bg: #0f172a;
+  --tab-bar-border: #1e293b;
+  --tab-bg: #1e293b;
+  --tab-border: #334155;
+  --tab-hover-bg: #334155;
+  --tab-active-bg: #0f172a;
+  --tab-active-border: #334155;
+  --tab-active-indicator: #818cf8;
+}

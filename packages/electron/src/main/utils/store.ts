@@ -108,3 +108,37 @@ export function addProjectRecentFile(projectPath: string, filePath: string) {
     
     store.set(key, recentFiles);
 }
+
+// Tab state persistence
+export interface TabState {
+    id: string;
+    filePath: string;
+    fileName: string;
+    isDirty: boolean;
+    isPinned: boolean;
+    lastSaved?: string;
+}
+
+export interface TabManagerState {
+    tabs: TabState[];
+    activeTabId: string | null;
+    tabOrder: string[];
+}
+
+export function getProjectTabState(projectPath: string): TabManagerState | null {
+    const key = `projectTabs.${projectPath}`;
+    const state = store.get(key, null) as TabManagerState | null;
+    console.log('[STORE] Getting tab state for', projectPath, ':', state ? { numTabs: state.tabs?.length } : 'null');
+    return state;
+}
+
+export function saveProjectTabState(projectPath: string, state: TabManagerState) {
+    const key = `projectTabs.${projectPath}`;
+    store.set(key, state);
+    console.log('[STORE] Saved tab state for', projectPath, ':', { numTabs: state.tabs?.length });
+}
+
+export function clearProjectTabState(projectPath: string) {
+    const key = `projectTabs.${projectPath}`;
+    store.delete(key);
+}

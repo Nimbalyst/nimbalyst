@@ -441,6 +441,27 @@ export function createApplicationMenu() {
                             focused.webContents.send('view-history');
                         }
                     }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Next Tab',
+                    accelerator: 'CmdOrCtrl+Alt+Right',
+                    click: () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('next-tab');
+                        }
+                    }
+                },
+                {
+                    label: 'Previous Tab',
+                    accelerator: 'CmdOrCtrl+Alt+Left',
+                    click: () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('previous-tab');
+                        }
+                    }
                 }
             ]
         },

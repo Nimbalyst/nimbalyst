@@ -25,6 +25,9 @@ import { AIModels } from './components/AIModels/AIModels';
 import { SessionManager } from './components/SessionManager/SessionManager';
 import { ProjectManager } from './components/ProjectManager/ProjectManager';
 import { NewFileDialog } from './components/NewFileDialog';
+import { TabManager } from './components/TabManager/TabManager';
+import { useTabPreferences } from './hooks/useTabPreferences';
+import { useTabs } from './hooks/useTabs';
 import './ProjectWelcome.css';
 import './components/AIModels/AIModels.css';
 
@@ -71,6 +74,8 @@ interface ElectronAPI {
   onThemeChange: (callback: (theme: string) => void) => () => void;
   onShowAbout: (callback: () => void) => () => void;
   onViewHistory?: (callback: () => void) => () => void;
+  onNextTab?: (callback: () => void) => () => void;
+  onPreviousTab?: (callback: () => void) => () => void;
   onLoadSessionFromManager?: (callback: (data: { sessionId: string; projectPath?: string }) => void) => () => void;
   onShowPreferences?: (callback: () => void) => () => void;
   openFile: () => Promise<{ filePath: string; content: string } | null>;
@@ -91,6 +96,10 @@ interface ElectronAPI {
   setAIChatState: (state: { collapsed: boolean; width: number }) => void;
   getRecentProjectFiles?: () => Promise<string[]>;
   addToProjectRecentFiles?: (filePath: string) => void;
+  // Tab state operations
+  getProjectTabState?: () => Promise<any>;
+  saveProjectTabState?: (tabState: any) => void;
+  clearProjectTabState?: () => void;
   // History operations
   history?: {
     createSnapshot: (filePath: string, state: string, type: string, description?: string) => Promise<void>;
@@ -194,6 +203,54 @@ export default function App() {
   });
   const [lastPrompt, setLastPrompt] = useState<string>('');
   const [lastAIResponse, setLastAIResponse] = useState<string>('');
+  
+  // Tab management state
+  const tabPreferences = useTabPreferences();
+  console.log('[APP] Creating useTabs hook, projectMode:', projectMode, 'projectPath:', projectPath);
+  const tabs = useTabs({
+    maxTabs: tabPreferences.preferences.maxTabs,
+    enabled: tabPreferences.preferences.enabled,
+    onTabChange: async (tab) => {
+      console.log('[APP] onTabChange called for tab:', tab.id, tab.filePath);
+      // When switching tabs, restore the tab's saved state
+      if (tab.filePath) {
+        // If tab has no content, load it from file
+        if (!tab.content && window.electronAPI) {
+          try {
+            const result = await window.electronAPI.switchProjectFile(tab.filePath);
+            if (result) {
+              tab.content = result.content;
+              tabs.updateTab(tab.id, { content: result.content });
+            }
+          } catch (error) {
+            console.error('[TABS] Failed to load content for tab:', error);
+          }
+        }
+        
+        if (tab.content !== undefined) {
+          setCurrentFilePath(tab.filePath);
+          setCurrentFileName(tab.fileName);
+          setContent(tab.content);
+          initialContentRef.current = tab.content;
+          contentVersionRef.current += 1;
+          setIsDirty(tab.isDirty);
+          
+          // Update the main process about the current file
+          if (window.electronAPI) {
+            window.electronAPI.setCurrentFile(tab.filePath);
+          }
+        }
+      }
+    },
+    onTabClose: (tab) => {
+      // Handle tab close - check for unsaved changes
+      if (tab.isDirty) {
+        // In a real implementation, we'd show a dialog here
+        console.warn('Closing tab with unsaved changes:', tab.fileName);
+      }
+    }
+  });
+  
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
@@ -470,13 +527,18 @@ export default function App() {
 
   // Handle save
   const handleSave = useCallback(async () => {
-    if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] handleSave called, currentFilePath:', currentFilePath);
+    // Get the current file path from tabs if enabled, otherwise use state
+    const filePath = tabPreferences.preferences.enabled && tabs.activeTab 
+      ? tabs.activeTab.filePath 
+      : currentFilePath;
+      
+    if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] handleSave called, filePath:', filePath);
     if (!window.electronAPI || !getContentRef.current) return;
 
     const content = getContentRef.current();
-    if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Saving content:', { contentLength: content.length, hasFilePath: !!currentFilePath, currentFilePath });
+    if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Saving content:', { contentLength: content.length, hasFilePath: !!filePath, filePath });
 
-    if (!currentFilePath) {
+    if (!filePath) {
       if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] No file path, triggering save as');
       // No file loaded, for Cmd+S we should trigger save as
       // This matches typical editor behavior
@@ -495,6 +557,14 @@ export default function App() {
         // Update initial content ref to the saved content
         if (getContentRef.current) {
           initialContentRef.current = getContentRef.current();
+        }
+        
+        // Update tab state if tabs are enabled
+        if (tabPreferences.preferences.enabled && tabs.activeTabId) {
+          tabs.updateTab(tabs.activeTabId, { 
+            isDirty: false,
+            lastSaved: new Date()
+          });
         }
 
         // Create a history snapshot for manual save
@@ -543,6 +613,17 @@ export default function App() {
 
     if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] Selecting file:', filePath);
 
+    // If tabs are enabled, check if file is already open in a tab
+    console.log('[TABS] Tab preferences:', tabPreferences.preferences);
+    if (tabPreferences.preferences.enabled) {
+      const existingTab = tabs.findTabByPath(filePath);
+      if (existingTab) {
+        if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] File already open in tab, switching');
+        tabs.switchTab(existingTab.id);
+        return;
+      }
+    }
+
     // Auto-save current file if dirty (no prompt needed with autosave)
     if (isDirty && getContentRef.current && currentFilePath && currentFilePath !== filePath) {
       if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] Auto-saving current file before switching');
@@ -553,13 +634,29 @@ export default function App() {
       const result = await window.electronAPI.switchProjectFile(filePath);
       if (result) {
         if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] File loaded successfully');
-        contentVersionRef.current += 1;
-        isInitializedRef.current = false;
-        setContent(result.content);
-        setCurrentFilePath(result.filePath);
-        setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
-        setIsDirty(false);
-        initialContentRef.current = result.content;
+        
+        // If tabs are enabled, add a new tab
+        if (tabPreferences.preferences.enabled) {
+          console.log('[TABS] Adding tab for file:', result.filePath);
+          console.log('[TABS] Current tabs before add:', tabs.tabs);
+          const tabId = tabs.addTab(result.filePath, result.content);
+          if (!tabId) {
+            console.warn('Failed to add tab - max tabs reached');
+            // Could show a dialog here
+          } else {
+            console.log('[TABS] Added tab with ID:', tabId);
+            console.log('[TABS] Current tabs after add:', tabs.tabs);
+          }
+        } else {
+          // Original non-tab behavior
+          contentVersionRef.current += 1;
+          isInitializedRef.current = false;
+          setContent(result.content);
+          setCurrentFilePath(result.filePath);
+          setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
+          setIsDirty(false);
+          initialContentRef.current = result.content;
+        }
         
         // Update current directory based on the file path
         const dirPath = result.filePath.substring(0, result.filePath.lastIndexOf('/'));
@@ -610,7 +707,7 @@ export default function App() {
     } catch (error) {
       console.error('Failed to switch project file:', error);
     }
-  }, [isDirty, currentFilePath, handleSave]);
+  }, [isDirty, currentFilePath, handleSave, tabs, tabPreferences]);
 
   // Update window title and dirty state
   useEffect(() => {
@@ -641,6 +738,15 @@ export default function App() {
         e.stopPropagation();
         e.stopImmediatePropagation();
         if (projectMode) {
+          // Load recent files before showing dialog
+          if (window.electronAPI?.getRecentProjectFiles) {
+            window.electronAPI.getRecentProjectFiles().then(files => {
+              console.log('[RECENT_FILES] Loaded files for QuickOpen:', files);
+              setRecentProjectFiles(files || []);
+            }).catch(error => {
+              console.error('[RECENT_FILES] Failed to load:', error);
+            });
+          }
           setIsQuickOpenVisible(true);
         }
         return false;
@@ -688,11 +794,15 @@ export default function App() {
     const loadRecentFiles = async () => {
       try {
         if (window.electronAPI.getRecentProjectFiles) {
+          console.log('[RECENT_FILES] Loading recent files for project');
           const files = await window.electronAPI.getRecentProjectFiles();
-          setRecentProjectFiles(files);
+          console.log('[RECENT_FILES] Loaded recent files:', files);
+          setRecentProjectFiles(files || []);
+        } else {
+          console.warn('[RECENT_FILES] getRecentProjectFiles API not available');
         }
       } catch (error) {
-        console.error('Failed to load recent project files:', error);
+        console.error('[RECENT_FILES] Failed to load recent project files:', error);
       }
     };
 
@@ -914,6 +1024,51 @@ export default function App() {
       }
     };
   }, [currentFilePath]);
+
+  // Handle active tab changes (especially after restoration)
+  useEffect(() => {
+    if (tabs.activeTab && tabPreferences.preferences.enabled) {
+      console.log('[APP] Active tab changed to:', tabs.activeTab.id, tabs.activeTab.filePath);
+      // Load the tab's content if it's not already loaded
+      if (tabs.activeTab.filePath) {
+        // Load content if needed
+        if (!tabs.activeTab.content && window.electronAPI) {
+          console.log('[APP] Loading content for restored active tab');
+          window.electronAPI.switchProjectFile(tabs.activeTab.filePath).then(result => {
+            if (result) {
+              tabs.updateTab(tabs.activeTab.id, { content: result.content });
+              setCurrentFilePath(tabs.activeTab.filePath);
+              setCurrentFileName(tabs.activeTab.fileName);
+              setContent(result.content);
+              initialContentRef.current = result.content;
+              contentVersionRef.current += 1;
+              setIsDirty(tabs.activeTab.isDirty);
+              
+              // Update the main process
+              if (window.electronAPI) {
+                window.electronAPI.setCurrentFile(tabs.activeTab.filePath);
+              }
+            }
+          }).catch(error => {
+            console.error('[APP] Failed to load content for active tab:', error);
+          });
+        } else if (tabs.activeTab.content !== undefined) {
+          // Tab already has content, just set it
+          setCurrentFilePath(tabs.activeTab.filePath);
+          setCurrentFileName(tabs.activeTab.fileName);
+          setContent(tabs.activeTab.content);
+          initialContentRef.current = tabs.activeTab.content;
+          contentVersionRef.current += 1;
+          setIsDirty(tabs.activeTab.isDirty);
+          
+          // Update the main process
+          if (window.electronAPI) {
+            window.electronAPI.setCurrentFile(tabs.activeTab.filePath);
+          }
+        }
+      }
+    }
+  }, [tabs.activeTab?.id]); // Only re-run when active tab ID changes
 
   // Load initial state on mount
   useEffect(() => {
@@ -1214,6 +1369,33 @@ export default function App() {
       }));
     }
 
+    // Tab navigation handlers
+    if (window.electronAPI.onNextTab) {
+      cleanupFns.push(window.electronAPI.onNextTab(() => {
+        if (tabPreferences.preferences.enabled && tabs.tabs.length > 1) {
+          const currentIndex = tabs.tabs.findIndex(tab => tab.id === tabs.activeTabId);
+          const nextIndex = (currentIndex + 1) % tabs.tabs.length;
+          const nextTab = tabs.tabs[nextIndex];
+          if (nextTab) {
+            tabs.switchTab(nextTab.id);
+          }
+        }
+      }));
+    }
+
+    if (window.electronAPI.onPreviousTab) {
+      cleanupFns.push(window.electronAPI.onPreviousTab(() => {
+        if (tabPreferences.preferences.enabled && tabs.tabs.length > 1) {
+          const currentIndex = tabs.tabs.findIndex(tab => tab.id === tabs.activeTabId);
+          const prevIndex = currentIndex <= 0 ? tabs.tabs.length - 1 : currentIndex - 1;
+          const prevTab = tabs.tabs[prevIndex];
+          if (prevTab) {
+            tabs.switchTab(prevTab.id);
+          }
+        }
+      }));
+    }
+
     // MCP Server handlers
     if (window.electronAPI.onMcpApplyDiff) {
       cleanupFns.push(window.electronAPI.onMcpApplyDiff(async ({ replacements, resultChannel }) => {
@@ -1389,7 +1571,67 @@ export default function App() {
         </>
       )}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {projectMode && !currentFilePath ? (
+        {console.log('[APP] Rendering TabManager check:', {
+          enabled: tabPreferences.preferences.enabled,
+          projectMode,
+          numTabs: tabs.tabs.length,
+          activeTabId: tabs.activeTabId
+        })}
+        {tabPreferences.preferences.enabled && projectMode ? (
+          <TabManager
+            tabs={tabs.tabs}
+            activeTabId={tabs.activeTabId}
+            onTabSelect={tabs.switchTab}
+            onTabClose={tabs.removeTab}
+            onNewTab={() => {
+              // Open file dialog or create untitled tab
+              setIsNewFileDialogOpen(true);
+            }}
+            onTogglePin={(tabId) => {
+              const tab = tabs.getTabState(tabId);
+              if (tab) {
+                tabs.updateTab(tabId, { isPinned: !tab.isPinned });
+              }
+            }}
+          >
+            {tabs.activeTab ? (
+              <StravuEditor
+                key={`${tabs.activeTabId}-${contentVersionRef.current}-${theme}`}
+                config={{
+                  initialContent: tabs.activeTab.content || '',
+                  onContentChange: (newContent) => {
+                    logger.editor.log('Content changed in tab:', tabs.activeTabId);
+                    
+                    if (getContentRef.current && tabs.activeTabId) {
+                      const currentContent = getContentRef.current();
+                      const hasChanged = currentContent !== tabs.activeTab?.content;
+                      
+                      tabs.updateTab(tabs.activeTabId, {
+                        content: currentContent,
+                        isDirty: hasChanged
+                      });
+                      
+                      setIsDirty(hasChanged);
+                    }
+                  },
+                  onGetContent: (getContentFn) => {
+                    logger.ui.info('Received getContent function for tab');
+                    getContentRef.current = getContentFn;
+                  },
+                  onEditorReady: (editor) => {
+                    logger.ui.info('Editor ready for tab');
+                    editorRef.current = editor;
+                    searchCommandRef.current = TOGGLE_SEARCH_COMMAND;
+                  },
+                  theme: theme,
+                  markdownTransformers: MARKDOWN_TRANSFORMERS
+                }}
+              />
+            ) : (
+              <ProjectWelcome projectName={projectName || 'Project'} />
+            )}
+          </TabManager>
+        ) : projectMode && !currentFilePath ? (
           <ProjectWelcome projectName={projectName || 'Project'} />
         ) : (
           <StravuEditor
@@ -1403,6 +1645,14 @@ export default function App() {
             if (getContentRef.current) {
               const currentContent = getContentRef.current();
               const hasChanged = currentContent !== initialContentRef.current;
+
+              // Update tab content if tabs are enabled
+              if (tabPreferences.preferences.enabled && tabs.activeTabId) {
+                tabs.updateTab(tabs.activeTabId, { 
+                  content: currentContent,
+                  isDirty: hasChanged
+                });
+              }
 
               // On first onChange, mark as initialized
               if (!isInitializedRef.current) {

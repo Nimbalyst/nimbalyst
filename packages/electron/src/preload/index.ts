@@ -110,6 +110,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('view-history', callback);
   },
   
+  onNextTab: (callback: () => void) => {
+    ipcRenderer.on('next-tab', callback);
+    return () => ipcRenderer.removeListener('next-tab', callback);
+  },
+  
+  onPreviousTab: (callback: () => void) => {
+    ipcRenderer.on('previous-tab', callback);
+    return () => ipcRenderer.removeListener('previous-tab', callback);
+  },
+  
   onLoadSessionFromManager: (callback: (data: { sessionId: string; projectPath?: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('load-session-from-manager', handler);
@@ -183,6 +193,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchProjectFiles: (projectPath: string, query: string) => ipcRenderer.invoke('search-project-files', projectPath, query),
   getRecentProjectFiles: () => ipcRenderer.invoke('get-recent-project-files'),
   addToProjectRecentFiles: (filePath: string) => ipcRenderer.send('add-to-project-recent-files', filePath),
+  
+  // Tab state operations
+  getProjectTabState: () => ipcRenderer.invoke('get-project-tab-state'),
+  saveProjectTabState: (tabState: any) => ipcRenderer.send('save-project-tab-state', tabState),
+  clearProjectTabState: () => ipcRenderer.send('clear-project-tab-state'),
   
   // History operations
   history: {
