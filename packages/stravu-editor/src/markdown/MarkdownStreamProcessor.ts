@@ -413,7 +413,8 @@ export class MarkdownStreamProcessor {
 
       const currentNodes = [workingNode, ...targetSiblings];
 
-      newNodes.forEach((node) => this.onNodeCreated?.(node));
+      // Don't call onNodeCreated here - it will be called recursively
+      // within updateNodes when nodes are actually inserted/replaced
 
       const newWorkingNode = this.updateNodes(
         workingNode,
@@ -444,8 +445,9 @@ export class MarkdownStreamProcessor {
       // Special case: when targeting a shadow root (like CollapsibleContentNode),
       // insert the new content inside it instead of replacing the shadow root itself
       currentNode.clear(); // Remove existing content
+      // Call onNodeCreated recursively for the new node and all its descendants
+      this.callOnNodeCreatedRecursively(newNode);
       currentNode.append(newNode); // Add new content inside
-      this.onNodeCreated?.(newNode);
       return currentNode; // Return the shadow root, not the replacement
     } else {
       let replaceSelection = false;
@@ -458,6 +460,9 @@ export class MarkdownStreamProcessor {
           replaceSelection = true;
         }
       }
+      // When replacing a node with a different type, we need to call onNodeCreated
+      // for the new node and all its descendants (e.g., when text becomes a table)
+      this.callOnNodeCreatedRecursively(newNode);
       const replacedNode = currentNode.replace(newNode);
 
       if (replaceSelection) {
@@ -503,7 +508,8 @@ export class MarkdownStreamProcessor {
       // Replace all content with the new structure from markdown parsing
       startingNode.clear();
       newNodes.forEach((node) => {
-        this.onNodeCreated?.(node);
+        // Call onNodeCreated recursively for each node and all its descendants
+        this.callOnNodeCreatedRecursively(node);
         startingNode.append(node);
         if (this.isVerbose) {
           console.log('Appended node to shadow root:', {
@@ -520,7 +526,8 @@ export class MarkdownStreamProcessor {
       const currentNode = currentNodes[currentIndex];
 
       if (!currentNode) {
-        this.onNodeCreated?.(newNode);
+        // Call onNodeCreated recursively for new nodes being inserted
+        this.callOnNodeCreatedRecursively(newNode);
         lastInsertedNode.insertAfter(newNode);
         lastInsertedNode = newNode;
       } else {
@@ -549,15 +556,24 @@ export class MarkdownStreamProcessor {
   }
 
   private updateTextNode(currentNode: TextNode, newNode: TextNode) {
+    let nodeModified = false;
+    
     if (currentNode.getTextContent() !== newNode.getTextContent()) {
       currentNode.setTextContent(newNode.getTextContent());
-      this.onNodeCreated?.(currentNode);
+      nodeModified = true;
     }
     if (currentNode.getFormat() !== newNode.getFormat()) {
       currentNode.setFormat(newNode.getFormat());
+      nodeModified = true;
     }
     if (currentNode.getStyle() !== newNode.getStyle()) {
       currentNode.setStyle(newNode.getStyle());
+      nodeModified = true;
+    }
+    
+    // Only call onNodeCreated if the node was actually modified
+    if (nodeModified) {
+      this.onNodeCreated?.(currentNode);
     }
   }
 
@@ -571,6 +587,10 @@ export class MarkdownStreamProcessor {
       const currentChild = currentChildren[currentChildIndex];
 
       if (!currentChild) {
+        // When appending new children, we need to call onNodeCreated recursively
+        // to ensure all new nodes (including deeply nested ones like table cells) 
+        // get marked with diff state
+        this.callOnNodeCreatedRecursively(newChild);
         currentNode.append(newChild);
       } else {
         this.updateNodeRecursively(currentChild, newChild);
@@ -581,6 +601,19 @@ export class MarkdownStreamProcessor {
     while (currentChildIndex < currentChildren.length) {
       currentChildren[currentChildIndex].remove();
       currentChildIndex++;
+    }
+  }
+
+  private callOnNodeCreatedRecursively(node: LexicalNode) {
+    // Call onNodeCreated for this node
+    this.onNodeCreated?.(node);
+    
+    // If it's an element node, recursively call for all children
+    if ($isElementNode(node)) {
+      const children = node.getChildren();
+      for (const child of children) {
+        this.callOnNodeCreatedRecursively(child);
+      }
     }
   }
 
@@ -601,7 +634,8 @@ export class MarkdownStreamProcessor {
 
     let lastInsertedNode = workingNode;
     nodes.forEach((node) => {
-      this.onNodeCreated?.(node);
+      // Call onNodeCreated recursively for custom inserted nodes and all their descendants
+      this.callOnNodeCreatedRecursively(node);
       if (nextBoundaryNode) {
         // Insert before the boundary node (e.g., "Section Two")
         nextBoundaryNode.insertBefore(node);
