@@ -192,7 +192,13 @@ export function ChatMessage({
                     {expandedEdits ? '▼' : '▶'}
                   </span>
                   <span className="ai-chat-edit-title">
-                    {edits.length} suggested edit{edits.length > 1 ? 's' : ''}
+                    {(() => {
+                      // For diff edits, count the total replacements
+                      const totalReplacements = edit.type === 'diff' && edit.replacements 
+                        ? edit.replacements.length 
+                        : 1;
+                      return `${totalReplacements} suggested edit${totalReplacements > 1 ? 's' : ''}`;
+                    })()}
                   </span>
                   {editStatus[index]?.status === 'applied' && (
                     <span className="ai-chat-edit-badge ai-chat-edit-badge--success">Applied</span>
