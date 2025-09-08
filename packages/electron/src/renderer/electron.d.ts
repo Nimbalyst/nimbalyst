@@ -47,8 +47,8 @@ interface ElectronAPI {
   // Settings operations
   getSidebarWidth: () => Promise<number>;
   setSidebarWidth: (width: number) => void;
-  getAIChatState: () => Promise<{ collapsed: boolean; width: number }>;
-  setAIChatState: (state: { collapsed: boolean; width: number }) => void;
+  getAIChatState: () => Promise<{ collapsed: boolean; width: number; sessionId?: string }>;
+  setAIChatState: (state: { collapsed: boolean; width: number; sessionId?: string }) => void;
   
   // QuickOpen operations
   searchProjectFiles: (projectPath: string, query: string) => Promise<string[]>;

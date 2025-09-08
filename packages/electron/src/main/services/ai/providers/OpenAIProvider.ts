@@ -38,8 +38,8 @@ export class OpenAIProvider extends BaseAIProvider {
       throw new Error('API key required for OpenAI provider');
     }
 
-    // For GPT-5, use a shorter timeout to see if it helps
-    const timeout = config.model === 'gpt-5' ? 15000 : 60000;
+    // Use consistent timeout for all models
+    const timeout = 60000; // 60 seconds
     console.log(`[OpenAIProvider] Creating OpenAI client with timeout: ${timeout}ms, maxRetries: 0`);
     this.openai = new OpenAI({
       apiKey: config.apiKey,
@@ -106,63 +106,8 @@ export class OpenAIProvider extends BaseAIProvider {
     apiMessages.push({ role: 'user', content: message });
 
     try {
-      // Define tools for OpenAI (using function calling)
-      const tools: OpenAI.Chat.ChatCompletionTool[] = [{
-        type: 'function',
-        function: {
-          name: 'applyDiff',
-          description: 'Apply text replacements to the document with diff preview',
-          parameters: {
-            type: 'object',
-            properties: {
-              replacements: {
-                type: 'array',
-                description: 'Array of text replacements to apply',
-                items: {
-                  type: 'object',
-                  properties: {
-                    oldText: { 
-                      type: 'string',
-                      description: 'The exact text to replace'
-                    },
-                    newText: { 
-                      type: 'string',
-                      description: 'The new text to insert'
-                    }
-                  },
-                  required: ['oldText', 'newText']
-                }
-              }
-            },
-            required: ['replacements']
-          }
-        }
-      }, {
-        type: 'function',
-        function: {
-          name: 'streamContent',
-          description: 'Stream new content into the document at a specific position',
-          parameters: {
-            type: 'object',
-            properties: {
-              content: {
-                type: 'string',
-                description: 'The content to stream into the document'
-              },
-              position: {
-                type: 'string',
-                enum: ['cursor', 'end', 'after-selection'],
-                description: 'Where to insert the content'
-              },
-              insertAfter: {
-                type: 'string',
-                description: 'Optional: Find this text and insert content after it'
-              }
-            },
-            required: ['content', 'position']
-          }
-        }
-      }];
+      // Use the centralized tool system
+      const tools: OpenAI.Chat.ChatCompletionTool[] = this.getToolsInOpenAIFormat();
 
       // Create the chat completion with streaming
       if (!this.config.model) {
@@ -177,7 +122,7 @@ export class OpenAIProvider extends BaseAIProvider {
         model: modelId,
         messages: apiMessages,
         tools,
-        tool_choice: 'auto',
+        tool_choice: documentContext ? 'auto' : 'auto',  // Could try 'required' to force tool use
         stream: true
       };
       
@@ -301,6 +246,7 @@ export class OpenAIProvider extends BaseAIProvider {
         if (delta?.content) {
           // Text chunk
           fullContent += delta.content;
+          console.log(`[OpenAIProvider] Text chunk #${chunkCount}: "${delta.content.substring(0, 50)}..." (${delta.content.length} chars)`);
           yield {
             type: 'text',
             content: delta.content
@@ -388,17 +334,18 @@ export class OpenAIProvider extends BaseAIProvider {
         }
         
         if (chunk.choices[0]?.finish_reason === 'stop') {
-          // Message complete
+          // Message complete - log it but don't yield complete yet
           const totalTime = Date.now() - startTime;
           console.log(`[OpenAIProvider] Stream complete - Total time: ${totalTime}ms, Chunks: ${chunkCount}, Tool calls: ${toolCallCount}, Content length: ${fullContent.length}`);
-          
-          yield {
-            type: 'complete',
-            content: fullContent,
-            isComplete: true
-          };
         }
       }
+      
+      // Yield complete AFTER the loop ends
+      yield {
+        type: 'complete',
+        content: fullContent,
+        isComplete: true
+      };
 
     } catch (error: any) {
       const errorTime = Date.now() - startTime;
@@ -451,15 +398,23 @@ You have access to the following tools for document editing:
 - applyDiff: Apply text replacements to the document with diff preview (use for replacing existing text)
 - streamContent: Stream new content into the document at a specific position (use for inserting new content)
 
+CRITICAL: When the user asks you to add, insert, write, or create content in the document, YOU MUST USE THE streamContent TOOL. 
+DO NOT just say you're doing it - actually use the tool to insert the content!
+
 Tool Usage Guidelines:
 - Use 'applyDiff' when you need to REPLACE or MODIFY existing text
 - Use 'streamContent' when you need to INSERT NEW content without replacing anything
 - For streamContent, use position='cursor' to insert at cursor, position='end' to append to document, or provide 'insertAfter' to insert after specific text
 
-CRITICAL RESPONSE RULES - YOU MUST FOLLOW THESE:
-1. When editing documents, briefly acknowledge the action using the -ing form of the user's request
-2. Keep your response to 2-4 words maximum
-3. Mirror the user's language when possible
+Examples of when to use streamContent:
+- "Add a poem" -> Use streamContent to insert the poem
+- "Write a list" -> Use streamContent to insert the list
+- "Insert a paragraph" -> Use streamContent to insert the paragraph
+
+RESPONSE RULES:
+1. When using tools, briefly acknowledge with 2-4 words (e.g., "Adding poem...")
+2. ALWAYS use the appropriate tool when editing the document
+3. Never just describe what you would do - actually do it with the tools
 4. NEVER explain what you're about to do with phrases like "Let me...", "I'll...", "First..."
 5. NEVER describe the actual content you added - the user sees it in the document
 6. NEVER list what you added or explain your reasoning unless asked

@@ -23,7 +23,7 @@ export function registerSettingsHandlers() {
     });
 
     // Set AI Chat state
-    ipcMain.on('set-ai-chat-state', (event, state: { collapsed: boolean; width: number }) => {
+    ipcMain.on('set-ai-chat-state', (event, state: { collapsed: boolean; width: number; sessionId?: string }) => {
         setAIChatState(state);
     });
 }

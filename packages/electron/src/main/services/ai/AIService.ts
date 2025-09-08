@@ -19,6 +19,7 @@ import {
   AIModel
 } from './types';
 import { updateDocumentState } from '../../mcp/httpServer';
+import { ToolExecutor } from './tools';
 
 export class AIService {
   private sessionManager: SessionManager;
@@ -410,7 +411,9 @@ export class AIService {
           switch (chunk.type) {
             case 'text':
               textChunks++;
-              fullResponse += chunk.content || '';
+              const chunkContent = chunk.content || '';
+              fullResponse += chunkContent;
+              console.log(`[AIService] Forwarding text chunk #${textChunks}: ${chunkContent.length} chars, total: ${fullResponse.length}`);
               // Send ACCUMULATED response to renderer (not just the chunk)
               event.sender.send('ai:streamResponse', {
                 partial: fullResponse,  // Send the full accumulated text
@@ -920,31 +923,14 @@ export class AIService {
   }
 
   private createToolHandler(webContents: Electron.WebContents): ToolHandler {
+    const executor = new ToolExecutor(webContents);
+    
     return {
       applyDiff: async (args: DiffArgs): Promise<DiffResult> => {
-        // Send the diff to the renderer to apply
-        const resultChannel = `applyDiff-result-${Date.now()}`;
-
-        return new Promise((resolve) => {
-          // Set up one-time listener for result
-          ipcMain.once(resultChannel, (event, result) => {
-            resolve(result);
-          });
-
-          // Send the diff to renderer
-          webContents.send('ai:applyDiff', {
-            replacements: args.replacements,
-            resultChannel
-          });
-
-          // Timeout after 10 seconds
-          setTimeout(() => {
-            resolve({
-              success: false,
-              error: 'Timeout waiting for diff application'
-            });
-          }, 10000);
-        });
+        return executor.applyDiff(args);
+      },
+      executeTool: async (name: string, args: any): Promise<any> => {
+        return executor.executeTool(name, args);
       }
     };
   }

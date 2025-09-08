@@ -81,11 +81,11 @@ export function setSidebarWidth(width: number) {
 }
 
 // AI Chat settings
-export function getAIChatState(): { collapsed: boolean; width: number } {
-    return store.get('aiChatState', { collapsed: false, width: 350 }) as { collapsed: boolean; width: number };
+export function getAIChatState(): { collapsed: boolean; width: number; sessionId?: string } {
+    return store.get('aiChatState', { collapsed: false, width: 350 }) as { collapsed: boolean; width: number; sessionId?: string };
 }
 
-export function setAIChatState(state: { collapsed: boolean; width: number }) {
+export function setAIChatState(state: { collapsed: boolean; width: number; sessionId?: string }) {
     store.set('aiChatState', state);
 }
 

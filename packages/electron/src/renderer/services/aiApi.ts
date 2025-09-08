@@ -78,12 +78,7 @@ class AIApi {
 
     // Set up IPC listeners for streaming responses (both legacy and new)
     const handleStreamResponse = (data: any) => {
-      logger.api.info('Received stream response:', {
-        hasPartial: !!data.partial,
-        partialLength: data.partial?.length,
-        isComplete: data.isComplete,
-        preview: data.partial?.substring(0, 100)
-      });
+      // Stream response received - emit will handle logging
       
       // Accumulate content to check for streaming markers
       if (data.partial) {
@@ -94,12 +89,7 @@ class AIApi {
       if (!this.isStreamingEdit && !this.streamStartDetected) {
         // Check accumulated content for streaming marker
         const { isStreaming, streamConfig, cleanContent } = detectStreamingIntent(this.accumulatedContent);
-        logger.api.info('Stream detection on accumulated content:', {
-          isStreaming,
-          streamConfig,
-          accumulatedLength: this.accumulatedContent.length,
-          hasStreamMarker: this.accumulatedContent.includes('STREAM_EDIT')
-        });
+        // Stream detection handled
         
         if (isStreaming) {
           logger.streaming.info('🚀 STREAMING MODE ACTIVATED', streamConfig);
@@ -366,9 +356,43 @@ class AIApi {
     }
   }
 
+  private streamChunkCount = 0;
+  private lastStreamLength = 0;
+
   private emit(event: string, data: any) {
     const callbacks = this.listeners.get(event);
-    logger.api.info(`Emitting event '${event}' with ${callbacks?.size || 0} listeners`, data);
+    
+    // More concise logging for streaming events
+    if (event === 'streamResponse') {
+      // Only log brief status for streaming, not the full content
+      if (data.isComplete) {
+        logger.api.info(`✓ Stream complete (${this.streamChunkCount} chunks, ${this.lastStreamLength} chars)`);
+        this.streamChunkCount = 0;
+        this.lastStreamLength = 0;
+      } else if (data.partial && !data.content) {
+        // Track chunks and show progress
+        this.streamChunkCount++;
+        const partialLength = data.partial?.length || 0;
+        const newChars = partialLength - this.lastStreamLength;
+        this.lastStreamLength = partialLength;
+        
+        // Log every 5 chunks or every 200 new characters
+        if (this.streamChunkCount % 5 === 1 || newChars > 200) {
+          logger.api.info(`📝 Chunk #${this.streamChunkCount}: +${newChars} chars (total: ${partialLength})`);
+        }
+      }
+    } else if (event === 'performanceMetrics') {
+      // Show performance metrics concisely
+      if (data.phase === 'start') {
+        logger.api.info(`🚀 Stream starting: ${data.provider} ${data.model}`);
+      } else if (data.phase === 'firstChunk') {
+        logger.api.info(`⚡ First chunk: ${data.timeToFirstChunk}ms`);
+      }
+    } else {
+      // Normal verbose logging for other events
+      logger.api.info(`Emitting event '${event}' with ${callbacks?.size || 0} listeners`, data);
+    }
+    
     if (callbacks) {
       callbacks.forEach(callback => {
         try {

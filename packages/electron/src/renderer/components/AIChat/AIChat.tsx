@@ -8,6 +8,7 @@ import { EmptyState } from './EmptyState';
 import { PerformanceMetrics } from './PerformanceMetrics';
 import { aiApi, DocumentContext } from '../../services/aiApi';
 import { logger } from '../../utils/logger';
+import { DEFAULT_MODELS } from '../../../shared/modelConstants';
 import './AIChat.css';
 
 interface AIChatProps {
@@ -20,6 +21,7 @@ interface AIChatProps {
   projectPath?: string;
   sessionToLoad?: { sessionId: string; projectPath?: string } | null;
   onSessionLoaded?: () => void;
+  onSessionIdChange?: (sessionId: string | null) => void;
 }
 
 export function AIChat({
@@ -32,6 +34,7 @@ export function AIChat({
   projectPath,
   sessionToLoad,
   onSessionLoaded,
+  onSessionIdChange,
   onShowApiKeyError
 }: AIChatProps & { onShowApiKeyError?: () => void }) {
   const [messages, setMessages] = useState<Array<{
@@ -64,10 +67,9 @@ export function AIChat({
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [tempInput, setTempInput] = useState('');
   const [currentUserMessage, setCurrentUserMessage] = useState<string>(''); // Track current user message for error reporting
-  const [currentModel, setCurrentModel] = useState<string>(() => {
-    // Load last used model from localStorage
-    const saved = localStorage.getItem('ai-selected-model');
-    return saved || 'claude-code';  // Default to Claude Code
+  const [currentModel, setCurrentModel] = useState<string | null>(() => {
+    // Load last used model from localStorage, but don't default to anything
+    return localStorage.getItem('ai-selected-model');
   });
   const [showPerformanceMetrics, setShowPerformanceMetrics] = useState<boolean>(() => {
     // Load performance metrics visibility from localStorage
@@ -580,8 +582,28 @@ export function AIChat({
           // Load the most recent session
           session = await aiApi.loadSession(existingSessions[0].id, projectPath);
 
-          // Don't override user's selected model - they may have switched providers
-          // The user's selection should take precedence over the session's provider
+          // ALWAYS restore the provider and model from the session
+          // This ensures the UI shows what's actually being used
+          if (session.provider) {
+            let modelIdToSet: string;
+            if (session.provider === 'claude-code') {
+              modelIdToSet = 'claude-code';
+            } else {
+              // Use the session's actual model, or fall back to provider default
+              modelIdToSet = session.model 
+                ? `${session.provider}:${session.model}`
+                : `${session.provider}:default`;
+            }
+            
+            console.log(`[AIChat] Syncing UI model from session: ${modelIdToSet} (was: ${currentModel})`);
+            setCurrentModel(modelIdToSet);
+            localStorage.setItem('ai-selected-model', modelIdToSet);
+          } else {
+            // No provider in session - this shouldn't happen but handle it
+            console.warn('[AIChat] Session has no provider, using default');
+            setCurrentModel(DEFAULT_MODELS.claude);
+            localStorage.setItem('ai-selected-model', DEFAULT_MODELS.claude);
+          }
         } else {
           // Create new session only if none exists
           // Clean the document context for IPC (remove functions)
@@ -592,7 +614,8 @@ export function AIChat({
             cursorPosition: documentContext.cursorPosition,
             selection: documentContext.selection
           } : undefined;
-          const { provider, model } = parseModelId(currentModel);
+          const modelToUse = currentModel || DEFAULT_MODELS.claude;
+          const { provider, model } = parseModelId(modelToUse);
           session = await aiApi.createSession(cleanDocumentContext, projectPath, provider, model);
         }
 
@@ -708,27 +731,57 @@ export function AIChat({
     });
 
     // Check if we need a new session (no session or provider changed)
-    const { provider, model } = parseModelId(currentModel);
+    const modelToUse = currentModel || DEFAULT_MODELS.claude;
+    const { provider, model } = parseModelId(modelToUse);
 
     // Get current session to check provider
     let needNewSession = !currentSessionId;
+    let actualProvider = provider;
+    let actualModel = model;
+    
     if (currentSessionId && sessions.length > 0) {
       const currentSession = sessions.find(s => s.id === currentSessionId);
-      if (currentSession && currentSession.provider !== provider) {
-        console.log(`[AIChat] Provider changed from ${currentSession.provider} to ${provider}, creating new session`);
-        needNewSession = true;
+      if (currentSession) {
+        // Check if provider changed
+        if (currentSession.provider !== provider) {
+          console.log(`[AIChat] Provider changed from ${currentSession.provider} to ${provider}, creating new session`);
+          needNewSession = true;
+        } else {
+          // Use the session's actual provider/model for consistency
+          actualProvider = currentSession.provider;
+          actualModel = currentSession.model || model;
+          
+          // Sync UI if needed
+          const expectedModelId = currentSession.provider === 'claude-code' 
+            ? 'claude-code' 
+            : `${actualProvider}:${actualModel}`;
+          
+          if (currentModel !== expectedModelId) {
+            console.log(`[AIChat] Syncing UI model to match session: ${expectedModelId}`);
+            setCurrentModel(expectedModelId);
+            localStorage.setItem('ai-selected-model', expectedModelId);
+          }
+        }
       }
     }
 
     if (needNewSession) {
-      console.log(`[AIChat] Creating new session with provider: ${provider}, model: ${model}`);
-      const session = await aiApi.createSession(freshDocumentContext, projectPath, provider, model);
+      console.log(`[AIChat] Creating new session with provider: ${actualProvider}, model: ${actualModel}`);
+      const session = await aiApi.createSession(freshDocumentContext, projectPath, actualProvider, actualModel);
       setCurrentSessionId(session.id);
       console.log(`[AIChat] Created session ${session.id} with provider: ${session.provider}`);
+      
+      // Update UI to match the new session
+      const newModelId = session.provider === 'claude-code' 
+        ? 'claude-code' 
+        : `${session.provider}:${session.model || actualModel}`;
+      setCurrentModel(newModelId);
+      localStorage.setItem('ai-selected-model', newModelId);
+      
       // Reload sessions to include the new one
       await loadSessions();
     } else {
-      console.log(`[AIChat] Using existing session ${currentSessionId} with provider: ${provider}`);
+      console.log(`[AIChat] Using existing session ${currentSessionId} with provider: ${actualProvider}`);
     }
 
     // Add user message
@@ -955,16 +1008,24 @@ export function AIChat({
       const session = await aiApi.loadSession(sessionId, projectPath);
       setCurrentSessionId(session.id);
 
-      // Update model based on session (provider:model format)
+      // ALWAYS update model based on session (provider:model format)
+      // This ensures UI always shows what's actually being used
       if (session.provider) {
+        let modelIdToSet: string;
         if (session.provider === 'claude-code') {
-          setCurrentModel('claude-code');
-          localStorage.setItem('ai-selected-model', 'claude-code');
-        } else if (session.model) {
-          const modelId = `${session.provider}:${session.model}`;
-          setCurrentModel(modelId);
-          localStorage.setItem('ai-selected-model', modelId);
+          modelIdToSet = 'claude-code';
+        } else {
+          // Use the session's actual model, or fall back to a sensible default
+          modelIdToSet = session.model 
+            ? `${session.provider}:${session.model}`
+            : `${session.provider}:default`;
         }
+        
+        console.log(`[AIChat] handleSessionSelect - Syncing UI model: ${modelIdToSet}`);
+        setCurrentModel(modelIdToSet);
+        localStorage.setItem('ai-selected-model', modelIdToSet);
+      } else {
+        console.warn('[AIChat] handleSessionSelect - Session has no provider');
       }
 
       // Convert session messages to chat format, preserving streaming status
@@ -1038,6 +1099,13 @@ export function AIChat({
     loadRequestedSession();
   }, [sessionToLoad, isInitialized, handleSessionSelect, onSessionLoaded]);
 
+  // Notify parent component when session ID changes
+  useEffect(() => {
+    if (onSessionIdChange) {
+      onSessionIdChange(currentSessionId);
+    }
+  }, [currentSessionId, onSessionIdChange]);
+
   if (isCollapsed) {
     return (
       <button
@@ -1068,8 +1136,8 @@ export function AIChat({
 
       <ChatHeader
         onToggleCollapse={onToggleCollapse}
-        provider={parseModelId(currentModel).provider}
-        model={currentModel}
+        provider={currentModel ? parseModelId(currentModel).provider : undefined}
+        model={currentModel || undefined}
         showPerformanceMetrics={showPerformanceMetrics}
         onTogglePerformanceMetrics={() => {
           const newValue = !showPerformanceMetrics;
@@ -1124,8 +1192,8 @@ export function AIChat({
             messages={messages}
             isLoading={isLoading}
             onApplyEdit={handleApplyEdit}
-            provider={parseModelId(currentModel).provider}
-            modelName={getModelDisplayName(currentModel)}
+            provider={currentModel ? parseModelId(currentModel).provider : undefined}
+            modelName={currentModel ? getModelDisplayName(currentModel) : undefined}
             hasDocument={!!documentContext && !!(documentContext.filePath || documentContext.content)}
           />
 

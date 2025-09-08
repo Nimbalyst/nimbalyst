@@ -92,8 +92,8 @@ interface ElectronAPI {
   // Settings
   getSidebarWidth: () => Promise<number | null>;
   setSidebarWidth: (width: number) => void;
-  getAIChatState: () => Promise<{ collapsed: boolean; width: number } | null>;
-  setAIChatState: (state: { collapsed: boolean; width: number }) => void;
+  getAIChatState: () => Promise<{ collapsed: boolean; width: number; sessionId?: string } | null>;
+  setAIChatState: (state: { collapsed: boolean; width: number; sessionId?: string }) => void;
   getRecentProjectFiles?: () => Promise<string[]>;
   addToProjectRecentFiles?: (filePath: string) => void;
   // Tab state operations
@@ -195,6 +195,7 @@ export default function App() {
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
   const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
   const [sessionToLoad, setSessionToLoad] = useState<{ sessionId: string; projectPath?: string } | null>(null);
+  const [currentAISessionId, setCurrentAISessionId] = useState<string | null>(null);
   const [diffError, setDiffError] = useState<{ isOpen: boolean; title: string; message: string; details?: any }>({
     isOpen: false,
     title: '',
@@ -367,6 +368,10 @@ export default function App() {
         if (state) {
           setIsAIChatCollapsed(state.collapsed);
           setAIChatWidth(state.width);
+          // If there's a saved session ID, load it
+          if (state.sessionId) {
+            setSessionToLoad({ sessionId: state.sessionId });
+          }
         }
         setIsAIChatStateLoaded(true);
       }).catch(error => {
@@ -785,11 +790,15 @@ export default function App() {
   // Save AI Chat state when it changes (but only after initial load)
   useEffect(() => {
     if (isAIChatStateLoaded && window.electronAPI.setAIChatState) {
-      const state = { collapsed: isAIChatCollapsed, width: aiChatWidth };
+      const state = { 
+        collapsed: isAIChatCollapsed, 
+        width: aiChatWidth,
+        sessionId: currentAISessionId || undefined
+      };
       if (LOG_CONFIG.AI_CHAT_STATE) console.log('[AI_CHAT] Saving AI Chat state:', state);
       window.electronAPI.setAIChatState(state);
     }
-  }, [isAIChatCollapsed, aiChatWidth, isAIChatStateLoaded]);
+  }, [isAIChatCollapsed, aiChatWidth, currentAISessionId, isAIChatStateLoaded]);
 
   // Load recent project files when in project mode
   useEffect(() => {
@@ -1703,6 +1712,7 @@ export default function App() {
           projectPath={projectPath || undefined}
           sessionToLoad={sessionToLoad}
           onSessionLoaded={() => setSessionToLoad(null)}
+          onSessionIdChange={setCurrentAISessionId}
           onShowApiKeyError={() => setIsApiKeyDialogOpen(true)}
           documentContext={{
             filePath: currentFilePath || '',

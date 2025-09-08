@@ -84,9 +84,10 @@
   content: '';
   position: absolute;
   top: 0px;
-  left: 0;
-  right: 0;
+  left: 1px;
+  right: 1px;
   height: 2px;
+  border-radius: 2px;
   background: var(--tab-active-indicator, #3b82f6);
 }
 

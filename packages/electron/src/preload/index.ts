@@ -187,7 +187,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSidebarWidth: () => ipcRenderer.invoke('get-sidebar-width'),
   setSidebarWidth: (width: number) => ipcRenderer.send('set-sidebar-width', width),
   getAIChatState: () => ipcRenderer.invoke('get-ai-chat-state'),
-  setAIChatState: (state: { collapsed: boolean; width: number }) => ipcRenderer.send('set-ai-chat-state', state),
+  setAIChatState: (state: { collapsed: boolean; width: number; sessionId?: string }) => ipcRenderer.send('set-ai-chat-state', state),
   
   // QuickOpen operations
   searchProjectFiles: (projectPath: string, query: string) => ipcRenderer.invoke('search-project-files', projectPath, query),

@@ -112,7 +112,20 @@ export interface DiffResult {
   appliedCount?: number;
 }
 
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: {
+    type: 'object';
+    properties: Record<string, any>;
+    required?: string[];
+  };
+  handler?: (args: any) => Promise<any>;
+  source?: 'main' | 'renderer'; // Where the tool executes
+}
+
 export interface ToolHandler {
   applyDiff(args: DiffArgs): Promise<DiffResult>;
-  // Other common tools can be added here
+  // Dynamic tool execution
+  executeTool?(name: string, args: any): Promise<any>;
 }

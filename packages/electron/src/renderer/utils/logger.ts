@@ -67,10 +67,16 @@ const disabledComponents = new Set([
   LogComponent.AUTOSAVE
 ]);
 
+// Components with reduced verbosity (only errors and warnings)
+const quietComponents = new Set([
+  LogComponent.PROTOCOL  // Keep PROTOCOL quiet, but not API or STREAMING
+]);
+
 // Create a scoped logger for a component
 function createComponentLogger(component: LogComponent) {
   const scope = log.scope(component);
   const isDisabled = disabledComponents.has(component);
+  const isQuiet = quietComponents.has(component);
   
   return {
     error: (message: string, ...args: any[]) => {
@@ -80,20 +86,20 @@ function createComponentLogger(component: LogComponent) {
       if (!isDisabled) scope.warn(message, ...args);
     },
     info: (message: string, ...args: any[]) => {
-      if (!isDisabled) scope.info(message, ...args);
+      if (!isDisabled && !isQuiet) scope.info(message, ...args);
     },
     verbose: (message: string, ...args: any[]) => {
-      if (!isDisabled) scope.verbose(message, ...args);
+      if (!isDisabled && !isQuiet) scope.verbose(message, ...args);
     },
     debug: (message: string, ...args: any[]) => {
-      if (!isDisabled) scope.debug(message, ...args);
+      if (!isDisabled && !isQuiet) scope.debug(message, ...args);
     },
     silly: (message: string, ...args: any[]) => {
-      if (!isDisabled) scope.silly(message, ...args);
+      if (!isDisabled && !isQuiet) scope.silly(message, ...args);
     },
     // Convenience method for backward compatibility with old logger
     log: (message: string, ...args: any[]) => {
-      if (!isDisabled) scope.info(message, ...args);
+      if (!isDisabled && !isQuiet) scope.info(message, ...args);
     }
   };
 }

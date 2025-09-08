@@ -8,8 +8,11 @@ import {
   ProviderConfig, 
   ProviderCapabilities, 
   StreamChunk,
-  ToolHandler 
+  ToolHandler,
+  ToolDefinition,
+  Message
 } from './types';
+import { toolRegistry, toAnthropicTools, toOpenAITools } from './tools';
 
 export interface AIProvider extends EventEmitter {
   /**
@@ -65,12 +68,14 @@ export interface AIProvider extends EventEmitter {
 export abstract class BaseAIProvider extends EventEmitter implements AIProvider {
   protected toolHandler: ToolHandler | null = null;
   protected config: ProviderConfig = {};
+  protected correlationId: string | null = null;
 
   abstract initialize(config: ProviderConfig): Promise<void>;
   abstract sendMessage(
     message: string, 
     documentContext?: DocumentContext,
-    sessionId?: string
+    sessionId?: string,
+    messages?: Message[]
   ): AsyncIterableIterator<StreamChunk>;
   abstract abort(): void;
   abstract getCapabilities(): ProviderCapabilities;
@@ -79,20 +84,75 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     this.toolHandler = handler;
   }
 
+  /**
+   * Get all registered tools from the centralized registry
+   */
+  protected getRegisteredTools(): ToolDefinition[] {
+    return toolRegistry.getAll();
+  }
+  
+  /**
+   * Convert tools to Anthropic format
+   */
+  protected getToolsInAnthropicFormat(): any[] {
+    return toAnthropicTools(this.getRegisteredTools());
+  }
+  
+  /**
+   * Convert tools to OpenAI format
+   */
+  protected getToolsInOpenAIFormat(): any[] {
+    return toOpenAITools(this.getRegisteredTools());
+  }
+  
+  /**
+   * Generate a correlation ID for request tracking
+   */
+  protected generateCorrelationId(): string {
+    this.correlationId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return this.correlationId;
+  }
+  
   destroy(): void {
     this.removeAllListeners();
   }
 
   protected async executeToolCall(name: string, args: any): Promise<any> {
-    if (!this.toolHandler) {
-      throw new Error('No tool handler registered');
-    }
+    // Generate correlation ID for tracking
+    const correlationId = `tool-${name}-${Date.now()}`;
+    this.emit('tool:start', { correlationId, name, args });
+    
+    try {
+      if (!this.toolHandler) {
+        throw new Error('No tool handler registered');
+      }
 
-    switch (name) {
-      case 'applyDiff':
-        return await this.toolHandler.applyDiff(args);
-      default:
+      let result;
+      
+      // Check if tool exists in registry
+      if (toolRegistry.has(name)) {
+        // Use the centralized tool executor
+        if (this.toolHandler.executeTool) {
+          result = await this.toolHandler.executeTool(name, args);
+        } else {
+          // Fallback to built-in handlers
+          switch (name) {
+            case 'applyDiff':
+              result = await this.toolHandler.applyDiff(args);
+              break;
+            default:
+              throw new Error(`Tool ${name} not implemented in handler`);
+          }
+        }
+      } else {
         throw new Error(`Unknown tool: ${name}`);
+      }
+      
+      this.emit('tool:complete', { correlationId, name, result });
+      return result;
+    } catch (error) {
+      this.emit('tool:error', { correlationId, name, error });
+      throw error;
     }
   }
 

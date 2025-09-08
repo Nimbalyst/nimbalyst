@@ -85,56 +85,8 @@ export class ClaudeProvider extends BaseAIProvider {
     try {
       // Only define tools if we have a document open
       const hasDocument = documentContext && (documentContext.filePath || documentContext.content);
-      const tools: Anthropic.Tool[] = hasDocument ? [{
-        name: 'applyDiff',
-        description: 'Apply text replacements to the document with diff preview',
-        input_schema: {
-          type: 'object',
-          properties: {
-            replacements: {
-              type: 'array',
-              description: 'Array of text replacements to apply',
-              items: {
-                type: 'object',
-                properties: {
-                  oldText: { 
-                    type: 'string',
-                    description: 'The exact text to replace'
-                  },
-                  newText: { 
-                    type: 'string',
-                    description: 'The new text to insert'
-                  }
-                },
-                required: ['oldText', 'newText']
-              }
-            }
-          },
-          required: ['replacements']
-        }
-      }, {
-        name: 'streamContent',
-        description: 'Stream new content into the document at a specific position',
-        input_schema: {
-          type: 'object',
-          properties: {
-            content: {
-              type: 'string',
-              description: 'The content to stream into the document'
-            },
-            position: {
-              type: 'string',
-              enum: ['cursor', 'end', 'after-selection'],
-              description: 'Where to insert the content (cursor = at cursor position, end = end of document, after-selection = after selected text)'
-            },
-            insertAfter: {
-              type: 'string',
-              description: 'Optional: Find this text and insert content after it (at end of the line containing this text)'
-            }
-          },
-          required: ['content', 'position']
-        }
-      }] : [];
+      // Use the centralized tool system
+      const tools: Anthropic.Tool[] = hasDocument ? this.getToolsInAnthropicFormat() : [];
 
       // Create the message with full conversation history
       if (!this.config.model) {
