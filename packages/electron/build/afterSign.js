@@ -74,10 +74,11 @@ exports.default = async function(context) {
       
       if (fs.existsSync(rgPath)) {
         try {
-          // Sign the ripgrep binary
+          // Sign the ripgrep binary with hardened runtime
           const signingIdentity = process.env.CSC_NAME || 'Developer ID Application';
-          execSync(`codesign --force --sign "${signingIdentity}" "${rgPath}"`, { stdio: 'inherit' });
-          console.log('AfterSign: Successfully signed ripgrep binary');
+          const entitlementsPath = path.join(__dirname, 'entitlements.mac.plist');
+          execSync(`codesign --force --sign "${signingIdentity}" --entitlements "${entitlementsPath}" --options runtime "${rgPath}"`, { stdio: 'inherit' });
+          console.log('AfterSign: Successfully signed ripgrep binary with hardened runtime');
         } catch (error) {
           console.error('AfterSign: Failed to sign ripgrep binary:', error);
         }
@@ -88,6 +89,22 @@ exports.default = async function(context) {
   }
   
   console.log('AfterSign: JAR cleanup complete');
+  
+  // After modifying any files, we need to re-sign the entire app bundle
+  if (hasSigningCredentials && packager.platform.name === 'mac') {
+    console.log('AfterSign: Re-signing the entire app bundle after modifications...');
+    try {
+      const signingIdentity = process.env.CSC_NAME || 'Developer ID Application';
+      const entitlementsPath = path.join(__dirname, 'entitlements.mac.plist');
+      
+      // Re-sign the main app bundle with deep codesigning to update all nested resources
+      execSync(`codesign --deep --force --sign "${signingIdentity}" --entitlements "${entitlementsPath}" --options runtime "${appPath}"`, { stdio: 'inherit' });
+      console.log('AfterSign: Successfully re-signed app bundle');
+    } catch (error) {
+      console.error('AfterSign: Failed to re-sign app bundle:', error);
+      throw error;
+    }
+  }
   
   // Now handle notarization (only if not skipped)
   if (process.env.SKIP_NOTARIZE !== 'true') {
