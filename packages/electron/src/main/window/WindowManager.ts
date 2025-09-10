@@ -125,7 +125,8 @@ export function createWindow(
                 nodeIntegration: false,
                 contextIsolation: true,
                 preload: join(__dirname, '../preload/index.js'),
-                webSecurity: false
+                webSecurity: false,
+                webviewTag: false
             },
             show: false,
             titleBarStyle: process.platform === 'darwin' ? undefined : 'hidden',

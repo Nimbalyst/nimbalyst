@@ -3,10 +3,10 @@ import { logger } from './utils/logger';
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
-import { StravuEditor, TOGGLE_SEARCH_COMMAND, MARKDOWN_TRANSFORMERS, aiChatBridge } from 'stravu-editor';
-import type { LexicalCommand, ConfigTheme, TextReplacement } from 'stravu-editor';
+import { StravuEditor, TOGGLE_SEARCH_COMMAND, MARKDOWN_TRANSFORMERS, aiChatBridge } from 'rexical';
+import type { LexicalCommand, ConfigTheme, TextReplacement } from 'rexical';
 // Import styles - handled by vite plugin for both dev and prod
-import 'stravu-editor/styles';
+import 'rexical/styles';
 logger.ui.info('StravuEditor imported');
 
 // Ensure aiChatBridge is available globally
@@ -276,7 +276,7 @@ export default function App() {
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
       // Restore state from session storage on mount
-      const savedState = sessionStorage.getItem('stravu-editor-dev-state');
+      const savedState = sessionStorage.getItem('rexical-dev-state');
       if (savedState) {
         try {
           const state = JSON.parse(savedState);
@@ -317,7 +317,7 @@ export default function App() {
           }
 
           // Clear the saved state
-          sessionStorage.removeItem('stravu-editor-dev-state');
+          sessionStorage.removeItem('rexical-dev-state');
         } catch (error) {
           if (LOG_CONFIG.HMR) console.error('[HMR] Failed to restore dev state:', error);
         }
@@ -342,7 +342,7 @@ export default function App() {
           theme: theme
         };
         if (LOG_CONFIG.HMR) console.log('[HMR] Saving dev state:', state);
-        sessionStorage.setItem('stravu-editor-dev-state', JSON.stringify(state));
+        sessionStorage.setItem('rexical-dev-state', JSON.stringify(state));
       };
 
       // Save state on beforeunload (catches HMR)

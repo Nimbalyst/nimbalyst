@@ -1,5 +1,5 @@
 {
-  "name": "stravu-editor",
+  "name": "rexical",
   "version": "0.34.0",
   "description": "A rich text editor built with Meta's Lexical framework, featuring markdown support, tables, and comprehensive editing capabilities",
   "keywords": [
@@ -79,6 +79,7 @@
     "react-dom": "^18.0.0"
   },
   "devDependencies": {
+    "@lexical/headless": "^0.34.0",
     "@types/diff": "^7.0.2",
     "@types/lodash": "^4.14.182",
     "@types/lodash-es": "^4.14.182",

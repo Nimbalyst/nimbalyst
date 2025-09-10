@@ -45,7 +45,8 @@ export function createSessionManagerWindow(filterProject?: string) {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: join(__dirname, '../preload/index.js')
+      preload: join(__dirname, '../preload/index.js'),
+      webviewTag: false
     },
     show: false,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',

@@ -27,7 +27,8 @@ export function createAboutWindow() {
         webPreferences: {
             preload: join(__dirname, '../preload/index.js'),
             nodeIntegration: false,
-            contextIsolation: true
+            contextIsolation: true,
+            webviewTag: false
         }
     });
 

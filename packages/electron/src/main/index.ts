@@ -48,10 +48,10 @@ let mcpHttpServer: any = null;
 function initializeLogging() {
     // electron-log handles main process logging
     logger.main.info('Application logging initialized');
-    
+
     // Always capture error logs for debugging
     const debugLogPath = join(app.getPath('userData'), 'stravu-editor-debug.log');
-    
+
     // Initialize or append to log
     try {
         const timestamp = new Date().toISOString();
@@ -70,7 +70,7 @@ function initializeLogging() {
         if (process.env.NODE_ENV === 'production' && !['error', 'warn'].includes(data.level)) {
             return;
         }
-        
+
         const logEntry = `[${data.timestamp}] [${data.level.toUpperCase()}] [${data.source}] ${data.message}\n`;
         try {
             appendFileSync(debugLogPath, logEntry);
@@ -78,7 +78,7 @@ function initializeLogging() {
             // Ignore write errors
         }
     });
-    
+
     logger.main.info(`Debug logs will be written to: ${debugLogPath}`);
 }
 
@@ -86,7 +86,7 @@ function initializeLogging() {
 app.on('open-file', (event, path) => {
     event.preventDefault();
     logger.main.info(`open-file event received: ${path}`);
-    
+
     if (app.isReady()) {
         // Check if file is already open in a window
         const existingWindow = findWindowByFilePath(path);
@@ -94,7 +94,7 @@ app.on('open-file', (event, path) => {
             existingWindow.focus();
             return;
         }
-        
+
         // Open in new window
         const window = createWindow(true);
         window.once('ready-to-show', () => {
@@ -109,7 +109,7 @@ app.on('open-file', (event, path) => {
 // Parse command line arguments
 function parseCommandLineArgs() {
     const args = process.argv.slice(app.isPackaged ? 1 : 2);
-    
+
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--project' && i + 1 < args.length) {
             pendingProjectPath = args[i + 1];
@@ -122,13 +122,13 @@ function parseCommandLineArgs() {
 // App ready handler
 app.whenReady().then(async () => {
     logger.main.info('App ready');
-    
+
     // Parse command line arguments
     parseCommandLineArgs();
-    
+
     // Initialize logging
     initializeLogging();
-    
+
     // Set dock icon for macOS
     if (process.platform === 'darwin' && app.dock) {
         const iconPath = join(__dirname, '../../resources/icon.png');
@@ -140,7 +140,7 @@ app.whenReady().then(async () => {
             logger.main.warn(`icon not found at: ${iconPath}`);
         }
     }
-    
+
     // Register all IPC handlers
     registerFileHandlers();
     registerProjectHandlers();
@@ -150,10 +150,10 @@ app.whenReady().then(async () => {
     await registerSessionHandlers();
     registerSessionManagerHandlers();
     setupProjectManagerHandlers();
-    
+
     // Initialize AI service
     aiService = new AIService();
-    
+
     // Start MCP SSE server
     try {
         const result = await startMcpHttpServer(3456);
@@ -162,15 +162,15 @@ app.whenReady().then(async () => {
     } catch (error) {
             logger.mcp.error('Failed to start MCP SSE server:', error);
     }
-    
+
     // Set up IPC handler to update document state for MCP
     ipcMain.on('mcp:updateDocumentState', (event, state) => {
         updateDocumentState(state);
     });
-    
+
     // Try to restore session, otherwise show Project Manager
     const sessionRestored = restoreSessionState();
-    
+
     if (pendingProjectPath) {
         // Handle project path from CLI
         const window = createWindow(true);
@@ -190,13 +190,13 @@ app.whenReady().then(async () => {
             pendingFilePath = null;
         });
     }
-    
+
     // Create application menu
     createApplicationMenu();
-    
+
     // Set initial native theme
     updateNativeTheme();
-    
+
     // Initialize auto-updater (only in production)
     if (app.isPackaged) {
         logger.main.info('Starting auto-updater service');
@@ -204,10 +204,10 @@ app.whenReady().then(async () => {
     } else {
         logger.main.info('Skipping auto-updater in development mode');
     }
-    
+
     // Start performance monitoring
     startPerformanceMonitoring();
-    
+
     // Remove periodic menu updates - menus should update on events only
     // This was causing high CPU usage by updating every second
     // menuUpdateInterval = setInterval(() => {
@@ -215,7 +215,7 @@ app.whenReady().then(async () => {
     //         updateApplicationMenu();
     //     }
     // }, 1000);
-    
+
     // Save session periodically (every 30 seconds)
     sessionSaveInterval = setInterval(() => {
         // Only save if app is not quitting
@@ -223,13 +223,13 @@ app.whenReady().then(async () => {
             saveSessionState();
         }
     }, 30000);
-    
+
     // Monitor memory usage and perform cleanup for long-running sessions
     memoryMonitorInterval = setInterval(() => {
         if (!isAppQuitting) {
             const memUsage = process.memoryUsage();
             const uptime = Date.now() - appStartTime;
-            
+
             // Log memory usage every hour
             if (uptime % 3600000 < 60000) {
                 console.log('[Memory] Usage:', {
@@ -239,14 +239,14 @@ app.whenReady().then(async () => {
                     uptime: `${Math.round(uptime / 1000 / 60)} minutes`
                 });
             }
-            
+
             // If memory usage is high (>1GB heap), trigger garbage collection
             if (memUsage.heapUsed > 1024 * 1024 * 1024) {
                 if (global.gc) {
                     console.log('[Memory] High heap usage detected, running garbage collection');
                     global.gc();
                 }
-                
+
                 // Also clear webContents caches for all windows
                 BrowserWindow.getAllWindows().forEach(window => {
                     if (!window.isDestroyed()) {
@@ -254,14 +254,10 @@ app.whenReady().then(async () => {
                     }
                 });
             }
-            
-            // After 12 hours of runtime, suggest restart
-            if (uptime > 12 * 60 * 60 * 1000) {
-                console.warn('[Memory] App has been running for over 12 hours, consider restarting');
-            }
+
         }
     }, 60000); // Check every minute
-    
+
     // Listen for system theme changes
     let lastNativeDark = nativeTheme.shouldUseDarkColors;
     nativeTheme.on('updated', () => {
@@ -295,33 +291,33 @@ app.on('activate', () => {
 // Before quit handler
 app.on('before-quit', async (event) => {
     console.log('[QUIT] before-quit event triggered');
-    
+
     // If we're already quitting, don't prevent default to avoid infinite loop
     if (isAppQuitting) {
         console.log('[QUIT] Already quitting, allowing default behavior');
         return;
     }
-    
+
     // Prevent default to do async cleanup
     event.preventDefault();
-    
+
     // Mark app as quitting to prevent interval operations
     isAppQuitting = true;
-    
+
     // Setup force quit timer - shorter for notarized builds to prevent hanging
     const forceQuitDelay = app.isPackaged ? 3000 : 2000;
     setupForceQuit(forceQuitDelay);
-    
+
     const fs = require('fs');
     const path = require('path');
     let debugLog: string | null = null;
     let canWriteLogs = false;
-    
+
     // Check if we can write to userData directory
     try {
         const userDataPath = app.getPath('userData');
         debugLog = path.join(userDataPath, 'stravu-editor-debug.log');
-        
+
         // Test write permission
         fs.accessSync(userDataPath, fs.constants.W_OK);
         canWriteLogs = true;
@@ -331,7 +327,7 @@ app.on('before-quit', async (event) => {
         console.error('[QUIT] Cannot write to userData directory:', e);
         canWriteLogs = false;
     }
-    
+
     try {
         // Clear ALL intervals first (should not fail)
         if (sessionSaveInterval) {
@@ -346,10 +342,10 @@ app.on('before-quit', async (event) => {
             clearInterval(memoryMonitorInterval);
             memoryMonitorInterval = null;
         }
-        
+
         // CRITICAL: Stop performance monitoring - this has an interval that keeps the process alive!
         stopPerformanceMonitoring();
-        
+
         if (canWriteLogs) {
             logger.session.info('App quitting, intervals cleared');
         }
@@ -361,7 +357,7 @@ app.on('before-quit', async (event) => {
             } catch (e) {}
         }
     }
-    
+
     // Clean up all file watchers FIRST - these can keep the process alive
     try {
         console.log('[QUIT] About to clean up file watchers');
@@ -370,15 +366,15 @@ app.on('before-quit', async (event) => {
                 fs.appendFileSync(debugLog, '[QUIT] Cleaning up file watchers\n');
             } catch (e) {}
         }
-        
+
         console.log('[QUIT] Calling stopAllFileWatchers...');
         stopAllFileWatchers();
         console.log('[QUIT] stopAllFileWatchers returned');
-        
+
         console.log('[QUIT] Calling stopAllProjectWatchers...');
         stopAllProjectWatchers();
         console.log('[QUIT] stopAllProjectWatchers returned');
-        
+
         if (canWriteLogs && debugLog) {
             try {
                 fs.appendFileSync(debugLog, '[QUIT] File watchers cleaned up\n');
@@ -392,7 +388,7 @@ app.on('before-quit', async (event) => {
             } catch (e) {}
         }
     }
-    
+
     try {
         // Clean up AI service
         if (aiService) {
@@ -412,7 +408,7 @@ app.on('before-quit', async (event) => {
             } catch (e) {}
         }
     }
-    
+
     try {
         // Shutdown MCP HTTP server with timeout
         if (canWriteLogs && debugLog) {
@@ -420,14 +416,14 @@ app.on('before-quit', async (event) => {
                 fs.appendFileSync(debugLog, '[QUIT] Shutting down MCP HTTP server\n');
             } catch (e) {}
         }
-        
+
         // Add timeout to prevent hanging
         const shutdownPromise = shutdownHttpServer();
         const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 500));
         await Promise.race([shutdownPromise, timeoutPromise]);
-        
+
         mcpHttpServer = null;
-        
+
         if (canWriteLogs && debugLog) {
             try {
                 fs.appendFileSync(debugLog, '[QUIT] MCP HTTP server shutdown complete\n');
@@ -441,7 +437,7 @@ app.on('before-quit', async (event) => {
             } catch (e) {}
         }
     }
-    
+
     try {
         // Save session state only if we can write
         if (canWriteLogs) {
@@ -450,7 +446,7 @@ app.on('before-quit', async (event) => {
                     fs.appendFileSync(debugLog, '[QUIT] Saving session state\n');
                 } catch (e) {}
             }
-            
+
             // Wrap session save with timeout
             const savePromise = new Promise((resolve, reject) => {
                 try {
@@ -462,7 +458,7 @@ app.on('before-quit', async (event) => {
             });
             const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(false), 300));
             await Promise.race([savePromise, timeoutPromise]);
-            
+
             if (debugLog) {
                 try {
                     fs.appendFileSync(debugLog, '[QUIT] Session state saved\n');
@@ -479,16 +475,16 @@ app.on('before-quit', async (event) => {
             } catch (e) {}
         }
     }
-    
+
     // After all cleanup, quit the app
     if (canWriteLogs && debugLog) {
         try {
             fs.appendFileSync(debugLog, '[QUIT] All cleanup complete, quitting app\n');
-            
+
             // Log what's still keeping the process alive
             const activeHandles = (process as any)._getActiveHandles?.();
             const activeRequests = (process as any)._getActiveRequests?.();
-            
+
             if (activeHandles && activeHandles.length > 0) {
                 fs.appendFileSync(debugLog, `[QUIT] WARNING: ${activeHandles.length} handles still active:\n`);
                 activeHandles.forEach((handle: any, i: number) => {
@@ -515,13 +511,13 @@ app.on('before-quit', async (event) => {
                     fs.appendFileSync(debugLog, details + '\n');
                 });
             }
-            
+
             if (activeRequests && activeRequests.length > 0) {
                 fs.appendFileSync(debugLog, `[QUIT] WARNING: ${activeRequests.length} requests still active\n`);
             }
         } catch (e) {}
     }
-    
+
     // Aggressively close all windows to avoid any close prompts or handlers
     try {
         const all = BrowserWindow.getAllWindows();

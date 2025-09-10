@@ -1,6 +1,6 @@
 {
   "name": "@stravu-editor/electron",
-  "version": "0.36.4",
+  "version": "0.36.5",
   "private": true,
   "description": "Electron app for Stravu Editor",
   "main": "out/main/index.js",
@@ -39,7 +39,7 @@
     "openai": "^5.19.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "stravu-editor": "*",
+    "rexical": "workspace:*",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
@@ -166,6 +166,6 @@
     "linux": {
       "target": "AppImage"
     },
-    "buildVersion": "0.36.4"
+    "buildVersion": "0.36.5"
   }
 }

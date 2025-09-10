@@ -41,15 +41,33 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: package-lock.json
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build stravu-editor package
         working-directory: packages/stravu-editor
-        run: npm run build-prod
+        run: pnpm run build-prod
 
       # macOS specific setup
       - name: Import macOS certificates
@@ -117,14 +135,14 @@ jobs:
         run: |
           if [ "${{ matrix.os }}" == "macos-latest" ]; then
             if [ "${{ github.event_name }}" == "push" ] || [ "${{ github.event.inputs.release }}" == "true" ]; then
-              npm run build:mac:notarized
+              pnpm run build:mac:notarized
             else
-              npm run build:mac:local
+              pnpm run build:mac:local
             fi
           elif [ "${{ matrix.os }}" == "windows-2022" ]; then
-            npm run build:win
+            pnpm run build:win
           else
-            npm run build:linux
+            pnpm run build:linux
           fi
         shell: bash
 

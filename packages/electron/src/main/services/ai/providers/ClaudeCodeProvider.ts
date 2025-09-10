@@ -2,7 +2,7 @@
  * Claude Code provider using claude-code SDK with MCP support
  */
 
-import { query, AbortError } from '@anthropic-ai/claude-code';
+import { query } from '@anthropic-ai/claude-code';
 import { BaseAIProvider } from '../AIProvider';
 import { 
   DocumentContext, 
@@ -223,7 +223,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
     } catch (error: any) {
       const errorTime = Date.now() - startTime;
-      if (error instanceof AbortError) {
+      if (error.name === 'AbortError' || error.message?.includes('aborted')) {
         console.log(`[ClaudeCodeProvider] Request was aborted after ${errorTime}ms`);
         yield {
           type: 'complete',

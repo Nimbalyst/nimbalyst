@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 import viteStravuPlugin from '../shared/viteStravuPlugin'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
 
-// Custom plugin to exclude Excalidraw locales and optimize imports (copied from stravu-editor)
+// Custom plugin to exclude Excalidraw locales and optimize imports (copied from rexical)
 // Plugin to optimize Shiki language imports
 const optimizeShikiPlugin = () => {
   return {
@@ -140,7 +140,7 @@ export default defineConfig({
     resolve: {
       alias: {
         // Block mermaid import to prevent large bundle
-        '@excalidraw/mermaid-to-excalidraw': resolve(__dirname, '../stravu-editor/src/mocks/mermaid-mock.ts')
+        '@excalidraw/mermaid-to-excalidraw': resolve(__dirname, '../rexical/src/mocks/mermaid-mock.ts')
       }
     },
     optimizeDeps: {
@@ -150,7 +150,7 @@ export default defineConfig({
         'es6-promise-pool'
       ],
       exclude: [
-        'stravu-editor',
+        'rexical',
         '@shikijs/langs',
         'prettier'
       ],
