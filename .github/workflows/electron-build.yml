@@ -19,12 +19,12 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        os: [macos-latest, windows-2022, ubuntu-latest]
         include:
           - os: macos-latest
             platform: mac
             arch: arm64
-          - os: windows-latest
+          - os: windows-2022
             platform: win
             arch: x64
           - os: ubuntu-latest
@@ -42,14 +42,14 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
       - name: Build stravu-editor package
-        run: |
-          cd packages/stravu-editor
-          npm run build-prod
+        working-directory: packages/stravu-editor
+        run: npm run build-prod
 
       # macOS specific setup
       - name: Import macOS certificates
@@ -80,7 +80,7 @@ jobs:
 
       # Windows specific setup
       - name: Import Windows certificate
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2022'
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PWD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
@@ -121,7 +121,7 @@ jobs:
             else
               npm run build:mac:local
             fi
-          elif [ "${{ matrix.os }}" == "windows-latest" ]; then
+          elif [ "${{ matrix.os }}" == "windows-2022" ]; then
             npm run build:win
           else
             npm run build:linux
