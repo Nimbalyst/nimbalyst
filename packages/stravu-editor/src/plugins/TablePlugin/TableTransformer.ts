@@ -17,8 +17,8 @@ import {
 } from '@lexical/table';
 import {
   $convertFromMarkdownString,
-  $convertToMarkdownString,
 } from '@lexical/markdown';
+import { $convertNodeToMarkdownString } from '../../markdown/nodeMarkdownExport';
 import {
   $isParagraphNode,
   $isTextNode,
@@ -28,6 +28,7 @@ import {
 // Import transformers directly
 import { MARKDOWN_TRANSFORMERS } from '../../markdown';
 
+// TODO: THis is just wrong, we need to use the transformers of the editor
 const getTransformers = () => {
   return MARKDOWN_TRANSFORMERS;
 };
@@ -44,8 +45,9 @@ export const TABLE_TRANSFORMER: ElementTransformer = {
     }
 
     const output: string[] = [];
+    const rows = node.getChildren();
 
-    for (const row of node.getChildren()) {
+    for (const row of rows) {
       const rowOutput = [];
       if (!$isTableRowNode(row)) {
         continue;
@@ -55,8 +57,9 @@ export const TABLE_TRANSFORMER: ElementTransformer = {
       for (const cell of row.getChildren()) {
         // It's TableCellNode so it's just to make flow happy
         if ($isTableCellNode(cell)) {
+          // Use $convertNodeToMarkdownString for single nodes, not $convertToMarkdownString
           rowOutput.push(
-            $convertToMarkdownString(getTransformers(), cell)
+            $convertNodeToMarkdownString(getTransformers(), cell)
               .replace(/\n/g, '\\n')
               .trim(),
           );

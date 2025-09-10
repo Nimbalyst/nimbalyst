@@ -696,10 +696,23 @@ export function applyMarkdownDiffToDocument(
       const root = $getRoot();
       const children = root.getChildren();
       for (const child of children) {
-        const markdown = $convertNodeToMarkdownString(
-          transformers,
-          child as ElementNode
-        ).trim();
+        if (child.getType() === 'table') {
+          console.log('🔍 LIVE: Converting table node to markdown for lookup map');
+          console.log('  Table node key:', child.getKey());
+        }
+        let markdown = '';
+        try {
+          markdown = $convertNodeToMarkdownString(
+            transformers,
+            child as ElementNode
+          ).trim();
+        } catch (error) {
+          console.error('  Error converting live node to markdown:', error);
+          markdown = child.getTextContent().trim();
+        }
+        if (child.getType() === 'table') {
+          console.log('  Live table markdown:', markdown);
+        }
         liveNodesByMarkdown.set(markdown, child.getKey());
       }
     });

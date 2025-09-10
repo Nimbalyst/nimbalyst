@@ -10,7 +10,7 @@ import { useEffect, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { logger } from '../../utils/logger';
 import { $setDiffState } from '../DiffPlugin/core/DiffState';
-import { $getSelection, $isRangeSelection, $getRoot } from 'lexical';
+import { $getSelection, $isRangeSelection, $getRoot, $getNodeByKey, $isElementNode } from 'lexical';
 import { APPLY_MARKDOWN_REPLACE_COMMAND } from '../DiffPlugin';
 import type { TextReplacement } from '../DiffPlugin/core/exports';
 import { MarkdownStreamProcessor } from '../../markdown/MarkdownStreamProcessor';
@@ -128,6 +128,7 @@ if (typeof window !== 'undefined') {
 export function AIChatIntegrationPlugin(): null {
   const [editor] = useLexicalComposerContext();
   const streamProcessorsRef = useRef<Map<string, MarkdownStreamProcessor>>(new Map());
+  const streamConfigRef = useRef<Map<string, { startingNodeKey?: string; insertAfter?: string; insertAtEnd?: boolean }>>(new Map());
 
   useEffect(() => {
     const bridge = AIChatIntegrationBridge.getInstance();
@@ -170,22 +171,22 @@ export function AIChatIntegrationPlugin(): null {
               logger.log('streaming', 'Inserting at end, after node:', lastChild.getTextContent().substring(0, 50));
             }
           } else if (streamConfig.insertAfter) {
-            // Find the node containing the specified text
             const searchText = streamConfig.insertAfter.toLowerCase();
+            logger.log('streaming', 'Searching for text to insert after:', searchText);
             
+            // Search for the node containing this text
             for (const child of children) {
               const nodeText = child.getTextContent().toLowerCase();
-              // Check if this node ends with or contains the search text
               if (nodeText.includes(searchText)) {
                 startingNodeKey = child.getKey();
-                logger.log('streaming', 'Found insertion point after:', child.getTextContent().substring(0, 50));
+                logger.log('streaming', 'Found insertion point after node:', child.getKey());
                 break;
               }
             }
             
             // If not found, default to end of document
             if (!startingNodeKey && children.length > 0) {
-              logger.log('streaming', 'Could not find text:', streamConfig.insertAfter, 'Defaulting to end');
+              logger.log('streaming', 'Could not find insertion point, defaulting to end');
               const lastChild = children[children.length - 1];
               startingNodeKey = lastChild.getKey();
             }
@@ -202,7 +203,14 @@ export function AIChatIntegrationPlugin(): null {
           }
         });
         
-        // Create a new stream processor with the correct starting point
+        // Store the configuration for this stream
+        streamConfigRef.current.set(streamConfig.id, {
+          startingNodeKey,
+          insertAfter: streamConfig.insertAfter,
+          insertAtEnd: streamConfig.insertAtEnd
+        });
+        
+        // Create a stream processor - it handles tables just fine!
         const processor = new MarkdownStreamProcessor(
           editor,
           getEditorTransformers(), // Use dynamic transformers from enabled plugins
@@ -220,9 +228,17 @@ export function AIChatIntegrationPlugin(): null {
         const { streamId, content } = customEvent.detail;
         if (!streamId || !content) return;
         
+        logger.log('streaming', 'Stream content received:', { streamId, content: content.substring(0, 100) });
+        
         const processor = streamProcessorsRef.current.get(streamId);
+        
         if (processor) {
+          // Just use the markdown stream processor - it handles tables!
+          logger.log('streaming', 'Using markdown streaming for content:', content);
           await processor.insertWithUpdate(content);
+          logger.log('streaming', 'Content streamed successfully');
+        } else {
+          logger.log('streaming', 'ERROR: No processor found for stream:', streamId);
         }
       } else if (type === 'endStreaming') {
         const { streamId } = customEvent.detail;
@@ -230,6 +246,7 @@ export function AIChatIntegrationPlugin(): null {
         
         logger.log('streaming', 'Ending streaming edit:', streamId);
         streamProcessorsRef.current.delete(streamId);
+        streamConfigRef.current.delete(streamId);
       }
     };
 

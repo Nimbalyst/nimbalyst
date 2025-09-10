@@ -23,29 +23,12 @@ import { ToolExecutor } from './tools';
 
 export class AIService {
   private sessionManager: SessionManager;
-  private settingsStore: Store;
+  private settingsStore: Store | null = null;
   private currentProvider: AIProvider | null = null;
 
   constructor() {
     this.sessionManager = new SessionManager();
-    this.settingsStore = new Store({
-      name: 'ai-settings',
-      schema: {
-        defaultProvider: {
-          type: 'string',
-          default: 'claude-code'
-        },
-        apiKeys: {
-          type: 'object',
-          default: {}
-        },
-        providerSettings: {
-          type: 'object',
-          default: {}
-        }
-      }
-    });
-
+    // Delay initialization until first use
     this.initializeApiKeys();
     this.setupIpcHandlers();
 
@@ -56,23 +39,53 @@ export class AIService {
     }
   }
 
-  private initializeApiKeys() {
-    // Check if we have API key stored
-    const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
-
-    // If we have an env variable and no stored key, save it
-    if (process.env.ANTHROPIC_API_KEY && !apiKeys['anthropic']) {
-      console.log('Initializing API key from environment variable');
-      apiKeys['anthropic'] = process.env.ANTHROPIC_API_KEY;
-      this.settingsStore.set('apiKeys', apiKeys);
+  private getSettingsStore(): Store {
+    if (!this.settingsStore) {
+      this.settingsStore = new Store({
+        name: 'ai-settings',
+        schema: {
+          defaultProvider: {
+            type: 'string',
+            default: 'claude-code'
+          },
+          apiKeys: {
+            type: 'object',
+            default: {}
+          },
+          providerSettings: {
+            type: 'object',
+            default: {}
+          }
+        }
+      });
     }
+    return this.settingsStore;
+  }
+
+  private initializeApiKeys() {
+    // Delay initialization to avoid accessing store before app is ready
+    process.nextTick(() => {
+      try {
+        // Check if we have API key stored
+        const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
+
+        // If we have an env variable and no stored key, save it
+        if (process.env.ANTHROPIC_API_KEY && !apiKeys['anthropic']) {
+          console.log('Initializing API key from environment variable');
+          apiKeys['anthropic'] = process.env.ANTHROPIC_API_KEY;
+          this.getSettingsStore().set('apiKeys', apiKeys);
+        }
+      } catch (error) {
+        console.error('[AIService] Error initializing API keys:', error);
+      }
+    });
   }
 
   private setupIpcHandlers() {
     // Check if any AI provider is configured with usable models
     ipcMain.handle('ai:hasApiKey', async () => {  // Keeping the name for backward compatibility
-      const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
-      const providerSettings = this.settingsStore.get('providerSettings', {}) as any;
+      const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
+      const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
 
       // Check Claude/Claude Code (needs API key)
       const hasAnthropicKey = !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY);
@@ -105,9 +118,9 @@ export class AIService {
     ipcMain.handle('ai:initialize', async (event, provider?: string, apiKey?: string) => {
       if (apiKey) {
         // Save API key - always save as 'anthropic' since both providers use the same key
-        const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
+        const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
         apiKeys['anthropic'] = apiKey;
-        this.settingsStore.set('apiKeys', apiKeys);
+        this.getSettingsStore().set('apiKeys', apiKeys);
       }
 
       return { success: true };
@@ -129,7 +142,7 @@ export class AIService {
       });
       
       // Get API key based on provider
-      const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
+      const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
       let apiKey: string | undefined;
 
       switch (provider) {
@@ -212,7 +225,7 @@ export class AIService {
 
       // Add LMStudio-specific config
       if (provider === 'lmstudio') {
-        const lmstudioSettings = this.settingsStore.get('providerSettings.lmstudio', {}) as any;
+        const lmstudioSettings = this.getSettingsStore().get('providerSettings.lmstudio', {}) as any;
         initConfig.baseUrl = lmstudioSettings.baseUrl || apiKeys['lmstudio_url'] || 'http://127.0.0.1:8234';
       }
 
@@ -291,7 +304,7 @@ export class AIService {
       // If provider doesn't exist, create and initialize it
       if (!provider) {
         console.log(`[AIService] Provider not found, creating new ${session.provider} provider`);
-        const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
+        const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
         // Get the correct API key based on provider
         let apiKey: string | undefined;
@@ -671,11 +684,11 @@ export class AIService {
 
     // Settings handlers
     ipcMain.handle('ai:getSettings', async () => {
-      const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
-      const providerSettings = this.settingsStore.get('providerSettings', {}) as any;
+      const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
+      const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
 
       return {
-        defaultProvider: this.settingsStore.get('defaultProvider', 'claude-code'),
+        defaultProvider: this.getSettingsStore().get('defaultProvider', 'claude-code'),
         apiKeys: this.maskApiKeys(apiKeys),
         providerSettings
       };
@@ -683,12 +696,12 @@ export class AIService {
 
     ipcMain.handle('ai:saveSettings', async (event, settings: any) => {
       if (settings.defaultProvider) {
-        this.settingsStore.set('defaultProvider', settings.defaultProvider);
+        this.getSettingsStore().set('defaultProvider', settings.defaultProvider);
       }
 
       if (settings.apiKeys) {
         // Only update changed API keys
-        const currentKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
+        const currentKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
         // Save Anthropic key
         if (settings.apiKeys.anthropic !== undefined) {
@@ -711,11 +724,11 @@ export class AIService {
           currentKeys['lmstudio_url'] = settings.apiKeys.lmstudio_url as string;
         }
 
-        this.settingsStore.set('apiKeys', currentKeys);
+        this.getSettingsStore().set('apiKeys', currentKeys);
       }
 
       if (settings.providerSettings) {
-        this.settingsStore.set('providerSettings', settings.providerSettings);
+        this.getSettingsStore().set('providerSettings', settings.providerSettings);
       }
 
       return { success: true };
@@ -723,7 +736,7 @@ export class AIService {
 
     // Test connection
     ipcMain.handle('ai:testConnection', async (event, provider: string) => {
-      const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
+      const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
       // Get the appropriate API key based on provider
       let apiKey: string | undefined;
@@ -810,8 +823,8 @@ export class AIService {
       // Clear cache to get fresh models
       ModelRegistry.clearCache();
 
-      const providerSettings = this.settingsStore.get('providerSettings', {}) as Record<AIProviderType, any>;
-      const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
+      const providerSettings = this.getSettingsStore().get('providerSettings', {}) as Record<AIProviderType, any>;
+      const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
       
       console.log('[AIService] ai:getAllModels - API keys available:', {
         anthropic: !!apiKeys['anthropic'],
@@ -850,8 +863,8 @@ export class AIService {
 
     // Get ENABLED models for actual use
     ipcMain.handle('ai:getModels', async () => {
-      const providerSettings = this.settingsStore.get('providerSettings', {}) as Record<AIProviderType, any>;
-      const apiKeys = this.settingsStore.get('apiKeys', {}) as Record<string, string>;
+      const providerSettings = this.getSettingsStore().get('providerSettings', {}) as Record<AIProviderType, any>;
+      const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
       // Get all models - pass provider settings for LMStudio URL
       const modelsConfig = {
@@ -936,7 +949,7 @@ export class AIService {
   }
 
   private getProviderSetting(provider: string, key: string): any {
-    const providerSettings = this.settingsStore.get('providerSettings', {}) as any;
+    const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
     return providerSettings[provider]?.[key];
   }
 
@@ -954,7 +967,20 @@ export class AIService {
   }
 
   public destroy() {
-    // Clean up all providers
-    ProviderFactory.destroyAll();
+    try {
+      // Clean up all providers with error handling
+      ProviderFactory.destroyAll();
+    } catch (error) {
+      console.error('[AIService] Error destroying providers:', error);
+      // Continue destruction even if providers fail
+    }
+    
+    // Clear any remaining references
+    try {
+      this.sessionManager = null as any;
+      this.settingsStore = null;
+    } catch (error) {
+      console.error('[AIService] Error clearing references:', error);
+    }
   }
 }

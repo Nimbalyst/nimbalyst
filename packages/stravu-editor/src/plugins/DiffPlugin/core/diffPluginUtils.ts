@@ -197,10 +197,7 @@ export function $rejectDiffs(editor: LexicalEditor): void {
           }
 
           if (diffState === 'modified') {
-            // Reject modification - clear the diff state and process any nested diff nodes
-            $clearDiffState(child);
-
-            // Try to use a handler for this node type to handle nested changes
+            // Try to use a handler for this node type to handle rejection
             const context: DiffHandlerContext = {
               liveNode: child,
               sourceNode: {} as SerializedLexicalNode, // Not used in reject context
@@ -211,10 +208,15 @@ export function $rejectDiffs(editor: LexicalEditor): void {
 
             const handler = diffHandlerRegistry.findHandler(context);
             if (handler && handler.handleReject) {
+              // Let the handler handle the rejection (including clearing diff state)
               handler.handleReject(child, undefined as any);
-            } else if ($isElementNode(child)) {
-              // Recursively process child elements for nested diff nodes
-              processElementNode(child);
+            } else {
+              // No handler, just clear the diff state and process nested nodes
+              $clearDiffState(child);
+              if ($isElementNode(child)) {
+                // Recursively process child elements for nested diff nodes
+                processElementNode(child);
+              }
             }
             continue;
           }

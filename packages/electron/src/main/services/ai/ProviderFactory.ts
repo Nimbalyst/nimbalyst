@@ -90,9 +90,24 @@ export class ProviderFactory {
    * Clean up all provider instances
    */
   static destroyAll(): void {
-    for (const provider of this.providers.values()) {
-      provider.destroy();
+    console.log(`[ProviderFactory] Destroying ${this.providers.size} providers`);
+    
+    // Try to destroy each provider individually with error handling
+    for (const [key, provider] of this.providers.entries()) {
+      try {
+        console.log(`[ProviderFactory] Destroying provider: ${key}`);
+        provider.destroy();
+      } catch (error) {
+        console.error(`[ProviderFactory] Error destroying provider ${key}:`, error);
+        // Continue destroying other providers
+      }
     }
-    this.providers.clear();
+    
+    // Clear the map even if some providers failed to destroy
+    try {
+      this.providers.clear();
+    } catch (error) {
+      console.error('[ProviderFactory] Error clearing providers map:', error);
+    }
   }
 }

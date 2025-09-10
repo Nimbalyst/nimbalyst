@@ -40,7 +40,11 @@ export function $convertNodeToMarkdownString(
     transformers,
     shouldPreserveNewLines,
   );
-  return exportMarkdown(node);
+  const result = exportMarkdown(node);
+  if (node && node.getType && node.getType() === 'table') {
+    console.log('  $convertNodeToMarkdownString final result for table:', result);
+  }
+  return result;
 }
 
 /**
@@ -68,9 +72,14 @@ function createMarkdownExport(
 
   return (node) => {
     const output: string[] = [];
+    if (node && node.getType && node.getType() === 'table') {
+      console.log('  createMarkdownExport called with table node');
+      console.log('  Is root or shadow?', $isRootOrShadowRoot(node));
+    }
 
     // Export a specific node if provided, otherwise export the entire document
-    if (node && !$isRootOrShadowRoot(node)) {
+    // HACK: TableNode incorrectly reports as root/shadow, so explicitly check for it
+    if (node && (!$isRootOrShadowRoot(node) || node.getType() === 'table')) {
       // CRITICAL FIX: Export the single node directly
       const result = exportTopLevelElements(
         node,
@@ -81,7 +90,15 @@ function createMarkdownExport(
       );
 
       if (result != null) {
+        if (node.getType() === 'table') {
+          console.log('  createMarkdownExport: GOT RESULT:', result.substring(0, 100));
+          console.log('  createMarkdownExport: pushing result to output');
+        }
         output.push(result);
+        if (node.getType() === 'table') {
+          console.log('  createMarkdownExport: output array now has', output.length, 'items');
+          console.log('  createMarkdownExport: output[0]:', output[0].substring(0, 100));
+        }
       }
     } else {
       // Standard behavior for root nodes
@@ -112,7 +129,11 @@ function createMarkdownExport(
     }
 
     // Ensure consecutive groups of texts are at least \n\n apart
-    return output.join('\n\n');
+    const finalResult = output.join('\n\n');
+    if (node && node.getType && node.getType() === 'table') {
+      console.log('  createMarkdownExport: final result:', finalResult.substring(0, 100));
+    }
+    return finalResult;
   };
 }
 
@@ -131,7 +152,9 @@ function exportTopLevelElements(
     if (!transformer.export) {
       continue;
     }
-    // console.log('  Trying transformer:', transformer.type, transformer.dependencies?.map?.(d => typeof d === 'function' ? d.name : d));
+    if (node.getType() === 'table') {
+      console.log('  Trying transformer for table:', transformer.type, transformer.dependencies?.map?.(d => typeof d === 'function' ? d.name : d));
+    }
     const result = transformer.export(node, (_node) =>
       exportChildren(
         _node,
@@ -145,7 +168,10 @@ function exportTopLevelElements(
     );
 
     if (result != null) {
-      // console.log('  ✅ Transformer matched and returned:', result.substring(0, 100));
+      if (node.getType() === 'table') {
+        console.log('  ✅ Table transformer matched and returned:', result.substring(0, 100));
+        console.log('  Full table result:', result);
+      }
       return result;
     }
   }

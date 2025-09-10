@@ -64,12 +64,13 @@ export class ToolExecutor extends EventEmitter {
   }): Promise<void> {
     const streamId = `stream-${Date.now()}`;
     
-    // Start streaming
+    // Start streaming - let the AI specify insertAfter with actual content
     this.webContents.send('ai:streamEditStart', {
       id: streamId,
-      position: args.position || 'cursor',
+      position: args.position || (args.insertAfter ? undefined : 'cursor'),
       insertAfter: args.insertAfter,
-      mode: args.mode || 'append'
+      mode: args.mode || 'append',
+      insertAtEnd: false
     });
     
     // Stream content in chunks

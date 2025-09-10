@@ -7,24 +7,31 @@ import { v4 as uuidv4 } from 'uuid';
 import { SessionData, Message, DocumentContext, AIProviderType } from './types';
 
 export class SessionManager {
-  private store: Store;
+  private store: Store | null = null;
   private currentSession: SessionData | null = null;
   private currentProjectPath: string | null = null;
 
   constructor() {
-    this.store = new Store({
-      name: 'ai-sessions',
-      schema: {
-        sessionsByProject: {
-          type: 'object',
-          default: {}
-        },
-        currentSessionByProject: {
-          type: 'object',
-          default: {}
+    // Lazy initialization - will be created on first use
+  }
+
+  private getStore(): Store {
+    if (!this.store) {
+      this.store = new Store({
+        name: 'ai-sessions',
+        schema: {
+          sessionsByProject: {
+            type: 'object',
+            default: {}
+          },
+          currentSessionByProject: {
+            type: 'object',
+            default: {}
+          }
         }
-      }
-    });
+      });
+    }
+    return this.store;
   }
 
   /**
@@ -57,9 +64,9 @@ export class SessionManager {
     this.saveSession(session);
 
     // Set as current session for this project
-    const currentByProject = this.store.get('currentSessionByProject', {}) as Record<string, string>;
+    const currentByProject = this.getStore().get('currentSessionByProject', {}) as Record<string, string>;
     currentByProject[project] = sessionId;
-    this.store.set('currentSessionByProject', currentByProject);
+    this.getStore().set('currentSessionByProject', currentByProject);
 
     return session;
   }
@@ -69,7 +76,7 @@ export class SessionManager {
    */
   loadSession(sessionId: string, projectPath?: string): SessionData | null {
     const project = projectPath || this.currentProjectPath || 'default';
-    const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
     const sessions = sessionsByProject[project] || [];
     const session = sessions.find(s => s.id === sessionId);
     
@@ -96,9 +103,9 @@ export class SessionManager {
       this.currentProjectPath = project;
 
       // Set as current session for this project
-      const currentByProject = this.store.get('currentSessionByProject', {}) as Record<string, string>;
+      const currentByProject = this.getStore().get('currentSessionByProject', {}) as Record<string, string>;
       currentByProject[project] = sessionId;
-      this.store.set('currentSessionByProject', currentByProject);
+      this.getStore().set('currentSessionByProject', currentByProject);
 
       return session;
     }
@@ -111,7 +118,7 @@ export class SessionManager {
    */
   getSessions(projectPath?: string): SessionData[] {
     const project = projectPath || this.currentProjectPath || 'default';
-    const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
     const sessions = sessionsByProject[project] || [];
     // Sort by timestamp descending (newest first)
     return sessions.sort((a, b) => b.timestamp - a.timestamp);
@@ -156,7 +163,7 @@ export class SessionManager {
    */
   updateSessionMessages(sessionId: string, messages: Message[], projectPath?: string): boolean {
     const project = projectPath || this.currentProjectPath || 'default';
-    const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
     const sessions = sessionsByProject[project] || [];
     const session = sessions.find(s => s.id === sessionId);
 
@@ -180,7 +187,7 @@ export class SessionManager {
    */
   saveDraftInput(sessionId: string, draftInput: string, projectPath?: string): boolean {
     const project = projectPath || this.currentProjectPath || 'default';
-    const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
     const sessions = sessionsByProject[project] || [];
     const session = sessions.find(s => s.id === sessionId);
 
@@ -222,7 +229,7 @@ export class SessionManager {
    */
   deleteSession(sessionId: string, projectPath?: string): boolean {
     const project = projectPath || this.currentProjectPath || 'default';
-    const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
     const sessions = sessionsByProject[project] || [];
 
     // Filter out the session to delete
@@ -230,17 +237,17 @@ export class SessionManager {
 
     // Update the store
     sessionsByProject[project] = updatedSessions;
-    this.store.set('sessionsByProject', sessionsByProject);
+    this.getStore().set('sessionsByProject', sessionsByProject);
 
     // If we deleted the current session, clear it
     if (this.currentSession?.id === sessionId) {
       this.currentSession = null;
 
       // Clear from current session tracking
-      const currentByProject = this.store.get('currentSessionByProject', {}) as Record<string, string>;
+      const currentByProject = this.getStore().get('currentSessionByProject', {}) as Record<string, string>;
       if (currentByProject[project] === sessionId) {
         delete currentByProject[project];
-        this.store.set('currentSessionByProject', currentByProject);
+        this.getStore().set('currentSessionByProject', currentByProject);
       }
     }
 
@@ -259,7 +266,7 @@ export class SessionManager {
    */
   private saveSession(session: SessionData): void {
     const project = session.projectPath || this.currentProjectPath || 'default';
-    const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
     
     if (!sessionsByProject[project]) {
       sessionsByProject[project] = [];
@@ -280,14 +287,14 @@ export class SessionManager {
     }
     
     sessionsByProject[project] = sessions;
-    this.store.set('sessionsByProject', sessionsByProject);
+    this.getStore().set('sessionsByProject', sessionsByProject);
   }
 
   /**
    * Clean up empty messages from all sessions
    */
   cleanupAllSessions(): number {
-    const sessionsByProject = this.store.get('sessionsByProject', {}) as Record<string, SessionData[]>;
+    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
     let totalCleaned = 0;
     
     for (const project in sessionsByProject) {
@@ -312,7 +319,7 @@ export class SessionManager {
     }
     
     if (totalCleaned > 0) {
-      this.store.set('sessionsByProject', sessionsByProject);
+      this.getStore().set('sessionsByProject', sessionsByProject);
       console.log(`[SessionManager] Total cleaned: ${totalCleaned} empty messages across all sessions`);
     }
     

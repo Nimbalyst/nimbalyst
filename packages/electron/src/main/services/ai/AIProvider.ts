@@ -196,6 +196,31 @@ Current document context:
 - Type: ${documentContext?.fileType || 'markdown'}
 ${documentContext?.cursorPosition ? `- Cursor position: Line ${documentContext.cursorPosition.line}, Column ${documentContext.cursorPosition.column}` : ''}
 ${documentContext?.selection ? `- Selected text: "${documentContext.selection.substring(0, 100)}${documentContext.selection.length > 100 ? '...' : ''}"` : ''}
-${documentContext?.content ? `- Full document content:\n${documentContext.content}` : ''}`;
+${documentContext?.content ? `- Full document content:\n${documentContext.content}` : ''}
+
+CRITICAL TABLE EDITING RULES:
+When the user asks you to add rows to an existing table, use the applyDiff tool:
+
+1. Find the complete table in the document
+2. Create a replacement with the table plus new rows
+3. Use applyDiff with:
+   - oldText: The ENTIRE existing table (all rows)
+   - newText: The ENTIRE table with new rows added
+
+Example:
+If the table is:
+| Fruit | Color |
+| Apple | Red |
+| Pear | Green |
+
+To add Banana, use applyDiff:
+{
+  "replacements": [{
+    "oldText": "| Fruit | Color |\n| Apple | Red |\n| Pear | Green |",
+    "newText": "| Fruit | Color |\n| Apple | Red |\n| Pear | Green |\n| Banana | Yellow |"
+  }]
+}
+
+ALWAYS use applyDiff for table modifications - it's more reliable than streaming!`;
   }
 }

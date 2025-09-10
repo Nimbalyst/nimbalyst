@@ -23,7 +23,7 @@ export class ToolRegistry extends EventEmitter {
     // Document editing tool
     this.register({
       name: 'applyDiff',
-      description: 'Apply text replacements to the current document',
+      description: 'Apply text replacements to the current document. REQUIRED for adding rows to tables - replace the entire table.',
       parameters: {
         type: 'object',
         properties: {
@@ -32,8 +32,8 @@ export class ToolRegistry extends EventEmitter {
             items: {
               type: 'object',
               properties: {
-                oldText: { type: 'string', description: 'Text to replace' },
-                newText: { type: 'string', description: 'Replacement text' }
+                oldText: { type: 'string', description: 'Text to replace (for tables: the COMPLETE existing table including all rows)' },
+                newText: { type: 'string', description: 'Replacement text (for tables: the COMPLETE updated table with new rows added)' }
               },
               required: ['oldText', 'newText']
             }
@@ -47,17 +47,17 @@ export class ToolRegistry extends EventEmitter {
     // Content streaming tool
     this.register({
       name: 'streamContent',
-      description: 'Stream new content directly to the editor',
+      description: 'Stream new content to the editor. For tables: set insertAfter to the COMPLETE table, content to ONLY the new rows.',
       parameters: {
         type: 'object',
         properties: {
-          content: { type: 'string', description: 'The content to stream' },
+          content: { type: 'string', description: 'The content to stream (for tables: ONLY the new rows like "| Cell1 | Cell2 |")' },
           position: {
             type: 'string',
             enum: ['cursor', 'end', 'after-selection'],
             description: 'Where to insert the content'
           },
-          insertAfter: { type: 'string', description: 'Optional text to insert after' },
+          insertAfter: { type: 'string', description: 'Text to insert after (for tables: the COMPLETE table including all rows)' },
           mode: {
             type: 'string',
             enum: ['append', 'replace', 'insert'],

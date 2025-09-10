@@ -299,23 +299,40 @@ export class WindowedTreeMatcher {
           let markdown = '';
 
           if ($isElementNode(child)) {
-            // if (child.getType() === 'table') {
-            //   console.log('🔍 SOURCE: Converting table node to markdown');
-            //   console.log('  Number of transformers:', this.config.transformers.length);
-            //   const tableTransformer = this.config.transformers.find(t =>
-            //     t.type === 'element' && t.dependencies?.some?.(d =>
-            //       typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
-            //     )
-            //   );
-            //   console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
-            //   if (tableTransformer) {
-            //     console.log('  Transformer export function exists:', !!tableTransformer.export);
-            //   }
-            // }
+            if (child.getType() === 'table') {
+              console.log('🔍 SOURCE: Converting table node to markdown');
+              console.log('  Number of transformers:', this.config.transformers.length);
+              const tableTransformer = this.config.transformers.find(t =>
+                t.type === 'element' && t.dependencies?.some?.(d =>
+                  typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
+                )
+              );
+              console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
+              if (tableTransformer) {
+                console.log('  Transformer export function exists:', !!tableTransformer.export);
+              }
+            }
+            // Debug: check if transformers include TABLE_TRANSFORMER
+            if (child.getType() === 'table') {
+              console.log('  Calling $convertNodeToMarkdownString with', this.config.transformers.length, 'transformers');
+              const hasTableTransformer = this.config.transformers.some(t => 
+                t.type === 'element' && t.dependencies?.some?.(d => 
+                  typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
+                )
+              );
+              console.log('  Has TABLE_TRANSFORMER?', hasTableTransformer);
+            }
             markdown = $convertNodeToMarkdownString(this.config.transformers, child);
-            // if (child.getType() === 'table') {
-            //   console.log('  Result markdown:', markdown);
+            // try {
+            //   markdown = $convertNodeToMarkdownString(this.config.transformers, child);
+            // } catch (error) {
+            //   console.error('  Error converting node to markdown:', error);
+            //   markdown = child.getTextContent();
             // }
+            if (child.getType() === 'table') {
+              console.log('  Result markdown before trim:', markdown);
+              console.log('  Result markdown after trim:', markdown.trim());
+            }
           } else {
             // For text nodes within paragraphs, we need the parent's markdown
             // to preserve link formatting
@@ -354,23 +371,40 @@ export class WindowedTreeMatcher {
           let markdown = '';
 
           if ($isElementNode(child)) {
-            // if (child.getType() === 'table') {
-            //   console.log('🔍 TARGET: Converting table node to markdown');
-            //   console.log('  Number of transformers:', this.config.transformers.length);
-            //   const tableTransformer = this.config.transformers.find(t =>
-            //     t.type === 'element' && t.dependencies?.some?.(d =>
-            //       typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
-            //     )
-            //   );
-            //   console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
-            //   if (tableTransformer) {
-            //     console.log('  Transformer export function exists:', !!tableTransformer.export);
-            //   }
-            // }
+            if (child.getType() === 'table') {
+              console.log('🔍 TARGET: Converting table node to markdown');
+              console.log('  Number of transformers:', this.config.transformers.length);
+              const tableTransformer = this.config.transformers.find(t =>
+                t.type === 'element' && t.dependencies?.some?.(d =>
+                  typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
+                )
+              );
+              console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
+              if (tableTransformer) {
+                console.log('  Transformer export function exists:', !!tableTransformer.export);
+              }
+            }
+            // Debug: check if transformers include TABLE_TRANSFORMER
+            if (child.getType() === 'table') {
+              console.log('  Calling $convertNodeToMarkdownString with', this.config.transformers.length, 'transformers');
+              const hasTableTransformer = this.config.transformers.some(t => 
+                t.type === 'element' && t.dependencies?.some?.(d => 
+                  typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
+                )
+              );
+              console.log('  Has TABLE_TRANSFORMER?', hasTableTransformer);
+            }
             markdown = $convertNodeToMarkdownString(this.config.transformers, child);
-            // if (child.getType() === 'table') {
-            //   console.log('  Result markdown:', markdown);
+            // try {
+            //   markdown = $convertNodeToMarkdownString(this.config.transformers, child);
+            // } catch (error) {
+            //   console.error('  Error converting node to markdown:', error);
+            //   markdown = child.getTextContent();
             // }
+            if (child.getType() === 'table') {
+              console.log('  Result markdown before trim:', markdown);
+              console.log('  Result markdown after trim:', markdown.trim());
+            }
           } else {
             // For text nodes within paragraphs, we need the parent's markdown
             // to preserve link formatting
