@@ -48,6 +48,8 @@ if (typeof window !== 'undefined') {
   // Also listen for IPC theme changes
   if (window.electronAPI?.onThemeChange) {
     const unsubscribe = window.electronAPI.onThemeChange((theme) => {
+      // Guard: skip if unchanged
+      if (localStorage.getItem('theme') === theme) return;
       // Update localStorage with the new theme
       localStorage.setItem('theme', theme);
       applyTheme();

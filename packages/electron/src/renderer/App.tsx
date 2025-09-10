@@ -1304,6 +1304,11 @@ export default function App() {
       if (LOG_CONFIG.THEME) console.log('[THEME] Theme changed to:', newTheme);
       // Map 'system' to 'auto' for the editor
       const editorTheme = newTheme === 'system' ? 'auto' : newTheme;
+      // Guard: avoid redundant state updates
+      if (theme === (editorTheme as ConfigTheme)) {
+        if (LOG_CONFIG.THEME) console.log('[THEME] Skipping duplicate theme apply');
+        return;
+      }
       setTheme(editorTheme as ConfigTheme);
       if (LOG_CONFIG.THEME) console.log('[THEME] Editor theme set to:', editorTheme);
     }));

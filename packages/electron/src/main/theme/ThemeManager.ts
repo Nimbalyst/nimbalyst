@@ -5,13 +5,13 @@ import { updateAboutWindowTheme } from '../window/AboutWindow';
 // Function to update native theme
 export function updateNativeTheme() {
     const currentTheme = getTheme();
+    const desired: 'system' | 'dark' | 'light' =
+        currentTheme === 'system' ? 'system' :
+        (currentTheme === 'dark' || currentTheme === 'crystal-dark') ? 'dark' : 'light';
 
-    if (currentTheme === 'system') {
-        nativeTheme.themeSource = 'system';
-    } else if (currentTheme === 'dark' || currentTheme === 'crystal-dark') {
-        nativeTheme.themeSource = 'dark';
-    } else {
-        nativeTheme.themeSource = 'light';
+    // Only set when it actually changes to avoid spurious 'updated' events
+    if (nativeTheme.themeSource !== desired) {
+        nativeTheme.themeSource = desired;
     }
 }
 
@@ -23,8 +23,8 @@ export function updateWindowTitleBars() {
                       currentTheme === 'crystal-dark' ||
                       (currentTheme === 'system' && systemDarkMode);
 
-    // Update native theme first
-    updateNativeTheme();
+    // Do NOT touch nativeTheme.themeSource here to avoid triggering
+    // nativeTheme 'updated' recursively. Only adjust window visuals.
 
     // Define title bar colors for each theme
     const titleBarColors = {

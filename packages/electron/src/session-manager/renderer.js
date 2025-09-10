@@ -37,6 +37,9 @@ async function init() {
 
 // Apply theme
 function applyTheme(theme) {
+  // Guard: avoid redundant re-apply
+  if (document.body.dataset.theme === theme) return;
+  document.body.dataset.theme = theme;
   document.body.className = '';
   if (theme === 'crystal-dark') {
     document.body.classList.add('crystal-dark');

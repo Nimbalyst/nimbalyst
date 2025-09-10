@@ -1,6 +1,6 @@
 {
   "name": "@stravu-editor/electron",
-  "version": "0.33.1",
+  "version": "0.36.4",
   "private": true,
   "description": "Electron app for Stravu Editor",
   "main": "out/main/index.js",
@@ -157,6 +157,7 @@
     },
     "linux": {
       "target": "AppImage"
-    }
+    },
+    "buildVersion": "0.36.4"
   }
 }

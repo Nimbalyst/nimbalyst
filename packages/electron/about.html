@@ -204,7 +204,7 @@
         <img src="icon.png" alt="Preditor">
       </div>
       <h1 class="about-title">Preditor</h1>
-      <p class="about-version">Version 0.33.1</p>
+      <p class="about-version" id="about-version">Version</p>
 
       <p class="about-description">
         A powerful rich text editor built with Meta's Lexical framework.
@@ -232,6 +232,8 @@
       // Apply theme from main window
       window.electronAPI?.onThemeChange((theme) => {
         const body = document.body;
+        if (body.dataset.theme === theme) return;
+        body.dataset.theme = theme;
         body.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
 
         if (theme === 'dark') {
@@ -250,7 +252,19 @@
         } else if (theme === 'crystal-dark') {
           document.body.classList.add('crystal-dark-theme');
         }
+        document.body.dataset.theme = theme;
       });
+
+      // Populate version from main process
+      (async () => {
+        try {
+          const version = await window.electronAPI?.getAppVersion?.();
+          if (version) {
+            const el = document.getElementById('about-version');
+            if (el) el.textContent = `Version ${version}`;
+          }
+        } catch {}
+      })();
     </script>
   </body>
 </html>
