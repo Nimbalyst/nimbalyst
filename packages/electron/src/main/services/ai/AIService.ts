@@ -615,7 +615,8 @@ export class AIService {
     ipcMain.handle('ai:loadSession', async (event, sessionId: string, projectPath?: string) => {
       const session = this.sessionManager.loadSession(sessionId, projectPath);
       if (!session) {
-        throw new Error('Session not found');
+        console.log(`[SESSION] Session not found: ${sessionId} (this is normal if the session was deleted)`);
+        return null;
       }
       return session;
     });

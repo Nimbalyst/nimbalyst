@@ -1006,6 +1006,17 @@ export function AIChat({
   const handleSessionSelect = useCallback(async (sessionId: string) => {
     try {
       const session = await aiApi.loadSession(sessionId, projectPath);
+      
+      // Handle case where session doesn't exist (was deleted)
+      if (!session) {
+        logger.session.info('Session not found, clearing saved session ID');
+        // Clear the saved session ID so we don't try to load it again
+        if (onSessionIdChange) {
+          onSessionIdChange(null);
+        }
+        return;
+      }
+      
       setCurrentSessionId(session.id);
 
       // ALWAYS update model based on session (provider:model format)
@@ -1049,8 +1060,12 @@ export function AIChat({
       }, 100);
     } catch (error) {
       logger.session.info('Failed to load session:', error);
+      // Clear the saved session ID on error
+      if (onSessionIdChange) {
+        onSessionIdChange(null);
+      }
     }
-  }, [projectPath]);
+  }, [projectPath, onSessionIdChange]);
 
   const handleDeleteSession = useCallback(async (sessionId: string) => {
     try {
