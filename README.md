@@ -333,7 +333,7 @@ packages/
 
 ### Testing
 
-The project's test infrastructure is under active development. Future updates will include comprehensive testing with Jest and Playwright.
+The project's test infrastructure is under active development. Future updates will include comprehensive testing with vitest and Playwright.
 
 ### Key Commands
 

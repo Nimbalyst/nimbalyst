@@ -17,7 +17,7 @@ This is Stravu Editor - a rich text editor built with Meta's Lexical framework. 
 
 The project uses multiple testing approaches:
 
-- **Unit tests**: Located in `__tests__/unit/` using Jest
+- **Unit tests**: Located in `__tests__/unit/` using vitest
 - **E2E tests**: Located in `__tests__/e2e/` using Playwright 
 - **Regression tests**: Located in `__tests__/regression/` using Playwright
 

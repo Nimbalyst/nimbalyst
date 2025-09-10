@@ -60,6 +60,6 @@ When proposing or implementing an extension, please ensure:
 - The feature round‑trips through edit → markdown → edit without loss, or provides a sensible fallback.
 - Any additional files (assets) are referenced via standard Markdown constructs.
 
----
+***
 
 This policy helps us keep Stravu Editor fast, portable, and friendly to the broader Markdown ecosystem while still enabling powerful workflows through well‑behaved extensions.

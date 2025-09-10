@@ -35,6 +35,7 @@
     "diff": "^5.2.0",
     "electron-log": "^5.4.3",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.6.2",
     "openai": "^5.19.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -67,6 +68,13 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ghinkle",
+        "repo": "stravu-editor"
+      }
+    ],
     "asar": true,
     "asarUnpack": [
       "node_modules/**/*.node",

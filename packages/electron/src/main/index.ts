@@ -22,6 +22,7 @@ import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/p
 import { setupForceQuit, cancelForceQuit } from './utils/forceQuit';
 import { stopAllFileWatchers } from './file/FileWatcher';
 import { stopAllProjectWatchers } from './file/ProjectWatcher';
+import { autoUpdaterService } from './services/autoUpdater';
 
 // Track pending file to open
 let pendingFilePath: string | null = null;
@@ -195,6 +196,14 @@ app.whenReady().then(async () => {
     
     // Set initial native theme
     updateNativeTheme();
+    
+    // Initialize auto-updater (only in production)
+    if (app.isPackaged) {
+        logger.main.info('Starting auto-updater service');
+        autoUpdaterService.startAutoUpdateCheck(60); // Check every hour
+    } else {
+        logger.main.info('Skipping auto-updater in development mode');
+    }
     
     // Start performance monitoring
     startPerformanceMonitoring();

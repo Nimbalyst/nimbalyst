@@ -12,6 +12,7 @@ import { updateWindowTitleBars } from '../theme/ThemeManager';
 import { getFileWatcherStatus, refreshProjectFileTree, getGlobalFileWatcherStats } from '../file/FileWatcherDebug';
 import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
+import { autoUpdaterService } from '../services/autoUpdater';
 
 // Create window list menu items
 function createWindowListMenu(): any[] {
@@ -717,6 +718,12 @@ export function createApplicationMenu() {
                         createAboutWindow();
                     }
                 },
+                {
+                    label: 'Check for Updates...',
+                    click: () => {
+                        autoUpdaterService.checkForUpdatesWithUI();
+                    }
+                },
                 { type: 'separator' },
                 {
                     label: 'Settings...',
@@ -758,6 +765,12 @@ export function createApplicationMenu() {
                     label: 'About Preditor',
                     click: () => {
                         createAboutWindow();
+                    }
+                },
+                {
+                    label: 'Check for Updates...',
+                    click: () => {
+                        autoUpdaterService.checkForUpdatesWithUI();
                     }
                 }
             ]
