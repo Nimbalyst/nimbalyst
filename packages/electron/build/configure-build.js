@@ -39,6 +39,26 @@ function configureBuild() {
   // Read the package.json file
   const packageJsonPath = path.join(__dirname, '..', 'package.json');
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+
+  // Optionally auto-bump patch version so test builds are clearly distinct
+  // Enable with AUTO_BUMP_PATCH=true (defaults to true if not explicitly 'false')
+  const shouldAutoBump = process.env.AUTO_BUMP_PATCH !== 'false';
+  if (shouldAutoBump) {
+    const current = packageJson.version || '0.0.0';
+    const parts = current.split('.').map(n => parseInt(n, 10));
+    while (parts.length < 3) parts.push(0);
+    if (Number.isFinite(parts[2])) {
+      parts[2] += 1; // bump patch
+    } else {
+      parts[2] = 1;
+    }
+    const newVersion = parts.join('.');
+    console.log(`Auto-bumping package version: ${current} -> ${newVersion}`);
+    packageJson.version = newVersion;
+    // Also set buildVersion so CFBundleVersion increments on macOS
+    packageJson.build = packageJson.build || {};
+    packageJson.build.buildVersion = newVersion;
+  }
   
   // Configure macOS build settings
   if (!packageJson.build || !packageJson.build.mac) {
