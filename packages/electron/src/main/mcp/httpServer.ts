@@ -59,31 +59,63 @@ export function shutdownHttpServer(): Promise<void> {
     
     console.log('[MCP Server] Shutting down HTTP server');
     
-    // First cleanup transports
-    cleanupMcpServer();
+    // Track if we've resolved
+    let hasResolved = false;
+    const safeResolve = () => {
+      if (!hasResolved) {
+        hasResolved = true;
+        resolve();
+      }
+    };
     
-    // Force close all connections
-    if (typeof httpServerInstance.closeAllConnections === 'function') {
-      httpServerInstance.closeAllConnections();
+    try {
+      // First cleanup transports
+      cleanupMcpServer();
+    } catch (error) {
+      console.error('[MCP Server] Error cleaning up transports:', error);
     }
     
-    // Close the server
-    httpServerInstance.close((err?: Error) => {
-      if (err) {
-        console.error('[MCP Server] Error closing HTTP server:', err);
+    try {
+      // Force close all connections
+      if (httpServerInstance && typeof httpServerInstance.closeAllConnections === 'function') {
+        httpServerInstance.closeAllConnections();
       }
-      httpServerInstance = null;
-      resolve();
-    });
+    } catch (error) {
+      console.error('[MCP Server] Error closing connections:', error);
+    }
     
-    // Timeout after 1 second
+    try {
+      // Close the server
+      if (httpServerInstance && typeof httpServerInstance.close === 'function') {
+        httpServerInstance.close((err?: Error) => {
+          if (err) {
+            console.error('[MCP Server] Error closing HTTP server:', err);
+          }
+          httpServerInstance = null;
+          safeResolve();
+        });
+      } else {
+        httpServerInstance = null;
+        safeResolve();
+      }
+    } catch (error) {
+      console.error('[MCP Server] Error in server close:', error);
+      httpServerInstance = null;
+      safeResolve();
+    }
+    
+    // More aggressive timeout for production
+    const isProduction = process.env.NODE_ENV === 'production';
+    const timeout = isProduction ? 300 : 1000;
+    
+    // Timeout to ensure we don't hang
     setTimeout(() => {
       if (httpServerInstance) {
-        console.log('[MCP Server] Force destroying HTTP server');
+        console.log('[MCP Server] Force destroying HTTP server after timeout');
         httpServerInstance = null;
       }
-      resolve();
-    }, 1000);
+      safeResolve();
+    }, timeout);
   });
 }
 

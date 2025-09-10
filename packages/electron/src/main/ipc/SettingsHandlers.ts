@@ -17,6 +17,12 @@ export function registerSettingsHandlers() {
         return getTheme();
     });
 
+    // Get app version (from app.getVersion)
+    ipcMain.handle('get-app-version', () => {
+        const { app } = require('electron');
+        return app.getVersion();
+    });
+
     // Get AI Chat state
     ipcMain.handle('get-ai-chat-state', () => {
         return getAIChatState();

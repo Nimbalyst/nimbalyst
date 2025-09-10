@@ -19,7 +19,10 @@ export function setupForceQuit(delay: number = 2000) {
         return; // Already force quitting
     }
     
-    logToDebugFile(`Setting up force quit timer for ${delay}ms`);
+    // Use app.isPackaged to detect production builds
+    const actualDelay = app.isPackaged ? Math.max(2000, delay) : delay;
+    
+    logToDebugFile(`Setting up force quit timer for ${actualDelay}ms (packaged: ${app.isPackaged})`);
     
     forceQuitTimer = setTimeout(() => {
         isForceQuitting = true;
@@ -86,7 +89,11 @@ export function setupForceQuit(delay: number = 2000) {
             logToDebugFile(`app.exit failed: ${e}`);
         }
         
-        // If still alive after 500ms, try process.exit
+        // Escalation timing (a bit conservative when packaged)
+        const firstDelay = app.isPackaged ? 500 : 500;
+        const secondDelay = app.isPackaged ? 500 : 500;
+        
+        // If still alive after firstDelay, try process.exit
         setTimeout(() => {
             if (!isForceQuitting) return;
             logToDebugFile('Still alive, attempting process.exit(0)');
@@ -96,7 +103,7 @@ export function setupForceQuit(delay: number = 2000) {
                 logToDebugFile(`process.exit failed: ${e}`);
             }
             
-            // Nuclear option after another 500ms
+            // Nuclear option after secondDelay
             setTimeout(() => {
                 if (!isForceQuitting) return;
                 logToDebugFile('Still alive, sending SIGKILL');
@@ -105,16 +112,12 @@ export function setupForceQuit(delay: number = 2000) {
                 } catch (e) {
                     logToDebugFile(`SIGKILL failed: ${e}`);
                 }
-            }, 500);
-        }, 500);
+            }, secondDelay);
+        }, firstDelay);
         
-    }, delay);
+    }, actualDelay);
     
-    // Set up listener to cancel timer if we quit normally
-    app.once('will-quit', () => {
-        logToDebugFile('will-quit event - canceling force quit timer');
-        cancelForceQuit();
-    });
+    // Do not auto-cancel the timer; if process truly exits, the timer won't fire.
 }
 
 export function cancelForceQuit() {

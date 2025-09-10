@@ -24,6 +24,8 @@ export class SimpleFileWatcher {
                     window.webContents.send('file-changed-on-disk', { path: filePath });
                 }
             });
+            // Do not keep the process alive because of watchers
+            try { (watcher as any).unref?.(); } catch {}
             
             this.watchers.set(windowId, watcher);
             this.filePaths.set(windowId, filePath);
@@ -40,6 +42,24 @@ export class SimpleFileWatcher {
             this.watchers.delete(windowId);
             this.filePaths.delete(windowId);
         }
+    }
+    
+    stopAll() {
+        logger.fileWatcher.info(`[CLEANUP] Stopping all file watchers (${this.watchers.size} active)`);
+        console.log(`[CLEANUP] SimpleFileWatcher.stopAll called with ${this.watchers.size} watchers`);
+        for (const [windowId, watcher] of this.watchers.entries()) {
+            try {
+                console.log(`[CLEANUP] Closing file watcher for window ${windowId}`);
+                watcher.close();
+                console.log(`[CLEANUP] Successfully closed file watcher for window ${windowId}`);
+            } catch (error) {
+                logger.fileWatcher.error(`Error closing watcher for window ${windowId}:`, error);
+                console.error(`[CLEANUP] Error closing file watcher for window ${windowId}:`, error);
+            }
+        }
+        this.watchers.clear();
+        this.filePaths.clear();
+        console.log(`[CLEANUP] SimpleFileWatcher.stopAll complete`);
     }
     
     getStats() {

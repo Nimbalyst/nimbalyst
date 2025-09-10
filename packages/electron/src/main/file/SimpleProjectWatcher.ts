@@ -39,6 +39,7 @@ export class SimpleProjectWatcher {
                 const fileTree = getFolderContents(projectPath);
                 window.webContents.send('project-file-tree-updated', { fileTree });
             }, 300);
+            try { (timer as any).unref?.(); } catch {}
             
             this.updateTimers.set(windowId, timer);
         };
@@ -78,6 +79,8 @@ export class SimpleProjectWatcher {
                         }
                     }
                 });
+                // Do not keep the process alive because of watchers
+                try { (watcher as any).unref?.(); } catch {}
                 
                 dirWatchers.set(dirPath, watcher);
                 
@@ -114,6 +117,38 @@ export class SimpleProjectWatcher {
             clearTimeout(timer);
             this.updateTimers.delete(windowId);
         }
+    }
+    
+    stopAll() {
+        logger.projectWatcher.info(`[CLEANUP] Stopping all project watchers (${this.watchers.size} windows)`);
+        console.log(`[CLEANUP] SimpleProjectWatcher.stopAll called with ${this.watchers.size} windows`);
+        
+        // Stop all watchers
+        for (const [windowId, dirWatchers] of this.watchers.entries()) {
+            logger.projectWatcher.debug(`Stopping ${dirWatchers.size} watchers for window ${windowId}`);
+            console.log(`[CLEANUP] Stopping ${dirWatchers.size} dir watchers for window ${windowId}`);
+            let closeCount = 0;
+            for (const [path, watcher] of dirWatchers.entries()) {
+                try {
+                    console.log(`[CLEANUP] Closing watcher for path: ${path}`);
+                    watcher.close();
+                    closeCount++;
+                } catch (error) {
+                    logger.projectWatcher.error(`Error closing watcher:`, error);
+                    console.error(`[CLEANUP] Error closing watcher for ${path}:`, error);
+                }
+            }
+            console.log(`[CLEANUP] Closed ${closeCount} watchers for window ${windowId}`);
+        }
+        this.watchers.clear();
+        this.projectPaths.clear();
+        
+        // Clear all timers
+        for (const timer of this.updateTimers.values()) {
+            clearTimeout(timer);
+        }
+        this.updateTimers.clear();
+        console.log(`[CLEANUP] SimpleProjectWatcher.stopAll complete`);
     }
     
     getStats() {

@@ -21,6 +21,12 @@ let windowPositionOffset = 0;
 let untitledCounter = 0;
 let focusOrderCounter = 0; // Counter for tracking focus order
 
+// Track whether the app is in the process of quitting so we don't block window close
+let isQuitting = false;
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
 // Get focused window or create new one
 export function getFocusedOrNewWindow(): BrowserWindow {
     const focusedWindow = BrowserWindow.getFocusedWindow();
@@ -170,8 +176,12 @@ export function createWindow(
             });
         }
 
-        // Handle window close with unsaved changes
+        // Handle window close with unsaved changes (skip prompts when quitting)
         window.on('close', (event) => {
+            if (isQuitting) {
+                // Allow close to proceed without prompts during app quit
+                return;
+            }
             const state = windowStates.get(windowId);
             if (state?.documentEdited) {
                 event.preventDefault();

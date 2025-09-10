@@ -1,8 +1,31 @@
 import Store from 'electron-store';
 import { RecentItem, SessionState, SessionWindow } from '../types';
 
-// Create a singleton store instance
-export const store = new Store();
+// Lazy-initialize store to ensure app is ready
+let _store: Store | null = null;
+
+function getStore(): Store {
+    if (!_store) {
+        _store = new Store();
+    }
+    return _store;
+}
+
+// Export a proxy that lazy-loads the store
+export const store = new Proxy({} as Store, {
+    get(target, prop, receiver) {
+        const actualStore = getStore();
+        const value = Reflect.get(actualStore, prop, actualStore);
+        if (typeof value === 'function') {
+            return value.bind(actualStore);
+        }
+        return value;
+    },
+    set(target, prop, value, receiver) {
+        const actualStore = getStore();
+        return Reflect.set(actualStore, prop, value, actualStore);
+    }
+});
 
 // Recent items management
 export function getRecentItems(type: 'projects' | 'documents'): RecentItem[] {

@@ -2,9 +2,10 @@ import { app } from 'electron';
 
 let lastCpuUsage = process.cpuUsage();
 let lastTime = Date.now();
+let performanceInterval: NodeJS.Timeout | null = null;
 
 export function startPerformanceMonitoring() {
-    setInterval(() => {
+    performanceInterval = setInterval(() => {
         const currentTime = Date.now();
         const currentCpuUsage = process.cpuUsage();
         
@@ -32,4 +33,11 @@ export function startPerformanceMonitoring() {
         lastCpuUsage = currentCpuUsage;
         lastTime = currentTime;
     }, 5000); // Check every 5 seconds
+}
+
+export function stopPerformanceMonitoring() {
+    if (performanceInterval) {
+        clearInterval(performanceInterval);
+        performanceInterval = null;
+    }
 }

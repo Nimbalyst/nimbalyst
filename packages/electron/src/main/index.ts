@@ -18,8 +18,10 @@ import { getTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
 import { startMcpHttpServer, updateDocumentState, cleanupMcpServer, shutdownHttpServer } from './mcp/httpServer';
 import { logger } from './utils/logger';
-import { startPerformanceMonitoring } from './utils/performanceMonitor';
+import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
 import { setupForceQuit, cancelForceQuit } from './utils/forceQuit';
+import { stopAllFileWatchers } from './file/FileWatcher';
+import { stopAllProjectWatchers } from './file/ProjectWatcher';
 
 // Track pending file to open
 let pendingFilePath: string | null = null;
@@ -252,9 +254,15 @@ app.whenReady().then(async () => {
     }, 60000); // Check every minute
     
     // Listen for system theme changes
+    let lastNativeDark = nativeTheme.shouldUseDarkColors;
     nativeTheme.on('updated', () => {
         const currentTheme = getTheme();
-        if (currentTheme === 'system') {
+        const isDark = nativeTheme.shouldUseDarkColors;
+        // Only react when:
+        //  - app theme is 'system', and
+        //  - the effective dark/light value actually changed
+        if (currentTheme === 'system' && isDark !== lastNativeDark) {
+            lastNativeDark = isDark;
             // Update windows when system theme changes
             updateWindowTitleBars();
             // Send theme change to all windows
@@ -267,6 +275,8 @@ app.whenReady().then(async () => {
 
 // Activate handler (macOS)
 app.on('activate', () => {
+    // Avoid resurrecting windows while quitting
+    if (isAppQuitting) return;
     // On macOS, re-create window when dock icon is clicked
     if (BrowserWindow.getAllWindows().length === 0) {
         createWindow();
@@ -289,20 +299,32 @@ app.on('before-quit', async (event) => {
     // Mark app as quitting to prevent interval operations
     isAppQuitting = true;
     
-    // Setup force quit timer (2 seconds)
-    setupForceQuit(2000);
+    // Setup force quit timer - shorter for notarized builds to prevent hanging
+    const forceQuitDelay = app.isPackaged ? 3000 : 2000;
+    setupForceQuit(forceQuitDelay);
     
     const fs = require('fs');
-    const debugLog = require('path').join(app.getPath('userData'), 'stravu-editor-debug.log');
+    const path = require('path');
+    let debugLog: string | null = null;
+    let canWriteLogs = false;
     
+    // Check if we can write to userData directory
     try {
-        fs.appendFileSync(debugLog, `\n[QUIT] before-quit event at ${new Date().toISOString()}\n`);
-    } catch (e) {}
-    
-    try {
-        logger.session.info('App quitting, saving session state');
+        const userDataPath = app.getPath('userData');
+        debugLog = path.join(userDataPath, 'stravu-editor-debug.log');
         
-        // Clear ALL intervals
+        // Test write permission
+        fs.accessSync(userDataPath, fs.constants.W_OK);
+        canWriteLogs = true;
+        fs.appendFileSync(debugLog, `\n[QUIT] before-quit event at ${new Date().toISOString()}\n`);
+        fs.appendFileSync(debugLog, `[QUIT] User: ${process.env.USER || 'unknown'}, UID: ${process.getuid?.() || 'unknown'}\n`);
+    } catch (e) {
+        console.error('[QUIT] Cannot write to userData directory:', e);
+        canWriteLogs = false;
+    }
+    
+    try {
+        // Clear ALL intervals first (should not fail)
         if (sessionSaveInterval) {
             clearInterval(sessionSaveInterval);
             sessionSaveInterval = null;
@@ -315,64 +337,216 @@ app.on('before-quit', async (event) => {
             clearInterval(memoryMonitorInterval);
             memoryMonitorInterval = null;
         }
+        
+        // CRITICAL: Stop performance monitoring - this has an interval that keeps the process alive!
+        stopPerformanceMonitoring();
+        
+        if (canWriteLogs) {
+            logger.session.info('App quitting, intervals cleared');
+        }
     } catch (error) {
-        console.error('Error in before-quit handler:', error);
-        fs.appendFileSync(debugLog, `[QUIT] Error in session save: ${error}\n`);
+        console.error('Error clearing intervals:', error);
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, `[QUIT] Error clearing intervals: ${error}\n`);
+            } catch (e) {}
+        }
+    }
+    
+    // Clean up all file watchers FIRST - these can keep the process alive
+    try {
+        console.log('[QUIT] About to clean up file watchers');
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, '[QUIT] Cleaning up file watchers\n');
+            } catch (e) {}
+        }
+        
+        console.log('[QUIT] Calling stopAllFileWatchers...');
+        stopAllFileWatchers();
+        console.log('[QUIT] stopAllFileWatchers returned');
+        
+        console.log('[QUIT] Calling stopAllProjectWatchers...');
+        stopAllProjectWatchers();
+        console.log('[QUIT] stopAllProjectWatchers returned');
+        
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, '[QUIT] File watchers cleaned up\n');
+            } catch (e) {}
+        }
+    } catch (error) {
+        console.error('[QUIT] Error cleaning up file watchers:', error);
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, `[QUIT] Error cleaning up file watchers: ${error}\n`);
+            } catch (e) {}
+        }
     }
     
     try {
         // Clean up AI service
         if (aiService) {
-            fs.appendFileSync(debugLog, '[QUIT] Destroying AI service\n');
+            if (canWriteLogs && debugLog) {
+                try {
+                    fs.appendFileSync(debugLog, '[QUIT] Destroying AI service\n');
+                } catch (e) {}
+            }
             aiService.destroy();
             aiService = null;
         }
     } catch (error) {
         console.error('[QUIT] Error destroying AI service:', error);
-        fs.appendFileSync(debugLog, `[QUIT] Error destroying AI service: ${error}\n`);
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, `[QUIT] Error destroying AI service: ${error}\n`);
+            } catch (e) {}
+        }
     }
     
     try {
-        // Shutdown MCP HTTP server properly
-        fs.appendFileSync(debugLog, '[QUIT] Shutting down MCP HTTP server\n');
-        await shutdownHttpServer();
-        fs.appendFileSync(debugLog, '[QUIT] MCP HTTP server shutdown complete\n');
+        // Shutdown MCP HTTP server with timeout
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, '[QUIT] Shutting down MCP HTTP server\n');
+            } catch (e) {}
+        }
+        
+        // Add timeout to prevent hanging
+        const shutdownPromise = shutdownHttpServer();
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 500));
+        await Promise.race([shutdownPromise, timeoutPromise]);
+        
         mcpHttpServer = null;
+        
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, '[QUIT] MCP HTTP server shutdown complete\n');
+            } catch (e) {}
+        }
     } catch (error) {
         console.error('[QUIT] Error closing MCP server:', error);
-        fs.appendFileSync(debugLog, `[QUIT] Error closing MCP server: ${error}\n`);
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, `[QUIT] Error closing MCP server: ${error}\n`);
+            } catch (e) {}
+        }
     }
     
     try {
-        // Save session state
-        fs.appendFileSync(debugLog, '[QUIT] Saving session state\n');
-        saveSessionState();
-        fs.appendFileSync(debugLog, '[QUIT] Session state saved\n');
+        // Save session state only if we can write
+        if (canWriteLogs) {
+            if (debugLog) {
+                try {
+                    fs.appendFileSync(debugLog, '[QUIT] Saving session state\n');
+                } catch (e) {}
+            }
+            
+            // Wrap session save with timeout
+            const savePromise = new Promise((resolve, reject) => {
+                try {
+                    saveSessionState();
+                    resolve(true);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+            const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(false), 300));
+            await Promise.race([savePromise, timeoutPromise]);
+            
+            if (debugLog) {
+                try {
+                    fs.appendFileSync(debugLog, '[QUIT] Session state saved\n');
+                } catch (e) {}
+            }
+        } else {
+            console.log('[QUIT] Skipping session save - no write permissions');
+        }
     } catch (error) {
         console.error('[QUIT] Error saving session state:', error);
-        fs.appendFileSync(debugLog, `[QUIT] Error saving session: ${error}\n`);
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, `[QUIT] Error saving session: ${error}\n`);
+            } catch (e) {}
+        }
     }
     
     // After all cleanup, quit the app
-    fs.appendFileSync(debugLog, '[QUIT] All cleanup complete, quitting app\n');
+    if (canWriteLogs && debugLog) {
+        try {
+            fs.appendFileSync(debugLog, '[QUIT] All cleanup complete, quitting app\n');
+            
+            // Log what's still keeping the process alive
+            const activeHandles = (process as any)._getActiveHandles?.();
+            const activeRequests = (process as any)._getActiveRequests?.();
+            
+            if (activeHandles && activeHandles.length > 0) {
+                fs.appendFileSync(debugLog, `[QUIT] WARNING: ${activeHandles.length} handles still active:\n`);
+                activeHandles.forEach((handle: any, i: number) => {
+                    const name = handle.constructor.name;
+                    let details = `  ${i}: ${name}`;
+                    if (name === 'Server' || name === 'Socket' || name === 'TCP') {
+                        try {
+                            details += ` (address: ${handle.address?.() || 'unknown'})`;
+                        } catch (e) {}
+                    }
+                    if (name === 'FSWatcher') {
+                        details += ' (file watcher!) - FORCE CLOSING';
+                        // Force close ANY FSWatcher we find
+                        try {
+                            handle.close();
+                            fs.appendFileSync(debugLog, `    FORCE CLOSED FSWatcher ${i}\n`);
+                        } catch (e) {
+                            fs.appendFileSync(debugLog, `    Failed to force close: ${e}\n`);
+                        }
+                    }
+                    if (name === 'Timer' || name === 'Timeout') {
+                        details += ' (timer/interval!)';
+                    }
+                    fs.appendFileSync(debugLog, details + '\n');
+                });
+            }
+            
+            if (activeRequests && activeRequests.length > 0) {
+                fs.appendFileSync(debugLog, `[QUIT] WARNING: ${activeRequests.length} requests still active\n`);
+            }
+        } catch (e) {}
+    }
     
-    // Cancel force quit if we're about to quit normally
-    cancelForceQuit();
-    
-    // Now quit
-    app.quit();
+    // Aggressively close all windows to avoid any close prompts or handlers
+    try {
+        const all = BrowserWindow.getAllWindows();
+        if (canWriteLogs && debugLog) {
+            try { fs.appendFileSync(debugLog, `[QUIT] Destroying ${all.length} windows\n`); } catch (e) {}
+        }
+        for (const win of all) {
+            try {
+                win.removeAllListeners('close');
+                if (!win.isDestroyed()) win.destroy();
+            } catch {}
+        }
+    } catch {}
+
+    // Ensure process terminates even if something re-hooks quit
+    // Use a short delay to allow logs to flush
+    setTimeout(() => {
+        try { app.exit(0); } catch {}
+    }, 50);
 });
 
 // Window all closed handler
 app.on('window-all-closed', () => {
-    logger.main.info('All windows closed');
-    // On macOS, keep app running when all windows are closed
-    // and show the Project Manager
-    if (process.platform === 'darwin') {
-        // Show Project Manager when all windows are closed on macOS
-        createProjectManagerWindow();
-    } else {
-        // On other platforms, quit when all windows are closed
-        app.quit();
+  logger.main.info('All windows closed');
+  // On macOS, keep app running when all windows are closed
+  // and show the Project Manager, but NOT when we are quitting.
+  if (process.platform === 'darwin') {
+    if (!isAppQuitting) {
+      // Only show the Project Manager when not quitting the app
+      createProjectManagerWindow();
     }
+    // If we are quitting, do nothing here and allow normal quit to proceed
+  } else {
+    // On other platforms, quit when all windows are closed
+    app.quit();
+  }
 });

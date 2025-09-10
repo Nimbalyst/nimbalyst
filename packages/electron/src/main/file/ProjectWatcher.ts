@@ -46,3 +46,16 @@ export function restartProjectWatcher(window: BrowserWindow, projectPath: string
     // Start new watcher
     startProjectWatcher(window, projectPath);
 }
+
+// Stop all project watchers (used during app quit)
+export function stopAllProjectWatchers() {
+    console.log('[ProjectWatcher] stopAllProjectWatchers called');
+    logger.projectWatcher.info('Stopping all project watchers');
+    try {
+        simpleProjectWatcher.stopAll();
+        console.log('[ProjectWatcher] stopAll completed');
+    } catch (error) {
+        console.error('[ProjectWatcher] Error in stopAll:', error);
+        throw error;
+    }
+}
