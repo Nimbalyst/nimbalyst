@@ -4,7 +4,7 @@ This is the monorepo for Stravu Editor, a powerful rich text editor built with M
 
 ## Packages
 
-- **\`packages/stravu-editor\`** - The core library (published to npm)
+- **\`packages/rexical\`** - The core library (published to npm)
 - **\`packages/playground\`** - Demo and testing playground web app
 - **\`packages/electron\`** - Desktop application (Electron)
 

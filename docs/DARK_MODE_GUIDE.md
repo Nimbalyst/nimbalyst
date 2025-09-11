@@ -13,8 +13,8 @@ Dark mode is implemented using CSS custom properties (CSS variables) that change
 ## CSS Variable System
 
 Both themes define a comprehensive set of CSS variables in their respective theme files:
-- `/packages/stravu-editor/src/themes/DarkEditorTheme.css`
-- `/packages/stravu-editor/src/themes/CrystalDarkTheme.css`
+- `/packages/rexical/src/themes/DarkEditorTheme.css`
+- `/packages/rexical/src/themes/CrystalDarkTheme.css`
 
 ### Core Variables
 

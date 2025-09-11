@@ -7,12 +7,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/stravu/stravu-editor.git"
+    "url": "https://github.com/stravu/preditor.git"
   },
   "type": "module",
   "scripts": {
     "dev": "npm run dev --prefix packages/playground",
-    "build": "npm run build --prefix packages/stravu-editor",
+    "build": "npm run build --prefix packages/rexical",
     "build:playground": "npm run build --prefix packages/playground",
     "preview": "npm run preview --prefix packages/playground",
     "test": "npm run test:unit && npm run test:e2e",
@@ -41,7 +41,6 @@
     "typescript": "^5.0.0"
   },
   "workspaces": [
-    "packages/stravu-editor",
     "packages/playground",
     "packages/electron",
     "packages/tauri",

@@ -10,7 +10,7 @@
     "skipLibCheck": true
   },
   "references": [
-    { "path": "./packages/stravu-editor" },
+    { "path": "./packages/rexical" },
     { "path": "./packages/playground" },
     { "path": "./packages/electron" }
   ]

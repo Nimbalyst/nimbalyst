@@ -116,7 +116,7 @@ npm run build:playground
 #### Hot Module Replacement (HMR)
 
 The development setup provides seamless HMR:
-- Changes to `packages/stravu-editor` source files are immediately reflected in the playground
+- Changes to `packages/rexical` source files are immediately reflected in the playground
 - A custom Vite plugin handles module resolution to import directly from TypeScript source
 - Both CSS and TypeScript changes trigger instant updates
 - No manual rebuilds or separate library dev server required
