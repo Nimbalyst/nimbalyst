@@ -71,8 +71,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "ghinkle",
-        "repo": "stravu-editor"
+        "owner": "stravu",
+        "repo": "preditor"
       }
     ],
     "asar": true,
