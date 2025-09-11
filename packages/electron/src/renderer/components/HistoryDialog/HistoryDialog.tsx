@@ -46,9 +46,19 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
   };
 
   const handleRestore = () => {
+    console.log('[HistoryDialog] handleRestore called', { 
+      hasPreviewContent: !!previewContent, 
+      hasOnRestore: !!onRestore,
+      contentLength: previewContent?.length 
+    });
     if (previewContent && onRestore) {
       onRestore(previewContent);
       onClose();
+    } else {
+      console.error('[HistoryDialog] Cannot restore:', {
+        previewContent: previewContent ? 'exists' : 'missing',
+        onRestore: onRestore ? 'exists' : 'missing'
+      });
     }
   };
 

@@ -68,7 +68,7 @@ export function HistoryWindow() {
   };
 
   const handleRestore = async () => {
-    if (!selectedSnapshot) return;
+    if (!selectedSnapshot || !previewContent) return;
     
     const confirmed = window.confirm(
       `Are you sure you want to restore this version from ${formatDate(selectedSnapshot.timestamp)}? This will replace the current file content.`
@@ -76,7 +76,15 @@ export function HistoryWindow() {
     
     if (confirmed) {
       try {
-        await window.electronAPI.restoreSnapshot(filePath, selectedSnapshot.timestamp);
+        // Send the content back to the main window via IPC
+        // The main window will handle actually updating the editor content
+        if (window.electronAPI.sendToMainWindow) {
+          await window.electronAPI.sendToMainWindow('restore-from-history', {
+            filePath,
+            content: previewContent,
+            timestamp: selectedSnapshot.timestamp
+          });
+        }
         window.close();
       } catch (err) {
         alert('Failed to restore snapshot');

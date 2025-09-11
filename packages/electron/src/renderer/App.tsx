@@ -858,13 +858,33 @@ export default function App() {
 
   // Handle restoring content from history
   const handleRestoreFromHistory = useCallback((content: string) => {
+    console.log('[App] handleRestoreFromHistory called', { 
+      contentLength: content?.length,
+      currentVersion: contentVersionRef.current,
+      tabsEnabled: tabPreferences.preferences.enabled,
+      activeTabId: tabs.activeTabId
+    });
+    
+    // Update content version to force editor remount
     contentVersionRef.current += 1;
     isInitializedRef.current = false;
-    setContent(content);
+    
+    // Update the content based on tab mode
+    if (tabPreferences.preferences.enabled && tabs.activeTabId) {
+      // In tab mode, update the active tab's content
+      tabs.updateTab(tabs.activeTabId, { content });
+      console.log('[App] Updated tab content for tab:', tabs.activeTabId);
+    } else {
+      // In single file mode, just update the content state
+      setContent(content);
+      console.log('[App] Updated content state directly');
+    }
+    
     setIsDirty(true);
     // Close the history dialog
     setIsHistoryDialogOpen(false);
-  }, []);
+    console.log('[App] Content restored from history');
+  }, [tabPreferences.preferences.enabled, tabs]);
 
   // Sync current file path with backend whenever it changes
   useEffect(() => {
