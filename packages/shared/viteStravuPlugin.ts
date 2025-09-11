@@ -17,22 +17,22 @@ export default function viteStravuPlugin(): Plugin {
           resolve: {
             alias: [
               {
-                find: 'stravu-editor/styles',
+                find: 'rexical/styles',
                 replacement: isDevMode 
-                  ? resolve(__dirname, '../stravu-editor/src/index.css')
-                  : resolve(__dirname, '../stravu-editor/dist/style.css')
+                  ? resolve(__dirname, '../rexical/src/index.css')
+                  : resolve(__dirname, '../rexical/dist/style.css')
               },
               {
-                find: 'stravu-editor',
+                find: 'rexical',
                 replacement: isDevMode
-                  ? resolve(__dirname, '../stravu-editor/src/index.ts')
-                  : resolve(__dirname, '../stravu-editor/dist/index.js')
+                  ? resolve(__dirname, '../rexical/src/index.ts')
+                  : resolve(__dirname, '../rexical/dist/index.js')
               },
               {
-                find: /^stravu-editor\//,
+                find: /^rexical\//,
                 replacement: isDevMode
-                  ? resolve(__dirname, '../stravu-editor/src') + '/'
-                  : resolve(__dirname, '../stravu-editor/dist') + '/'
+                  ? resolve(__dirname, '../rexical/src') + '/'
+                  : resolve(__dirname, '../rexical/dist') + '/'
               }
             ]
           }

@@ -11,7 +11,7 @@ While heavily leveraging the Lexical playground environment, this editor works t
 
 ## Packages
 
-- **`packages/core`** - The core library
+- **`packages/rexical`** - The core editor library
 - **`packages/playground`** - Demo and testing playground web app
 - **`packages/electron`** - Desktop application (Electron)
 - **`packages/capacitor`** - Mobile application (Capacitor)
@@ -28,13 +28,13 @@ While heavily leveraging the Lexical playground environment, this editor works t
 
 ```bash
 # Install dependencies
-npm install
+npm install --legacy-peer-deps
 
-# Start development (runs playground with HMR)
-npm run dev
+# Start Electron app development
+cd packages/electron && npm run dev
 
-# Build the library for production
-npm run build
+# Build Electron app for Mac
+cd packages/electron && npm run build:mac:local
 ```
 
 ## Features

@@ -58,20 +58,20 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     optimizeExcalidrawPlugin(),
     react(),
-    ...(mode === 'production' ? [
-      dts({
-        insertTypesEntry: true,
-        include: ['src']
-      }),
-      viteStaticCopy({
-        targets: [
-          {
-            src: 'src/images/**/*',
-            dest: 'images'
-          }
-        ]
-      })
-    ] : []),
+    dts({
+      insertTypesEntry: true,
+      include: ['src'],
+      skipDiagnostics: true,
+      logDiagnostics: false
+    }),
+    viteStaticCopy({
+      targets: [
+        {
+          src: 'src/images/**/*',
+          dest: 'images'
+        }
+      ]
+    }),
   ],
   server: {
     port: 4100,

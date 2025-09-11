@@ -46,7 +46,8 @@
     "packages/electron",
     "packages/tauri",
     "packages/core",
-    "packages/capacitor"
+    "packages/capacitor",
+    "packages/rexical"
   ],
   "dependencies": {
     "cors": "^2.8.5",

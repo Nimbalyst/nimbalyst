@@ -126,7 +126,15 @@ export default defineConfig({
     ],
     server: {
       port: 5273,
-      strictPort: true
+      strictPort: true,
+      watch: {
+        // Force watching rexical dist files
+        ignored: ['!**/rexical/dist/**']
+      },
+      fs: {
+        // Allow serving files from rexical
+        allow: ['..']
+      }
     },
     build: {
       target: 'chrome109',
@@ -150,9 +158,9 @@ export default defineConfig({
         'es6-promise-pool'
       ],
       exclude: [
-        'rexical',
         '@shikijs/langs',
-        'prettier'
+        'prettier',
+        'rexical'
       ],
       esbuildOptions: {
         target: 'chrome109'

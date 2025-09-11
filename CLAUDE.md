@@ -8,10 +8,14 @@ This is Stravu Editor - a rich text editor built with Meta's Lexical framework. 
 
 ## Development Commands
 
-- **Start dev server**: `npm run dev` - Runs Vite dev server on port 3000
-- **Build for development**: `npm run build-dev` - Creates development build
-- **Build for production**: `npm run build-prod` - Creates optimized production build with terser minification
-- **Preview build**: `npm run preview` - Preview the built application
+### Electron App
+- **Start dev server**: `cd packages/electron && npm run dev` - Runs Electron app with hot reload
+- **Build for Mac**: `cd packages/electron && npm run build:mac:local` - Creates local Mac build
+- **Build for Mac (notarized)**: `cd packages/electron && npm run build:mac:notarized` - Creates notarized Mac build
+
+### Monorepo Setup
+- **Install dependencies**: `npm install --legacy-peer-deps` - Install all dependencies 
+- **Package management**: Uses npm workspaces (not pnpm)
 
 ## Testing
 
