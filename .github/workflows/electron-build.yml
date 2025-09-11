@@ -42,32 +42,20 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 10
-          run_install: false
-
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
-
-      - name: Setup pnpm cache
+      - name: Setup npm cache
         uses: actions/cache@v3
         with:
-          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+            ${{ runner.os }}-npm-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci --legacy-peer-deps
 
-      - name: Build stravu-editor package
-        working-directory: packages/stravu-editor
-        run: pnpm run build-prod
+      - name: Build rexical package
+        working-directory: packages/rexical
+        run: npm run build
 
       # macOS specific setup
       - name: Import macOS certificates
@@ -135,14 +123,14 @@ jobs:
         run: |
           if [ "${{ matrix.os }}" == "macos-latest" ]; then
             if [ "${{ github.event_name }}" == "push" ] || [ "${{ github.event.inputs.release }}" == "true" ]; then
-              pnpm run build:mac:notarized
+              npm run build:mac:notarized
             else
-              pnpm run build:mac:local
+              npm run build:mac:local
             fi
           elif [ "${{ matrix.os }}" == "windows-2022" ]; then
-            pnpm run build:win
+            npm run build:win
           else
-            pnpm run build:linux
+            npm run build:linux
           fi
         shell: bash
 
