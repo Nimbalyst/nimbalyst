@@ -1,0 +1,179 @@
+.card-edit-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.card-edit-dialog {
+  background-color: white;
+  padding: 24px;
+  border-radius: 8px;
+  min-width: 400px;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow: auto;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.card-edit-title {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.card-edit-field {
+  margin-bottom: 16px;
+}
+
+.card-edit-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.card-edit-input,
+.card-edit-select,
+.card-edit-textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  background: white;
+  color: #333;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.card-edit-textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.card-edit-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.card-edit-button {
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.card-edit-button-cancel {
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  color: #333;
+}
+
+.card-edit-button-cancel:hover {
+  background: #e0e0e0;
+}
+
+.card-edit-button-save {
+  background: #4a90e2;
+  color: white;
+  border: none;
+}
+
+.card-edit-button-save:hover {
+  background: #357abd;
+}
+
+/* Dark mode support - using CSS variables */
+.stravu-editor[data-theme="dark"] .card-edit-dialog {
+  background: var(--stravu-bg-secondary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.stravu-editor[data-theme="dark"] .card-edit-title {
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="dark"] .card-edit-label {
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="dark"] .card-edit-input,
+.stravu-editor[data-theme="dark"] .card-edit-select,
+.stravu-editor[data-theme="dark"] .card-edit-textarea {
+  background: var(--stravu-bg-tertiary);
+  border-color: var(--stravu-editor-border);
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="dark"] .card-edit-button-cancel {
+  background: var(--stravu-bg-tertiary);
+  border-color: var(--stravu-editor-border);
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="dark"] .card-edit-button-cancel:hover {
+  background: var(--stravu-hover-bg);
+}
+
+.stravu-editor[data-theme="dark"] .card-edit-button-save {
+  background: var(--stravu-focus-border);
+  border-color: var(--stravu-focus-border);
+  color: white;
+}
+
+.stravu-editor[data-theme="dark"] .card-edit-button-save:hover {
+  background-color: var(--stravu-active-bg);
+}
+
+/* Crystal Dark theme support - using CSS variables */
+.stravu-editor[data-theme="crystal-dark"] .card-edit-dialog {
+  background: var(--stravu-bg-secondary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .card-edit-title {
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .card-edit-label {
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .card-edit-input,
+.stravu-editor[data-theme="crystal-dark"] .card-edit-select,
+.stravu-editor[data-theme="crystal-dark"] .card-edit-textarea {
+  background: var(--stravu-bg-tertiary);
+  border-color: var(--stravu-editor-border);
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .card-edit-button-cancel {
+  background: var(--stravu-bg-tertiary);
+  border-color: var(--stravu-editor-border);
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .card-edit-button-cancel:hover {
+  background: var(--stravu-hover-bg);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .card-edit-button-save {
+  background: var(--stravu-focus-border);
+  border-color: var(--stravu-focus-border);
+  color: white;
+}
+
+.stravu-editor[data-theme="crystal-dark"] .card-edit-button-save:hover {
+  background-color: var(--stravu-active-bg);
+}
