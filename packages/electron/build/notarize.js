@@ -24,8 +24,8 @@ exports.default = async function notarizing(context) {
     return;
   }
 
-  // Skip notarization in CI or if explicitly disabled
-  if (process.env.CI || process.env.SKIP_NOTARIZE === 'true') {
+  // Skip notarization only if explicitly disabled
+  if (process.env.SKIP_NOTARIZE === 'true') {
     console.log('Skipping notarization (SKIP_NOTARIZE=true)');
     return;
   }

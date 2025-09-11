@@ -38,7 +38,7 @@
 }
 
 .kanban-board:hover {
-  border-color: #4a90e2;
+  /*border-color: #4a90e2;*/
 }
 
 .kanban-board-header {
