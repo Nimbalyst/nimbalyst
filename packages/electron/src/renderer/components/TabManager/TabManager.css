@@ -91,12 +91,13 @@
   background: var(--tab-active-indicator, #3b82f6);
 }
 
+/* Removed - dirty indicator is now handled by React component
 .tab.dirty .tab-title::after {
   content: ' •';
   color: var(--tab-dirty-indicator, #ef4444);
   font-weight: bold;
   margin-left: 4px;
-}
+} */
 
 .tab.pinned {
   min-width: 40px;

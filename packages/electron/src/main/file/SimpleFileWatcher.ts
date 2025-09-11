@@ -7,16 +7,16 @@ import { getWindowId } from '../window/WindowManager';
 export class SimpleFileWatcher {
     private watchers = new Map<number, FSWatcher>();
     private filePaths = new Map<number, string>();
-    
+
     start(window: BrowserWindow, filePath: string) {
         const windowId = getWindowId(window);
         if (windowId === null) {
             logger.fileWatcher.error('Failed to find window ID');
             return;
         }
-        
+
         this.stop(windowId);
-        
+
         try {
             const watcher = watch(filePath, (eventType, filename) => {
                 if (eventType === 'change') {
@@ -26,15 +26,15 @@ export class SimpleFileWatcher {
             });
             // Do not keep the process alive because of watchers
             try { (watcher as any).unref?.(); } catch {}
-            
+
             this.watchers.set(windowId, watcher);
             this.filePaths.set(windowId, filePath);
-            logger.fileWatcher.info(`Started simple watcher for: ${filePath}`);
+            // logger.fileWatcher.info(`Started simple watcher for: ${filePath}`);
         } catch (error) {
             logger.fileWatcher.error('Failed to start watcher:', error);
         }
     }
-    
+
     stop(windowId: number) {
         const watcher = this.watchers.get(windowId);
         if (watcher) {
@@ -43,7 +43,7 @@ export class SimpleFileWatcher {
             this.filePaths.delete(windowId);
         }
     }
-    
+
     stopAll() {
         logger.fileWatcher.info(`[CLEANUP] Stopping all file watchers (${this.watchers.size} active)`);
         console.log(`[CLEANUP] SimpleFileWatcher.stopAll called with ${this.watchers.size} watchers`);
@@ -61,7 +61,7 @@ export class SimpleFileWatcher {
         this.filePaths.clear();
         console.log(`[CLEANUP] SimpleFileWatcher.stopAll complete`);
     }
-    
+
     getStats() {
         const stats: Array<{windowId: number, filePath: string}> = [];
         for (const [windowId, filePath] of this.filePaths.entries()) {

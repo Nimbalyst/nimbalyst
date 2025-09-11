@@ -64,20 +64,20 @@ export function registerFileHandlers() {
         const state = windowStates.get(windowId);
         const filePath = state?.filePath;
 
-        console.log('[SAVE] save-file handler called at', new Date().toISOString());
-        console.log('[SAVE] Window ID:', windowId);
-        console.log('[SAVE] Window state exists:', !!state);
-        console.log('[SAVE] Current state:', {
-            hasState: !!state,
-            filePath: state?.filePath,
-            projectPath: state?.projectPath,
-            documentEdited: state?.documentEdited
-        });
-        console.log('[SAVE] All window states:', Array.from(windowStates.entries()).map(([id, s]) => ({
-            windowId: id,
-            filePath: s?.filePath,
-            projectPath: s?.projectPath
-        })));
+        // console.log('[SAVE] save-file handler called at', new Date().toISOString());
+        // console.log('[SAVE] Window ID:', windowId);
+        // console.log('[SAVE] Window state exists:', !!state);
+        // console.log('[SAVE] Current state:', {
+        //     hasState: !!state,
+        //     filePath: state?.filePath,
+        //     projectPath: state?.projectPath,
+        //     documentEdited: state?.documentEdited
+        // });
+        // console.log('[SAVE] All window states:', Array.from(windowStates.entries()).map(([id, s]) => ({
+        //     windowId: id,
+        //     filePath: s?.filePath,
+        //     projectPath: s?.projectPath
+        // })));
 
         try {
             if (!filePath) {

@@ -12,7 +12,7 @@ export function startFileWatcher(window: BrowserWindow, filePath: string) {
     }
 
     // Use simple file watcher instead of chokidar due to FSEvents issues
-    logger.fileWatcher.info('Using SimpleFileWatcher for:', filePath);
+    // logger.fileWatcher.info('Using SimpleFileWatcher for:', filePath);
     simpleFileWatcher.start(window, filePath);
 }
 

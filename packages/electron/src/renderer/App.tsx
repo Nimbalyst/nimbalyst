@@ -136,6 +136,7 @@ declare global {
 
 
 export default function App() {
+  console.log('[APP RENDER]', new Date().toISOString(), 'App component rendering');
   logger.ui.info('App component rendering');
 
   // Check for special window modes
@@ -174,10 +175,13 @@ export default function App() {
     return <ProjectManager />;
   }
 
-  const [content, setContent] = useState('');
+  const contentRef = useRef('');
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
   const [currentFileName, setCurrentFileName] = useState<string | null>(null);
-  const [isDirty, setIsDirty] = useState(false);
+  const isDirtyRef = useRef(false);  // Internal tracking for autosave
+  const [isDirty, setIsDirty] = useState(false);  // For UI updates
+  const tabStatesRef = useRef<Map<string, { isDirty: boolean }>>(new Map());  // Track tab dirty states without re-renders
+  const tabsRef = useRef<any>(null);  // Reference to current tabs object for use in intervals only
   const [isInitializing, setIsInitializing] = useState(true);
   const [projectMode, setProjectMode] = useState(false);
   const [projectPath, setProjectPath] = useState<string | null>(null);
@@ -204,15 +208,27 @@ export default function App() {
   });
   const [lastPrompt, setLastPrompt] = useState<string>('');
   const [lastAIResponse, setLastAIResponse] = useState<string>('');
-  
+
   // Tab management state
   const tabPreferences = useTabPreferences();
-  console.log('[APP] Creating useTabs hook, projectMode:', projectMode, 'projectPath:', projectPath);
+  // console.log('[APP] Creating useTabs hook, projectMode:', projectMode, 'projectPath:', projectPath);
   const tabs = useTabs({
     maxTabs: tabPreferences.preferences.maxTabs,
     enabled: tabPreferences.preferences.enabled,
     onTabChange: async (tab) => {
-      console.log('[APP] onTabChange called for tab:', tab.id, tab.filePath);
+      // console.log('[APP] onTabChange called for tab:', tab.id, tab.filePath);
+
+      // Save current tab's content before switching
+      const previousTabId = tabs.activeTabId;
+      if (previousTabId && getContentRef.current) {
+        const currentContent = getContentRef.current();
+        tabs.updateTab(previousTabId, {
+          content: currentContent,
+          isDirty: isDirtyRef.current
+        });
+        // console.log('[TABS] Saved content for previous tab:', previousTabId);
+      }
+
       // When switching tabs, restore the tab's saved state
       if (tab.filePath) {
         // If tab has no content, load it from file
@@ -227,15 +243,16 @@ export default function App() {
             console.error('[TABS] Failed to load content for tab:', error);
           }
         }
-        
+
         if (tab.content !== undefined) {
           setCurrentFilePath(tab.filePath);
           setCurrentFileName(tab.fileName);
-          setContent(tab.content);
+          contentRef.current = tab.content;
           initialContentRef.current = tab.content;
           contentVersionRef.current += 1;
-          setIsDirty(tab.isDirty);
-          
+          isDirtyRef.current = tab.isDirty || false;
+          setIsDirty(tab.isDirty || false);
+
           // Update the main process about the current file
           if (window.electronAPI) {
             window.electronAPI.setCurrentFile(tab.filePath);
@@ -244,14 +261,62 @@ export default function App() {
       }
     },
     onTabClose: (tab) => {
-      // Handle tab close - check for unsaved changes
-      if (tab.isDirty) {
-        // In a real implementation, we'd show a dialog here
-        console.warn('Closing tab with unsaved changes:', tab.fileName);
+      // Save current tab's content if it's the active tab being closed
+      if (tab.id === tabs.activeTabId && getContentRef.current) {
+        const currentContent = getContentRef.current();
+        tabs.updateTab(tab.id, {
+          content: currentContent,
+          isDirty: isDirtyRef.current
+        });
+
+        // Update the actual tab object with latest content
+        tab.content = currentContent;
+        tab.isDirty = isDirtyRef.current;
+      }
+
+      // Handle tab close - save if dirty
+      if (tab.isDirty && tab.filePath && window.electronAPI) {
+        // console.log('[TAB CLOSE] Saving unsaved changes for:', tab.fileName);
+
+        // Try to save the file
+        if (tab.content) {
+          // Save the specific tab's content
+          const saveTab = async () => {
+            try {
+              // Set the current file first (may or may not return a promise)
+              const setFileResult = window.electronAPI.setCurrentFile(tab.filePath);
+              if (setFileResult && typeof setFileResult.then === 'function') {
+                await setFileResult;
+              }
+
+              // Now save the content
+              const result = await window.electronAPI.saveFile(tab.content);
+              if (result && result.success) {
+                console.log('[TAB CLOSE] Saved successfully:', tab.fileName);
+              }
+            } catch (error) {
+              console.error('[TAB CLOSE] Failed to save:', tab.fileName, error);
+              // Could show an error dialog here
+              if (window.electronAPI.showErrorDialog) {
+                window.electronAPI.showErrorDialog(
+                  'Failed to Save',
+                  `Failed to save ${tab.fileName} before closing.\n\nYour changes may be lost.`
+                );
+              }
+            }
+          };
+
+          saveTab();
+        }
       }
     }
   });
-  
+
+  // Keep tabsRef updated with the current tabs object
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
+
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');
   const editorRef = useRef<any>(null);
@@ -264,13 +329,63 @@ export default function App() {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef<boolean>(false);
 
-  // Log mount/unmount
+  // Log mount/unmount and handle window close
   useEffect(() => {
     logger.ui.info('App component mounted');
+
+    // Save on window close/reload
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Save current tab content first
+      if (tabsRef.current && tabsRef.current.activeTabId && getContentRef.current) {
+        const currentContent = getContentRef.current();
+        tabsRef.current.updateTab(tabsRef.current.activeTabId, {
+          content: currentContent,
+          isDirty: isDirtyRef.current
+        });
+      }
+
+      // Check if any tabs are dirty
+      let hasDirtyTabs = isDirtyRef.current;
+      if (tabsRef.current && tabsRef.current.tabs) {
+        hasDirtyTabs = hasDirtyTabs || tabsRef.current.tabs.some((tab: any) => tab.isDirty);
+      }
+
+      if (hasDirtyTabs) {
+        console.log('[WINDOW CLOSE] Has unsaved changes');
+        // This will show a dialog in Electron
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to quit?';
+
+        // Try to save current file quickly
+        if (isDirtyRef.current && getContentRef.current && currentFilePath && window.electronAPI) {
+          const content = getContentRef.current();
+          // Fire and forget - don't await
+          window.electronAPI.saveFile(content).then(result => {
+            if (result && result.success) {
+              console.log('[WINDOW CLOSE] Saved current file');
+            }
+          }).catch(error => {
+            console.error('[WINDOW CLOSE] Failed to save:', error);
+          });
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
       logger.ui.info('App component unmounting');
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+
+      // Final save attempt on unmount
+      if (isDirtyRef.current && getContentRef.current && currentFilePath && window.electronAPI) {
+        const content = getContentRef.current();
+        window.electronAPI.saveFile(content).catch(error => {
+          console.error('[UNMOUNT] Failed to save:', error);
+        });
+      }
     };
-  }, []);
+  }, [currentFilePath]);
 
   // Restore state during development HMR (only on mount)
   useEffect(() => {
@@ -293,7 +408,7 @@ export default function App() {
           if (state.filePath) {
             setCurrentFilePath(state.filePath);
             setCurrentFileName(state.fileName);
-            setContent(state.content || '');
+            contentRef.current = state.content || '';
             initialContentRef.current = state.content || '';
             contentVersionRef.current += 1;
             isInitializedRef.current = false;
@@ -336,7 +451,7 @@ export default function App() {
           fileTree,
           filePath: currentFilePath,
           fileName: currentFileName,
-          content: getContentRef.current ? getContentRef.current() : content,
+          content: getContentRef.current ? getContentRef.current() : contentRef.current,
           sidebarWidth: sidebarWidth,
           isDirty: isDirty,
           theme: theme
@@ -352,7 +467,7 @@ export default function App() {
         window.removeEventListener('beforeunload', saveDevState);
       };
     }
-  }, [projectMode, projectPath, projectName, fileTree, currentFilePath, currentFileName, content, sidebarWidth, isDirty, theme]);
+  }, [projectMode, projectPath, projectName, fileTree, currentFilePath, currentFileName, sidebarWidth, isDirty, theme]);
 
   // Load saved sidebar width and AI chat state on mount
   useEffect(() => {
@@ -446,9 +561,10 @@ export default function App() {
   const handleNew = useCallback(() => {
     contentVersionRef.current += 1;
     isInitializedRef.current = false;
-    setContent('');
+    contentRef.current = '';
     setCurrentFilePath(null);
     setCurrentFileName(null);
+    isDirtyRef.current = false;
     setIsDirty(false);
     initialContentRef.current = '';
   }, []);
@@ -462,10 +578,11 @@ export default function App() {
       if (result) {
         contentVersionRef.current += 1;
         isInitializedRef.current = false;
-        setContent(result.content);
+        contentRef.current = result.content;
         setCurrentFilePath(result.filePath);
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
-        setIsDirty(false);
+        isDirtyRef.current = false;
+    setIsDirty(false);
         initialContentRef.current = result.content;
 
         // Create automatic snapshot when opening file
@@ -523,7 +640,8 @@ export default function App() {
         if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Setting current file path to:', result.filePath);
         setCurrentFilePath(result.filePath);
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
-        setIsDirty(false);
+        isDirtyRef.current = false;
+    setIsDirty(false);
         // Update initial content ref to the saved content
         if (getContentRef.current) {
           initialContentRef.current = getContentRef.current();
@@ -537,15 +655,15 @@ export default function App() {
   // Handle save
   const handleSave = useCallback(async () => {
     // Get the current file path from tabs if enabled, otherwise use state
-    const filePath = tabPreferences.preferences.enabled && tabs.activeTab 
-      ? tabs.activeTab.filePath 
+    const filePath = tabPreferences.preferences.enabled && tabs.activeTab
+      ? tabs.activeTab.filePath
       : currentFilePath;
-      
+
     if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] handleSave called, filePath:', filePath);
     if (!window.electronAPI || !getContentRef.current) return;
 
     const content = getContentRef.current();
-    if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Saving content:', { contentLength: content.length, hasFilePath: !!filePath, filePath });
+    if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Saving content:', { contentLength: contentRef.current.length, hasFilePath: !!filePath, filePath });
 
     if (!filePath) {
       if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] No file path, triggering save as');
@@ -562,15 +680,16 @@ export default function App() {
       if (result) {
         setCurrentFilePath(result.filePath);
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
-        setIsDirty(false);
+        isDirtyRef.current = false;
+    setIsDirty(false);
         // Update initial content ref to the saved content
         if (getContentRef.current) {
           initialContentRef.current = getContentRef.current();
         }
-        
+
         // Update tab state if tabs are enabled
         if (tabPreferences.preferences.enabled && tabs.activeTabId) {
-          tabs.updateTab(tabs.activeTabId, { 
+          tabs.updateTab(tabs.activeTabId, {
             isDirty: false,
             lastSaved: new Date()
           });
@@ -580,7 +699,7 @@ export default function App() {
         if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Checking history API:', !!window.electronAPI?.history);
         if (window.electronAPI?.history) {
           try {
-            if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Creating snapshot for:', result.filePath, 'content length:', content.length);
+            if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Creating snapshot for:', result.filePath, 'content length:', contentRef.current.length);
             await window.electronAPI.history.createSnapshot(
               result.filePath,
               content,
@@ -643,7 +762,7 @@ export default function App() {
       const result = await window.electronAPI.switchProjectFile(filePath);
       if (result) {
         if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] File loaded successfully');
-        
+
         // If tabs are enabled, add a new tab
         if (tabPreferences.preferences.enabled) {
           console.log('[TABS] Adding tab for file:', result.filePath);
@@ -655,18 +774,26 @@ export default function App() {
           } else {
             console.log('[TABS] Added tab with ID:', tabId);
             console.log('[TABS] Current tabs after add:', tabs.tabs);
+            // Set initialContentRef for the new tab
+            initialContentRef.current = result.content;
+            setCurrentFilePath(result.filePath);
+            setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
+            contentRef.current = result.content;
+            isDirtyRef.current = false;
+            setIsDirty(false);
           }
         } else {
           // Original non-tab behavior
           contentVersionRef.current += 1;
           isInitializedRef.current = false;
-          setContent(result.content);
+          contentRef.current = result.content;
           setCurrentFilePath(result.filePath);
           setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
-          setIsDirty(false);
+          isDirtyRef.current = false;
+    setIsDirty(false);
           initialContentRef.current = result.content;
         }
-        
+
         // Update current directory based on the file path
         const dirPath = result.filePath.substring(0, result.filePath.lastIndexOf('/'));
         setCurrentDirectory(dirPath);
@@ -790,8 +917,8 @@ export default function App() {
   // Save AI Chat state when it changes (but only after initial load)
   useEffect(() => {
     if (isAIChatStateLoaded && window.electronAPI.setAIChatState) {
-      const state = { 
-        collapsed: isAIChatCollapsed, 
+      const state = {
+        collapsed: isAIChatCollapsed,
         width: aiChatWidth,
         sessionId: currentAISessionId || undefined
       };
@@ -807,9 +934,9 @@ export default function App() {
     const loadRecentFiles = async () => {
       try {
         if (window.electronAPI.getRecentProjectFiles) {
-          console.log('[RECENT_FILES] Loading recent files for project');
+          // console.log('[RECENT_FILES] Loading recent files for project');
           const files = await window.electronAPI.getRecentProjectFiles();
-          console.log('[RECENT_FILES] Loaded recent files:', files);
+          // console.log('[RECENT_FILES] Loaded recent files:', files);
           setRecentProjectFiles(files || []);
         } else {
           console.warn('[RECENT_FILES] getRecentProjectFiles API not available');
@@ -831,20 +958,20 @@ export default function App() {
       window.electronAPI.addToProjectRecentFiles(filePath);
     }
   }, [handleProjectFileSelect]);
-  
+
   // Handle creating a new file in project
   const handleCreateNewFile = useCallback(async (fileName: string) => {
     if (!window.electronAPI || !currentDirectory) return;
-    
+
     const filePath = `${currentDirectory}/${fileName}`;
-    
+
     try {
       // Create the file with empty content
       await window.electronAPI.createFile(filePath, '');
-      
+
       // Open the newly created file
       await handleProjectFileSelect(filePath);
-      
+
       // Refresh file tree
       if (projectPath) {
         const tree = await window.electronAPI.getFolderContents(projectPath);
@@ -858,17 +985,17 @@ export default function App() {
 
   // Handle restoring content from history
   const handleRestoreFromHistory = useCallback((content: string) => {
-    console.log('[App] handleRestoreFromHistory called', { 
+    console.log('[App] handleRestoreFromHistory called', {
       contentLength: content?.length,
       currentVersion: contentVersionRef.current,
       tabsEnabled: tabPreferences.preferences.enabled,
       activeTabId: tabs.activeTabId
     });
-    
+
     // Update content version to force editor remount
     contentVersionRef.current += 1;
     isInitializedRef.current = false;
-    
+
     // Update the content based on tab mode
     if (tabPreferences.preferences.enabled && tabs.activeTabId) {
       // In tab mode, update the active tab's content
@@ -876,10 +1003,11 @@ export default function App() {
       console.log('[App] Updated tab content for tab:', tabs.activeTabId);
     } else {
       // In single file mode, just update the content state
-      setContent(content);
+      contentRef.current = content;
       console.log('[App] Updated content state directly');
     }
-    
+
+    isDirtyRef.current = true;
     setIsDirty(true);
     // Close the history dialog
     setIsHistoryDialogOpen(false);
@@ -915,15 +1043,21 @@ export default function App() {
       autoSaveIntervalRef.current = null;
     }
 
-    // Set up autosave if we have a file path and the document is dirty
-    if (currentFilePath && isDirty && getContentRef.current) {
+    // Set up autosave if we have a file path (check dirty state inside the interval)
+    if (currentFilePath && getContentRef.current) {
       if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Setting up autosave for:', currentFilePath);
 
       autoSaveIntervalRef.current = setInterval(async () => {
-        if (isDirty && currentFilePath && getContentRef.current && window.electronAPI) {
+        console.log('[AUTOSAVE INTERVAL] Checking:', {
+          isDirtyRef: isDirtyRef.current,
+          currentFilePath,
+          hasGetContent: !!getContentRef.current,
+          hasElectronAPI: !!window.electronAPI
+        });
+        if (isDirtyRef.current && currentFilePath && getContentRef.current && window.electronAPI) {
           if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Starting save attempt...');
           if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Current state:', {
-            isDirty,
+            isDirty: isDirtyRef.current,
             currentFilePath,
             hasGetContent: !!getContentRef.current,
             timestamp: new Date().toISOString()
@@ -931,7 +1065,7 @@ export default function App() {
 
           try {
             const content = getContentRef.current();
-            if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Got content, length:', content.length);
+            if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Got content, length:', contentRef.current.length);
 
             // First ensure the backend knows the current file path
             if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Ensuring backend has current file path...');
@@ -949,6 +1083,7 @@ export default function App() {
             if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Save result:', result);
 
             if (result && result.success) {
+              isDirtyRef.current = false;
               setIsDirty(false);
               initialContentRef.current = content;
               if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] ✓ Autosaved successfully to:', result.filePath);
@@ -989,7 +1124,7 @@ export default function App() {
           }
         } else {
           if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Skipping autosave - conditions not met:', {
-            isDirty,
+            isDirty: isDirtyRef.current,
             currentFilePath,
             hasGetContent: !!getContentRef.current,
             hasElectronAPI: !!window.electronAPI
@@ -999,7 +1134,6 @@ export default function App() {
     } else {
       if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Not setting up autosave:', {
         hasPath: !!currentFilePath,
-        isDirty,
         hasGetContent: !!getContentRef.current
       });
     }
@@ -1012,7 +1146,68 @@ export default function App() {
         autoSaveIntervalRef.current = null;
       }
     };
-  }, [currentFilePath, isDirty])
+  }, [currentFilePath])  // Remove isDirty from deps - use ref instead
+
+  // Set up autosave when we have both a file path and the content getter
+  useEffect(() => {
+    // Clear any existing interval first
+    if (autoSaveIntervalRef.current) {
+      clearInterval(autoSaveIntervalRef.current);
+      autoSaveIntervalRef.current = null;
+    }
+
+    if (!currentFilePath) {
+      return;
+    }
+
+    // Check every second if we have getContentRef, then set up autosave
+    const checkInterval = setInterval(() => {
+      if (getContentRef.current) {
+        clearInterval(checkInterval);
+
+        console.log('[AUTOSAVE] Setting up autosave interval - getContentRef is now available');
+
+        autoSaveIntervalRef.current = setInterval(async () => {
+          // console.log('[AUTOSAVE CHECK] Checking dirty state:', {
+          //   isDirtyRef: isDirtyRef.current,
+          //   currentFilePath,
+          //   hasGetContent: !!getContentRef.current
+          // });
+
+          if (isDirtyRef.current && currentFilePath && getContentRef.current && window.electronAPI) {
+            // console.log('[AUTOSAVE] Saving...');
+            try {
+              const content = getContentRef.current();
+              const result = await window.electronAPI.saveFile(content);
+              if (result && result.success) {
+                isDirtyRef.current = false;
+                setIsDirty(false);
+                initialContentRef.current = content;
+
+                // Update the tab's dirty state using ref to get current tabs
+                if (tabsRef.current && tabsRef.current.activeTabId) {
+                  // console.log('[AUTOSAVE] Updating tab dirty state for:', tabsRef.current.activeTabId);
+                  tabsRef.current.updateTab(tabsRef.current.activeTabId, { isDirty: false });
+                }
+
+                // console.log('[AUTOSAVE] ✓ Saved successfully');
+              }
+            } catch (error) {
+              console.error('[AUTOSAVE] Failed:', error);
+            }
+          }
+        }, 10000);
+      }
+    }, 100);
+
+    return () => {
+      clearInterval(checkInterval);
+      if (autoSaveIntervalRef.current) {
+        clearInterval(autoSaveIntervalRef.current);
+        autoSaveIntervalRef.current = null;
+      }
+    };
+  }, [currentFilePath]) // Only re-run when file path changes
 
   // Automatic snapshot functionality
   useEffect(() => {
@@ -1072,11 +1267,11 @@ export default function App() {
               tabs.updateTab(tabs.activeTab.id, { content: result.content });
               setCurrentFilePath(tabs.activeTab.filePath);
               setCurrentFileName(tabs.activeTab.fileName);
-              setContent(result.content);
+              contentRef.current = result.content;
               initialContentRef.current = result.content;
               contentVersionRef.current += 1;
               setIsDirty(tabs.activeTab.isDirty);
-              
+
               // Update the main process
               if (window.electronAPI) {
                 window.electronAPI.setCurrentFile(tabs.activeTab.filePath);
@@ -1089,11 +1284,11 @@ export default function App() {
           // Tab already has content, just set it
           setCurrentFilePath(tabs.activeTab.filePath);
           setCurrentFileName(tabs.activeTab.fileName);
-          setContent(tabs.activeTab.content);
+          contentRef.current = tabs.activeTab.content;
           initialContentRef.current = tabs.activeTab.content;
           contentVersionRef.current += 1;
           setIsDirty(tabs.activeTab.isDirty);
-          
+
           // Update the main process
           if (window.electronAPI) {
             window.electronAPI.setCurrentFile(tabs.activeTab.filePath);
@@ -1109,7 +1304,7 @@ export default function App() {
       setIsInitializing(false);
       return;
     }
-    
+
     window.electronAPI.getInitialState().then((initialState) => {
       if (initialState && initialState.mode === 'project') {
         // Set project state immediately
@@ -1142,7 +1337,7 @@ export default function App() {
         console.error('Failed to check for API key:', error);
       }
     };
-    
+
     // Only check on initial mount (when currentFilePath is null)
     if (!currentFilePath && !sessionToLoad) {
       checkFirstLaunch();
@@ -1152,7 +1347,7 @@ export default function App() {
     const cleanupFns: Array<() => void> = [];
 
     cleanupFns.push(window.electronAPI.onFileNew(handleNew));
-    
+
     // Handle new file in project mode
     if (window.electronAPI.onFileNewInProject) {
       cleanupFns.push(window.electronAPI.onFileNewInProject(() => {
@@ -1177,10 +1372,11 @@ export default function App() {
       // Set current directory to project root
       setCurrentDirectory(data.projectPath);
       // Clear current document
-      setContent('');
+      contentRef.current = '';
       setCurrentFilePath(null);
       setCurrentFileName(null);
-      setIsDirty(false);
+      isDirtyRef.current = false;
+    setIsDirty(false);
       contentVersionRef.current += 1;
       isInitializedRef.current = false;
 
@@ -1224,10 +1420,11 @@ export default function App() {
       if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] File opened from OS:', data.filePath);
       contentVersionRef.current += 1;
       isInitializedRef.current = false;
-      setContent(data.content);
+      contentRef.current = data.content;
       setCurrentFilePath(data.filePath);
       setCurrentFileName(data.filePath.split('/').pop() || data.filePath);
-      setIsDirty(false);
+      isDirtyRef.current = false;
+    setIsDirty(false);
       initialContentRef.current = data.content;
 
       // Create automatic snapshot when file is opened from OS
@@ -1267,7 +1464,7 @@ export default function App() {
     }));
     cleanupFns.push(window.electronAPI.onNewUntitledDocument((data) => {
       logger.file.log('Received new-untitled-document event:', data.untitledName);
-      setContent('');
+      contentRef.current = '';
       setCurrentFilePath(null);
       setCurrentFileName(data.untitledName);
       // setIsDirty(true); // New documents start as dirty
@@ -1295,7 +1492,8 @@ export default function App() {
       if (currentFilePath === data.filePath) {
         // Current file was deleted, mark as dirty and clear the file path
         setCurrentFilePath(null);
-        setIsDirty(true);
+        isDirtyRef.current = true;
+    setIsDirty(true);
         // Optionally show a notification to the user
         alert('The file has been deleted from disk.');
       }
@@ -1533,10 +1731,10 @@ export default function App() {
       // console.log('Cleaning up IPC listeners');
       cleanupFns.forEach(cleanup => cleanup());
     };
-  }, [handleNew, handleOpen, handleSave, handleSaveAs, currentFilePath, isDirty, getContentRef.current]);
+  }, [handleNew, handleOpen, handleSave, handleSaveAs, currentFilePath, isDirty]);
 
   logger.ui.info('Rendering App with config:', {
-    contentLength: content.length,
+    contentLength: contentRef.current.length,
     currentFileName,
     theme
   });
@@ -1609,12 +1807,12 @@ export default function App() {
         </>
       )}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {console.log('[APP] Rendering TabManager check:', {
-          enabled: tabPreferences.preferences.enabled,
-          projectMode,
-          numTabs: tabs.tabs.length,
-          activeTabId: tabs.activeTabId
-        })}
+        {/*{console.log('[APP] Rendering TabManager check:', {*/}
+        {/*  enabled: tabPreferences.preferences.enabled,*/}
+        {/*  projectMode,*/}
+        {/*  numTabs: tabs.tabs.length,*/}
+        {/*  activeTabId: tabs.activeTabId*/}
+        {/*})}*/}
         {tabPreferences.preferences.enabled && projectMode ? (
           <TabManager
             tabs={tabs.tabs}
@@ -1637,19 +1835,35 @@ export default function App() {
                 key={`${tabs.activeTabId}-${contentVersionRef.current}-${theme}`}
                 config={{
                   initialContent: tabs.activeTab.content || '',
-                  onContentChange: (newContent) => {
-                    logger.editor.log('Content changed in tab:', tabs.activeTabId);
-                    
-                    if (getContentRef.current && tabs.activeTabId) {
+                  onContentChange: () => {
+                    // Track dirty state in ref for autosave without re-rendering
+                    if (getContentRef.current) {
                       const currentContent = getContentRef.current();
-                      const hasChanged = currentContent !== tabs.activeTab?.content;
-                      
-                      tabs.updateTab(tabs.activeTabId, {
-                        content: currentContent,
-                        isDirty: hasChanged
-                      });
-                      
-                      setIsDirty(hasChanged);
+                      const hasChanged = currentContent !== initialContentRef.current;
+
+                      // console.log('[TAB CONTENT CHANGE] Dirty check:', {
+                      //   hasChanged,
+                      //   currentLength: currentContent.length,
+                      //   initialLength: initialContentRef.current.length,
+                      //   isDirtyRef: isDirtyRef.current
+                      // });
+
+                      // Update ref immediately for autosave
+                      isDirtyRef.current = hasChanged;
+
+                      // Track tab dirty state in ref
+                      if (tabs.activeTabId) {
+                        tabStatesRef.current.set(tabs.activeTabId, { isDirty: hasChanged });
+                      }
+
+                      // Only update state if the visual indicator needs to change
+                      if (isDirty !== hasChanged) {
+                        setIsDirty(hasChanged);
+                        // Also update the tab's dirty state for UI
+                        if (tabs.activeTabId) {
+                          tabs.updateTab(tabs.activeTabId, { isDirty: hasChanged });
+                        }
+                      }
                     }
                   },
                   onGetContent: (getContentFn) => {
@@ -1675,38 +1889,18 @@ export default function App() {
           <StravuEditor
             key={`${contentVersionRef.current}-${theme}`}
             config={{
-              initialContent: content,
-              onContentChange: (newContent) => {
-            logger.editor.log('Content changed:', newContent.length, 'initialized:', isInitializedRef.current);
-
-            // Check if content actually changed from initial
+              initialContent: contentRef.current,
+              onContentChange: () => {
+            // Track dirty state in ref for autosave without re-rendering
             if (getContentRef.current) {
               const currentContent = getContentRef.current();
               const hasChanged = currentContent !== initialContentRef.current;
 
-              // Update tab content if tabs are enabled
-              if (tabPreferences.preferences.enabled && tabs.activeTabId) {
-                tabs.updateTab(tabs.activeTabId, { 
-                  content: currentContent,
-                  isDirty: hasChanged
-                });
-              }
+              // Update ref immediately for autosave
+              isDirtyRef.current = hasChanged;
 
-              // On first onChange, mark as initialized
-              if (!isInitializedRef.current) {
-                isInitializedRef.current = true;
-                // If content is different on first change, it's a real user edit
-                if (hasChanged) {
-                  logger.editor.log('First change is a real user edit');
-                  setIsDirty(true);
-                }
-                // If content is same, it's just initialization - no need to set dirty
-                return;
-              }
-
-              // After initialization, normal dirty checking
-              if (hasChanged !== isDirty) {
-                logger.editor.log('Dirty state changed to:', hasChanged);
+              // Only update state if the visual indicator needs to change
+              if (isDirty !== hasChanged) {
                 setIsDirty(hasChanged);
               }
             }
@@ -1742,7 +1936,7 @@ export default function App() {
           documentContext={{
             filePath: currentFilePath || '',
             fileType: 'markdown',
-            content: getContentRef.current ? getContentRef.current() : content,
+            content: getContentRef.current ? getContentRef.current() : contentRef.current,
             cursorPosition: undefined, // TODO: Get from Lexical editor
             selection: undefined, // TODO: Get selected text from Lexical
             getLatestContent: getContentRef.current // Pass the function itself
