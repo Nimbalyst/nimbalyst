@@ -1,6 +1,14 @@
 import {$createParagraphNode, $createTextNode, $getNodeByKey, LexicalEditor} from 'lexical';
-import {GraphCollaborationHooks} from '../../space/graph/GraphCollaborationProvider';
+// import {GraphCollaborationHooks} from '../../space/graph/GraphCollaborationProvider';
 import {BoardConfig} from './BoardConfigDialog';
+
+// Stub interface until GraphCollaborationProvider is implemented
+interface GraphCollaborationHooks {
+  onEntityUpdated?: (entity: any) => void;
+  onEntityDeleted?: (entityUri: string) => void;
+  updateEntity?: (entity: any) => Promise<void>;
+  updateEntityProperty?: (entityUri: string, property: string, value: any) => Promise<void>;
+}
 import {$isBoardNode} from './BoardNode';
 import {$createColumnNode} from './BoardColumnNode';
 import {$createColumnHeaderNode} from './BoardColumnHeaderNode';
@@ -104,6 +112,7 @@ export class BoardSyncService {
 
             // Filter entities for this column
             const columnEntities = entities.filter(entity => {
+              if (!this.config.statusPropertyId) return false;
               const statusValue = entity.properties[this.config.statusPropertyId];
               return statusValue === option.value;
             });
@@ -178,13 +187,15 @@ export class BoardSyncService {
       // Update the entity through the collaboration hooks
       // Note: This assumes updateEntityProperty exists - may need to use updateEntity instead
       try {
-        await this.hooks.updateEntity({
-          uri: entityUri,
-          type: this.config.entityTypeId,
-          properties: {
-            [this.config.statusPropertyId]: newStatusValue
-          }
-        });
+        if (this.config.statusPropertyId) {
+          await this.hooks.updateEntity({
+            uri: entityUri,
+            type: this.config.entityTypeId,
+            properties: {
+              [this.config.statusPropertyId]: newStatusValue
+            }
+          });
+        }
       } catch (error) {
         console.error('Failed to update entity via collaboration hooks:', error);
         // Fallback: try direct property update if available

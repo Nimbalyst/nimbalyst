@@ -14,6 +14,10 @@ import {
   BoardNode,
 } from './BoardNode';
 import {
+  $createBoardHeaderNode,
+  $isBoardHeaderNode,
+} from './BoardHeaderNode';
+import {
   $createColumnNode,
   $isColumnNode,
   BoardColumnNode,
@@ -28,7 +32,6 @@ import {
 import {
   $createCardNode,
   $isCardNode,
-  CardData,
 } from './BoardCardNode';
 
 // Parse the metadata block for board configuration
@@ -90,13 +93,23 @@ export const BOARD_TABLE_TRANSFORMER: MultilineElementTransformer = {
 
     const output: string[] = [];
 
+    // Extract the board title from the header node
+    let boardTitle = 'Kanban Board'; // default title
+    const children = node.getChildren();
+    const headerNode = children.find($isBoardHeaderNode);
+    if (headerNode) {
+      const titleText = headerNode.getTextContent();
+      if (titleText) {
+        boardTitle = titleText;
+      }
+    }
+
     // Create table from board columns and cards
-    const columns = node.getChildren();
-    const columnData: Map<string, string[]> = new Map();
+    const columnData: Map<string, any[]> = new Map();
     const statusValues: string[] = [];
 
     // Gather columns and their cards
-    for (const column of columns) {
+    for (const column of children) {
       if ($isColumnNode(column)) {
         // Get header from the column's header node
         const headerNode = column.getChildren().find(child => child.getType() === 'kanban-column-header');
@@ -127,6 +140,7 @@ export const BOARD_TABLE_TRANSFORMER: MultilineElementTransformer = {
     output.push('```board-table');
 
     // Add metadata
+    output.push(`title: ${boardTitle}`);
     output.push('status-column: Status');
     output.push('view: board');
 
@@ -175,7 +189,7 @@ export const BOARD_TABLE_TRANSFORMER: MultilineElementTransformer = {
   },
   regExpStart: /^```board-table$/,
   regExpEnd: {
-    optional: false,
+    optional: true,
     regExp: /^```$/,
   },
   replace: (rootNode, children, startMatch, endMatch, linesInBetween) => {
@@ -188,7 +202,6 @@ export const BOARD_TABLE_TRANSFORMER: MultilineElementTransformer = {
     const metadataLines: string[] = [];
     let tableStartIndex = 0;
 
-    let foundEmptyLine = false;
     for (let i = 0; i < linesInBetween.length; i++) {
       const line = linesInBetween[i].trim();
 
@@ -200,7 +213,6 @@ export const BOARD_TABLE_TRANSFORMER: MultilineElementTransformer = {
       // Empty line after metadata marks the end of metadata
       if (line === '' && metadataLines.length > 0) {
         tableStartIndex = i + 1;
-        foundEmptyLine = true;
         break;
       }
 
@@ -269,7 +281,7 @@ export const BOARD_TABLE_TRANSFORMER: MultilineElementTransformer = {
         title,
         owner: owner !== '-' ? owner : undefined,
         dueDate: dueDate !== '-' ? dueDate : undefined,
-        priority: priority !== '-' ? priority : undefined,
+        priority: priority !== '-' && priority ? priority : undefined,
         description: description !== '-' ? description : undefined,
         data: cells
       });
@@ -277,6 +289,13 @@ export const BOARD_TABLE_TRANSFORMER: MultilineElementTransformer = {
 
     // Create the BoardNode with columns
     const boardNode = $createBoardNode();
+
+    // Create and add the board header with title
+    const boardHeader = $createBoardHeaderNode();
+    const titleParagraph = $createParagraphNode();
+    titleParagraph.append($createTextNode(metadata.title || 'Kanban Board'));
+    boardHeader.append(titleParagraph);
+    boardNode.append(boardHeader);
 
     // Create columns for each status
     // Use columns from metadata if available, otherwise use statuses from data

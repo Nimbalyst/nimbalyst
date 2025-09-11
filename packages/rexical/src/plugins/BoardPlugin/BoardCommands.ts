@@ -13,6 +13,9 @@ import {
   $createBoardNode,
   $isBoardNode,
 } from './BoardNode';
+import {
+  $createBoardHeaderNode,
+} from './BoardHeaderNode';
 import { BoardConfig } from './BoardConfigDialog';
 import {
   $createColumnNode,
@@ -71,6 +74,13 @@ export function registerKanbanCommands(editor: LexicalEditor): () => void {
       if ($isRangeSelection(selection)) {
         const kanbanBoard = $createBoardNode();
 
+        // Create header node with title
+        const headerNode = $createBoardHeaderNode();
+        const titleParagraph = $createParagraphNode();
+        titleParagraph.append($createTextNode('Kanban Board'));
+        headerNode.append(titleParagraph);
+        kanbanBoard.append(headerNode);
+
         // Create columns with header and content nodes
         const createColumn = (title: string) => {
           const column = $createColumnNode();
@@ -118,6 +128,13 @@ export function registerKanbanCommands(editor: LexicalEditor): () => void {
       const selection = $getSelection();
       if ($isRangeSelection(selection)) {
         const kanbanBoard = $createBoardNode(config);
+        
+        // Create header node with title
+        const headerNode = $createBoardHeaderNode();
+        const titleParagraph = $createParagraphNode();
+        titleParagraph.append($createTextNode('Kanban Board'));
+        headerNode.append(titleParagraph);
+        kanbanBoard.append(headerNode);
         
         // Board will be populated by the sync service once it starts
         // Just insert the configured board node for now

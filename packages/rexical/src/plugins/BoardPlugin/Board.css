@@ -26,8 +26,15 @@
   transition: border-color 0.2s ease;
   margin: 1rem 0;
   position: relative;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+/* Header spans full width */
+.kanban-board > .kanban-board-header {
+  grid-column: 1 / -1;
 }
 
 .kanban-board:hover {
@@ -37,9 +44,41 @@
 .kanban-board-header {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 1rem;
+}
+
+.kanban-board-title-container {
+  flex-grow: 1;
+}
+
+.kanban-board-title-container h1,
+.kanban-board-title-container h2,
+.kanban-board-title-container h3,
+.kanban-board-title-container p {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  cursor: text;
+  transition: background-color 0.2s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*.kanban-board-title-container *:hover,*/
+/*.kanban-board-title-container *:focus {*/
+/*  background-color: rgba(0, 0, 0, 0.05);*/
+/*  outline: none;*/
+/*}*/
+
+.kanban-board-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .kanban-board:hover .board-settings-button {
@@ -66,12 +105,7 @@
   border-color: #999;
 }
 
-.kanban-columns-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1rem;
-  flex: 1;
-}
+/* Columns are now direct children of .kanban-board, handled by board's grid */
 
 .kanban-add-column-button {
   background: white;
@@ -467,6 +501,18 @@
 
 .stravu-editor[data-theme="dark"] .kanban-board:hover {
   border-color: var(--stravu-focus-border);
+}
+
+.stravu-editor[data-theme="dark"] .kanban-board-title-container h1,
+.stravu-editor[data-theme="dark"] .kanban-board-title-container h2,
+.stravu-editor[data-theme="dark"] .kanban-board-title-container h3,
+.stravu-editor[data-theme="dark"] .kanban-board-title-container p {
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="dark"] .kanban-board-title-container *:hover,
+.stravu-editor[data-theme="dark"] .kanban-board-title-container *:focus {
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 .stravu-editor[data-theme="dark"] .board-settings-button {

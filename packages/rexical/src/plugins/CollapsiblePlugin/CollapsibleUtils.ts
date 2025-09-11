@@ -12,6 +12,6 @@ export function setDomHiddenUntilFound(dom: HTMLElement): void {
 }
 
 export function domOnBeforeMatch(dom: HTMLElement, callback: () => void): void {
-  // @ts-expect-error
-  dom.onbeforematch = callback;
+  // onbeforematch is a new experimental API that may not be in TypeScript types yet
+  (dom as any).onbeforematch = callback;
 }

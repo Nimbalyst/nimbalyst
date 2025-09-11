@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {INSERT_BOARD_COMMAND, INSERT_CONFIGURED_BOARD_COMMAND} from './BoardCommands';
 import { BoardConfigDialog, BoardConfig } from './BoardConfigDialog';
-import { Button } from 'primereact/button';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faColumns, faCog } from '@fortawesome/pro-light-svg-icons';
+// import { Button } from 'primereact/button';
+// import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+// import { faColumns, faCog } from '@fortawesome/pro-light-svg-icons';
 
 export function BoardToolbar(): JSX.Element {
   const [editor] = useLexicalComposerContext();

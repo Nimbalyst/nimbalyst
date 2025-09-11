@@ -14,12 +14,16 @@ import {mergeRegister} from '@lexical/utils';
 
 import {
     registerKanbanCommands,
-    MOVE_BOARD_CARD_COMMAND,
 } from './BoardCommands';
 import {
     BoardNode,
     $isBoardNode,
 } from './BoardNode';
+import {
+    BoardHeaderNode,
+    $isBoardHeaderNode,
+    $createBoardHeaderNode,
+} from './BoardHeaderNode';
 import {
     BoardColumnNode,
     $isColumnNode,
@@ -67,8 +71,8 @@ export function BoardPlugin(): JSX.Element | null {
     const [currentCardData, setCurrentCardData] = useState<CardData>({ title: '' });
 
     useEffect(() => {
-        console.log("BoardPlugin mounted");
-        if (!editor.hasNodes([BoardNode, BoardColumnNode, BoardColumnHeaderNode, BoardColumnContentNode, BoardCardNode])) {
+        // console.log("BoardPlugin mounted");
+        if (!editor.hasNodes([BoardNode, BoardHeaderNode, BoardColumnNode, BoardColumnHeaderNode, BoardColumnContentNode, BoardCardNode])) {
             throw new Error(
                 'BoardPlugin: Required nodes not registered on editor',
             );
@@ -142,7 +146,7 @@ export function BoardPlugin(): JSX.Element | null {
         // Handle add card events
         const handleAddCard = (event: CustomEvent) => {
             const { contentNodeKey } = event.detail;
-            
+
             editor.update(() => {
                 const contentNode = $getNodeByKey(contentNodeKey);
                 if ($isColumnContentNode(contentNode)) {
@@ -152,7 +156,7 @@ export function BoardPlugin(): JSX.Element | null {
                     paragraph.append($createTextNode('New card'));
                     newCard.append(paragraph);
                     contentNode.append(newCard);
-                    
+
                     // Select the new card text for editing
                     paragraph.select();
                 }
@@ -164,25 +168,25 @@ export function BoardPlugin(): JSX.Element | null {
         // Handle add column events
         const handleAddColumn = (event: CustomEvent) => {
             const { boardNodeKey } = event.detail;
-            
+
             editor.update(() => {
                 const boardNode = $getNodeByKey(boardNodeKey);
                 if ($isBoardNode(boardNode)) {
                     // Create a new column with header and content
                     const column = $createColumnNode();
-                    
+
                     // Create header with default title
                     const header = $createColumnHeaderNode();
                     const headerParagraph = $createParagraphNode();
                     headerParagraph.append($createTextNode('New Column'));
                     header.append(headerParagraph);
-                    
+
                     // Create content area for cards
                     const content = $createColumnContentNode();
-                    
+
                     column.append(header, content);
                     boardNode.append(column);
-                    
+
                     // Select the header text for editing
                     headerParagraph.select();
                 }
@@ -194,7 +198,7 @@ export function BoardPlugin(): JSX.Element | null {
         // Handle delete column events
         const handleDeleteColumn = (event: CustomEvent) => {
             const { columnNodeKey } = event.detail;
-            
+
             editor.update(() => {
                 // Find the column node by traversing from the header
                 const headerNode = $getNodeByKey(columnNodeKey);
@@ -213,7 +217,7 @@ export function BoardPlugin(): JSX.Element | null {
         // Handle delete card events
         const handleDeleteCard = (event: CustomEvent) => {
             const { cardNodeKey } = event.detail;
-            
+
             editor.update(() => {
                 const cardNode = $getNodeByKey(cardNodeKey);
                 if ($isCardNode(cardNode)) {
@@ -227,7 +231,7 @@ export function BoardPlugin(): JSX.Element | null {
         // Handle edit card events
         const handleEditCard = (event: CustomEvent) => {
             const { cardNodeKey, currentData } = event.detail;
-            
+
             setCurrentEditCardKey(cardNodeKey);
             setCurrentCardData(currentData);
             setShowCardEditDialog(true);
@@ -291,7 +295,7 @@ export function BoardPlugin(): JSX.Element | null {
                 (event: DragEvent) => {
                     // Always reset visual feedback when drop occurs
                     resetColumnVisualFeedback();
-                    
+
                     const target = event.target as HTMLElement;
                     const columnContent = target.closest('.kanban-column-content');
                     const column = target.closest('.kanban-column');
@@ -440,15 +444,15 @@ export function BoardPlugin(): JSX.Element | null {
                 // Get the parent before modifying
                 const parent = cardNode.getParent();
                 const index = parent ? parent.getChildren().indexOf(cardNode) : -1;
-                
+
                 // Create a new card with updated data
                 const newCard = $createCardNode(cardNode.getId(), data);
-                
+
                 // Copy the text content
                 const paragraph = $createParagraphNode();
                 paragraph.append($createTextNode(data.title || 'Untitled'));
                 newCard.append(paragraph);
-                
+
                 // Replace the old card with the new one
                 if (parent && index !== -1) {
                     cardNode.replace(newCard);

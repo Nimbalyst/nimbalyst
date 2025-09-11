@@ -6,7 +6,6 @@ export interface BoardConfig {
   entityTypeName?: string;
   statusPropertyId?: string;
   statusPropertyName?: string;
-  title?: string;
   filter?: string;
   visibleFields?: {
     owner: boolean;
@@ -24,7 +23,6 @@ interface BoardConfigDialogProps {
 }
 
 export function BoardConfigDialog({ visible, onHide, onSelect, initialConfig }: BoardConfigDialogProps) {
-  const [title, setTitle] = useState(initialConfig?.title || 'My Board');
   const [visibleFields, setVisibleFields] = useState({
     owner: initialConfig?.visibleFields?.owner ?? true,
     dueDate: initialConfig?.visibleFields?.dueDate ?? true,
@@ -36,7 +34,6 @@ export function BoardConfigDialog({ visible, onHide, onSelect, initialConfig }: 
   
   const handleSave = () => {
     const config: BoardConfig = {
-      title,
       visibleFields,
       ...initialConfig
     };
@@ -56,19 +53,6 @@ export function BoardConfigDialog({ visible, onHide, onSelect, initialConfig }: 
       <div className="board-config-dialog">
         <h3 className="board-config-title">Board Configuration</h3>
         
-        <div className="board-config-section">
-          <label className="board-config-label">
-            Board Title:
-          </label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="board-config-input"
-            placeholder="Enter board title"
-          />
-        </div>
-
         <div className="board-config-section">
           <label className="board-config-label">
             Visible Card Fields:

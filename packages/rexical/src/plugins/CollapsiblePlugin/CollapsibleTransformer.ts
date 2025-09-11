@@ -3,7 +3,7 @@
  * Supports standard markdown-compatible collapsible sections
  */
 
-import {$createTextNode, $isElementNode, $isTextNode, LexicalNode, $isParagraphNode} from 'lexical';
+import {$createTextNode, $isElementNode, $isTextNode, LexicalNode} from 'lexical';
 import {$convertFromMarkdownString, $convertToMarkdownString, MultilineElementTransformer} from '@lexical/markdown';
 import {
     $createStyledCollapsible,
