@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import './BoardConfigDialog.css';
 
 export interface BoardConfig {
   entityTypeId?: string;
@@ -51,114 +52,67 @@ export function BoardConfigDialog({ visible, onHide, onSelect, initialConfig }: 
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 10000
-    }}>
-      <div style={{
-        backgroundColor: 'white',
-        padding: '24px',
-        borderRadius: '8px',
-        minWidth: '400px',
-        maxWidth: '500px'
-      }}>
-        <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '600' }}>Board Configuration</h3>
+    <div className="board-config-overlay">
+      <div className="board-config-dialog">
+        <h3 className="board-config-title">Board Configuration</h3>
         
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+        <div className="board-config-section">
+          <label className="board-config-label">
             Board Title:
           </label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              fontSize: '14px'
-            }}
+            className="board-config-input"
             placeholder="Enter board title"
           />
         </div>
 
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '12px', fontWeight: '500' }}>
+        <div className="board-config-section">
+          <label className="board-config-label">
             Visible Card Fields:
           </label>
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div className="board-config-fields">
             {[
-              { key: 'owner', label: '👤 Owner', desc: 'Show card owner' },
-              { key: 'dueDate', label: '📅 Due Date', desc: 'Show due dates' },
-              { key: 'priority', label: '🔴 Priority', desc: 'Show priority indicators' },
-              { key: 'description', label: '📝 Description', desc: 'Show description field' }
-            ].map(({ key, label, desc }) => (
-              <label key={key} style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px',
-                padding: '8px',
-                cursor: 'pointer',
-                borderRadius: '4px',
-                backgroundColor: visibleFields[key as keyof typeof visibleFields] ? '#f0f8ff' : 'transparent'
-              }}>
+              { key: 'owner', icon: 'person', label: 'Owner', desc: 'Show card owner' },
+              { key: 'dueDate', icon: 'calendar_today', label: 'Due Date', desc: 'Show due dates' },
+              { key: 'priority', icon: 'priority_high', label: 'Priority', desc: 'Show priority indicators' },
+              { key: 'description', icon: 'description', label: 'Description', desc: 'Show description field' }
+            ].map(({ key, icon, label, desc }) => (
+              <label 
+                key={key} 
+                className={`board-config-field-option ${visibleFields[key as keyof typeof visibleFields] ? 'active' : ''}`}
+              >
                 <input
                   type="checkbox"
                   checked={visibleFields[key as keyof typeof visibleFields]}
                   onChange={() => handleFieldToggle(key as keyof typeof visibleFields)}
-                  style={{ margin: 0 }}
+                  className="board-config-field-checkbox"
                 />
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: '500' }}>{label}</div>
-                  <div style={{ fontSize: '12px', color: '#666' }}>{desc}</div>
+                <div className="board-config-field-info">
+                  <div className="board-config-field-label">
+                    <span className="material-symbols-outlined">{icon}</span>
+                    {label}
+                  </div>
+                  <div className="board-config-field-desc">{desc}</div>
                 </div>
               </label>
             ))}
           </div>
         </div>
 
-        <div style={{ 
-          marginTop: '24px', 
-          display: 'flex', 
-          gap: '12px', 
-          justifyContent: 'flex-end',
-          borderTop: '1px solid #eee',
-          paddingTop: '16px'
-        }}>
+        <div className="board-config-actions">
           <button 
             onClick={onHide}
-            style={{
-              padding: '8px 16px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              backgroundColor: 'white',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
+            className="board-config-button board-config-button-cancel"
           >
             Cancel
           </button>
           <button 
             onClick={handleSave}
-            style={{
-              padding: '8px 16px',
-              border: '1px solid #4a90e2',
-              borderRadius: '4px',
-              backgroundColor: '#4a90e2',
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
+            className="board-config-button board-config-button-save"
           >
             Save Configuration
           </button>

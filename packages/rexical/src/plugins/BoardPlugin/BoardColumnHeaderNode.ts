@@ -36,7 +36,7 @@ export class BoardColumnHeaderNode extends ElementNode {
     // Drag handle for column reordering
     const dragHandle = document.createElement('div');
     dragHandle.className = 'kanban-column-drag-handle';
-    dragHandle.innerHTML = '⋮⋮';
+    dragHandle.innerHTML = '<span class="material-symbols-outlined">drag_indicator</span>';
     dragHandle.title = 'Drag to reorder column';
     
     // Header content area (where lexical nodes go)
@@ -50,7 +50,7 @@ export class BoardColumnHeaderNode extends ElementNode {
     // Delete button
     const deleteButton = document.createElement('button');
     deleteButton.className = 'kanban-column-delete';
-    deleteButton.innerHTML = '×';
+    deleteButton.innerHTML = '<span class="material-symbols-outlined">close</span>';
     deleteButton.type = 'button';
     deleteButton.title = 'Delete column';
     
@@ -65,29 +65,8 @@ export class BoardColumnHeaderNode extends ElementNode {
         }
       }));
     });
-    
-    // Menu button
-    const menuButton = document.createElement('button');
-    menuButton.className = 'kanban-column-menu-button';
-    menuButton.innerHTML = '⋯';
-    menuButton.type = 'button';
 
-    // Menu button click handler
-    menuButton.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      // Dispatch a custom event for the column menu
-      const menuEvent = new CustomEvent('kanban-column-menu', {
-        detail: {
-          columnElement: element.closest('.kanban-column'),
-          buttonElement: menuButton,
-        }
-      });
-      window.dispatchEvent(menuEvent);
-    });
-
-    columnActions.append(deleteButton, menuButton);
+    columnActions.appendChild(deleteButton);
     element.append(dragHandle, headerContent, columnActions);
     
     // Make the entire column draggable via the header

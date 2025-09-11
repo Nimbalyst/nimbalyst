@@ -23,13 +23,16 @@ import {
 import {
     BoardColumnNode,
     $isColumnNode,
+    $createColumnNode,
 } from './BoardColumnNode';
 import {
     BoardColumnHeaderNode,
+    $createColumnHeaderNode,
 } from './BoardColumnHeaderNode';
 import {
     BoardColumnContentNode,
     $isColumnContentNode,
+    $createColumnContentNode,
 } from './BoardColumnContentNode';
 import {
     BoardCardNode,
@@ -47,6 +50,8 @@ class BoardSyncService {
     updateConfig(config: any) {}
 }
 import {BoardConfigDialog, BoardConfig} from './BoardConfigDialog';
+import {CardEditDialog} from './CardEditDialog';
+import {CardData} from './BoardCardNode';
 import {createPortal} from 'react-dom';
 
 export function BoardPlugin(): JSX.Element | null {
@@ -56,6 +61,9 @@ export function BoardPlugin(): JSX.Element | null {
     const [showConfigDialog, setShowConfigDialog] = useState(false);
     const [currentConfigNodeKey, setCurrentConfigNodeKey] = useState<string | null>(null);
     const [currentConfig, setCurrentConfig] = useState<BoardConfig | null>(null);
+    const [showCardEditDialog, setShowCardEditDialog] = useState(false);
+    const [currentEditCardKey, setCurrentEditCardKey] = useState<string | null>(null);
+    const [currentCardData, setCurrentCardData] = useState<CardData>({ title: '' });
 
     useEffect(() => {
         console.log("BoardPlugin mounted");
@@ -129,21 +137,126 @@ export function BoardPlugin(): JSX.Element | null {
 
         window.addEventListener('board-configure', handleBoardConfigure as EventListener);
 
-        // Handle column menu events
-        const handleColumnMenu = (event: CustomEvent) => {
-            const {columnElement, buttonElement} = event.detail;
-            console.log('Column menu clicked:', {columnElement, buttonElement});
-
-            // TODO: Implement column menu functionality
-            // This could open a context menu with options like:
-            // - Add card
-            // - Delete column
-            // - Rename column
-            // - Add enum selector
-            // - Configure column
+        // Handle add card events
+        const handleAddCard = (event: CustomEvent) => {
+            const { contentNodeKey } = event.detail;
+            
+            editor.update(() => {
+                const contentNode = $getNodeByKey(contentNodeKey);
+                if ($isColumnContentNode(contentNode)) {
+                    // Create a new card with editable content
+                    const newCard = $createCardNode();
+                    const paragraph = $createParagraphNode();
+                    paragraph.append($createTextNode('New card'));
+                    newCard.append(paragraph);
+                    contentNode.append(newCard);
+                    
+                    // Select the new card text for editing
+                    paragraph.select();
+                }
+            });
         };
 
-        window.addEventListener('kanban-column-menu', handleColumnMenu as EventListener);
+        window.addEventListener('board-add-card', handleAddCard as EventListener);
+
+        // Handle add column events
+        const handleAddColumn = (event: CustomEvent) => {
+            const { boardNodeKey } = event.detail;
+            
+            editor.update(() => {
+                const boardNode = $getNodeByKey(boardNodeKey);
+                if ($isBoardNode(boardNode)) {
+                    // Create a new column with header and content
+                    const column = $createColumnNode();
+                    
+                    // Create header with default title
+                    const header = $createColumnHeaderNode();
+                    const headerParagraph = $createParagraphNode();
+                    headerParagraph.append($createTextNode('New Column'));
+                    header.append(headerParagraph);
+                    
+                    // Create content area for cards
+                    const content = $createColumnContentNode();
+                    
+                    column.append(header, content);
+                    boardNode.append(column);
+                    
+                    // Select the header text for editing
+                    headerParagraph.select();
+                }
+            });
+        };
+
+        window.addEventListener('board-add-column', handleAddColumn as EventListener);
+
+        // Handle delete column events
+        const handleDeleteColumn = (event: CustomEvent) => {
+            const { columnNodeKey } = event.detail;
+            
+            editor.update(() => {
+                // Find the column node by traversing from the header
+                const headerNode = $getNodeByKey(columnNodeKey);
+                if (headerNode) {
+                    // The header's parent should be the column
+                    const columnNode = headerNode.getParent();
+                    if ($isColumnNode(columnNode)) {
+                        columnNode.remove();
+                    }
+                }
+            });
+        };
+
+        window.addEventListener('board-delete-column', handleDeleteColumn as EventListener);
+
+        // Handle delete card events
+        const handleDeleteCard = (event: CustomEvent) => {
+            const { cardNodeKey } = event.detail;
+            
+            editor.update(() => {
+                const cardNode = $getNodeByKey(cardNodeKey);
+                if ($isCardNode(cardNode)) {
+                    cardNode.remove();
+                }
+            });
+        };
+
+        window.addEventListener('board-delete-card', handleDeleteCard as EventListener);
+
+        // Handle edit card events
+        const handleEditCard = (event: CustomEvent) => {
+            const { cardNodeKey, currentData } = event.detail;
+            
+            setCurrentEditCardKey(cardNodeKey);
+            setCurrentCardData(currentData);
+            setShowCardEditDialog(true);
+        };
+
+        window.addEventListener('board-edit-card', handleEditCard as EventListener);
+
+        // Helper function to reset column visual feedback
+        const resetColumnVisualFeedback = () => {
+            const allColumnContents = document.querySelectorAll('.kanban-column-content');
+            allColumnContents.forEach((content) => {
+                const element = content as HTMLElement;
+                element.style.backgroundColor = '';
+                element.style.borderColor = '';
+                element.style.borderStyle = '';
+            });
+        };
+
+        // Global dragend listener to ensure cleanup
+        const handleDragEnd = () => {
+            resetColumnVisualFeedback();
+        };
+
+        document.addEventListener('dragend', handleDragEnd);
+        document.addEventListener('dragleave', (e) => {
+            // If we're leaving the board entirely, reset
+            const target = e.target as HTMLElement;
+            if (target.classList.contains('kanban-board')) {
+                resetColumnVisualFeedback();
+            }
+        });
 
         // Register drag and drop commands following Lexical's pattern
         const unregisterDragDrop = mergeRegister(
@@ -153,12 +266,16 @@ export function BoardPlugin(): JSX.Element | null {
                     const target = event.target as HTMLElement;
                     const columnContent = target.closest('.kanban-column-content');
 
+                    // First reset all columns
+                    resetColumnVisualFeedback();
+
                     if (columnContent && event.dataTransfer?.types.includes('application/x-kanban-card')) {
                         event.preventDefault();
-                        // Add visual feedback
-                        columnContent.style.backgroundColor = '#f0f8ff';
-                        columnContent.style.borderColor = '#4a90e2';
-                        columnContent.style.borderStyle = 'dashed';
+                        // Add visual feedback to current column
+                        const htmlColumnContent = columnContent as HTMLElement;
+                        htmlColumnContent.style.backgroundColor = '#f0f8ff';
+                        htmlColumnContent.style.borderColor = '#4a90e2';
+                        htmlColumnContent.style.borderStyle = 'dashed';
                         return true;
                     }
 
@@ -170,6 +287,9 @@ export function BoardPlugin(): JSX.Element | null {
             editor.registerCommand(
                 DROP_COMMAND,
                 (event: DragEvent) => {
+                    // Always reset visual feedback when drop occurs
+                    resetColumnVisualFeedback();
+                    
                     const target = event.target as HTMLElement;
                     const columnContent = target.closest('.kanban-column-content');
                     const column = target.closest('.kanban-column');
@@ -177,11 +297,6 @@ export function BoardPlugin(): JSX.Element | null {
                     if (!columnContent || !column || !event.dataTransfer?.types.includes('application/x-kanban-card')) {
                         return false;
                     }
-
-                    // Reset visual feedback
-                    columnContent.style.backgroundColor = 'white';
-                    columnContent.style.borderColor = '#ddd';
-                    columnContent.style.borderStyle = 'solid';
 
                     const cardId = event.dataTransfer.getData('application/x-kanban-card');
                     if (!cardId) {
@@ -214,12 +329,14 @@ export function BoardPlugin(): JSX.Element | null {
                     // Dispatch the move command with proper node references
                     editor.update(() => {
                         const cardText = sourceCardNode.getTextContent() || 'Moved card';
+                        // Get the card's data to preserve all fields
+                        const cardData = sourceCardNode.getData();
 
                         // Remove the original card
                         sourceCardNode.remove();
 
-                        // Create a new card with the same content using proper Lexical functions
-                        const newCard = $createCardNode(cardId);
+                        // Create a new card with the same content and data using proper Lexical functions
+                        const newCard = $createCardNode(cardId, cardData);
                         const paragraph = $createParagraphNode();
                         paragraph.append($createTextNode(cardText));
                         newCard.append(paragraph);
@@ -258,9 +375,14 @@ export function BoardPlugin(): JSX.Element | null {
             clearTimeout(timeout);
             unregisterCommands();
             unregisterDragDrop();
-            window.removeEventListener('kanban-column-menu', handleColumnMenu as EventListener);
             window.removeEventListener('board-created', handleBoardCreated as EventListener);
             window.removeEventListener('board-configure', handleBoardConfigure as EventListener);
+            window.removeEventListener('board-add-card', handleAddCard as EventListener);
+            window.removeEventListener('board-add-column', handleAddColumn as EventListener);
+            window.removeEventListener('board-delete-column', handleDeleteColumn as EventListener);
+            window.removeEventListener('board-delete-card', handleDeleteCard as EventListener);
+            window.removeEventListener('board-edit-card', handleEditCard as EventListener);
+            document.removeEventListener('dragend', handleDragEnd);
 
             // Clean up sync services
             syncServicesRef.current.forEach(syncService => {
@@ -306,6 +428,43 @@ export function BoardPlugin(): JSX.Element | null {
         setCurrentConfig(null);
     };
 
+    const handleCardEditSave = (data: CardData) => {
+        if (!currentEditCardKey) return;
+
+        editor.update(() => {
+            const cardNode = $getNodeByKey(currentEditCardKey);
+            if ($isCardNode(cardNode)) {
+                // Get the parent before modifying
+                const parent = cardNode.getParent();
+                const index = parent ? parent.getChildren().indexOf(cardNode) : -1;
+                
+                // Create a new card with updated data
+                const newCard = $createCardNode(cardNode.getId(), data);
+                
+                // Copy the text content
+                const paragraph = $createParagraphNode();
+                paragraph.append($createTextNode(data.title || 'Untitled'));
+                newCard.append(paragraph);
+                
+                // Replace the old card with the new one
+                if (parent && index !== -1) {
+                    cardNode.replace(newCard);
+                }
+            }
+        });
+
+        setShowCardEditDialog(false);
+        setCurrentEditCardKey(null);
+    };
+
+    const handleCardEditHide = () => {
+        setShowCardEditDialog(false);
+        setCurrentEditCardKey(null);
+    };
+
+    const editorContainer = document.querySelector('.stravu-editor');
+    const portalTarget = editorContainer || document.body;
+
     return (
         <>
             {showConfigDialog && createPortal(
@@ -315,7 +474,16 @@ export function BoardPlugin(): JSX.Element | null {
                     onSelect={handleBoardConfigured}
                     initialConfig={currentConfig || undefined}
                 />,
-                document.body
+                portalTarget
+            )}
+            {showCardEditDialog && createPortal(
+                <CardEditDialog
+                    visible={showCardEditDialog}
+                    onHide={handleCardEditHide}
+                    onSave={handleCardEditSave}
+                    initialData={currentCardData}
+                />,
+                portalTarget
             )}
         </>
     );

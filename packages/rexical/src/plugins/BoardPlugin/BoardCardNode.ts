@@ -75,14 +75,34 @@ export class BoardCardNode extends ElementNode {
     element.setAttribute('data-card-id', this.__id);
     element.draggable = true;
 
-    // Card header with delete button
+    // Card header with edit and delete buttons
     const cardHeader = document.createElement('div');
     cardHeader.className = 'kanban-card-header';
+    
+    // Edit button
+    const editButton = document.createElement('button');
+    editButton.className = 'kanban-card-edit';
+    editButton.innerHTML = '<span class="material-symbols-outlined">edit</span>';
+    editButton.type = 'button';
+    editButton.title = 'Edit card';
+    
+    editButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      window.dispatchEvent(new CustomEvent('board-edit-card', {
+        detail: { 
+          cardNodeKey: this.getKey(),
+          cardId: this.__id,
+          currentData: this.__data
+        }
+      }));
+    });
     
     // Delete button
     const deleteButton = document.createElement('button');
     deleteButton.className = 'kanban-card-delete';
-    deleteButton.innerHTML = '×';
+    deleteButton.innerHTML = '<span class="material-symbols-outlined">close</span>';
     deleteButton.type = 'button';
     deleteButton.title = 'Delete card';
     
@@ -98,6 +118,7 @@ export class BoardCardNode extends ElementNode {
       }));
     });
     
+    cardHeader.appendChild(editButton);
     cardHeader.appendChild(deleteButton);
     element.appendChild(cardHeader);
     
@@ -117,22 +138,26 @@ export class BoardCardNode extends ElementNode {
     if (visibleFields.owner && this.__data.owner) {
       const owner = document.createElement('span');
       owner.className = 'kanban-card-owner';
-      owner.textContent = `👤 ${this.__data.owner}`;
+      owner.innerHTML = `<span class="material-symbols-outlined">person</span> ${this.__data.owner}`;
       cardMeta.appendChild(owner);
     }
     
     if (visibleFields.dueDate && this.__data.dueDate) {
       const dueDate = document.createElement('span');
       dueDate.className = 'kanban-card-due';
-      dueDate.textContent = `📅 ${this.__data.dueDate}`;
+      dueDate.innerHTML = `<span class="material-symbols-outlined">calendar_today</span> ${this.__data.dueDate}`;
       cardMeta.appendChild(dueDate);
     }
     
     if (visibleFields.priority && this.__data.priority) {
       const priority = document.createElement('span');
       priority.className = `kanban-card-priority kanban-card-priority-${this.__data.priority}`;
-      const priorityIcons = { low: '🔵', medium: '🟡', high: '🔴' };
-      priority.textContent = priorityIcons[this.__data.priority];
+      const priorityIcons = { 
+        low: '<span class="material-symbols-outlined">low_priority</span>',
+        medium: '<span class="material-symbols-outlined">priority_high</span>',
+        high: '<span class="material-symbols-outlined">error</span>'
+      };
+      priority.innerHTML = priorityIcons[this.__data.priority];
       cardMeta.appendChild(priority);
     }
     
@@ -158,7 +183,45 @@ export class BoardCardNode extends ElementNode {
     return element;
   }
 
-  updateDOM(): false {
+  updateDOM(prevNode: BoardCardNode, dom: HTMLElement): boolean {
+    // Update if data changed
+    if (prevNode.__data !== this.__data) {
+      // Update metadata display
+      const cardMeta = dom.querySelector('.kanban-card-meta');
+      if (cardMeta) {
+        cardMeta.innerHTML = '';
+        
+        const boardConfig = this.getBoardConfig();
+        const visibleFields = boardConfig?.visibleFields || { owner: true, dueDate: true, priority: true, description: false };
+        
+        if (visibleFields.owner && this.__data.owner) {
+          const owner = document.createElement('span');
+          owner.className = 'kanban-card-owner';
+          owner.innerHTML = `<span class="material-symbols-outlined">person</span> ${this.__data.owner}`;
+          cardMeta.appendChild(owner);
+        }
+        
+        if (visibleFields.dueDate && this.__data.dueDate) {
+          const dueDate = document.createElement('span');
+          dueDate.className = 'kanban-card-due';
+          dueDate.innerHTML = `<span class="material-symbols-outlined">calendar_today</span> ${this.__data.dueDate}`;
+          cardMeta.appendChild(dueDate);
+        }
+        
+        if (visibleFields.priority && this.__data.priority) {
+          const priority = document.createElement('span');
+          priority.className = `kanban-card-priority kanban-card-priority-${this.__data.priority}`;
+          const priorityIcons = { 
+            low: '<span class="material-symbols-outlined">low_priority</span>',
+            medium: '<span class="material-symbols-outlined">priority_high</span>',
+            high: '<span class="material-symbols-outlined">error</span>'
+          };
+          priority.innerHTML = priorityIcons[this.__data.priority];
+          cardMeta.appendChild(priority);
+        }
+      }
+      return true;
+    }
     return false;
   }
 

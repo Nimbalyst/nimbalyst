@@ -49,13 +49,13 @@ export class BoardNode extends ElementNode {
     const element = document.createElement('div');
     element.className = 'kanban-board';
 
-    // Create board controls container
-    const boardControls = document.createElement('div');
-    boardControls.className = 'board-controls';
+    // Create board header with controls
+    const boardHeader = document.createElement('div');
+    boardHeader.className = 'kanban-board-header';
 
     // Create config button
     const configButton = document.createElement('button');
-    configButton.className = 'board-config-button';
+    configButton.className = 'board-settings-button';
     configButton.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
         <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
@@ -77,14 +77,6 @@ export class BoardNode extends ElementNode {
       }));
     });
 
-    boardControls.appendChild(configButton);
-    element.appendChild(boardControls);
-    
-    // Create columns container
-    const columnsContainer = document.createElement('div');
-    columnsContainer.className = 'kanban-columns-container';
-    element.appendChild(columnsContainer);
-    
     // Add new column button
     const addColumnButton = document.createElement('button');
     addColumnButton.className = 'kanban-add-column-button';
@@ -101,8 +93,16 @@ export class BoardNode extends ElementNode {
         }
       }));
     });
+
+    // Add buttons to header
+    boardHeader.appendChild(configButton);
+    boardHeader.appendChild(addColumnButton);
+    element.appendChild(boardHeader);
     
-    element.appendChild(addColumnButton);
+    // Create columns container
+    const columnsContainer = document.createElement('div');
+    columnsContainer.className = 'kanban-columns-container';
+    element.appendChild(columnsContainer);
     
     return element;
   }
