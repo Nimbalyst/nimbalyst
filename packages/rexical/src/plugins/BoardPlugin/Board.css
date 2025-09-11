@@ -1,0 +1,344 @@
+.kanban-board {
+  padding: 1rem;
+  min-height: 400px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  transition: border-color 0.2s ease;
+  margin: 1rem 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.kanban-board:hover {
+  border-color: #4a90e2;
+}
+
+.board-controls {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 10;
+}
+
+.kanban-board:hover .board-config-button {
+  opacity: 1;
+}
+
+.board-config-button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0.5rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+}
+
+.board-config-button:hover {
+  background: #f0f0f0;
+  border-color: #999;
+}
+
+.kanban-columns-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  flex: 1;
+}
+
+.kanban-add-column-button {
+  background: transparent;
+  border: 1px dashed #e0e0e0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-top: 0.5rem;
+  cursor: pointer;
+  color: #999;
+  font-size: 12px;
+  font-weight: normal;
+  transition: all 0.2s ease;
+  text-align: center;
+  width: 140px;
+  align-self: flex-start;
+  opacity: 0.6;
+}
+
+.kanban-add-column-button:hover {
+  background: #f8f9fa;
+  border-color: #4a90e2;
+  color: #4a90e2;
+  opacity: 1;
+}
+
+.kanban-column {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+  width: 100%;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  height: fit-content;
+  max-height: 600px;
+}
+
+.kanban-column-header {
+  background: #f5f5f5;
+  padding: 12px;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 2.5rem;
+  cursor: grab;
+}
+
+.kanban-column-header:active {
+  cursor: grabbing;
+}
+
+.kanban-column-drag-handle {
+  color: #999;
+  cursor: grab;
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+  padding: 2px;
+}
+
+.kanban-column:hover .kanban-column-drag-handle {
+  opacity: 1;
+}
+
+.kanban-column-drag-handle:active {
+  cursor: grabbing;
+}
+
+.kanban-column.dragging {
+  opacity: 0.5;
+  transform: rotate(2deg);
+  z-index: 1000;
+}
+
+.kanban-column-header-content {
+  flex: 1;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 14px;
+  color: #666;
+  letter-spacing: 0.5px;
+}
+
+.kanban-column-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.kanban-column-delete {
+  background: transparent;
+  border: none;
+  color: #999;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s ease;
+  border-radius: 3px;
+}
+
+.kanban-column:hover .kanban-column-delete {
+  opacity: 1;
+}
+
+.kanban-column-delete:hover {
+  background: #ff4444;
+  color: white;
+}
+
+.kanban-column-menu-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: #999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.kanban-column-menu-button:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #666;
+}
+
+.kanban-column-content {
+  padding: 8px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+}
+
+.kanban-cards-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kanban-add-card-button {
+  background: transparent;
+  border: 1px dashed #e0e0e0;
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-top: 4px;
+  cursor: pointer;
+  color: #999;
+  font-size: 12px;
+  transition: all 0.2s ease;
+  text-align: center;
+  width: 100%;
+  opacity: 0.6;
+}
+
+.kanban-add-card-button:hover {
+  background: #f8f9fa;
+  border-color: #4a90e2;
+  color: #4a90e2;
+  opacity: 1;
+}
+
+.kanban-card {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  cursor: move;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  position: relative;
+  min-height: 60px;
+}
+
+.kanban-card:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.kanban-card:hover .kanban-card-delete {
+  opacity: 1;
+}
+
+.kanban-card.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+  transform: rotate(2deg);
+}
+
+.kanban-card:focus-within {
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+}
+
+.kanban-card-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px;
+  min-height: 24px;
+}
+
+.kanban-card-delete {
+  background: transparent;
+  border: none;
+  color: #999;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s ease;
+  border-radius: 3px;
+}
+
+.kanban-card-delete:hover {
+  background: #ff4444;
+  color: white;
+}
+
+.kanban-card-content {
+  padding: 0 12px 12px 12px;
+  min-height: 20px;
+}
+
+.kanban-card-content p {
+  margin: 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.kanban-card-meta {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid #f0f0f0;
+  font-size: 12px;
+  color: #666;
+  flex-wrap: wrap;
+}
+
+.kanban-card-owner,
+.kanban-card-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kanban-card-priority {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Drag and drop visual feedback */
+.kanban-column-content.drag-over {
+  background: #f0f8ff;
+  border: 2px dashed #4a90e2;
+}
+
+.card-drop-indicator {
+  height: 2px;
+  background: #4a90e2;
+  margin: 4px 0;
+  border-radius: 1px;
+  pointer-events: none;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.column-drop-indicator {
+  position: absolute;
+  width: 3px;
+  background: #4a90e2;
+  top: 0;
+  bottom: 0;
+  z-index: 1000;
+  pointer-events: none;
+  border-radius: 1px;
+}

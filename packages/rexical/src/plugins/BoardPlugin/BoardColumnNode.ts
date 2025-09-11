@@ -38,15 +38,6 @@ export class BoardColumnNode extends ElementNode {
   createDOM(): HTMLElement {
     const element = document.createElement('div');
     element.className = 'kanban-column';
-    element.style.cssText = `
-      background: #f9f9f9;
-      border-radius: 4px;
-      overflow: hidden;
-      min-width: 280px;
-      display: flex;
-      flex-direction: column;
-    `;
-
     return element;
   }
 

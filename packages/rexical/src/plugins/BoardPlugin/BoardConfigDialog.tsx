@@ -1,26 +1,18 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { Dialog } from 'primereact/dialog';
-import { Button } from 'primereact/button';
-import { Dropdown } from 'primereact/dropdown';
-import { InputText } from 'primereact/inputtext';
-import { Card } from 'primereact/card';
-import { Message } from 'primereact/message';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCog, faColumns, faFilter } from '@fortawesome/pro-light-svg-icons';
-
-import {SpaceContext} from "../../App";
-import ToastContext from '../../ToastContext';
-import {buildIconComponent} from "../../utils/iconUtils";
-import { useServerClient } from '../../server/ServerClient';
-import {SchemaClassDefinition, SchemaDocument} from "@stravu/shared";
+import React, { useState } from 'react';
 
 export interface BoardConfig {
-  entityTypeId: string;
-  entityTypeName: string;
-  statusPropertyId: string;
-  statusPropertyName: string;
+  entityTypeId?: string;
+  entityTypeName?: string;
+  statusPropertyId?: string;
+  statusPropertyName?: string;
   title?: string;
   filter?: string;
+  visibleFields?: {
+    owner: boolean;
+    dueDate: boolean;
+    priority: boolean;
+    description: boolean;
+  };
 }
 
 interface BoardConfigDialogProps {
@@ -30,316 +22,148 @@ interface BoardConfigDialogProps {
   initialConfig?: BoardConfig;
 }
 
-interface PropertyOption {
-  id: string;
-  name: string;
-  type: string;
-  enumOptions?: Array<{ value: string; label: string; icon?: string; color?: string }>;
-}
-
 export function BoardConfigDialog({ visible, onHide, onSelect, initialConfig }: BoardConfigDialogProps) {
-  const [loading, setLoading] = useState(false);
-  const [entityTypes, setEntityTypes] = useState<SchemaClassDefinition[]>([]);
-  const [selectedEntityType, setSelectedEntityType] = useState<SchemaClassDefinition | null>(null);
-  const [statusProperties, setStatusProperties] = useState<PropertyOption[]>([]);
-  const [selectedStatusProperty, setSelectedStatusProperty] = useState<PropertyOption | null>(null);
-  const [boardTitle, setBoardTitle] = useState('');
-  const [filter, setFilter] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [title, setTitle] = useState(initialConfig?.title || 'My Board');
+  const [visibleFields, setVisibleFields] = useState({
+    owner: initialConfig?.visibleFields?.owner ?? true,
+    dueDate: initialConfig?.visibleFields?.dueDate ?? true,
+    priority: initialConfig?.visibleFields?.priority ?? true,
+    description: initialConfig?.visibleFields?.description ?? false,
+  });
 
-  const { schemaService } = useServerClient();
-
-  const spaceContext = useContext(SpaceContext);
-  const { showToast } = useContext(ToastContext);
-
-  useEffect(() => {
-    if (visible) {
-      loadEntityTypes();
-
-      if (initialConfig) {
-        setBoardTitle(initialConfig.title || '');
-        setFilter(initialConfig.filter || '');
-      } else {
-        setBoardTitle('');
-        setFilter('');
-      }
-    }
-  }, [visible, initialConfig]);
-
-  useEffect(() => {
-    if (selectedEntityType) {
-      loadStatusProperties();
-    } else {
-      setStatusProperties([]);
-      setSelectedStatusProperty(null);
-    }
-  }, [selectedEntityType]);
-
-  const loadEntityTypes = async () => {
-    if (!spaceContext) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const schema: SchemaDocument = await schemaService.fetchSchemas(spaceContext);
-
-      const types = schema.classes || [];
-      setEntityTypes(types);
-
-      if (initialConfig) {
-        const existingType = types.find(type => type._id === initialConfig.entityTypeId);
-        if (existingType) {
-          setSelectedEntityType(existingType);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load entity types:', err);
-      setError('Failed to load entity types. Please try again.');
-      showToast({ severity: 'error', summary: 'Error', detail: 'Failed to load entity types' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadStatusProperties = async () => {
-    if (!selectedEntityType || !spaceContext) return;
-
-    try {
-      const entityClass = await schemaService.fetchEntityClass(spaceContext, selectedEntityType._id);
-
-      if (entityClass && entityClass.properties) {
-        const enumProperties = entityClass.properties
-          .filter(prop => prop.type === 'ENUM')
-          .map(prop => ({
-            id: prop.id,
-            name: prop.name,
-            type: prop.type,
-            enumOptions: prop.enumOptions || []
-          }));
-
-        setStatusProperties(enumProperties);
-
-        if (initialConfig && initialConfig.statusPropertyId) {
-          const existingProperty = enumProperties.find(prop => prop.id === initialConfig.statusPropertyId);
-          if (existingProperty) {
-            setSelectedStatusProperty(existingProperty);
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load status properties:', err);
-      setError('Failed to load properties for selected entity type.');
-    }
-  };
-
-  const handleCreate = () => {
-    if (!selectedEntityType || !selectedStatusProperty) {
-      setError('Please select both an entity type and a status property.');
-      return;
-    }
-
+  if (!visible) return null;
+  
+  const handleSave = () => {
     const config: BoardConfig = {
-      entityTypeId: selectedEntityType._id,
-      entityTypeName: selectedEntityType.name,
-      statusPropertyId: selectedStatusProperty.id,
-      statusPropertyName: selectedStatusProperty.name,
-      title: boardTitle.trim() || `${selectedEntityType.name} Board`,
-      filter: filter.trim() || undefined
+      title,
+      visibleFields,
+      ...initialConfig
     };
-
     onSelect(config);
     onHide();
-    resetForm();
   };
 
-  const resetForm = () => {
-    setSelectedEntityType(null);
-    setSelectedStatusProperty(null);
-    setBoardTitle('');
-    setFilter('');
-    setError(null);
+  const handleFieldToggle = (field: keyof typeof visibleFields) => {
+    setVisibleFields(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
   };
-
-  const handleCancel = () => {
-    onHide();
-    resetForm();
-  };
-
-  const entityTypeOptions = entityTypes.map(type => ({
-    label: type.name,
-    value: type,
-    icon: type.fontawesomeIcon
-  }));
-
-  const statusPropertyOptions = statusProperties.map(prop => ({
-    label: prop.name,
-    value: prop
-  }));
-
-  const entityTypeTemplate = (option: any) => {
-    if (!option) return null;
-
-    return (
-      <div className="flex align-items-center gap-2">
-        {option.icon && buildIconComponent(option.icon)}
-        <span>{option.label}</span>
-      </div>
-    );
-  };
-
-  const statusPropertyTemplate = (option: any) => {
-    if (!option) return null;
-
-    return (
-      <div className="flex align-items-center gap-2">
-        <FontAwesomeIcon icon={faColumns} className="text-sm" />
-        <span>{option.label}</span>
-        {option.value.enumOptions && (
-          <span className="text-xs text-500">({option.value.enumOptions.length} options)</span>
-        )}
-      </div>
-    );
-  };
-
-  const footerContent = (
-    <div className="flex justify-content-between gap-2">
-      <Button
-        label="Cancel"
-        severity="secondary"
-        onClick={handleCancel}
-        outlined
-      />
-      <Button
-        label={initialConfig ? "Update Board" : "Create Board"}
-        severity="primary"
-        onClick={handleCreate}
-        disabled={!selectedEntityType || !selectedStatusProperty}
-        loading={loading}
-      />
-    </div>
-  );
 
   return (
-    <Dialog
-      header={
-        <div className="flex align-items-center gap-2">
-          <FontAwesomeIcon icon={faCog} />
-          <span>{initialConfig ? "Configure Board" : "Create New Board"}</span>
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 10000
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        padding: '24px',
+        borderRadius: '8px',
+        minWidth: '400px',
+        maxWidth: '500px'
+      }}>
+        <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '600' }}>Board Configuration</h3>
+        
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+            Board Title:
+          </label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '14px'
+            }}
+            placeholder="Enter board title"
+          />
         </div>
-      }
-      visible={visible}
-      onHide={handleCancel}
-      modal
-      style={{ width: '500px' }}
-      footer={footerContent}
-    >
-      <div className="flex flex-column gap-4">
-        {error && (
-          <Message severity="error" text={error} />
-        )}
 
-        <Card title="Entity Configuration" className="p-3">
-          <div className="flex flex-column gap-3">
-            <div className="field">
-              <label htmlFor="entityType" className="font-semibold">
-                Entity Type *
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '12px', fontWeight: '500' }}>
+            Visible Card Fields:
+          </label>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {[
+              { key: 'owner', label: '👤 Owner', desc: 'Show card owner' },
+              { key: 'dueDate', label: '📅 Due Date', desc: 'Show due dates' },
+              { key: 'priority', label: '🔴 Priority', desc: 'Show priority indicators' },
+              { key: 'description', label: '📝 Description', desc: 'Show description field' }
+            ].map(({ key, label, desc }) => (
+              <label key={key} style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px',
+                padding: '8px',
+                cursor: 'pointer',
+                borderRadius: '4px',
+                backgroundColor: visibleFields[key as keyof typeof visibleFields] ? '#f0f8ff' : 'transparent'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={visibleFields[key as keyof typeof visibleFields]}
+                  onChange={() => handleFieldToggle(key as keyof typeof visibleFields)}
+                  style={{ margin: 0 }}
+                />
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '500' }}>{label}</div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>{desc}</div>
+                </div>
               </label>
-              <Dropdown
-                id="entityType"
-                options={entityTypeOptions}
-                value={selectedEntityType}
-                onChange={(e) => setSelectedEntityType(e.value)}
-                placeholder="Select an entity type"
-                filter
-                showClear
-                itemTemplate={entityTypeTemplate}
-                valueTemplate={entityTypeTemplate}
-                className="w-full"
-                disabled={loading}
-              />
-              <small className="text-500">
-                Choose the type of entities to display on this board
-              </small>
-            </div>
-
-            <div className="field">
-              <label htmlFor="statusProperty" className="font-semibold">
-                Status Property *
-              </label>
-              <Dropdown
-                id="statusProperty"
-                options={statusPropertyOptions}
-                value={selectedStatusProperty}
-                onChange={(e) => setSelectedStatusProperty(e.value)}
-                placeholder="Select a status property"
-                showClear
-                itemTemplate={statusPropertyTemplate}
-                valueTemplate={statusPropertyTemplate}
-                className="w-full"
-                disabled={!selectedEntityType || loading}
-              />
-              <small className="text-500">
-                Choose the enum property that will define board columns
-              </small>
-            </div>
+            ))}
           </div>
-        </Card>
+        </div>
 
-        <Card title="Board Settings" className="p-3">
-          <div className="flex flex-column gap-3">
-            <div className="field">
-              <label htmlFor="boardTitle" className="font-semibold">
-                Board Title
-              </label>
-              <InputText
-                id="boardTitle"
-                value={boardTitle}
-                onChange={(e) => setBoardTitle(e.target.value)}
-                placeholder="Enter board title (optional)"
-                className="w-full"
-              />
-              <small className="text-500">
-                Custom title for the board (defaults to "{selectedEntityType?.name} Board")
-              </small>
-            </div>
-
-            <div className="field">
-              <label htmlFor="filter" className="font-semibold">
-                <FontAwesomeIcon icon={faFilter} className="mr-1" />
-                Filter (Advanced)
-              </label>
-              <InputText
-                id="filter"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                placeholder="Enter filter expression (optional)"
-                className="w-full"
-              />
-              <small className="text-500">
-                Optional filter to limit which entities appear on the board
-              </small>
-            </div>
-          </div>
-        </Card>
-
-        {selectedStatusProperty && selectedStatusProperty.enumOptions && (
-          <Card title="Board Preview" className="p-3">
-            <div className="flex flex-column gap-2">
-              <small className="font-semibold">Columns will be created for:</small>
-              <div className="flex flex-wrap gap-2">
-                {selectedStatusProperty.enumOptions.map((option, index) => (
-                  <div key={index} className="flex align-items-center gap-1 p-2 border-round"
-                       style={{ backgroundColor: option.color || '#f8f9fa', border: '1px solid #dee2e6' }}>
-                    {option.icon && buildIconComponent(option.icon)}
-                    <span className="text-sm">{option.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
-        )}
+        <div style={{ 
+          marginTop: '24px', 
+          display: 'flex', 
+          gap: '12px', 
+          justifyContent: 'flex-end',
+          borderTop: '1px solid #eee',
+          paddingTop: '16px'
+        }}>
+          <button 
+            onClick={onHide}
+            style={{
+              padding: '8px 16px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              backgroundColor: 'white',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleSave}
+            style={{
+              padding: '8px 16px',
+              border: '1px solid #4a90e2',
+              borderRadius: '4px',
+              backgroundColor: '#4a90e2',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Save Configuration
+          </button>
+        </div>
       </div>
-    </Dialog>
+    </div>
   );
 }

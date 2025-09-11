@@ -6,7 +6,7 @@ import {$createColumnNode} from './BoardColumnNode';
 import {$createColumnHeaderNode} from './BoardColumnHeaderNode';
 import {$createColumnContentNode} from './BoardColumnContentNode';
 import {$createCardNode} from './BoardCardNode';
-import {$createEntityNode} from '../EntityPlugin/EntityNode';
+// import {$createEntityNode} from '../EntityPlugin/EntityNode';
 
 export interface EntityData {
   uri: string;
@@ -112,9 +112,9 @@ export class BoardSyncService {
             columnEntities.forEach(entity => {
               const card = $createCardNode(entity.uri);
 
-              // Create EntityNode as card content
-              const entityNode = $createEntityNode(entity.type, entity.uri, entity.properties.name || entity.uri);
-              card.append(entityNode);
+              // // Create EntityNode as card content
+              // const entityNode = $createEntityNode(entity.type, entity.uri, entity.properties.name || entity.uri);
+              // card.append(entityNode);
 
               content.append(card);
             });

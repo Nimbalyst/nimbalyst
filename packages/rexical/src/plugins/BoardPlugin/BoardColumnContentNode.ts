@@ -32,19 +32,28 @@ export class BoardColumnContentNode extends ElementNode {
   createDOM(): HTMLElement {
     const element = document.createElement('div');
     element.className = 'kanban-column-content';
-    element.style.cssText = `
-      min-height: 300px;
-      padding: 0.5rem;
-      background: white;
-      border-radius: 0 0 4px 4px;
-      border: 1px solid #ddd;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-      transition: all 0.2s ease;
-      flex: 1;
-    `;
-
+    
+    // Add card button
+    const addButton = document.createElement('button');
+    addButton.className = 'kanban-add-card-button';
+    addButton.textContent = '+ Add card';
+    addButton.type = 'button';
+    
+    // Add button click handler
+    addButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Dispatch custom event to add a new card
+      window.dispatchEvent(new CustomEvent('board-add-card', {
+        detail: { 
+          columnElement: element.closest('.kanban-column'),
+          contentNodeKey: this.getKey()
+        }
+      }));
+    });
+    
+    element.appendChild(addButton);
     return element;
   }
 
@@ -53,7 +62,20 @@ export class BoardColumnContentNode extends ElementNode {
   }
 
   getDOMSlot(element: HTMLElement): ElementDOMSlot {
-    return super.getDOMSlot(element);
+    // Create a container for cards before the add button
+    let cardsContainer = element.querySelector('.kanban-cards-container') as HTMLElement;
+    if (!cardsContainer) {
+      cardsContainer = document.createElement('div');
+      cardsContainer.className = 'kanban-cards-container';
+      // Insert before the add button
+      const addButton = element.querySelector('.kanban-add-card-button');
+      if (addButton) {
+        element.insertBefore(cardsContainer, addButton);
+      } else {
+        element.appendChild(cardsContainer);
+      }
+    }
+    return super.getDOMSlot(element).withElement(cardsContainer);
   }
 
   static importJSON(serializedNode: SerializedColumnContentNode): BoardColumnContentNode {

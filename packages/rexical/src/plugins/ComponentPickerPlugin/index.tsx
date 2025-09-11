@@ -44,6 +44,7 @@ import InsertLayoutDialog from '../LayoutPlugin/InsertLayoutDialog';
 import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
 import {InsertTableDialog} from '../TablePlugin';
 import {pluginRegistry} from '../PluginRegistry';
+import {INSERT_BOARD_COMMAND} from '../BoardPlugin/BoardCommands';
 
 class ComponentPickerOption extends MenuOption {
   // What shows up in the editor
@@ -265,6 +266,12 @@ function getBaseOptions(editor: LexicalEditor, showModal: ShowModal) {
         showModal('Insert Columns Layout', (onClose) => (
           <InsertLayoutDialog activeEditor={editor} onClose={onClose} />
         )),
+    }),
+    new ComponentPickerOption('Board', {
+      icon: <i className="icon columns" />,
+      keywords: ['board', 'kanban', 'tasks', 'cards', 'columns'],
+      onSelect: () =>
+        editor.dispatchCommand(INSERT_BOARD_COMMAND, undefined),
     }),
     ...(['left', 'center', 'right', 'justify'] as const).map(
       (alignment) =>

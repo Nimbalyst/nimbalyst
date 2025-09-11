@@ -19,6 +19,7 @@ import { TABLE_TRANSFORMER } from '../plugins/TablePlugin/TableTransformer';
 import { IMAGE_TRANSFORMER } from '../plugins/ImagesPlugin/ImageTransformer';
 import { EMOJI_TRANSFORMER } from '../plugins/EmojisPlugin/EmojiTransformer';
 import { COLLAPSIBLE_TRANSFORMER } from '../plugins/CollapsiblePlugin/CollapsibleTransformer';
+import { BOARD_TABLE_TRANSFORMER } from '../plugins/BoardPlugin/BoardTableTransformer';
 
 // TODO: Move ExcalidrawTransform when refactoring that plugin
 import { ExcalidrawTransform } from '../plugins/ExcalidrawPlugin/ExcalidrawNode/excalidrawTransform';
@@ -32,6 +33,7 @@ export const PLUGIN_TRANSFORMERS: Array<Transformer> = [
   // These transformers require their respective plugins to be loaded
   COLLAPSIBLE_TRANSFORMER,
   ExcalidrawTransform,
+  BOARD_TABLE_TRANSFORMER,  // Board tables must come before regular tables
   TABLE_TRANSFORMER,
   IMAGE_TRANSFORMER,
   EMOJI_TRANSFORMER,

@@ -8,6 +8,7 @@ import {
 } from 'lexical';
 import {ElementDOMSlot} from 'lexical';
 import { BoardConfig } from './BoardConfigDialog';
+import './Board.css';
 
 export type SerializedKanbanBoardNode = Spread<
   {
@@ -47,19 +48,10 @@ export class BoardNode extends ElementNode {
     // Create the board element (this is what gets returned and becomes the main element)
     const element = document.createElement('div');
     element.className = 'kanban-board';
-    element.style.cssText = `
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 1rem;
-      padding: 1rem;
-      min-height: 400px;
-      background: #f5f5f5;
-      border-radius: 8px;
-      border: 2px solid transparent;
-      transition: border-color 0.2s ease;
-      margin: 1rem 0;
-      position: relative;
-    `;
+
+    // Create board controls container
+    const boardControls = document.createElement('div');
+    boardControls.className = 'board-controls';
 
     // Create config button
     const configButton = document.createElement('button');
@@ -69,34 +61,6 @@ export class BoardNode extends ElementNode {
         <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
       </svg>
     `;
-    configButton.style.cssText = `
-      position: absolute;
-      top: 0.5rem;
-      right: 0.5rem;
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 0.5rem;
-      cursor: pointer;
-      opacity: 0;
-      transition: opacity 0.2s ease;
-      z-index: 10;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #666;
-    `;
-
-    // Add hover effects
-    element.addEventListener('mouseenter', () => {
-      element.style.borderColor = '#4a90e2';
-      configButton.style.opacity = '1';
-    });
-
-    element.addEventListener('mouseleave', () => {
-      element.style.borderColor = 'transparent';
-      configButton.style.opacity = '0';
-    });
 
     // Add config button click handler
     configButton.addEventListener('click', (e) => {
@@ -113,17 +77,32 @@ export class BoardNode extends ElementNode {
       }));
     });
 
-    configButton.addEventListener('mouseenter', () => {
-      configButton.style.background = '#f0f0f0';
-      configButton.style.borderColor = '#999';
+    boardControls.appendChild(configButton);
+    element.appendChild(boardControls);
+    
+    // Create columns container
+    const columnsContainer = document.createElement('div');
+    columnsContainer.className = 'kanban-columns-container';
+    element.appendChild(columnsContainer);
+    
+    // Add new column button
+    const addColumnButton = document.createElement('button');
+    addColumnButton.className = 'kanban-add-column-button';
+    addColumnButton.innerHTML = '+ Add Column';
+    addColumnButton.type = 'button';
+    
+    addColumnButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      window.dispatchEvent(new CustomEvent('board-add-column', {
+        detail: { 
+          boardNodeKey: this.getKey()
+        }
+      }));
     });
-
-    configButton.addEventListener('mouseleave', () => {
-      configButton.style.background = 'white';
-      configButton.style.borderColor = '#ddd';
-    });
-
-    element.appendChild(configButton);
+    
+    element.appendChild(addColumnButton);
     
     return element;
   }
@@ -133,7 +112,8 @@ export class BoardNode extends ElementNode {
   }
 
   getDOMSlot(element: HTMLElement): ElementDOMSlot {
-    return super.getDOMSlot(element);
+    const columnsContainer = element.querySelector('.kanban-columns-container') as HTMLElement;
+    return super.getDOMSlot(element).withElement(columnsContainer);
   }
 
   static importJSON(serializedNode: SerializedKanbanBoardNode): BoardNode {

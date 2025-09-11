@@ -28,6 +28,11 @@ import {LayoutContainerNode} from '../plugins/LayoutPlugin/LayoutContainerNode.t
 import {LayoutItemNode} from '../plugins/LayoutPlugin/LayoutItemNode.ts';
 import {PageBreakNode} from '../plugins/PageBreakPlugin/PageBreakNode';
 // import { $createThemelessCodeNode, ThemelessCodeNode } from '../plugins/CodeHighlightShikiPlugin/ThemelessCodeNode.ts';
+import {BoardNode} from '../plugins/BoardPlugin/BoardNode';
+import {BoardColumnNode} from '../plugins/BoardPlugin/BoardColumnNode';
+import {BoardColumnHeaderNode} from '../plugins/BoardPlugin/BoardColumnHeaderNode';
+import {BoardColumnContentNode} from '../plugins/BoardPlugin/BoardColumnContentNode';
+import {BoardCardNode} from '../plugins/BoardPlugin/BoardCardNode';
 
 const EditorNodes: Array<Klass<LexicalNode>> = [
   HeadingNode,
@@ -55,6 +60,11 @@ const EditorNodes: Array<Klass<LexicalNode>> = [
   PageBreakNode,
   LayoutContainerNode,
   LayoutItemNode,
+  BoardNode,
+  BoardColumnNode,
+  BoardColumnHeaderNode,
+  BoardColumnContentNode,
+  BoardCardNode,
 
     // ThemelessCodeNode,
     // {

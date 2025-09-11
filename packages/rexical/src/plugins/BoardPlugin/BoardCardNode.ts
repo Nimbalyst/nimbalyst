@@ -8,10 +8,19 @@ import {
 } from 'lexical';
 import {ElementDOMSlot} from 'lexical';
 
+export interface CardData {
+  title: string;
+  owner?: string;
+  dueDate?: string;
+  priority?: 'low' | 'medium' | 'high';
+  description?: string;
+}
+
 export type SerializedCardNode = Spread<
   {
     type: 'kanban-card';
     id: string;
+    data?: CardData;
     version: 1;
   },
   SerializedElementNode
@@ -19,10 +28,12 @@ export type SerializedCardNode = Spread<
 
 export class BoardCardNode extends ElementNode {
   __id: string;
+  __data: CardData;
 
-  constructor(id?: string, key?: NodeKey) {
+  constructor(id?: string, data?: CardData, key?: NodeKey) {
     super(key);
     this.__id = id || Math.random().toString(36).substr(2, 9);
+    this.__data = data || { title: '' };
   }
 
   static getType(): string {
@@ -30,98 +41,119 @@ export class BoardCardNode extends ElementNode {
   }
 
   static clone(node: BoardCardNode): BoardCardNode {
-    return new BoardCardNode(node.__id, node.__key);
+    return new BoardCardNode(node.__id, node.__data, node.__key);
   }
 
   getId(): string {
     return this.__id;
   }
 
+  getData(): CardData {
+    return this.__data;
+  }
+
+  setData(data: CardData): void {
+    const writable = this.getWritable();
+    writable.__data = data;
+  }
+
+  getBoardConfig() {
+    // Traverse up to find the board node and get its config
+    let parent = this.getParent();
+    while (parent) {
+      if (parent.getType() === 'kanban-board') {
+        return (parent as any).getConfig?.();
+      }
+      parent = parent.getParent();
+    }
+    return null;
+  }
+
   createDOM(): HTMLElement {
     const element = document.createElement('div');
     element.className = 'kanban-card';
-    element.style.cssText = `
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      padding: 0.75rem;
-      margin-bottom: 0.5rem;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      cursor: text;
-      transition: all 0.2s ease;
-      position: relative;
-      min-height: 2.5rem;
-    `;
     element.setAttribute('data-card-id', this.__id);
     element.draggable = true;
 
-    // Add drag handle (visible on hover)
-    const dragHandle = document.createElement('div');
-    dragHandle.className = 'kanban-card-drag-handle';
-    dragHandle.innerHTML = '⋮⋮';
-    dragHandle.style.cssText = `
-      position: absolute;
-      top: 0.5rem;
-      right: 0.5rem;
-      cursor: grab;
-      color: #999;
-      font-weight: bold;
-      opacity: 0;
-      transition: opacity 0.2s ease;
-      user-select: none;
-      font-size: 0.8rem;
-      line-height: 1;
-      pointer-events: none;
-    `;
-    element.appendChild(dragHandle);
+    // Card header with delete button
+    const cardHeader = document.createElement('div');
+    cardHeader.className = 'kanban-card-header';
+    
+    // Delete button
+    const deleteButton = document.createElement('button');
+    deleteButton.className = 'kanban-card-delete';
+    deleteButton.innerHTML = '×';
+    deleteButton.type = 'button';
+    deleteButton.title = 'Delete card';
+    
+    deleteButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      window.dispatchEvent(new CustomEvent('board-delete-card', {
+        detail: { 
+          cardNodeKey: this.getKey(),
+          cardId: this.__id
+        }
+      }));
+    });
+    
+    cardHeader.appendChild(deleteButton);
+    element.appendChild(cardHeader);
+    
+    // Card content area
+    const cardContent = document.createElement('div');
+    cardContent.className = 'kanban-card-content';
+    element.appendChild(cardContent);
+    
+    // Card metadata (owner, due date, priority) - check board config for visibility
+    const cardMeta = document.createElement('div');
+    cardMeta.className = 'kanban-card-meta';
+    
+    // Get board config to check visible fields
+    const boardConfig = this.getBoardConfig();
+    const visibleFields = boardConfig?.visibleFields || { owner: true, dueDate: true, priority: true, description: false };
+    
+    if (visibleFields.owner && this.__data.owner) {
+      const owner = document.createElement('span');
+      owner.className = 'kanban-card-owner';
+      owner.textContent = `👤 ${this.__data.owner}`;
+      cardMeta.appendChild(owner);
+    }
+    
+    if (visibleFields.dueDate && this.__data.dueDate) {
+      const dueDate = document.createElement('span');
+      dueDate.className = 'kanban-card-due';
+      dueDate.textContent = `📅 ${this.__data.dueDate}`;
+      cardMeta.appendChild(dueDate);
+    }
+    
+    if (visibleFields.priority && this.__data.priority) {
+      const priority = document.createElement('span');
+      priority.className = `kanban-card-priority kanban-card-priority-${this.__data.priority}`;
+      const priorityIcons = { low: '🔵', medium: '🟡', high: '🔴' };
+      priority.textContent = priorityIcons[this.__data.priority];
+      cardMeta.appendChild(priority);
+    }
+    
+    if (cardMeta.children.length > 0) {
+      element.appendChild(cardMeta);
+    }
 
-    // Add drag events following Lexical's pattern
+    // Add drag events
     element.addEventListener('dragstart', (e) => {
-      dragHandle.style.cursor = 'grabbing';
-      element.style.opacity = '0.5';
-      element.style.transform = 'rotate(2deg)';
-
-      // Set drag data in multiple formats like Lexical does
+      element.classList.add('dragging');
       const dataTransfer = e.dataTransfer;
       if (dataTransfer) {
-        // Set our card-specific data
         dataTransfer.setData('application/x-kanban-card', this.__id);
         dataTransfer.setData('text/plain', this.__id);
-
-        // Let the browser create the drag image
         dataTransfer.effectAllowed = 'move';
       }
     });
 
     element.addEventListener('dragend', (e) => {
-      dragHandle.style.cursor = 'grab';
-      element.style.opacity = '1';
-      element.style.transform = 'none';
+      element.classList.remove('dragging');
     });
-
-    // Add hover effect
-    element.addEventListener('mouseenter', () => {
-      element.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-      element.style.borderColor = '#bbb';
-      dragHandle.style.opacity = '1';
-    });
-    element.addEventListener('mouseleave', () => {
-      element.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-      element.style.borderColor = '#ddd';
-      dragHandle.style.opacity = '0';
-    });
-
-    // Add focus styles
-    element.addEventListener('focusin', () => {
-      element.style.borderColor = '#4a90e2';
-      element.style.boxShadow = '0 0 0 2px rgba(74, 144, 226, 0.2)';
-    });
-    element.addEventListener('focusout', () => {
-      element.style.borderColor = '#ddd';
-      element.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-    });
-
-    // Remove all DOM drag event handling - let Lexical handle this properly
 
     return element;
   }
@@ -131,12 +163,13 @@ export class BoardCardNode extends ElementNode {
   }
 
   getDOMSlot(element: HTMLElement): ElementDOMSlot {
-    return super.getDOMSlot(element);
+    const contentArea = element.querySelector('.kanban-card-content') as HTMLElement;
+    return super.getDOMSlot(element).withElement(contentArea);
   }
 
   static importJSON(serializedNode: SerializedCardNode): BoardCardNode {
-    const {id} = serializedNode;
-    return $createCardNode(id);
+    const {id, data} = serializedNode;
+    return $createCardNode(id, data);
   }
 
   exportJSON(): SerializedCardNode {
@@ -144,6 +177,7 @@ export class BoardCardNode extends ElementNode {
       ...super.exportJSON(),
       type: 'kanban-card',
       id: this.__id,
+      data: this.__data,
       version: 1,
     };
   }
@@ -153,8 +187,8 @@ export class BoardCardNode extends ElementNode {
   }
 }
 
-export function $createCardNode(id?: string): BoardCardNode {
-  return $applyNodeReplacement(new BoardCardNode(id));
+export function $createCardNode(id?: string, data?: CardData): BoardCardNode {
+  return $applyNodeReplacement(new BoardCardNode(id, data));
 }
 
 export function $isCardNode(
