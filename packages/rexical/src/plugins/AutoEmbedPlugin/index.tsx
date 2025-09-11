@@ -50,7 +50,9 @@ export const YoutubeEmbedConfig: PlaygroundEmbedConfig = {
   icon: <i className="icon youtube" />,
 
   insertNode: (editor: LexicalEditor, result: EmbedMatchResult) => {
-    editor.dispatchCommand(INSERT_YOUTUBE_COMMAND, result.id);
+    // TODO: Implement YouTube embed node
+    // editor.dispatchCommand(INSERT_YOUTUBE_COMMAND, result.id);
+    console.warn('YouTube embed not yet implemented');
   },
 
   keywords: ['youtube', 'video'],
@@ -86,7 +88,9 @@ export const TwitterEmbedConfig: PlaygroundEmbedConfig = {
 
   // Create the Lexical embed node from the url data.
   insertNode: (editor: LexicalEditor, result: EmbedMatchResult) => {
-    editor.dispatchCommand(INSERT_TWEET_COMMAND, result.id);
+    // TODO: Implement Tweet embed node
+    // editor.dispatchCommand(INSERT_TWEET_COMMAND, result.id);
+    console.warn('Tweet embed not yet implemented');
   },
 
   // For extra searching.
@@ -120,7 +124,9 @@ export const FigmaEmbedConfig: PlaygroundEmbedConfig = {
   icon: <i className="icon figma" />,
 
   insertNode: (editor: LexicalEditor, result: EmbedMatchResult) => {
-    editor.dispatchCommand(INSERT_FIGMA_COMMAND, result.id);
+    // TODO: Implement Figma embed node
+    // editor.dispatchCommand(INSERT_FIGMA_COMMAND, result.id);
+    console.warn('Figma embed not yet implemented');
   },
 
   keywords: ['figma', 'figma.com', 'mock-up'],

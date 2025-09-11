@@ -10,7 +10,7 @@ import { useEffect, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { logger } from '../../utils/logger';
 import { $setDiffState } from '../DiffPlugin/core/DiffState';
-import { $getSelection, $isRangeSelection, $getRoot, $getNodeByKey, $isElementNode } from 'lexical';
+import { $getSelection, $isRangeSelection, $getRoot } from 'lexical';
 import { APPLY_MARKDOWN_REPLACE_COMMAND } from '../DiffPlugin';
 import type { TextReplacement } from '../DiffPlugin/core/exports';
 import { MarkdownStreamProcessor } from '../../markdown/MarkdownStreamProcessor';
@@ -33,7 +33,7 @@ interface AIChatEvent {
 
 class AIChatIntegrationBridge extends EventTarget {
   private static instance: AIChatIntegrationBridge;
-  private activeStreamingSessions: Map<string, MarkdownStreamProcessor> = new Map();
+  // private activeStreamingSessions: Map<string, MarkdownStreamProcessor> = new Map();
 
   private constructor() {
     super();
@@ -77,12 +77,9 @@ class AIChatIntegrationBridge extends EventTarget {
       detail: {
         type: 'startStreaming',
         streamConfig: {
-          id: config.id,
+          ...config, // Pass through all properties first
           position: config.position as 'cursor' | 'selection',
-          mode: config.mode as 'extend' | 'after',
-          insertAfter: config.insertAfter,
-          insertAtEnd: config.insertAtEnd,
-          ...config // Pass through any other properties
+          mode: config.mode as 'extend' | 'after'
         }
       }
     }));
@@ -140,6 +137,10 @@ export function AIChatIntegrationPlugin(): null {
       if (type === 'applyReplacements') {
         const { replacements } = customEvent.detail;
         logger.log('bridge', 'Applying replacements:', replacements);
+        if (!replacements) {
+          bridge.reportResult(false, 'No replacements provided');
+          return;
+        }
         try {
           const success = editor.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
           // Report success

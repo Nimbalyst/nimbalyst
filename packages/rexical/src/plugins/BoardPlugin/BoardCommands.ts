@@ -12,27 +12,21 @@ import {
 import {
   $createBoardNode,
   $isBoardNode,
-  BoardNode,
 } from './BoardNode';
 import { BoardConfig } from './BoardConfigDialog';
 import {
   $createColumnNode,
   $isColumnNode,
-  BoardColumnNode,
 } from './BoardColumnNode';
 import {
   $createColumnHeaderNode,
-  BoardColumnHeaderNode,
 } from './BoardColumnHeaderNode';
 import {
   $createColumnContentNode,
-  $isColumnContentNode,
-  BoardColumnContentNode,
 } from './BoardColumnContentNode';
 import {
   $createCardNode,
   $isCardNode,
-  BoardCardNode,
 } from './BoardCardNode';
 
 export const INSERT_BOARD_COMMAND: LexicalCommand<void> = createCommand(
@@ -151,7 +145,9 @@ export function registerKanbanCommands(editor: LexicalEditor): () => void {
           for (const node of nodes) {
             const kanbanBoard = node.getTopLevelElement();
             if ($isBoardNode(kanbanBoard)) {
-              const newColumn = $createColumnNode(title);
+              const newColumn = $createColumnNode();
+              // TODO: Add method to set column title if needed
+              // For now, the column will use default title
               kanbanBoard.append(newColumn);
               break;
             }
@@ -210,7 +206,8 @@ export function registerKanbanCommands(editor: LexicalEditor): () => void {
               if (columnIndex < columns.length) {
                 const targetColumn = columns[columnIndex];
                 if ($isColumnNode(targetColumn)) {
-                  targetColumn.setTitle(title);
+                  // TODO: Add method to set column title if needed
+                  // targetColumn.setTitle(title);
                 }
               }
               break;

@@ -27,7 +27,6 @@ import { useLexicalEditable } from '@lexical/react/useLexicalEditable';
 import { CAN_USE_DOM } from '@lexical/utils';
 
 import { $convertToMarkdownString } from '@lexical/markdown';
-import { $getRoot } from 'lexical';
 
 import { DEFAULT_EDITOR_CONFIG, type EditorConfig } from './EditorConfig';
 import { useSharedHistoryContext } from './context/SharedHistoryContext';

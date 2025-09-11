@@ -13,6 +13,7 @@ import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {DraggableBlockPlugin_EXPERIMENTAL} from '@lexical/react/LexicalDraggableBlockPlugin';
 import {$createParagraphNode, $getNearestNodeFromDOMNode} from 'lexical';
 import {useRef, useState, useEffect, useCallback} from 'react';
+import {draggableBlockMenuRegistry, DraggableBlockMenuItem} from './DraggableBlockMenuRegistry';
 
 const DRAGGABLE_BLOCK_MENU_CLASSNAME = 'draggable-block-menu';
 
@@ -33,6 +34,8 @@ export default function DraggableBlockPlugin({
     null,
   );
   const [showDropdown, setShowDropdown] = useState(false);
+  const [currentNode, setCurrentNode] = useState<any>(null);
+  const [menuItems, setMenuItems] = useState<DraggableBlockMenuItem[]>([]);
 
   function insertBlock(e: React.MouseEvent) {
     if (!draggableElement || !editor) {
@@ -76,6 +79,34 @@ export default function DraggableBlockPlugin({
     setShowDropdown(prev => !prev);
   }, []);
 
+  // Update menu items when draggable element changes
+  useEffect(() => {
+    if (draggableElement && editor) {
+      editor.read(() => {
+        const node = $getNearestNodeFromDOMNode(draggableElement);
+        if (node) {
+          setCurrentNode(node);
+          const items = draggableBlockMenuRegistry.getMenuItemsForNode(node);
+          setMenuItems(items);
+        }
+      });
+    } else {
+      setCurrentNode(null);
+      setMenuItems([]);
+    }
+  }, [draggableElement, editor]);
+
+  // Listen for registry changes
+  useEffect(() => {
+    const unsubscribe = draggableBlockMenuRegistry.addListener(() => {
+      if (currentNode) {
+        const items = draggableBlockMenuRegistry.getMenuItemsForNode(currentNode);
+        setMenuItems(items);
+      }
+    });
+    return unsubscribe;
+  }, [currentNode]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -112,8 +143,31 @@ export default function DraggableBlockPlugin({
           {showDropdown && (
             <div ref={dropdownRef} className="draggable-dropdown">
               <button onClick={deleteNode} className="dropdown-item">
+                <span className="material-symbols-outlined">delete</span>
                 Delete
               </button>
+              {menuItems.length > 0 && (
+                <>
+                  <div className="dropdown-divider" />
+                  {menuItems.map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        if (currentNode) {
+                          item.command(editor, currentNode);
+                          setShowDropdown(false);
+                        }
+                      }}
+                      className="dropdown-item"
+                    >
+                      {item.icon && (
+                        <span className="material-symbols-outlined">{item.icon}</span>
+                      )}
+                      {item.label}
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
           )}
         </div>

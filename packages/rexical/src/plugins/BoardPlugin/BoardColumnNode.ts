@@ -5,14 +5,8 @@ import {
   NodeKey,
   SerializedElementNode,
   Spread,
-  $createTextNode,
-  $createParagraphNode,
 } from 'lexical';
 import {ElementDOMSlot} from 'lexical';
-import {
-  $createColumnHeaderNode,
-  BoardColumnHeaderNode,
-} from './BoardColumnHeaderNode';
 
 export type SerializedColumnNode = Spread<
   {

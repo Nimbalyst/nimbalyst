@@ -1,5 +1,5 @@
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
-import {useEffect, useRef, useContext, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {
     DRAGOVER_COMMAND,
     DROP_COMMAND,
@@ -53,6 +53,7 @@ import {BoardConfigDialog, BoardConfig} from './BoardConfigDialog';
 import {CardEditDialog} from './CardEditDialog';
 import {CardData} from './BoardCardNode';
 import {createPortal} from 'react-dom';
+import {registerBoardTransformCommands} from './BoardTransformCommands';
 
 export function BoardPlugin(): JSX.Element | null {
     const [editor] = useLexicalComposerContext();
@@ -74,6 +75,7 @@ export function BoardPlugin(): JSX.Element | null {
         }
 
         const unregisterCommands = registerKanbanCommands(editor);
+        const unregisterTransformCommands = registerBoardTransformCommands();
 
         // Initialize sync services for existing board nodes
         const initializeBoardSyncServices = () => {
@@ -374,6 +376,7 @@ export function BoardPlugin(): JSX.Element | null {
         return () => {
             clearTimeout(timeout);
             unregisterCommands();
+            unregisterTransformCommands();
             unregisterDragDrop();
             window.removeEventListener('board-created', handleBoardCreated as EventListener);
             window.removeEventListener('board-configure', handleBoardConfigure as EventListener);

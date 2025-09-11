@@ -1,0 +1,274 @@
+.board-config-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.board-config-dialog {
+  background-color: white;
+  padding: 24px;
+  border-radius: 8px;
+  min-width: 400px;
+  max-width: 500px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.board-config-title {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.board-config-section {
+  margin-bottom: 20px;
+}
+
+.board-config-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  font-size: 14px;
+  color: #333;
+}
+
+.board-config-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  background: white;
+  color: #333;
+  box-sizing: border-box;
+}
+
+.board-config-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.board-config-field-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.board-config-field-option:hover {
+  background: #f5f5f5;
+}
+
+.board-config-field-option.active {
+  background: #f0f8ff;
+}
+
+.board-config-field-checkbox {
+  margin: 0;
+  cursor: pointer;
+}
+
+.board-config-field-info {
+  flex: 1;
+}
+
+.board-config-field-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.board-config-field-label .material-symbols-outlined {
+  font-size: 18px;
+  color: #666;
+}
+
+.board-config-field-desc {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.board-config-actions {
+  margin-top: 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  border-top: 1px solid #eee;
+  padding-top: 16px;
+}
+
+.board-config-button {
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  outline: none;
+  font-family: inherit;
+}
+
+.board-config-button-cancel {
+  border: 1px solid #ddd;
+  background: white;
+  color: #333;
+}
+
+.board-config-button-cancel:hover {
+  background: #f5f5f5;
+}
+
+.board-config-button-save {
+  border: 1px solid #4a90e2;
+  background: #4a90e2;
+  color: white;
+}
+
+.board-config-button-save:hover {
+  background: #357abd;
+}
+
+/* Dark mode support - using CSS variables */
+.stravu-editor[data-theme="dark"] .board-config-dialog {
+  background: var(--stravu-bg-secondary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.stravu-editor[data-theme="dark"] .board-config-title {
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="dark"] .board-config-label {
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="dark"] .board-config-input {
+  background: var(--stravu-bg-tertiary);
+  border-color: var(--stravu-editor-border);
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="dark"] .board-config-field-option:hover {
+  background: var(--stravu-hover-bg);
+}
+
+.stravu-editor[data-theme="dark"] .board-config-field-option.active {
+  background: var(--stravu-active-bg);
+}
+
+.stravu-editor[data-theme="dark"] .board-config-field-label {
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="dark"] .board-config-field-label .material-symbols-outlined {
+  color: var(--stravu-text-secondary);
+}
+
+.stravu-editor[data-theme="dark"] .board-config-field-desc {
+  color: var(--stravu-text-secondary);
+}
+
+.stravu-editor[data-theme="dark"] .board-config-actions {
+  border-top-color: var(--stravu-editor-border);
+}
+
+.stravu-editor[data-theme="dark"] .board-config-button-cancel {
+  background: var(--stravu-bg-tertiary);
+  border: 1px solid var(--stravu-editor-border);
+  color: var(--stravu-text-primary) !important;
+}
+
+.stravu-editor[data-theme="dark"] .board-config-button-cancel:hover {
+  background: var(--stravu-hover-bg);
+}
+
+.stravu-editor[data-theme="dark"] .board-config-button-save {
+  background: var(--stravu-focus-border);
+  border: 1px solid var(--stravu-focus-border);
+  color: white !important;
+}
+
+.stravu-editor[data-theme="dark"] .board-config-button-save:hover {
+  background: var(--stravu-active-bg);
+  border-color: var(--stravu-active-bg);
+}
+
+/* Crystal Dark theme support - using CSS variables */
+.stravu-editor[data-theme="crystal-dark"] .board-config-dialog {
+  background: var(--stravu-bg-secondary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .board-config-title {
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .board-config-label {
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .board-config-input {
+  background: var(--stravu-bg-tertiary);
+  border-color: var(--stravu-editor-border);
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .board-config-field-option:hover {
+  background: var(--stravu-hover-bg);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .board-config-field-option.active {
+  background: var(--stravu-active-bg);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .board-config-field-label {
+  color: var(--stravu-text-primary);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .board-config-field-label .material-symbols-outlined {
+  color: var(--stravu-text-secondary);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .board-config-field-desc {
+  color: var(--stravu-text-secondary);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .board-config-actions {
+  border-top-color: var(--stravu-editor-border);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .board-config-button-cancel {
+  background: var(--stravu-bg-tertiary);
+  border: 1px solid var(--stravu-editor-border);
+  color: var(--stravu-text-primary) !important;
+}
+
+.stravu-editor[data-theme="crystal-dark"] .board-config-button-cancel:hover {
+  background: var(--stravu-hover-bg);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .board-config-button-save {
+  background: var(--stravu-focus-border);
+  border: 1px solid var(--stravu-focus-border);
+  color: white !important;
+}
+
+.stravu-editor[data-theme="crystal-dark"] .board-config-button-save:hover {
+  background: var(--stravu-active-bg);
+  border-color: var(--stravu-active-bg);
+}
