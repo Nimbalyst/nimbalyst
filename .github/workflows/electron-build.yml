@@ -19,14 +19,11 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [macos-latest, windows-2022, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest]
         include:
           - os: macos-latest
             platform: mac
             arch: arm64
-          - os: windows-2022
-            platform: win
-            arch: x64
           - os: ubuntu-latest
             platform: linux
             arch: x64
