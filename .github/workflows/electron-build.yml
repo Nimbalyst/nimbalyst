@@ -15,6 +15,10 @@ on:
           - 'true'
           - 'false'
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build:
     strategy:
