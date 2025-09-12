@@ -1,0 +1,191 @@
+name: Build and Release Electron App (Public)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Create a release'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        include:
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build rexical package
+        working-directory: packages/rexical
+        run: npm run build
+
+      # macOS specific setup
+      - name: Import macOS certificates
+        if: matrix.os == 'macos-latest'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Create temporary keychain
+          KEYCHAIN_NAME="build.keychain"
+          KEYCHAIN_PASSWORD="${KEYCHAIN_PASSWORD:-$(openssl rand -base64 32)}"
+          
+          # Decode certificate
+          echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
+          
+          # Create keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security default-keychain -s "$KEYCHAIN_NAME"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          
+          # Import certificate
+          security import certificate.p12 -k "$KEYCHAIN_NAME" -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          
+          # Clean up
+          rm certificate.p12
+
+      # Build Electron app
+      - name: Build Electron app
+        env:
+          # macOS notarization
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: '3GYP4YJ3DH'
+          CSC_NAME: ${{ secrets.CSC_NAME }}
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          # Windows signing
+          WIN_CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
+          # GitHub token for auto-updater
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Require notarization for release builds
+          REQUIRE_NOTARIZE: ${{ github.event_name == 'push' || github.event.inputs.release == 'true' }}
+        working-directory: packages/electron
+        run: |
+          if [ "${{ matrix.os }}" == "macos-latest" ]; then
+            if [ "${{ github.event_name }}" == "push" ] || [ "${{ github.event.inputs.release }}" == "true" ]; then
+              npm run build:mac:notarized
+            else
+              npm run build:mac:local
+            fi
+          elif [ "${{ matrix.os }}" == "windows-2022" ]; then
+            npm run build:win
+          else
+            npm run build:linux
+          fi
+        shell: bash
+
+      # Upload artifacts
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            packages/electron/release/*.dmg
+            packages/electron/release/*.zip
+            packages/electron/release/*.exe
+            packages/electron/release/*.AppImage
+            packages/electron/release/*.yml
+            packages/electron/release/*.yaml
+            packages/electron/release/*.json
+          retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.release == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-files
+          find release-artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.yml" -o -name "*.yaml" -o -name "*.json" \) -exec cp {} release-files/ \;
+          ls -la release-files/
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            # Use the package.json version for non-tag builds
+            PACKAGE_VERSION=$(node -p "require('./packages/electron/package.json').version")
+            VERSION="${PACKAGE_VERSION}-dev.${GITHUB_SHA::7}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      # Create release in PUBLIC repository
+      - name: Create Release in Public Repo
+        uses: softprops/action-gh-release@v1
+        with:
+          repository: stravu/preditor-releases  # PUBLIC REPO
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: release-files/*
+          generate_release_notes: false  # Can't generate from different repo
+          body: |
+            ## Download Preditor ${{ steps.get_version.outputs.VERSION }}
+            
+            ### macOS
+            - Download the `.dmg` file
+            - Open and drag to Applications
+            
+            ### Windows
+            - Download the `.exe` installer
+            - Run the installer
+            
+            ### Linux
+            - Download the `.AppImage` file
+            - Make it executable: `chmod +x *.AppImage`
+            - Run it
+            
+            ---
+            Report issues at: https://github.com/stravu/preditor-releases/issues
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASES_TOKEN }}  # Need a PAT with access to public repo

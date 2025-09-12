@@ -72,7 +72,7 @@
       {
         "provider": "github",
         "owner": "stravu",
-        "repo": "preditor"
+        "repo": "preditor-releases"
       }
     ],
     "asar": true,
