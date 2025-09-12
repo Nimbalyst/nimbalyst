@@ -140,12 +140,49 @@
 
 .new-session-option-name {
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.new-session-option-current {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: normal;
+}
+
+.new-session-option-action {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.new-session-option:hover .new-session-option-action {
+  color: var(--text-secondary);
+}
+
+.new-session-option.selected .new-session-option-action {
+  color: var(--accent-color);
+  opacity: 0.8;
 }
 
 .new-session-option-description {
   font-size: 11px;
   color: var(--text-tertiary);
   opacity: 0.8;
+}
+
+.new-session-option-icon {
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.new-session-option:hover .new-session-option-icon {
+  color: var(--text-primary);
+}
+
+.new-session-option.selected .new-session-option-icon {
+  color: var(--accent-color);
 }
 
 .new-session-option-check {
@@ -179,6 +216,25 @@
   text-align: center;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.new-session-empty p {
+  margin: 0 0 12px 0;
+}
+
+.new-session-configure-inline {
+  padding: 6px 12px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.new-session-configure-inline:hover {
+  background: var(--primary-color-hover);
 }
 
 /* Dark theme adjustments */

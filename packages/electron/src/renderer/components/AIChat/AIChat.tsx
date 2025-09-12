@@ -895,11 +895,6 @@ export function AIChat({
     }
   }, []);
 
-  // Model change handler
-  const handleModelChange = useCallback((modelId: string) => {
-    setCurrentModel(modelId);
-    localStorage.setItem('ai-selected-model', modelId);
-  }, []);
 
   // Session management handlers
   const handleNewSession = useCallback(async (modelId?: string) => {
@@ -1180,9 +1175,9 @@ export function AIChat({
         <NewSessionButton
           currentModel={currentModel}
           onNewSession={handleNewSession}
-          onModelChange={handleModelChange}
           onOpenSettings={() => window.electronAPI.openAIModels()}
           disabled={isLoading}
+          hasUnsavedInput={inputValue.trim().length > 0}
         />
       </ChatHeader>
 

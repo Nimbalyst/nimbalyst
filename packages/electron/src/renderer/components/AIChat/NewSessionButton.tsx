@@ -11,18 +11,18 @@ interface Model {
 
 interface NewSessionButtonProps {
   currentModel: string;  // Full provider:model ID
-  onNewSession: (modelId: string) => void;  // Just pass the full model ID
-  onModelChange?: (modelId: string) => void;  // For just changing model without new session
+  onNewSession: (modelId: string) => void;  // Creates new session with specified model
   onOpenSettings?: () => void;  // Open AI settings
   disabled?: boolean;
+  hasUnsavedInput?: boolean;  // Whether there's text in the input field
 }
 
 export function NewSessionButton({
   currentModel,
   onNewSession,
-  onModelChange,
   onOpenSettings,
-  disabled = false
+  disabled = false,
+  hasUnsavedInput = false
 }: NewSessionButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [models, setModels] = useState<Record<string, Model[]>>({});
@@ -63,16 +63,42 @@ export function NewSessionButton({
   };
 
   const handleMainClick = () => {
+    // Create new session with current model
+    if (hasUnsavedInput && !confirm('Start a new conversation? Your current message will be cleared.')) {
+      return;
+    }
     onNewSession(currentModel);
   };
 
   const handleModelSelect = (modelId: string) => {
-    if (onModelChange) {
-      onModelChange(modelId);  // Just change the model
+    // Different model = create new session
+    if (modelId !== currentModel) {
+      if (hasUnsavedInput && !confirm(`Switch to ${getModelNameFromId(modelId)}? Your current message will be cleared.`)) {
+        setIsOpen(false);
+        return;
+      }
+      onNewSession(modelId);  // Create new session with selected model
     } else {
-      onNewSession(modelId);  // Create new session with model
+      // Same model = create new session with same model
+      if (hasUnsavedInput && !confirm('Start a new conversation? Your current message will be cleared.')) {
+        setIsOpen(false);
+        return;
+      }
+      onNewSession(modelId);
     }
     setIsOpen(false);
+  };
+
+  const getModelNameFromId = (modelId: string) => {
+    // Find the model in our list
+    for (const providerModels of Object.values(models)) {
+      const model = providerModels.find(m => m.id === modelId);
+      if (model) return model.name;
+    }
+    // Fallback
+    if (modelId === 'claude-code') return 'Claude Code';
+    const [, ...modelParts] = modelId.split(':');
+    return modelParts.join(':') || modelId;
   };
 
   const getProviderLabel = (provider: string) => {
@@ -107,8 +133,8 @@ export function NewSessionButton({
         className="new-session-button-main"
         onClick={handleMainClick}
         disabled={disabled}
-        title={`New Session with ${getCurrentModelName()}`}
-        aria-label={`New Session with ${getCurrentModelName()}`}
+        title={`New conversation with ${getCurrentModelName()}`}
+        aria-label={`New conversation with ${getCurrentModelName()}`}
       >
         <MaterialSymbol icon="add" size={20} />
       </button>
@@ -116,8 +142,8 @@ export function NewSessionButton({
         className="new-session-button-dropdown"
         onClick={() => setIsOpen(!isOpen)}
         disabled={disabled}
-        title="Choose model"
-        aria-label="Choose model"
+        title="Switch model or start new conversation"
+        aria-label="Switch model or start new conversation"
       >
         <MaterialSymbol icon="expand_more" size={16} />
       </button>
@@ -128,7 +154,18 @@ export function NewSessionButton({
             <div className="new-session-loading">Loading models...</div>
           ) : Object.keys(models).length === 0 ? (
             <div className="new-session-empty">
-              No models available. Please configure providers in AI Models settings.
+              <p>No models available</p>
+              {onOpenSettings && (
+                <button 
+                  className="new-session-configure-inline"
+                  onClick={() => {
+                    onOpenSettings();
+                    setIsOpen(false);
+                  }}
+                >
+                  Configure Providers
+                </button>
+              )}
             </div>
           ) : (
             Object.entries(models).map(([provider, providerModels]) => (
@@ -137,22 +174,34 @@ export function NewSessionButton({
                   {getProviderIcon(provider, { size: 14 })}
                   {getProviderLabel(provider)}
                 </div>
-                {providerModels.map(model => (
-                  <button
-                    key={model.id}
-                    className={`new-session-option ${
-                      model.id === currentModel ? 'selected' : ''
-                    }`}
-                    onClick={() => handleModelSelect(model.id)}
-                  >
-                    <div className="new-session-option-info">
-                      <div className="new-session-option-name">{model.name}</div>
-                    </div>
-                    {model.id === currentModel && (
-                      <MaterialSymbol icon="check" size={16} className="new-session-option-check" />
-                    )}
-                  </button>
-                ))}
+                {providerModels.map(model => {
+                  const isCurrent = model.id === currentModel;
+                  return (
+                    <button
+                      key={model.id}
+                      className={`new-session-option ${isCurrent ? 'selected' : ''}`}
+                      onClick={() => handleModelSelect(model.id)}
+                      title={isCurrent ? 'Start new conversation' : `Switch to ${model.name}`}
+                    >
+                      <div className="new-session-option-info">
+                        <div className="new-session-option-name">
+                          {model.name}
+                          {isCurrent && (
+                            <span className="new-session-option-current"> (current)</span>
+                          )}
+                        </div>
+                        <div className="new-session-option-action">
+                          {isCurrent ? 'New conversation' : 'Switch model'}
+                        </div>
+                      </div>
+                      {isCurrent ? (
+                        <MaterialSymbol icon="refresh" size={16} className="new-session-option-icon" />
+                      ) : (
+                        <MaterialSymbol icon="swap_horiz" size={16} className="new-session-option-icon" />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             ))
           )}
