@@ -110,19 +110,20 @@ export default defineConfig({
       viteStravuPlugin(), 
       react(), 
       optimizeExcalidrawPlugin(), 
-      optimizeShikiPlugin(),
-      viteStaticCopy({
-        targets: [
-          {
-            src: 'icon.png',
-            dest: ''
-          },
-          {
-            src: 'about.html',
-            dest: ''
-          }
-        ]
-      })
+      optimizeShikiPlugin()
+      // Temporarily disabled - causing issues on CI
+      // viteStaticCopy({
+      //   targets: [
+      //     {
+      //       src: './icon.png',
+      //       dest: ''
+      //     },
+      //     {
+      //       src: './about.html',
+      //       dest: ''
+      //     }
+      //   ]
+      // })
     ],
     server: {
       port: 5273,
