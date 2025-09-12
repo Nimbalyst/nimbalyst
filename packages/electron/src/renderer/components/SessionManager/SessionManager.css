@@ -323,6 +323,11 @@
   color: var(--primary-color-dark);
 }
 
+.message-role.tool {
+  background-color: var(--background-quaternary, #f0f2f5);
+  color: var(--text-secondary);
+}
+
 .message-content {
   padding: 16px;
 }
@@ -335,6 +340,37 @@
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-primary);
+}
+
+/* Tool call styling */
+.tool-call {
+  background: var(--background-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 13px;
+}
+
+.tool-name {
+  margin-bottom: 8px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.tool-arguments {
+  margin-top: 8px;
+}
+
+.tool-arguments pre {
+  background: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+  overflow-x: auto;
+  color: var(--text-secondary);
 }
 
 /* Loading and empty states */

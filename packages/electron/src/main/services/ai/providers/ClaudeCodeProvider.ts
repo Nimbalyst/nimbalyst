@@ -156,14 +156,21 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                     }
                   };
 
-                  // If it's an applyDiff tool, execute it
+                  // If it's an applyDiff tool (including MCP variant), execute it
+                  // Note: For MCP tools, Claude Code handles the execution internally
+                  // We only execute non-MCP applyDiff calls here
                   if (block.name === 'applyDiff' && this.toolHandler) {
+                    console.log(`[ClaudeCodeProvider] Executing non-MCP applyDiff tool`);
                     try {
                       const result = await this.toolHandler.applyDiff(block.input);
+                      console.log(`[ClaudeCodeProvider] applyDiff result:`, result);
                       // Tool result will be sent back to Claude Code automatically
                     } catch (error) {
-                      console.error('Error executing applyDiff:', error);
+                      console.error('[ClaudeCodeProvider] Error executing applyDiff:', error);
                     }
+                  } else if (block.name?.endsWith('__applyDiff')) {
+                    // MCP applyDiff - Claude Code handles this through MCP server
+                    console.log(`[ClaudeCodeProvider] MCP applyDiff detected: ${block.name} - handled by MCP server`);
                   }
                 }
               }
@@ -187,13 +194,19 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               }
             };
 
-            // Handle applyDiff
+            // Handle applyDiff - only non-MCP versions
+            // MCP tools are handled by the MCP server directly
             if (chunk.name === 'applyDiff' && chunk.input && this.toolHandler) {
+              console.log(`[ClaudeCodeProvider] Executing non-MCP applyDiff tool (standalone)`);
               try {
                 const result = await this.toolHandler.applyDiff(chunk.input);
+                console.log(`[ClaudeCodeProvider] applyDiff result:`, result);
               } catch (error) {
-                console.error('Error executing applyDiff:', error);
+                console.error('[ClaudeCodeProvider] Error executing applyDiff:', error);
               }
+            } else if (chunk.name?.endsWith('__applyDiff')) {
+              // MCP applyDiff - handled by MCP server
+              console.log(`[ClaudeCodeProvider] MCP applyDiff (standalone): ${chunk.name} - handled by MCP server`);
             }
           } else if (chunk.type === 'text') {
             const text = chunk.text || chunk.content || '';
@@ -217,7 +230,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       
       yield {
         type: 'complete',
-        content: fullContent,
+        // Don't send content here - it's already been sent in chunks
+        // The AIService accumulates the chunks itself
         isComplete: true
       };
 

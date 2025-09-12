@@ -14,6 +14,14 @@ export class AutoUpdaterService {
     // Configure auto-updater
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
+    
+    // Set the feed URL for GitHub releases
+    // This will look for latest-mac.yml, latest.yml, etc. in the release assets
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: 'stravu',
+      repo: 'preditor-releases'
+    });
 
     // Set up event handlers
     this.setupEventHandlers();

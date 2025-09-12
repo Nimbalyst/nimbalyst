@@ -67,10 +67,7 @@ export function AIChat({
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [tempInput, setTempInput] = useState('');
   const [currentUserMessage, setCurrentUserMessage] = useState<string>(''); // Track current user message for error reporting
-  const [currentModel, setCurrentModel] = useState<string | null>(() => {
-    // Load last used model from localStorage, but don't default to anything
-    return localStorage.getItem('ai-selected-model');
-  });
+  const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [showPerformanceMetrics, setShowPerformanceMetrics] = useState<boolean>(() => {
     // Load performance metrics visibility from localStorage
     return localStorage.getItem('ai-show-performance-metrics') === 'true';
@@ -132,10 +129,26 @@ export function AIChat({
     try {
       const allSessions = await aiApi.getSessions(projectPath);
       setSessions(allSessions || []);
+      
+      // Sync currentModel with actual session if we have one
+      if (currentSessionId && allSessions) {
+        const currentSession = allSessions.find(s => s.id === currentSessionId);
+        if (currentSession) {
+          const expectedModelId = currentSession.provider === 'claude-code' 
+            ? 'claude-code' 
+            : `${currentSession.provider}:${currentSession.model}`;
+          
+          if (currentModel !== expectedModelId) {
+            console.log(`[AIChat] loadSessions - Syncing model: ${currentModel} -> ${expectedModelId}`);
+            setCurrentModel(expectedModelId);
+            // Don't store in localStorage - it's global across windows!
+          }
+        }
+      }
     } catch (error) {
       logger.session.info('Failed to load sessions:', error);
     }
-  }, [projectPath]);
+  }, [projectPath, currentSessionId, currentModel]);
 
   // Set up all event listeners FIRST (before initialization)
   useEffect(() => {
@@ -274,11 +287,12 @@ export function AIChat({
             );
 
             for (const toolCall of data.toolCalls) {
-              // Skip applyDiff tool calls since they're already shown as edits on the assistant message
-              if (toolCall.name === 'applyDiff') {
+              // Skip applyDiff tool calls since they're already shown as edits in the assistant message
+              // This avoids duplicate UI elements for the same action
+              if (toolCall.name === 'applyDiff' || toolCall.name?.endsWith('__applyDiff')) {
                 continue;
               }
-
+              
               // Create a unique signature for this tool call
               const signature = `${toolCall.name}-${JSON.stringify(toolCall.arguments)}`;
 
@@ -564,6 +578,30 @@ export function AIChat({
     };
   }, [hasApiKey]);
 
+  // Keep UI in sync with current session's provider/model
+  useEffect(() => {
+    if (!currentSessionId || sessions.length === 0) return;
+    
+    const currentSession = sessions.find(s => s.id === currentSessionId);
+    if (currentSession && currentSession.provider) {
+      let expectedModelId: string;
+      if (currentSession.provider === 'claude-code') {
+        expectedModelId = 'claude-code';
+      } else {
+        expectedModelId = currentSession.model 
+          ? `${currentSession.provider}:${currentSession.model}`
+          : `${currentSession.provider}:default`;
+      }
+      
+      // If UI is out of sync, update it
+      if (currentModel !== expectedModelId) {
+        console.log(`[AIChat] UI sync: Updating model from ${currentModel} to ${expectedModelId} to match session ${currentSessionId}`);
+        setCurrentModel(expectedModelId);
+        // Don't store in localStorage - it's global across windows!
+      }
+    }
+  }, [currentSessionId, sessions, currentModel]); // Re-run when session or model changes
+  
   // Initialize Claude AFTER event handlers are set up
   useEffect(() => {
     // Prevent double initialization or initialization without API key
@@ -584,7 +622,7 @@ export function AIChat({
 
           // ALWAYS restore the provider and model from the session
           // This ensures the UI shows what's actually being used
-          if (session.provider) {
+          if (session && session.provider) {
             let modelIdToSet: string;
             if (session.provider === 'claude-code') {
               modelIdToSet = 'claude-code';
@@ -595,31 +633,32 @@ export function AIChat({
                 : `${session.provider}:default`;
             }
             
-            console.log(`[AIChat] Syncing UI model from session: ${modelIdToSet} (was: ${currentModel})`);
+            console.log(`[AIChat] Initialization: Restoring session ${session.id} with provider: ${session.provider}, model: ${session.model}, UI will show: ${modelIdToSet}`);
             setCurrentModel(modelIdToSet);
-            localStorage.setItem('ai-selected-model', modelIdToSet);
-          } else {
-            // No provider in session - this shouldn't happen but handle it
-            console.warn('[AIChat] Session has no provider, using default');
-            setCurrentModel(DEFAULT_MODELS.claude);
-            localStorage.setItem('ai-selected-model', DEFAULT_MODELS.claude);
+            // Don't store in localStorage - it's global across windows!
+            
+            // Force update to ensure UI is in sync
+            setTimeout(() => {
+              setCurrentModel(modelIdToSet);
+            }, 100);
+          } else if (session) {
+            // Session exists but no provider - shouldn't happen but handle it
+            console.warn('[AIChat] Session has no provider, will recreate session');
+            session = null; // Force new session creation below
           }
-        } else {
-          // Create new session only if none exists
-          // Clean the document context for IPC (remove functions)
-          const cleanDocumentContext = documentContext ? {
-            filePath: documentContext.filePath,
-            fileType: documentContext.fileType,
-            content: documentContext.getLatestContent ? documentContext.getLatestContent() : documentContext.content,
-            cursorPosition: documentContext.cursorPosition,
-            selection: documentContext.selection
-          } : undefined;
-          const modelToUse = currentModel || DEFAULT_MODELS.claude;
-          const { provider, model } = parseModelId(modelToUse);
-          session = await aiApi.createSession(cleanDocumentContext, projectPath, provider, model);
+        }
+        
+        // Don't create a session automatically - user needs to pick a model
+        if (!session) {
+          console.log('[AIChat] No session and no model selected - waiting for user to choose');
+          // Just mark as initialized without a session
+          if (mounted) {
+            setIsInitialized(true);
+          }
+          return;
         }
 
-        if (mounted) {
+        if (mounted && session) {
           setCurrentSessionId(session.id);
           setIsInitialized(true);
 
@@ -645,8 +684,10 @@ export function AIChat({
         }
       } catch (error: any) {
         if (mounted) {
-          logger.api.info('Failed to initialize Claude:', error);
-          setInitError(error.message || 'Failed to initialize Claude');
+          logger.api.info('Failed to initialize AI:', error);
+          setInitError(error.message || 'Failed to initialize AI');
+          // Don't leave in a bad state - reset initialization
+          setIsInitialized(false);
         }
       }
     };
@@ -730,58 +771,34 @@ export function AIChat({
       cursorPosition: freshDocumentContext.cursorPosition
     });
 
-    // Check if we need a new session (no session or provider changed)
-    const modelToUse = currentModel || DEFAULT_MODELS.claude;
-    const { provider, model } = parseModelId(modelToUse);
-
-    // Get current session to check provider
-    let needNewSession = !currentSessionId;
-    let actualProvider = provider;
-    let actualModel = model;
-    
-    if (currentSessionId && sessions.length > 0) {
-      const currentSession = sessions.find(s => s.id === currentSessionId);
-      if (currentSession) {
-        // Check if provider changed
-        if (currentSession.provider !== provider) {
-          console.log(`[AIChat] Provider changed from ${currentSession.provider} to ${provider}, creating new session`);
-          needNewSession = true;
-        } else {
-          // Use the session's actual provider/model for consistency
-          actualProvider = currentSession.provider;
-          actualModel = currentSession.model || model;
-          
-          // Sync UI if needed
-          const expectedModelId = currentSession.provider === 'claude-code' 
-            ? 'claude-code' 
-            : `${actualProvider}:${actualModel}`;
-          
-          if (currentModel !== expectedModelId) {
-            console.log(`[AIChat] Syncing UI model to match session: ${expectedModelId}`);
-            setCurrentModel(expectedModelId);
-            localStorage.setItem('ai-selected-model', expectedModelId);
-          }
-        }
-      }
+    // If we don't have a session, we can't send a message
+    if (!currentSessionId) {
+      console.error('[AIChat] No session - cannot send message');
+      setIsLoading(false);
+      return;
     }
+    
+    // Get the session to find out what provider to use
+    const currentSession = sessions.find(s => s.id === currentSessionId);
+    if (!currentSession) {
+      console.error('[AIChat] Session not found in sessions list');
+      setIsLoading(false);
+      return;
+    }
+    
+    // Use the session's provider - it's the source of truth
+    const actualProvider = currentSession.provider;
+    const actualModel = currentSession.model;
+    console.log(`[AIChat] Using session provider: ${actualProvider}, model: ${actualModel}`);
 
-    if (needNewSession) {
-      console.log(`[AIChat] Creating new session with provider: ${actualProvider}, model: ${actualModel}`);
-      const session = await aiApi.createSession(freshDocumentContext, projectPath, actualProvider, actualModel);
-      setCurrentSessionId(session.id);
-      console.log(`[AIChat] Created session ${session.id} with provider: ${session.provider}`);
-      
-      // Update UI to match the new session
-      const newModelId = session.provider === 'claude-code' 
-        ? 'claude-code' 
-        : `${session.provider}:${session.model || actualModel}`;
-      setCurrentModel(newModelId);
-      localStorage.setItem('ai-selected-model', newModelId);
-      
-      // Reload sessions to include the new one
-      await loadSessions();
-    } else {
-      console.log(`[AIChat] Using existing session ${currentSessionId} with provider: ${actualProvider}`);
+    // Sync UI model to match session
+    const expectedModelId = currentSession.provider === 'claude-code' 
+      ? 'claude-code' 
+      : `${currentSession.provider}:${currentSession.model}`;
+    
+    if (currentModel !== expectedModelId) {
+      console.log(`[AIChat] Syncing UI model to match session: ${currentModel} -> ${expectedModelId}`);
+      setCurrentModel(expectedModelId);
     }
 
     // Add user message
@@ -899,13 +916,20 @@ export function AIChat({
   // Session management handlers
   const handleNewSession = useCallback(async (modelId?: string) => {
     try {
-      // Use provided model or current model
+      // Must have a model to create a session
       const selectedModel = modelId || currentModel;
+      if (!selectedModel) {
+        console.error('[AIChat] No model selected - cannot create session');
+        // Open the AI models window so user can configure
+        window.electronAPI.openAIModels();
+        return;
+      }
+      
       const { provider, model } = parseModelId(selectedModel);
 
       // Update current model
       setCurrentModel(selectedModel);
-      localStorage.setItem('ai-selected-model', selectedModel);
+      // Don't store in localStorage - it's global across windows!
 
       // Create a clean document context without functions for IPC
       const cleanDocumentContext = documentContext ? {
@@ -1029,7 +1053,7 @@ export function AIChat({
         
         console.log(`[AIChat] handleSessionSelect - Syncing UI model: ${modelIdToSet}`);
         setCurrentModel(modelIdToSet);
-        localStorage.setItem('ai-selected-model', modelIdToSet);
+        // Don't store in localStorage - it's global across windows!
       } else {
         console.warn('[AIChat] handleSessionSelect - Session has no provider');
       }
@@ -1146,8 +1170,31 @@ export function AIChat({
 
       <ChatHeader
         onToggleCollapse={onToggleCollapse}
-        provider={currentModel ? parseModelId(currentModel).provider : undefined}
-        model={currentModel || undefined}
+        provider={(() => {
+          // Get provider from actual session, not UI state
+          if (currentSessionId) {
+            const session = sessions.find(s => s.id === currentSessionId);
+            if (session) {
+              return session.provider;
+            }
+          }
+          // Fallback to parsed model if no session
+          return currentModel ? parseModelId(currentModel).provider : undefined;
+        })()}
+        model={(() => {
+          // Get model from actual session, not UI state
+          if (currentSessionId) {
+            const session = sessions.find(s => s.id === currentSessionId);
+            if (session) {
+              // Format as provider:model or just provider for claude-code
+              return session.provider === 'claude-code' 
+                ? 'claude-code'
+                : `${session.provider}:${session.model}`;
+            }
+          }
+          // Fallback to current model
+          return currentModel || undefined;
+        })()}
         showPerformanceMetrics={showPerformanceMetrics}
         onTogglePerformanceMetrics={() => {
           const newValue = !showPerformanceMetrics;
@@ -1173,7 +1220,19 @@ export function AIChat({
           onOpenSessionManager={handleOpenSessionManager}
         />
         <NewSessionButton
-          currentModel={currentModel}
+          currentModel={(() => {
+            // Get the actual model from the current session, not stale UI state
+            if (currentSessionId) {
+              const session = sessions.find(s => s.id === currentSessionId);
+              if (session) {
+                // Return the proper model ID format
+                return session.provider === 'claude-code' 
+                  ? 'claude-code'
+                  : `${session.provider}:${session.model}`;
+              }
+            }
+            return currentModel;
+          })()}
           onNewSession={handleNewSession}
           onOpenSettings={() => window.electronAPI.openAIModels()}
           disabled={isLoading}
@@ -1214,9 +1273,9 @@ export function AIChat({
             onSend={handleSendMessage}
             onNavigateHistory={handleNavigateHistory}
             onCancel={handleCancelRequest}
-            disabled={isLoading || !isInitialized}
+            disabled={isLoading || !isInitialized || !currentSessionId}
             isLoading={isLoading}
-            placeholder={!isInitialized ? "Initializing AI..." : "Ask anything..."}
+            placeholder={!isInitialized ? "Initializing AI..." : !currentSessionId ? "No session - click + to start" : "Ask anything..."}
           />
         </>
       )}

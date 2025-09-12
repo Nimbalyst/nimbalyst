@@ -3,10 +3,10 @@
  */
 
 import { EventEmitter } from 'events';
-import { 
-  DocumentContext, 
-  ProviderConfig, 
-  ProviderCapabilities, 
+import {
+  DocumentContext,
+  ProviderConfig,
+  ProviderCapabilities,
   StreamChunk,
   ToolHandler,
   ToolDefinition,
@@ -25,7 +25,7 @@ export interface AIProvider extends EventEmitter {
    * Returns an async iterator for streaming responses
    */
   sendMessage(
-    message: string, 
+    message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
     messages?: Message[]
@@ -72,7 +72,7 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
 
   abstract initialize(config: ProviderConfig): Promise<void>;
   abstract sendMessage(
-    message: string, 
+    message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
     messages?: Message[]
@@ -90,21 +90,21 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
   protected getRegisteredTools(): ToolDefinition[] {
     return toolRegistry.getAll();
   }
-  
+
   /**
    * Convert tools to Anthropic format
    */
   protected getToolsInAnthropicFormat(): any[] {
     return toAnthropicTools(this.getRegisteredTools());
   }
-  
+
   /**
    * Convert tools to OpenAI format
    */
   protected getToolsInOpenAIFormat(): any[] {
     return toOpenAITools(this.getRegisteredTools());
   }
-  
+
   /**
    * Generate a correlation ID for request tracking
    */
@@ -112,7 +112,7 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     this.correlationId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     return this.correlationId;
   }
-  
+
   destroy(): void {
     this.removeAllListeners();
   }
@@ -121,14 +121,14 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     // Generate correlation ID for tracking
     const correlationId = `tool-${name}-${Date.now()}`;
     this.emit('tool:start', { correlationId, name, args });
-    
+
     try {
       if (!this.toolHandler) {
         throw new Error('No tool handler registered');
       }
 
       let result;
-      
+
       // Check if tool exists in registry
       if (toolRegistry.has(name)) {
         // Use the centralized tool executor
@@ -147,7 +147,7 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
       } else {
         throw new Error(`Unknown tool: ${name}`);
       }
-      
+
       this.emit('tool:complete', { correlationId, name, result });
       return result;
     } catch (error) {
@@ -163,24 +163,25 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
   protected buildSystemPrompt(documentContext?: DocumentContext): string {
     // Get current date and time
     const now = new Date();
-    const dateStr = now.toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    const dateStr = now.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
-    const timeStr = now.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    const timeStr = now.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
     });
-    
+
     // Check if we have a document context
     const hasDocument = documentContext && (documentContext.filePath || documentContext.content);
-    
+
     let basePrompt = `Current date and time: ${dateStr} at ${timeStr}
 
-You are an AI assistant integrated into Stravu Editor, a markdown-focused text editor built with Lexical.`;
-    
+You are an AI assistant integrated into the Preditor editor, a markdown-focused text editor.
+When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
+
     if (!hasDocument) {
       return basePrompt + `
 
@@ -188,7 +189,7 @@ IMPORTANT: No document is currently open. You cannot perform any editing operati
 The user needs to open a document first before you can help with editing.
 You can still answer questions, provide information, and have general conversations.`;
     }
-    
+
     return basePrompt + `
 
 Current document context:

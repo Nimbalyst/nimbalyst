@@ -53,17 +53,59 @@ export function ToolCallBlock({ toolName, arguments: args, result, isLoading, on
       return `Searching for: "${shortPattern}"`;
     }
 
-    // For getDocument, indicate current document
+    // For getDocument, show which document and selection info
     if (checkName('getDocument')) {
+      // Try to get path from args first
+      if (args?.path) {
+        const fileName = args.path.split('/').pop() || args.path;
+        return `Reading ${fileName}`;
+      }
+      // Then try from result (MCP tools return document with filePath)
+      if (result?.filePath) {
+        const fileName = result.filePath.split('/').pop() || result.filePath;
+        return `Reading ${fileName}`;
+      }
+      // Legacy path field
+      if (result?.path) {
+        const fileName = result.path.split('/').pop() || result.path;
+        return `Reading ${fileName}`;
+      }
       return 'Reading current document';
     }
 
-    // For applyDiff with MCP prefix
+    // For applyDiff, show which document is being modified
     if (checkName('applyDiff')) {
+      // Check if there's a path in args
+      if (args?.path) {
+        const fileName = args.path.split('/').pop() || args.path;
+        const count = args?.replacements?.length || 0;
+        if (count > 0) {
+          return `Applying ${count} change${count !== 1 ? 's' : ''} to ${fileName}`;
+        }
+        return `Applying changes to ${fileName}`;
+      }
+      // Check result for path info
+      if (result?.filePath) {
+        const fileName = result.filePath.split('/').pop() || result.filePath;
+        const count = args?.replacements?.length || 0;
+        if (count > 0) {
+          return `Applied ${count} change${count !== 1 ? 's' : ''} to ${fileName}`;
+        }
+        return `Applied changes to ${fileName}`;
+      }
+      if (result?.path) {
+        const fileName = result.path.split('/').pop() || result.path;
+        return `Applied changes to ${fileName}`;
+      }
+      // Check if there's line/range info in replacements
+      if (args?.replacements && args.replacements.length > 0) {
+        const count = args.replacements.length;
+        return `Applying ${count} change${count !== 1 ? 's' : ''} to document`;
+      }
       return 'Applying changes to document';
     }
 
-    // Default descriptions
+    // Default descriptions with more context
     const descriptions: Record<string, string> = {
       'applyDiff': 'Applying changes to document',
       'streamContent': 'Streaming content to document',
@@ -71,10 +113,10 @@ export function ToolCallBlock({ toolName, arguments: args, result, isLoading, on
       'navigateTo': 'Navigating to position',
       'getOutline': 'Getting document outline',
       'searchInDocument': 'Searching in document',
-      'WebSearch': 'Searching the web',
-      'WebFetch': 'Fetching web content',
-      'Task': 'Running task',
-      'Glob': 'Finding files'
+      'WebSearch': args?.query ? `Searching web for: "${args.query.substring(0, 30)}${args.query.length > 30 ? '...' : ''}"` : 'Searching the web',
+      'WebFetch': args?.url ? `Fetching: ${new URL(args.url).hostname}` : 'Fetching web content',
+      'Task': args?.description || 'Running task',
+      'Glob': args?.pattern ? `Finding files: ${args.pattern}` : 'Finding files'
     };
 
     return descriptions[name] || `Using ${name}`;

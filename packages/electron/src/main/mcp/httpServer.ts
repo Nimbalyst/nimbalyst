@@ -10,15 +10,20 @@ import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { BrowserWindow, ipcMain } from 'electron';
 import { parse as parseUrl } from 'url';
 
-let documentState: any = null;
+// Store document state PER SESSION to avoid cross-window contamination
+const documentStateBySession = new Map<string, any>();
 let mcpServer: Server | null = null;
 
 // Store active SSE transports by session ID
 const activeTransports = new Map<string, SSEServerTransport>();
 
-export function updateDocumentState(state: any) {
-  documentState = state;
-  console.log('[MCP Server] Document state updated');
+export function updateDocumentState(state: any, sessionId?: string) {
+  if (!sessionId) {
+    console.warn('[MCP Server] No sessionId provided for document state update - using "default"');
+    sessionId = 'default';
+  }
+  documentStateBySession.set(sessionId, state);
+  console.log(`[MCP Server] Document state updated for session ${sessionId}`);
 }
 
 // Store the HTTP server instance
@@ -230,8 +235,22 @@ async function tryCreateServer(port: number): Promise<any> {
         console.log(`[MCP Server] Tool called: ${name}`, args);
 
         switch (name) {
-          case 'getDocument':
+          case 'getDocument': {
+            // TODO: Need to get sessionId from the request context
+            // For now, get the most recent document state
+            const states = Array.from(documentStateBySession.values());
+            const documentState = states[states.length - 1];
+            
+            // Ensure documentState includes filePath for tool display
+            if (documentState && !documentState.error) {
+              return {
+                ...documentState,
+                // Ensure filePath is included for tool UI display
+                filePath: documentState.filePath || 'untitled'
+              };
+            }
             return documentState || { content: '', error: 'No document open' };
+          }
 
           case 'applyDiff': {
             const windows = BrowserWindow.getAllWindows();
@@ -249,7 +268,15 @@ async function tryCreateServer(port: number): Promise<any> {
                 ipcMain.once(resultChannel, (event, result) => {
                   clearTimeout(timeout);
                   console.log('[MCP Server] Received applyDiff result:', result);
-                  resolve(result || { success: false, error: 'No result received' });
+                  // Include document path in the result for tool UI display
+                  const enhancedResult = result || { success: false, error: 'No result received' };
+                  // Get most recent document state for filePath
+                  const states = Array.from(documentStateBySession.values());
+                  const documentState = states[states.length - 1];
+                  if (enhancedResult.success && documentState?.filePath) {
+                    enhancedResult.filePath = documentState.filePath;
+                  }
+                  resolve(enhancedResult);
                 });
                 
                 // Send the request with the result channel

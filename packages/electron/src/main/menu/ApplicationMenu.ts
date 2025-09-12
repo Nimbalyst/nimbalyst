@@ -679,11 +679,11 @@ export function createApplicationMenu() {
                     click: () => {
                         const fs = require('fs');
                         const path = require('path');
-                        const logPath = path.join(app.getPath('userData'), 'stravu-editor-debug.log');
+                        const logPath = path.join(app.getPath('userData'), 'preditor-debug.log');
                         
                         // Create the log file if it doesn't exist
                         if (!fs.existsSync(logPath)) {
-                            fs.writeFileSync(logPath, `=== Stravu Editor Debug Log ===\nNo debug messages yet.\n\nDebug logging is only active in development mode.\nTo enable debug logging in production, set NODE_ENV=development\n`);
+                            fs.writeFileSync(logPath, `=== Preditor Debug Log ===\nNo debug messages yet.\n\nDebug logging is only active in development mode.\nTo enable debug logging in production, set NODE_ENV=development\n`);
                         }
                         
                         require('electron').shell.openPath(logPath).catch((err: any) => {

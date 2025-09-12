@@ -1,6 +1,6 @@
-# Stravu Editor
+# Preditor
 
-Stravu Editor is a powerful, rich text markdown editor based on the Lexical editor project. 
+Preditor is a powerful, rich text markdown editor based on the Lexical editor project. 
 
 While heavily leveraging the Lexical playground environment, this editor works to make this functionality available as an embeddable component. It also adds an externally configurable plugin architecture and several new plugins.
 
@@ -67,7 +67,7 @@ npm run build
 ### Electron Development
 
 ```bash
-# Build the stravu-editor library first
+# Build the preditor library first
 npm run build
 
 # Navigate to electron package
@@ -124,9 +124,9 @@ The development setup provides seamless HMR:
 ### Library Installation (for end users)
 
 ```bash
-npm install stravu-editor
+npm install preditor
 # or
-yarn add stravu-editor
+yarn add preditor
 ```
 
 ## Usage
@@ -147,10 +147,10 @@ Visit `http://localhost:4101` to access the editor with:
 
 ### As a Component
 
-Import and use the `StravuEditor` component in your React application:
+Import and use the `Preditor` component in your React application:
 
 ```tsx
-import { StravuEditor } from 'stravu-editor';
+import { Preditor } from 'preditor';
 // CSS is automatically included when you import the component!
 
 const config = {
@@ -163,7 +163,7 @@ const config = {
 function MyApp() {
   return (
     <div style={{ height: '400px' }}>
-      <StravuEditor config={config} />
+      <Preditor config={config} />
     </div>
   );
 }
@@ -377,7 +377,7 @@ npm install lexical @lexical/react @lexical/rich-text @lexical/plain-text @lexic
 
 **Solution**: The library includes TypeScript definitions. Make sure you're importing from the correct path:
 ```tsx
-import { StravuEditor, type EditorConfig } from 'stravu-editor';
+import { Preditor, type EditorConfig } from 'preditor';
 ```
 
 ## Browser Support

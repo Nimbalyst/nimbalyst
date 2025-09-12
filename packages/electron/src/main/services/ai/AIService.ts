@@ -24,7 +24,8 @@ import { ToolExecutor } from './tools';
 export class AIService {
   private sessionManager: SessionManager;
   private settingsStore: Store | null = null;
-  private currentProvider: AIProvider | null = null;
+  // Track providers per window to avoid cross-window conflicts
+  private providersByWindow: Map<number, AIProvider> = new Map();
 
   constructor() {
     this.sessionManager = new SessionManager();
@@ -235,11 +236,12 @@ export class AIService {
       const toolHandler = this.createToolHandler(event.sender);
       providerInstance.registerToolHandler(toolHandler);
 
-      this.currentProvider = providerInstance;
+      // Track provider for this window
+      this.providersByWindow.set(event.sender.id, providerInstance);
 
       // Update MCP document state if provided
       if (documentContext) {
-        updateDocumentState(documentContext);
+        updateDocumentState(documentContext, session.id);
       }
 
       return session;
@@ -262,21 +264,25 @@ export class AIService {
         hasDocumentContext: !!documentContext
       };
 
-      // Get or load the session
-      let session = this.sessionManager.getCurrentSession();
-
+      // ALWAYS load session by ID - never use "current" session (causes cross-window issues)
+      if (!sessionId) {
+        throw new Error('No session ID provided - cannot send message');
+      }
+      
+      const loadStartTime = Date.now();
+      const session = this.sessionManager.loadSession(sessionId, projectPath);
+      perfLog.sessionLoadTime = Date.now() - loadStartTime;
+      
       if (!session) {
-        if (sessionId) {
-          const loadStartTime = Date.now();
-          session = this.sessionManager.loadSession(sessionId, projectPath);
-          perfLog.sessionLoadTime = Date.now() - loadStartTime;
-          console.log(`[AIService] Loaded session ${sessionId} with provider: ${session?.provider}, model: ${session?.model} (took ${perfLog.sessionLoadTime}ms)`);
-        }
-        if (!session) {
-          throw new Error('No session available');
-        }
-      } else {
-        console.log(`[AIService] Using current session with provider: ${session.provider}, model: ${session.model}`);
+        throw new Error(`Session ${sessionId} not found`);
+      }
+      
+      console.log(`[AIService] Loaded session ${sessionId} with provider: ${session.provider}, model: ${session.model} (took ${perfLog.sessionLoadTime}ms)`);
+      
+      // Verify we got the right session
+      if (session.id !== sessionId) {
+        console.error(`[AIService] CRITICAL ERROR: Requested session ${sessionId} but got session ${session.id}!`);
+        throw new Error(`Session mismatch: requested ${sessionId} but got ${session.id}`);
       }
 
       perfLog.provider = session.provider;
@@ -288,11 +294,11 @@ export class AIService {
         content: message,
         timestamp: Date.now()
       };
-      this.sessionManager.addMessage(userMessage);
+      this.sessionManager.addMessage(userMessage, session.id);
 
       // Update MCP document state if provided
       if (documentContext) {
-        updateDocumentState(documentContext);
+        updateDocumentState(documentContext, sessionId);
       }
 
       // Get or create provider for this session
@@ -379,7 +385,9 @@ export class AIService {
         provider.registerToolHandler(toolHandler);
       }
 
-      this.currentProvider = provider;
+      // Track provider for this window to avoid cross-window conflicts
+      this.providersByWindow.set(event.sender.id, provider);
+      console.log(`[AIService] Set provider for window ${event.sender.id}: ${session.provider}`);
 
       try {
         let fullResponse = '';
@@ -447,7 +455,7 @@ export class AIService {
                   timestamp: Date.now(),
                   toolCall: chunk.toolCall
                 };
-                this.sessionManager.addMessage(toolMessage);
+                this.sessionManager.addMessage(toolMessage, session.id);
 
                 // Send tool call to renderer
                 // For applyDiff, include it as BOTH an edit AND a toolCall
@@ -533,7 +541,7 @@ export class AIService {
                   timestamp: Date.now(),
                   ...(edits.length > 0 && { edits })  // Include edits if any
                 };
-                this.sessionManager.addMessage(assistantMessage);
+                this.sessionManager.addMessage(assistantMessage, session.id);
               } else if (edits.length > 0) {
                 // If there were edits but no text response
                 const assistantMessage: Message = {
@@ -542,7 +550,7 @@ export class AIService {
                   timestamp: Date.now(),
                   edits
                 };
-                this.sessionManager.addMessage(assistantMessage);
+                this.sessionManager.addMessage(assistantMessage, session.id);
               } else if (hasStreamingContent) {
                 // If we used streamContent, add a message to track it
                 const assistantMessage: Message = {
@@ -557,7 +565,7 @@ export class AIService {
                     isActive: false
                   }
                 };
-                this.sessionManager.addMessage(assistantMessage);
+                this.sessionManager.addMessage(assistantMessage, session.id);
               } else if (toolCalls.length > 0) {
                 // If there were only other tool calls and no text
                 const assistantMessage: Message = {
@@ -565,7 +573,7 @@ export class AIService {
                   content: '[Tool calls executed]',
                   timestamp: Date.now()
                 };
-                this.sessionManager.addMessage(assistantMessage);
+                this.sessionManager.addMessage(assistantMessage, session.id);
               }
 
               // Update provider session data if available
@@ -626,8 +634,12 @@ export class AIService {
       this.sessionManager.clearCurrentSession();
 
       // Abort any ongoing request
-      if (this.currentProvider) {
-        this.currentProvider.abort();
+      // Abort the provider for this specific window
+      const windowId = event.sender.id;
+      const provider = this.providersByWindow.get(windowId);
+      if (provider) {
+        provider.abort();
+        console.log(`[AIService] Aborted provider for window ${windowId}`);
       }
 
       return { success: true };
@@ -675,9 +687,13 @@ export class AIService {
     });
 
     // Cancel current request
-    ipcMain.handle('ai:cancelRequest', async () => {
-      if (this.currentProvider) {
-        this.currentProvider.abort();
+    ipcMain.handle('ai:cancelRequest', async (event) => {
+      // Abort the provider for this specific window
+      const windowId = event.sender.id;
+      const provider = this.providersByWindow.get(windowId);
+      if (provider) {
+        provider.abort();
+        console.log(`[AIService] Cancelled request for window ${windowId}`);
         return { success: true };
       }
       return { success: false, error: 'No active request to cancel' };

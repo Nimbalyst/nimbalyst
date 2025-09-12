@@ -280,7 +280,21 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterProject })
                     {message.role}
                   </div>
                   <div className="message-content">
-                    <pre>{message.content}</pre>
+                    {message.role === 'tool' && message.toolCall ? (
+                      <div className="tool-call">
+                        <div className="tool-name">
+                          <strong>Tool:</strong> {message.toolCall.name || 'Unknown'}
+                        </div>
+                        {message.toolCall.arguments && (
+                          <div className="tool-arguments">
+                            <strong>Arguments:</strong>
+                            <pre>{JSON.stringify(message.toolCall.arguments, null, 2)}</pre>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <pre>{message.content || '(empty)'}</pre>
+                    )}
                   </div>
                 </div>
               ))}

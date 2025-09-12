@@ -1,11 +1,11 @@
 {
-  "name": "@stravu-editor/electron",
-  "version": "0.37.8",
+  "name": "@preditor/electron",
+  "version": "0.38.0",
   "private": true,
-  "description": "Electron app for Stravu Editor",
+  "description": "Electron app for Preditor",
   "main": "out/main/index.js",
   "bin": {
-    "stravueditor": "./bin/stravueditor"
+    "preditor": "./bin/preditor"
   },
   "scripts": {
     "start": "electron-vite preview",
@@ -16,8 +16,9 @@
     "build:dist": "npm run build && electron-builder",
     "build:mac": "npm run build && node -r dotenv/config build/configure-build.js && node build/build-with-env.js --mac",
     "build:mac:signed": "npm run build && node -r dotenv/config build/configure-build.js && node build/build-with-env.js --mac",
-    "build:mac:notarized": "npm run build && node -r dotenv/config build/configure-build.js && REQUIRE_NOTARIZE=true node build/build-with-env.js --mac",
-    "build:mac:local": "SKIP_NOTARIZE=true npm run build && SKIP_NOTARIZE=true node -r dotenv/config build/configure-build.js && SKIP_NOTARIZE=true node build/build-with-env.js --mac",
+    "build:mac:notarized": "npm run build && node -r dotenv/config build/configure-build.js && REQUIRE_NOTARIZE=true node build/build-with-env.js --mac --publish always",
+    "build:mac:local": "SKIP_NOTARIZE=true npm run build && SKIP_NOTARIZE=true node -r dotenv/config build/configure-build.js && SKIP_NOTARIZE=true node build/build-with-env.js --mac --publish never",
+    "build:mac:release": "npm run build && node -r dotenv/config build/configure-build.js && REQUIRE_NOTARIZE=true node build/build-with-env.js --mac --publish always",
     "build:win": "npm run build && electron-builder --win",
     "build:linux": "npm run build && electron-builder --linux",
     "test": "vitest",
@@ -62,7 +63,7 @@
     "vitest": "^3.2.4"
   },
   "build": {
-    "appId": "com.stravu.editor",
+    "appId": "com.stravu.preditor",
     "productName": "Preditor",
     "electronVersion": "37.2.6",
     "directories": {
@@ -72,9 +73,11 @@
       {
         "provider": "github",
         "owner": "stravu",
-        "repo": "preditor-releases"
+        "repo": "preditor-releases",
+        "releaseType": "release"
       }
     ],
+    "generateUpdatesFilesForAllChannels": true,
     "asar": true,
     "asarUnpack": [
       "node_modules/**/*.node",
@@ -108,6 +111,7 @@
       "icon": "icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
       "target": [
         {
           "target": "dmg",

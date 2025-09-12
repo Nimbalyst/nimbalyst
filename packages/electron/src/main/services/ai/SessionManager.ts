@@ -8,8 +8,8 @@ import { SessionData, Message, DocumentContext, AIProviderType } from './types';
 
 export class SessionManager {
   private store: Store | null = null;
-  private currentSession: SessionData | null = null;
-  private currentProjectPath: string | null = null;
+  // REMOVED currentSession and currentProjectPath - they cause cross-window contamination!
+  // Each window should track its own session by ID
 
   constructor() {
     // Lazy initialization - will be created on first use
@@ -132,30 +132,62 @@ export class SessionManager {
   }
 
   /**
-   * Add a message to the current session
+   * Add a message to a specific session
    */
-  addMessage(message: Message): void {
-    if (!this.currentSession) {
-      throw new Error('No session loaded');
+  addMessage(message: Message, sessionId?: string): void {
+    // Use provided sessionId or fall back to current session
+    const targetSessionId = sessionId || this.currentSession?.id;
+    
+    if (!targetSessionId) {
+      throw new Error('No session ID provided and no current session loaded');
     }
-
+    
+    // Find the session by ID across all projects
+    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
+    let targetSession: SessionData | null = null;
+    let targetProject: string | null = null;
+    
+    // Search through all projects to find the session
+    for (const [project, sessions] of Object.entries(sessionsByProject)) {
+      const session = sessions.find(s => s.id === targetSessionId);
+      if (session) {
+        targetSession = session;
+        targetProject = project;
+        break;
+      }
+    }
+    
+    if (!targetSession || !targetProject) {
+      throw new Error(`Session not found: ${targetSessionId}`);
+    }
+    
     // Validate message content - but allow tool messages with toolCall data
     if ((!message.content || message.content.trim() === '') && 
         !(message.role === 'tool' && message.toolCall)) {
       console.warn('Attempted to add message with empty content and no toolCall, skipping:', message);
       return;
     }
-
-    this.currentSession.messages.push(message);
+    
+    targetSession.messages.push(message);
     
     // Generate title from first user message if not already set
-    if (this.currentSession.messages.length === 1 && 
+    if (targetSession.messages.length === 1 && 
         message.role === 'user' &&
-        (!this.currentSession.title || this.currentSession.title === 'New conversation')) {
-      this.currentSession.title = this.generateSessionTitle(message.content);
+        (!targetSession.title || targetSession.title === 'New conversation')) {
+      targetSession.title = this.generateSessionTitle(message.content);
     }
-
-    this.saveSession(this.currentSession);
+    
+    // Save the updated session
+    const updatedSessions = sessionsByProject[targetProject].map(s => 
+      s.id === targetSessionId ? targetSession : s
+    );
+    sessionsByProject[targetProject] = updatedSessions;
+    this.getStore().set('sessionsByProject', sessionsByProject);
+    
+    // Update current session if it matches
+    if (this.currentSession?.id === targetSessionId) {
+      this.currentSession = targetSession;
+    }
   }
 
   /**

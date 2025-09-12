@@ -1,8 +1,8 @@
 {
-  "name": "stravu-editor-monorepo",
+  "name": "preditor-monorepo",
   "version": "0.33.1",
   "private": true,
-  "description": "Monorepo for Stravu Editor - A rich text editor built with Meta's Lexical framework",
+  "description": "Monorepo for Preditor - A rich text editor built with Meta's Lexical framework",
   "author": "Stravu Team",
   "license": "MIT",
   "repository": {

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Codebase Overview
 
-This is Stravu Editor - a rich text editor built with Meta's Lexical framework. Originally based on the Lexical playground, it's been adapted as the foundation for a new editor project with comprehensive features including rich text editing, tables, collaboration, code highlighting, and various plugins.
+This is Preditor - a rich text editor built with Meta's Lexical framework. Originally based on the Lexical playground, it's been adapted as the foundation for a new editor project with comprehensive features including rich text editing, tables, collaboration, code highlighting, and various plugins.
 
 ## Development Commands
 
@@ -84,7 +84,7 @@ The Electron app supports notarized distribution for macOS:
 
 The Electron app (`packages/electron/`) includes a debug logging feature that captures all browser console messages in development mode. This is useful for debugging renderer-side issues and browser load problems.
 
-- **Log file location**: `~/Library/Application Support/stravu-editor/stravu-editor-debug.log` (macOS)
+- **Log file location**: `~/Library/Application Support/@preditor/electron/preditor-debug.log` (macOS)
 - **What's logged**: All browser console messages, main process logs, timestamps, source locations, and log levels
 - **When active**: Only in development mode (`NODE_ENV !== 'production'`)
 - **Implementation**: See `packages/electron/src/main/index.ts` - uses `webContents.on('console-message')` event
@@ -160,6 +160,32 @@ The Electron app includes comprehensive window state persistence:
 - **LM Studio detection**: Automatically detects local models running in LM Studio
 - **Model management**: Select/deselect all buttons for bulk model configuration
 - **Smart defaults**: Doesn't auto-select all models when enabling a provider
+
+## Data Persistence
+
+The Preditor app stores all user data in platform-specific locations:
+
+### macOS
+- **Main path**: `~/Library/Application Support/@preditor/electron/`
+- **Config file**: `config.json` - Main electron-store configuration (window states, recent files, preferences)
+- **AI sessions**: `ai-sessions.json` - All AI chat conversations by project
+- **AI settings**: `ai-settings.json` - AI provider configurations and API keys
+- **History**: `history/` directory - Document edit history snapshots
+- **Logs**: `logs/` directory - Application logs
+- **Debug log**: `preditor-debug.log` - Debug console output
+
+### Windows
+- **Main path**: `%APPDATA%/@preditor/electron/`
+
+### Linux
+- **Main path**: `~/.config/@preditor/electron/`
+
+### Data Migration
+When upgrading from the old Stravu Editor version, the app automatically migrates all user data from:
+- Old: `~/Library/Application Support/@stravu-editor/electron/`
+- New: `~/Library/Application Support/@preditor/electron/`
+
+The migration preserves all settings, sessions, history, and preferences.
 
 ## File Operations
 

@@ -23,6 +23,7 @@ import { setupForceQuit, cancelForceQuit } from './utils/forceQuit';
 import { stopAllFileWatchers } from './file/FileWatcher';
 import { stopAllProjectWatchers } from './file/ProjectWatcher';
 import { autoUpdaterService } from './services/autoUpdater';
+import { migrateUserData } from './migration/dataMigration';
 
 // Track pending file to open
 let pendingFilePath: string | null = null;
@@ -50,7 +51,7 @@ function initializeLogging() {
     logger.main.info('Application logging initialized');
 
     // Always capture error logs for debugging
-    const debugLogPath = join(app.getPath('userData'), 'stravu-editor-debug.log');
+    const debugLogPath = join(app.getPath('userData'), 'preditor-debug.log');
 
     // Initialize or append to log
     try {
@@ -128,6 +129,16 @@ app.whenReady().then(async () => {
 
     // Initialize logging
     initializeLogging();
+
+    // Migrate user data from old location if needed
+    try {
+        const migrated = await migrateUserData();
+        if (migrated) {
+            logger.main.info('User data migration completed');
+        }
+    } catch (error) {
+        logger.main.error('Error during user data migration:', error);
+    }
 
     // Set dock icon for macOS
     if (process.platform === 'darwin' && app.dock) {
@@ -316,7 +327,7 @@ app.on('before-quit', async (event) => {
     // Check if we can write to userData directory
     try {
         const userDataPath = app.getPath('userData');
-        debugLog = path.join(userDataPath, 'stravu-editor-debug.log');
+        debugLog = path.join(userDataPath, 'preditor-debug.log');
 
         // Test write permission
         fs.accessSync(userDataPath, fs.constants.W_OK);
