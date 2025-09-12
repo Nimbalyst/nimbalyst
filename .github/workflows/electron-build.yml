@@ -131,6 +131,14 @@ jobs:
             npm run build:linux -- --publish never
           fi
         shell: bash
+      
+      # Generate update metadata files
+      - name: Generate update metadata
+        if: github.event_name == 'push' || github.event.inputs.release == 'true'
+        working-directory: packages/electron
+        run: |
+          node build/generate-update-yml.js || true
+        shell: bash
 
       # Upload artifacts
       - name: Upload artifacts
