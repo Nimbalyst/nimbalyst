@@ -113,22 +113,22 @@ jobs:
           # Windows signing
           WIN_CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
-          # Don't publish during build - we'll handle it separately
-          # GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GitHub token for electron-builder publishing
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
           # Require notarization for release builds
           REQUIRE_NOTARIZE: ${{ github.event_name == 'push' || github.event.inputs.release == 'true' }}
         working-directory: packages/electron
         run: |
           if [ "${{ matrix.os }}" == "macos-latest" ]; then
             if [ "${{ github.event_name }}" == "push" ] || [ "${{ github.event.inputs.release }}" == "true" ]; then
-              npm run build:mac:notarized -- --publish never
+              npm run build:mac:notarized
             else
-              npm run build:mac:local -- --publish never
+              npm run build:mac:local
             fi
           elif [ "${{ matrix.os }}" == "windows-latest" ]; then
-            npm run build:win -- --publish never
+            npm run build:win
           else
-            npm run build:linux -- --publish never
+            npm run build:linux
           fi
         shell: bash
       

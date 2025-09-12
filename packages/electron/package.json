@@ -1,6 +1,6 @@
 {
   "name": "@preditor/electron",
-  "version": "0.39.0",
+  "version": "0.39.1",
   "private": true,
   "description": "Electron app for Preditor",
   "main": "out/main/index.js",
@@ -16,7 +16,7 @@
     "build:dist": "npm run build && electron-builder",
     "build:mac": "npm run build && node -r dotenv/config build/configure-build.js && node build/build-with-env.js --mac",
     "build:mac:signed": "npm run build && node -r dotenv/config build/configure-build.js && node build/build-with-env.js --mac",
-    "build:mac:notarized": "npm run build && node -r dotenv/config build/configure-build.js && REQUIRE_NOTARIZE=true node build/build-with-env.js --mac --publish always",
+    "build:mac:notarized": "npm run build && node -r dotenv/config build/configure-build.js && REQUIRE_NOTARIZE=true node build/build-with-env.js --mac",
     "build:mac:local": "SKIP_NOTARIZE=true npm run build && SKIP_NOTARIZE=true node -r dotenv/config build/configure-build.js && SKIP_NOTARIZE=true node build/build-with-env.js --mac --publish never",
     "build:mac:release": "npm run build && node -r dotenv/config build/configure-build.js && REQUIRE_NOTARIZE=true node build/build-with-env.js --mac --publish always",
     "build:win": "npm run build && electron-builder --win",
