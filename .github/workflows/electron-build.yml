@@ -110,8 +110,8 @@ jobs:
           # Windows signing
           WIN_CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
-          # GitHub token for auto-updater
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Don't publish during build - we'll handle it separately
+          # GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Require notarization for release builds
           REQUIRE_NOTARIZE: ${{ github.event_name == 'push' || github.event.inputs.release == 'true' }}
         working-directory: packages/electron
@@ -187,3 +187,41 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Publish to public repository
+      - name: Publish to Public Repository
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
+        run: |
+          # Check if PAT is configured
+          if [ -z "$GH_TOKEN" ]; then
+            echo "PUBLIC_REPO_PAT secret not configured. Skipping public release."
+            echo "To enable public releases, create a PAT with 'repo' scope and add it as PUBLIC_REPO_PAT secret."
+            exit 0
+          fi
+          
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          
+          # Check if release already exists in public repo
+          if gh release view "$VERSION" --repo stravu/preditor-releases &>/dev/null; then
+            echo "Release $VERSION already exists in public repository"
+            exit 0
+          fi
+          
+          # Create release in public repository with the same assets
+          gh release create "$VERSION" \
+            --repo stravu/preditor-releases \
+            --title "Release $VERSION" \
+            --notes "Download the latest version of Preditor Editor.
+          
+          ### Installation
+          - **macOS**: Download the .dmg file
+          - **Windows**: Download the .exe file
+          - **Linux**: Download the .AppImage file
+          
+          ### Auto-Updates
+          The app will automatically check for updates and notify you when a new version is available.
+          
+          For more information, visit [stravu.io](https://stravu.io)" \
+            release-files/*
