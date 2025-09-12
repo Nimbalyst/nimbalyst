@@ -222,11 +222,11 @@ export default function ExcalidrawModal({
             theme={theme.includes('dark') ? 'dark' : 'light'}
           />
           <div className="ExcalidrawModal__actions">
-            <button className="action-button" onClick={discard}>
-              Discard
-            </button>
+            {/*<button className="action-button" onClick={discard}>*/}
+            {/*  Discard*/}
+            {/*</button>*/}
             <button className="action-button" onClick={save}>
-              Save
+              Close
             </button>
           </div>
         </div>
