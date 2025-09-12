@@ -141,6 +141,8 @@ jobs:
             packages/electron/release/*.dmg
             packages/electron/release/*.exe
             packages/electron/release/*.AppImage
+            packages/electron/release/*.yml
+            packages/electron/release/*.yaml
           retention-days: 7
 
   release:
@@ -160,7 +162,7 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-files
-          find release-artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.AppImage" \) -exec cp {} release-files/ \;
+          find release-artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.yml" -o -name "*.yaml" \) -exec cp {} release-files/ \;
           ls -la release-files/
 
       - name: Get version from tag
@@ -216,50 +218,20 @@ jobs:
             exit 0
           fi
           
-          # Find and rename files for clarity
-          cd release-files
-          
-          # Rename files to be more descriptive and track what's available
-          RELEASE_FILES=""
-          RELEASE_NOTES="Download Preditor Editor for your operating system:"
-          RELEASE_NOTES="${RELEASE_NOTES}\n\n### Available Downloads"
-          
-          for file in *.dmg; do
-            if [ -f "$file" ]; then
-              mv "$file" "Preditor-macOS-${VERSION}.dmg"
-              RELEASE_FILES="${RELEASE_FILES} release-files/Preditor-macOS-${VERSION}.dmg"
-              RELEASE_NOTES="${RELEASE_NOTES}\n- **macOS**: Preditor-macOS-${VERSION}.dmg"
-            fi
-          done
-          
-          for file in *.exe; do
-            if [ -f "$file" ]; then
-              mv "$file" "Preditor-Windows-${VERSION}.exe"
-              RELEASE_FILES="${RELEASE_FILES} release-files/Preditor-Windows-${VERSION}.exe"
-              RELEASE_NOTES="${RELEASE_NOTES}\n- **Windows**: Preditor-Windows-${VERSION}.exe"
-            fi
-          done
-          
-          for file in *.AppImage; do
-            if [ -f "$file" ]; then
-              mv "$file" "Preditor-Linux-${VERSION}.AppImage"
-              RELEASE_FILES="${RELEASE_FILES} release-files/Preditor-Linux-${VERSION}.AppImage"
-              RELEASE_NOTES="${RELEASE_NOTES}\n- **Linux**: Preditor-Linux-${VERSION}.AppImage"
-            fi
-          done
-          
-          cd ..
-          
-          # Add installation instructions
-          RELEASE_NOTES="${RELEASE_NOTES}\n\n### Installation"
-          RELEASE_NOTES="${RELEASE_NOTES}\n- **macOS**: Open the .dmg file and drag Preditor to Applications"
-          RELEASE_NOTES="${RELEASE_NOTES}\n- **Windows**: Run the .exe installer (may show security warning - unsigned)"
-          RELEASE_NOTES="${RELEASE_NOTES}\n- **Linux**: Make the AppImage executable and run it"
-          RELEASE_NOTES="${RELEASE_NOTES}\n\nThe app will automatically check for updates."
-          
-          # Create release in public repository with available files
-          echo -e "$RELEASE_NOTES" | gh release create "$VERSION" \
+          # Create release in public repository with update manifests
+          gh release create "$VERSION" \
             --repo stravu/preditor-releases \
             --title "Preditor $VERSION" \
-            --notes-file - \
-            $RELEASE_FILES
+            --notes "Download Preditor Editor for your operating system.
+          
+          ### Installation
+          - **macOS**: Download and open the .dmg file, drag Preditor to Applications
+          - **Windows**: Download and run the .exe installer
+          - **Linux**: Download the .AppImage, make it executable, and run it
+          
+          The app will automatically check for updates." \
+            release-files/*.dmg \
+            release-files/*.exe \
+            release-files/*.AppImage \
+            release-files/*.yml \
+            release-files/*.yaml 2>/dev/null || true
