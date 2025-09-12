@@ -118,14 +118,14 @@ jobs:
         run: |
           if [ "${{ matrix.os }}" == "macos-latest" ]; then
             if [ "${{ github.event_name }}" == "push" ] || [ "${{ github.event.inputs.release }}" == "true" ]; then
-              npm run build:mac:notarized
+              npm run build:mac:notarized -- --publish never
             else
-              npm run build:mac:local
+              npm run build:mac:local -- --publish never
             fi
           elif [ "${{ matrix.os }}" == "windows-2022" ]; then
-            npm run build:win
+            npm run build:win -- --publish never
           else
-            npm run build:linux
+            npm run build:linux -- --publish never
           fi
         shell: bash
 
