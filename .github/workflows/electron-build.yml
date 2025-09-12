@@ -136,12 +136,8 @@ jobs:
           name: ${{ matrix.platform }}-${{ matrix.arch }}
           path: |
             packages/electron/release/*.dmg
-            packages/electron/release/*.zip
             packages/electron/release/*.exe
             packages/electron/release/*.AppImage
-            packages/electron/release/*.yml
-            packages/electron/release/*.yaml
-            packages/electron/release/*.json
           retention-days: 7
 
   release:
@@ -161,7 +157,7 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-files
-          find release-artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.yml" -o -name "*.yaml" -o -name "*.json" \) -exec cp {} release-files/ \;
+          find release-artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.AppImage" \) -exec cp {} release-files/ \;
           ls -la release-files/
 
       - name: Get version from tag
@@ -184,7 +180,15 @@ jobs:
           draft: false
           prerelease: false
           files: release-files/*
-          generate_release_notes: true
+          generate_release_notes: false
+          body: |
+            ## What's Changed
+            See [commit history](https://github.com/stravu/preditor/commits/main) for details.
+            
+            ## Downloads
+            - **macOS**: Download the .dmg file
+            - **Windows**: Download the .exe file  
+            - **Linux**: Download the .AppImage file
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -209,19 +213,41 @@ jobs:
             exit 0
           fi
           
-          # Create release in public repository with the same assets
+          # Find and rename files for clarity
+          cd release-files
+          
+          # Rename files to be more descriptive
+          for file in *.dmg; do
+            [ -f "$file" ] && mv "$file" "Preditor-macOS-${VERSION}.dmg"
+          done
+          
+          for file in *.exe; do
+            [ -f "$file" ] && mv "$file" "Preditor-Windows-${VERSION}.exe"
+          done
+          
+          for file in *.AppImage; do
+            [ -f "$file" ] && mv "$file" "Preditor-Linux-${VERSION}.AppImage"
+          done
+          
+          cd ..
+          
+          # Create release in public repository with ONLY the application files
           gh release create "$VERSION" \
             --repo stravu/preditor-releases \
-            --title "Release $VERSION" \
-            --notes "Download the latest version of Preditor Editor.
+            --title "Preditor $VERSION" \
+            --notes "Download Preditor Editor for your operating system:
+          
+          ### Downloads
+          - **macOS**: Preditor-macOS-${VERSION}.dmg
+          - **Windows**: Preditor-Windows-${VERSION}.exe
+          - **Linux**: Preditor-Linux-${VERSION}.AppImage
           
           ### Installation
-          - **macOS**: Download the .dmg file
-          - **Windows**: Download the .exe file
-          - **Linux**: Download the .AppImage file
+          - **macOS**: Open the .dmg file and drag Preditor to Applications
+          - **Windows**: Run the .exe installer
+          - **Linux**: Make the AppImage executable and run it
           
-          ### Auto-Updates
-          The app will automatically check for updates and notify you when a new version is available.
-          
-          For more information, visit [stravu.io](https://stravu.io)" \
-            release-files/*
+          The app will automatically check for updates." \
+            release-files/Preditor-macOS-*.dmg \
+            release-files/Preditor-Windows-*.exe \
+            release-files/Preditor-Linux-*.AppImage
