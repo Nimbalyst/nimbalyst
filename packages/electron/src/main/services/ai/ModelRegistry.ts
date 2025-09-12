@@ -50,6 +50,13 @@ export class ModelRegistry {
           models = await OpenAIProvider.getModels(apiKey);
           break;
         case 'lmstudio':
+          // Only try to connect to LMStudio if explicitly enabled
+          // This prevents the "find devices on local network" permission dialog
+          const settings = await this.getSettings();
+          if (!settings?.providers?.lmstudio?.enabled) {
+            models = [];
+            break;
+          }
           const { LMStudioProvider } = await import('./providers/LMStudioProvider');
           models = await LMStudioProvider.getModels(baseUrl || 'http://127.0.0.1:8234');
           break;
