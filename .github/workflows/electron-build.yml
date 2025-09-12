@@ -23,13 +23,16 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest, windows-latest]
         include:
           - os: macos-latest
             platform: mac
             arch: arm64
           - os: ubuntu-latest
             platform: linux
+            arch: x64
+          - os: windows-latest
+            platform: win
             arch: x64
 
     runs-on: ${{ matrix.os }}
@@ -79,9 +82,9 @@ jobs:
           # Clean up
           rm certificate.p12
 
-      # Windows specific setup
+      # Windows specific setup (optional - only if certificate is provided)
       - name: Import Windows certificate
-        if: matrix.os == 'windows-2022'
+        if: matrix.os == 'windows-latest' && env.WINDOWS_CERTIFICATE != ''
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PWD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
@@ -122,7 +125,7 @@ jobs:
             else
               npm run build:mac:local -- --publish never
             fi
-          elif [ "${{ matrix.os }}" == "windows-2022" ]; then
+          elif [ "${{ matrix.os }}" == "windows-latest" ]; then
             npm run build:win -- --publish never
           else
             npm run build:linux -- --publish never
@@ -216,38 +219,47 @@ jobs:
           # Find and rename files for clarity
           cd release-files
           
-          # Rename files to be more descriptive
+          # Rename files to be more descriptive and track what's available
+          RELEASE_FILES=""
+          RELEASE_NOTES="Download Preditor Editor for your operating system:"
+          RELEASE_NOTES="${RELEASE_NOTES}\n\n### Available Downloads"
+          
           for file in *.dmg; do
-            [ -f "$file" ] && mv "$file" "Preditor-macOS-${VERSION}.dmg"
+            if [ -f "$file" ]; then
+              mv "$file" "Preditor-macOS-${VERSION}.dmg"
+              RELEASE_FILES="${RELEASE_FILES} release-files/Preditor-macOS-${VERSION}.dmg"
+              RELEASE_NOTES="${RELEASE_NOTES}\n- **macOS**: Preditor-macOS-${VERSION}.dmg"
+            fi
           done
           
           for file in *.exe; do
-            [ -f "$file" ] && mv "$file" "Preditor-Windows-${VERSION}.exe"
+            if [ -f "$file" ]; then
+              mv "$file" "Preditor-Windows-${VERSION}.exe"
+              RELEASE_FILES="${RELEASE_FILES} release-files/Preditor-Windows-${VERSION}.exe"
+              RELEASE_NOTES="${RELEASE_NOTES}\n- **Windows**: Preditor-Windows-${VERSION}.exe"
+            fi
           done
           
           for file in *.AppImage; do
-            [ -f "$file" ] && mv "$file" "Preditor-Linux-${VERSION}.AppImage"
+            if [ -f "$file" ]; then
+              mv "$file" "Preditor-Linux-${VERSION}.AppImage"
+              RELEASE_FILES="${RELEASE_FILES} release-files/Preditor-Linux-${VERSION}.AppImage"
+              RELEASE_NOTES="${RELEASE_NOTES}\n- **Linux**: Preditor-Linux-${VERSION}.AppImage"
+            fi
           done
           
           cd ..
           
-          # Create release in public repository with ONLY the application files
-          gh release create "$VERSION" \
+          # Add installation instructions
+          RELEASE_NOTES="${RELEASE_NOTES}\n\n### Installation"
+          RELEASE_NOTES="${RELEASE_NOTES}\n- **macOS**: Open the .dmg file and drag Preditor to Applications"
+          RELEASE_NOTES="${RELEASE_NOTES}\n- **Windows**: Run the .exe installer (may show security warning - unsigned)"
+          RELEASE_NOTES="${RELEASE_NOTES}\n- **Linux**: Make the AppImage executable and run it"
+          RELEASE_NOTES="${RELEASE_NOTES}\n\nThe app will automatically check for updates."
+          
+          # Create release in public repository with available files
+          echo -e "$RELEASE_NOTES" | gh release create "$VERSION" \
             --repo stravu/preditor-releases \
             --title "Preditor $VERSION" \
-            --notes "Download Preditor Editor for your operating system:
-          
-          ### Downloads
-          - **macOS**: Preditor-macOS-${VERSION}.dmg
-          - **Windows**: Preditor-Windows-${VERSION}.exe
-          - **Linux**: Preditor-Linux-${VERSION}.AppImage
-          
-          ### Installation
-          - **macOS**: Open the .dmg file and drag Preditor to Applications
-          - **Windows**: Run the .exe installer
-          - **Linux**: Make the AppImage executable and run it
-          
-          The app will automatically check for updates." \
-            release-files/Preditor-macOS-*.dmg \
-            release-files/Preditor-Windows-*.exe \
-            release-files/Preditor-Linux-*.AppImage
+            --notes-file - \
+            $RELEASE_FILES
