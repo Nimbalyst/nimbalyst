@@ -120,6 +120,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('previous-tab', callback);
   },
   
+  onApproveAction: (callback: () => void) => {
+    ipcRenderer.on('approve-action', callback);
+    return () => ipcRenderer.removeListener('approve-action', callback);
+  },
+  
+  onRejectAction: (callback: () => void) => {
+    ipcRenderer.on('reject-action', callback);
+    return () => ipcRenderer.removeListener('reject-action', callback);
+  },
+  
   onLoadSessionFromManager: (callback: (data: { sessionId: string; projectPath?: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('load-session-from-manager', handler);

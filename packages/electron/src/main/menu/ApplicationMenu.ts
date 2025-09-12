@@ -463,6 +463,27 @@ export function createApplicationMenu() {
                             focused.webContents.send('previous-tab');
                         }
                     }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Approve',
+                    accelerator: 'CmdOrCtrl+Enter',
+                    click: () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('approve-action');
+                        }
+                    }
+                },
+                {
+                    label: 'Reject',
+                    accelerator: 'CmdOrCtrl+Shift+N',
+                    click: () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('reject-action');
+                        }
+                    }
                 }
             ]
         },

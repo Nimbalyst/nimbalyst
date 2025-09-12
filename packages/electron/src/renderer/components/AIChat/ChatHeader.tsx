@@ -11,6 +11,7 @@ interface ChatHeaderProps {
   model?: string;  // Full provider:model ID
   showPerformanceMetrics?: boolean;
   onTogglePerformanceMetrics?: () => void;
+  onCopyChat?: () => void;
 }
 
 export function ChatHeader({ 
@@ -19,7 +20,8 @@ export function ChatHeader({
   provider, 
   model,
   showPerformanceMetrics,
-  onTogglePerformanceMetrics 
+  onTogglePerformanceMetrics,
+  onCopyChat 
 }: ChatHeaderProps) {
   const modelInfo = parseModelInfo(model);
 
@@ -56,6 +58,16 @@ export function ChatHeader({
               style={{ opacity: showPerformanceMetrics ? 1 : 0.6 }}
             >
               <MaterialSymbol icon="speed" size={18} />
+            </button>
+          )}
+          {onCopyChat && (
+            <button
+              className="ai-chat-action-button"
+              onClick={onCopyChat}
+              title="Copy Chat to Clipboard"
+              aria-label="Copy Chat"
+            >
+              <MaterialSymbol icon="content_copy" size={18} />
             </button>
           )}
           <button

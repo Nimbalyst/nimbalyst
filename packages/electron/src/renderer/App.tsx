@@ -3,7 +3,7 @@ import { logger } from './utils/logger';
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
-import { StravuEditor, TOGGLE_SEARCH_COMMAND, MARKDOWN_TRANSFORMERS, aiChatBridge } from 'rexical';
+import { StravuEditor, TOGGLE_SEARCH_COMMAND, MARKDOWN_TRANSFORMERS, aiChatBridge, APPROVE_DIFF_COMMAND, REJECT_DIFF_COMMAND } from 'rexical';
 import type { LexicalCommand, ConfigTheme, TextReplacement } from 'rexical';
 // Import styles - handled by vite plugin for both dev and prod
 import 'rexical/styles';
@@ -1628,6 +1628,29 @@ export default function App() {
           if (prevTab) {
             tabs.switchTab(prevTab.id);
           }
+        }
+      }));
+    }
+
+    // Approve/Reject action handlers
+    if (window.electronAPI.onApproveAction) {
+      cleanupFns.push(window.electronAPI.onApproveAction(() => {
+        console.log('Approve action triggered');
+        // Trigger approve action in the editor
+        const editor = editorRef.current;
+        if (editor) {
+          editor.dispatchCommand(APPROVE_DIFF_COMMAND, undefined);
+        }
+      }));
+    }
+
+    if (window.electronAPI.onRejectAction) {
+      cleanupFns.push(window.electronAPI.onRejectAction(() => {
+        console.log('Reject action triggered');
+        // Trigger reject action in the editor
+        const editor = editorRef.current;
+        if (editor) {
+          editor.dispatchCommand(REJECT_DIFF_COMMAND, undefined);
         }
       }));
     }

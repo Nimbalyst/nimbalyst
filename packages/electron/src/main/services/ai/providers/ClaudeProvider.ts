@@ -372,13 +372,14 @@ export class ClaudeProvider extends BaseAIProvider {
     return `${basePrompt}
 
 You have access to the following tools for document editing:
-- applyDiff: Apply text replacements to the document with diff preview (use for replacing existing text)
+- applyDiff: Apply text replacements to the document with diff preview (use for replacing existing text) - changes appear as visual diffs that users can approve (Cmd+Enter) or reject (Cmd+Shift+N)
 - streamContent: Stream new content into the document at a specific position (use for inserting new content)
 
 Tool Usage Guidelines:
-- Use 'applyDiff' when you need to REPLACE or MODIFY existing text
+- Use 'applyDiff' when you need to REPLACE or MODIFY existing text - this creates reviewable changes
 - Use 'streamContent' when you need to INSERT NEW content without replacing anything
 - For streamContent, use position='cursor' to insert at cursor, position='end' to append to document, or provide 'insertAfter' to insert after specific text
+- When using applyDiff, changes will be shown as diffs that the user can review and approve/reject
 
 SMART INSERTION RULES for streamContent tool - YOU MUST ANALYZE THE USER'S REQUEST:
 1. If user says "at the end", "append", or "add to the bottom" → use position='end'

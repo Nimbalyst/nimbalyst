@@ -108,6 +108,10 @@ export class OpenAIProvider extends BaseAIProvider {
     try {
       // Use the centralized tool system
       const tools: OpenAI.Chat.ChatCompletionTool[] = this.getToolsInOpenAIFormat();
+      console.log(`[OpenAIProvider] Available tools for OpenAI:`, tools.map(t => t.function?.name || 'unknown'));
+      if (tools.length === 0) {
+        console.warn('[OpenAIProvider] WARNING: No tools available! Check tool registration.');
+      }
 
       // Create the chat completion with streaming
       if (!this.config.model) {
@@ -122,7 +126,7 @@ export class OpenAIProvider extends BaseAIProvider {
         model: modelId,
         messages: apiMessages,
         tools,
-        tool_choice: documentContext ? 'auto' : 'auto',  // Could try 'required' to force tool use
+        tool_choice: tools.length > 0 ? 'auto' : undefined,  // Only set if we have tools
         stream: true
       };
       
@@ -322,9 +326,11 @@ export class OpenAIProvider extends BaseAIProvider {
                 
                 // Execute applyDiff if handler is available
                 if (toolCall.function.name === 'applyDiff' && this.toolHandler) {
+                  console.log(`[OpenAIProvider] Executing applyDiff with args:`, JSON.stringify(args, null, 2));
                   const toolStartTime = Date.now();
                   const result = await this.toolHandler.applyDiff(args);
-                  console.log(`[OpenAIProvider] Tool execution completed in ${Date.now() - toolStartTime}ms:`, result);
+                  console.log(`[OpenAIProvider] ApplyDiff execution completed in ${Date.now() - toolStartTime}ms`);
+                  console.log(`[OpenAIProvider] ApplyDiff result:`, JSON.stringify(result, null, 2));
                 }
               }
             } catch (error) {
@@ -333,10 +339,17 @@ export class OpenAIProvider extends BaseAIProvider {
           }
         }
         
-        if (chunk.choices[0]?.finish_reason === 'stop') {
-          // Message complete - log it but don't yield complete yet
-          const totalTime = Date.now() - startTime;
-          console.log(`[OpenAIProvider] Stream complete - Total time: ${totalTime}ms, Chunks: ${chunkCount}, Tool calls: ${toolCallCount}, Content length: ${fullContent.length}`);
+        const finishReason = chunk.choices[0]?.finish_reason;
+        if (finishReason) {
+          console.log(`[OpenAIProvider] Chunk #${chunkCount} finish_reason: '${finishReason}'`);
+          
+          if (finishReason === 'stop') {
+            // Message complete - log it but don't yield complete yet
+            const totalTime = Date.now() - startTime;
+            console.log(`[OpenAIProvider] Stream complete - Total time: ${totalTime}ms, Chunks: ${chunkCount}, Tool calls: ${toolCallCount}, Content length: ${fullContent.length}`);
+          } else if (finishReason !== 'tool_calls') {
+            console.warn(`[OpenAIProvider] Unexpected finish_reason: ${finishReason}`);
+          }
         }
       }
       
@@ -398,26 +411,29 @@ You have access to the following tools for document editing:
 - applyDiff: Apply text replacements to the document with diff preview (use for replacing existing text)
 - streamContent: Stream new content into the document at a specific position (use for inserting new content)
 
-CRITICAL: When the user asks you to add, insert, write, or create content in the document, YOU MUST USE THE streamContent TOOL. 
-DO NOT just say you're doing it - actually use the tool to insert the content!
+🚨 CRITICAL TOOL USAGE RULES - YOU MUST FOLLOW THESE:
+1. EVERY edit request REQUIRES using a tool - NO EXCEPTIONS
+2. If the user asks to add/remove/modify/change ANYTHING in the document, YOU MUST USE A TOOL
+3. Saying "Removing X" or "Adding Y" WITHOUT using a tool is a FAILURE
+4. Even simple edits like removing a single word MUST use applyDiff
 
-Tool Usage Guidelines:
-- Use 'applyDiff' when you need to REPLACE or MODIFY existing text
-- Use 'streamContent' when you need to INSERT NEW content without replacing anything
-- For streamContent, use position='cursor' to insert at cursor, position='end' to append to document, or provide 'insertAfter' to insert after specific text
+WHEN TO USE EACH TOOL:
+- applyDiff: For ANY modification to existing text (remove, replace, edit, fix, change)
+- streamContent: For inserting NEW content without replacing anything
 
-Examples of when to use streamContent:
-- "Add a poem" -> Use streamContent to insert the poem
-- "Write a list" -> Use streamContent to insert the list
-- "Insert a paragraph" -> Use streamContent to insert the paragraph
+EXAMPLES OF REQUIRED TOOL USE:
+- "remove mango" → MUST use applyDiff to replace the line containing mango
+- "add a haiku" → MUST use streamContent to insert the haiku
+- "fix the typo" → MUST use applyDiff to replace the typo
+- "delete the last paragraph" → MUST use applyDiff to remove it
 
-RESPONSE RULES:
-1. When using tools, briefly acknowledge with 2-4 words (e.g., "Adding poem...")
-2. ALWAYS use the appropriate tool when editing the document
-3. Never just describe what you would do - actually do it with the tools
-4. NEVER explain what you're about to do with phrases like "Let me...", "I'll...", "First..."
-5. NEVER describe the actual content you added - the user sees it in the document
-6. NEVER list what you added or explain your reasoning unless asked
+YOUR RESPONSE FORMAT:
+1. Acknowledge in 2-4 words (e.g., "Removing mango...")
+2. IMMEDIATELY use the appropriate tool
+3. DO NOT explain or describe - the user sees the changes
+
+⚠️ WARNING: If you say you're doing something but don't use a tool, you have FAILED.
+The user cannot see changes unless you USE THE TOOL.
 
 GOOD response examples:
 - User: "add a haiku about trees" → You: "Adding haiku about trees"

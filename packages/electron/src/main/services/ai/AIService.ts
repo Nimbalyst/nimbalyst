@@ -19,7 +19,7 @@ import {
   AIModel
 } from './types';
 import { updateDocumentState } from '../../mcp/httpServer';
-import { ToolExecutor } from './tools';
+import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 
 export class AIService {
   private sessionManager: SessionManager;
@@ -29,6 +29,14 @@ export class AIService {
 
   constructor() {
     this.sessionManager = new SessionManager();
+    
+    // Register built-in tools
+    console.log('[AIService] Registering built-in tools...');
+    for (const tool of BUILT_IN_TOOLS) {
+      toolRegistry.register(tool);
+      console.log(`[AIService] Registered tool: ${tool.name}`);
+    }
+    
     // Delay initialization until first use
     this.initializeApiKeys();
     this.setupIpcHandlers();
@@ -458,11 +466,13 @@ export class AIService {
                 this.sessionManager.addMessage(toolMessage, session.id);
 
                 // Send tool call to renderer
-                // For applyDiff, include it as BOTH an edit AND a toolCall
-                if (chunk.toolCall.name === 'applyDiff') {
+                // For applyDiff (including MCP variants), include it as BOTH an edit AND a toolCall
+                if (chunk.toolCall.name === 'applyDiff' || chunk.toolCall.name?.endsWith('__applyDiff')) {
                   const edit = {
                     type: 'diff',
-                    replacements: chunk.toolCall.arguments.replacements
+                    replacements: chunk.toolCall.arguments.replacements,
+                    // MCP edits are applied automatically by the MCP server
+                    applied: chunk.toolCall.name?.endsWith('__applyDiff')
                   };
                   edits.push(edit);  // Save edit for the assistant message
 

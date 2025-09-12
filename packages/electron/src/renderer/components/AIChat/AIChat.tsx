@@ -944,6 +944,11 @@ export function AIChat({
       setCurrentSessionId(session.id);
       setMessages([]);
       setInputValue(''); // Clear input for new session
+      
+      // Add the new session to the list immediately so it's available
+      setSessions(prev => [...prev, session]);
+      
+      // Then reload to get any other updates
       await loadSessions();
 
       // Focus the input field after creating new session
@@ -1115,6 +1120,64 @@ export function AIChat({
     }
   }, [loadSessions]);
 
+  const handleCopyChat = useCallback(() => {
+    // Format messages for copying
+    const chatText = messages.map(msg => {
+      let text = `[${msg.role.toUpperCase()}]: `;
+      
+      if (msg.role === 'tool' && msg.toolCall) {
+        text += `Tool: ${msg.toolCall.name}\n`;
+        if (msg.toolCall.arguments) {
+          text += `Arguments: ${JSON.stringify(msg.toolCall.arguments, null, 2)}\n`;
+        }
+        if (msg.toolCall.result) {
+          text += `Result: ${typeof msg.toolCall.result === 'string' ? msg.toolCall.result : JSON.stringify(msg.toolCall.result, null, 2)}`;
+        }
+      } else if (msg.isStreamingStatus && msg.streamingData) {
+        text += `[Streaming Edit]\n`;
+        text += `File: ${msg.streamingData.file}\n`;
+        text += `Content:\n${msg.streamingData.content}`;
+      } else {
+        text += msg.content;
+        
+        // Add edits if present
+        if (msg.edits && msg.edits.length > 0) {
+          text += '\n\n[EDITS]:';
+          msg.edits.forEach((edit, i) => {
+            text += `\nEdit ${i + 1}:`;
+            if (edit.file) text += `\n  File: ${edit.file}`;
+            if (edit.operation) text += `\n  Operation: ${edit.operation}`;
+            if (edit.content) text += `\n  Content: ${edit.content}`;
+          });
+        }
+      }
+      
+      return text;
+    }).join('\n\n---\n\n');
+
+    // Add metadata
+    const metadata = [
+      `Chat Session Export`,
+      `Date: ${new Date().toISOString()}`,
+      `Session ID: ${currentSessionId || 'None'}`,
+      `Project: ${projectPath || 'None'}`,
+      `Provider: ${sessions.find(s => s.id === currentSessionId)?.provider || 'None'}`,
+      `Model: ${sessions.find(s => s.id === currentSessionId)?.model || 'None'}`,
+      `Messages: ${messages.length}`,
+      '',
+      '=== CHAT HISTORY ===',
+      '',
+      chatText
+    ].join('\n');
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(metadata).then(() => {
+      logger.ui.info('Chat copied to clipboard');
+    }).catch(err => {
+      logger.ui.info('Failed to copy chat:', err);
+    });
+  }, [messages, currentSessionId, projectPath, sessions]);
+
   // Handle loading a specific session from Session Manager
   useEffect(() => {
     if (!sessionToLoad || !isInitialized) return;
@@ -1201,6 +1264,7 @@ export function AIChat({
           setShowPerformanceMetrics(newValue);
           localStorage.setItem('ai-show-performance-metrics', String(newValue));
         }}
+        onCopyChat={handleCopyChat}
       >
         <SessionDropdown
           currentSessionId={currentSessionId}
