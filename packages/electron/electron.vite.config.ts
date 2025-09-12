@@ -114,11 +114,11 @@ export default defineConfig({
       viteStaticCopy({
         targets: [
           {
-            src: resolve(__dirname, 'icon.png'),
+            src: 'icon.png',
             dest: ''
           },
           {
-            src: resolve(__dirname, 'about.html'),
+            src: 'about.html',
             dest: ''
           }
         ]
