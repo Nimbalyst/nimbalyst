@@ -94,7 +94,17 @@ export class AutoUpdaterService {
         cancelId: 1
       }).then(result => {
         if (result.response === 0) {
-          autoUpdater.quitAndInstall();
+          setImmediate(() => {
+            try {
+              log.info('Attempting to quit and install update...');
+              autoUpdater.quitAndInstall(false, true);
+            } catch (error) {
+              log.error('Failed to quit and install:', error);
+              // Fallback to relaunch if quitAndInstall fails
+              app.relaunch();
+              app.exit(0);
+            }
+          });
         }
       });
 
@@ -128,7 +138,17 @@ export class AutoUpdaterService {
     });
 
     ipcMain.handle('quit-and-install', () => {
-      autoUpdater.quitAndInstall();
+      setImmediate(() => {
+        try {
+          log.info('IPC: Attempting to quit and install update...');
+          autoUpdater.quitAndInstall(false, true);
+        } catch (error) {
+          log.error('Failed to quit and install update:', error);
+          // In development mode or if update not downloaded, just restart the app
+          app.relaunch();
+          app.exit(0);
+        }
+      });
     });
 
     ipcMain.handle('get-current-version', () => {
