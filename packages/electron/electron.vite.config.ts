@@ -110,7 +110,7 @@ export default defineConfig({
       viteStravuPlugin(), 
       react(), 
       optimizeExcalidrawPlugin(), 
-      optimizeShikiPlugin()
+      optimizeShikiPlugin(),
       viteStaticCopy({
         targets: [
           {

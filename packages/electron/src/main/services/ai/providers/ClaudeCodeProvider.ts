@@ -73,10 +73,21 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         cwd: projectPath,
         abortController: this.abortController,
         model: this.config.model || 'claude-3-5-sonnet-20241022',
-        permissionMode: 'bypassPermissions',
-        // Specify node executable for production builds
-        nodeExecutable: this.getNodeExecutable()
+        permissionMode: 'bypassPermissions'
       };
+
+      // In production, we need to spawn claude-code differently
+      // The SDK expects to spawn with 'node', but we need to use Electron in node mode
+      if (app.isPackaged) {
+        // Set environment to run Electron as Node
+        options.env = {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1'
+        };
+        options.executable = process.execPath;
+        options.executableArgs = [];
+        console.log('[ClaudeCodeProvider] Using Electron as node with ELECTRON_RUN_AS_NODE=1');
+      }
 
       // If we have a session ID and a claude session ID, resume
       if (sessionId) {
@@ -390,6 +401,7 @@ Remember: The user can SEE the changes in their editor. They don't need you to d
     }
 
     // In production, use Electron's node binary
+    // Note: This is now handled directly in the options setup
     return process.execPath;
   }
 
