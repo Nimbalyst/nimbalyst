@@ -187,7 +187,7 @@ export function $transformTableToBoard(tableNode: TableNode): BoardNode | null {
 
   // Create board with columns
   const boardNode = $createBoardNode();
-  
+
   // Create header node with title
   const headerNode = $createBoardHeaderNode();
   const titleParagraph = $createParagraphNode();
@@ -233,7 +233,7 @@ export function $transformListToBoard(listNode: LexicalNode): BoardNode | null {
   }
 
   const boardNode = $createBoardNode();
-  
+
   // Create header node with title
   const headerNode = $createBoardHeaderNode();
   const titleParagraph = $createParagraphNode();
@@ -292,6 +292,8 @@ export function registerBoardTransformCommands(): () => void {
           const tableNode = $transformBoardToTable(node);
           if (tableNode) {
             node.replace(tableNode);
+            // if the selection was in the board, the replace causes errors
+            tableNode.selectStart();
           }
         }
       });
@@ -311,6 +313,8 @@ export function registerBoardTransformCommands(): () => void {
           const boardNode = $transformTableToBoard(node);
           if (boardNode) {
             node.replace(boardNode);
+            // if the selection was in the table, the replace causes errors
+            boardNode.selectStart();
           }
         }
       });
@@ -330,6 +334,8 @@ export function registerBoardTransformCommands(): () => void {
           const boardNode = $transformListToBoard(node);
           if (boardNode) {
             node.replace(boardNode);
+            // if the selection was in the list, the replace causes errors
+            boardNode.selectStart();
           }
         }
       });
