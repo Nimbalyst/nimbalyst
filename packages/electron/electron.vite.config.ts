@@ -3,6 +3,7 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import viteStravuPlugin from '../shared/viteStravuPlugin'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
+import fs from 'fs'
 
 // Custom plugin to exclude Excalidraw locales and optimize imports (copied from rexical)
 // Plugin to optimize Shiki language imports
@@ -115,13 +116,28 @@ export default defineConfig({
         targets: [
           {
             src: resolve(__dirname, 'icon.png'),
-            dest: ''
+            dest: '',
+            overwrite: true
           },
           {
             src: resolve(__dirname, 'about.html'),
-            dest: ''
+            dest: '',
+            overwrite: true
           }
-        ]
+        ].filter(target => {
+          // Check if source file exists before adding to targets
+          try {
+            fs.accessSync(target.src, fs.constants.F_OK);
+            console.log(`✓ Copy target exists: ${target.src}`);
+            return true;
+          } catch (err: any) {
+            console.warn(`✗ Skipping copy target: ${target.src} does not exist (${err.code})`);
+            // Log working directory and __dirname for debugging path issues
+            console.log(`  Working directory: ${process.cwd()}`);
+            console.log(`  Config directory: ${__dirname}`);
+            return false;
+          }
+        })
       })
     ],
     server: {
