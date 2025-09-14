@@ -212,6 +212,9 @@ export default function App() {
   const [lastPrompt, setLastPrompt] = useState<string>('');
   const [lastAIResponse, setLastAIResponse] = useState<string>('');
 
+  // Track when we last saved to ignore file change events shortly after
+  const lastSaveTimeRef = useRef<number>(0);
+
   // Tab management state
   const tabPreferences = useTabPreferences();
   // console.log('[APP] Creating useTabs hook, projectMode:', projectMode, 'projectPath:', projectPath);
@@ -296,6 +299,8 @@ export default function App() {
               // Now save the content
               const result = await window.electronAPI.saveFile(tab.content);
               if (result && result.success) {
+                // Mark the time we saved to ignore file change events
+                lastSaveTimeRef.current = Date.now();
                 console.log('[TAB CLOSE] Saved successfully:', tab.fileName);
               }
             } catch (error) {
@@ -366,6 +371,8 @@ export default function App() {
           // Fire and forget - don't await
           window.electronAPI.saveFile(content).then(result => {
             if (result && result.success) {
+              // Mark the time we saved to ignore file change events
+              lastSaveTimeRef.current = Date.now();
               console.log('[WINDOW CLOSE] Saved current file');
             }
           }).catch(error => {
@@ -650,6 +657,8 @@ export default function App() {
       const result = await window.electronAPI.saveFileAs(content);
       if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Save as result:', result);
       if (result) {
+        // Mark the time we saved to ignore file change events
+        lastSaveTimeRef.current = Date.now();
         if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Setting current file path to:', result.filePath);
         setCurrentFilePath(result.filePath);
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
@@ -691,6 +700,8 @@ export default function App() {
       const result = await window.electronAPI.saveFile(content);
       if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Save result:', result);
       if (result) {
+        // Mark the time we saved to ignore file change events
+        lastSaveTimeRef.current = Date.now();
         setCurrentFilePath(result.filePath);
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
         isDirtyRef.current = false;
@@ -1098,6 +1109,8 @@ export default function App() {
             if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Save result:', result);
 
             if (result && result.success) {
+              // Mark the time we saved to ignore file change events
+              lastSaveTimeRef.current = Date.now();
               isDirtyRef.current = false;
               setIsDirty(false);
               initialContentRef.current = content;
@@ -1195,6 +1208,8 @@ export default function App() {
               const content = getContentRef.current();
               const result = await window.electronAPI.saveFile(content);
               if (result && result.success) {
+                // Mark the time we saved to ignore file change events
+                lastSaveTimeRef.current = Date.now();
                 isDirtyRef.current = false;
                 setIsDirty(false);
                 initialContentRef.current = content;
@@ -1544,6 +1559,13 @@ export default function App() {
       cleanupFns.push(window.electronAPI.onFileChangedOnDisk(async (data) => {
         // console.log('File changed on disk:', data.path);
         if (currentFilePath === data.path) {
+          // Check if this change is from our own save (within 2 seconds)
+          const timeSinceLastSave = Date.now() - lastSaveTimeRef.current;
+          if (timeSinceLastSave < 2000) {
+            console.log('[FILE_WATCH] Ignoring file change, was just saved', timeSinceLastSave, 'ms ago');
+            return;
+          }
+
           // The current file was changed on disk
           try {
             // Read the file content without touching the watcher
