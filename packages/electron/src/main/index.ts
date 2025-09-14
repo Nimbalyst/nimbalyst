@@ -1,6 +1,7 @@
 import { app, BrowserWindow, nativeTheme, nativeImage, ipcMain } from 'electron';
 import { join } from 'path';
 import { existsSync, writeFileSync, appendFileSync } from 'fs';
+
 import { createWindow, windows, windowStates, findWindowByFilePath } from './window/WindowManager';
 import { loadFileIntoWindow } from './file/FileOperations';
 import { createApplicationMenu, updateApplicationMenu } from './menu/ApplicationMenu';
@@ -24,6 +25,7 @@ import { stopAllFileWatchers } from './file/FileWatcher';
 import { stopAllProjectWatchers } from './file/ProjectWatcher';
 import { autoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
 import { migrateUserData } from './migration/dataMigration';
+import { initializeDatabase } from './database/initialize';
 
 // Track pending file to open
 let pendingFilePath: string | null = null;
@@ -140,6 +142,25 @@ app.whenReady().then(async () => {
         logger.main.error('Error during user data migration:', error);
     }
 
+    // Initialize PGLite database
+    try {
+        await initializeDatabase();
+        logger.main.info('Database initialization completed');
+    } catch (error) {
+        logger.main.error('Error initializing database:', error);
+
+        // Show error dialog to user
+        const { dialog } = require('electron');
+        dialog.showErrorBox(
+            'Database Initialization Failed',
+            `Failed to initialize the database system.\n\nError: ${error.message}\n\nThe application cannot continue without the database.`
+        );
+
+        // Exit the app
+        app.quit();
+        return;
+    }
+
     // Set dock icon for macOS
     if (process.platform === 'darwin' && app.dock) {
         const iconPath = join(__dirname, '../../resources/icon.png');
@@ -180,7 +201,7 @@ app.whenReady().then(async () => {
     });
 
     // Try to restore session, otherwise show Project Manager
-    const sessionRestored = restoreSessionState();
+    const sessionRestored = await restoreSessionState();
 
     if (pendingProjectPath) {
         // Handle project path from CLI
@@ -228,10 +249,10 @@ app.whenReady().then(async () => {
     // }, 1000);
 
     // Save session periodically (every 30 seconds)
-    sessionSaveInterval = setInterval(() => {
+    sessionSaveInterval = setInterval(async () => {
         // Only save if app is not quitting
         if (!isAppQuitting) {
-            saveSessionState();
+            await saveSessionState();
         }
     }, 30000);
 
@@ -465,9 +486,9 @@ app.on('before-quit', async (event) => {
             }
 
             // Wrap session save with timeout
-            const savePromise = new Promise((resolve, reject) => {
+            const savePromise = new Promise(async (resolve, reject) => {
                 try {
-                    saveSessionState();
+                    await saveSessionState();
                     resolve(true);
                 } catch (error) {
                     reject(error);

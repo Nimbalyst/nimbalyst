@@ -701,15 +701,37 @@ export function createApplicationMenu() {
                         const fs = require('fs');
                         const path = require('path');
                         const logPath = path.join(app.getPath('userData'), 'preditor-debug.log');
-                        
+
                         // Create the log file if it doesn't exist
                         if (!fs.existsSync(logPath)) {
                             fs.writeFileSync(logPath, `=== Preditor Debug Log ===\nNo debug messages yet.\n\nDebug logging is only active in development mode.\nTo enable debug logging in production, set NODE_ENV=development\n`);
                         }
-                        
+
                         require('electron').shell.openPath(logPath).catch((err: any) => {
                             console.error('Failed to open debug log:', err);
                             require('electron').dialog.showErrorBox('Error', `Could not open debug log at: ${logPath}`);
+                        });
+                    }
+                },
+                {
+                    label: 'Open Main Log',
+                    click: () => {
+                        const fs = require('fs');
+                        const path = require('path');
+                        const logPath = path.join(app.getPath('userData'), 'logs', 'main.log');
+
+                        // Create the log file if it doesn't exist
+                        if (!fs.existsSync(logPath)) {
+                            const logsDir = path.dirname(logPath);
+                            if (!fs.existsSync(logsDir)) {
+                                fs.mkdirSync(logsDir, { recursive: true });
+                            }
+                            fs.writeFileSync(logPath, `=== Preditor Main Log ===\nNo log messages yet.\n\nThis log contains main process and application logs.\n`);
+                        }
+
+                        require('electron').shell.openPath(logPath).catch((err: any) => {
+                            console.error('Failed to open main log:', err);
+                            require('electron').dialog.showErrorBox('Error', `Could not open main log at: ${logPath}`);
                         });
                     }
                 },
@@ -721,6 +743,121 @@ export function createApplicationMenu() {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('toggle-debug-console');
+                        }
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Start Database Server',
+                    click: async () => {
+                        try {
+                            const { database } = await import('../database/initialize');
+                            const result = await database.startProtocolServer();
+
+                            const focused = BrowserWindow.getFocusedWindow();
+                            if (focused) {
+                                dialog.showMessageBox(focused, {
+                                    type: 'info',
+                                    title: 'Database Server Started',
+                                    message: result.message || 'Database server started successfully',
+                                    detail: `You can now connect using:\npsql -h ${result.host} -p ${result.port} -d pglite\n\nOr use any PostgreSQL client like pgAdmin, DataGrip, or TablePlus.\n\nNote: Only one connection at a time is supported.`,
+                                    buttons: ['OK']
+                                });
+                            }
+                        } catch (error) {
+                            const focused = BrowserWindow.getFocusedWindow();
+                            if (focused) {
+                                dialog.showMessageBox(focused, {
+                                    type: 'error',
+                                    title: 'Failed to Start Database Server',
+                                    message: error instanceof Error ? error.message : 'Failed to start database server',
+                                    buttons: ['OK']
+                                });
+                            }
+                        }
+                    }
+                },
+                {
+                    label: 'Stop Database Server',
+                    click: async () => {
+                        try {
+                            const { database } = await import('../database/initialize');
+                            const result = await database.stopProtocolServer();
+
+                            const focused = BrowserWindow.getFocusedWindow();
+                            if (focused) {
+                                dialog.showMessageBox(focused, {
+                                    type: 'info',
+                                    title: 'Database Server Stopped',
+                                    message: result.message || 'Database server stopped',
+                                    buttons: ['OK']
+                                });
+                            }
+                        } catch (error) {
+                            const focused = BrowserWindow.getFocusedWindow();
+                            if (focused) {
+                                dialog.showMessageBox(focused, {
+                                    type: 'error',
+                                    title: 'Error',
+                                    message: error instanceof Error ? error.message : 'Failed to stop database server',
+                                    buttons: ['OK']
+                                });
+                            }
+                        }
+                    }
+                },
+                {
+                    label: 'Database Connection Info',
+                    click: async () => {
+                        try {
+                            const { database } = await import('../database/initialize');
+                            const status = await database.getProtocolServerStatus();
+
+                            const focused = BrowserWindow.getFocusedWindow();
+                            if (focused) {
+                                if (status.running) {
+                                    const connectionString = `postgresql://${status.host}:${status.port}/pglite`;
+                                    dialog.showMessageBox(focused, {
+                                        type: 'info',
+                                        title: 'Database Connection Info',
+                                        message: 'PostgreSQL Protocol Server',
+                                        detail: `The database server is running and accepting connections.
+
+Connection Details:
+Host: ${status.host}
+Port: ${status.port}
+Database: pglite
+
+Connection String:
+${connectionString}
+
+You can connect using any PostgreSQL client:
+• psql -h ${status.host} -p ${status.port} -d pglite
+• pgAdmin, DataGrip, TablePlus, etc.
+
+Note: Only one connection at a time is supported.`,
+                                        buttons: ['OK']
+                                    });
+                                } else {
+                                    dialog.showMessageBox(focused, {
+                                        type: 'info',
+                                        title: 'Database Server Not Running',
+                                        message: 'The PostgreSQL protocol server is not running.',
+                                        detail: 'Start the server from Debug > Start Database Server first.',
+                                        buttons: ['OK']
+                                    });
+                                }
+                            }
+                        } catch (error) {
+                            const focused = BrowserWindow.getFocusedWindow();
+                            if (focused) {
+                                dialog.showMessageBox(focused, {
+                                    type: 'error',
+                                    title: 'Error',
+                                    message: error instanceof Error ? error.message : 'Failed to get server status',
+                                    buttons: ['OK']
+                                });
+                            }
                         }
                     }
                 }

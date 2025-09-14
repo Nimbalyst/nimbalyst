@@ -85,6 +85,7 @@ npm run dist
 
 The Electron app features:
 - **Modern Electron version** for improved performance and security
+- **PGLite database system** - PostgreSQL in WebAssembly for robust data storage
 - **Native About window** that respects the current theme
 - **Dark mode support** with automatic title bar theming
 - **Code highlighting** using Prism.js with full dark theme support
@@ -94,6 +95,7 @@ The Electron app features:
 - **Recent files** tracking in the application menu
 - **Window state persistence** - remembers window position, size, and dev tools state
 - **Per-project window state** - each project remembers its own window configuration
+- **Document history tracking** - compressed binary storage with automatic migration
 - **AI Chat integration** - Built-in Claude AI assistant with context-aware editing
 - **Session Manager** - Global view of all AI chat sessions across projects
 - **Drag and drop** file operations in the project sidebar with copy/move support

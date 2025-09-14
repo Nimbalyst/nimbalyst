@@ -4,69 +4,129 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import * as zlib from 'zlib';
 import { promisify } from 'util';
+import { database } from './database/PGLiteDatabaseWorker';
+import { logger } from './utils/logger';
 
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 
 export type SnapshotType = 'auto-save' | 'manual' | 'ai-diff' | 'pre-apply';
 
-export interface SnapshotMetadata {
-  timestamp: string;
-  type: SnapshotType;
-  description?: string;
-  baseMarkdownHash: string;
-  stats?: {
-    additions?: number;
-    deletions?: number;
-    nodeCount?: number;
-  };
-}
-
 export interface Snapshot {
   timestamp: string;
   type: SnapshotType;
   size: number;
   baseMarkdownHash: string;
-  metadata?: SnapshotMetadata;
-}
-
-export interface Manifest {
-  filePath: string;
-  created: string;
-  lastAccessed: string;
-  snapshots: Snapshot[];
+  metadata?: any;
 }
 
 export class HistoryManager {
-  private historyDir: string;
   private maxSnapshots = 50;
   private maxAgeDays = 30;
 
-  constructor() {
-    this.historyDir = path.join(app.getPath('userData'), 'history');
-  }
+  constructor() {}
 
   async initialize(): Promise<void> {
-    await fs.mkdir(this.historyDir, { recursive: true });
+    // Ensure database is initialized
+    if (!database.isInitialized()) {
+      await database.initialize();
+    }
+
+    // Check if we need to migrate from file-based history
+    await this.migrateIfNeeded();
+
     await this.cleanup();
   }
 
-  private getFileHash(filePath: string): string {
-    return crypto
-      .createHash('sha256')
-      .update(filePath)
-      .digest('hex')
-      .substring(0, 16);
+  private async migrateIfNeeded(): Promise<void> {
+    try {
+      // Check if database has any history
+      const result = await database.query('SELECT COUNT(*) as count FROM document_history');
+      const dbCount = parseInt(result.rows[0].count);
+
+      // Check if there are history files
+      const historyDir = path.join(app.getPath('userData'), 'history');
+      let hasHistoryFiles = false;
+
+      try {
+        const dirs = await fs.readdir(historyDir);
+        hasHistoryFiles = dirs.length > 0;
+      } catch {
+        // No history directory
+      }
+
+      // If database is empty but we have history files, migrate
+      if (dbCount === 0 && hasHistoryFiles) {
+        logger.main.info('[HistoryManager] Database empty but history files exist, starting migration...');
+        await this.migrateFromFiles();
+      }
+    } catch (error) {
+      logger.main.error('[HistoryManager] Migration check failed:', error);
+    }
   }
 
-  private getFilePaths(filePath: string) {
-    const hash = this.getFileHash(filePath);
-    const fileDir = path.join(this.historyDir, hash);
-    return {
-      dir: fileDir,
-      manifest: path.join(fileDir, 'manifest.json'),
-      snapshotsDir: path.join(fileDir, 'snapshots'),
-    };
+  private async migrateFromFiles(): Promise<void> {
+    const historyDir = path.join(app.getPath('userData'), 'history');
+
+    try {
+      const dirs = await fs.readdir(historyDir);
+      let migratedCount = 0;
+
+      for (const dir of dirs) {
+        const manifestPath = path.join(historyDir, dir, 'manifest.json');
+        const snapshotsDir = path.join(historyDir, dir, 'snapshots');
+
+        try {
+          const data = await fs.readFile(manifestPath, 'utf-8');
+          const manifest = JSON.parse(data);
+          const projectId = path.dirname(manifest.filePath);
+
+          for (const snapshot of manifest.snapshots) {
+            try {
+              // Read the compressed content
+              const snapshotPath = path.join(snapshotsDir, `${snapshot.timestamp}.lexical.gz`);
+              const compressed = await fs.readFile(snapshotPath);
+
+              // Read metadata if it exists
+              let metadata = { type: snapshot.type };
+              try {
+                const metaPath = path.join(snapshotsDir, `${snapshot.timestamp}.meta.json`);
+                const metaData = await fs.readFile(metaPath, 'utf-8');
+                metadata = JSON.parse(metaData);
+              } catch {
+                // No metadata file
+              }
+
+              // Insert into database with actual content
+              await database.query(`
+                INSERT INTO document_history (
+                  project_id, file_path, content, size_bytes,
+                  timestamp, version, metadata
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+              `, [
+                projectId,
+                manifest.filePath,
+                compressed,
+                snapshot.size,
+                Date.parse(snapshot.timestamp),
+                1,
+                metadata
+              ]);
+
+              migratedCount++;
+            } catch (error) {
+              logger.main.warn(`[HistoryManager] Failed to migrate snapshot ${snapshot.timestamp}:`, error);
+            }
+          }
+        } catch (error) {
+          logger.main.warn(`[HistoryManager] Failed to migrate history for ${dir}:`, error);
+        }
+      }
+
+      logger.main.info(`[HistoryManager] Migrated ${migratedCount} history snapshots to database`);
+    } catch (error) {
+      logger.main.error('[HistoryManager] Migration failed:', error);
+    }
   }
 
   async createSnapshot(
@@ -75,158 +135,175 @@ export class HistoryManager {
     type: SnapshotType,
     description?: string
   ): Promise<void> {
-    const paths = this.getFilePaths(filePath);
     const timestamp = new Date().toISOString();
-    
-    // Ensure directories exist
-    await fs.mkdir(paths.snapshotsDir, { recursive: true });
 
     // Compress the state
     const compressed = await gzip(Buffer.from(state, 'utf-8'));
-    
+
     // Calculate markdown hash
     const baseMarkdownHash = crypto
       .createHash('sha256')
       .update(state)
       .digest('hex');
 
-    // Save snapshot
-    const snapshotPath = path.join(paths.snapshotsDir, `${timestamp}.lexical.gz`);
-    await fs.writeFile(snapshotPath, compressed);
-
-    // Save metadata
-    const metadata: SnapshotMetadata = {
-      timestamp,
-      type,
-      description,
-      baseMarkdownHash,
-    };
-    
-    const metaPath = path.join(paths.snapshotsDir, `${timestamp}.meta.json`);
-    await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
-
-    // Update manifest
-    await this.updateManifest(filePath, {
-      timestamp,
-      type,
-      size: compressed.length,
-      baseMarkdownHash,
-    });
-
-    // Cleanup old snapshots
-    await this.cleanupFile(filePath);
-  }
-
-  private async updateManifest(filePath: string, snapshot: Snapshot): Promise<void> {
-    const paths = this.getFilePaths(filePath);
-    let manifest: Manifest;
-
+    // Save to database
     try {
-      const data = await fs.readFile(paths.manifest, 'utf-8');
-      manifest = JSON.parse(data);
-      manifest.lastAccessed = new Date().toISOString();
-    } catch {
-      manifest = {
+      // Ensure database is initialized
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      // Determine project ID
+      let projectId: string | null = null;
+      const dirPath = path.dirname(filePath);
+      if (dirPath !== '/' && dirPath !== path.parse(dirPath).root) {
+        projectId = dirPath;
+      }
+
+      await database.query(`
+        INSERT INTO document_history (
+          project_id,
+          file_path,
+          content,
+          size_bytes,
+          timestamp,
+          version,
+          metadata
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, [
+        projectId,
         filePath,
-        created: new Date().toISOString(),
-        lastAccessed: new Date().toISOString(),
-        snapshots: [],
-      };
+        compressed, // Store compressed content directly in database
+        compressed.length,
+        Date.now(),
+        1,
+        { type, description, baseMarkdownHash }
+      ]);
+
+      logger.main.debug('[HistoryManager] Saved history to database for:', filePath);
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to save history to database:', error);
+      throw error; // Actually fail if we can't save
     }
-
-    manifest.snapshots.push(snapshot);
-    manifest.snapshots.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-
-    await fs.writeFile(paths.manifest, JSON.stringify(manifest, null, 2));
   }
+
 
   async listSnapshots(filePath: string): Promise<Snapshot[]> {
-    const paths = this.getFilePaths(filePath);
-    
     try {
-      const data = await fs.readFile(paths.manifest, 'utf-8');
-      const manifest: Manifest = JSON.parse(data);
-      return manifest.snapshots;
-    } catch {
+      // Ensure database is initialized
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const result = await database.query<{
+        timestamp: number;
+        size_bytes: number;
+        metadata: any;
+      }>(`
+        SELECT timestamp, size_bytes, metadata
+        FROM document_history
+        WHERE file_path = $1
+        ORDER BY timestamp DESC
+      `, [filePath]);
+
+      return result.rows.map(row => ({
+        timestamp: new Date(row.timestamp).toISOString(),
+        type: row.metadata?.type || 'manual',
+        size: row.size_bytes,
+        baseMarkdownHash: row.metadata?.baseMarkdownHash || '',
+        metadata: row.metadata
+      }));
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to list snapshots:', error);
       return [];
     }
   }
 
   async loadSnapshot(filePath: string, timestamp: string): Promise<string> {
-    const paths = this.getFilePaths(filePath);
-    const snapshotPath = path.join(paths.snapshotsDir, `${timestamp}.lexical.gz`);
-    
-    const compressed = await fs.readFile(snapshotPath);
-    const decompressed = await gunzip(compressed);
-    return decompressed.toString('utf-8');
+    try {
+      // Ensure database is initialized
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const result = await database.query<{ content: Buffer }>(`
+        SELECT content
+        FROM document_history
+        WHERE file_path = $1 AND timestamp = $2
+        LIMIT 1
+      `, [filePath, Date.parse(timestamp)]);
+
+      if (result.rows.length === 0) {
+        throw new Error('Snapshot not found');
+      }
+
+      const compressed = result.rows[0].content;
+      const decompressed = await gunzip(compressed);
+      return decompressed.toString('utf-8');
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to load snapshot from database:', error);
+      throw error;
+    }
   }
 
   async deleteSnapshot(filePath: string, timestamp: string): Promise<void> {
-    const paths = this.getFilePaths(filePath);
-    const snapshotPath = path.join(paths.snapshotsDir, `${timestamp}.lexical.gz`);
-    const metaPath = path.join(paths.snapshotsDir, `${timestamp}.meta.json`);
-    
-    await fs.unlink(snapshotPath).catch(() => {});
-    await fs.unlink(metaPath).catch(() => {});
-    
-    // Update manifest
     try {
-      const data = await fs.readFile(paths.manifest, 'utf-8');
-      const manifest: Manifest = JSON.parse(data);
-      manifest.snapshots = manifest.snapshots.filter(s => s.timestamp !== timestamp);
-      await fs.writeFile(paths.manifest, JSON.stringify(manifest, null, 2));
-    } catch {
-      // Ignore if manifest doesn't exist
+      await database.query(`
+        DELETE FROM document_history
+        WHERE file_path = $1 AND timestamp = $2
+      `, [filePath, Date.parse(timestamp)]);
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to delete snapshot:', error);
+      throw error;
     }
   }
 
-  private async cleanupFile(filePath: string): Promise<void> {
-    const paths = this.getFilePaths(filePath);
-    
-    try {
-      const data = await fs.readFile(paths.manifest, 'utf-8');
-      const manifest: Manifest = JSON.parse(data);
-      
-      const now = Date.now();
-      const maxAge = this.maxAgeDays * 24 * 60 * 60 * 1000;
-      
-      // Filter snapshots to keep
-      let snapshots = manifest.snapshots.filter((s, index) => {
-        const age = now - new Date(s.timestamp).getTime();
-        // Keep if: within max count, within max age, or in top 5
-        return index < this.maxSnapshots && (age < maxAge || index < 5);
-      });
-      
-      // Delete removed snapshots
-      const toDelete = manifest.snapshots.filter(s => !snapshots.includes(s));
-      for (const snapshot of toDelete) {
-        await this.deleteSnapshot(filePath, snapshot.timestamp);
-      }
-      
-      manifest.snapshots = snapshots;
-      await fs.writeFile(paths.manifest, JSON.stringify(manifest, null, 2));
-    } catch {
-      // Ignore if manifest doesn't exist
-    }
-  }
 
   async cleanup(): Promise<void> {
     try {
-      const dirs = await fs.readdir(this.historyDir);
-      
-      for (const dir of dirs) {
-        const manifestPath = path.join(this.historyDir, dir, 'manifest.json');
-        
-        try {
-          const data = await fs.readFile(manifestPath, 'utf-8');
-          const manifest: Manifest = JSON.parse(data);
-          await this.cleanupFile(manifest.filePath);
-        } catch {
-          // Skip invalid directories
-        }
-      }
-    } catch {
-      // History directory doesn't exist yet
+      const now = Date.now();
+      const maxAge = this.maxAgeDays * 24 * 60 * 60 * 1000;
+
+      // Delete old snapshots
+      await database.query(`
+        DELETE FROM document_history
+        WHERE timestamp < $1
+      `, [now - maxAge]);
+
+      // Keep only maxSnapshots per file
+      await database.query(`
+        DELETE FROM document_history
+        WHERE id NOT IN (
+          SELECT id FROM (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY file_path ORDER BY timestamp DESC) as rn
+            FROM document_history
+          ) t
+          WHERE rn <= $1
+        )
+      `, [this.maxSnapshots]);
+    } catch (error) {
+      logger.main.error('[HistoryManager] Cleanup failed:', error);
+    }
+  }
+
+  /**
+   * Delete all history for a project
+   */
+  async deleteProjectHistory(projectPath: string): Promise<void> {
+    try {
+      logger.main.info('[HistoryManager] Deleting history for project:', projectPath);
+
+      await database.query(`
+        DELETE FROM document_history
+        WHERE project_id = $1
+      `, [projectPath]);
+
+      logger.main.info('[HistoryManager] Deleted history for project:', projectPath);
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to delete project history:', error);
     }
   }
 }
+
+// Export singleton instance
+export const historyManager = new HistoryManager();

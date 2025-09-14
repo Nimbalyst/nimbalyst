@@ -129,7 +129,7 @@ export function setupProjectManagerHandlers() {
   handlersRegistered = true;
   // Get recent projects with additional info
   ipcMain.handle('project-manager:get-recent-projects', async () => {
-    const recentProjects = getRecentItems('projects');
+    const recentProjects = await getRecentItems('projects');
     
     // Add additional info for each project
     const projectsWithInfo = recentProjects.map(project => {
@@ -285,7 +285,7 @@ export function setupProjectManagerHandlers() {
 
   // Remove from recent projects
   ipcMain.handle('project-manager:remove-recent', async (event, projectPath: string) => {
-    const items = getRecentItems('projects').filter(item => item.path !== projectPath);
+    const items = (await getRecentItems('projects')).filter(item => item.path !== projectPath);
     store.set('recent.projects', items);
     return { success: true };
   });

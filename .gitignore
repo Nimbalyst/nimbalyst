@@ -142,3 +142,6 @@ coverage/
 # Bundle analysis artifacts
 bundle-stats.html
 bundle-analysis.json
+
+# Temporary test files
+**/temptests/

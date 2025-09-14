@@ -66,17 +66,17 @@ export function registerProjectHandlers() {
             console.error('[SWITCH_FILE] Failed to find custom window ID');
             return null;
         }
-        
+
         try {
             const content = readFileSync(filePath, 'utf-8');
             console.log('[SWITCH_FILE] File read successfully, length:', content.length);
-            
+
             let state = windowStates.get(windowId);
-            console.log('[SWITCH_FILE] Window state exists:', !!state);
-            
+            // console.log('[SWITCH_FILE] Window state exists:', !!state);
+
             // Create state if it doesn't exist
             if (!state) {
-                console.log('[SWITCH_FILE] Creating new window state for window:', windowId);
+                // console.log('[SWITCH_FILE] Creating new window state for window:', windowId);
                 state = {
                     filePath: null,
                     documentEdited: false,
@@ -86,40 +86,40 @@ export function registerProjectHandlers() {
             }
 
             const oldFilePath = state.filePath;
-            console.log('[SWITCH_FILE] Previous file:', oldFilePath);
-            
+            // console.log('[SWITCH_FILE] Previous file:', oldFilePath);
+
             // Stop watching the old file
             if (oldFilePath && oldFilePath !== filePath) {
-                console.log('[SWITCH_FILE] Stopping watcher for old file');
+                // console.log('[SWITCH_FILE] Stopping watcher for old file');
                 stopFileWatcher(windowId);
             }
 
             // Update state
             state.filePath = filePath;
             state.documentEdited = false;
-            console.log('[SWITCH_FILE] Updated window state with new file path');
-            
+            // console.log('[SWITCH_FILE] Updated window state with new file path');
+
             // Add to recent project files
             if (state.projectPath) {
                 addProjectRecentFile(state.projectPath, filePath);
-                console.log('[SWITCH_FILE] Added to recent files');
+                // console.log('[SWITCH_FILE] Added to recent files');
             }
 
             // Start watching the new file
             startFileWatcher(window, filePath);
-            console.log('[SWITCH_FILE] Started file watcher');
+            // console.log('[SWITCH_FILE] Started file watcher');
 
             // Set represented filename for macOS
             if (process.platform === 'darwin') {
                 window.setRepresentedFilename(filePath);
-                console.log('[SWITCH_FILE] Updated macOS represented filename');
+                // console.log('[SWITCH_FILE] Updated macOS represented filename');
             }
 
-            console.log('[SWITCH_FILE] ✓ Switch complete, state:', {
-                filePath: state.filePath,
-                projectPath: state.projectPath,
-                documentEdited: state.documentEdited
-            });
+            // console.log('[SWITCH_FILE] ✓ Switch complete, state:', {
+            //     filePath: state.filePath,
+            //     projectPath: state.projectPath,
+            //     documentEdited: state.documentEdited
+            // });
 
             return { filePath, content };
         } catch (error) {
@@ -133,19 +133,19 @@ export function registerProjectHandlers() {
         try {
             const trimmedQuery = query.trim();
             if (!trimmedQuery) return [];
-            
+
             // Escape special characters for shell
             const escapedTerm = trimmedQuery.replace(/["'\\]/g, '\\$&');
-            
+
             // Search both file names and content using ripgrep
             // Use --files-with-matches to get file list, then search content
             const allResults = [];
-            
+
             // First, search file names
             try {
                 const fileNameCommand = `find "${projectPath}" -name "*.md" -o -name "*.markdown" 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
                 const { stdout: fileMatches } = await execAsync(fileNameCommand);
-                
+
                 if (fileMatches) {
                     const files = fileMatches.split('\n').filter(f => f.trim());
                     for (const file of files) {
@@ -159,7 +159,7 @@ export function registerProjectHandlers() {
             } catch (e) {
                 // Ignore file name search errors
             }
-            
+
             // Then search content using ripgrep
             let contentCommand = ''; // Define at outer scope for error handling
             try {
@@ -169,12 +169,12 @@ export function registerProjectHandlers() {
                 const path = require('path'); // Ensure path is required locally
                 const os = require('os');
                 const fs = require('fs');
-                
+
                 // Determine the platform-specific ripgrep binary
                 const platform = os.platform();
                 const arch = os.arch();
                 let rgBinaryDir = '';
-                
+
                 if (platform === 'darwin') {
                     rgBinaryDir = arch === 'arm64' ? 'arm64-darwin' : 'x64-darwin';
                 } else if (platform === 'win32') {
@@ -182,15 +182,15 @@ export function registerProjectHandlers() {
                 } else if (platform === 'linux') {
                     rgBinaryDir = arch === 'arm64' ? 'arm64-linux' : 'x64-linux';
                 }
-                
+
                 const rgBinaryName = platform === 'win32' ? 'rg.exe' : 'rg';
-                
+
                 // In production, files are in app.asar.unpacked
                 const isPackaged = app.isPackaged;
-                
+
                 // Check all possible paths, both dev and production
                 const possibleRgPaths = [];
-                
+
                 if (isPackaged) {
                     // Production paths - files are unpacked from ASAR
                     const resourcesPath = process.resourcesPath;
@@ -205,16 +205,16 @@ export function registerProjectHandlers() {
                         path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
                     );
                 }
-                
-                console.log('[SEARCH] Looking for ripgrep. isPackaged:', isPackaged, 'platform:', platform, 'arch:', arch);
-                console.log('[SEARCH] Binary dir:', rgBinaryDir, 'Binary name:', rgBinaryName);
-                console.log('[SEARCH] Checking paths:', possibleRgPaths);
-                
+
+                // console.log('[SEARCH] Looking for ripgrep. isPackaged:', isPackaged, 'platform:', platform, 'arch:', arch);
+                // console.log('[SEARCH] Binary dir:', rgBinaryDir, 'Binary name:', rgBinaryName);
+                // console.log('[SEARCH] Checking paths:', possibleRgPaths);
+
                 for (const testPath of possibleRgPaths) {
                     if (existsSync(testPath)) {
                         rgPath = testPath;
                         console.log('[SEARCH] Found ripgrep at:', rgPath);
-                        
+
                         // Make sure the binary is executable in production
                         if (isPackaged && platform !== 'win32') {
                             try {
@@ -229,18 +229,18 @@ export function registerProjectHandlers() {
                         console.log('[SEARCH] Not found at:', testPath);
                     }
                 }
-                
+
                 if (rgPath === 'rg') {
                     console.warn('[SEARCH] Could not find bundled ripgrep, falling back to system rg');
                 }
-                
+
                 contentCommand = `"${rgPath}" --type md -i --json "${escapedTerm}" "${projectPath}" 2>/dev/null || true`;
                 const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
-                
+
                 if (stdout) {
                     const lines = stdout.split('\n').filter(line => line.trim());
                     const contentMatches = new Map<string, any>();
-                    
+
                     for (const line of lines) {
                         try {
                             const item = JSON.parse(line);
@@ -253,7 +253,7 @@ export function registerProjectHandlers() {
                                         matches: []
                                     });
                                 }
-                                
+
                                 // Add match with line number and text
                                 contentMatches.get(filePath).matches.push({
                                     line: item.data.line_number,
@@ -266,7 +266,7 @@ export function registerProjectHandlers() {
                             // Skip invalid JSON lines
                         }
                     }
-                    
+
                     // Merge content matches with existing results
                     for (const [filePath, data] of contentMatches) {
                         const existing = allResults.find(r => r.path === filePath);
@@ -285,16 +285,16 @@ export function registerProjectHandlers() {
                 console.error('[SEARCH] Error details:', error.message, error.code);
                 // Return empty results on error instead of throwing
             }
-            
+
             // Sort by relevance: files matching both name and content first
             allResults.sort((a, b) => {
                 const aScore = (a.isFileNameMatch ? 2 : 0) + (a.isContentMatch ? 1 : 0);
                 const bScore = (b.isFileNameMatch ? 2 : 0) + (b.isContentMatch ? 1 : 0);
                 return bScore - aScore;
             });
-            
+
             return allResults.slice(0, 50);
-            
+
         } catch (error) {
             console.error('Error searching project files:', error);
             return [];
@@ -302,61 +302,67 @@ export function registerProjectHandlers() {
     });
 
     // Get recent project files
-    ipcMain.handle('get-recent-project-files', (event) => {
+    ipcMain.handle('get-recent-project-files', async (event) => {
         const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
         if (!windowId) return [];
-        
+
         const state = windowStates.get(windowId);
         if (!state || !state.projectPath) return [];
-        
+
         // Get recent files for this project from store
-        const projectRecentFiles = getProjectRecentFiles(state.projectPath);
-        
+        const projectRecentFiles = await getProjectRecentFiles(state.projectPath);
+
+        // Ensure it's an array before filtering
+        if (!Array.isArray(projectRecentFiles)) {
+            console.error('[ProjectHandlers] projectRecentFiles is not an array:', projectRecentFiles);
+            return [];
+        }
+
         // Filter to only existing files
         return projectRecentFiles.filter(filePath => existsSync(filePath)).slice(0, 20);
     });
 
     // Add to project recent files
-    ipcMain.on('add-to-project-recent-files', (event, filePath: string) => {
+    ipcMain.on('add-to-project-recent-files', async (event, filePath: string) => {
         const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
         if (!windowId) return;
-        
+
         const state = windowStates.get(windowId);
         if (!state || !state.projectPath) return;
-        
-        addProjectRecentFile(state.projectPath, filePath);
+
+        await addProjectRecentFile(state.projectPath, filePath);
     });
 
     // Get project tab state
-    ipcMain.handle('get-project-tab-state', (event) => {
+    ipcMain.handle('get-project-tab-state', async (event) => {
         const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
         if (!windowId) return null;
-        
+
         const state = windowStates.get(windowId);
         if (!state || !state.projectPath) return null;
-        
-        return getProjectTabState(state.projectPath);
+
+        return await getProjectTabState(state.projectPath);
     });
 
     // Save project tab state
-    ipcMain.on('save-project-tab-state', (event, tabState) => {
+    ipcMain.on('save-project-tab-state', async (event, tabState) => {
         const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
         if (!windowId) return;
-        
+
         const state = windowStates.get(windowId);
         if (!state || !state.projectPath) return;
-        
-        saveProjectTabState(state.projectPath, tabState);
+
+        await saveProjectTabState(state.projectPath, tabState);
     });
 
     // Clear project tab state
     ipcMain.on('clear-project-tab-state', (event) => {
         const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
         if (!windowId) return;
-        
+
         const state = windowStates.get(windowId);
         if (!state || !state.projectPath) return;
-        
+
         clearProjectTabState(state.projectPath);
     });
 
@@ -367,7 +373,7 @@ export function registerProjectHandlers() {
 
         try {
             const newPath = join(dirname(oldPath), newName);
-            
+
             // Stop watching before rename to prevent false delete detection
             for (const [windowId, state] of windowStates) {
                 if (state?.filePath === oldPath) {
@@ -375,7 +381,7 @@ export function registerProjectHandlers() {
                     stopFileWatcher(windowId);
                 }
             }
-            
+
             await rename(oldPath, newPath);
 
             // Update windows that have this file open
@@ -448,7 +454,7 @@ export function registerProjectHandlers() {
         try {
             // Check if source exists
             const sourceStats = await stat(sourcePath);
-            
+
             // Check if target is a directory
             let destinationPath = targetPath;
             try {
@@ -482,7 +488,7 @@ export function registerProjectHandlers() {
                     if (state?.filePath === sourcePath) {
                         // Update the file path
                         state.filePath = destinationPath;
-                        
+
                         // Update represented filename for macOS
                         const window = BrowserWindow.getAllWindows().find(w => w.id === windowId);
                         if (window) {
@@ -517,7 +523,7 @@ export function registerProjectHandlers() {
         try {
             // Check if source exists
             const sourceStats = await stat(sourcePath);
-            
+
             // Check if target is a directory
             let destinationPath = targetPath;
             try {
@@ -526,12 +532,12 @@ export function registerProjectHandlers() {
                     // If target is a directory, copy source into it
                     let destName = basename(sourcePath);
                     destinationPath = join(targetPath, destName);
-                    
+
                     // Check if file already exists and generate unique name
                     let counter = 1;
                     const nameWithoutExt = basename(sourcePath, extname(sourcePath));
                     const ext = extname(sourcePath);
-                    
+
                     while (existsSync(destinationPath)) {
                         destName = `${nameWithoutExt} copy${counter > 1 ? ' ' + counter : ''}${ext}`;
                         destinationPath = join(targetPath, destName);
@@ -561,7 +567,7 @@ export function registerProjectHandlers() {
         try {
             const { createWindow } = require('../window/WindowManager');
             const { loadFileIntoWindow } = require('../file/FileOperations');
-            
+
             const newWindow = createWindow(true, false);
             newWindow.once('ready-to-show', () => {
                 loadFileIntoWindow(newWindow, filePath);

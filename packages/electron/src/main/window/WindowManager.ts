@@ -244,6 +244,13 @@ export function createWindow(
             // This will be handled by the menu system
         });
 
+        // Save session state when window is created
+        import('../session/SessionState').then(({ saveSessionState }) => {
+            setTimeout(async () => {
+                await saveSessionState();
+            }, 1000);
+        });
+
         // Update menu when window gains/loses focus
         window.on('focus', () => {
             // Update focus order

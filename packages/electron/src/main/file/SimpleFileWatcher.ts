@@ -19,26 +19,26 @@ export class SimpleFileWatcher {
         // Check if we're already watching this exact file for this window
         const existingPath = this.filePaths.get(windowId);
         if (existingPath === filePath) {
-            console.log(`[FileWatcher] Already watching ${filePath} for window ${windowId}, skipping restart`);
+            // console.log(`[FileWatcher] Already watching ${filePath} for window ${windowId}, skipping restart`);
             return;
         }
 
         this.stop(windowId);
 
         try {
-            console.log(`[FileWatcher] Setting up watcher for: ${filePath} (window ${windowId})`);
+            // console.log(`[FileWatcher] Setting up watcher for: ${filePath} (window ${windowId})`);
 
             // Get initial mtime
             try {
                 const stats = statSync(filePath);
                 this.lastMtimes.set(windowId, stats.mtimeMs);
-                console.log(`[FileWatcher] Initial mtime for ${filePath}: ${stats.mtimeMs}`);
+                // console.log(`[FileWatcher] Initial mtime for ${filePath}: ${stats.mtimeMs}`);
             } catch (err) {
                 console.error(`[FileWatcher] Could not get initial mtime for ${filePath}:`, err);
             }
 
             const watcher = watch(filePath, { persistent: true }, (eventType, filename) => {
-                console.log(`[FileWatcher] Raw event detected: ${eventType} for ${filePath} (filename: ${filename})`);
+                // console.log(`[FileWatcher] Raw event detected: ${eventType} for ${filePath} (filename: ${filename})`);
                 if (eventType === 'change') {
                     // Check if the file actually changed by comparing mtime
                     try {
@@ -61,7 +61,7 @@ export class SimpleFileWatcher {
                     try {
                         if (window && !window.isDestroyed() && window.webContents && !window.webContents.isDestroyed()) {
                             window.webContents.send('file-changed-on-disk', { path: filePath });
-                            console.log(`[FileWatcher] Event sent successfully`);
+                            // console.log(`[FileWatcher] Event sent successfully`);
                         } else {
                             console.log(`[FileWatcher] Window or webContents is destroyed, cannot send event`);
                         }
@@ -69,7 +69,7 @@ export class SimpleFileWatcher {
                         console.error(`[FileWatcher] Error sending event:`, error);
                     }
                 } else if (eventType === 'rename') {
-                    console.log(`[FileWatcher] File renamed: ${filePath}`);
+                    // console.log(`[FileWatcher] File renamed: ${filePath}`);
                 }
             });
 
@@ -79,7 +79,7 @@ export class SimpleFileWatcher {
             this.watchers.set(windowId, watcher);
             this.filePaths.set(windowId, filePath);
             logger.fileWatcher.info(`Started simple watcher for: ${filePath}`);
-            console.log(`[FileWatcher] Watcher successfully created and stored for window ${windowId}`);
+            // console.log(`[FileWatcher] Watcher successfully created and stored for window ${windowId}`);
         } catch (error) {
             logger.fileWatcher.error('Failed to start watcher:', error);
         }
@@ -89,7 +89,7 @@ export class SimpleFileWatcher {
         const watcher = this.watchers.get(windowId);
         const filePath = this.filePaths.get(windowId);
         if (watcher) {
-            console.log(`[FileWatcher] Stopping watcher for window ${windowId}, file: ${filePath}`);
+            // console.log(`[FileWatcher] Stopping watcher for window ${windowId}, file: ${filePath}`);
             watcher.close();
             this.watchers.delete(windowId);
             this.filePaths.delete(windowId);
@@ -104,9 +104,9 @@ export class SimpleFileWatcher {
         console.log(`[CLEANUP] SimpleFileWatcher.stopAll called with ${this.watchers.size} watchers`);
         for (const [windowId, watcher] of this.watchers.entries()) {
             try {
-                console.log(`[CLEANUP] Closing file watcher for window ${windowId}`);
+                // console.log(`[CLEANUP] Closing file watcher for window ${windowId}`);
                 watcher.close();
-                console.log(`[CLEANUP] Successfully closed file watcher for window ${windowId}`);
+                // console.log(`[CLEANUP] Successfully closed file watcher for window ${windowId}`);
             } catch (error) {
                 logger.fileWatcher.error(`Error closing watcher for window ${windowId}:`, error);
                 console.error(`[CLEANUP] Error closing file watcher for window ${windowId}:`, error);

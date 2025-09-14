@@ -10,8 +10,8 @@ This is Preditor - a rich text editor built with Meta's Lexical framework. Origi
 
 ### Electron App
 - **Start dev server**: `cd packages/electron && npm run dev` - Runs Electron app with hot reload
-- **Build for Mac**: `cd packages/electron && npm run build:mac:local` - Creates local Mac build
-- **Build for Mac (notarized)**: `cd packages/electron && npm run build:mac:notarized` - Creates notarized Mac build
+- **Build for Mac**: \`cd packages/electron && npm run build:mac:local\` - Creates local Mac build
+- **Build for Mac (notarized)**: \`cd packages/electron && npm run build:mac:notarized\` - Creates notarized Mac build
 
 ### Monorepo Setup
 - **Install dependencies**: `npm install --legacy-peer-deps` - Install all dependencies 
@@ -163,29 +163,38 @@ The Electron app includes comprehensive window state persistence:
 
 ## Data Persistence
 
-The Preditor app stores all user data in platform-specific locations:
+The Preditor app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage, providing a robust database system that works both in development and packaged builds.
 
-### macOS
-- **Main path**: `~/Library/Application Support/@preditor/electron/`
-- **Config file**: `config.json` - Main electron-store configuration (window states, recent files, preferences)
-- **AI sessions**: `ai-sessions.json` - All AI chat conversations by project
-- **AI settings**: `ai-settings.json` - AI provider configurations and API keys
-- **History**: `history/` directory - Document edit history snapshots
-- **Logs**: `logs/` directory - Application logs
-- **Debug log**: `preditor-debug.log` - Debug console output
+### Database System
+- **Technology**: PGLite (PostgreSQL in WebAssembly) running in Node.js worker thread
+- **Storage**: Persistent file-based database with ACID compliance
+- **Worker architecture**: Isolated worker thread prevents module conflicts
+- **Bundling**: PGLite is fully bundled in packaged apps for reliable distribution
 
-### Windows
-- **Main path**: `%APPDATA%/@preditor/electron/`
+### Database Tables
+- **ai_sessions**: AI chat conversations with full message history, document context, and provider configurations
+- **app_settings**: Global application settings (theme, providers, shortcuts, etc.)
+- **project_state**: Per-project state including window bounds, UI layout, open tabs, file tree, and editor settings
+- **session_state**: Global session restoration data for windows and focus order
+- **document_history**: Compressed document edit history with binary content storage
 
-### Linux
-- **Main path**: `~/.config/@preditor/electron/`
+### Data Locations
+- **Database**: `~/Library/Application Support/@preditor/electron/pglite-db/` (macOS)
+- **Logs**: `~/Library/Application Support/@preditor/electron/logs/` - Application logs
+- **Debug log**: `~/Library/Application Support/@preditor/electron/preditor-debug.log` - Debug console output
+- **Legacy files**: `~/Library/Application Support/@preditor/electron/history/` - Preserved file-based history (migrated to database)
 
-### Data Migration
-When upgrading from the old Stravu Editor version, the app automatically migrates all user data from:
-- Old: `~/Library/Application Support/@stravu-editor/electron/`
-- New: `~/Library/Application Support/@preditor/electron/`
+### Migration System
+- **Automatic migration**: File-based data automatically migrates to database on first startup
+- **History preservation**: Original history files preserved after migration (not deleted)
+- **Legacy app migration**: Automatically migrates from old Stravu Editor data paths
+- **Version tracking**: Database includes migration timestamps and version information
 
-The migration preserves all settings, sessions, history, and preferences.
+### Database Features
+- **Compression**: Document history stored as compressed binary data (BYTEA)
+- **JSON support**: Rich JSON fields for complex data structures (JSONB columns)
+- **Indexing**: Optimized indexes for fast queries on projects, timestamps, and file paths
+- **Protocol server**: Optional PostgreSQL protocol server for external database access
 
 ## File Operations
 

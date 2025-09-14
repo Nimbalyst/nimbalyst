@@ -9,7 +9,7 @@ import { basename } from 'path';
 import { logger } from '../utils/logger';
 
 // Save session state
-export function saveSessionState() {
+export async function saveSessionState() {
     const sessionWindows: any[] = [];
 
     for (const [windowId, window] of windows) {
@@ -46,20 +46,19 @@ export function saveSessionState() {
         lastUpdated: Date.now()
     };
 
-    saveToStore(sessionState);
+    await saveToStore(sessionState);
     // logger.session.debug('Saved session state:', sessionState);
 }
 
 // Restore session state
-export function restoreSessionState(): boolean {
-    const sessionState = getSessionState();
+export async function restoreSessionState(): Promise<boolean> {
+    const sessionState = await getSessionState();
 
     if (!sessionState || !sessionState.windows || sessionState.windows.length === 0) {
-        logger.session.info('No session to restore');
         return false;
     }
 
-    logger.session.info('Restoring session:', sessionState);
+    logger.session.info(`Restoring session with ${sessionState.windows.length} window(s)`);
 
     // Sort windows by focus order (lower order first, so they're created in background)
     const sortedWindows = [...sessionState.windows].sort((a, b) => {

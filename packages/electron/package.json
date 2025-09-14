@@ -1,6 +1,6 @@
 {
   "name": "@preditor/electron",
-  "version": "0.40.4",
+  "version": "0.42.0",
   "private": true,
   "description": "Electron app for Preditor",
   "main": "out/main/index.js",
@@ -9,8 +9,9 @@
   },
   "scripts": {
     "start": "electron-vite preview",
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "dev": "npm run build:worker && electron-vite dev",
+    "build": "electron-vite build && npm run build:worker",
+    "build:worker": "node build/build-worker.js",
     "postinstall": "electron-builder install-app-deps || true",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:dist": "npm run build && electron-builder",
@@ -31,8 +32,10 @@
   "dependencies": {
     "@anthropic-ai/claude-code": "^1.0.77",
     "@anthropic-ai/sdk": "^0.58.0",
+    "@electric-sql/pglite": "^0.3.8",
     "@modelcontextprotocol/sdk": "^1.17.2",
-    "dexie": "^4.0.11",
+    "@types/uuid": "^10.0.0",
+    "better-sqlite3": "^12.2.0",
     "diff": "^5.2.0",
     "electron-log": "^5.4.3",
     "electron-store": "^8.2.0",
@@ -44,6 +47,7 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite-socket": "^0.0.13",
     "@electron/notarize": "^2.3.2",
     "@types/dotenv": "^6.1.1",
     "@types/node": "^20.19.11",
@@ -55,6 +59,7 @@
     "electron": "^37.2.6",
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.0",
+    "esbuild": "^0.21.5",
     "happy-dom": "^18.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.0.0",
@@ -88,6 +93,20 @@
       "icon.png",
       "node_modules/**/*",
       "!node_modules/@anthropic-ai/claude-code/vendor/**/*.jar"
+    ],
+    "extraResources": [
+      {
+        "from": "out/worker.bundle.js",
+        "to": "worker.bundle.js"
+      },
+      {
+        "from": "../../node_modules/@electric-sql/pglite/dist/pglite.data",
+        "to": "pglite.data"
+      },
+      {
+        "from": "../../node_modules/@electric-sql/pglite/dist/pglite.wasm",
+        "to": "pglite.wasm"
+      }
     ],
     "afterSign": "build/afterSign.js",
     "fileAssociations": [
