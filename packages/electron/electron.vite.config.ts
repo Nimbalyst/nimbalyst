@@ -108,44 +108,27 @@ export default defineConfig({
   renderer: {
     root: 'src/renderer',
     plugins: [
-      viteStravuPlugin(), 
-      react(), 
-      optimizeExcalidrawPlugin(), 
+      viteStravuPlugin(),
+      react(),
+      optimizeExcalidrawPlugin(),
       optimizeShikiPlugin(),
-      viteStaticCopy({
-        targets: (() => {
-          const potentialTargets = [
-            {
-              src: resolve(__dirname, 'icon.png'),
-              dest: '',
-              overwrite: true
-            },
-            {
-              src: resolve(__dirname, 'about.html'),
-              dest: '',
-              overwrite: true
-            }
-          ];
-
-          // Filter targets based on file existence
-          const validTargets = potentialTargets.filter(target => {
-            try {
-              fs.accessSync(target.src, fs.constants.F_OK);
-              console.log(`✓ Copy target exists: ${target.src}`);
-              return true;
-            } catch (err: any) {
-              console.warn(`✗ Skipping copy target: ${target.src} does not exist (${err.code})`);
-              console.log(`  Working directory: ${process.cwd()}`);
-              console.log(`  Config directory: ${__dirname}`);
-              return false;
-            }
-          });
-
-          // Return empty array if no valid targets to prevent plugin errors
-          return validTargets.length > 0 ? validTargets : [];
-        })()
-      })
-    ],
+      // viteStaticCopy disabled due to Windows CI build issues
+      // Files should be copied manually or handled by electron-builder
+      // viteStaticCopy({
+      //   targets: [
+      //     {
+      //       src: resolve(__dirname, 'icon.png'),
+      //       dest: '',
+      //       overwrite: true
+      //     },
+      //     {
+      //       src: resolve(__dirname, 'about.html'),
+      //       dest: '',
+      //       overwrite: true
+      //     }
+      //   ]
+      // })
+    ].filter(Boolean),
     server: {
       port: 5273,
       strictPort: true,
