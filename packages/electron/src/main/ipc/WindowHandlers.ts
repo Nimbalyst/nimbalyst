@@ -80,6 +80,13 @@ export function registerWindowHandlers() {
             return;
         }
         const state = windowStates.get(windowId);
+        
+        // Only proceed if the file path actually changed
+        if (state?.filePath === filePath) {
+            // No change, skip everything
+            return;
+        }
+        
         console.log('[SET_FILE] Updating file path for window', windowId, 'from', state?.filePath, 'to', filePath);
         
         if (state) {

@@ -198,11 +198,6 @@ export function registerFileHandlers() {
         }
         let state = windowStates.get(windowId);
 
-        console.log('[SET_FILE] set-current-file called at', new Date().toISOString());
-        console.log('[SET_FILE] Window ID:', windowId);
-        console.log('[SET_FILE] New file path:', filePath);
-        console.log('[SET_FILE] State exists:', !!state);
-
         // Create state if it doesn't exist (can happen with new windows)
         if (!state) {
             console.log('[SET_FILE] Creating new window state for window:', windowId);
@@ -214,8 +209,19 @@ export function registerFileHandlers() {
             windowStates.set(windowId, state);
         }
 
+        // Only proceed if the file path actually changed
+        if (state.filePath === filePath) {
+            // No change, skip everything
+            return { success: true };
+        }
+
+        // console.log('[SET_FILE] set-current-file called at', new Date().toISOString());
+        // console.log('[SET_FILE] Window ID:', windowId);
+        // console.log('[SET_FILE] New file path:', filePath);
+        // console.log('[SET_FILE] State exists:', !!state);
+
         const oldFilePath = state.filePath;
-        console.log('[SET_FILE] Previous file path:', oldFilePath);
+        // console.log('[SET_FILE] Previous file path:', oldFilePath);
 
         // Stop watching the old file
         if (oldFilePath && oldFilePath !== filePath) {

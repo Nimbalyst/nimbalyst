@@ -41,6 +41,17 @@ export function registerProjectHandlers() {
         }
     });
 
+    // Read file content (without changing watcher or state)
+    ipcMain.handle('read-file-content', async (event, filePath: string) => {
+        try {
+            const content = readFileSync(filePath, 'utf-8');
+            return { content };
+        } catch (error: any) {
+            console.error('[READ_FILE] Failed to read file:', filePath, error);
+            return null;
+        }
+    });
+
     // Switch project file
     ipcMain.handle('switch-project-file', async (event, filePath: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);

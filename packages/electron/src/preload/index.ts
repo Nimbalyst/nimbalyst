@@ -159,6 +159,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createFile: (filePath: string, content: string) => ipcRenderer.invoke('create-file', filePath, content),
   createFolder: (folderPath: string) => ipcRenderer.invoke('create-folder', folderPath),
   switchProjectFile: (filePath: string) => ipcRenderer.invoke('switch-project-file', filePath),
+  readFileContent: (filePath: string) => ipcRenderer.invoke('read-file-content', filePath),
   
   // File context menu operations
   renameFile: (oldPath: string, newName: string) => ipcRenderer.invoke('rename-file', oldPath, newName),
@@ -192,6 +193,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('project-file-tree-updated', handler);
     return () => ipcRenderer.removeListener('project-file-tree-updated', handler);
+  },
+  
+  onFileChangedOnDisk: (callback: (data: { path: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('file-changed-on-disk', handler);
+    return () => ipcRenderer.removeListener('file-changed-on-disk', handler);
   },
   
   // Settings operations

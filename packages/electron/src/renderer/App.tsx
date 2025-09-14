@@ -71,6 +71,7 @@ interface ElectronAPI {
   onFileRenamed: (callback: (data: { oldPath: string; newPath: string }) => void) => () => void;
   onFileMoved: (callback: (data: { sourcePath: string; destinationPath: string }) => void) => () => void;
   onProjectFileTreeUpdated: (callback: (data: { fileTree: FileTreeItem[]; addedPath?: string; removedPath?: string }) => void) => () => void;
+  onFileChangedOnDisk?: (callback: (data: { path: string }) => void) => () => void;
   onThemeChange: (callback: (theme: string) => void) => () => void;
   onShowAbout: (callback: () => void) => () => void;
   onViewHistory?: (callback: () => void) => () => void;
@@ -89,6 +90,7 @@ interface ElectronAPI {
   // Project operations
   getFolderContents: (dirPath: string) => Promise<FileTreeItem[]>;
   switchProjectFile: (filePath: string) => Promise<{ filePath: string; content: string } | null>;
+  readFileContent?: (filePath: string) => Promise<{ content: string } | null>;
   // Settings
   getSidebarWidth: () => Promise<number | null>;
   setSidebarWidth: (width: number) => void;
@@ -180,6 +182,7 @@ export default function App() {
   const [currentFileName, setCurrentFileName] = useState<string | null>(null);
   const isDirtyRef = useRef(false);  // Internal tracking for autosave
   const [isDirty, setIsDirty] = useState(false);  // For UI updates
+  const [contentVersion, setContentVersion] = useState(0);  // For forcing editor re-render
   const tabStatesRef = useRef<Map<string, { isDirty: boolean }>>(new Map());  // Track tab dirty states without re-renders
   const tabsRef = useRef<any>(null);  // Reference to current tabs object for use in intervals only
   const [isInitializing, setIsInitializing] = useState(true);
@@ -250,6 +253,7 @@ export default function App() {
           contentRef.current = tab.content;
           initialContentRef.current = tab.content;
           contentVersionRef.current += 1;
+          setContentVersion(v => v + 1);
           isDirtyRef.current = tab.isDirty || false;
           setIsDirty(tab.isDirty || false);
 
@@ -411,6 +415,11 @@ export default function App() {
             contentRef.current = state.content || '';
             initialContentRef.current = state.content || '';
             contentVersionRef.current += 1;
+            setContentVersion(v => v + 1);
+      setContentVersion(v => v + 1);
+        setContentVersion(v => v + 1);
+    setContentVersion(v => v + 1);
+          setContentVersion(v => v + 1);
             isInitializedRef.current = false;
 
             // Update the main process about the current file
@@ -560,6 +569,7 @@ export default function App() {
   // Handle new file
   const handleNew = useCallback(() => {
     contentVersionRef.current += 1;
+    setContentVersion(v => v + 1);
     isInitializedRef.current = false;
     contentRef.current = '';
     setCurrentFilePath(null);
@@ -577,6 +587,9 @@ export default function App() {
       const result = await window.electronAPI.openFile();
       if (result) {
         contentVersionRef.current += 1;
+      setContentVersion(v => v + 1);
+        setContentVersion(v => v + 1);
+    setContentVersion(v => v + 1);
         isInitializedRef.current = false;
         contentRef.current = result.content;
         setCurrentFilePath(result.filePath);
@@ -785,6 +798,7 @@ export default function App() {
         } else {
           // Original non-tab behavior
           contentVersionRef.current += 1;
+          setContentVersion(v => v + 1);
           isInitializedRef.current = false;
           contentRef.current = result.content;
           setCurrentFilePath(result.filePath);
@@ -994,6 +1008,7 @@ export default function App() {
 
     // Update content version to force editor remount
     contentVersionRef.current += 1;
+    setContentVersion(v => v + 1);
     isInitializedRef.current = false;
 
     // Update the content based on tab mode
@@ -1130,7 +1145,7 @@ export default function App() {
             hasElectronAPI: !!window.electronAPI
           });
         }
-      }, 10000); // Autosave every 10 seconds
+      }, 2000); // Autosave every 2 seconds
     } else {
       if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Not setting up autosave:', {
         hasPath: !!currentFilePath,
@@ -1196,7 +1211,7 @@ export default function App() {
               console.error('[AUTOSAVE] Failed:', error);
             }
           }
-        }, 10000);
+        }, 2000);
       }
     }, 100);
 
@@ -1270,6 +1285,12 @@ export default function App() {
               contentRef.current = result.content;
               initialContentRef.current = result.content;
               contentVersionRef.current += 1;
+              setContentVersion(v => v + 1);
+            setContentVersion(v => v + 1);
+      setContentVersion(v => v + 1);
+        setContentVersion(v => v + 1);
+    setContentVersion(v => v + 1);
+          setContentVersion(v => v + 1);
               setIsDirty(tabs.activeTab.isDirty);
 
               // Update the main process
@@ -1287,6 +1308,7 @@ export default function App() {
           contentRef.current = tabs.activeTab.content;
           initialContentRef.current = tabs.activeTab.content;
           contentVersionRef.current += 1;
+          setContentVersion(v => v + 1);
           setIsDirty(tabs.activeTab.isDirty);
 
           // Update the main process
@@ -1378,6 +1400,8 @@ export default function App() {
       isDirtyRef.current = false;
     setIsDirty(false);
       contentVersionRef.current += 1;
+      setContentVersion(v => v + 1);
+    setContentVersion(v => v + 1);
       isInitializedRef.current = false;
 
       // Restore AI Chat state when opening a project
@@ -1419,6 +1443,8 @@ export default function App() {
     cleanupFns.push(window.electronAPI.onFileOpenedFromOS(async (data) => {
       if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] File opened from OS:', data.filePath);
       contentVersionRef.current += 1;
+      setContentVersion(v => v + 1);
+    setContentVersion(v => v + 1);
       isInitializedRef.current = false;
       contentRef.current = data.content;
       setCurrentFilePath(data.filePath);
@@ -1498,6 +1524,83 @@ export default function App() {
         alert('The file has been deleted from disk.');
       }
     }));
+    
+    // Handle file changes on disk
+    if (window.electronAPI.onFileChangedOnDisk) {
+      cleanupFns.push(window.electronAPI.onFileChangedOnDisk(async (data) => {
+        console.log('File changed on disk:', data.path);
+        if (currentFilePath === data.path) {
+          // The current file was changed on disk
+          try {
+            // Read the file content without touching the watcher
+            const result = window.electronAPI.readFileContent 
+              ? await window.electronAPI.readFileContent(data.path)
+              : await window.electronAPI.switchProjectFile(data.path);
+            if (result && result.content !== undefined) {
+              // Get current content from the editor
+              const currentContent = getContentRef.current ? getContentRef.current() : contentRef.current;
+              
+              console.log('[FILE CHANGE] Content comparison:', {
+                diskLength: result.content.length,
+                currentLength: currentContent.length,
+                diskFirst100: result.content.substring(0, 100),
+                currentFirst100: currentContent.substring(0, 100),
+                areEqual: result.content === currentContent
+              });
+              
+              // Compare the content
+              if (result.content === currentContent) {
+                // Content is the same, ignore the change (likely from our own save)
+                console.log('File changed on disk but content is identical, ignoring');
+                return;
+              }
+              
+              // Content is different, handle based on dirty state
+              if (!isDirtyRef.current) {
+                // File is not dirty, reload it automatically
+                console.log('File is not dirty, reloading from disk with content:', result.content.substring(0, 100));
+                contentRef.current = result.content;
+                initialContentRef.current = result.content;
+                contentVersionRef.current += 1;
+                setContentVersion(v => v + 1);  // Trigger re-render and remount editor
+                // Reset the getContentRef since editor will remount
+                getContentRef.current = null;
+                // Ensure editor is not marked as dirty
+                isDirtyRef.current = false;
+                setIsDirty(false);
+                // IMPORTANT: Update the tab's content so it doesn't reload and restart the watcher
+                if (tabs.activeTab && tabs.activeTab.filePath === data.path) {
+                  tabs.updateTab(tabs.activeTab.id, { content: result.content });
+                }
+              } else {
+                // File is dirty, we have a conflict
+                console.log('File changed on disk but local changes exist');
+                const choice = confirm(
+                  'The file has been changed on disk but you have unsaved changes.\n\n' +
+                  'Do you want to reload the file from disk and lose your changes?\n\n' +
+                  'Click OK to reload from disk, or Cancel to keep your changes.'
+                );
+                
+                if (choice) {
+                  // User chose to reload from disk
+                  contentRef.current = result.content;
+                  initialContentRef.current = result.content;
+                  contentVersionRef.current += 1;
+                  setContentVersion(v => v + 1);  // Trigger re-render and remount editor
+                  // Reset the getContentRef since editor will remount
+                  getContentRef.current = null;
+                  isDirtyRef.current = false;
+                  setIsDirty(false);
+                }
+                // If user chose Cancel, we just keep the current changes
+              }
+            }
+          } catch (error) {
+            console.error('Failed to check file changes:', error);
+          }
+        }
+      }));
+    }
     cleanupFns.push(window.electronAPI.onFileMoved(async (data) => {
       console.log('File moved:', data);
       if (currentFilePath === data.sourcePath) {
@@ -1855,7 +1958,7 @@ export default function App() {
           >
             {tabs.activeTab ? (
               <StravuEditor
-                key={`${tabs.activeTabId}-${contentVersionRef.current}-${theme}`}
+                key={`${tabs.activeTabId}-${contentVersion}-${theme}`}
                 config={{
                   initialContent: tabs.activeTab.content || '',
                   onContentChange: () => {
@@ -1910,7 +2013,7 @@ export default function App() {
           <ProjectWelcome projectName={projectName || 'Project'} />
         ) : (
           <StravuEditor
-            key={`${contentVersionRef.current}-${theme}`}
+            key={`${contentVersion}-${theme}`}
             config={{
               initialContent: contentRef.current,
               onContentChange: () => {
