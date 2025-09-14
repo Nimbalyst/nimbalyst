@@ -22,7 +22,7 @@ import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/p
 import { setupForceQuit, cancelForceQuit } from './utils/forceQuit';
 import { stopAllFileWatchers } from './file/FileWatcher';
 import { stopAllProjectWatchers } from './file/ProjectWatcher';
-import { autoUpdaterService } from './services/autoUpdater';
+import { autoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
 import { migrateUserData } from './migration/dataMigration';
 
 // Track pending file to open
@@ -302,6 +302,12 @@ app.on('activate', () => {
 // Before quit handler
 app.on('before-quit', async (event) => {
     console.log('[QUIT] before-quit event triggered');
+
+    // If auto-updater is updating, don't prevent quit
+    if (AutoUpdaterService.isUpdatingApp()) {
+        console.log('[QUIT] Auto-updater is updating, allowing quit');
+        return;
+    }
 
     // If we're already quitting, don't prevent default to avoid infinite loop
     if (isAppQuitting) {

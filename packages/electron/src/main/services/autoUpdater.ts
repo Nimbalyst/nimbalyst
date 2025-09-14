@@ -5,6 +5,7 @@ import log from 'electron-log';
 export class AutoUpdaterService {
   private updateCheckInterval: NodeJS.Timeout | null = null;
   private isCheckingForUpdate = false;
+  private static isUpdating = false;
 
   constructor() {
     // Configure electron-updater logger
@@ -97,10 +98,19 @@ export class AutoUpdaterService {
           setImmediate(() => {
             try {
               log.info('Attempting to quit and install update...');
+              // Set flag to bypass quit prevention
+              AutoUpdaterService.isUpdating = true;
+              // Force remove all before-quit listeners that might prevent quit
+              app.removeAllListeners('before-quit');
+              app.removeAllListeners('window-all-closed');
+              // Now quit and install
               autoUpdater.quitAndInstall(false, true);
             } catch (error) {
               log.error('Failed to quit and install:', error);
-              // Fallback to relaunch if quitAndInstall fails
+              // Fallback to force quit
+              AutoUpdaterService.isUpdating = true;
+              app.removeAllListeners('before-quit');
+              app.removeAllListeners('window-all-closed');
               app.relaunch();
               app.exit(0);
             }
@@ -141,10 +151,19 @@ export class AutoUpdaterService {
       setImmediate(() => {
         try {
           log.info('IPC: Attempting to quit and install update...');
+          // Set flag to bypass quit prevention
+          AutoUpdaterService.isUpdating = true;
+          // Force remove all before-quit listeners that might prevent quit
+          app.removeAllListeners('before-quit');
+          app.removeAllListeners('window-all-closed');
+          // Now quit and install
           autoUpdater.quitAndInstall(false, true);
         } catch (error) {
           log.error('Failed to quit and install update:', error);
-          // In development mode or if update not downloaded, just restart the app
+          // Fallback to force quit
+          AutoUpdaterService.isUpdating = true;
+          app.removeAllListeners('before-quit');
+          app.removeAllListeners('window-all-closed');
           app.relaunch();
           app.exit(0);
         }
@@ -179,6 +198,10 @@ export class AutoUpdaterService {
       clearInterval(this.updateCheckInterval);
       this.updateCheckInterval = null;
     }
+  }
+
+  public static isUpdatingApp(): boolean {
+    return AutoUpdaterService.isUpdating;
   }
 
   public async checkForUpdates() {
