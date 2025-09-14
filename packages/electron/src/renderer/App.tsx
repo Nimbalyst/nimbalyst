@@ -891,7 +891,7 @@ export default function App() {
           // Load recent files before showing dialog
           if (window.electronAPI?.getRecentProjectFiles) {
             window.electronAPI.getRecentProjectFiles().then(files => {
-              console.log('[RECENT_FILES] Loaded files for QuickOpen:', files);
+              // console.log('[RECENT_FILES] Loaded files for QuickOpen:', files);
               setRecentProjectFiles(files || []);
             }).catch(error => {
               console.error('[RECENT_FILES] Failed to load:', error);
@@ -1322,23 +1322,37 @@ export default function App() {
 
   // Load initial state on mount
   useEffect(() => {
-    if (!window.electronAPI?.getInitialState) {
-      setIsInitializing(false);
-      return;
-    }
+    const loadInitialState = async () => {
+      try {
+        // Fetch the current theme from main process
+        if (window.electronAPI?.getTheme) {
+          const savedTheme = await window.electronAPI.getTheme();
+          if (savedTheme) {
+            const editorTheme = savedTheme === 'system' ? 'auto' : savedTheme;
+            setTheme(editorTheme as ConfigTheme);
+            if (LOG_CONFIG.THEME) console.log('[THEME] Initial theme loaded:', editorTheme);
+          }
+        }
 
-    window.electronAPI.getInitialState().then((initialState) => {
-      if (initialState && initialState.mode === 'project') {
-        // Set project state immediately
-        setProjectMode(true);
-        setProjectPath(initialState.projectPath);
-        setProjectName(initialState.projectName);
-        setFileTree(initialState.fileTree || []);
+        // Load window initial state
+        if (window.electronAPI?.getInitialState) {
+          const initialState = await window.electronAPI.getInitialState();
+          if (initialState && initialState.mode === 'project') {
+            // Set project state immediately
+            setProjectMode(true);
+            setProjectPath(initialState.projectPath);
+            setProjectName(initialState.projectName);
+            setFileTree(initialState.fileTree || []);
+          }
+        }
+      } catch (error) {
+        console.error('[INIT] Failed to load initial state:', error);
+      } finally {
+        setIsInitializing(false);
       }
-      setIsInitializing(false);
-    }).catch(() => {
-      setIsInitializing(false);
-    });
+    };
+
+    loadInitialState();
   }, []);
 
   // Set up IPC listeners
@@ -1524,22 +1538,22 @@ export default function App() {
         alert('The file has been deleted from disk.');
       }
     }));
-    
+
     // Handle file changes on disk
     if (window.electronAPI.onFileChangedOnDisk) {
       cleanupFns.push(window.electronAPI.onFileChangedOnDisk(async (data) => {
-        console.log('File changed on disk:', data.path);
+        // console.log('File changed on disk:', data.path);
         if (currentFilePath === data.path) {
           // The current file was changed on disk
           try {
             // Read the file content without touching the watcher
-            const result = window.electronAPI.readFileContent 
+            const result = window.electronAPI.readFileContent
               ? await window.electronAPI.readFileContent(data.path)
               : await window.electronAPI.switchProjectFile(data.path);
             if (result && result.content !== undefined) {
               // Get current content from the editor
               const currentContent = getContentRef.current ? getContentRef.current() : contentRef.current;
-              
+
               console.log('[FILE CHANGE] Content comparison:', {
                 diskLength: result.content.length,
                 currentLength: currentContent.length,
@@ -1547,14 +1561,14 @@ export default function App() {
                 currentFirst100: currentContent.substring(0, 100),
                 areEqual: result.content === currentContent
               });
-              
+
               // Compare the content
               if (result.content === currentContent) {
                 // Content is the same, ignore the change (likely from our own save)
-                console.log('File changed on disk but content is identical, ignoring');
+                // console.log('File changed on disk but content is identical, ignoring');
                 return;
               }
-              
+
               // Content is different, handle based on dirty state
               if (!isDirtyRef.current) {
                 // File is not dirty, reload it automatically
@@ -1580,7 +1594,7 @@ export default function App() {
                   'Do you want to reload the file from disk and lose your changes?\n\n' +
                   'Click OK to reload from disk, or Cancel to keep your changes.'
                 );
-                
+
                 if (choice) {
                   // User chose to reload from disk
                   contentRef.current = result.content;
