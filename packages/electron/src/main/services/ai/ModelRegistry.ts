@@ -22,7 +22,7 @@ export class ModelRegistry {
       hasApiKey: !!apiKey,
       baseUrl
     });
-    
+
     // SKIP CACHE FOR NOW - always fetch fresh
     // const lastFetchTime = this.lastFetch.get(provider) || 0;
     // const cached = this.cachedModels.get(provider);
@@ -50,15 +50,10 @@ export class ModelRegistry {
           models = await OpenAIProvider.getModels(apiKey);
           break;
         case 'lmstudio':
-          // Only try to connect to LMStudio if explicitly enabled
-          // This prevents the "find devices on local network" permission dialog
-          const settings = await this.getSettings();
-          if (!settings?.providers?.lmstudio?.enabled) {
-            models = [];
-            break;
-          }
+          // Try to fetch models from LMStudio
+          // The provider will return empty array if LMStudio is not running
           const { LMStudioProvider } = await import('./providers/LMStudioProvider');
-          models = await LMStudioProvider.getModels(baseUrl || 'http://127.0.0.1:8234');
+          models = await LMStudioProvider.getModels(baseUrl || 'http://127.0.0.1:1234');
           break;
       }
 

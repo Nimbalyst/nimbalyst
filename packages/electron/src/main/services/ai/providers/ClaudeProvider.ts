@@ -361,57 +361,8 @@ export class ClaudeProvider extends BaseAIProvider {
   }
 
   private buildSystemPrompt(documentContext?: DocumentContext): string {
-    const basePrompt = super.buildSystemPrompt(documentContext);
-    
-    // If no document is open, return just the base prompt (which already has the no-document warning)
-    const hasDocument = documentContext && (documentContext.filePath || documentContext.content);
-    if (!hasDocument) {
-      return basePrompt;
-    }
-    
-    return `${basePrompt}
-
-You have access to the following tools for document editing:
-- applyDiff: Apply text replacements to the document with diff preview (use for replacing existing text) - changes appear as visual diffs that users can approve (Cmd+Enter) or reject (Cmd+Shift+N)
-- streamContent: Stream new content into the document at a specific position (use for inserting new content)
-
-Tool Usage Guidelines:
-- Use 'applyDiff' when you need to REPLACE or MODIFY existing text - this creates reviewable changes
-- Use 'streamContent' when you need to INSERT NEW content without replacing anything
-- For streamContent, use position='cursor' to insert at cursor, position='end' to append to document, or provide 'insertAfter' to insert after specific text
-- When using applyDiff, changes will be shown as diffs that the user can review and approve/reject
-
-SMART INSERTION RULES for streamContent tool - YOU MUST ANALYZE THE USER'S REQUEST:
-1. If user says "at the end", "append", or "add to the bottom" → use position='end'
-2. If user references specific text like "after the fruits list", "below the purple section", "after ## Purple" → use:
-   - insertAfter="## Purple" (or whatever unique text they reference)
-   - position='cursor' (as fallback)
-3. If user has text selected (check selection field above) → use position='after-selection'
-4. If user says "here" or "at cursor" → use position='cursor'
-5. If unclear but adding new content → use position='end' (safer than overwriting at cursor)
-
-EXAMPLE: If user says "add pink fruits" and document has "## Purple" section:
-- Use: insertAfter="## Purple" to place it after that section
-- Or use: position='end' to append at the end
-
-ALWAYS include BOTH position AND insertAfter when appropriate!
-
-CRITICAL RESPONSE RULES - YOU MUST FOLLOW THESE:
-1. When editing documents, briefly acknowledge the action using the -ing form of the user's request
-2. Keep your response to 2-4 words maximum
-3. Mirror the user's language when possible
-4. NEVER explain what you're about to do with phrases like "Let me...", "I'll...", "First..."
-5. NEVER describe the actual content you added - the user sees it in the document
-6. NEVER list what you added or explain your reasoning unless asked
-
-GOOD response examples:
-- User: "add a haiku about trees" → You: "Adding haiku about trees"
-- User: "fix the typo" → You: "Fixing typo"
-- User: "make it bold" → You: "Making it bold"
-- User: "insert a table" → You: "Inserting table"
-- User: "update the title" → You: "Updating title"
-
-Remember: The user can SEE the changes in their editor. They just want confirmation you understood the request.`;
+    // The base prompt now includes all tool usage instructions
+    return super.buildSystemPrompt(documentContext);
   }
 
   /**

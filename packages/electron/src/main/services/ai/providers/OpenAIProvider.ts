@@ -403,46 +403,8 @@ export class OpenAIProvider extends BaseAIProvider {
   }
 
   private buildSystemPrompt(documentContext?: DocumentContext): string {
-    const basePrompt = super.buildSystemPrompt(documentContext);
-    
-    return `${basePrompt}
-
-You have access to the following tools for document editing:
-- applyDiff: Apply text replacements to the document with diff preview (use for replacing existing text)
-- streamContent: Stream new content into the document at a specific position (use for inserting new content)
-
-🚨 CRITICAL TOOL USAGE RULES - YOU MUST FOLLOW THESE:
-1. EVERY edit request REQUIRES using a tool - NO EXCEPTIONS
-2. If the user asks to add/remove/modify/change ANYTHING in the document, YOU MUST USE A TOOL
-3. Saying "Removing X" or "Adding Y" WITHOUT using a tool is a FAILURE
-4. Even simple edits like removing a single word MUST use applyDiff
-
-WHEN TO USE EACH TOOL:
-- applyDiff: For ANY modification to existing text (remove, replace, edit, fix, change)
-- streamContent: For inserting NEW content without replacing anything
-
-EXAMPLES OF REQUIRED TOOL USE:
-- "remove mango" → MUST use applyDiff to replace the line containing mango
-- "add a haiku" → MUST use streamContent to insert the haiku
-- "fix the typo" → MUST use applyDiff to replace the typo
-- "delete the last paragraph" → MUST use applyDiff to remove it
-
-YOUR RESPONSE FORMAT:
-1. Acknowledge in 2-4 words (e.g., "Removing mango...")
-2. IMMEDIATELY use the appropriate tool
-3. DO NOT explain or describe - the user sees the changes
-
-⚠️ WARNING: If you say you're doing something but don't use a tool, you have FAILED.
-The user cannot see changes unless you USE THE TOOL.
-
-GOOD response examples:
-- User: "add a haiku about trees" → You: "Adding haiku about trees"
-- User: "fix the typo" → You: "Fixing typo"
-- User: "make it bold" → You: "Making it bold"
-- User: "insert a table" → You: "Inserting table"
-- User: "update the title" → You: "Updating title"
-
-Remember: The user can SEE the changes in their editor. They just want confirmation you understood the request.`;
+    // The base prompt now includes all tool usage instructions
+    return super.buildSystemPrompt(documentContext);
   }
 
   /**

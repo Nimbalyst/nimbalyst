@@ -90,66 +90,8 @@ export class LMStudioProvider extends BaseAIProvider {
     }
     apiMessages.push({ role: 'user', content: message });
 
-    // Define tools for LMStudio (OpenAI-compatible format)
-    const tools = [
-      {
-        type: 'function',
-        function: {
-          name: 'applyDiff',
-          description: 'Apply text replacements to the document with diff preview',
-          parameters: {
-            type: 'object',
-            properties: {
-              replacements: {
-                type: 'array',
-                description: 'Array of text replacements to apply',
-                items: {
-                  type: 'object',
-                  properties: {
-                    oldText: { 
-                      type: 'string',
-                      description: 'The exact text to replace'
-                    },
-                    newText: { 
-                      type: 'string',
-                      description: 'The new text to insert'
-                    }
-                  },
-                  required: ['oldText', 'newText']
-                }
-              }
-            },
-            required: ['replacements']
-          }
-        }
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'streamContent',
-          description: 'Stream new content into the document at a specific position',
-          parameters: {
-            type: 'object',
-            properties: {
-              content: {
-                type: 'string',
-                description: 'The content to stream into the document'
-              },
-              position: {
-                type: 'string',
-                enum: ['cursor', 'end', 'after-selection'],
-                description: 'Where to insert the content'
-              },
-              insertAfter: {
-                type: 'string',
-                description: 'Optional: Find this text and insert content after it'
-              }
-            },
-            required: ['content', 'position']
-          }
-        }
-      }
-    ];
+    // Use the centralized tool system (OpenAI-compatible format)
+    const tools = this.getToolsInOpenAIFormat();
 
     // Log the request for debugging
     const requestBody = {
@@ -537,33 +479,8 @@ export class LMStudioProvider extends BaseAIProvider {
   }
 
   private buildSystemPrompt(documentContext?: DocumentContext): string {
-    const basePrompt = super.buildSystemPrompt(documentContext);
-    
-    return `${basePrompt}
-
-CRITICAL: You MUST use the provided tools for ALL document editing operations. NEVER output content that should be added to the document as part of your text response.
-
-You have access to the following tools for document editing:
-- applyDiff: Apply text replacements to the document (use for replacing existing text)
-- streamContent: Stream new content into the document at a specific position (use for inserting new content)
-
-MANDATORY Tool Usage Rules:
-1. ALWAYS use 'streamContent' when the user asks you to add, insert, append, or create new content
-2. ALWAYS use 'applyDiff' when the user asks you to replace, modify, fix, or update existing text
-3. NEVER output document content in your text response - it should ONLY go through tools
-4. Your text response should be brief (2-4 words) acknowledging the action
-
-Tool Usage Guidelines:
-- Use 'applyDiff' when you need to REPLACE or MODIFY existing text
-- Use 'streamContent' when you need to INSERT NEW content without replacing anything
-- For streamContent, use position='cursor' to insert at cursor, position='end' to append, or provide 'insertAfter' to insert after specific text
-
-Response Format Examples:
-- User: "add more quotes" → You: "Adding quotes" [USE streamContent tool]
-- User: "fix the typo" → You: "Fixing typo" [USE applyDiff tool]
-- User: "insert a list" → You: "Inserting list" [USE streamContent tool]
-
-Remember: ALL content changes MUST go through tools, not in your text response.`;
+    // The base prompt now includes all tool usage instructions
+    return super.buildSystemPrompt(documentContext);
   }
 
   /**

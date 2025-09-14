@@ -145,7 +145,7 @@ describe('LMStudio Provider - Tool Usage', () => {
       // This isn't necessarily a failure - model might be responding differently
       console.log('Note: Model may need specific prompting to use tools');
     }
-  }, 30000); // 30 second timeout for slow local model for local model
+  }, 60000); // 60 second timeout for slow local model
 
   it('should use streamContent tool to insert content', async () => {
     // Document where we'll insert content
