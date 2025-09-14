@@ -28,12 +28,12 @@ import {LayoutContainerNode} from '../plugins/LayoutPlugin/LayoutContainerNode.t
 import {LayoutItemNode} from '../plugins/LayoutPlugin/LayoutItemNode.ts';
 import {PageBreakNode} from '../plugins/PageBreakPlugin/PageBreakNode';
 // import { $createThemelessCodeNode, ThemelessCodeNode } from '../plugins/CodeHighlightShikiPlugin/ThemelessCodeNode.ts';
-import {BoardNode} from '../plugins/BoardPlugin/BoardNode';
-import {BoardHeaderNode} from '../plugins/BoardPlugin/BoardHeaderNode';
-import {BoardColumnNode} from '../plugins/BoardPlugin/BoardColumnNode';
-import {BoardColumnHeaderNode} from '../plugins/BoardPlugin/BoardColumnHeaderNode';
-import {BoardColumnContentNode} from '../plugins/BoardPlugin/BoardColumnContentNode';
-import {BoardCardNode} from '../plugins/BoardPlugin/BoardCardNode';
+import {KanbanBoardNode} from '../plugins/KanbanBoardPlugin/KanbanBoardNode.ts';
+import {BoardHeaderNode} from '../plugins/KanbanBoardPlugin/BoardHeaderNode';
+import {BoardColumnNode} from '../plugins/KanbanBoardPlugin/BoardColumnNode';
+import {BoardColumnHeaderNode} from '../plugins/KanbanBoardPlugin/BoardColumnHeaderNode';
+import {BoardColumnContentNode} from '../plugins/KanbanBoardPlugin/BoardColumnContentNode';
+import {BoardCardNode} from '../plugins/KanbanBoardPlugin/BoardCardNode';
 
 const EditorNodes: Array<Klass<LexicalNode>> = [
   HeadingNode,
@@ -61,7 +61,7 @@ const EditorNodes: Array<Klass<LexicalNode>> = [
   PageBreakNode,
   LayoutContainerNode,
   LayoutItemNode,
-  BoardNode,
+  KanbanBoardNode,
   BoardHeaderNode,
   BoardColumnNode,
   BoardColumnHeaderNode,

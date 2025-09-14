@@ -9,7 +9,7 @@ interface GraphCollaborationHooks {
   updateEntity?: (entity: any) => Promise<void>;
   updateEntityProperty?: (entityUri: string, property: string, value: any) => Promise<void>;
 }
-import {$isBoardNode} from './BoardNode';
+import {$isBoardNode} from './KanbanBoardNode.ts';
 import {$createColumnNode} from './BoardColumnNode';
 import {$createColumnHeaderNode} from './BoardColumnHeaderNode';
 import {$createColumnContentNode} from './BoardColumnContentNode';

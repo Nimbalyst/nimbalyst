@@ -19,7 +19,7 @@ import { TABLE_TRANSFORMER } from '../plugins/TablePlugin/TableTransformer';
 import { IMAGE_TRANSFORMER } from '../plugins/ImagesPlugin/ImageTransformer';
 import { EMOJI_TRANSFORMER } from '../plugins/EmojisPlugin/EmojiTransformer';
 import { COLLAPSIBLE_TRANSFORMER } from '../plugins/CollapsiblePlugin/CollapsibleTransformer';
-import { BOARD_TABLE_TRANSFORMER } from '../plugins/BoardPlugin/BoardTableTransformer';
+import { BOARD_TABLE_TRANSFORMER } from '../plugins/KanbanBoardPlugin/BoardTableTransformer';
 
 // TODO: Move ExcalidrawTransform when refactoring that plugin
 import { ExcalidrawTransform } from '../plugins/ExcalidrawPlugin/ExcalidrawNode/excalidrawTransform';

@@ -19,7 +19,7 @@ export type SerializedKanbanBoardNode = Spread<
   SerializedElementNode
 >;
 
-export class BoardNode extends ElementNode {
+export class KanbanBoardNode extends ElementNode {
   __config: BoardConfig | null;
 
   constructor(config?: BoardConfig, key?: NodeKey) {
@@ -31,8 +31,8 @@ export class BoardNode extends ElementNode {
     return 'kanban-board';
   }
 
-  static clone(node: BoardNode): BoardNode {
-    return new BoardNode(node.__config || undefined, node.__key);
+  static clone(node: KanbanBoardNode): KanbanBoardNode {
+    return new KanbanBoardNode(node.__config || undefined, node.__key);
   }
 
   getConfig(): BoardConfig | null {
@@ -49,7 +49,7 @@ export class BoardNode extends ElementNode {
     const element = document.createElement('div');
     element.className = 'kanban-board';
     element.setAttribute('data-lexical-node-key', this.getKey());
-    
+
     return element;
   }
 
@@ -59,7 +59,7 @@ export class BoardNode extends ElementNode {
 
   // Remove getDOMSlot override - use default behavior
 
-  static importJSON(serializedNode: SerializedKanbanBoardNode): BoardNode {
+  static importJSON(serializedNode: SerializedKanbanBoardNode): KanbanBoardNode {
     return $createBoardNode(serializedNode.config);
   }
 
@@ -81,12 +81,12 @@ export class BoardNode extends ElementNode {
   }
 }
 
-export function $createBoardNode(config?: BoardConfig): BoardNode {
-  return $applyNodeReplacement(new BoardNode(config));
+export function $createBoardNode(config?: BoardConfig): KanbanBoardNode {
+  return $applyNodeReplacement(new KanbanBoardNode(config));
 }
 
 export function $isBoardNode(
   node: LexicalNode | null | undefined,
-): node is BoardNode {
-  return node instanceof BoardNode;
+): node is KanbanBoardNode {
+  return node instanceof KanbanBoardNode;
 }

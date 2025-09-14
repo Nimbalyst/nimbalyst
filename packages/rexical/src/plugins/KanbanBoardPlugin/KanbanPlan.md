@@ -486,7 +486,7 @@ export function KanbanPlugin(): null {
   useEffect(() => {
     if (!editor.hasNodes([KanbanBoardNode, ColumnNode, CardNode])) {
       throw new Error(
-        'BoardPlugin: BoardNode, BoardColumnNode, or BoardCardNode not registered on editor',
+        'KanbanBoardPlugin: KanbanBoardNode, BoardColumnNode, or BoardCardNode not registered on editor',
       );
     }
 

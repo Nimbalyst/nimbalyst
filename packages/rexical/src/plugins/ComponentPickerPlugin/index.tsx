@@ -44,7 +44,7 @@ import InsertLayoutDialog from '../LayoutPlugin/InsertLayoutDialog';
 import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
 import {InsertTableDialog} from '../TablePlugin';
 import {pluginRegistry} from '../PluginRegistry';
-import {INSERT_BOARD_COMMAND} from '../BoardPlugin/BoardCommands';
+import {INSERT_BOARD_COMMAND} from '../KanbanBoardPlugin/BoardCommands';
 
 class ComponentPickerOption extends MenuOption {
   // What shows up in the editor

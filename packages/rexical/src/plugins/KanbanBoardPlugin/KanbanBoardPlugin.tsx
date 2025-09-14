@@ -16,9 +16,9 @@ import {
     registerKanbanCommands,
 } from './BoardCommands';
 import {
-    BoardNode,
+    KanbanBoardNode,
     $isBoardNode,
-} from './BoardNode';
+} from './KanbanBoardNode.ts';
 import {
     BoardHeaderNode,
     $isBoardHeaderNode,
@@ -59,7 +59,7 @@ import {CardData} from './BoardCardNode';
 import {createPortal} from 'react-dom';
 import {registerBoardTransformCommands} from './BoardTransformCommands';
 
-export function BoardPlugin(): JSX.Element | null {
+export function KanbanBoardPlugin(): JSX.Element | null {
     const [editor] = useLexicalComposerContext();
     const graphCollaboration = useGraphCollaboration();
     const syncServicesRef = useRef<Map<string, BoardSyncService>>(new Map());
@@ -71,10 +71,10 @@ export function BoardPlugin(): JSX.Element | null {
     const [currentCardData, setCurrentCardData] = useState<CardData>({ title: '' });
 
     useEffect(() => {
-        // console.log("BoardPlugin mounted");
-        if (!editor.hasNodes([BoardNode, BoardHeaderNode, BoardColumnNode, BoardColumnHeaderNode, BoardColumnContentNode, BoardCardNode])) {
+        // console.log("KanbanBoardPlugin mounted");
+        if (!editor.hasNodes([KanbanBoardNode, BoardHeaderNode, BoardColumnNode, BoardColumnHeaderNode, BoardColumnContentNode, BoardCardNode])) {
             throw new Error(
-                'BoardPlugin: Required nodes not registered on editor',
+                'KanbanBoardPlugin: Required nodes not registered on editor',
             );
         }
 

@@ -11,8 +11,8 @@ import {
 import {
   $isBoardNode,
   $createBoardNode,
-  BoardNode,
-} from './BoardNode';
+  KanbanBoardNode,
+} from './KanbanBoardNode.ts';
 import {
   $createBoardHeaderNode,
   $isBoardHeaderNode,
@@ -85,7 +85,7 @@ const TABLE_ROW_REG_EXP = /^(?:\|)(.+)(?:\|)\s?$/;
 const TABLE_ROW_DIVIDER_REG_EXP = /^(\| ?:?-*:? ?)+\|\s?$/;
 
 export const BOARD_TABLE_TRANSFORMER: MultilineElementTransformer = {
-  dependencies: [BoardNode, BoardColumnNode],
+  dependencies: [KanbanBoardNode, BoardColumnNode],
   export: (node: LexicalNode) => {
     if (!$isBoardNode(node)) {
       return null;
@@ -287,7 +287,7 @@ export const BOARD_TABLE_TRANSFORMER: MultilineElementTransformer = {
       });
     }
 
-    // Create the BoardNode with columns
+    // Create the KanbanBoardNode with columns
     const boardNode = $createBoardNode();
 
     // Create and add the board header with title

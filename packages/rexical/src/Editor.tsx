@@ -69,7 +69,7 @@ import CodeHighlightPlugin from './plugins/CodeHighlightPlugin';
 // import CodeHighlightShikiPlugin  from './plugins/CodeHighlightShikiPlugin';
 // Lazy load ExcalidrawPlugin to improve initial load time
 const ExcalidrawPlugin = React.lazy(() => import('./plugins/ExcalidrawPlugin'));
-import { BoardPlugin } from './plugins/BoardPlugin/BoardPlugin';
+import { KanbanBoardPlugin } from './plugins/KanbanBoardPlugin';
 
 
 interface EditorProps {
@@ -286,7 +286,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             <LayoutPlugin />
             <DiffPlugin />
             <AIChatIntegrationPlugin />
-            <BoardPlugin />
+            <KanbanBoardPlugin />
 
             {/* Render any custom plugins */}
             <PluginManager />

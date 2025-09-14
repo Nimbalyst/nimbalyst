@@ -11,7 +11,7 @@ import {
 } from '@lexical/table';
 import { $createParagraphNode, $createTextNode} from 'lexical';
 import {$isListItemNode, $isListNode} from '@lexical/list';
-import { BoardNode, $isBoardNode, $createBoardNode } from './BoardNode';
+import { KanbanBoardNode, $isBoardNode, $createBoardNode } from './KanbanBoardNode.ts';
 import { $createBoardHeaderNode, $isBoardHeaderNode } from './BoardHeaderNode';
 import { $isColumnNode, $createColumnNode } from './BoardColumnNode';
 import { $isColumnHeaderNode, $createColumnHeaderNode } from './BoardColumnHeaderNode';
@@ -21,11 +21,11 @@ import { draggableBlockMenuRegistry } from '../DraggableBlockPlugin/DraggableBlo
 import { CardData } from './BoardCardNode';
 
 /**
- * Transform a BoardNode into a TableNode
+ * Transform a KanbanBoardNode into a TableNode
  * Each card becomes a row in the table
  * Fields (Title, Status, Owner, Due Date, Priority, Description) become columns
  */
-export function $transformBoardToTable(boardNode: BoardNode): TableNode | null {
+export function $transformBoardToTable(boardNode: KanbanBoardNode): TableNode | null {
   if (!$isBoardNode(boardNode)) {
     return null;
   }
@@ -120,11 +120,11 @@ export function $transformBoardToTable(boardNode: BoardNode): TableNode | null {
 }
 
 /**
- * Transform a TableNode into a BoardNode
+ * Transform a TableNode into a KanbanBoardNode
  * Expects table with headers: Title, Status, Owner, Due Date, Priority, Description
  * Groups rows by Status column into board columns
  */
-export function $transformTableToBoard(tableNode: TableNode): BoardNode | null {
+export function $transformTableToBoard(tableNode: TableNode): KanbanBoardNode | null {
   if (!$isTableNode(tableNode)) {
     return null;
   }
@@ -224,10 +224,10 @@ export function $transformTableToBoard(tableNode: TableNode): BoardNode | null {
 }
 
 /**
- * Transform a List into a BoardNode
+ * Transform a List into a KanbanBoardNode
  * Each list item becomes a card in a single "To Do" column
  */
-export function $transformListToBoard(listNode: LexicalNode): BoardNode | null {
+export function $transformListToBoard(listNode: LexicalNode): KanbanBoardNode | null {
   if (!$isListNode(listNode)) {
     return null;
   }

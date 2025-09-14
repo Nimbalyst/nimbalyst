@@ -1,10 +1,10 @@
 // Nodes
 export {
-  BoardNode,
+  KanbanBoardNode,
   $createBoardNode,
   $isBoardNode,
   type SerializedKanbanBoardNode,
-} from './BoardNode';
+} from './KanbanBoardNode';
 
 export {
   BoardColumnNode,
@@ -47,7 +47,7 @@ export {
 } from './BoardCommands';
 
 // Components
-export { BoardPlugin } from './BoardPlugin';
+export { KanbanBoardPlugin } from './KanbanBoardPlugin';
 export { BoardToolbar } from './BoardToolbar';
 export { BoardConfigDialog, type BoardConfig } from './BoardConfigDialog';
 

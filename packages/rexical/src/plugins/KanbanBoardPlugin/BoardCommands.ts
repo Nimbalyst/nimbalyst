@@ -12,7 +12,7 @@ import {
 import {
   $createBoardNode,
   $isBoardNode,
-} from './BoardNode';
+} from './KanbanBoardNode.ts';
 import {
   $createBoardHeaderNode,
 } from './BoardHeaderNode';
@@ -128,18 +128,18 @@ export function registerKanbanCommands(editor: LexicalEditor): () => void {
       const selection = $getSelection();
       if ($isRangeSelection(selection)) {
         const kanbanBoard = $createBoardNode(config);
-        
+
         // Create header node with title
         const headerNode = $createBoardHeaderNode();
         const titleParagraph = $createParagraphNode();
         titleParagraph.append($createTextNode('Kanban Board'));
         headerNode.append(titleParagraph);
         kanbanBoard.append(headerNode);
-        
+
         // Board will be populated by the sync service once it starts
         // Just insert the configured board node for now
         selection.insertNodes([kanbanBoard]);
-        
+
         // Dispatch event to notify the plugin to start sync service
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('board-created', {
