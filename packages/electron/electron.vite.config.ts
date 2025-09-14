@@ -113,31 +113,37 @@ export default defineConfig({
       optimizeExcalidrawPlugin(), 
       optimizeShikiPlugin(),
       viteStaticCopy({
-        targets: [
-          {
-            src: resolve(__dirname, 'icon.png'),
-            dest: '',
-            overwrite: true
-          },
-          {
-            src: resolve(__dirname, 'about.html'),
-            dest: '',
-            overwrite: true
-          }
-        ].filter(target => {
-          // Check if source file exists before adding to targets
-          try {
-            fs.accessSync(target.src, fs.constants.F_OK);
-            console.log(`✓ Copy target exists: ${target.src}`);
-            return true;
-          } catch (err: any) {
-            console.warn(`✗ Skipping copy target: ${target.src} does not exist (${err.code})`);
-            // Log working directory and __dirname for debugging path issues
-            console.log(`  Working directory: ${process.cwd()}`);
-            console.log(`  Config directory: ${__dirname}`);
-            return false;
-          }
-        })
+        targets: (() => {
+          const potentialTargets = [
+            {
+              src: resolve(__dirname, 'icon.png'),
+              dest: '',
+              overwrite: true
+            },
+            {
+              src: resolve(__dirname, 'about.html'),
+              dest: '',
+              overwrite: true
+            }
+          ];
+
+          // Filter targets based on file existence
+          const validTargets = potentialTargets.filter(target => {
+            try {
+              fs.accessSync(target.src, fs.constants.F_OK);
+              console.log(`✓ Copy target exists: ${target.src}`);
+              return true;
+            } catch (err: any) {
+              console.warn(`✗ Skipping copy target: ${target.src} does not exist (${err.code})`);
+              console.log(`  Working directory: ${process.cwd()}`);
+              console.log(`  Config directory: ${__dirname}`);
+              return false;
+            }
+          });
+
+          // Return empty array if no valid targets to prevent plugin errors
+          return validTargets.length > 0 ? validTargets : [];
+        })()
       })
     ],
     server: {
