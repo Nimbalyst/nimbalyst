@@ -33,7 +33,13 @@ export function createAboutWindow() {
     });
 
     // Load the about.html file
-    aboutWindow.loadFile(join(__dirname, '../renderer/about.html'));
+    // In production, the file is copied to the renderer output directory
+    // In development, it's served by the dev server
+    if (process.env['ELECTRON_RENDERER_URL']) {
+        aboutWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/about.html`);
+    } else {
+        aboutWindow.loadFile(join(__dirname, '../renderer/about.html'));
+    }
 
     aboutWindow.once('ready-to-show', () => {
         aboutWindow?.show();

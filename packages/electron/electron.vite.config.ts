@@ -111,19 +111,18 @@ export default defineConfig({
       react(), 
       optimizeExcalidrawPlugin(), 
       optimizeShikiPlugin()
-      // Temporarily disabled - causing issues on CI
-      // viteStaticCopy({
-      //   targets: [
-      //     {
-      //       src: './icon.png',
-      //       dest: ''
-      //     },
-      //     {
-      //       src: './about.html',
-      //       dest: ''
-      //     }
-      //   ]
-      // })
+      viteStaticCopy({
+        targets: [
+          {
+            src: resolve(__dirname, 'icon.png'),
+            dest: ''
+          },
+          {
+            src: resolve(__dirname, 'about.html'),
+            dest: ''
+          }
+        ]
+      })
     ],
     server: {
       port: 5273,
