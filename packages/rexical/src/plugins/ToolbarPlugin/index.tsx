@@ -1325,7 +1325,7 @@ export default function ToolbarPlugin({
       )}
       <div className="divider toolbar-main-divider" />
       <TableOfContentsDropdownPlugin disabled={!isEditable} />
-      <ThemeToggle className="toolbar-item" />
+      {/*<ThemeToggle className="toolbar-item" />*/}
 
       {modal}
     </div>
