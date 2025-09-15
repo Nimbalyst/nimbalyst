@@ -112,20 +112,24 @@ export default defineConfig({
       react(),
       optimizeExcalidrawPlugin(),
       optimizeShikiPlugin(),
-      viteStaticCopy({
-        targets: [
-          {
-            src: resolve(__dirname, 'icon.png'),
-            dest: '',
-            overwrite: true
-          },
-          {
-            src: resolve(__dirname, 'about.html'),
-            dest: '',
-            overwrite: true
-          }
-        ]
-      })
+      // NOTE: On Windows, vite-plugin-static-copy uses fast-glob which expects
+      // POSIX-style paths. Absolute Windows paths with backslashes won't match
+      // and cause "No file was found to copy" errors in CI. Normalize to POSIX.
+      // Ref: https://github.com/sapphi-red/vite-plugin-static-copy (fast-glob)
+      (() => {
+        const toPosix = (p: string) => p.replace(/\\/g, '/');
+        const targets: Array<{ src: string; dest: string; overwrite?: boolean }> = [];
+        const icon = resolve(__dirname, 'icon.png');
+        const about = resolve(__dirname, 'about.html');
+
+        if (fs.existsSync(icon)) {
+          targets.push({ src: toPosix(icon), dest: '', overwrite: true });
+        }
+        if (fs.existsSync(about)) {
+          targets.push({ src: toPosix(about), dest: '', overwrite: true });
+        }
+        return viteStaticCopy({ targets });
+      })()
     ].filter(Boolean),
     server: {
       port: 5273,
