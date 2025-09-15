@@ -112,22 +112,20 @@ export default defineConfig({
       react(),
       optimizeExcalidrawPlugin(),
       optimizeShikiPlugin(),
-      // viteStaticCopy disabled due to Windows CI build issues
-      // Files should be copied manually or handled by electron-builder
-      // viteStaticCopy({
-      //   targets: [
-      //     {
-      //       src: resolve(__dirname, 'icon.png'),
-      //       dest: '',
-      //       overwrite: true
-      //     },
-      //     {
-      //       src: resolve(__dirname, 'about.html'),
-      //       dest: '',
-      //       overwrite: true
-      //     }
-      //   ]
-      // })
+      viteStaticCopy({
+        targets: [
+          {
+            src: resolve(__dirname, 'icon.png'),
+            dest: '',
+            overwrite: true
+          },
+          {
+            src: resolve(__dirname, 'about.html'),
+            dest: '',
+            overwrite: true
+          }
+        ]
+      })
     ].filter(Boolean),
     server: {
       port: 5273,

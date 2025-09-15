@@ -134,12 +134,14 @@ export async function clearProjectWindowState(projectPath: string) {
 }
 
 // Theme management
-export async function getTheme(): Promise<string> {
-    return await getAsync('theme', 'system') as string;
+export function getTheme(): string {
+    // Only use electron-store for sync access
+    return store.get('theme', 'system') as string;
 }
 
-export async function setTheme(theme: string) {
-    await setAsync('theme', theme);
+export function setTheme(theme: string) {
+    // Only save to electron-store
+    store.set('theme', theme);
 }
 
 // Settings
@@ -275,14 +277,9 @@ export async function clearProjectTabState(projectPath: string) {
     await setAsync(`projectState:${projectPath}`, projectState);
 }
 
-// Sync versions for backward compatibility (will use electron-store)
-export function getThemeSync(): string {
-    return store.get('theme', 'system') as string;
-}
-
-export function setThemeSync(theme: string) {
-    store.set('theme', theme);
-}
+// Sync versions for backward compatibility (just aliases now)
+export const getThemeSync = getTheme;
+export const setThemeSync = setTheme;
 
 export function getSidebarWidthSync(): number {
     return store.get('sidebarWidth', 240) as number;

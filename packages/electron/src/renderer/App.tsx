@@ -190,7 +190,11 @@ export default function App() {
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string | null>(null);
   const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
-  const [theme, setTheme] = useState<ConfigTheme>('auto');
+  // Initialize theme from localStorage immediately
+  const [theme, setTheme] = useState<ConfigTheme>(() => {
+    const savedTheme = localStorage.getItem('theme');
+    return (savedTheme as ConfigTheme) || 'auto';
+  });
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
   const [recentProjectFiles, setRecentProjectFiles] = useState<string[]>([]);
@@ -550,7 +554,7 @@ export default function App() {
     };
   }, [sidebarWidth]);
 
-  // Apply theme to document
+  // Apply theme to document and save to localStorage
   useEffect(() => {
     const root = document.documentElement;
 
@@ -571,6 +575,9 @@ export default function App() {
       root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
       root.removeAttribute('data-theme');
     }
+
+    // Save theme to localStorage
+    localStorage.setItem('theme', theme);
   }, [theme]);
 
   // Handle new file
@@ -1339,16 +1346,6 @@ export default function App() {
   useEffect(() => {
     const loadInitialState = async () => {
       try {
-        // Fetch the current theme from main process
-        if (window.electronAPI?.getTheme) {
-          const savedTheme = await window.electronAPI.getTheme();
-          if (savedTheme) {
-            const editorTheme = savedTheme === 'system' ? 'auto' : savedTheme;
-            setTheme(editorTheme as ConfigTheme);
-            if (LOG_CONFIG.THEME) console.log('[THEME] Initial theme loaded:', editorTheme);
-          }
-        }
-
         // Load window initial state
         if (window.electronAPI?.getInitialState) {
           const initialState = await window.electronAPI.getInitialState();

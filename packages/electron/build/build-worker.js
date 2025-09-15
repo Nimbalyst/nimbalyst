@@ -26,11 +26,10 @@ async function buildWorker() {
       outfile: path.join(outDir, 'worker.bundle.js'),
       external: [
         'electron',
-        'worker_threads', // Don't bundle worker_threads, it's a Node.js built-in
-        'path',          // Don't bundle path, it's a Node.js built-in
-        'fs',            // Don't bundle fs if used
-        'crypto',        // Don't bundle crypto if used
-        // Bundle PGLite so it's available in the packaged app
+        'worker_threads',
+        'path',
+        'fs',
+        'crypto'
       ],
       minify: false,
       sourcemap: false,

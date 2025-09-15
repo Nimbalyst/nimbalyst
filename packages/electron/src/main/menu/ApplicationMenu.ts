@@ -8,7 +8,7 @@ import { createProjectManagerWindow } from '../window/ProjectManagerWindow';
 import { createAIModelsWindow } from '../window/AIModelsWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getProjectWindowState } from '../utils/store';
-import { updateWindowTitleBars } from '../theme/ThemeManager';
+import { updateWindowTitleBars, updateNativeTheme } from '../theme/ThemeManager';
 import { getFileWatcherStatus, refreshProjectFileTree, getGlobalFileWatcherStats } from '../file/FileWatcherDebug';
 import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
@@ -560,6 +560,7 @@ export function createApplicationMenu() {
                             checked: currentTheme === 'light',
                             click: () => {
                                 setTheme('light');
+                                updateNativeTheme();
                                 // Send to all windows
                                 BrowserWindow.getAllWindows().forEach(window => {
                                     window.webContents.send('theme-change', 'light');
@@ -576,6 +577,7 @@ export function createApplicationMenu() {
                             checked: currentTheme === 'dark',
                             click: () => {
                                 setTheme('dark');
+                                updateNativeTheme();
                                 // Send to all windows
                                 BrowserWindow.getAllWindows().forEach(window => {
                                     window.webContents.send('theme-change', 'dark');
@@ -592,6 +594,7 @@ export function createApplicationMenu() {
                             checked: currentTheme === 'crystal-dark',
                             click: () => {
                                 setTheme('crystal-dark');
+                                updateNativeTheme();
                                 // Send to all windows
                                 BrowserWindow.getAllWindows().forEach(window => {
                                     window.webContents.send('theme-change', 'crystal-dark');
@@ -608,6 +611,7 @@ export function createApplicationMenu() {
                             checked: currentTheme === 'system',
                             click: () => {
                                 setTheme('system');
+                                updateNativeTheme();
                                 // Send to all windows
                                 BrowserWindow.getAllWindows().forEach(window => {
                                     window.webContents.send('theme-change', 'system');

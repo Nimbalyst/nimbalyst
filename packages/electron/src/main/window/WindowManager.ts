@@ -129,8 +129,7 @@ export function createWindow(
                 webviewTag: false
             },
             show: false,
-            titleBarStyle: process.platform === 'darwin' ? undefined : 'hidden',
-            titleBarOverlay: process.platform !== 'darwin' ? getTitleBarColors() : false,
+            titleBarStyle: process.platform === 'darwin' ? undefined : 'default',
         };
 
         if (iconPath) {
