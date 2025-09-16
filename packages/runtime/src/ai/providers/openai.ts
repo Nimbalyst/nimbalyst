@@ -62,6 +62,7 @@ export const streamOpenAI: ProviderStream = async function* (
         } catch (e) {
           // eslint-disable-next-line no-console
           console.error('[ai] tool exec error', e);
+          throw e;
         }
       }
     }

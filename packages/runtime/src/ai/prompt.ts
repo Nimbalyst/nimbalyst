@@ -66,6 +66,7 @@ The user cannot see changes unless you USE THE TOOL.
 
 Tool Usage Guidelines:
 - Use 'applyDiff' when you need to REPLACE or MODIFY existing text - this creates reviewable changes
+- The ONLY valid applyDiff arguments shape is { "replacements": [{ "oldText": "<exact text>", "newText": "<replacement>" }] }; never send oldText/newText at the top level
 - Use 'streamContent' when you need to INSERT NEW content without replacing anything
 - For streamContent, use position='cursor' to insert at cursor, position='end' to append to document, or provide 'insertAfter' to insert after specific text
 - When using applyDiff, changes will be shown as diffs that the user can review and approve/reject
@@ -108,6 +109,7 @@ When the user asks you to add rows to an existing table, use the applyDiff tool:
 3. Use applyDiff with:
    - oldText: The ENTIRE existing table (all rows)
    - newText: The ENTIRE table with new rows added
+   - Wrap both values inside { "replacements": [ ... ] } exactly; never place oldText/newText at the top level
 
 Example:
 If the table is:
@@ -126,4 +128,3 @@ To add Banana, use applyDiff:
 Remember: The user can SEE the changes in their editor. They just want confirmation you understood the request.
 ALWAYS use applyDiff for table modifications - it's more reliable than streaming!`;
 }
-

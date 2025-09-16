@@ -56,6 +56,7 @@ export const streamAnthropic: ProviderStream = async function* (
         } catch (e) {
           // eslint-disable-next-line no-console
           console.error('[ai] anthropic tool exec error', e);
+          throw e;
         }
       }
       delete toolMap[id];

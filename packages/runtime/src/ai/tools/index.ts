@@ -221,6 +221,14 @@ export class RuntimeToolExecutor {
       this.dispatchBrowserEvent(name, args, result);
       return result;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.dispatchBrowserEvent(name, args, {
+        success: false,
+        error: errorMessage,
+        ...(error && typeof error === 'object' && 'toolResult' in (error as any)
+          ? { result: (error as any).toolResult }
+          : {})
+      });
       this.emit('execution:error', { correlationId, toolName: name, error });
       throw error;
     }
@@ -261,7 +269,30 @@ export class RuntimeToolExecutor {
       throw new Error('applyDiff requires replacements array');
     }
 
-    return await applyReplacements(args.replacements);
+    const replacementCount = args.replacements.length;
+    if (replacementCount === 0) {
+      throw new Error('applyDiff requires at least one replacement');
+    }
+
+    try {
+      // eslint-disable-next-line no-console
+      console.info('[runtime][tool] applyDiff invoked', { replacements: replacementCount });
+    } catch {}
+
+    const result = await applyReplacements(args.replacements);
+
+    try {
+      // eslint-disable-next-line no-console
+      console.info('[runtime][tool] applyDiff result', result);
+    } catch {}
+
+    if (!result?.success) {
+      const error = new Error(result?.error || 'applyDiff failed to apply replacements');
+      (error as any).toolResult = result;
+      throw error;
+    }
+
+    return result;
   }
 
   private async executeStreamContent(args: {

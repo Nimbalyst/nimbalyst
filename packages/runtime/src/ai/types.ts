@@ -22,6 +22,41 @@ export interface ProviderRequest {
   headers?: Record<string, string>;
 }
 
+export interface ChatToolCall {
+  name: string;
+  arguments?: any;
+  result?: any;
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'tool';
+  content: string;
+  timestamp: number;
+  edits?: any[];
+  toolCall?: ChatToolCall;
+  isStreamingStatus?: boolean;
+  streamingData?: {
+    position: string;
+    mode: string;
+    content: string;
+    isActive: boolean;
+  };
+  isError?: boolean;
+  errorMessage?: string;
+}
+
+export interface ChatSession {
+  id: string;
+  provider: string;
+  model?: string;
+  title?: string;
+  draftInput?: string;
+  messages: ChatMessage[];
+  createdAt: number;
+  updatedAt: number;
+  metadata?: Record<string, unknown>;
+}
+
 export type StreamEvent =
   | { type: 'start'; config: StreamingConfig }
   | { type: 'content'; chunk: string }

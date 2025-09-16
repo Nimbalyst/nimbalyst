@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AISessionsRepository } from '@stravu/runtime';
 
 export function SessionDropdown({ open, onClose, onSelect }: { open: boolean; onClose: () => void; onSelect: (id: string) => void }) {
-  const [sessions, setSessions] = useState<{ id: string; provider: string; model: string; updatedAt: number }[]>([]);
+  const [sessions, setSessions] = useState<{ id: string; provider: string; model?: string; updatedAt: number }[]>([]);
   useEffect(() => { if (open) { AISessionsRepository.list().then(setSessions).catch(()=>setSessions([])); } }, [open]);
   if (!open) return null;
   return (
@@ -13,7 +13,7 @@ export function SessionDropdown({ open, onClose, onSelect }: { open: boolean; on
           {sessions.map(s => (
             <button key={s.id} className="btn" onClick={() => { onSelect(s.id); onClose(); }}>
               <div className="flex items-center justify-between w-full">
-                <span className="truncate" title={`${s.provider} • ${s.model}`}>{s.provider.toUpperCase()} • {s.model}</span>
+                <span className="truncate" title={`${s.provider} • ${s.model || 'model'}`}>{s.provider.toUpperCase()} • {s.model || 'model'}</span>
                 <span className="material-symbols-rounded" style={{ fontSize: 18 }}>history</span>
               </div>
             </button>
@@ -23,4 +23,3 @@ export function SessionDropdown({ open, onClose, onSelect }: { open: boolean; on
     </div>
   );
 }
-

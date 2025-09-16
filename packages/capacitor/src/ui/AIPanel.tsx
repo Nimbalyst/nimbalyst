@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { sendStreamingEdit, sendStreamingEditWithProvider, type DocumentContext, SettingsRepository, AISessionsRepository } from '@stravu/runtime';
+import { sendStreamingEdit, sendStreamingEditWithProvider, type DocumentContext, SettingsRepository, AISessionsRepository, type ChatMessage } from '@stravu/runtime';
 import { ToolExecutor, toolRegistry } from '@stravu/runtime';
 import { AIModelsSheet } from './AIModelsSheet';
 import { ModelPicker } from './ModelPicker';
@@ -51,7 +51,12 @@ export function AIPanel({ open, onClose, document }: AIPanelProps) {
       setSessionId(restoredId);
       if (!ai.lastSessionId) await SettingsRepository.updateAI({ lastSessionId: restoredId });
       const sess = await AISessionsRepository.get(restoredId);
-      if (sess?.messages?.length) setMessages(sess.messages.map((m, i) => ({ role: m.role, content: m.content, id: `m_${i}_${m.role[0]}` })));
+      if (sess?.messages?.length) {
+        const simplified = sess.messages
+          .filter((m: ChatMessage) => m.role === 'user' || m.role === 'assistant')
+          .map((m: ChatMessage, i: number) => ({ role: m.role as 'user' | 'assistant', content: m.content, id: `m_${i}_${m.role[0]}` }));
+        setMessages(simplified);
+      }
     })();
   }, []);
   useEffect(() => {
@@ -199,7 +204,10 @@ export function AIPanel({ open, onClose, document }: AIPanelProps) {
           setSessionId(id);
           setProvider(sess.provider as any);
           setModel(sess.model);
-          setMessages(sess.messages.map((m, i) => ({ role: m.role, content: m.content, id: `m_${i}_${m.role[0]}` })));
+          const simplified = (sess.messages || [])
+            .filter((m: ChatMessage) => m.role === 'user' || m.role === 'assistant')
+            .map((m: ChatMessage, i: number) => ({ role: m.role as 'user' | 'assistant', content: m.content, id: `m_${i}_${m.role[0]}` }));
+          setMessages(simplified);
           await SettingsRepository.updateAI({ lastSessionId: id, provider: sess.provider as any, model: sess.model });
         }
       }} />
@@ -218,12 +226,26 @@ export function AIPanel({ open, onClose, document }: AIPanelProps) {
   );
 }
 
+type ToolEventEntry = {
+  id: string;
+  name: string;
+  args: any;
+  result?: any;
+  error?: string;
+};
+
 function ToolEventsView() {
-  const [events, setEvents] = useState<{ id: string; name: string; args: any }[]>([]);
+  const [events, setEvents] = useState<ToolEventEntry[]>([]);
   useEffect(() => {
     const handler = (e: any) => {
       const detail = e.detail || {};
-      setEvents((prev) => [...prev, { id: `t_${Date.now()}`, name: detail.name, args: detail.args }]);
+      setEvents((prev) => [...prev, {
+        id: `t_${Date.now()}`,
+        name: detail.name,
+        args: detail.args,
+        result: detail.result,
+        error: detail.result?.error || detail.error
+      }]);
     };
     window.addEventListener('aiToolCall' as any, handler as any);
     return () => window.removeEventListener('aiToolCall' as any, handler as any);
@@ -233,9 +255,12 @@ function ToolEventsView() {
     <div style={{ display: 'grid', gap: 6 }}>
       {events.map(ev => (
         <div key={ev.id} style={{ background: 'var(--stravu-bg-secondary, #fff)', border: '1px solid var(--stravu-editor-border, #e5e7eb)', borderRadius: 10, padding: 8 }}>
-          <div className="flex items-center justify-between">
-            <div className="muted">Using tool: {ev.name}</div>
-            {ev.name === 'applyDiff' && (
+          <div className="flex items-center justify-between" style={{ gap: 8 }}>
+            <div className="muted">
+              Using tool: {ev.name}
+              {ev.error && <span style={{ marginLeft: 6, color: '#b91c1c' }}>Error: {ev.error}</span>}
+            </div>
+            {ev.name === 'applyDiff' && !ev.error && (
               <div className="flex gap-2">
                 <button className="btn" onClick={async () => { try { await ToolExecutor.execute('applyDiff', ev.args); } catch (e) { console.error('reapply failed', e);} }}>Accept</button>
                 <button className="btn" onClick={async () => {
@@ -250,6 +275,9 @@ function ToolEventsView() {
             )}
           </div>
           <pre style={{ margin: 0, whiteSpace: 'pre-wrap', font: '12px/1.4 ui-sans-serif, system-ui' }}>{JSON.stringify(ev.args, null, 2)}</pre>
+          {ev.result && !ev.error && (
+            <pre style={{ marginTop: 4, whiteSpace: 'pre-wrap', font: '11px/1.4 ui-sans-serif, system-ui', color: '#4b5563' }}>{JSON.stringify(ev.result, null, 2)}</pre>
+          )}
         </div>
       ))}
     </div>

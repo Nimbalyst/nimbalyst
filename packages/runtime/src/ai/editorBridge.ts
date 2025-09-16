@@ -14,16 +14,31 @@ function getBridge(): any {
 export function startStreamingEdit(config: StreamingConfig & { id: string }) {
   const bridge = getBridge();
   bridge.startStreamingEdit(config as any);
+  try {
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('aiStreamEditStart', { detail: config }));
+    }
+  } catch {}
 }
 
 export function streamContent(streamId: string, content: string) {
   const bridge = getBridge();
   bridge.streamContent(streamId, content);
+  try {
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('aiStreamEditContent', { detail: { streamId, content } }));
+    }
+  } catch {}
 }
 
 export function endStreamingEdit(streamId: string) {
   const bridge = getBridge();
   bridge.endStreamingEdit(streamId);
+  try {
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('aiStreamEditEnd', { detail: { streamId } }));
+    }
+  } catch {}
 }
 
 export async function applyReplacements(replacements: TextReplacement[]) {
@@ -31,5 +46,15 @@ export async function applyReplacements(replacements: TextReplacement[]) {
   if (typeof bridge.applyReplacements !== 'function') {
     throw new Error('Editor bridge cannot apply replacements');
   }
-  return await bridge.applyReplacements(replacements);
+  const count = Array.isArray(replacements) ? replacements.length : 0;
+  try {
+    // eslint-disable-next-line no-console
+    console.info('[runtime][bridge] applyReplacements invoked', { replacements: count });
+  } catch {}
+  const result = await bridge.applyReplacements(replacements);
+  try {
+    // eslint-disable-next-line no-console
+    console.info('[runtime][bridge] applyReplacements result', result);
+  } catch {}
+  return result;
 }

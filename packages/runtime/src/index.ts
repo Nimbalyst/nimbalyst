@@ -9,6 +9,7 @@ export * from './ai/streaming';
 export * from './ai/client';
 export * from './ai/models';
 export * from './ai/tools';
+export * from './ai/sessionManager';
 export * from './storage/repositories/SettingsRepository';
 export * from './storage/repositories/AISessionsRepository';
 // Plugins
