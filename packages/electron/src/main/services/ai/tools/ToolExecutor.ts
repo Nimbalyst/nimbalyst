@@ -6,6 +6,14 @@ import { WebContents, ipcMain } from 'electron';
 import { EventEmitter } from 'events';
 import { DiffArgs, DiffResult, ToolDefinition } from '../types';
 import { toolRegistry } from './ToolRegistry';
+import { logger } from '../../../utils/logger';
+
+const LOG_PREVIEW_LENGTH = 400;
+
+function previewForLog(value?: string, max: number = LOG_PREVIEW_LENGTH): string {
+  if (!value) return '';
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
 
 export class ToolExecutor extends EventEmitter {
   private webContents: WebContents;
@@ -28,20 +36,30 @@ export class ToolExecutor extends EventEmitter {
   
   /**
    * Execute applyDiff tool
-   */
+  */
   async applyDiff(args: DiffArgs): Promise<DiffResult> {
     const resultChannel = `applyDiff-result-${Date.now()}`;
-    
+    const replacementCount = Array.isArray(args?.replacements) ? args.replacements.length : undefined;
+    logger.ai.info('[ToolExecutor] applyDiff invoked', {
+      replacements: replacementCount,
+      preview: previewForLog(JSON.stringify(args ?? {}))
+    });
+    if (replacementCount === undefined || replacementCount === 0) {
+      logger.ai.warn('[ToolExecutor] applyDiff called without replacements');
+    }
+
     return new Promise((resolve, reject) => {
       // Set up timeout
       const timeout = setTimeout(() => {
         ipcMain.removeAllListeners(resultChannel);
+        logger.ai.error('[ToolExecutor] applyDiff timed out');
         reject(new Error('applyDiff execution timed out'));
       }, 30000);
       
       // Set up one-time listener for result
       ipcMain.once(resultChannel, (event, result: DiffResult) => {
         clearTimeout(timeout);
+        logger.ai.info('[ToolExecutor] applyDiff result received', result);
         resolve(result);
       });
       

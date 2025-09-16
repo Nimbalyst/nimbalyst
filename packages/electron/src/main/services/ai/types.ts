@@ -24,6 +24,8 @@ export interface Message {
     arguments?: any;
     result?: any;
   };
+  isError?: boolean;
+  errorMessage?: string;
   isStreamingStatus?: boolean;
   streamingData?: {
     position: string;
@@ -87,11 +89,17 @@ export interface ProviderSettings {
 }
 
 export interface StreamChunk {
-  type: 'text' | 'tool_call' | 'error' | 'complete' | 'stream_edit_start' | 'stream_edit_content' | 'stream_edit_end';
+  type: 'text' | 'tool_call' | 'tool_error' | 'error' | 'complete' | 'stream_edit_start' | 'stream_edit_content' | 'stream_edit_end';
   content?: string;
   toolCall?: {
     name: string;
     arguments?: any;
+    result?: any;
+  };
+  toolError?: {
+    name: string;
+    arguments?: any;
+    error: string;
     result?: any;
   };
   error?: string;

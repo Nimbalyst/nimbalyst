@@ -148,7 +148,7 @@ if (!documentLinkPluginRegistered) {
 }
 
 export default function App() {
-  console.log('[APP RENDER]', new Date().toISOString(), 'App component rendering');
+  // console.log('[APP RENDER]', new Date().toISOString(), 'App component rendering');
   logger.ui.info('App component rendering');
 
   // Check for special window modes

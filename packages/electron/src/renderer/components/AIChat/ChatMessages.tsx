@@ -19,6 +19,7 @@ interface Message {
     isActive: boolean;
   };
   isError?: boolean;
+  errorMessage?: string;
 }
 
 interface ChatMessagesProps {
@@ -99,6 +100,7 @@ export function ChatMessages({
               content={message.content}
               toolCall={message.toolCall}
               isError={message.isError}
+              errorMessage={message.errorMessage}
               onApplyEdit={onApplyEdit}
               onReapply={handleReapply}
               provider={provider}

@@ -20,6 +20,14 @@ import {
 } from './types';
 import { updateDocumentState } from '../../mcp/httpServer';
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
+import { logger } from '../../utils/logger';
+
+const LOG_PREVIEW_LENGTH = 400;
+
+function previewForLog(value?: string, max: number = LOG_PREVIEW_LENGTH): string {
+  if (!value) return '';
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
 
 export class AIService {
   private sessionManager: SessionManager;
@@ -456,25 +464,55 @@ export class AIService {
                 toolCalls.push(chunk.toolCall);
                 console.log(`[AIService] Tool call #${toolCallCount}: ${chunk.toolCall.name}`);
 
+                const toolName = chunk.toolCall.name;
+                const toolArgs = chunk.toolCall.arguments as Record<string, unknown> | undefined;
+                const replacementCount = Array.isArray((toolArgs as any)?.replacements)
+                  ? (toolArgs as any).replacements.length
+                  : undefined;
+                logger.ai.info('[AIService] Tool call received', {
+                  name: toolName,
+                  replacements: replacementCount,
+                  argKeys: toolArgs ? Object.keys(toolArgs) : []
+                });
+
+                if (toolName === 'applyDiff' && (replacementCount === undefined || replacementCount === 0)) {
+                  const rawArgs = toolArgs ? JSON.stringify(toolArgs) : 'null';
+                  logger.ai.warn('[AIService] applyDiff payload missing replacements', previewForLog(rawArgs));
+                }
+
                 // Save tool call as a separate message in the session
-                const toolMessage: Message = {
-                  role: 'tool',
-                  content: '',  // Tool messages don't have text content
-                  timestamp: Date.now(),
-                  toolCall: chunk.toolCall
-                };
-                this.sessionManager.addMessage(toolMessage, session.id);
+                const toolResult = chunk.toolCall.result as any;
+                const isFailedResult = toolResult?.success === false;
+
+                if (!isFailedResult) {
+                  const toolMessage: Message = {
+                    role: 'tool',
+                    content: '',  // Tool messages don't have text content
+                    timestamp: Date.now(),
+                    toolCall: chunk.toolCall,
+                    ...(toolResult !== undefined ? { errorMessage: toolResult?.error, isError: toolResult?.success === false } : {})
+                  };
+                  this.sessionManager.addMessage(toolMessage, session.id);
+                }
 
                 // Send tool call to renderer
                 // For applyDiff (including MCP variants), include it as BOTH an edit AND a toolCall
-                if (chunk.toolCall.name === 'applyDiff' || chunk.toolCall.name?.endsWith('__applyDiff')) {
+                if (toolName === 'applyDiff' || toolName?.endsWith('__applyDiff')) {
                   const edit = {
                     type: 'diff',
                     replacements: chunk.toolCall.arguments.replacements,
                     // MCP edits are applied automatically by the MCP server
-                    applied: chunk.toolCall.name?.endsWith('__applyDiff')
+                    applied: toolName?.endsWith('__applyDiff')
                   };
                   edits.push(edit);  // Save edit for the assistant message
+
+                  if (!Array.isArray(edit.replacements) || edit.replacements.length === 0) {
+                    logger.ai.warn('[AIService] Forwarding applyDiff edit without replacements');
+                  } else {
+                    logger.ai.info('[AIService] Forwarding applyDiff edit', {
+                      count: edit.replacements.length
+                    });
+                  }
 
                   event.sender.send('ai:streamResponse', {
                     partial: '',
@@ -493,6 +531,35 @@ export class AIService {
                     toolCalls: [chunk.toolCall]
                   });
                 }
+              }
+              break;
+
+            case 'tool_error':
+              if (chunk.toolError) {
+                logger.ai.warn('[AIService] Tool error reported', {
+                  name: chunk.toolError.name,
+                  error: chunk.toolError.error
+                });
+
+                const errorMessage: Message = {
+                  role: 'tool',
+                  content: '',
+                  timestamp: Date.now(),
+                  toolCall: {
+                    name: chunk.toolError.name,
+                    arguments: chunk.toolError.arguments,
+                    result: chunk.toolError.result
+                  },
+                  isError: true,
+                  errorMessage: chunk.toolError.error
+                };
+                this.sessionManager.addMessage(errorMessage, session.id);
+
+                event.sender.send('ai:streamResponse', {
+                  partial: '',
+                  isComplete: false,
+                  toolError: chunk.toolError
+                });
               }
               break;
 
@@ -531,6 +598,24 @@ export class AIService {
               perfLog.responseLength = fullResponse.length;
               
               console.log('[AIService] Stream complete - Performance metrics:', perfLog);
+              if (fullResponse) {
+                logger.ai.info('[AIService] Assistant final response', {
+                  length: fullResponse.length,
+                  preview: previewForLog(fullResponse)
+                });
+              } else {
+                logger.ai.info('[AIService] Assistant response empty', {
+                  edits: edits.length,
+                  streamed: hasStreamingContent,
+                  toolCalls: toolCallCount
+                });
+              }
+              if (edits.length > 0) {
+                logger.ai.info('[AIService] Collected edits', {
+                  editCount: edits.length,
+                  replacementCounts: edits.map(edit => Array.isArray(edit.replacements) ? edit.replacements.length : 0)
+                });
+              }
               
               // Send completion metrics
               event.sender.send('ai:performanceMetrics', {

@@ -1,6 +1,13 @@
 import { detectStreamingIntent, parseStreamingChunk, StreamingEditRequest } from './aiStreamProtocol';
 import { logger } from '../utils/logger';
 
+const LOG_PREVIEW_LENGTH = 400;
+
+const previewForLog = (value?: string, max: number = LOG_PREVIEW_LENGTH): string => {
+  if (!value) return '';
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+};
+
 interface DocumentContext {
   filePath: string;
   fileType: string;
@@ -78,6 +85,13 @@ class AIApi {
 
     // Set up IPC listeners for streaming responses (both legacy and new)
     const handleStreamResponse = (data: any) => {
+      if (data?.edits && !data.isComplete) {
+        const counts = Array.isArray(data.edits)
+          ? data.edits.map((edit: any) => Array.isArray(edit?.replacements) ? edit.replacements.length : 0)
+          : [];
+        logger.api.info('AI provided edits mid-stream', counts);
+      }
+
       // Stream response received - emit will handle logging
       
       // Accumulate content to check for streaming markers
@@ -203,6 +217,28 @@ class AIApi {
       }
       
       // Normal streaming response
+      if (data.isComplete) {
+        if (data.content) {
+          logger.api.info('AI final response', {
+            length: data.content.length,
+            preview: previewForLog(data.content)
+          });
+        } else {
+          logger.api.info('AI final response had no text content');
+        }
+        if (Array.isArray(data.edits) && data.edits.length > 0) {
+          logger.api.info('AI final edits summary', {
+            editCount: data.edits.length,
+            replacementCounts: data.edits.map((edit: any) => Array.isArray(edit?.replacements) ? edit.replacements.length : 0)
+          });
+        }
+      }
+      if (data.toolError) {
+        logger.api.warn('AI reported tool error', {
+          name: data.toolError.name,
+          error: data.toolError.error
+        });
+      }
       logger.api.info('Normal (non-streaming) response');
       this.emit('streamResponse', data);
     };
@@ -220,9 +256,19 @@ class AIApi {
       try {
         // Try to access the bridge if it's available on the window
         const aiChatBridge = (window as any).aiChatBridge;
+        const replacementCount = Array.isArray(data?.replacements) ? data.replacements.length : undefined;
+        const payloadPreview = previewForLog(JSON.stringify(data));
+        logger.api.info('Renderer received applyDiff request', {
+          replacements: replacementCount,
+          preview: payloadPreview
+        });
+        if (replacementCount === undefined || replacementCount === 0) {
+          logger.api.warn('applyDiff payload missing replacements');
+        }
         
         if (aiChatBridge) {
           const result = await aiChatBridge.applyReplacements(data.replacements);
+          logger.api.info('Renderer applyDiff result', result);
           // Send result back through the result channel
           window.electronAPI.sendMcpApplyDiffResult(data.resultChannel, result);
         } else {
@@ -325,10 +371,14 @@ class AIApi {
       
       // If this is a diff edit with replacements and bridge is available, use it
       if (aiChatBridge && edit.type === 'diff' && 'replacements' in edit) {
+        logger.api.info('applyEdit via bridge', {
+          replacements: Array.isArray((edit as any).replacements) ? (edit as any).replacements.length : undefined
+        });
         const result = await aiChatBridge.applyReplacements((edit as any).replacements);
+        logger.api.info('applyEdit result from bridge', result);
         return result;
       }
-      
+
       // For other edit types or if bridge not available, use the IPC method
       const result = await window.electronAPI.aiApplyEdit(edit);
       return { success: result.success, error: result.success ? undefined : 'Failed to apply edit' };

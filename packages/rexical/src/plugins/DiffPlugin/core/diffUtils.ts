@@ -402,6 +402,10 @@ export function applyMarkdownReplace(
     }
   }
 
+  if (originalMarkdown === newMarkdown) {
+    throw new Error('No changes detected after applying replacements');
+  }
+
   // Debug: Markdown diff info
   // console.log('📝 Original markdown length:', originalMarkdown.length);
   // console.log('📝 New markdown length:', newMarkdown.length);

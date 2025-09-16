@@ -12,6 +12,14 @@ import {
   AIModel 
 } from '../types';
 import { CLAUDE_MODELS, DEFAULT_MODELS } from '../../../../shared/modelConstants';
+import { logger } from '../../../utils/logger';
+
+const LOG_PREVIEW_LENGTH = 400;
+
+function previewForLog(value?: string, max: number = LOG_PREVIEW_LENGTH): string {
+  if (!value) return '';
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
 
 export class ClaudeProvider extends BaseAIProvider {
   private anthropic: Anthropic | null = null;
@@ -268,10 +276,48 @@ export class ClaudeProvider extends BaseAIProvider {
           if (currentToolUse && toolInputBuffer) {
             try {
               // Parse the complete tool input
+              if (currentToolUse.name === 'applyDiff') {
+                logger.aiClaude.info('[ClaudeProvider] applyDiff raw input', previewForLog(toolInputBuffer));
+              }
+
               currentToolUse.input = JSON.parse(toolInputBuffer);
-              
-              // If this was streamContent, emit the end event
+
+              // Prepare optional execution result for tools that run immediately
+              let executionResult: any = undefined;
+
+              if (currentToolUse.name === 'applyDiff') {
+                const replacements = (currentToolUse.input as any)?.replacements;
+                if (!Array.isArray(replacements) || replacements.length === 0) {
+                  logger.aiClaude.warn('[ClaudeProvider] applyDiff tool call missing replacements', {
+                    inputKeys: currentToolUse.input ? Object.keys(currentToolUse.input) : []
+                  });
+                } else {
+                  logger.aiClaude.info('[ClaudeProvider] applyDiff replacements received', {
+                    count: replacements.length
+                  });
+                }
+
+                if (this.toolHandler) {
+                  executionResult = await this.toolHandler.applyDiff(currentToolUse.input);
+                  logger.aiClaude.info('[ClaudeProvider] applyDiff execution result', executionResult);
+
+                  if (!executionResult?.success) {
+                    const errorMessage = executionResult?.error || 'applyDiff execution failed';
+                    yield {
+                      type: 'tool_error',
+                      toolError: {
+                        name: currentToolUse.name,
+                        arguments: currentToolUse.input,
+                        error: errorMessage,
+                        result: executionResult
+                      }
+                    };
+                  }
+                }
+              }
+
               if (currentToolUse.name === 'streamContent' && isStreamingContent) {
+                // streamContent handled separately through streaming events
                 yield {
                   type: 'stream_edit_end'
                 };
@@ -279,22 +325,15 @@ export class ClaudeProvider extends BaseAIProvider {
                 streamContentBuffer = '';
                 streamConfig = null;
               } else {
-                // Only emit tool call event for non-streaming tools
-                // streamContent is handled entirely through streaming events
+                // Emit tool call for logging/UI purposes
                 yield {
                   type: 'tool_call',
                   toolCall: {
                     name: currentToolUse.name,
-                    arguments: currentToolUse.input
+                    arguments: currentToolUse.input,
+                    ...(executionResult !== undefined ? { result: executionResult } : {})
                   }
                 };
-              }
-
-              // If it's an applyDiff tool and we have a handler, execute it
-              if (currentToolUse.name === 'applyDiff' && this.toolHandler) {
-                const result = await this.toolHandler.applyDiff(currentToolUse.input);
-                // We could handle the result here if needed
-                console.log('Tool execution result:', result);
               }
             } catch (error) {
               console.error('Error parsing tool input:', error);
@@ -316,6 +355,12 @@ export class ClaudeProvider extends BaseAIProvider {
           }
         } else if (chunk.type === 'message_stop') {
           // Message complete
+          if (fullContent) {
+            logger.aiClaude.info('[ClaudeProvider] Assistant response', {
+              length: fullContent.length,
+              preview: previewForLog(fullContent)
+            });
+          }
           yield {
             type: 'complete',
             content: fullContent,

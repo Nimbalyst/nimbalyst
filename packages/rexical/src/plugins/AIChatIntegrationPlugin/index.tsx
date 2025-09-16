@@ -246,14 +246,16 @@ export function AIChatIntegrationPlugin(): null {
 
       if (type === 'applyReplacements') {
         const { replacements } = customEvent.detail;
-        logger.log('bridge', 'Applying replacements:', replacements);
+        logger.log('bridge', `Applying replacements payload (count: ${Array.isArray(replacements) ? replacements.length : 'none'})`, replacements);
         if (!replacements) {
+          logger.log('bridge', '❗ No replacements array provided in applyReplacements event');
           bridge.reportResult(false, 'No replacements provided');
           return;
         }
         try {
           const success = editor.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
           // Report success
+          logger.log('bridge', success ? 'Diff command returned success' : 'Diff command returned false');
           bridge.reportResult(success, success ? undefined : 'Failed to apply replacements');
         } catch (error) {
           // Report error

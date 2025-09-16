@@ -62,6 +62,16 @@
   border-top: 1px solid var(--border-color);
 }
 
+.ai-chat-tool-error {
+  background: var(--error-background-light);
+  color: var(--error-color);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .ai-chat-tool-metadata {
   display: flex;
   align-items: center;

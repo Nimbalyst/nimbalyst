@@ -23,6 +23,7 @@ interface ChatMessageProps {
   };
   isStreaming?: boolean;
   isError?: boolean;
+  errorMessage?: string;
   onApplyEdit?: (edit: EditRequest) => Promise<{ success: boolean; error?: string }>;
   onReapply?: (args: any) => void;
   provider?: string;  // Provider for showing appropriate icon
@@ -35,6 +36,7 @@ export function ChatMessage({
   toolCall,
   isStreaming,
   isError,
+  errorMessage,
   onApplyEdit,
   onReapply,
   provider
@@ -154,6 +156,7 @@ export function ChatMessage({
             toolName={toolCall.name}
             arguments={toolCall.arguments}
             result={toolCall.result}
+            errorMessage={errorMessage}
             onReapply={onReapply}
           />
         </div>

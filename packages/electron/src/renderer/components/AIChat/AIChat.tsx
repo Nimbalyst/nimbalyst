@@ -53,6 +53,8 @@ export function AIChat({
       content: string;
       isActive: boolean;
     };
+    isError?: boolean;
+    errorMessage?: string;
   }>>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -301,10 +303,44 @@ export function AIChat({
                 newMessages.push({
                   role: 'tool',
                   content: '', // Tool messages don't have text content
-                  toolCall: toolCall
+                  toolCall: toolCall,
+                  isError: toolCall.result?.success === false,
+                  errorMessage: toolCall.result?.error
                 });
                 existingToolCalls.add(signature);
               }
+            }
+            return newMessages;
+          });
+        }
+
+        if (data.toolError) {
+          setMessages(prev => {
+            const newMessages = [...prev];
+            const signature = `${data.toolError.name}-${JSON.stringify(data.toolError.arguments)}`;
+            const existingIndex = newMessages.findIndex(m => 
+              m.role === 'tool' && m.toolCall && `${m.toolCall.name}-${JSON.stringify(m.toolCall.arguments)}` === signature
+            );
+
+            const errorInfo = {
+              role: 'tool' as const,
+              content: '',
+              toolCall: {
+                name: data.toolError.name,
+                arguments: data.toolError.arguments,
+                result: data.toolError.result
+              },
+              isError: true,
+              errorMessage: data.toolError.error
+            };
+
+            if (existingIndex >= 0) {
+              newMessages[existingIndex] = {
+                ...newMessages[existingIndex],
+                ...errorInfo
+              };
+            } else {
+              newMessages.push(errorInfo);
             }
             return newMessages;
           });
@@ -670,7 +706,9 @@ export function AIChat({
               edits: msg.edits,
               toolCall: msg.toolCall,
               isStreamingStatus: msg.isStreamingStatus,
-              streamingData: msg.streamingData
+              streamingData: msg.streamingData,
+              isError: msg.isError,
+              errorMessage: msg.errorMessage
             }));
             setMessages(chatMessages);
           }
@@ -1070,7 +1108,9 @@ export function AIChat({
         edits: msg.edits,
         toolCall: msg.toolCall,
         isStreamingStatus: msg.isStreamingStatus,
-        streamingData: msg.streamingData
+        streamingData: msg.streamingData,
+        isError: msg.isError,
+        errorMessage: msg.errorMessage
       }));
 
       setMessages(chatMessages);

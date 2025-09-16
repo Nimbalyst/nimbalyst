@@ -5,17 +5,22 @@ interface ToolCallBlockProps {
   toolName: string;
   arguments?: any;
   result?: any;
+  errorMessage?: string;
   isLoading?: boolean;
   onReapply?: (args: any) => void;
 }
 
-export function ToolCallBlock({ toolName, arguments: args, result, isLoading, onReapply }: ToolCallBlockProps) {
+export function ToolCallBlock({ toolName, arguments: args, result, errorMessage, isLoading, onReapply }: ToolCallBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Extract the actual tool name from MCP format (e.g., "mcp__stravu-editor__applyDiff" -> "applyDiff")
   const displayName = toolName.includes('__')
     ? toolName.split('__').pop() || toolName
     : toolName;
+
+  const executionResult = result;
+  const hasError = !!errorMessage || executionResult?.success === false;
+  const hasSuccess = executionResult?.success === true && !hasError;
 
   // Get a user-friendly description based on the tool name and arguments
   const getToolDescription = (name: string, args?: any) => {
@@ -225,13 +230,21 @@ export function ToolCallBlock({ toolName, arguments: args, result, isLoading, on
         {isLoading && (
           <span className="ai-chat-tool-badge ai-chat-tool-badge--loading">Running...</span>
         )}
-        {result && !isLoading && (
+        {hasSuccess && !isLoading && (
           <span className="ai-chat-tool-badge ai-chat-tool-badge--success">Complete</span>
+        )}
+        {hasError && !isLoading && (
+          <span className="ai-chat-tool-badge ai-chat-tool-badge--error">Failed</span>
         )}
       </div>
 
       {isExpanded && (
         <div className="ai-chat-tool-content-wrapper">
+          {hasError && (
+            <div className="ai-chat-tool-error">
+              {errorMessage || executionResult?.error || 'Tool execution failed'}
+            </div>
+          )}
           <div className="ai-chat-tool-metadata">
             <span className="ai-chat-tool-type">TOOL</span>
             <span className="ai-chat-tool-location">
@@ -241,11 +254,11 @@ export function ToolCallBlock({ toolName, arguments: args, result, isLoading, on
 
           {formatArguments(args)}
 
-          {result && (
+          {executionResult && (
             <div className="ai-chat-tool-result">
               <span className="ai-chat-tool-label">Result:</span>
               <pre className="ai-chat-tool-result-content">
-                {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+                {typeof executionResult === 'string' ? executionResult : JSON.stringify(executionResult, null, 2)}
               </pre>
             </div>
           )}
