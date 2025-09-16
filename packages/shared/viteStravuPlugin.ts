@@ -33,6 +33,22 @@ export default function viteStravuPlugin(): Plugin {
                 replacement: isDevMode
                   ? resolve(__dirname, '../rexical/src') + '/'
                   : resolve(__dirname, '../rexical/dist') + '/'
+              },
+              // Runtime package aliases. First, normalize legacy to current name
+              { find: '@stravu-editor/runtime', replacement: '@stravu/runtime' },
+              { find: /^@stravu-editor\/runtime\//, replacement: '@stravu/runtime/' },
+              // Then map current name to src in dev, dist in prod
+              {
+                find: '@stravu/runtime',
+                replacement: isDevMode
+                  ? resolve(__dirname, '../runtime/src/index.ts')
+                  : resolve(__dirname, '../runtime/dist/index.js')
+              },
+              {
+                find: /^@stravu\/runtime\//,
+                replacement: isDevMode
+                  ? resolve(__dirname, '../runtime/src') + '/'
+                  : resolve(__dirname, '../runtime/dist') + '/'
               }
             ]
           }

@@ -44,6 +44,7 @@
     "packages/playground",
     "packages/electron",
     "packages/tauri",
+    "packages/runtime",
     "packages/core",
     "packages/capacitor",
     "packages/rexical"

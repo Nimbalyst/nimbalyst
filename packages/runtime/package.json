@@ -1,0 +1,29 @@
+{
+  "name": "@stravu/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared Preditor runtime: storage (PGlite), sessions, collab, AI hooks, plugins",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "vite build",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.2.5",
+    "@anthropic-ai/sdk": "^0.20.9",
+    "openai": "^4.56.0",
+    "yjs": ">=13.5.42",
+    "y-websocket": "^1.5.4"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
