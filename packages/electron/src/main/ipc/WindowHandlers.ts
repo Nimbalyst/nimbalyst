@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, shell } from 'electron';
 import { windowStates, windows, getWindowId } from '../window/WindowManager';
 import { updateApplicationMenu } from '../menu/ApplicationMenu';
 import { stopFileWatcher, startFileWatcher } from '../file/FileWatcher';
@@ -11,13 +11,13 @@ export function registerWindowHandlers() {
     ipcMain.handle('get-initial-state', (event) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return null;
-        
+
         const windowId = [...windows.entries()].find(([, win]) => win === window)?.[0];
         if (windowId === undefined) return null;
-        
+
         const state = windowStates.get(windowId);
         if (!state) return null;
-        
+
         // If it's a project mode window, return the full initial state
         if (state.mode === 'project' && state.projectPath) {
             const fileTree = getFolderContents(state.projectPath);
@@ -28,16 +28,23 @@ export function registerWindowHandlers() {
                 fileTree
             };
         }
-        
+
         // For document mode, just return the mode
         return {
             mode: 'document'
         };
     });
-    
+
     // Open AI Models window
     ipcMain.handle('window:open-ai-models', async () => {
         createAIModelsWindow();
+    });
+
+    // Open external URL in default browser
+    ipcMain.handle('open-external', async (event, url: string) => {
+        if (url && typeof url === 'string') {
+            await shell.openExternal(url);
+        }
     });
     // Set document edited state
     ipcMain.on('set-document-edited', (event, edited: boolean) => {
@@ -56,7 +63,7 @@ export function registerWindowHandlers() {
         window.setDocumentEdited(edited);
 
         // Update menu to reflect new window state
-        updateApplicationMenu();
+        updateApplicationMenu().catch(err => console.error("Error updating menu:", err));
     });
 
     // Set window title
@@ -65,7 +72,7 @@ export function registerWindowHandlers() {
         if (window) {
             window.setTitle(title);
             // Update menu to reflect new window title
-            updateApplicationMenu();
+            updateApplicationMenu().catch(err => console.error("Error updating menu:", err));
         }
     });
 
@@ -80,15 +87,15 @@ export function registerWindowHandlers() {
             return;
         }
         const state = windowStates.get(windowId);
-        
+
         // Only proceed if the file path actually changed
         if (state?.filePath === filePath) {
             // No change, skip everything
             return;
         }
-        
-        console.log('[SET_FILE] Updating file path for window', windowId, 'from', state?.filePath, 'to', filePath);
-        
+
+        // console.log('[SET_FILE] Updating file path for window', windowId, 'from', state?.filePath, 'to', filePath);
+
         if (state) {
             // Stop watching the old file
             if (state.filePath && state.filePath !== filePath) {
@@ -100,7 +107,7 @@ export function registerWindowHandlers() {
             console.log('[SET_FILE] Window state after update:', { windowId, filePath: state.filePath });
 
             // Update menu to reflect new file
-            updateApplicationMenu();
+            updateApplicationMenu().catch(err => console.error("Error updating menu:", err));
 
             // Start watching the new file
             if (filePath) {

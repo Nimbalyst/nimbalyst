@@ -20,6 +20,7 @@ interface QuickOpenProps {
   isOpen: boolean;
   onClose: () => void;
   projectPath: string;
+  currentFilePath?: string | null;
   recentFiles: string[];
   onFileSelect: (filePath: string) => void;
 }
@@ -28,6 +29,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   isOpen,
   onClose,
   projectPath,
+  currentFilePath,
   recentFiles,
   onFileSelect,
 }) => {
@@ -40,12 +42,14 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
   const resultsListRef = useRef<HTMLUListElement>(null);
 
-  // Convert recent files to FileItems
-  const recentFileItems: FileItem[] = recentFiles.map(path => ({
-    path,
-    name: path.split('/').pop() || path,
-    isRecent: true,
-  }));
+  // Convert recent files to FileItems (excluding current file)
+  const recentFileItems: FileItem[] = recentFiles
+    .filter(path => path !== currentFilePath)
+    .map(path => ({
+      path,
+      name: path.split('/').pop() || path,
+      isRecent: true,
+    }));
 
   // Combined list of files to display
   const displayFiles = searchQuery ? searchResults : recentFileItems;
@@ -64,6 +68,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
 
     console.log('Searching for files with query:', query, 'in project:', projectPath, 'content search:', isContent);
     setIsSearching(true);
+
     try {
       // Use electron API to search files (check both window.electronAPI and window.electron)
       const api = (window as any).electronAPI || (window as any).electron;
@@ -73,36 +78,92 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         return;
       }
 
-      if (!api.searchProjectFiles) {
-        console.error('searchProjectFiles method not available on API');
-        setSearchResults([]);
-        return;
+      // First, get file name matches immediately
+      if (api.searchProjectFileNames) {
+        const fileNameResults = await api.searchProjectFileNames(projectPath, query);
+        console.log('File name results:', fileNameResults);
+
+        // Process and display file name results immediately
+        if (Array.isArray(fileNameResults)) {
+          const processedFileNames = fileNameResults
+            .map((result: any) => ({
+              path: result.path,
+              name: result.path.split('/').pop() || result.path,
+              isRecent: recentFiles.includes(result.path),
+              matches: result.matches || [],
+              isFileNameMatch: result.isFileNameMatch || false,
+              isContentMatch: false,
+            }));
+
+          // Set file name results immediately
+          setSearchResults(processedFileNames);
+          setIsSearching(false); // Stop showing "Searching..." for file names
+        }
       }
 
-      const results = await api.searchProjectFiles(projectPath, query);
-      console.log('Search results:', results);
+      // Then search content in the background (don't await!)
+      if (api.searchProjectFileContent) {
+        // Run content search asynchronously without blocking
+        api.searchProjectFileContent(projectPath, query).then((contentResults: any) => {
+          console.log('Content search results:', contentResults);
 
-      // Results are always objects now with both file name and content matches
-      if (Array.isArray(results)) {
-        setSearchResults(results.map((result: any) => ({
-          path: result.path,
-          name: result.path.split('/').pop() || result.path,
-          isRecent: recentFiles.includes(result.path),
-          matches: result.matches || [],
-          isFileNameMatch: result.isFileNameMatch || false,
-          isContentMatch: result.isContentMatch || false,
-        })));
-      } else {
-        console.error('Unexpected results format:', results);
-        setSearchResults([]);
+          // Merge content results with existing file name results
+          if (Array.isArray(contentResults)) {
+            setSearchResults(prevResults => {
+              const mergedResults = [...prevResults];
+
+              // Process content results
+              for (const contentResult of contentResults) {
+                const existingIndex = mergedResults.findIndex(r => r.path === contentResult.path);
+
+                if (existingIndex >= 0) {
+                  // File already in results from name match, add content matches
+                  mergedResults[existingIndex].matches = contentResult.matches || [];
+                  mergedResults[existingIndex].isContentMatch = true;
+                } else {
+                  // New file found only by content
+                  mergedResults.push({
+                    path: contentResult.path,
+                    name: contentResult.path.split('/').pop() || contentResult.path,
+                    isRecent: recentFiles.includes(contentResult.path),
+                    matches: contentResult.matches || [],
+                    isFileNameMatch: false,
+                    isContentMatch: true,
+                  });
+                }
+              }
+
+              // Sort merged results: prioritize file name matches over content matches
+              mergedResults.sort((a, b) => {
+                // File name matches come first
+                if (a.isFileNameMatch && !b.isFileNameMatch) return -1;
+                if (!a.isFileNameMatch && b.isFileNameMatch) return 1;
+
+                // Then sort by number of matches (more matches = higher priority)
+                const aMatchCount = a.matches?.length || 0;
+                const bMatchCount = b.matches?.length || 0;
+                if (aMatchCount !== bMatchCount) {
+                  return bMatchCount - aMatchCount;
+                }
+
+                // Finally, sort alphabetically by file name
+                return a.name.localeCompare(b.name);
+              });
+
+              return mergedResults;
+            });
+          }
+        }).catch((error: any) => {
+          console.error('Error in content search:', error);
+          // Don't clear results on content search error, keep file name results
+        });
       }
     } catch (error) {
       console.error('Error searching files:', error);
       setSearchResults([]);
-    } finally {
       setIsSearching(false);
     }
-  }, [projectPath, recentFiles]);
+  }, [projectPath, recentFiles, currentFilePath]);
 
   // Debounced search
   useEffect(() => {

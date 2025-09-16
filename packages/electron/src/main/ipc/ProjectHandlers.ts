@@ -69,7 +69,7 @@ export function registerProjectHandlers() {
 
         try {
             const content = readFileSync(filePath, 'utf-8');
-            console.log('[SWITCH_FILE] File read successfully, length:', content.length);
+            // console.log('[SWITCH_FILE] File read successfully, length:', content.length);
 
             let state = windowStates.get(windowId);
             // console.log('[SWITCH_FILE] Window state exists:', !!state);
@@ -128,7 +128,137 @@ export function registerProjectHandlers() {
         }
     });
 
-    // Search project files and content using ripgrep
+    // Search project file names only (fast)
+    ipcMain.handle('search-project-file-names', async (event, projectPath: string, query: string) => {
+        try {
+            const trimmedQuery = query.trim();
+            if (!trimmedQuery) return [];
+
+            // Escape special characters for shell
+            const escapedTerm = trimmedQuery.replace(/["'\\]/g, '\\$&');
+
+            const fileNameCommand = `find "${projectPath}" -name "*.md" -o -name "*.markdown" 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
+            const { stdout: fileMatches } = await execAsync(fileNameCommand);
+
+            const results = [];
+            if (fileMatches) {
+                const files = fileMatches.split('\n').filter(f => f.trim());
+                for (const file of files) {
+                    results.push({
+                        path: file,
+                        isFileNameMatch: true,
+                        matches: []
+                    });
+                }
+            }
+            return results;
+        } catch (error) {
+            console.error('Error searching file names:', error);
+            return [];
+        }
+    });
+
+    // Search project file content using ripgrep (slower)
+    ipcMain.handle('search-project-file-content', async (event, projectPath: string, query: string) => {
+        try {
+            const trimmedQuery = query.trim();
+            if (!trimmedQuery) return [];
+
+            // Escape special characters for shell
+            const escapedTerm = trimmedQuery.replace(/["'\\]/g, '\\$&');
+
+            // Try to use bundled ripgrep from claude-code, fall back to system rg
+            let rgPath = 'rg';
+            const app = require('electron').app;
+            const path = require('path');
+            const os = require('os');
+            const fs = require('fs');
+
+            // Determine the platform-specific ripgrep binary
+            const platform = os.platform();
+            const arch = os.arch();
+            let rgBinaryDir = '';
+
+            if (platform === 'darwin') {
+                rgBinaryDir = arch === 'arm64' ? 'arm64-darwin' : 'x64-darwin';
+            } else if (platform === 'win32') {
+                rgBinaryDir = 'x64-windows';
+            } else if (platform === 'linux') {
+                rgBinaryDir = arch === 'arm64' ? 'arm64-linux' : 'x64-linux';
+            }
+
+            const rgBinaryName = platform === 'win32' ? 'rg.exe' : 'rg';
+            const isPackaged = app.isPackaged;
+
+            // Check all possible paths, both dev and production
+            const possibleRgPaths = [];
+
+            if (isPackaged) {
+                const resourcesPath = process.resourcesPath;
+                possibleRgPaths.push(
+                    path.join(resourcesPath, 'app.asar.unpacked', 'node_modules', '@anthropic-ai', 'claude-code', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+                );
+            } else {
+                possibleRgPaths.push(
+                    path.join(__dirname, '..', '..', 'node_modules', '@anthropic-ai', 'claude-code', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+                    path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+                );
+            }
+
+            for (const testPath of possibleRgPaths) {
+                if (existsSync(testPath)) {
+                    rgPath = testPath;
+                    if (isPackaged && platform !== 'win32') {
+                        try {
+                            fs.chmodSync(rgPath, 0o755);
+                        } catch (e) {
+                            console.warn('[SEARCH] Could not set executable permission on ripgrep:', e);
+                        }
+                    }
+                    break;
+                }
+            }
+
+            const contentCommand = `"${rgPath}" --type md -i --json "${escapedTerm}" "${projectPath}" 2>/dev/null || true`;
+            const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
+
+            const contentMatches = new Map<string, any>();
+            if (stdout) {
+                const lines = stdout.split('\n').filter(line => line.trim());
+                for (const line of lines) {
+                    try {
+                        const item = JSON.parse(line);
+                        if (item.type === 'match') {
+                            const filePath = item.data.path.text;
+                            if (!contentMatches.has(filePath)) {
+                                contentMatches.set(filePath, {
+                                    path: filePath,
+                                    isContentMatch: true,
+                                    matches: []
+                                });
+                            }
+
+                            contentMatches.get(filePath).matches.push({
+                                line: item.data.line_number,
+                                text: item.data.lines.text.trim(),
+                                start: item.data.submatches[0]?.start || 0,
+                                end: item.data.submatches[0]?.end || item.data.lines.text.length
+                            });
+                        }
+                    } catch (e) {
+                        // Skip invalid JSON lines
+                    }
+                }
+            }
+
+            return Array.from(contentMatches.values()).slice(0, 50);
+        } catch (error) {
+            console.error('Error searching file content:', error);
+            return [];
+        }
+    });
+
+    // Legacy handler that combines both (for backward compatibility)
     ipcMain.handle('search-project-files', async (event, projectPath: string, query: string) => {
         try {
             const trimmedQuery = query.trim();

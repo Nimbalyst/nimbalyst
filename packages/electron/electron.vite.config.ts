@@ -1,7 +1,7 @@
 import { resolve } from 'path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
-import viteStravuPlugin from '../shared/viteStravuPlugin'
+import viteStravuPlugin from '../shared/viteStravuPlugin.ts'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
 import fs from 'fs'
 
@@ -82,8 +82,20 @@ const optimizeExcalidrawPlugin = () => {
   };
 };
 
+const isDev = process.env.NODE_ENV !== 'production';
+
 export default defineConfig({
   main: {
+    resolve: {
+      alias: {
+        // Normalize legacy name to current
+        '@stravu-editor/runtime': '@stravu/runtime',
+        // Map runtime package for dev HMR; point to dist in prod
+        '@stravu/runtime': isDev
+          ? resolve(__dirname, '../runtime/src/index.ts')
+          : resolve(__dirname, '../runtime/dist/index.js')
+      }
+    },
     build: {
       target: 'node16',
       sourcemap: true,
@@ -95,6 +107,14 @@ export default defineConfig({
     }
   },
   preload: {
+    resolve: {
+      alias: {
+        '@stravu-editor/runtime': '@stravu/runtime',
+        '@stravu/runtime': isDev
+          ? resolve(__dirname, '../runtime/src/index.ts')
+          : resolve(__dirname, '../runtime/dist/index.js')
+      }
+    },
     build: {
       target: 'node16',
       sourcemap: true,
@@ -135,11 +155,11 @@ export default defineConfig({
       port: 5273,
       strictPort: true,
       watch: {
-        // Force watching rexical dist files
-        ignored: ['!**/rexical/dist/**']
+        // Force watching rexical and runtime source files in dev mode
+        ignored: ['!**/rexical/src/**', '!**/runtime/src/**']
       },
       fs: {
-        // Allow serving files from rexical
+        // Allow serving files from rexical and runtime
         allow: ['..']
       }
     },
@@ -155,8 +175,20 @@ export default defineConfig({
     resolve: {
       alias: {
         // Block mermaid import to prevent large bundle
-        '@excalidraw/mermaid-to-excalidraw': resolve(__dirname, '../rexical/src/mocks/mermaid-mock.ts')
-      }
+        '@excalidraw/mermaid-to-excalidraw': resolve(__dirname, '../rexical/src/mocks/mermaid-mock.ts'),
+        // Ensure renderer also points runtime imports at source during dev
+        '@stravu-editor/runtime': '@stravu/runtime',
+        '@stravu/runtime': isDev
+          ? resolve(__dirname, '../runtime/src/index.ts')
+          : resolve(__dirname, '../runtime/dist/index.js')
+      },
+      dedupe: [
+        'react',
+        'react-dom',
+        'lexical',
+        '@lexical/react',
+        '@stravu/runtime'
+      ]
     },
     optimizeDeps: {
       include: [
@@ -167,7 +199,9 @@ export default defineConfig({
       exclude: [
         '@shikijs/langs',
         'prettier',
-        'rexical'
+        'rexical',
+        '@stravu/runtime',
+        '@stravu-editor/runtime'
       ],
       esbuildOptions: {
         target: 'chrome109'

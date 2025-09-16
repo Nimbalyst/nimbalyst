@@ -209,6 +209,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // QuickOpen operations
   searchProjectFiles: (projectPath: string, query: string) => ipcRenderer.invoke('search-project-files', projectPath, query),
+  searchProjectFileNames: (projectPath: string, query: string) => ipcRenderer.invoke('search-project-file-names', projectPath, query),
+  searchProjectFileContent: (projectPath: string, query: string) => ipcRenderer.invoke('search-project-file-content', projectPath, query),
   getRecentProjectFiles: () => ipcRenderer.invoke('get-recent-project-files'),
   addToProjectRecentFiles: (filePath: string) => ipcRenderer.send('add-to-project-recent-files', filePath),
   
@@ -390,6 +392,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     removeRecent: (projectPath: string) => ipcRenderer.invoke('project-manager:remove-recent', projectPath),
   },
 
+
+  // Document Service
+  documentService: {
+    list: () => ipcRenderer.invoke('document-service:list'),
+    search: (query: string) => ipcRenderer.invoke('document-service:search', query),
+    get: (id: string) => ipcRenderer.invoke('document-service:get', id),
+    getByPath: (path: string) => ipcRenderer.invoke('document-service:get-by-path', path),
+    open: (id: string) => ipcRenderer.invoke('document-service:open', id),
+    watch: () => ipcRenderer.send('document-service:watch'),
+    onDocumentsChanged: (callback: (documents: any[]) => void) => {
+      const handler = (_event: any, documents: any[]) => callback(documents);
+      ipcRenderer.on('document-service:documents-changed', handler);
+      return () => ipcRenderer.removeListener('document-service:documents-changed', handler);
+    }
+  },
   // Open AI Models window
-  openAIModels: () => ipcRenderer.invoke('window:open-ai-models')
+  openAIModels: () => ipcRenderer.invoke('window:open-ai-models'),
+
+  // Open external links
+  openExternal: (url: string) => ipcRenderer.invoke('open-external', url)
 });

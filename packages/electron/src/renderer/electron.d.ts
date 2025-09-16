@@ -51,7 +51,9 @@ interface ElectronAPI {
   setAIChatState: (state: { collapsed: boolean; width: number; sessionId?: string }) => void;
   
   // QuickOpen operations
-  searchProjectFiles: (projectPath: string, query: string) => Promise<string[]>;
+  searchProjectFiles: (projectPath: string, query: string) => Promise<any[]>;
+  searchProjectFileNames: (projectPath: string, query: string) => Promise<any[]>;
+  searchProjectFileContent: (projectPath: string, query: string) => Promise<any[]>;
   getRecentProjectFiles: () => Promise<string[]>;
   addToProjectRecentFiles: (filePath: string) => void;
   

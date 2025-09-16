@@ -67,14 +67,7 @@
       .about-features {
         text-align: left;
         margin: 0 auto 30px;
-        max-width: 300px;
-      }
-
-      .about-features h3 {
-        font-size: 18px;
-        font-weight: 600;
-        margin: 0 0 15px 0;
-        color: #333;
+        max-width: 500px;
       }
 
       .about-features ul {
@@ -92,6 +85,16 @@
 
       .about-footer p {
         margin: 5px 0;
+      }
+
+      .about-footer a {
+        color: #0066cc;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      .about-footer a:hover {
+        text-decoration: underline;
       }
 
       /* Dark theme support */
@@ -117,16 +120,16 @@
           color: #ccc;
         }
 
-        .about-features h3 {
-          color: #ddd;
-        }
-
         .about-features ul {
           color: #bbb;
         }
 
         .about-footer {
           color: #999;
+        }
+
+        .about-footer a {
+          color: #66b3ff;
         }
       }
 
@@ -152,16 +155,16 @@
         color: #ccc;
       }
 
-      body.dark-theme .about-features h3 {
-        color: #ddd;
-      }
-
       body.dark-theme .about-features ul {
         color: #bbb;
       }
 
       body.dark-theme .about-footer {
         color: #999;
+      }
+
+      body.dark-theme .about-footer a {
+        color: #66b3ff;
       }
 
       body.crystal-dark-theme {
@@ -185,16 +188,16 @@
         color: #ccc;
       }
 
-      body.crystal-dark-theme .about-features h3 {
-        color: #ddd;
-      }
-
       body.crystal-dark-theme .about-features ul {
         color: #bbb;
       }
 
       body.crystal-dark-theme .about-footer {
         color: #999;
+      }
+
+      body.crystal-dark-theme .about-footer a {
+        color: #66b3ff;
       }
     </style>
   </head>
@@ -207,24 +210,20 @@
       <p class="about-version" id="about-version">Version</p>
 
       <p class="about-description">
-        A powerful rich text editor built with Meta's Lexical framework.
-        Features comprehensive editing capabilities including tables,
-        collaboration, code highlighting, and extensible plugins.
+        A powerful, rich text editor built with Meta's Lexical framework, Preditor is a local desktop app for:
       </p>
 
       <div class="about-features">
-        <h3>Key Features</h3>
         <ul>
-          <li>Rich text editing of Markdown</li>
-          <li>Table support with advanced editing</li>
-          <li>Code syntax highlighting</li>
-          <li>Multiple themes including dark mode</li>
+          <li>Editing local markdown documents with a fast, clean, WYSIWIG editor</li>
+          <li>Collaborating with AI using your own Anthropic/OpenAI account or local models via LMStudio</li>
+          <li>Working across text, tables, code, lists, images, &amp; excalidraw diagrams</li>
         </ul>
       </div>
 
       <div class="about-footer">
-        <p>Built with ❤️ by Stravu</p>
-        <p class="about-copyright">© 2025 Stravu</p>
+        <p>Built with ❤️ by <a href="https://stravu.com" id="stravu-link">Stravu</a></p>
+        <p class="about-copyright">© 2025  Stravu</p>
       </div>
     </div>
 
@@ -265,6 +264,14 @@
           }
         } catch {}
       })();
+
+      // Handle link clicks
+      document.getElementById('stravu-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.electronAPI?.openExternal?.('https://stravu.com');
+      });
+
+
     </script>
   </body>
 </html>

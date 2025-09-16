@@ -34,6 +34,7 @@
     "@anthropic-ai/sdk": "^0.58.0",
     "@electric-sql/pglite": "^0.3.8",
     "@modelcontextprotocol/sdk": "^1.17.2",
+    "@stravu/runtime": "*",
     "@types/uuid": "^10.0.0",
     "better-sqlite3": "^12.2.0",
     "diff": "^5.2.0",

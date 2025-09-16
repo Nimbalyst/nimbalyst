@@ -100,16 +100,16 @@ export function registerFileHandlers() {
 
             if (state) {
                 state.documentEdited = false; // Reset dirty state after save
-                console.log('[SAVE] ✓ Reset documentEdited flag');
+                // console.log('[SAVE] ✓ Reset documentEdited flag');
             }
 
             // Clear the saving flag after a delay to ensure the file watcher doesn't react
             setTimeout(() => {
                 savingWindows.delete(windowId);
-                console.log('[SAVE] Cleared saving flag for window:', windowId);
+                // console.log('[SAVE] Cleared saving flag for window:', windowId);
             }, AUTOSAVE_DELAY);
 
-            console.log('[SAVE] ✓ Save successful to:', filePath);
+            // console.log('[SAVE] ✓ Save successful to:', filePath);
             return { success: true, filePath };
         } catch (error) {
             console.error('[SAVE] ✗ Error saving file:', error);
@@ -157,7 +157,7 @@ export function registerFileHandlers() {
                 // Clear the saving flag after a delay
                 setTimeout(() => {
                     savingWindows.delete(windowId);
-                    console.log('[SAVE_AS] Cleared saving flag for window:', windowId);
+                    // console.log('[SAVE_AS] Cleared saving flag for window:', windowId);
                 }, AUTOSAVE_DELAY);
 
                 // Set represented filename for macOS

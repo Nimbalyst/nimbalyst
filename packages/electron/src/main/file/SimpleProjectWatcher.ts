@@ -63,7 +63,7 @@ export class SimpleProjectWatcher {
 
                     // Only care about markdown files and directories
                     if (filename.endsWith('.md') || filename.endsWith('.markdown') || !filename.includes('.')) {
-                        logger.projectWatcher.debug(`Change detected: ${eventType} ${filename} in ${dirPath}`);
+                        // logger.projectWatcher.debug(`Change detected: ${eventType} ${filename} in ${dirPath}`);
                         triggerUpdate();
 
                         // If a new directory was created, watch it

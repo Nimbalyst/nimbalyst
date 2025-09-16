@@ -1,0 +1,50 @@
+import { Document, DocumentService } from '@stravu/runtime';
+
+// Access the electronAPI exposed by the preload script
+declare global {
+  interface Window {
+    electronAPI: {
+      documentService: {
+        list: () => Promise<Document[]>;
+        search: (query: string) => Promise<Document[]>;
+        get: (id: string) => Promise<Document | null>;
+        open: (id: string) => Promise<void>;
+        watch: () => void;
+        onDocumentsChanged: (callback: (documents: Document[]) => void) => () => void;
+      };
+    };
+  }
+}
+
+/**
+ * Electron renderer-side implementation of DocumentService
+ * This connects to the main process document service via IPC
+ */
+export class ElectronRendererDocumentService implements DocumentService {
+  async listDocuments(): Promise<Document[]> {
+    return window.electronAPI.documentService.list();
+  }
+
+  async searchDocuments(query: string): Promise<Document[]> {
+    return window.electronAPI.documentService.search(query);
+  }
+
+  async getDocument(id: string): Promise<Document | null> {
+    return window.electronAPI.documentService.get(id);
+  }
+
+  async openDocument(documentId: string): Promise<void> {
+    return window.electronAPI.documentService.open(documentId);
+  }
+
+  watchDocuments(callback: (documents: Document[]) => void): () => void {
+    // Start watching
+    window.electronAPI.documentService.watch();
+
+    // Set up the listener
+    const unsubscribe = window.electronAPI.documentService.onDocumentsChanged(callback);
+
+    // Return unsubscribe function
+    return unsubscribe;
+  }
+}

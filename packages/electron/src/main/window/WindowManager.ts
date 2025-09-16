@@ -8,6 +8,7 @@ import { stopFileWatcher } from '../file/FileWatcher';
 import { stopProjectWatcher, startProjectWatcher } from '../file/ProjectWatcher';
 import { getFolderContents } from '../utils/FileTree';
 import { getTitleBarColors } from '../theme/ThemeManager';
+import { ElectronDocumentService, setupDocumentServiceHandlers } from '../services/ElectronDocumentService';
 
 // Window management
 export const windows = new Map<number, BrowserWindow>();
@@ -15,6 +16,9 @@ export const windowStates = new Map<number, WindowState>();
 export const savingWindows = new Set<number>();
 export const windowFocusOrder = new Map<number, number>(); // Track focus order for each window
 export const windowDevToolsState = new Map<number, boolean>(); // Track dev tools state for each window
+
+// Store document services for each project
+const documentServices = new Map<string, ElectronDocumentService>();
 
 let windowIdCounter = 0;
 let windowPositionOffset = 0;
@@ -155,7 +159,10 @@ export function createWindow(
         console.log('[MAIN] Window stored in maps. Mode:', isProjectMode ? 'project' : 'document');
         console.log('[MAIN] Windows Map now has:', windows.size, 'windows');
         console.log('[MAIN] Window IDs in map:', [...windows.keys()]);
-        
+
+        // Increase max listeners to avoid warning (we have multiple event handlers)
+        window.webContents.setMaxListeners(20);
+
         // Capture console messages from renderer (for debugging)
         if (process.env.NODE_ENV !== 'production') {
             window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
@@ -233,12 +240,30 @@ export function createWindow(
 
         window.on('closed', () => {
             windows.delete(windowId);
+            const state = windowStates.get(windowId);
             windowStates.delete(windowId);
             savingWindows.delete(windowId);
             windowFocusOrder.delete(windowId);
             windowDevToolsState.delete(windowId);
             stopFileWatcher(windowId);
             stopProjectWatcher(windowId);
+
+            // Clean up document service if this was the last window for the project
+            if (state?.mode === 'project' && state.projectPath) {
+                // Check if any other windows are using this project
+                const otherProjectWindows = Array.from(windowStates.values())
+                    .filter(s => s.mode === 'project' && s.projectPath === state.projectPath);
+
+                if (otherProjectWindows.length === 0) {
+                    // Clean up document service if no other windows are using it
+                    const docService = documentServices.get(state.projectPath);
+                    if (docService) {
+                        docService.destroy();
+                        documentServices.delete(state.projectPath);
+                        console.log('[MAIN] Destroyed DocumentService for project:', state.projectPath);
+                    }
+                }
+            }
             // Update menu to reflect window closure
             // This will be handled by the menu system
         });
@@ -347,6 +372,14 @@ export function createWindow(
                 setTimeout(() => {
                     startProjectWatcher(window, projectPath);
                 }, 100);
+
+                // Create document service for this project if it doesn't exist
+                if (!documentServices.has(projectPath)) {
+                    const docService = new ElectronDocumentService(projectPath);
+                    documentServices.set(projectPath, docService);
+                    setupDocumentServiceHandlers(docService);
+                    console.log('[MAIN] Created DocumentService for project:', projectPath);
+                }
             } else if (!isOpeningFile) {
                 // Create new untitled document
                 untitledCounter++;

@@ -28,6 +28,7 @@ import { NewFileDialog } from './components/NewFileDialog';
 import { TabManager } from './components/TabManager/TabManager';
 import { useTabPreferences } from './hooks/useTabPreferences';
 import { useTabs } from './hooks/useTabs';
+import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import './ProjectWelcome.css';
 import './components/AIModels/AIModels.css';
 
@@ -98,6 +99,8 @@ interface ElectronAPI {
   setAIChatState: (state: { collapsed: boolean; width: number; sessionId?: string }) => void;
   getRecentProjectFiles?: () => Promise<string[]>;
   addToProjectRecentFiles?: (filePath: string) => void;
+  searchProjectFileNames?: (projectPath: string, query: string) => Promise<any[]>;
+  searchProjectFileContent?: (projectPath: string, query: string) => Promise<any[]>;
   // Tab state operations
   getProjectTabState?: () => Promise<any>;
   saveProjectTabState?: (tabState: any) => void;
@@ -136,6 +139,13 @@ declare global {
   }
 }
 
+// Register the DocumentLinkPlugin once at module level
+// This provides the Electron-specific document service to the plugin
+let documentLinkPluginRegistered = false;
+if (!documentLinkPluginRegistered) {
+  registerDocumentLinkPlugin();
+  documentLinkPluginRegistered = true;
+}
 
 export default function App() {
   console.log('[APP RENDER]', new Date().toISOString(), 'App component rendering');
@@ -830,6 +840,11 @@ export default function App() {
         const dirPath = result.filePath.substring(0, result.filePath.lastIndexOf('/'));
         setCurrentDirectory(dirPath);
 
+        // Add to recent files
+        if (window.electronAPI?.addToProjectRecentFiles) {
+          window.electronAPI.addToProjectRecentFiles(filePath);
+        }
+
         // Explicitly update the current file in main process (redundant but safe)
         if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] Ensuring backend has correct file path');
         const syncResult = window.electronAPI.setCurrentFile(filePath);
@@ -984,11 +999,7 @@ export default function App() {
   // Handle QuickOpen file selection
   const handleQuickOpenFileSelect = useCallback(async (filePath: string) => {
     await handleProjectFileSelect(filePath);
-
-    // Add to recent files
-    if (window.electronAPI?.addToProjectRecentFiles) {
-      window.electronAPI.addToProjectRecentFiles(filePath);
-    }
+    // Recent files are now added inside handleProjectFileSelect
   }, [handleProjectFileSelect]);
 
   // Handle creating a new file in project
@@ -1656,15 +1667,70 @@ export default function App() {
     }));
     cleanupFns.push(window.electronAPI.onThemeChange((newTheme) => {
       if (LOG_CONFIG.THEME) console.log('[THEME] Theme changed to:', newTheme);
-      // Map 'system' to 'auto' for the editor
       const editorTheme = newTheme === 'system' ? 'auto' : newTheme;
-      // Guard: avoid redundant state updates
-      if (theme === (editorTheme as ConfigTheme)) {
-        if (LOG_CONFIG.THEME) console.log('[THEME] Skipping duplicate theme apply');
-        return;
-      }
-      setTheme(editorTheme as ConfigTheme);
-      if (LOG_CONFIG.THEME) console.log('[THEME] Editor theme set to:', editorTheme);
+
+      // Flush unsaved changes to disk before visual reset, when possible
+      const flushAndReload = async () => {
+        try {
+          if (currentFilePath && getContentRef.current) {
+            if (isDirtyRef.current) {
+              const content = getContentRef.current();
+              if (LOG_CONFIG.THEME) console.log('[THEME] Dirty before theme switch. Saving to disk...');
+              const result = await window.electronAPI?.saveFile(content);
+              if (result?.success) {
+                lastSaveTimeRef.current = Date.now();
+                isDirtyRef.current = false;
+                setIsDirty(false);
+                initialContentRef.current = content;
+                // Reflect clean state in active tab UI
+                if (tabPreferences.preferences.enabled && tabs.activeTabId) {
+                  tabs.updateTab(tabs.activeTabId, { isDirty: false });
+                }
+                if (LOG_CONFIG.THEME) console.log('[THEME] Saved successfully before theme switch');
+              } else if (LOG_CONFIG.THEME) {
+                console.warn('[THEME] Save before theme switch did not succeed:', result);
+              }
+            }
+
+            // Reload from disk to ensure we rehydrate with canonical content
+            if (window.electronAPI?.readFileContent) {
+              const res = await window.electronAPI.readFileContent(currentFilePath);
+              if (res?.content !== undefined) {
+                contentRef.current = res.content;
+                initialContentRef.current = res.content;
+                contentVersionRef.current += 1;
+                setContentVersion(v => v + 1);
+                // Keep tab content in sync
+                if (tabPreferences.preferences.enabled && tabs.activeTabId) {
+                  tabs.updateTab(tabs.activeTabId, { content: res.content });
+                }
+              }
+            } else if (window.electronAPI?.switchProjectFile) {
+              const res = await window.electronAPI.switchProjectFile(currentFilePath);
+              if (res?.content !== undefined) {
+                contentRef.current = res.content;
+                initialContentRef.current = res.content;
+                contentVersionRef.current += 1;
+                setContentVersion(v => v + 1);
+                if (tabPreferences.preferences.enabled && tabs.activeTabId) {
+                  tabs.updateTab(tabs.activeTabId, { content: res.content });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[THEME] Error flushing/reloading content on theme change:', err);
+        } finally {
+          // Apply theme after content rehydration
+          if (theme !== (editorTheme as ConfigTheme)) {
+            setTheme(editorTheme as ConfigTheme);
+            if (LOG_CONFIG.THEME) console.log('[THEME] Editor theme set to:', editorTheme);
+          }
+        }
+      };
+
+      // Kick off the async workflow without blocking
+      flushAndReload();
     }));
 
     // Listen for show preferences event
@@ -1993,11 +2059,14 @@ export default function App() {
               <StravuEditor
                 key={`${tabs.activeTabId}-${contentVersion}-${theme}`}
                 config={{
-                  initialContent: tabs.activeTab.content || '',
+                  // Prefer the latest in-memory content; fall back to tab snapshot
+                  initialContent: contentRef.current || tabs.activeTab.content || '',
                   onContentChange: () => {
                     // Track dirty state in ref for autosave without re-rendering
                     if (getContentRef.current) {
                       const currentContent = getContentRef.current();
+                      // Keep the latest content in memory to prevent losing edits
+                      contentRef.current = currentContent;
                       const hasChanged = currentContent !== initialContentRef.current;
 
                       // console.log('[TAB CONTENT CHANGE] Dirty check:', {
@@ -2053,6 +2122,8 @@ export default function App() {
             // Track dirty state in ref for autosave without re-rendering
             if (getContentRef.current) {
               const currentContent = getContentRef.current();
+              // Keep the latest content in memory to prevent losing edits
+              contentRef.current = currentContent;
               const hasChanged = currentContent !== initialContentRef.current;
 
               // Update ref immediately for autosave
@@ -2128,6 +2199,7 @@ export default function App() {
             isOpen={isQuickOpenVisible}
             onClose={() => setIsQuickOpenVisible(false)}
             projectPath={projectPath}
+            currentFilePath={currentFilePath}
             recentFiles={recentProjectFiles}
             onFileSelect={handleQuickOpenFileSelect}
           />

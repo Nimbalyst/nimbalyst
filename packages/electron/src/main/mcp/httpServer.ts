@@ -19,11 +19,11 @@ const activeTransports = new Map<string, SSEServerTransport>();
 
 export function updateDocumentState(state: any, sessionId?: string) {
   if (!sessionId) {
-    console.warn('[MCP Server] No sessionId provided for document state update - using "default"');
+    // console.warn('[MCP Server] No sessionId provided for document state update - using "default"');
     sessionId = 'default';
   }
   documentStateBySession.set(sessionId, state);
-  console.log(`[MCP Server] Document state updated for session ${sessionId}`);
+  // console.log(`[MCP Server] Document state updated for session ${sessionId}`);
 }
 
 // Store the HTTP server instance
@@ -48,7 +48,7 @@ export function cleanupMcpServer() {
     }
   }
   activeTransports.clear();
-  
+
   // Clear the MCP server instance
   if (mcpServer) {
     mcpServer = null;
@@ -61,9 +61,9 @@ export function shutdownHttpServer(): Promise<void> {
       resolve();
       return;
     }
-    
+
     console.log('[MCP Server] Shutting down HTTP server');
-    
+
     // Track if we've resolved
     let hasResolved = false;
     const safeResolve = () => {
@@ -72,14 +72,14 @@ export function shutdownHttpServer(): Promise<void> {
         resolve();
       }
     };
-    
+
     try {
       // First cleanup transports
       cleanupMcpServer();
     } catch (error) {
       console.error('[MCP Server] Error cleaning up transports:', error);
     }
-    
+
     try {
       // Force close all connections
       if (httpServerInstance && typeof httpServerInstance.closeAllConnections === 'function') {
@@ -88,7 +88,7 @@ export function shutdownHttpServer(): Promise<void> {
     } catch (error) {
       console.error('[MCP Server] Error closing connections:', error);
     }
-    
+
     try {
       // Close the server
       if (httpServerInstance && typeof httpServerInstance.close === 'function') {
@@ -108,11 +108,11 @@ export function shutdownHttpServer(): Promise<void> {
       httpServerInstance = null;
       safeResolve();
     }
-    
+
     // More aggressive timeout for production
     const isProduction = process.env.NODE_ENV === 'production';
     const timeout = isProduction ? 300 : 1000;
-    
+
     // Timeout to ensure we don't hang
     setTimeout(() => {
       if (httpServerInstance) {
@@ -129,7 +129,7 @@ export async function startMcpHttpServer(startPort: number = 3456): Promise<{ ht
   let port = startPort;
   let httpServer: any = null;
   let maxAttempts = 100; // Try up to 100 ports
-  
+
   while (maxAttempts > 0) {
     try {
       httpServer = await tryCreateServer(port);
@@ -146,14 +146,14 @@ export async function startMcpHttpServer(startPort: number = 3456): Promise<{ ht
       }
     }
   }
-  
+
   if (!httpServer) {
     throw new Error(`[MCP Server] Could not find an available port after trying ${100} ports starting from ${startPort}`);
   }
-  
+
   // Store the instance for cleanup
   httpServerInstance = httpServer;
-  
+
   return { httpServer, port };
 }
 
@@ -162,7 +162,7 @@ async function tryCreateServer(port: number): Promise<any> {
     const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const parsedUrl = parseUrl(req.url || '', true);
     const pathname = parsedUrl.pathname;
-    
+
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
       res.writeHead(200, {
@@ -173,11 +173,11 @@ async function tryCreateServer(port: number): Promise<any> {
       res.end();
       return;
     }
-    
+
     // Handle SSE GET request to establish connection
     if (pathname === '/mcp' && req.method === 'GET') {
       console.log('[MCP Server] SSE connection request');
-      
+
       // Create a new MCP server instance for this connection
       const server = new Server(
         {
@@ -240,7 +240,7 @@ async function tryCreateServer(port: number): Promise<any> {
             // For now, get the most recent document state
             const states = Array.from(documentStateBySession.values());
             const documentState = states[states.length - 1];
-            
+
             // Ensure documentState includes filePath for tool display
             if (documentState && !documentState.error) {
               return {
@@ -257,14 +257,14 @@ async function tryCreateServer(port: number): Promise<any> {
             if (windows.length > 0) {
               // Create a unique channel for the result
               const resultChannel = `mcp-result-${Date.now()}-${Math.random()}`;
-              
+
               // Set up a one-time listener for the result
               return new Promise((resolve) => {
                 const timeout = setTimeout(() => {
                   ipcMain.removeHandler(resultChannel);
                   resolve({ success: false, error: 'Timeout waiting for diff application' });
                 }, 5000);
-                
+
                 ipcMain.once(resultChannel, (event, result) => {
                   clearTimeout(timeout);
                   console.log('[MCP Server] Received applyDiff result:', result);
@@ -278,7 +278,7 @@ async function tryCreateServer(port: number): Promise<any> {
                   }
                   resolve(enhancedResult);
                 });
-                
+
                 // Send the request with the result channel
                 windows[0].webContents.send('mcp:applyDiff', {
                   replacements: args.replacements,
@@ -296,15 +296,15 @@ async function tryCreateServer(port: number): Promise<any> {
 
       // Create SSE transport - it will handle headers
       const transport = new SSEServerTransport('/mcp', res);
-      
+
       // Store the transport by session ID
       activeTransports.set(transport.sessionId, transport);
       console.log('[MCP Server] Created transport with session ID:', transport.sessionId);
-      
+
       // Connect server to transport
       server.connect(transport).then(() => {
         console.log('[MCP Server] Client connected successfully');
-        
+
         // Clean up on disconnect
         transport.onclose = () => {
           console.log('[MCP Server] Client disconnected, session:', transport.sessionId);
@@ -318,18 +318,18 @@ async function tryCreateServer(port: number): Promise<any> {
           res.end();
         }
       });
-      
+
     // Handle POST requests for sending messages
     } else if (pathname === '/mcp' && req.method === 'POST') {
       const sessionId = parsedUrl.query.sessionId as string;
       console.log('[MCP Server] POST message for session:', sessionId);
-      
+
       if (!sessionId) {
         res.writeHead(400);
         res.end('Missing sessionId');
         return;
       }
-      
+
       const transport = activeTransports.get(sessionId);
       if (!transport) {
         console.error('[MCP Server] No transport found for session:', sessionId);
@@ -337,7 +337,7 @@ async function tryCreateServer(port: number): Promise<any> {
         res.end('Session not found');
         return;
       }
-      
+
       // Let the transport handle the POST message
       try {
         await transport.handlePostMessage(req, res);
@@ -353,24 +353,24 @@ async function tryCreateServer(port: number): Promise<any> {
       res.end('Not found');
     }
     });
-    
+
     // Try to listen on the port
     httpServer.listen(port, '127.0.0.1', (err?: Error) => {
       if (err) {
         reject(err);
       }
     });
-    
+
     httpServer.on('listening', () => {
       console.log(`[MCP Server] Running on http://127.0.0.1:${port}/mcp`);
       console.log('[MCP Server] Ready to accept SSE connections and POST messages');
-      
+
       // Unref the server so it doesn't keep the process alive
       httpServer.unref();
-      
+
       resolve(httpServer);
     });
-    
+
     httpServer.on('error', (err: any) => {
       reject(err);
     });

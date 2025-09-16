@@ -224,7 +224,7 @@ app.whenReady().then(async () => {
     }
 
     // Create application menu
-    createApplicationMenu();
+    await createApplicationMenu();
 
     // Set initial native theme
     updateNativeTheme();

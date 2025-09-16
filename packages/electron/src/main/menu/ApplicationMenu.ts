@@ -100,7 +100,7 @@ function createWindowListMenu(): any[] {
                 accelerator,
                 type: 'checkbox',
                 checked: !window.isDestroyed() && window.isFocused(),
-                click: () => {
+                click: async () => {
                     if (!window.isDestroyed()) {
                         window.focus();
                     }
@@ -123,7 +123,7 @@ function createWindowListMenu(): any[] {
                 accelerator,
                 type: 'checkbox',
                 checked: !window.isDestroyed() && window.isFocused(),
-                click: () => {
+                click: async () => {
                     if (!window.isDestroyed()) {
                         window.focus();
                     }
@@ -146,7 +146,7 @@ function createWindowListMenu(): any[] {
     //             accelerator,
     //             type: 'checkbox',
     //             checked: window.isFocused(),
-    //             click: () => {
+    //             click: async () => {
     //                 window.focus();
     //             }
     //         });
@@ -157,9 +157,9 @@ function createWindowListMenu(): any[] {
 }
 
 // Create the recent submenu
-function createRecentSubmenu(): any[] {
-    const recentProjects = getRecentItems('projects');
-    const recentDocuments = getRecentItems('documents');
+async function createRecentSubmenu(): any[] {
+    const recentProjects = await getRecentItems('projects');
+    const recentDocuments = await getRecentItems('documents');
     const submenu: any[] = [];
 
     // Recent Projects section
@@ -168,7 +168,7 @@ function createRecentSubmenu(): any[] {
         recentProjects.forEach(project => {
             submenu.push({
                 label: project.name,
-                click: () => {
+                click: async () => {
                     // Check if project exists
                     if (existsSync(project.path)) {
                         // Check for saved project window state
@@ -205,7 +205,7 @@ function createRecentSubmenu(): any[] {
         recentDocuments.forEach(doc => {
             submenu.push({
                 label: doc.name,
-                click: () => {
+                click: async () => {
                     // Check if file exists
                     if (existsSync(doc.path)) {
                         // Check if file is already open
@@ -238,7 +238,7 @@ function createRecentSubmenu(): any[] {
         if (recentProjects.length > 0) {
             submenu.push({
                 label: 'Clear Recent Projects',
-                click: () => {
+                click: async () => {
                     clearRecentItems('projects');
                     updateApplicationMenu();
                 }
@@ -248,7 +248,7 @@ function createRecentSubmenu(): any[] {
         if (recentDocuments.length > 0) {
             submenu.push({
                 label: 'Clear Recent Documents',
-                click: () => {
+                click: async () => {
                     clearRecentItems('documents');
                     updateApplicationMenu();
                 }
@@ -265,7 +265,7 @@ function createRecentSubmenu(): any[] {
 }
 
 // Create application menu
-export function createApplicationMenu() {
+export async function createApplicationMenu() {
     // Get current theme from store
     const currentTheme = getTheme();
 
@@ -276,7 +276,7 @@ export function createApplicationMenu() {
                 { 
                     label: 'New', 
                     accelerator: 'CmdOrCtrl+N', 
-                    click: () => {
+                    click: async () => {
                         console.log('[File->New] Menu clicked');
                         const focusedWindow = BrowserWindow.getFocusedWindow();
                         console.log('[File->New] Focused window:', focusedWindow ? `Electron ID: ${focusedWindow.id}` : 'none');
@@ -373,13 +373,13 @@ export function createApplicationMenu() {
                 },
                 {
                     label: 'Open Recent',
-                    submenu: createRecentSubmenu()
+                    submenu: await createRecentSubmenu()
                 },
                 { type: 'separator' },
                 {
                     label: 'Save',
                     accelerator: 'CmdOrCtrl+S',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused && !isAboutWindow(focused)) {
                             focused.webContents.send('file-save');
@@ -389,7 +389,7 @@ export function createApplicationMenu() {
                 // {
                 //     label: 'Save As',
                 //     accelerator: 'CmdOrCtrl+Shift+S',
-                //     click: () => {
+                //     click: async () => {
                 //         const focused = BrowserWindow.getFocusedWindow();
                 //         if (focused && !isAboutWindow(focused)) {
                 //             focused.webContents.send('file-save-as');
@@ -400,7 +400,7 @@ export function createApplicationMenu() {
                 {
                     label: 'Close',
                     accelerator: 'CmdOrCtrl+W',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) focused.close();
                     }
@@ -409,7 +409,7 @@ export function createApplicationMenu() {
                 { 
                     label: 'Quit', 
                     accelerator: 'CmdOrCtrl+Q', 
-                    click: () => {
+                    click: async () => {
                         try {
                             console.log('Quit menu item clicked');
                             app.quit();
@@ -436,7 +436,7 @@ export function createApplicationMenu() {
                 {
                     label: 'View History...',
                     accelerator: 'CmdOrCtrl+Y',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('view-history');
@@ -447,7 +447,7 @@ export function createApplicationMenu() {
                 {
                     label: 'Next Tab',
                     accelerator: 'CmdOrCtrl+Alt+Right',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('next-tab');
@@ -457,7 +457,7 @@ export function createApplicationMenu() {
                 {
                     label: 'Previous Tab',
                     accelerator: 'CmdOrCtrl+Alt+Left',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('previous-tab');
@@ -468,7 +468,7 @@ export function createApplicationMenu() {
                 {
                     label: 'Approve',
                     accelerator: 'CmdOrCtrl+Enter',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('approve-action');
@@ -478,7 +478,7 @@ export function createApplicationMenu() {
                 {
                     label: 'Reject',
                     accelerator: 'CmdOrCtrl+Shift+N',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('reject-action');
@@ -493,7 +493,7 @@ export function createApplicationMenu() {
                 {
                     label: 'Toggle Developer Tools',
                     accelerator: 'CmdOrCtrl+Shift+I',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) focused.webContents.toggleDevTools();
                     }
@@ -502,7 +502,7 @@ export function createApplicationMenu() {
                 {
                     label: 'Reload',
                     accelerator: 'CmdOrCtrl+R',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) focused.webContents.reload();
                     }
@@ -510,7 +510,7 @@ export function createApplicationMenu() {
                 {
                     label: 'Force Reload',
                     accelerator: 'CmdOrCtrl+Shift+R',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) focused.webContents.reloadIgnoringCache();
                     }
@@ -519,7 +519,7 @@ export function createApplicationMenu() {
                 {
                     label: 'Actual Size',
                     accelerator: 'CmdOrCtrl+0',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) focused.webContents.setZoomFactor(1);
                     }
@@ -527,7 +527,7 @@ export function createApplicationMenu() {
                 {
                     label: 'Zoom In',
                     accelerator: 'CmdOrCtrl+Plus',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
                             const currentZoom = focused.webContents.getZoomFactor();
@@ -538,7 +538,7 @@ export function createApplicationMenu() {
                 {
                     label: 'Zoom Out',
                     accelerator: 'CmdOrCtrl+-',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
                             const currentZoom = focused.webContents.getZoomFactor();
@@ -558,7 +558,7 @@ export function createApplicationMenu() {
                             label: 'Light',
                             type: 'radio',
                             checked: currentTheme === 'light',
-                            click: () => {
+                            click: async () => {
                                 setTheme('light');
                                 updateNativeTheme();
                                 // Send to all windows
@@ -568,14 +568,14 @@ export function createApplicationMenu() {
                                 // Update window title bars
                                 updateWindowTitleBars();
                                 // Recreate menu to update checkmarks
-                                createApplicationMenu();
+                                await createApplicationMenu();
                             }
                         },
                         {
                             label: 'Dark',
                             type: 'radio',
                             checked: currentTheme === 'dark',
-                            click: () => {
+                            click: async () => {
                                 setTheme('dark');
                                 updateNativeTheme();
                                 // Send to all windows
@@ -585,14 +585,14 @@ export function createApplicationMenu() {
                                 // Update window title bars
                                 updateWindowTitleBars();
                                 // Recreate menu to update checkmarks
-                                createApplicationMenu();
+                                await createApplicationMenu();
                             }
                         },
                         {
                             label: 'Crystal Dark',
                             type: 'radio',
                             checked: currentTheme === 'crystal-dark',
-                            click: () => {
+                            click: async () => {
                                 setTheme('crystal-dark');
                                 updateNativeTheme();
                                 // Send to all windows
@@ -602,14 +602,14 @@ export function createApplicationMenu() {
                                 // Update window title bars
                                 updateWindowTitleBars();
                                 // Recreate menu to update checkmarks
-                                createApplicationMenu();
+                                await createApplicationMenu();
                             }
                         },
                         {
                             label: 'System',
                             type: 'radio',
                             checked: currentTheme === 'system',
-                            click: () => {
+                            click: async () => {
                                 setTheme('system');
                                 updateNativeTheme();
                                 // Send to all windows
@@ -619,7 +619,7 @@ export function createApplicationMenu() {
                                 // Update window title bars
                                 updateWindowTitleBars();
                                 // Recreate menu to update checkmarks
-                                createApplicationMenu();
+                                await createApplicationMenu();
                             }
                         }
                     ]
@@ -628,21 +628,21 @@ export function createApplicationMenu() {
                 {
                     label: 'Project Manager',
                     accelerator: 'CmdOrCtrl+P',
-                    click: () => {
+                    click: async () => {
                         createProjectManagerWindow();
                     }
                 },
                 {
                     label: 'Session Manager',
                     accelerator: 'CmdOrCtrl+Alt+S',
-                    click: () => {
+                    click: async () => {
                         createSessionManagerWindow();
                     }
                 },
                 {
                     label: 'AI Models...',
                     accelerator: 'CmdOrCtrl+Alt+M',
-                    click: () => {
+                    click: async () => {
                         createAIModelsWindow();
                     }
                 },
@@ -658,7 +658,7 @@ export function createApplicationMenu() {
             submenu: [
                 {
                     label: 'Show File Watcher Status',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
                             const status = getFileWatcherStatus(focused.id);
@@ -674,7 +674,7 @@ export function createApplicationMenu() {
                 },
                 {
                     label: 'Show Global Watcher Stats',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
                             const stats = getGlobalFileWatcherStats();
@@ -691,7 +691,7 @@ export function createApplicationMenu() {
                 {
                     label: 'Refresh File Tree',
                     accelerator: 'CmdOrCtrl+Shift+F5',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
                             refreshProjectFileTree(focused);
@@ -701,7 +701,7 @@ export function createApplicationMenu() {
                 { type: 'separator' },
                 {
                     label: 'Open Debug Log',
-                    click: () => {
+                    click: async () => {
                         const fs = require('fs');
                         const path = require('path');
                         const logPath = path.join(app.getPath('userData'), 'preditor-debug.log');
@@ -719,7 +719,7 @@ export function createApplicationMenu() {
                 },
                 {
                     label: 'Open Main Log',
-                    click: () => {
+                    click: async () => {
                         const fs = require('fs');
                         const path = require('path');
                         const logPath = path.join(app.getPath('userData'), 'logs', 'main.log');
@@ -743,7 +743,7 @@ export function createApplicationMenu() {
                 {
                     label: 'Toggle Debug Console',
                     accelerator: 'CmdOrCtrl+Shift+D',
-                    click: () => {
+                    click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('toggle-debug-console');
@@ -876,13 +876,13 @@ Note: Only one connection at a time is supported.`,
             submenu: [
                 {
                     label: 'About Preditor',
-                    click: () => {
+                    click: async () => {
                         createAboutWindow();
                     }
                 },
                 {
                     label: 'Check for Updates...',
-                    click: () => {
+                    click: async () => {
                         autoUpdaterService.checkForUpdatesWithUI();
                     }
                 },
@@ -890,7 +890,7 @@ Note: Only one connection at a time is supported.`,
                 {
                     label: 'Settings...',
                     accelerator: 'CmdOrCtrl+,',
-                    click: () => {
+                    click: async () => {
                         createAIModelsWindow();
 
                     }
@@ -905,7 +905,7 @@ Note: Only one connection at a time is supported.`,
                 { 
                     label: 'Quit', 
                     accelerator: 'Command+Q', 
-                    click: () => {
+                    click: async () => {
                         try {
                             console.log('Quit menu item clicked (macOS)');
                             app.quit();
@@ -925,13 +925,13 @@ Note: Only one connection at a time is supported.`,
             submenu: [
                 {
                     label: 'About Preditor',
-                    click: () => {
+                    click: async () => {
                         createAboutWindow();
                     }
                 },
                 {
                     label: 'Check for Updates...',
-                    click: () => {
+                    click: async () => {
                         autoUpdaterService.checkForUpdatesWithUI();
                     }
                 }
@@ -943,9 +943,9 @@ Note: Only one connection at a time is supported.`,
 }
 
 // Update application menu
-export function updateApplicationMenu() {
+export async function updateApplicationMenu() {
     try {
-        createApplicationMenu();
+        await createApplicationMenu();
     } catch (error) {
         logger.menu.error('Error updating application menu:', error);
     }
