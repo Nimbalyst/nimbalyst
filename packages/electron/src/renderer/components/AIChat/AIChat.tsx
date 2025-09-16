@@ -129,15 +129,15 @@ export function AIChat({
     try {
       const allSessions = await aiApi.getSessions(projectPath);
       setSessions(allSessions || []);
-      
+
       // Sync currentModel with actual session if we have one
       if (currentSessionId && allSessions) {
         const currentSession = allSessions.find(s => s.id === currentSessionId);
         if (currentSession) {
-          const expectedModelId = currentSession.provider === 'claude-code' 
-            ? 'claude-code' 
+          const expectedModelId = currentSession.provider === 'claude-code'
+            ? 'claude-code'
             : `${currentSession.provider}:${currentSession.model}`;
-          
+
           if (currentModel !== expectedModelId) {
             console.log(`[AIChat] loadSessions - Syncing model: ${currentModel} -> ${expectedModelId}`);
             setCurrentModel(expectedModelId);
@@ -292,7 +292,7 @@ export function AIChat({
               if (toolCall.name === 'applyDiff' || toolCall.name?.endsWith('__applyDiff')) {
                 continue;
               }
-              
+
               // Create a unique signature for this tool call
               const signature = `${toolCall.name}-${JSON.stringify(toolCall.arguments)}`;
 
@@ -549,7 +549,7 @@ export function AIChat({
 
         // If we now have a provider configured and didn't before, reset initialization
         if (hasKey && !previousHasKey) {
-          logger.api.info('AI provider now configured, resetting initialization');
+          // logger.api.info('AI provider now configured, resetting initialization');
           setIsInitialized(false); // This will trigger re-initialization
           setInitError(null); // Clear any previous errors
         }
@@ -581,18 +581,18 @@ export function AIChat({
   // Keep UI in sync with current session's provider/model
   useEffect(() => {
     if (!currentSessionId || sessions.length === 0) return;
-    
+
     const currentSession = sessions.find(s => s.id === currentSessionId);
     if (currentSession && currentSession.provider) {
       let expectedModelId: string;
       if (currentSession.provider === 'claude-code') {
         expectedModelId = 'claude-code';
       } else {
-        expectedModelId = currentSession.model 
+        expectedModelId = currentSession.model
           ? `${currentSession.provider}:${currentSession.model}`
           : `${currentSession.provider}:default`;
       }
-      
+
       // If UI is out of sync, update it
       if (currentModel !== expectedModelId) {
         console.log(`[AIChat] UI sync: Updating model from ${currentModel} to ${expectedModelId} to match session ${currentSessionId}`);
@@ -601,7 +601,7 @@ export function AIChat({
       }
     }
   }, [currentSessionId, sessions, currentModel]); // Re-run when session or model changes
-  
+
   // Initialize Claude AFTER event handlers are set up
   useEffect(() => {
     // Prevent double initialization or initialization without API key
@@ -628,15 +628,15 @@ export function AIChat({
               modelIdToSet = 'claude-code';
             } else {
               // Use the session's actual model, or fall back to provider default
-              modelIdToSet = session.model 
+              modelIdToSet = session.model
                 ? `${session.provider}:${session.model}`
                 : `${session.provider}:default`;
             }
-            
+
             console.log(`[AIChat] Initialization: Restoring session ${session.id} with provider: ${session.provider}, model: ${session.model}, UI will show: ${modelIdToSet}`);
             setCurrentModel(modelIdToSet);
             // Don't store in localStorage - it's global across windows!
-            
+
             // Force update to ensure UI is in sync
             setTimeout(() => {
               setCurrentModel(modelIdToSet);
@@ -647,7 +647,7 @@ export function AIChat({
             session = null; // Force new session creation below
           }
         }
-        
+
         // Don't create a session automatically - user needs to pick a model
         if (!session) {
           console.log('[AIChat] No session and no model selected - waiting for user to choose');
@@ -777,7 +777,7 @@ export function AIChat({
       setIsLoading(false);
       return;
     }
-    
+
     // Get the session to find out what provider to use
     const currentSession = sessions.find(s => s.id === currentSessionId);
     if (!currentSession) {
@@ -785,17 +785,17 @@ export function AIChat({
       setIsLoading(false);
       return;
     }
-    
+
     // Use the session's provider - it's the source of truth
     const actualProvider = currentSession.provider;
     const actualModel = currentSession.model;
     console.log(`[AIChat] Using session provider: ${actualProvider}, model: ${actualModel}`);
 
     // Sync UI model to match session
-    const expectedModelId = currentSession.provider === 'claude-code' 
-      ? 'claude-code' 
+    const expectedModelId = currentSession.provider === 'claude-code'
+      ? 'claude-code'
       : `${currentSession.provider}:${currentSession.model}`;
-    
+
     if (currentModel !== expectedModelId) {
       console.log(`[AIChat] Syncing UI model to match session: ${currentModel} -> ${expectedModelId}`);
       setCurrentModel(expectedModelId);
@@ -924,7 +924,7 @@ export function AIChat({
         window.electronAPI.openAIModels();
         return;
       }
-      
+
       const { provider, model } = parseModelId(selectedModel);
 
       // Update current model
@@ -944,10 +944,10 @@ export function AIChat({
       setCurrentSessionId(session.id);
       setMessages([]);
       setInputValue(''); // Clear input for new session
-      
+
       // Add the new session to the list immediately so it's available
       setSessions(prev => [...prev, session]);
-      
+
       // Then reload to get any other updates
       await loadSessions();
 
@@ -1030,7 +1030,7 @@ export function AIChat({
   const handleSessionSelect = useCallback(async (sessionId: string) => {
     try {
       const session = await aiApi.loadSession(sessionId, projectPath);
-      
+
       // Handle case where session doesn't exist (was deleted)
       if (!session) {
         logger.session.info('Session not found, clearing saved session ID');
@@ -1040,7 +1040,7 @@ export function AIChat({
         }
         return;
       }
-      
+
       setCurrentSessionId(session.id);
 
       // ALWAYS update model based on session (provider:model format)
@@ -1051,11 +1051,11 @@ export function AIChat({
           modelIdToSet = 'claude-code';
         } else {
           // Use the session's actual model, or fall back to a sensible default
-          modelIdToSet = session.model 
+          modelIdToSet = session.model
             ? `${session.provider}:${session.model}`
             : `${session.provider}:default`;
         }
-        
+
         console.log(`[AIChat] handleSessionSelect - Syncing UI model: ${modelIdToSet}`);
         setCurrentModel(modelIdToSet);
         // Don't store in localStorage - it's global across windows!
@@ -1124,7 +1124,7 @@ export function AIChat({
     // Format messages for copying
     const chatText = messages.map(msg => {
       let text = `[${msg.role.toUpperCase()}]: `;
-      
+
       if (msg.role === 'tool' && msg.toolCall) {
         text += `Tool: ${msg.toolCall.name}\n`;
         if (msg.toolCall.arguments) {
@@ -1139,7 +1139,7 @@ export function AIChat({
         text += `Content:\n${msg.streamingData.content}`;
       } else {
         text += msg.content;
-        
+
         // Add edits if present
         if (msg.edits && msg.edits.length > 0) {
           text += '\n\n[EDITS]:';
@@ -1151,7 +1151,7 @@ export function AIChat({
           });
         }
       }
-      
+
       return text;
     }).join('\n\n---\n\n');
 
@@ -1250,7 +1250,7 @@ export function AIChat({
             const session = sessions.find(s => s.id === currentSessionId);
             if (session) {
               // Format as provider:model or just provider for claude-code
-              return session.provider === 'claude-code' 
+              return session.provider === 'claude-code'
                 ? 'claude-code'
                 : `${session.provider}:${session.model}`;
             }
@@ -1290,7 +1290,7 @@ export function AIChat({
               const session = sessions.find(s => s.id === currentSessionId);
               if (session) {
                 // Return the proper model ID format
-                return session.provider === 'claude-code' 
+                return session.provider === 'claude-code'
                   ? 'claude-code'
                   : `${session.provider}:${session.model}`;
               }
@@ -1320,7 +1320,7 @@ export function AIChat({
       ) : (
         <>
           <PerformanceMetrics show={showPerformanceMetrics} />
-          
+
           <ChatMessages
             messages={messages}
             isLoading={isLoading}

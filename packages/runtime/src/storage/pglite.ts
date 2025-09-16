@@ -13,18 +13,27 @@ export async function initDB(): Promise<PGlite> {
   const assetBase = (globalThis as any).__PGLITE_ASSET_BASE__ ?? '/pglite/';
   const devWasm = (globalThis as any).__PGLITE_DEV_WASM__ || '';
   const devData = (globalThis as any).__PGLITE_DEV_DATA__ || '';
+  const wasmOverride = (globalThis as any).__PGLITE_WASM_URL__ || '';
+  const dataOverride = (globalThis as any).__PGLITE_DATA_URL__ || '';
+  const isDev = Boolean((import.meta as any).env?.DEV);
 
   dbInstance = new PGlite({
     debug: 0,
     // Prefer Emscripten's built-in streaming by telling it where to find assets
     locateFile: (path: string) => {
-      const wasmUrl = (import.meta as any).env?.DEV && devWasm ? devWasm : assetBase + 'postgres.wasm';
-      const dataUrl = (import.meta as any).env?.DEV && devData ? devData : assetBase + 'postgres.data';
-      if (path.endsWith('postgres.wasm')) {
+      if (path.endsWith('.wasm')) {
+        const wasmUrl =
+          wasmOverride ||
+          (isDev && devWasm ? devWasm : '') ||
+          assetBase + path;
         try { console.log('[PGlite] locateFile wasm ->', wasmUrl); } catch {}
         return wasmUrl;
       }
-      if (path.endsWith('postgres.data')) {
+      if (path.endsWith('.data')) {
+        const dataUrl =
+          dataOverride ||
+          (isDev && devData ? devData : '') ||
+          assetBase + path;
         try { console.log('[PGlite] locateFile data ->', dataUrl); } catch {}
         return dataUrl;
       }
