@@ -86,3 +86,9 @@ export {
 
 // AI Chat integration
 export { aiChatBridge } from './plugins/AIChatIntegrationPlugin';
+
+// Anchor context for floating UI consumers
+export { AnchorProvider, AnchorContext, useAnchorElem } from './context/AnchorContext';
+
+// Typeahead components
+export { TypeaheadMenuPlugin } from './plugins/TypeaheadPlugin/TypeaheadMenuPlugin';

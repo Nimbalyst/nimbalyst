@@ -61,6 +61,7 @@ import SearchReplacePlugin from './plugins/SearchReplacePlugin';
 import { DiffPlugin } from './plugins/DiffPlugin';
 import { AIChatIntegrationPlugin } from './plugins/AIChatIntegrationPlugin';
 import ContentEditable from './ui/ContentEditable';
+import { AnchorProvider } from './context/AnchorContext';
 import { useRuntimeSettings } from './context/RuntimeSettingsContext';
 import { PluginManager } from './plugins/PluginManager';
 // Use standard Prism-based code highlighting for now
@@ -287,9 +288,11 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             <DiffPlugin />
             <AIChatIntegrationPlugin />
             <KanbanBoardPlugin />
-
-            {/* Render any custom plugins */}
-            <PluginManager />
+            {/* Render any custom plugins including DocumentLinkPlugin when registered */}
+            {/* Provide floating anchor element to dynamic plugins */}
+            <AnchorProvider value={floatingAnchorElem}>
+              <PluginManager />
+            </AnchorProvider>
 
             {floatingAnchorElem && (
               <>
