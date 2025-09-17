@@ -41,7 +41,7 @@ export class AutoUpdaterService {
     autoUpdater.on('update-available', (info) => {
       log.info('Update available:', info);
       this.isCheckingForUpdate = false;
-      
+
       // Show dialog to user
       dialog.showMessageBox({
         type: 'info',
@@ -51,9 +51,10 @@ export class AutoUpdaterService {
         buttons: ['Download', 'Later'],
         defaultId: 0,
         cancelId: 1
-      }).then(result => {
+      }).then(async (result) => {
         if (result.response === 0) {
-          autoUpdater.downloadUpdate();
+          // Re-check for updates before downloading to ensure we get the latest
+          await this.checkAndDownloadLatest();
         }
       });
 
@@ -231,7 +232,7 @@ export class AutoUpdaterService {
 
     try {
       const result = await autoUpdater.checkForUpdates();
-      
+
       if (!result || !result.updateInfo) {
         dialog.showMessageBox({
           type: 'info',
@@ -246,6 +247,45 @@ export class AutoUpdaterService {
         type: 'error',
         title: 'Update Check Failed',
         message: 'Failed to check for updates.',
+        detail: error instanceof Error ? error.message : 'Unknown error',
+        buttons: ['OK']
+      });
+    }
+  }
+
+  private async checkAndDownloadLatest() {
+    try {
+      log.info('Re-checking for latest version before download...');
+
+      // Check for the absolute latest version
+      const result = await autoUpdater.checkForUpdates();
+
+      if (result && result.updateInfo) {
+        log.info(`Latest version found: ${result.updateInfo.version}, downloading...`);
+
+        // Show a quick info that we're downloading the latest version
+        // This is non-blocking and will be replaced by the download progress
+        this.sendToAllWindows('update-checking-latest', {
+          message: `Downloading latest version ${result.updateInfo.version}...`
+        });
+
+        // Download the latest version that was just checked
+        await autoUpdater.downloadUpdate();
+      } else {
+        log.info('No update found during re-check');
+        dialog.showMessageBox({
+          type: 'info',
+          title: 'Up to Date',
+          message: 'You already have the latest version.',
+          buttons: ['OK']
+        });
+      }
+    } catch (error) {
+      log.error('Failed to check and download latest:', error);
+      dialog.showMessageBox({
+        type: 'error',
+        title: 'Download Failed',
+        message: 'Failed to download the latest update.',
         detail: error instanceof Error ? error.message : 'Unknown error',
         buttons: ['OK']
       });
