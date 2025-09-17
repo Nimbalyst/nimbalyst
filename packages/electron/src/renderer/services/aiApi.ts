@@ -305,7 +305,7 @@ class AIApi {
   // Create session with provider and model selection
   async createSession(
     documentContext?: DocumentContext,
-    projectPath?: string,
+    workspacePath?: string,
     provider?: 'claude' | 'claude-code' | 'openai' | 'lmstudio',
     modelId?: string
   ): Promise<Session> {
@@ -313,50 +313,50 @@ class AIApi {
     if (!provider) {
       throw new Error('Provider must be specified when creating a session');
     }
-    return window.electronAPI.aiCreateSession(provider, documentContext, projectPath, modelId);
+    return window.electronAPI.aiCreateSession(provider, documentContext, workspacePath, modelId);
   }
 
   // New method specifically for creating session with provider
   async createSessionWithProvider(
     provider: 'claude' | 'claude-code' | 'openai',
     documentContext?: DocumentContext,
-    projectPath?: string,
+    workspacePath?: string,
     modelId?: string
   ): Promise<Session> {
-    return window.electronAPI.aiCreateSession(provider, documentContext, projectPath, modelId);
+    return window.electronAPI.aiCreateSession(provider, documentContext, workspacePath, modelId);
   }
 
   async sendMessage(
-    message: string, 
+    message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
-    projectPath?: string
+    workspacePath?: string
   ): Promise<{ content: string; edits: EditRequest[] }> {
-    return window.electronAPI.aiSendMessage(message, documentContext, sessionId, projectPath);
+    return window.electronAPI.aiSendMessage(message, documentContext, sessionId, workspacePath);
   }
 
-  async getSessions(projectPath?: string): Promise<Session[]> {
-    return window.electronAPI.aiGetSessions(projectPath);
+  async getSessions(workspacePath?: string): Promise<Session[]> {
+    return window.electronAPI.aiGetSessions(workspacePath);
   }
 
-  async loadSession(sessionId: string, projectPath?: string): Promise<Session> {
-    return window.electronAPI.aiLoadSession(sessionId, projectPath);
+  async loadSession(sessionId: string, workspacePath?: string): Promise<Session> {
+    return window.electronAPI.aiLoadSession(sessionId, workspacePath);
   }
 
   async clearSession(): Promise<{ success: boolean }> {
     return window.electronAPI.aiClearSession();
   }
   
-  async updateSessionMessages(sessionId: string, messages: any[], projectPath?: string): Promise<{ success: boolean; error?: string }> {
-    return window.electronAPI.aiUpdateSessionMessages(sessionId, messages, projectPath);
+  async updateSessionMessages(sessionId: string, messages: any[], workspacePath?: string): Promise<{ success: boolean; error?: string }> {
+    return window.electronAPI.aiUpdateSessionMessages(sessionId, messages, workspacePath);
   }
   
-  async saveDraftInput(sessionId: string, draftInput: string, projectPath?: string): Promise<{ success: boolean; error?: string }> {
-    return window.electronAPI.aiSaveDraftInput(sessionId, draftInput, projectPath);
+  async saveDraftInput(sessionId: string, draftInput: string, workspacePath?: string): Promise<{ success: boolean; error?: string }> {
+    return window.electronAPI.aiSaveDraftInput(sessionId, draftInput, workspacePath);
   }
 
-  async deleteSession(sessionId: string, projectPath?: string): Promise<{ success: boolean }> {
-    return window.electronAPI.aiDeleteSession(sessionId, projectPath);
+  async deleteSession(sessionId: string, workspacePath?: string): Promise<{ success: boolean }> {
+    return window.electronAPI.aiDeleteSession(sessionId, workspacePath);
   }
 
   async cancelRequest(): Promise<{ success: boolean; error?: string }> {

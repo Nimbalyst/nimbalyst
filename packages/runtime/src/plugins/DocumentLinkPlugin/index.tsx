@@ -4,12 +4,35 @@ import {
   $getSelection,
   $isRangeSelection,
   TextNode,
-  $createTextNode
+  $createTextNode,
+  isDOMNode
 } from 'lexical';
 import { $createDocumentReferenceNode } from './DocumentLinkNode';
 import { DocumentService } from '../../core/DocumentService';
+import documentLinkStyles from './DocumentLinkPlugin.css?inline';
 
-import './DocumentLinkPlugin.css';
+const DOCUMENT_REFERENCE_STYLE_ID = 'document-reference-styles';
+
+function ensureDocumentReferenceStyles(): void {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById(DOCUMENT_REFERENCE_STYLE_ID)) return;
+
+  const style = document.createElement('style');
+  style.id = DOCUMENT_REFERENCE_STYLE_ID;
+  style.textContent = documentLinkStyles;
+  document.head.appendChild(style);
+}
+
+ensureDocumentReferenceStyles();
+
+function getDocumentReferenceElement(target: Node): Element | null {
+  const targetElement =
+    typeof Element !== 'undefined' && target instanceof Element
+      ? target
+      : target.parentElement;
+
+  return targetElement?.closest('.document-reference') ?? null;
+}
 
 interface DocumentLinkPluginProps {
   documentService: DocumentService;
@@ -31,6 +54,67 @@ export function DocumentLinkPlugin({
   const [documents, setDocuments] = useState<any[]>([]);
   const menuOpenRef = useRef(false);
   const pendingDocsRef = useRef<any[] | null>(null);
+
+  useEffect(() => {
+    const handleDocumentReferenceClick = (event: MouseEvent, allowButton: (button: number) => boolean) => {
+      if (event.defaultPrevented || !allowButton(event.button)) {
+        return;
+      }
+
+      const target = event.target;
+      if (!isDOMNode(target)) {
+        return;
+      }
+
+      const referenceElement = getDocumentReferenceElement(target);
+      if (!referenceElement) {
+        return;
+      }
+
+      const documentId = referenceElement.getAttribute('data-document-id');
+      if (!documentId) {
+        return;
+      }
+
+      const selectionPreventsNavigation = editor
+        .getEditorState()
+        .read(() => {
+          const selection = $getSelection();
+          return $isRangeSelection(selection) && !selection.isCollapsed();
+        });
+
+      if (selectionPreventsNavigation) {
+        event.preventDefault();
+        return;
+      }
+
+      event.preventDefault();
+      try {
+        console.log('[DocumentLinkPlugin] Opening document reference', documentId);
+      } catch {}
+      void documentService.openDocument(documentId).catch((error) => {
+        console.error('Failed to open document reference', error);
+      });
+    };
+
+    const onClick = (event: MouseEvent) => handleDocumentReferenceClick(event, (button) => button === 0);
+    const onAuxClick = (event: MouseEvent) => handleDocumentReferenceClick(event, (button) => button === 1);
+
+    return editor.registerRootListener((rootElement, prevRootElement) => {
+      if (prevRootElement) {
+        prevRootElement.removeEventListener('click', onClick, true);
+        prevRootElement.removeEventListener('auxclick', onAuxClick, true);
+      }
+      if (rootElement) {
+        rootElement.addEventListener('click', onClick, true);
+        rootElement.addEventListener('auxclick', onAuxClick, true);
+        return () => {
+          rootElement.removeEventListener('click', onClick, true);
+          rootElement.removeEventListener('auxclick', onAuxClick, true);
+        };
+      }
+    });
+  }, [editor, documentService]);
 
   // Load documents when component mounts
   useEffect(() => {
@@ -68,7 +152,7 @@ export function DocumentLinkPlugin({
     return filteredDocs.map(doc => ({
       id: `doc-${doc.id}`,
       label: doc.name,
-      // Only show project-relative folder path (no filename) if available
+      // Only show workspace-relative folder path (no filename) if available
       description: doc.workspace || undefined,
       icon: '📄',
       section: doc.workspace || 'Documents',

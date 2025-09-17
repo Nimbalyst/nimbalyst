@@ -7,7 +7,7 @@
  */
 
 import type { JSX } from 'react';
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 
 import { CheckListPlugin } from '@lexical/react/LexicalCheckListPlugin';
 import { ClearEditorPlugin } from '@lexical/react/LexicalClearEditorPlugin';
@@ -30,7 +30,7 @@ import { $convertToMarkdownString } from '@lexical/markdown';
 
 import { DEFAULT_EDITOR_CONFIG, type EditorConfig } from './EditorConfig';
 import { useSharedHistoryContext } from './context/SharedHistoryContext';
-import { MARKDOWN_TRANSFORMERS } from './markdown';
+import { getEditorTransformers } from './markdown';
 import AutoEmbedPlugin from './plugins/AutoEmbedPlugin';
 import CodeActionMenuPlugin from './plugins/CodeActionMenuPlugin';
 import CollapsiblePlugin from './plugins/CollapsiblePlugin';
@@ -126,15 +126,17 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
   const [activeEditor, setActiveEditor] = useState(editor);
   const [isLinkEditMode, setIsLinkEditMode] = useState<boolean>(false);
 
-  // Get all transformers including from plugins
-  // const allTransformers = [...STRAVU_TRANSFORMERS]; //, ...pluginRegistry.getAllTransformers()];
+  const markdownTransformers = useMemo(
+    () => config.markdownTransformers ?? getEditorTransformers(),
+    [config.markdownTransformers],
+  );
 
   // Expose markdown content getter
   useEffect(() => {
     if (config.onGetContent) {
       const getContent = () => {
         return editor.read(() => {
-          const markdown = $convertToMarkdownString(MARKDOWN_TRANSFORMERS, undefined, true);
+          const markdown = $convertToMarkdownString(markdownTransformers, undefined, true);
           // remove frontmatter
           const frontmatterRegex = /^---\s*\n(?:.*\n)*?---\s*\n/;
           const markdownWithoutFrontmatter = markdown.replace(frontmatterRegex, '');
@@ -143,7 +145,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
       };
       config.onGetContent(getContent);
     }
-  }, [editor, config.onGetContent]);
+  }, [editor, config.onGetContent, markdownTransformers]);
 
   // Expose editor instance
   useEffect(() => {
@@ -160,7 +162,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
 
       if (config.onContentChange) {
         const content = editor.read(() => {
-          const markdown = $convertToMarkdownString(MARKDOWN_TRANSFORMERS, undefined, true);
+          const markdown = $convertToMarkdownString(markdownTransformers, undefined, true);
           const frontmatterRegex = /^---\s*\n(?:.*\n)*?---\s*\n/;
           const markdownWithoutFrontmatter = markdown.replace(frontmatterRegex, '');
           return markdownWithoutFrontmatter;
@@ -172,7 +174,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     return () => {
       removeUpdateListener();
     };
-  }, [editor, config.onContentChange]);
+  }, [editor, config.onContentChange, markdownTransformers]);
 
   const onRef = (_floatingAnchorElem: HTMLDivElement) => {
     if (_floatingAnchorElem !== null) {
@@ -208,6 +210,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
           markdownOnly={markdownOnly}
           shouldPreserveNewLinesInMarkdown={shouldPreserveNewLinesInMarkdown}
           isCodeHighlighted={isCodeHighlighted}
+          markdownTransformers={markdownTransformers}
         />
       )}
       {isRichText && (

@@ -9,9 +9,9 @@ import { windowStates, getWindowId } from '../window/WindowManager';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { getFolderContents } from '../utils/FileTree';
-import { getProjectRecentFiles, addProjectRecentFile, store, getProjectTabState, saveProjectTabState, clearProjectTabState } from '../utils/store';
+import { getWorkspaceRecentFiles, addWorkspaceRecentFile, store, getWorkspaceTabState, saveWorkspaceTabState, clearWorkspaceTabState } from '../utils/store';
 
-export function registerProjectHandlers() {
+export function registerWorkspaceHandlers() {
     // Get folder contents
     ipcMain.handle('get-folder-contents', (event, dirPath: string) => {
         return getFolderContents(dirPath);
@@ -52,8 +52,8 @@ export function registerProjectHandlers() {
         }
     });
 
-    // Switch project file
-    ipcMain.handle('switch-project-file', async (event, filePath: string) => {
+    // Switch workspace file
+    ipcMain.handle('switch-workspace-file', async (event, filePath: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {
             console.error('[SWITCH_FILE] ✗ No window found for event sender');
@@ -80,7 +80,7 @@ export function registerProjectHandlers() {
                 state = {
                     filePath: null,
                     documentEdited: false,
-                    projectPath: null
+                    workspacePath: null
                 };
                 windowStates.set(windowId, state);
             }
@@ -99,9 +99,9 @@ export function registerProjectHandlers() {
             state.documentEdited = false;
             // console.log('[SWITCH_FILE] Updated window state with new file path');
 
-            // Add to recent project files
-            if (state.projectPath) {
-                addProjectRecentFile(state.projectPath, filePath);
+            // Add to recent workspace files
+            if (state.workspacePath) {
+                addWorkspaceRecentFile(state.workspacePath, filePath);
                 // console.log('[SWITCH_FILE] Added to recent files');
             }
 
@@ -117,19 +117,19 @@ export function registerProjectHandlers() {
 
             // console.log('[SWITCH_FILE] ✓ Switch complete, state:', {
             //     filePath: state.filePath,
-            //     projectPath: state.projectPath,
+            //     workspacePath: state.workspacePath,
             //     documentEdited: state.documentEdited
             // });
 
             return { filePath, content };
         } catch (error) {
-            console.error('[SWITCH_FILE] ✗ Error switching project file:', error);
+            console.error('[SWITCH_FILE] ✗ Error switching workspace file:', error);
             return null;
         }
     });
 
-    // Search project file names only (fast)
-    ipcMain.handle('search-project-file-names', async (event, projectPath: string, query: string) => {
+    // Search workspace file names only (fast)
+    ipcMain.handle('search-workspace-file-names', async (event, workspacePath: string, query: string) => {
         try {
             const trimmedQuery = query.trim();
             if (!trimmedQuery) return [];
@@ -137,7 +137,7 @@ export function registerProjectHandlers() {
             // Escape special characters for shell
             const escapedTerm = trimmedQuery.replace(/["'\\]/g, '\\$&');
 
-            const fileNameCommand = `find "${projectPath}" -name "*.md" -o -name "*.markdown" 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
+            const fileNameCommand = `find "${workspacePath}" -name "*.md" -o -name "*.markdown" 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
             const { stdout: fileMatches } = await execAsync(fileNameCommand);
 
             const results = [];
@@ -158,8 +158,8 @@ export function registerProjectHandlers() {
         }
     });
 
-    // Search project file content using ripgrep (slower)
-    ipcMain.handle('search-project-file-content', async (event, projectPath: string, query: string) => {
+    // Search workspace file content using ripgrep (slower)
+    ipcMain.handle('search-workspace-file-content', async (event, workspacePath: string, query: string) => {
         try {
             const trimmedQuery = query.trim();
             if (!trimmedQuery) return [];
@@ -219,7 +219,7 @@ export function registerProjectHandlers() {
                 }
             }
 
-            const contentCommand = `"${rgPath}" --type md -i --json "${escapedTerm}" "${projectPath}" 2>/dev/null || true`;
+            const contentCommand = `"${rgPath}" --type md -i --json "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
             const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
 
             const contentMatches = new Map<string, any>();
@@ -259,7 +259,7 @@ export function registerProjectHandlers() {
     });
 
     // Legacy handler that combines both (for backward compatibility)
-    ipcMain.handle('search-project-files', async (event, projectPath: string, query: string) => {
+    ipcMain.handle('search-workspace-files', async (event, workspacePath: string, query: string) => {
         try {
             const trimmedQuery = query.trim();
             if (!trimmedQuery) return [];
@@ -273,7 +273,7 @@ export function registerProjectHandlers() {
 
             // First, search file names
             try {
-                const fileNameCommand = `find "${projectPath}" -name "*.md" -o -name "*.markdown" 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
+                const fileNameCommand = `find "${workspacePath}" -name "*.md" -o -name "*.markdown" 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
                 const { stdout: fileMatches } = await execAsync(fileNameCommand);
 
                 if (fileMatches) {
@@ -364,7 +364,7 @@ export function registerProjectHandlers() {
                     console.warn('[SEARCH] Could not find bundled ripgrep, falling back to system rg');
                 }
 
-                contentCommand = `"${rgPath}" --type md -i --json "${escapedTerm}" "${projectPath}" 2>/dev/null || true`;
+                contentCommand = `"${rgPath}" --type md -i --json "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
                 const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
 
                 if (stdout) {
@@ -426,77 +426,77 @@ export function registerProjectHandlers() {
             return allResults.slice(0, 50);
 
         } catch (error) {
-            console.error('Error searching project files:', error);
+            console.error('Error searching workspace files:', error);
             return [];
         }
     });
 
-    // Get recent project files
-    ipcMain.handle('get-recent-project-files', async (event) => {
+    // Get recent workspace files
+    ipcMain.handle('get-recent-workspace-files', async (event) => {
         const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
         if (!windowId) return [];
 
         const state = windowStates.get(windowId);
-        if (!state || !state.projectPath) return [];
+        if (!state || !state.workspacePath) return [];
 
-        // Get recent files for this project from store
-        const projectRecentFiles = await getProjectRecentFiles(state.projectPath);
+        // Get recent files for this workspace from store
+        const workspaceRecentFiles = await getWorkspaceRecentFiles(state.workspacePath);
 
         // Ensure it's an array before filtering
-        if (!Array.isArray(projectRecentFiles)) {
-            console.error('[ProjectHandlers] projectRecentFiles is not an array:', projectRecentFiles);
+        if (!Array.isArray(workspaceRecentFiles)) {
+            console.error('[WorkspaceHandlers] workspaceRecentFiles is not an array:', workspaceRecentFiles);
             return [];
         }
 
         // Filter to only existing files
-        return projectRecentFiles.filter(filePath => existsSync(filePath)).slice(0, 20);
+        return workspaceRecentFiles.filter(filePath => existsSync(filePath)).slice(0, 20);
     });
 
-    // Add to project recent files
-    ipcMain.on('add-to-project-recent-files', async (event, filePath: string) => {
+    // Add to workspace recent files
+    ipcMain.on('add-to-workspace-recent-files', async (event, filePath: string) => {
         const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
         if (!windowId) return;
 
         const state = windowStates.get(windowId);
-        if (!state || !state.projectPath) return;
+        if (!state || !state.workspacePath) return;
 
-        await addProjectRecentFile(state.projectPath, filePath);
+        await addWorkspaceRecentFile(state.workspacePath, filePath);
     });
 
-    // Get project tab state
-    ipcMain.handle('get-project-tab-state', async (event) => {
+    // Get workspace tab state
+    ipcMain.handle('get-workspace-tab-state', async (event) => {
         const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
         if (!windowId) return null;
 
         const state = windowStates.get(windowId);
-        if (!state || !state.projectPath) return null;
+        if (!state || !state.workspacePath) return null;
 
-        return await getProjectTabState(state.projectPath);
+        return await getWorkspaceTabState(state.workspacePath);
     });
 
-    // Save project tab state
-    ipcMain.on('save-project-tab-state', async (event, tabState) => {
+    // Save workspace tab state
+    ipcMain.on('save-workspace-tab-state', async (event, tabState) => {
         const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
         if (!windowId) return;
 
         const state = windowStates.get(windowId);
-        if (!state || !state.projectPath) return;
+        if (!state || !state.workspacePath) return;
 
-        await saveProjectTabState(state.projectPath, tabState);
+        await saveWorkspaceTabState(state.workspacePath, tabState);
     });
 
-    // Clear project tab state
-    ipcMain.on('clear-project-tab-state', (event) => {
+    // Clear workspace tab state
+    ipcMain.on('clear-workspace-tab-state', (event) => {
         const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
         if (!windowId) return;
 
         const state = windowStates.get(windowId);
-        if (!state || !state.projectPath) return;
+        if (!state || !state.workspacePath) return;
 
-        clearProjectTabState(state.projectPath);
+        clearWorkspaceTabState(state.workspacePath);
     });
 
-    // File operations for project files
+    // File operations for workspace files
     ipcMain.handle('rename-file', async (event, oldPath: string, newName: string) => {
         const { rename } = require('fs').promises;
         const { dirname, join } = require('path');
@@ -709,9 +709,9 @@ export function registerProjectHandlers() {
         }
     });
 
-    ipcMain.handle('open-session-manager', async (event, filterProject?: string) => {
+    ipcMain.handle('open-session-manager', async (event, filterWorkspace?: string) => {
         try {
-            createSessionManagerWindow(filterProject);
+            createSessionManagerWindow(filterWorkspace);
             return { success: true };
         } catch (error: any) {
             console.error('Error opening session manager:', error);

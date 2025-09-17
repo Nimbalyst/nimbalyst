@@ -1,7 +1,7 @@
 import React from 'react';
 
-interface ProjectWelcomeProps {
-  projectName: string;
+interface WorkspaceWelcomeProps {
+  workspaceName: string;
 }
 
 // Try to import the icon if it exists in the build
@@ -13,15 +13,15 @@ try {
   iconUrl = undefined;
 }
 
-export function ProjectWelcome({ projectName }: ProjectWelcomeProps) {
+export function WorkspaceWelcome({ workspaceName }: WorkspaceWelcomeProps) {
   return (
-    <div className="project-welcome">
-      <div className="project-welcome-content">
-        <div className="project-welcome-icon">
+    <div className="workspace-welcome">
+      <div className="workspace-welcome-content">
+        <div className="workspace-welcome-icon">
           {iconUrl && (
-            <img 
-              src={iconUrl} 
-              alt="Preditor" 
+            <img
+              src={iconUrl}
+              alt="Preditor"
               onError={(e) => {
                 // Hide the image if it fails to load
                 (e.target as HTMLImageElement).style.display = 'none';
@@ -29,11 +29,11 @@ export function ProjectWelcome({ projectName }: ProjectWelcomeProps) {
             />
           )}
         </div>
-        <h1 className="project-welcome-title">{projectName}</h1>
-        <p className="project-welcome-text">
+        <h1 className="workspace-welcome-title">{workspaceName}</h1>
+        <p className="workspace-welcome-text">
           Select a file from the sidebar to start editing
         </p>
-        <div className="project-welcome-tips">
+        <div className="workspace-welcome-tips">
           <h3>Quick tips:</h3>
           <ul>
             <li>Click on any markdown file in the sidebar to open it</li>

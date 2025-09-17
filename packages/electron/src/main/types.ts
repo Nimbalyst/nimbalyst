@@ -15,9 +15,9 @@ export interface TabState {
 }
 
 export interface WindowState {
-    mode: 'document' | 'project';
+    mode: 'document' | 'workspace';
     filePath: string | null;
-    projectPath: string | null;
+    workspacePath: string | null;
     documentEdited: boolean;
     
     // Tab management (optional for backward compatibility)
@@ -33,9 +33,9 @@ export interface RecentItem {
 }
 
 export interface SessionWindow {
-    mode: 'document' | 'project';
+    mode: 'document' | 'workspace';
     filePath?: string;
-    projectPath?: string;
+    workspacePath?: string;
     bounds: {
         x: number;
         y: number;

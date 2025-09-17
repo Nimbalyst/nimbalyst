@@ -1,5 +1,5 @@
-/* Project Manager - Matching Project Sidebar Styles */
-.project-manager {
+/* Workspace Manager - Matching Workspace Sidebar Styles */
+.workspace-manager {
   display: flex;
   width: 100%;
   height: 100vh;
@@ -9,7 +9,7 @@
 }
 
 /* macOS draggable area */
-.project-manager::before {
+.workspace-manager::before {
   content: '';
   position: fixed;
   top: 0;
@@ -21,7 +21,7 @@
 }
 
 /* Sidebar - matching project sidebar */
-.project-manager .sidebar {
+.workspace-manager .sidebar {
   width: 380px;
   background-color: #f3f4f6;
   border-right: 1px solid #e5e7eb;
@@ -72,7 +72,7 @@
   gap: 8px;
 }
 
-.projects-list {
+.workspaces-list {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
@@ -81,7 +81,7 @@
 }
 
 /* Project items - matching file tree items */
-.project-item {
+.workspace-item {
   display: flex;
   gap: 8px;
   padding: 6px 8px;
@@ -93,15 +93,15 @@
   align-items: center;
 }
 
-.project-item:hover {
+.workspace-item:hover {
   background-color: #e5e7eb;
 }
 
-.project-item.selected {
+.workspace-item.selected {
   background-color: #dbeafe;
 }
 
-.project-icon {
+.workspace-icon {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -109,21 +109,21 @@
   color: #6b7280;
 }
 
-.project-icon .material-symbols-outlined {
+.workspace-icon .material-symbols-outlined {
   font-size: 20px;
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
 }
 
-.project-item.selected .project-icon {
+.workspace-item.selected .workspace-icon {
   color: #1e40af;
 }
 
-.project-info {
+.workspace-info {
   flex: 1;
   min-width: 0;
 }
 
-.project-name {
+.workspace-name {
   font-size: 13px;
   font-weight: 500;
   color: #1f2937;
@@ -133,11 +133,11 @@
   white-space: nowrap;
 }
 
-.project-item.selected .project-name {
+.workspace-item.selected .workspace-name {
   color: #1e40af;
 }
 
-.project-path {
+.workspace-path {
   font-size: 11px;
   color: #6b7280;
   overflow: hidden;
@@ -146,14 +146,14 @@
   margin-bottom: 2px;
 }
 
-.project-meta {
+.workspace-meta {
   display: flex;
   gap: 12px;
   font-size: 11px;
   color: #9ca3af;
 }
 
-.project-meta span {
+.workspace-meta span {
   white-space: nowrap;
 }
 
@@ -198,14 +198,14 @@
   gap: 20px;
 }
 
-.project-title h1 {
+.workspace-title h1 {
   font-size: 20px;
   font-weight: 600;
   color: #1f2937;
   margin: 0 0 4px 0;
 }
 
-.content-header .project-path {
+.content-header .workspace-path {
   font-size: 13px;
   color: #6b7280;
 }
@@ -217,7 +217,7 @@
 }
 
 /* Project details */
-.project-details {
+.workspace-details {
   flex: 1;
   overflow-y: auto;
   padding: 24px;
@@ -544,29 +544,29 @@
 }
 
 /* Scrollbar styling */
-.projects-list::-webkit-scrollbar,
-.project-details::-webkit-scrollbar {
+.workspaces-list::-webkit-scrollbar,
+.workspace-details::-webkit-scrollbar {
   width: 8px;
 }
 
-.projects-list::-webkit-scrollbar-track,
-.project-details::-webkit-scrollbar-track {
+.workspaces-list::-webkit-scrollbar-track,
+.workspace-details::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.projects-list::-webkit-scrollbar-thumb,
-.project-details::-webkit-scrollbar-thumb {
+.workspaces-list::-webkit-scrollbar-thumb,
+.workspace-details::-webkit-scrollbar-thumb {
   background-color: #d1d5db;
   border-radius: 4px;
 }
 
-.projects-list::-webkit-scrollbar-thumb:hover,
-.project-details::-webkit-scrollbar-thumb:hover {
+.workspaces-list::-webkit-scrollbar-thumb:hover,
+.workspace-details::-webkit-scrollbar-thumb:hover {
   background-color: #9ca3af;
 }
 
 /* Dark theme support */
-.dark-theme .project-manager {
+.dark-theme .workspace-manager {
   background-color: #1a1a1a;
 }
 
@@ -584,35 +584,35 @@
   color: #ffffff;
 }
 
-.dark-theme .project-item:hover {
+.dark-theme .workspace-item:hover {
   background-color: #3a3a3a;
 }
 
-.dark-theme .project-item.selected {
+.dark-theme .workspace-item.selected {
   background-color: #4a5568;
 }
 
-.dark-theme .project-icon {
+.dark-theme .workspace-icon {
   color: #b3b3b3;
 }
 
-.dark-theme .project-item.selected .project-icon {
+.dark-theme .workspace-item.selected .workspace-icon {
   color: #ffffff;
 }
 
-.dark-theme .project-name {
+.dark-theme .workspace-name {
   color: #ffffff;
 }
 
-.dark-theme .project-item.selected .project-name {
+.dark-theme .workspace-item.selected .workspace-name {
   color: #ffffff;
 }
 
-.dark-theme .project-path {
+.dark-theme .workspace-path {
   color: #b3b3b3;
 }
 
-.dark-theme .project-meta {
+.dark-theme .workspace-meta {
   color: #9ca3af;
 }
 
@@ -625,15 +625,15 @@
   border-bottom-color: #4a4a4a;
 }
 
-.dark-theme .project-title h1 {
+.dark-theme .workspace-title h1 {
   color: #ffffff;
 }
 
-.dark-theme .content-header .project-path {
+.dark-theme .content-header .workspace-path {
   color: #b3b3b3;
 }
 
-.dark-theme .project-details {
+.dark-theme .workspace-details {
   background-color: #2d2d2d;
 }
 
@@ -687,18 +687,18 @@
   color: #9ca3af;
 }
 
-.dark-theme .projects-list::-webkit-scrollbar-thumb,
-.dark-theme .project-details::-webkit-scrollbar-thumb {
+.dark-theme .workspaces-list::-webkit-scrollbar-thumb,
+.dark-theme .workspace-details::-webkit-scrollbar-thumb {
   background-color: #4a4a4a;
 }
 
-.dark-theme .projects-list::-webkit-scrollbar-thumb:hover,
-.dark-theme .project-details::-webkit-scrollbar-thumb:hover {
+.dark-theme .workspaces-list::-webkit-scrollbar-thumb:hover,
+.dark-theme .workspace-details::-webkit-scrollbar-thumb:hover {
   background-color: #5a5a5a;
 }
 
 /* Crystal Dark theme */
-.crystal-dark-theme .project-manager {
+.crystal-dark-theme .workspace-manager {
   background-color: #0F172A;
 }
 
@@ -716,35 +716,35 @@
   color: #F3F4F6;
 }
 
-.crystal-dark-theme .project-item:hover {
+.crystal-dark-theme .workspace-item:hover {
   background-color: #374151;
 }
 
-.crystal-dark-theme .project-item.selected {
+.crystal-dark-theme .workspace-item.selected {
   background-color: #2563EB;
 }
 
-.crystal-dark-theme .project-icon {
+.crystal-dark-theme .workspace-icon {
   color: #9CA3AF;
 }
 
-.crystal-dark-theme .project-item.selected .project-icon {
+.crystal-dark-theme .workspace-item.selected .workspace-icon {
   color: #F3F4F6;
 }
 
-.crystal-dark-theme .project-name {
+.crystal-dark-theme .workspace-name {
   color: #F3F4F6;
 }
 
-.crystal-dark-theme .project-item.selected .project-name {
+.crystal-dark-theme .workspace-item.selected .workspace-name {
   color: #F3F4F6;
 }
 
-.crystal-dark-theme .project-path {
+.crystal-dark-theme .workspace-path {
   color: #9CA3AF;
 }
 
-.crystal-dark-theme .project-meta {
+.crystal-dark-theme .workspace-meta {
   color: #6B7280;
 }
 
@@ -757,15 +757,15 @@
   border-bottom-color: #374151;
 }
 
-.crystal-dark-theme .project-title h1 {
+.crystal-dark-theme .workspace-title h1 {
   color: #F3F4F6;
 }
 
-.crystal-dark-theme .content-header .project-path {
+.crystal-dark-theme .content-header .workspace-path {
   color: #9CA3AF;
 }
 
-.crystal-dark-theme .project-details {
+.crystal-dark-theme .workspace-details {
   background-color: #1F2837;
 }
 
@@ -819,19 +819,19 @@
   color: #9CA3AF;
 }
 
-.crystal-dark-theme .projects-list::-webkit-scrollbar-thumb,
-.crystal-dark-theme .project-details::-webkit-scrollbar-thumb {
+.crystal-dark-theme .workspaces-list::-webkit-scrollbar-thumb,
+.crystal-dark-theme .workspace-details::-webkit-scrollbar-thumb {
   background-color: #4B5563;
 }
 
-.crystal-dark-theme .projects-list::-webkit-scrollbar-thumb:hover,
-.crystal-dark-theme .project-details::-webkit-scrollbar-thumb:hover {
+.crystal-dark-theme .workspaces-list::-webkit-scrollbar-thumb:hover,
+.crystal-dark-theme .workspace-details::-webkit-scrollbar-thumb:hover {
   background-color: #6B7280;
 }
 
 /* System preference dark mode */
 @media (prefers-color-scheme: dark) {
-  html:not(.light-theme):not(.dark-theme) .project-manager {
+  html:not(.light-theme):not(.dark-theme) .workspace-manager {
     background-color: #111827;
   }
 
@@ -849,35 +849,35 @@
     color: #f3f4f6;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-item:hover {
+  html:not(.light-theme):not(.dark-theme) .workspace-item:hover {
     background-color: #374151;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-item.selected {
+  html:not(.light-theme):not(.dark-theme) .workspace-item.selected {
     background-color: #1e3a8a;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-icon {
+  html:not(.light-theme):not(.dark-theme) .workspace-icon {
     color: #9ca3af;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-item.selected .project-icon {
+  html:not(.light-theme):not(.dark-theme) .workspace-item.selected .workspace-icon {
     color: #dbeafe;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-name {
+  html:not(.light-theme):not(.dark-theme) .workspace-name {
     color: #e5e7eb;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-item.selected .project-name {
+  html:not(.light-theme):not(.dark-theme) .workspace-item.selected .workspace-name {
     color: #dbeafe;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-path {
+  html:not(.light-theme):not(.dark-theme) .workspace-path {
     color: #9ca3af;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-meta {
+  html:not(.light-theme):not(.dark-theme) .workspace-meta {
     color: #6b7280;
   }
 
@@ -890,15 +890,15 @@
     border-bottom-color: #374151;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-title h1 {
+  html:not(.light-theme):not(.dark-theme) .workspace-title h1 {
     color: #f3f4f6;
   }
 
-  html:not(.light-theme):not(.dark-theme) .content-header .project-path {
+  html:not(.light-theme):not(.dark-theme) .content-header .workspace-path {
     color: #9ca3af;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-details {
+  html:not(.light-theme):not(.dark-theme) .workspace-details {
     background-color: #1f2937;
   }
 
@@ -952,13 +952,13 @@
     color: #9ca3af;
   }
 
-  html:not(.light-theme):not(.dark-theme) .projects-list::-webkit-scrollbar-thumb,
-  html:not(.light-theme):not(.dark-theme) .project-details::-webkit-scrollbar-thumb {
+  html:not(.light-theme):not(.dark-theme) .workspaces-list::-webkit-scrollbar-thumb,
+  html:not(.light-theme):not(.dark-theme) .workspace-details::-webkit-scrollbar-thumb {
     background-color: #4b5563;
   }
 
-  html:not(.light-theme):not(.dark-theme) .projects-list::-webkit-scrollbar-thumb:hover,
-  html:not(.light-theme):not(.dark-theme) .project-details::-webkit-scrollbar-thumb:hover {
+  html:not(.light-theme):not(.dark-theme) .workspaces-list::-webkit-scrollbar-thumb:hover,
+  html:not(.light-theme):not(.dark-theme) .workspace-details::-webkit-scrollbar-thumb:hover {
     background-color: #6b7280;
   }
 }

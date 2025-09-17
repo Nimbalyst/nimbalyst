@@ -30,26 +30,26 @@ export class PGLiteStore {
         return value;
       }
 
-      // Sidebar width is now per-project, stored in project_state
+      // Sidebar width is now per-workspace, stored in workspace_state
       // This is kept for backward compatibility but should be deprecated
       if (key === 'sidebarWidth') {
         return defaultValue || 240;
       }
 
-      if (key === 'recentProjects' || key === 'recent.projects') {
-        const result = await database.query<{ recent_projects: any }>(
-          'SELECT recent_projects FROM app_settings WHERE id = $1',
+      if (key === 'recentWorkspaces' || key === 'recent.workspaces' || key === 'recentProjects' || key === 'recent.projects') {
+        const result = await database.query<{ recent_workspaces: any }>(
+          'SELECT recent_workspaces FROM app_settings WHERE id = $1',
           ['default']
         );
         // PGLite returns JSONB as parsed objects, not strings
-        const value = result.rows[0]?.recent_projects || defaultValue || [];
+        const value = result.rows[0]?.recent_workspaces || defaultValue || [];
         this.cache.set(key, value);
         return value;
       }
 
-      // Recent documents are now per-project, stored in project_state
+      // Recent documents are now per-workspace, stored in workspace_state
       if (key === 'recent.documents') {
-        // This should be accessed via projectState:path instead
+        // This should be accessed via workspaceState:path instead
         return defaultValue || [];
       }
 
@@ -83,19 +83,19 @@ export class PGLiteStore {
         return value;
       }
 
-      // For project-specific keys (e.g., "projectState:/path/to/project")
-      if (key.startsWith('projectState:')) {
-        const projectPath = key.substring('projectState:'.length);
+      // For workspace-specific keys (e.g., "workspaceState:/path/to/workspace")
+      if (key.startsWith('workspaceState:') || key.startsWith('projectState:')) {
+        const workspacePath = key.startsWith('workspaceState:') ? key.substring('workspaceState:'.length) : key.substring('projectState:'.length);
         const result = await database.query<any>(
-          'SELECT * FROM project_state WHERE project_path = $1',
-          [projectPath]
+          'SELECT * FROM workspace_state WHERE workspace_path = $1',
+          [workspacePath]
         );
 
         if (result.rows[0]) {
           const row = result.rows[0];
 
           const value = {
-            projectPath: row.project_path,
+            workspacePath: row.workspace_path,
             lastOpened: row.last_opened,
             windowState: row.window_state,
             uiState: row.ui_state,
@@ -135,18 +135,18 @@ export class PGLiteStore {
         return defaultValue || { windows: [] };
       }
 
-      // For AI sessions by project
-      if (key === 'sessionsByProject') {
+      // For AI sessions by workspace
+      if (key === 'sessionsByWorkspace' || key === 'sessionsByProject') {
         const result = await database.query<any>(
-          'SELECT project_id, id, title, provider, model, messages, created_at, updated_at FROM ai_sessions ORDER BY updated_at DESC'
+          'SELECT workspace_id, id, title, provider, model, messages, created_at, updated_at FROM ai_sessions ORDER BY updated_at DESC'
         );
 
-        const sessionsByProject: Record<string, any[]> = {};
+        const sessionsByWorkspace: Record<string, any[]> = {};
         for (const row of result.rows) {
-          if (!sessionsByProject[row.project_id]) {
-            sessionsByProject[row.project_id] = [];
+          if (!sessionsByWorkspace[row.workspace_id]) {
+            sessionsByWorkspace[row.workspace_id] = [];
           }
-          sessionsByProject[row.project_id].push({
+          sessionsByWorkspace[row.workspace_id].push({
             id: row.id,
             title: row.title,
             provider: row.provider,
@@ -156,19 +156,19 @@ export class PGLiteStore {
             updatedAt: row.updated_at
           });
         }
-        this.cache.set(key, sessionsByProject);
-        return sessionsByProject;
+        this.cache.set(key, sessionsByWorkspace);
+        return sessionsByWorkspace;
       }
 
-      if (key === 'currentSessionByProject') {
+      if (key === 'currentSessionByWorkspace' || key === 'currentSessionByProject') {
         // This is typically stored in memory or derived from sessions
         // Return empty object as default
         return defaultValue || {};
       }
 
-      // AI chat state is now per-project, stored in project_state
+      // AI chat state is now per-workspace, stored in workspace_state
       if (key === 'aiChatState') {
-        // This should be accessed via projectState:path instead
+        // This should be accessed via workspaceState:path instead
         return defaultValue || { collapsed: false, width: 350 };
       }
 
@@ -199,23 +199,23 @@ export class PGLiteStore {
         return;
       }
 
-      // Sidebar width is now per-project
+      // Sidebar width is now per-workspace
       if (key === 'sidebarWidth') {
-        // Should be set via projectState:path instead
+        // Should be set via workspaceState:path instead
         return;
       }
 
-      if (key === 'recentProjects' || key === 'recent.projects') {
+      if (key === 'recentWorkspaces' || key === 'recent.workspaces' || key === 'recentProjects' || key === 'recent.projects') {
         await database.query(
-          'UPDATE app_settings SET recent_projects = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          'UPDATE app_settings SET recent_workspaces = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
           [value, 'default']  // PGLite JSONB handles serialization
         );
         return;
       }
 
-      // Recent documents are now per-project
+      // Recent documents are now per-workspace
       if (key === 'recent.documents') {
-        // Should be set via projectState:path instead
+        // Should be set via workspaceState:path instead
         return;
       }
 
@@ -243,21 +243,21 @@ export class PGLiteStore {
         return;
       }
 
-      // For project-specific state
-      if (key.startsWith('projectState:')) {
-        const projectPath = key.substring('projectState:'.length);
-        logger.store.debug(`[PGLiteStore DEBUG] Setting project state for ${projectPath}`);
+      // For workspace-specific state
+      if (key.startsWith('workspaceState:') || key.startsWith('projectState:')) {
+        const workspacePath = key.startsWith('workspaceState:') ? key.substring('workspaceState:'.length) : key.substring('projectState:'.length);
+        logger.store.debug(`[PGLiteStore DEBUG] Setting workspace state for ${workspacePath}`);
         // logger.store.info(`[PGLiteStore DEBUG] Value structure:`, Object.keys(value));
         // logger.store.info(`[PGLiteStore DEBUG] Documents:`, JSON.stringify(value.documents));
 
         await database.query(
-          `INSERT INTO project_state (
-             project_path, last_opened, window_state, ui_state, documents,
+          `INSERT INTO workspace_state (
+             workspace_path, last_opened, window_state, ui_state, documents,
              file_tree, ai_chat, editor_settings, preferences,
              version, updated_at
            )
            VALUES ($1, CURRENT_TIMESTAMP, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
-           ON CONFLICT (project_path) DO UPDATE SET
+           ON CONFLICT (workspace_path) DO UPDATE SET
              last_opened = CURRENT_TIMESTAMP,
              window_state = $2,
              ui_state = $3,
@@ -269,7 +269,7 @@ export class PGLiteStore {
              version = $9,
              updated_at = CURRENT_TIMESTAMP`,
           [
-            projectPath,
+            workspacePath,
             value.windowState || {width: 1200, height: 800},  // PGLite JSONB handles serialization
             value.uiState || {sidebarWidth: 240, sidebarCollapsed: false, aiChatWidth: 350, aiChatCollapsed: false},  // PGLite JSONB
             value.documents || {recentDocuments: [], openTabs: [], activeTabId: null, tabOrder: []},  // PGLite JSONB
@@ -299,17 +299,17 @@ export class PGLiteStore {
         return;
       }
 
-      // For AI sessions by project - this is more complex as it involves multiple rows
-      if (key === 'sessionsByProject') {
+      // For AI sessions by workspace - this is more complex as it involves multiple rows
+      if (key === 'sessionsByWorkspace' || key === 'sessionsByProject') {
         // This would need special handling to sync with ai_sessions table
         // For now, log a warning
-        logger.store.warn('Direct update of sessionsByProject not implemented - use SessionManager methods');
+        logger.store.warn('Direct update of sessionsByWorkspace not implemented - use SessionManager methods');
         return;
       }
 
-      // AI chat state is now per-project
+      // AI chat state is now per-workspace
       if (key === 'aiChatState') {
-        // Should be set via projectState:path instead
+        // Should be set via workspaceState:path instead
         return;
       }
 
@@ -327,11 +327,11 @@ export class PGLiteStore {
   async delete(key: string): Promise<void> {
     this.cache.delete(key);
 
-    if (key.startsWith('projectState:')) {
-      const projectPath = key.substring('projectState:'.length);
+    if (key.startsWith('workspaceState:') || key.startsWith('projectState:')) {
+      const workspacePath = key.startsWith('workspaceState:') ? key.substring('workspaceState:'.length) : key.substring('projectState:'.length);
       await database.query(
-        'DELETE FROM project_state WHERE project_path = $1',
-        [projectPath]
+        'DELETE FROM workspace_state WHERE workspace_path = $1',
+        [workspacePath]
       );
     }
     // Add other delete cases as needed

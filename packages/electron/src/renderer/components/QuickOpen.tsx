@@ -19,7 +19,7 @@ interface FileItem {
 interface QuickOpenProps {
   isOpen: boolean;
   onClose: () => void;
-  projectPath: string;
+  workspacePath: string;
   currentFilePath?: string | null;
   recentFiles: string[];
   onFileSelect: (filePath: string) => void;
@@ -28,7 +28,7 @@ interface QuickOpenProps {
 export const QuickOpen: React.FC<QuickOpenProps> = ({
   isOpen,
   onClose,
-  projectPath,
+  workspacePath,
   currentFilePath,
   recentFiles,
   onFileSelect,
@@ -54,7 +54,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   // Combined list of files to display
   const displayFiles = searchQuery ? searchResults : recentFileItems;
 
-  // Search for files in the project
+  // Search for files in the workspace
   const searchFiles = useCallback(async (query: string) => {
     if (!query.trim()) {
       setSearchResults([]);
@@ -66,7 +66,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
     const isContent = query.startsWith('>');
     setIsContentSearch(isContent);
 
-    console.log('Searching for files with query:', query, 'in project:', projectPath, 'content search:', isContent);
+    console.log('Searching for files with query:', query, 'in workspace:', workspacePath, 'content search:', isContent);
     setIsSearching(true);
 
     try {
@@ -79,8 +79,8 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
       }
 
       // First, get file name matches immediately
-      if (api.searchProjectFileNames) {
-        const fileNameResults = await api.searchProjectFileNames(projectPath, query);
+      if (api.searchWorkspaceFileNames) {
+        const fileNameResults = await api.searchWorkspaceFileNames(workspacePath, query);
         console.log('File name results:', fileNameResults);
 
         // Process and display file name results immediately
@@ -102,9 +102,9 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
       }
 
       // Then search content in the background (don't await!)
-      if (api.searchProjectFileContent) {
+      if (api.searchWorkspaceFileContent) {
         // Run content search asynchronously without blocking
-        api.searchProjectFileContent(projectPath, query).then((contentResults: any) => {
+        api.searchWorkspaceFileContent(workspacePath, query).then((contentResults: any) => {
           console.log('Content search results:', contentResults);
 
           // Merge content results with existing file name results
@@ -163,7 +163,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
       setSearchResults([]);
       setIsSearching(false);
     }
-  }, [projectPath, recentFiles, currentFilePath]);
+  }, [workspacePath, recentFiles, currentFilePath]);
 
   // Debounced search
   useEffect(() => {
@@ -295,7 +295,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
                     )}
                   </div>
                   <div className="quick-open-item-path">
-                    {file.path.replace(projectPath, '').replace(/^\//, '')}
+                    {file.path.replace(workspacePath, '').replace(/^\//, '')}
                   </div>
                   {file.matches && file.matches.length > 0 && (
                     <div className="quick-open-item-matches">

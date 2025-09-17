@@ -5,7 +5,7 @@ interface NewFileDialogProps {
   isOpen: boolean;
   onClose: () => void;
   currentDirectory: string;
-  projectPath: string;
+  workspacePath: string;
   onCreateFile: (fileName: string) => void;
 }
 
@@ -13,7 +13,7 @@ export const NewFileDialog: React.FC<NewFileDialogProps> = ({
   isOpen,
   onClose,
   currentDirectory,
-  projectPath,
+  workspacePath,
   onCreateFile,
 }) => {
   const [fileName, setFileName] = useState('');
@@ -61,8 +61,8 @@ export const NewFileDialog: React.FC<NewFileDialogProps> = ({
   if (!isOpen) return null;
 
   // Get relative path for display
-  const relativePath = currentDirectory.startsWith(projectPath) 
-    ? currentDirectory.slice(projectPath.length + 1) || '/'
+  const relativePath = currentDirectory.startsWith(workspacePath)
+    ? currentDirectory.slice(workspacePath.length + 1) || '/'
     : currentDirectory;
 
   return (

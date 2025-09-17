@@ -1,3 +1,5 @@
+import type { Transformer } from '@lexical/markdown';
+
 /**
  * Configuration interface for the Stravu Editor component.
  * This replaces the reactive settings system with static configuration props.
@@ -75,6 +77,9 @@ export interface EditorConfig {
 
   // Theme configuration
   theme?: Theme; // Override theme: 'light' | 'dark' | 'auto' (default: 'auto')
+
+  /** Optional markdown transformers to use for import/export in this editor */
+  markdownTransformers?: Transformer[];
 
   // Content callbacks
   onContentChange?: (content: string) => void;

@@ -1,5 +1,5 @@
 /* Project Welcome Styles */
-.project-welcome {
+.workspace-welcome {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9,13 +9,13 @@
   color: #374151;
 }
 
-.project-welcome-content {
+.workspace-welcome-content {
   text-align: center;
   max-width: 500px;
   padding: 2rem;
 }
 
-.project-welcome-icon {
+.workspace-welcome-icon {
   margin-bottom: 1.5rem;
   width: 80px;
   height: 80px;
@@ -23,26 +23,26 @@
   margin-right: auto;
 }
 
-.project-welcome-icon img {
+.workspace-welcome-icon img {
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
 
-.project-welcome-title {
+.workspace-welcome-title {
   font-size: 2rem;
   font-weight: 600;
   margin: 0 0 0.5rem 0;
   color: #1f2937;
 }
 
-.project-welcome-text {
+.workspace-welcome-text {
   font-size: 1.125rem;
   color: #6b7280;
   margin: 0 0 2rem 0;
 }
 
-.project-welcome-tips {
+.workspace-welcome-tips {
   text-align: left;
   background-color: #ffffff;
   border: 1px solid #e5e7eb;
@@ -51,7 +51,7 @@
   margin-top: 2rem;
 }
 
-.project-welcome-tips h3 {
+.workspace-welcome-tips h3 {
   font-size: 0.875rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -60,22 +60,22 @@
   margin: 0 0 1rem 0;
 }
 
-.project-welcome-tips ul {
+.workspace-welcome-tips ul {
   margin: 0;
   padding-left: 1.5rem;
   color: #4b5563;
 }
 
-.project-welcome-tips li {
+.workspace-welcome-tips li {
   margin-bottom: 0.5rem;
   line-height: 1.5;
 }
 
-.project-welcome-tips li:last-child {
+.workspace-welcome-tips li:last-child {
   margin-bottom: 0;
 }
 
-.project-welcome-tips kbd {
+.workspace-welcome-tips kbd {
   display: inline-block;
   padding: 0.125rem 0.375rem;
   font-size: 0.75rem;
@@ -87,33 +87,33 @@
 }
 
 /* Dark mode support */
-.dark-theme .project-welcome {
+.dark-theme .workspace-welcome {
   background-color: #1a1a1a;
   color: #ffffff;
 }
 
-.dark-theme .project-welcome-title {
+.dark-theme .workspace-welcome-title {
   color: #ffffff;
 }
 
-.dark-theme .project-welcome-text {
+.dark-theme .workspace-welcome-text {
   color: #b3b3b3;
 }
 
-.dark-theme .project-welcome-tips {
+.dark-theme .workspace-welcome-tips {
   background-color: #2d2d2d;
   border-color: #4a4a4a;
 }
 
-.dark-theme .project-welcome-tips h3 {
+.dark-theme .workspace-welcome-tips h3 {
   color: #b3b3b3;
 }
 
-.dark-theme .project-welcome-tips ul {
+.dark-theme .workspace-welcome-tips ul {
   color: #ffffff;
 }
 
-.dark-theme .project-welcome-tips kbd {
+.dark-theme .workspace-welcome-tips kbd {
   background-color: #3a3a3a;
   border-color: #4a4a4a;
   color: #ffffff;
@@ -121,33 +121,33 @@
 
 /* System preference dark mode */
 @media (prefers-color-scheme: dark) {
-  html:not(.light-theme):not(.dark-theme) .project-welcome {
+  html:not(.light-theme):not(.dark-theme) .workspace-welcome {
     background-color: #111827;
     color: #e5e7eb;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-welcome-title {
+  html:not(.light-theme):not(.dark-theme) .workspace-welcome-title {
     color: #f3f4f6;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-welcome-text {
+  html:not(.light-theme):not(.dark-theme) .workspace-welcome-text {
     color: #9ca3af;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-welcome-tips {
+  html:not(.light-theme):not(.dark-theme) .workspace-welcome-tips {
     background-color: #1f2937;
     border-color: #374151;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-welcome-tips h3 {
+  html:not(.light-theme):not(.dark-theme) .workspace-welcome-tips h3 {
     color: #9ca3af;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-welcome-tips ul {
+  html:not(.light-theme):not(.dark-theme) .workspace-welcome-tips ul {
     color: #d1d5db;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-welcome-tips kbd {
+  html:not(.light-theme):not(.dark-theme) .workspace-welcome-tips kbd {
     background-color: #374151;
     border-color: #4b5563;
     color: #e5e7eb;
@@ -155,33 +155,33 @@
 }
 
 /* Crystal Dark theme */
-.crystal-dark-theme .project-welcome {
+.crystal-dark-theme .workspace-welcome {
   background-color: #1F2837;
   color: #F3F4F6;
 }
 
-.crystal-dark-theme .project-welcome-title {
+.crystal-dark-theme .workspace-welcome-title {
   color: #F3F4F6;
 }
 
-.crystal-dark-theme .project-welcome-text {
+.crystal-dark-theme .workspace-welcome-text {
   color: #9CA3AF;
 }
 
-.crystal-dark-theme .project-welcome-tips {
+.crystal-dark-theme .workspace-welcome-tips {
   background-color: #374151;
   border-color: #4B5563;
 }
 
-.crystal-dark-theme .project-welcome-tips h3 {
+.crystal-dark-theme .workspace-welcome-tips h3 {
   color: #9CA3AF;
 }
 
-.crystal-dark-theme .project-welcome-tips ul {
+.crystal-dark-theme .workspace-welcome-tips ul {
   color: #D1D5DB;
 }
 
-.crystal-dark-theme .project-welcome-tips kbd {
+.crystal-dark-theme .workspace-welcome-tips kbd {
   background-color: #4B5563;
   border-color: #6B7280;
   color: #F3F4F6;

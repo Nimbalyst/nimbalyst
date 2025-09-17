@@ -5,7 +5,7 @@ const path = require('path');
 let allSessions = [];
 let filteredSessions = [];
 let selectedSession = null;
-let filterProject = null;
+let filterWorkspace = null;
 
 // Initialize
 async function init() {
@@ -27,11 +27,11 @@ async function init() {
     applyTheme(theme);
   });
 
-  // Listen for project filter
-  ipcRenderer.on('filter-project', (event, projectPath) => {
-    filterProject = projectPath;
-    applyProjectFilter();
-    updateProjectFilterBadge();
+  // Listen for workspace filter
+  ipcRenderer.on('filter-workspace', (event, workspacePath) => {
+    filterWorkspace = workspacePath;
+    applyWorkspaceFilter();
+    updateWorkspaceFilterBadge();
   });
 }
 
@@ -52,18 +52,18 @@ function applyTheme(theme) {
 async function loadSessions() {
   try {
     allSessions = await ipcRenderer.invoke('session-manager:get-all-sessions');
-    applyProjectFilter();
+    applyWorkspaceFilter();
   } catch (error) {
     console.error('Failed to load sessions:', error);
     showError('Failed to load sessions');
   }
 }
 
-// Apply project filter
-function applyProjectFilter() {
-  if (filterProject) {
+// Apply workspace filter
+function applyWorkspaceFilter() {
+  if (filterWorkspace) {
     filteredSessions = allSessions.filter(session => 
-      session.projectPath === filterProject
+      session.workspacePath === filterWorkspace
     );
   } else {
     filteredSessions = [...allSessions];
@@ -74,9 +74,9 @@ function applyProjectFilter() {
 
 // Filter sessions based on search query
 function filterSessions(query) {
-  // Start with project-filtered sessions
-  let baseList = filterProject 
-    ? allSessions.filter(s => s.projectPath === filterProject)
+  // Start with workspace-filtered sessions
+  let baseList = filterWorkspace 
+    ? allSessions.filter(s => s.workspacePath === filterWorkspace)
     : allSessions;
     
   if (!query) {
@@ -88,9 +88,9 @@ function filterSessions(query) {
       const title = getSessionTitle(session).toLowerCase();
       if (title.includes(lowerQuery)) return true;
       
-      // Search in project name
-      const projectName = getProjectName(session.projectPath);
-      if (projectName.toLowerCase().includes(lowerQuery)) return true;
+      // Search in workspace name
+      const workspaceName = getWorkspaceName(session.workspacePath);
+      if (workspaceName.toLowerCase().includes(lowerQuery)) return true;
       
       // Search in messages
       if (session.messages) {
@@ -122,7 +122,7 @@ function renderSessionsList() {
   
   container.innerHTML = filteredSessions.map(session => {
     const title = getSessionTitle(session);
-    const projectName = getProjectName(session.projectPath);
+    const workspaceName = getWorkspaceName(session.workspacePath);
     const date = formatDate(session.timestamp);
     const messageCount = session.messages ? session.messages.length : 0;
     const isSelected = selectedSession && selectedSession.id === session.id;
@@ -135,7 +135,7 @@ function renderSessionsList() {
         <div class="session-item-meta">
           <span class="session-item-provider provider-${provider}">${providerLabel}</span>
           <span>•</span>
-          <span class="session-item-project">${escapeHtml(projectName)}</span>
+          <span class="session-item-workspace">${escapeHtml(workspaceName)}</span>
           <span>•</span>
           <span>${messageCount} messages</span>
           <span>•</span>
@@ -178,7 +178,7 @@ function renderSessionContent(session) {
   const contentArea = document.getElementById('contentArea');
   
   const title = getSessionTitle(session);
-  const projectName = getProjectName(session.projectPath);
+  const workspaceName = getWorkspaceName(session.workspacePath);
   const date = formatDate(session.timestamp);
   const messageCount = session.messages ? session.messages.length : 0;
   const provider = session.provider || 'claude-code';
@@ -208,7 +208,7 @@ function renderSessionContent(session) {
       <div class="content-meta">
         <span class="provider-badge provider-${provider}">${providerLabel}</span>
         <span>•</span>
-        <span>${escapeHtml(projectName)}</span>
+        <span>${escapeHtml(workspaceName)}</span>
         <span>•</span>
         <span>${messageCount} messages</span>
         <span>•</span>
@@ -216,13 +216,13 @@ function renderSessionContent(session) {
       </div>
     </div>
     <div class="content-actions">
-      <button class="btn btn-primary" onclick="openSession('${session.id}', ${session.projectPath ? `'${escapeHtml(session.projectPath)}'` : 'null'})">
+      <button class="btn btn-primary" onclick="openSession('${session.id}', ${session.workspacePath ? `'${escapeHtml(session.workspacePath)}'` : 'null'})">
         Open Session
       </button>
       <button class="btn" onclick="exportSession('${session.id}')">
         Export
       </button>
-      <button class="btn btn-danger" onclick="deleteSession('${session.id}', ${session.projectPath ? `'${escapeHtml(session.projectPath)}'` : 'null'})">
+      <button class="btn btn-danger" onclick="deleteSession('${session.id}', ${session.workspacePath ? `'${escapeHtml(session.workspacePath)}'` : 'null'})">
         Delete
       </button>
     </div>
@@ -233,9 +233,9 @@ function renderSessionContent(session) {
 }
 
 // Open session in main app
-async function openSession(sessionId, projectPath) {
+async function openSession(sessionId, workspacePath) {
   try {
-    const actualPath = projectPath === 'null' ? null : projectPath;
+    const actualPath = workspacePath === 'null' ? null : workspacePath;
     await ipcRenderer.invoke('session-manager:open-session', sessionId, actualPath);
     window.close();
   } catch (error) {
@@ -261,13 +261,13 @@ async function exportSession(sessionId) {
 }
 
 // Delete session
-async function deleteSession(sessionId, projectPath) {
+async function deleteSession(sessionId, workspacePath) {
   if (!confirm('Are you sure you want to delete this session? This cannot be undone.')) {
     return;
   }
   
   try {
-    const actualPath = projectPath === 'null' ? null : projectPath;
+    const actualPath = workspacePath === 'null' ? null : workspacePath;
     await ipcRenderer.invoke('claude:deleteSession', sessionId, actualPath);
     
     // Reload sessions
@@ -294,19 +294,19 @@ async function deleteSession(sessionId, projectPath) {
 // Update session count
 function updateStats() {
   const count = filteredSessions.length;
-  const total = filterProject 
-    ? allSessions.filter(s => s.projectPath === filterProject).length
+  const total = filterWorkspace
+    ? allSessions.filter(s => s.workspacePath === filterWorkspace).length
     : allSessions.length;
-    
+
   let text;
-  if (filterProject) {
-    const projectName = getProjectName(filterProject);
+  if (filterWorkspace) {
+    const workspaceName = getWorkspaceName(filterWorkspace);
     text = count === total 
-      ? `${count} session${count !== 1 ? 's' : ''} in ${projectName}`
-      : `${count} of ${total} sessions in ${projectName}`;
+      ? `${count} session${count !== 1 ? 's' : ''} in ${workspaceName}`
+      : `${count} of ${total} sessions in ${workspaceName}`;
   } else {
     text = count === total 
-      ? `${count} session${count !== 1 ? 's' : ''} across all projects`
+      ? `${count} session${count !== 1 ? 's' : ''} across all workspaces`
       : `${count} of ${total} sessions`;
   }
   document.getElementById('sessionCount').textContent = text;
@@ -326,9 +326,9 @@ function getSessionTitle(session) {
   return `Session ${session.id.substring(0, 8)}`;
 }
 
-function getProjectName(projectPath) {
-  if (!projectPath) return 'No Project';
-  return path.basename(projectPath);
+function getWorkspaceName(workspacePath) {
+  if (!workspacePath) return 'No Workspace';
+  return path.basename(workspacePath);
 }
 
 function formatDate(timestamp) {
@@ -398,11 +398,11 @@ function showSuccess(message) {
   console.log(message);
 }
 
-function updateProjectFilterBadge() {
-  const badge = document.getElementById('projectFilter');
-  if (filterProject) {
-    const projectName = getProjectName(filterProject);
-    badge.textContent = `Project: ${projectName}`;
+function updateWorkspaceFilterBadge() {
+  const badge = document.getElementById('workspaceFilter');
+  if (filterWorkspace) {
+    const workspaceName = getWorkspaceName(filterWorkspace);
+    badge.textContent = `Workspace: ${workspaceName}`;
     badge.style.display = 'inline-block';
   } else {
     badge.style.display = 'none';

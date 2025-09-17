@@ -4,12 +4,12 @@ import { existsSync } from 'fs';
 import { windows, windowStates, createWindow, findWindowByFilePath, getWindowId } from '../window/WindowManager';
 import { createAboutWindow } from '../window/AboutWindow';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
-import { createProjectManagerWindow } from '../window/ProjectManagerWindow';
+import { createWorkspaceManagerWindow } from '../window/WorkspaceManagerWindow.ts';
 import { createAIModelsWindow } from '../window/AIModelsWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
-import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getProjectWindowState } from '../utils/store';
+import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceWindowState } from '../utils/store';
 import { updateWindowTitleBars, updateNativeTheme } from '../theme/ThemeManager';
-import { getFileWatcherStatus, refreshProjectFileTree, getGlobalFileWatcherStats } from '../file/FileWatcherDebug';
+import { getFileWatcherStatus, refreshWorkspaceFileTree, getGlobalFileWatcherStats } from '../file/FileWatcherDebug';
 import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
 import { autoUpdaterService } from '../services/autoUpdater';
@@ -24,7 +24,7 @@ function createWindowListMenu(): any[] {
     }
 
     // Categorize windows
-    const projectWindows: { window: BrowserWindow; title: string }[] = [];
+    const workspaceWindows: { window: BrowserWindow; title: string }[] = [];
     const documentWindows: { window: BrowserWindow; title: string }[] = [];
     const otherWindows: { window: BrowserWindow; title: string }[] = [];
 
@@ -33,15 +33,15 @@ function createWindowListMenu(): any[] {
         if (!window || window.isDestroyed()) {
             return;
         }
-        
+
         const windowId = getWindowId(window);
         const state = windowId !== null ? windowStates.get(windowId) : undefined;
         let title = 'Untitled';
-        let category: 'project' | 'document' | 'other' = 'document';
+        let category: 'workspace' | 'document' | 'other' = 'document';
 
         // Check for special windows first
-        if (isProjectManagerWindow(window)) {
-            title = 'Project Manager';
+        if (isWorkspaceManagerWindow(window)) {
+            title = 'Workspace Manager';
             category = 'other';
         } else if (isSessionManagerWindow(window)) {
             title = 'Session Manager';
@@ -53,15 +53,15 @@ function createWindowListMenu(): any[] {
             title = 'About';
             category = 'other';
         } else if (state) {
-            if (state.mode === 'project' && state.projectPath) {
-                const projectName = basename(state.projectPath);
+            if (state.mode === 'workspace' && state.workspacePath) {
+                const workspaceName = basename(state.workspacePath);
                 if (state.filePath) {
                     const fileName = basename(state.filePath);
-                    title = `${fileName} - ${projectName}`;
+                    title = `${fileName} - ${workspaceName}`;
                 } else {
-                    title = projectName;
+                    title = workspaceName;
                 }
-                category = 'project';
+                category = 'workspace';
             } else if (state.filePath) {
                 title = basename(state.filePath);
                 category = 'document';
@@ -74,8 +74,8 @@ function createWindowListMenu(): any[] {
         }
 
         // Add to appropriate category
-        if (category === 'project') {
-            projectWindows.push({ window, title });
+        if (category === 'workspace') {
+            workspaceWindows.push({ window, title });
         } else if (category === 'document') {
             documentWindows.push({ window, title });
         } else {
@@ -86,13 +86,13 @@ function createWindowListMenu(): any[] {
     // Build menu items with groups
     let shortcutIndex = 0;
 
-    // Add project windows
-    if (projectWindows.length > 0) {
+    // Add workspace windows
+    if (workspaceWindows.length > 0) {
         if (menuItems.length > 0) {
             menuItems.push({ type: 'separator' });
         }
-        menuItems.push({ label: 'Open Projects', enabled: false });
-        projectWindows.forEach(({ window, title }) => {
+        menuItems.push({ label: 'Open Workspaces', enabled: false });
+        workspaceWindows.forEach(({ window, title }) => {
             const accelerator = shortcutIndex < 9 ? `CmdOrCtrl+${shortcutIndex + 1}` : undefined;
             shortcutIndex++;
             menuItems.push({
@@ -158,24 +158,24 @@ function createWindowListMenu(): any[] {
 
 // Create the recent submenu
 async function createRecentSubmenu(): any[] {
-    const recentProjects = await getRecentItems('projects');
+    const recentWorkspaces = await getRecentItems('workspaces');
     const recentDocuments = await getRecentItems('documents');
     const submenu: any[] = [];
 
-    // Recent Projects section
-    if (recentProjects.length > 0) {
-        submenu.push({ label: 'Recent Projects', enabled: false });
-        recentProjects.forEach(project => {
+    // Recent Workspaces section
+    if (recentWorkspaces.length > 0) {
+        submenu.push({ label: 'Recent Workspaces', enabled: false });
+        recentWorkspaces.forEach(workspace => {
             submenu.push({
-                label: project.name,
+                label: workspace.name,
                 click: async () => {
-                    // Check if project exists
-                    if (existsSync(project.path)) {
-                        // Check for saved project window state
-                        const savedState = getProjectWindowState(project.path);
+                    // Check if workspace exists
+                    if (existsSync(workspace.path)) {
+                        // Check for saved workspace window state
+                        const savedState = getWorkspaceWindowState(workspace.path);
 
                         // Create window with saved bounds if available
-                        const window = createWindow(false, true, project.path, savedState?.bounds);
+                        const window = createWindow(false, true, workspace.path, savedState?.bounds);
 
                         // Restore dev tools if they were open
                         if (savedState?.devToolsOpen) {
@@ -185,10 +185,10 @@ async function createRecentSubmenu(): any[] {
                         }
                     } else {
                         // Remove from recent if doesn't exist
-                        const items = getRecentItems('projects').filter(item => item.path !== project.path);
-                        store.set('recent.projects', items);
+                        const items = getRecentItems('workspaces').filter(item => item.path !== workspace.path);
+                        store.set('recent.workspaces', items);
                         updateApplicationMenu();
-                        dialog.showErrorBox('Project Not Found', `The project "${project.name}" could not be found at:\n${project.path}`);
+                        dialog.showErrorBox('Workspace Not Found', `The workspace "${workspace.name}" could not be found at:\n${workspace.path}`);
                     }
                 }
             });
@@ -232,14 +232,14 @@ async function createRecentSubmenu(): any[] {
     }
 
     // Clear Recent options
-    if (recentProjects.length > 0 || recentDocuments.length > 0) {
+    if (recentWorkspaces.length > 0 || recentDocuments.length > 0) {
         submenu.push({ type: 'separator' });
 
-        if (recentProjects.length > 0) {
+        if (recentWorkspaces.length > 0) {
             submenu.push({
-                label: 'Clear Recent Projects',
+                label: 'Clear Recent Workspaces',
                 click: async () => {
-                    clearRecentItems('projects');
+                    clearRecentItems('workspaces');
                     updateApplicationMenu();
                 }
             });
@@ -273,27 +273,27 @@ export async function createApplicationMenu() {
         {
             label: 'File',
             submenu: [
-                { 
-                    label: 'New', 
-                    accelerator: 'CmdOrCtrl+N', 
+                {
+                    label: 'New',
+                    accelerator: 'CmdOrCtrl+N',
                     click: async () => {
                         console.log('[File->New] Menu clicked');
                         const focusedWindow = BrowserWindow.getFocusedWindow();
                         console.log('[File->New] Focused window:', focusedWindow ? `Electron ID: ${focusedWindow.id}` : 'none');
-                        
+
                         if (focusedWindow) {
                             // Find the custom window ID used by WindowManager
                             const windowId = getWindowId(focusedWindow);
                             console.log('[File->New] Custom window ID:', windowId);
-                            
+
                             if (windowId !== null) {
                                 const state = windowStates.get(windowId);
                                 console.log('[File->New] Window state:', state);
-                                
-                                if (state?.mode === 'project') {
-                                    // In project mode, send event to create new file in project
-                                    console.log('[File->New] Project mode detected, sending file-new-in-project event');
-                                    focusedWindow.webContents.send('file-new-in-project');
+
+                                if (state?.mode === 'workspace') {
+                                    // In workspace mode, send event to create new file in workspace
+                                    console.log('[File->New] Workspace mode detected, sending file-new-in-workspace event');
+                                    focusedWindow.webContents.send('file-new-in-workspace');
                                 } else {
                                     // In document mode, create new window
                                     console.log('[File->New] Document mode or no mode, creating new window');
@@ -352,15 +352,15 @@ export async function createApplicationMenu() {
                         });
 
                         if (!result.canceled && result.filePaths.length > 0) {
-                            const projectPath = result.filePaths[0];
-                            // Add to recent projects
-                            addToRecentItems('projects', projectPath, basename(projectPath));
+                            const workspacePath = result.filePaths[0];
+                            // Add to recent.workspaces
+                            addToRecentItems('workspaces', workspacePath, basename(workspacePath));
 
-                            // Check for saved project window state
-                            const savedState = getProjectWindowState(projectPath);
+                            // Check for saved workspace window state
+                            const savedState = getWorkspaceWindowState(workspacePath);
 
                             // Create window with saved bounds if available
-                            const window = createWindow(false, true, projectPath, savedState?.bounds);
+                            const window = createWindow(false, true, workspacePath, savedState?.bounds);
 
                             // Restore dev tools if they were open
                             if (savedState?.devToolsOpen) {
@@ -406,9 +406,9 @@ export async function createApplicationMenu() {
                     }
                 },
                 { type: 'separator' },
-                { 
-                    label: 'Quit', 
-                    accelerator: 'CmdOrCtrl+Q', 
+                {
+                    label: 'Quit',
+                    accelerator: 'CmdOrCtrl+Q',
                     click: async () => {
                         try {
                             console.log('Quit menu item clicked');
@@ -626,10 +626,10 @@ export async function createApplicationMenu() {
                 },
                 { type: 'separator' },
                 {
-                    label: 'Project Manager',
+                    label: 'Workspace Manager',
                     accelerator: 'CmdOrCtrl+P',
                     click: async () => {
-                        createProjectManagerWindow();
+                        createWorkspaceManagerWindow();
                     }
                 },
                 {
@@ -694,7 +694,7 @@ export async function createApplicationMenu() {
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
-                            refreshProjectFileTree(focused);
+                            refreshWorkspaceFileTree(focused);
                         }
                     }
                 },
@@ -902,9 +902,9 @@ Note: Only one connection at a time is supported.`,
                 { label: 'Hide Others', accelerator: 'Command+Shift+H', role: 'hideothers' },
                 { label: 'Show All', role: 'unhide' },
                 { type: 'separator' },
-                { 
-                    label: 'Quit', 
-                    accelerator: 'Command+Q', 
+                {
+                    label: 'Quit',
+                    accelerator: 'Command+Q',
                     click: async () => {
                         try {
                             console.log('Quit menu item clicked (macOS)');
@@ -961,14 +961,14 @@ function isAboutWindow(window: BrowserWindow): boolean {
     return window.getTitle() === 'About Preditor';
 }
 
-// Helper to check if window is project manager window
-function isProjectManagerWindow(window: BrowserWindow): boolean {
+// Helper to check if window is workspace manager window
+function isWorkspaceManagerWindow(window: BrowserWindow): boolean {
     // Check if window is destroyed first
     if (!window || window.isDestroyed()) {
         return false;
     }
-    // Check if this is the project manager window by checking the title
-    return window.getTitle() === 'Project Manager - Preditor';
+    // Check if this is the workspace manager window by checking the title
+    return window.getTitle() === 'Workspace Manager - Preditor';
 }
 
 // Helper to check if window is session manager window
@@ -978,7 +978,7 @@ function isSessionManagerWindow(window: BrowserWindow): boolean {
         return false;
     }
     // Check if this is the session manager window by checking the title
-    return window.getTitle() === 'AI Chat Sessions - All Projects';
+    return window.getTitle() === 'AI Chat Sessions - All Workspaces';
 }
 
 // Helper to check if window is AI models window

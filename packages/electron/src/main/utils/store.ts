@@ -60,7 +60,7 @@ async function setAsync(key: string, value: any): Promise<void> {
 }
 
 // Recent items management
-export async function getRecentItems(type: 'projects' | 'documents'): Promise<RecentItem[]> {
+export async function getRecentItems(type: 'workspaces' | 'documents'): Promise<RecentItem[]> {
     const items = await getAsync(`recent.${type}`, []);
 
     // Ensure we have an array
@@ -73,7 +73,7 @@ export async function getRecentItems(type: 'projects' | 'documents'): Promise<Re
     return items.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 }
 
-export async function addToRecentItems(type: 'projects' | 'documents', path: string, name: string, maxItems: number = 10) {
+export async function addToRecentItems(type: 'workspaces' | 'documents', path: string, name: string, maxItems: number = 10) {
     const items = await getRecentItems(type);
 
     // Remove if already exists
@@ -93,7 +93,7 @@ export async function addToRecentItems(type: 'projects' | 'documents', path: str
     await setAsync(`recent.${type}`, limited);
 }
 
-export async function clearRecentItems(type: 'projects' | 'documents') {
+export async function clearRecentItems(type: 'workspaces' | 'documents') {
     await setAsync(`recent.${type}`, []);
 }
 
@@ -111,25 +111,25 @@ export async function saveSessionState(state: SessionState) {
     logger.store.debug('[DEBUG saveSessionState] Session state saved');
 }
 
-// Project-specific window state management
-export async function getProjectWindowState(projectPath: string): Promise<SessionWindow | undefined> {
-    const projectState = await getAsync(`projectState:${projectPath}`, {});
-    return projectState.windowState;
+// Workspace-specific window state management
+export async function getWorkspaceWindowState(workspacePath: string): Promise<SessionWindow | undefined> {
+    const workspaceState = await getAsync(`workspaceState:${workspacePath}`, {});
+    return workspaceState.windowState;
 }
 
-export async function saveProjectWindowState(projectPath: string, windowState: SessionWindow) {
-    const projectState = await getAsync(`projectState:${projectPath}`, {});
-    projectState.windowState = windowState;
-    await setAsync(`projectState:${projectPath}`, projectState);
+export async function saveWorkspaceWindowState(workspacePath: string, windowState: SessionWindow) {
+    const workspaceState = await getAsync(`workspaceState:${workspacePath}`, {});
+    workspaceState.windowState = windowState;
+    await setAsync(`workspaceState:${workspacePath}`, workspaceState);
 }
 
-export async function clearProjectWindowState(projectPath: string) {
+export async function clearWorkspaceWindowState(workspacePath: string) {
     if (usePGLite && database.isInitialized()) {
-        await database.query('DELETE FROM project_state WHERE project_path = $1', [projectPath]);
+        await database.query('DELETE FROM workspace_state WHERE workspace_path = $1', [workspacePath]);
     } else {
-        const projectStates = store.get('projectWindowStates', {}) as Record<string, SessionWindow>;
-        delete projectStates[projectPath];
-        store.set('projectWindowStates', projectStates);
+        const workspaceStates = store.get('workspaceWindowStates', {}) as Record<string, SessionWindow>;
+        delete workspaceStates[workspacePath];
+        store.set('workspaceWindowStates', workspaceStates);
     }
 }
 
@@ -162,25 +162,25 @@ export async function setAIChatState(state: { collapsed: boolean; width: number;
     await setAsync('aiChatState', state);
 }
 
-// Project recent files
-export async function getProjectRecentFiles(projectPath: string): Promise<string[]> {
-    const projectState = await getAsync(`projectState:${projectPath}`, {});
+// Workspace recent files
+export async function getWorkspaceRecentFiles(workspacePath: string): Promise<string[]> {
+    const workspaceState = await getAsync(`workspaceState:${workspacePath}`, {});
 
     // Check both new schema (documents.recentDocuments) and old schema (recentFiles) for backward compatibility
-    if (projectState.documents?.recentDocuments) {
-        return projectState.documents.recentDocuments.map((doc: any) =>
+    if (workspaceState.documents?.recentDocuments) {
+        return workspaceState.documents.recentDocuments.map((doc: any) =>
             typeof doc === 'string' ? doc : doc.path
         );
     }
-    return projectState.recentFiles || [];
+    return workspaceState.recentFiles || [];
 }
 
-export async function addProjectRecentFile(projectPath: string, filePath: string) {
-    const projectState = await getAsync(`projectState:${projectPath}`, {});
+export async function addWorkspaceRecentFile(workspacePath: string, filePath: string) {
+    const workspaceState = await getAsync(`workspaceState:${workspacePath}`, {});
 
     // Initialize documents structure if it doesn't exist
-    if (!projectState.documents) {
-        projectState.documents = {
+    if (!workspaceState.documents) {
+        workspaceState.documents = {
             recentDocuments: [],
             openTabs: [],
             activeTabId: null,
@@ -188,7 +188,7 @@ export async function addProjectRecentFile(projectPath: string, filePath: string
         };
     }
 
-    let recentDocs = projectState.documents.recentDocuments || [];
+    let recentDocs = workspaceState.documents.recentDocuments || [];
 
     // Remove if already exists and add to beginning
     recentDocs = recentDocs.filter((doc: any) => {
@@ -202,8 +202,8 @@ export async function addProjectRecentFile(projectPath: string, filePath: string
     // Keep only 50 most recent
     recentDocs = recentDocs.slice(0, 50);
 
-    projectState.documents.recentDocuments = recentDocs;
-    await setAsync(`projectState:${projectPath}`, projectState);
+    workspaceState.documents.recentDocuments = recentDocs;
+    await setAsync(`workspaceState:${workspacePath}`, workspaceState);
 }
 
 // Tab state persistence
@@ -222,30 +222,30 @@ export interface TabManagerState {
     tabOrder: string[];
 }
 
-export async function getProjectTabState(projectPath: string): Promise<TabManagerState | null> {
-    const projectState = await getAsync(`projectState:${projectPath}`, {});
-    logger.store.debug(`[DEBUG] getProjectTabState for ${projectPath}:`, JSON.stringify(projectState));
+export async function getWorkspaceTabState(workspacePath: string): Promise<TabManagerState | null> {
+    const workspaceState = await getAsync(`workspaceState:${workspacePath}`, {});
+    logger.store.debug(`[DEBUG] getWorkspaceTabState for ${workspacePath}:`, JSON.stringify(workspaceState));
 
     // Check new schema (documents.openTabs)
-    if (projectState.documents?.openTabs) {
-        logger.store.debug(`[DEBUG] Found openTabs:`, JSON.stringify(projectState.documents.openTabs));
+    if (workspaceState.documents?.openTabs) {
+        logger.store.debug(`[DEBUG] Found openTabs:`, JSON.stringify(workspaceState.documents.openTabs));
         return {
-            tabs: projectState.documents.openTabs,
-            activeTabId: projectState.documents.activeTabId || null,
-            tabOrder: projectState.documents.tabOrder || []
+            tabs: workspaceState.documents.openTabs,
+            activeTabId: workspaceState.documents.activeTabId || null,
+            tabOrder: workspaceState.documents.tabOrder || []
         };
     }
 
     // Fall back to old schema
-    return projectState.tabState || null;
+    return workspaceState.tabState || null;
 }
 
-export async function saveProjectTabState(projectPath: string, state: TabManagerState) {
-    const projectState = await getAsync(`projectState:${projectPath}`, {});
+export async function saveWorkspaceTabState(workspacePath: string, state: TabManagerState) {
+    const workspaceState = await getAsync(`workspaceState:${workspacePath}`, {});
 
     // Initialize documents structure if it doesn't exist
-    if (!projectState.documents) {
-        projectState.documents = {
+    if (!workspaceState.documents) {
+        workspaceState.documents = {
             recentDocuments: [],
             openTabs: [],
             activeTabId: null,
@@ -254,27 +254,27 @@ export async function saveProjectTabState(projectPath: string, state: TabManager
     }
 
     // Save to new schema location
-    projectState.documents.openTabs = state.tabs;
-    projectState.documents.activeTabId = state.activeTabId;
-    projectState.documents.tabOrder = state.tabOrder;
+    workspaceState.documents.openTabs = state.tabs;
+    workspaceState.documents.activeTabId = state.activeTabId;
+    workspaceState.documents.tabOrder = state.tabOrder;
 
-    await setAsync(`projectState:${projectPath}`, projectState);
+    await setAsync(`workspaceState:${workspacePath}`, workspaceState);
 }
 
-export async function clearProjectTabState(projectPath: string) {
-    const projectState = await getAsync(`projectState:${projectPath}`, {});
+export async function clearWorkspaceTabState(workspacePath: string) {
+    const workspaceState = await getAsync(`workspaceState:${workspacePath}`, {});
 
     // Clear from new schema location
-    if (projectState.documents) {
-        projectState.documents.openTabs = [];
-        projectState.documents.activeTabId = null;
-        projectState.documents.tabOrder = [];
+    if (workspaceState.documents) {
+        workspaceState.documents.openTabs = [];
+        workspaceState.documents.activeTabId = null;
+        workspaceState.documents.tabOrder = [];
     }
 
     // Also clear old schema for backward compatibility
-    delete projectState.tabState;
+    delete workspaceState.tabState;
 
-    await setAsync(`projectState:${projectPath}`, projectState);
+    await setAsync(`workspaceState:${workspacePath}`, workspaceState);
 }
 
 // Sync versions for backward compatibility (just aliases now)

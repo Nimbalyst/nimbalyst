@@ -6,26 +6,26 @@ import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
 import { getWindowId } from '../window/WindowManager';
 
-// Simple project watcher using Node's fs.watch for directories
-export class SimpleProjectWatcher {
+// Simple workspace watcher using Node's fs.watch for directories
+export class SimpleWorkspaceWatcher {
     private watchers = new Map<number, Map<string, FSWatcher>>();
     private updateTimers = new Map<number, NodeJS.Timeout>();
-    private projectPaths = new Map<number, string>();
+    private workspacePaths = new Map<number, string>();
 
-    async start(window: BrowserWindow, projectPath: string) {
+    async start(window: BrowserWindow, workspacePath: string) {
         const windowId = getWindowId(window);
         if (windowId === null) {
-            logger.projectWatcher.error('Failed to find window ID');
+            logger.workspaceWatcher.error('Failed to find window ID');
             return;
         }
 
         this.stop(windowId);
 
-        logger.projectWatcher.info(`Starting simple project watcher for: ${projectPath}`);
+        logger.workspaceWatcher.info(`Starting simple workspace watcher for: ${workspacePath}`);
 
         const dirWatchers = new Map<string, FSWatcher>();
         this.watchers.set(windowId, dirWatchers);
-        this.projectPaths.set(windowId, projectPath);
+        this.workspacePaths.set(windowId, workspacePath);
 
         // Debounced update function
         const triggerUpdate = () => {
@@ -35,9 +35,9 @@ export class SimpleProjectWatcher {
             }
 
             const timer = setTimeout(() => {
-                logger.projectWatcher.debug('Updating file tree');
-                const fileTree = getFolderContents(projectPath);
-                window.webContents.send('project-file-tree-updated', { fileTree });
+                logger.workspaceWatcher.debug('Updating file tree');
+                const fileTree = getFolderContents(workspacePath);
+                window.webContents.send('workspace-file-tree-updated', { fileTree });
             }, 300);
             try { (timer as any).unref?.(); } catch {}
 
@@ -63,7 +63,7 @@ export class SimpleProjectWatcher {
 
                     // Only care about markdown files and directories
                     if (filename.endsWith('.md') || filename.endsWith('.markdown') || !filename.includes('.')) {
-                        // logger.projectWatcher.debug(`Change detected: ${eventType} ${filename} in ${dirPath}`);
+                        // logger.workspaceWatcher.debug(`Change detected: ${eventType} ${filename} in ${dirPath}`);
                         triggerUpdate();
 
                         // If a new directory was created, watch it
@@ -92,14 +92,14 @@ export class SimpleProjectWatcher {
                     }
                 }
             } catch (error) {
-                logger.projectWatcher.error(`Failed to watch directory ${dirPath}:`, error);
+                logger.workspaceWatcher.error(`Failed to watch directory ${dirPath}:`, error);
             }
         };
 
-        // Start watching from the project root
-        await watchDirectory(projectPath);
+        // Start watching from the workspace root
+        await watchDirectory(workspacePath);
 
-        logger.projectWatcher.info(`Simple project watcher started with ${dirWatchers.size} directories watched`);
+        logger.workspaceWatcher.info(`Simple workspace watcher started with ${dirWatchers.size} directories watched`);
     }
 
     stop(windowId: number) {
@@ -109,7 +109,7 @@ export class SimpleProjectWatcher {
                 watcher.close();
             }
             this.watchers.delete(windowId);
-            this.projectPaths.delete(windowId);
+            this.workspacePaths.delete(windowId);
         }
 
         const timer = this.updateTimers.get(windowId);
@@ -120,12 +120,12 @@ export class SimpleProjectWatcher {
     }
 
     stopAll() {
-        logger.projectWatcher.info(`[CLEANUP] Stopping all project watchers (${this.watchers.size} windows)`);
-        console.log(`[CLEANUP] SimpleProjectWatcher.stopAll called with ${this.watchers.size} windows`);
+        logger.workspaceWatcher.info(`[CLEANUP] Stopping all workspace watchers (${this.watchers.size} windows)`);
+        console.log(`[CLEANUP] SimpleWorkspaceWatcher.stopAll called with ${this.watchers.size} windows`);
 
         // Stop all watchers
         for (const [windowId, dirWatchers] of this.watchers.entries()) {
-            logger.projectWatcher.debug(`Stopping ${dirWatchers.size} watchers for window ${windowId}`);
+            logger.workspaceWatcher.debug(`Stopping ${dirWatchers.size} watchers for window ${windowId}`);
             console.log(`[CLEANUP] Stopping ${dirWatchers.size} dir watchers for window ${windowId}`);
             let closeCount = 0;
             for (const [path, watcher] of dirWatchers.entries()) {
@@ -134,39 +134,39 @@ export class SimpleProjectWatcher {
                     watcher.close();
                     closeCount++;
                 } catch (error) {
-                    logger.projectWatcher.error(`Error closing watcher:`, error);
+                    logger.workspaceWatcher.error(`Error closing watcher:`, error);
                     console.error(`[CLEANUP] Error closing watcher for ${path}:`, error);
                 }
             }
             console.log(`[CLEANUP] Closed ${closeCount} watchers for window ${windowId}`);
         }
         this.watchers.clear();
-        this.projectPaths.clear();
+        this.workspacePaths.clear();
 
         // Clear all timers
         for (const timer of this.updateTimers.values()) {
             clearTimeout(timer);
         }
         this.updateTimers.clear();
-        console.log(`[CLEANUP] SimpleProjectWatcher.stopAll complete`);
+        console.log(`[CLEANUP] SimpleWorkspaceWatcher.stopAll complete`);
     }
 
     getStats() {
-        const stats: Array<{windowId: number, projectPath: string, directoriesWatched: number}> = [];
-        for (const [windowId, projectPath] of this.projectPaths.entries()) {
+        const stats: Array<{windowId: number, workspacePath: string, directoriesWatched: number}> = [];
+        for (const [windowId, workspacePath] of this.workspacePaths.entries()) {
             const dirWatchers = this.watchers.get(windowId);
             stats.push({
                 windowId,
-                projectPath,
+                workspacePath,
                 directoriesWatched: dirWatchers?.size || 0
             });
         }
         return {
-            type: 'SimpleProjectWatcher (fs.watch)',
-            activeProjects: this.watchers.size,
-            projects: stats
+            type: 'SimpleWorkspaceWatcher (fs.watch)',
+            activeWorkspaces: this.watchers.size,
+            workspaces: stats
         };
     }
 }
 
-export const simpleProjectWatcher = new SimpleProjectWatcher();
+export const simpleWorkspaceWatcher = new SimpleWorkspaceWatcher();

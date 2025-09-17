@@ -199,7 +199,7 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
   
   // Save state to Electron store only when it changes
   useEffect(() => {
-    if (!enabled || !window.electronAPI?.saveProjectTabState) return;
+    if (!enabled || !window.electronAPI?.saveWorkspaceTabState) return;
 
     const saveState = () => {
       // Don't save if we haven't restored yet and tabs are empty
@@ -226,7 +226,7 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
       // Only save if state has actually changed
       const stateString = JSON.stringify(tabState);
       if (stateString !== lastSavedStateRef.current) {
-        window.electronAPI.saveProjectTabState(tabState);
+        window.electronAPI.saveWorkspaceTabState(tabState);
         lastSavedStateRef.current = stateString;
         // Remove excessive logging - only log errors or important events
       }
@@ -251,17 +251,17 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
     onTabChangeRef.current = onTabChange;
   }, [onTabChange]);
 
-  // Restore state from Electron store on mount (with delay for project to load)
+  // Restore state from Electron store on mount (with delay for workspace to load)
   useEffect(() => {
-    if (!enabled || !window.electronAPI?.getProjectTabState) {
+    if (!enabled || !window.electronAPI?.getWorkspaceTabState) {
       return;
     }
 
-    // Add a small delay to ensure project is loaded in main process
+    // Add a small delay to ensure workspace is loaded in main process
     const timer = setTimeout(async () => {
       const loadTabState = async () => {
         try {
-          const savedState = await window.electronAPI.getProjectTabState();
+          const savedState = await window.electronAPI.getWorkspaceTabState();
           hasRestoredRef.current = true; // Mark as restored
           
           if (savedState && savedState.tabs && savedState.tabs.length > 0) {
@@ -301,7 +301,7 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
       };
 
       loadTabState();
-    }, 500); // Wait 500ms for project to be loaded in main process
+    }, 500); // Wait 500ms for workspace to be loaded in main process
     
     return () => clearTimeout(timer);
   }, [enabled]); // Only run once on mount when enabled

@@ -63,15 +63,15 @@ interface Session {
   provider: string;
   model: string;
   messages: any[];
-  projectPath?: string | null;
+  workspacePath?: string | null;
   title?: string;
 }
 
 interface SessionManagerProps {
-  filterProject?: string;
+  filterWorkspace?: string;
 }
 
-export const SessionManager: React.FC<SessionManagerProps> = ({ filterProject }) => {
+export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace }) => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -93,8 +93,8 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterProject })
   };
 
   const filteredSessions = sessions.filter(session => {
-    // Apply project filter if provided
-    if (filterProject && session.projectPath !== filterProject) {
+    // Apply workspace filter if provided
+    if (filterWorkspace && session.workspacePath !== filterWorkspace) {
       return false;
     }
 
@@ -106,7 +106,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterProject })
         session.messages.some(msg => 
           msg.content?.toLowerCase().includes(searchLower)
         ) ||
-        session.projectPath?.toLowerCase().includes(searchLower)
+        session.workspacePath?.toLowerCase().includes(searchLower)
       );
     }
 
@@ -119,7 +119,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterProject })
     try {
       await window.electronAPI.ai.openSessionInWindow(
         selectedSession.id,
-        selectedSession.projectPath || undefined
+        selectedSession.workspacePath || undefined
       );
     } catch (error) {
       console.error('Failed to open session:', error);
@@ -149,7 +149,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterProject })
     try {
       await window.electronAPI.ai.deleteSession(
         selectedSession.id,
-        selectedSession.projectPath || 'default'
+        selectedSession.workspacePath || 'default'
       );
       await loadSessions();
       setSelectedSession(null);
@@ -163,8 +163,8 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterProject })
     return date.toLocaleString();
   };
 
-  const getProjectName = (path: string | null | undefined) => {
-    if (!path) return 'No Project';
+  const getWorkspaceName = (path: string | null | undefined) => {
+    if (!path) return 'No Workspace';
     const parts = path.split('/');
     return parts[parts.length - 1] || path;
   };
@@ -202,9 +202,9 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterProject })
         
         <div className="session-stats">
           {filteredSessions.length} session{filteredSessions.length !== 1 ? 's' : ''}
-          {filterProject && (
-            <span className="project-filter">
-              {getProjectName(filterProject)}
+          {filterWorkspace && (
+            <span className="workspace-filter">
+              {getWorkspaceName(filterWorkspace)}
             </span>
           )}
         </div>
@@ -232,8 +232,8 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterProject })
                   <span className={`session-item-provider ${getProviderClass(session.provider)}`}>
                     {session.provider}
                   </span>
-                  <span className="session-item-project">
-                    {getProjectName(session.projectPath)}
+                  <span className="session-item-workspace">
+                    {getWorkspaceName(session.workspacePath)}
                   </span>
                   <span className="session-item-date">
                     {formatDate(session.timestamp)}

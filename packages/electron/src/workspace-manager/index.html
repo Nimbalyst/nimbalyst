@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Project Manager - Preditor</title>
+  <title>Workspace Manager - Preditor</title>
   <style>
     * {
       margin: 0;
@@ -135,7 +135,7 @@
       fill: currentColor;
     }
 
-    .recent-projects {
+    .recent-workspaces {
       flex: 1;
       overflow-y: auto;
       padding: 16px;
@@ -151,13 +151,13 @@
       margin-bottom: 10px;
     }
 
-    .project-list {
+    .workspace-list {
       display: flex;
       flex-direction: column;
       gap: 6px;
     }
 
-    .project-item {
+    .workspace-item {
       padding: 10px 12px;
       background: #f9fafb;
       border-radius: 6px;
@@ -166,24 +166,24 @@
       border: 1px solid transparent;
     }
 
-    .project-item:hover {
+    .workspace-item:hover {
       background: #f3f4f6;
       border-color: #e5e7eb;
       transform: translateX(4px);
     }
 
-    .project-item.selected {
+    .workspace-item.selected {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
     }
 
-    .project-name {
+    .workspace-name {
       font-size: 13px;
       font-weight: 500;
       margin-bottom: 2px;
     }
 
-    .project-path {
+    .workspace-path {
       font-size: 10px;
       opacity: 0.7;
       overflow: hidden;
@@ -191,7 +191,7 @@
       white-space: nowrap;
     }
 
-    .project-meta {
+    .workspace-meta {
       display: flex;
       gap: 10px;
       margin-top: 4px;
@@ -292,7 +292,7 @@
       line-height: 1.4;
     }
 
-    .project-preview {
+    .workspace-preview {
       background: white;
       border-radius: 16px;
       padding: 32px;
@@ -400,12 +400,12 @@
         background: #4b5563;
       }
 
-      .project-item {
+      .workspace-item {
         background: #374151;
         color: #e5e7eb;
       }
 
-      .project-item:hover {
+      .workspace-item:hover {
         background: #4b5563;
         border-color: #6b7280;
       }
@@ -435,7 +435,7 @@
         color: #9ca3af;
       }
 
-      .project-preview {
+      .workspace-preview {
         background: #1f2937;
       }
 
@@ -477,20 +477,20 @@
           <svg class="btn-icon" viewBox="0 0 24 24">
             <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
           </svg>
-          Open Project Folder
+          Open Workspace Folder
         </button>
-        <button class="btn btn-secondary" onclick="createNewProject()">
+        <button class="btn btn-secondary" onclick="createNewWorkspace()">
           <svg class="btn-icon" viewBox="0 0 24 24">
             <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
           </svg>
-          Create New Project
+          Create New Workspace
         </button>
       </div>
 
-      <div class="recent-projects">
-        <div class="section-title">Recent Projects</div>
-        <div class="project-list" id="projectList">
-          <!-- Projects will be added here -->
+      <div class="recent-workspaces">
+        <div class="section-title">Recent Workspaces</div>
+        <div class="workspace-list" id="workspaceList">
+          <!-- Workspaces will be added here -->
         </div>
       </div>
     </div>
@@ -504,7 +504,7 @@
         </div>
         <h2 class="empty-title">Welcome to Preditor</h2>
         <p class="empty-description">
-          Open a folder as a project to start editing markdown files with powerful features like AI assistance, real-time collaboration, and version control.
+          Open a folder as a workspace to start editing markdown files with powerful features like AI assistance, real-time collaboration, and version control.
         </p>
 
         <div class="feature-grid">
@@ -542,7 +542,7 @@
               </svg>
             </div>
             <div class="feature-title">Smart Features</div>
-            <div class="feature-desc">Auto-save, file watching, and project management</div>
+            <div class="feature-desc">Auto-save, file watching, and workspace management</div>
           </div>
         </div>
       </div>

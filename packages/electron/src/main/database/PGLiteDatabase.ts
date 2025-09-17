@@ -39,7 +39,10 @@ export class PGLiteDatabase {
       // Wait for database to be ready
       await this.db.waitReady;
 
-      logger.main.info('[PGLite] Database ready, creating schemas...');
+      logger.main.info('[PGLite] Database ready, checking for migrations...');
+
+      // Run migrations first
+      await this.runMigrations();
 
       // Create schemas
       await this.createSchemas();
@@ -53,6 +56,79 @@ export class PGLiteDatabase {
   }
 
   /**
+   * Run database migrations
+   */
+  private async runMigrations(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    try {
+      // Check if we need to migrate from project_id to workspace_id
+      const aiSessionsResult = await this.db.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'ai_sessions'
+        AND column_name IN ('project_id', 'workspace_id')
+      `);
+
+      const hasProjectId = aiSessionsResult.rows.some((row: any) => row.column_name === 'project_id');
+      const hasWorkspaceId = aiSessionsResult.rows.some((row: any) => row.column_name === 'workspace_id');
+
+      if (hasProjectId && !hasWorkspaceId) {
+        logger.main.info('[PGLite] Migrating ai_sessions table from project_id to workspace_id...');
+        await this.db.exec(`
+          ALTER TABLE ai_sessions RENAME COLUMN project_id TO workspace_id;
+          DROP INDEX IF EXISTS idx_ai_sessions_project;
+          CREATE INDEX IF NOT EXISTS idx_ai_sessions_workspace ON ai_sessions(workspace_id);
+        `);
+      }
+
+      // Check document_history table
+      const historyResult = await this.db.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'document_history'
+        AND column_name IN ('project_id', 'workspace_id')
+      `);
+
+      const historyHasProjectId = historyResult.rows.some((row: any) => row.column_name === 'project_id');
+      const historyHasWorkspaceId = historyResult.rows.some((row: any) => row.column_name === 'workspace_id');
+
+      if (historyHasProjectId && !historyHasWorkspaceId) {
+        logger.main.info('[PGLite] Migrating document_history table from project_id to workspace_id...');
+        await this.db.exec(`
+          ALTER TABLE document_history RENAME COLUMN project_id TO workspace_id;
+          DROP INDEX IF EXISTS idx_history_project_file;
+          DROP INDEX IF EXISTS idx_history_workspace_file;
+          CREATE INDEX IF NOT EXISTS idx_history_workspace_file ON document_history(workspace_id, file_path);
+        `);
+      }
+
+      // Check app_settings table for recent_projects column
+      const settingsResult = await this.db.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'app_settings'
+        AND column_name IN ('recent_projects', 'recent_workspaces')
+      `);
+
+      const hasRecentProjects = settingsResult.rows.some((row: any) => row.column_name === 'recent_projects');
+      const hasRecentWorkspaces = settingsResult.rows.some((row: any) => row.column_name === 'recent_workspaces');
+
+      if (hasRecentProjects && !hasRecentWorkspaces) {
+        logger.main.info('[PGLite] Migrating app_settings table from recent_projects to recent_workspaces...');
+        await this.db.exec(`
+          ALTER TABLE app_settings RENAME COLUMN recent_projects TO recent_workspaces;
+        `);
+      }
+
+      logger.main.info('[PGLite] Database migrations completed');
+    } catch (error) {
+      logger.main.warn('[PGLite] Migration check/execution:', error);
+      // Don't fail if migration fails - tables might not exist yet
+    }
+  }
+
+  /**
    * Create database schemas
    */
   private async createSchemas(): Promise<void> {
@@ -62,7 +138,7 @@ export class PGLiteDatabase {
     await this.db.exec(`
       CREATE TABLE IF NOT EXISTS ai_sessions (
         id TEXT PRIMARY KEY,
-        project_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
         file_path TEXT,
         provider TEXT NOT NULL,
         model TEXT,
@@ -76,7 +152,7 @@ export class PGLiteDatabase {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE INDEX IF NOT EXISTS idx_ai_sessions_project ON ai_sessions(project_id);
+      CREATE INDEX IF NOT EXISTS idx_ai_sessions_workspace ON ai_sessions(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_ai_sessions_created ON ai_sessions(created_at);
     `);
 
@@ -86,7 +162,7 @@ export class PGLiteDatabase {
         id TEXT PRIMARY KEY DEFAULT 'default',
         theme TEXT DEFAULT 'system',
         sidebar_width INTEGER DEFAULT 240,
-        recent_projects JSONB DEFAULT '[]',
+        recent_workspaces JSONB DEFAULT '[]',
         ai_providers JSONB DEFAULT '{}',
         editor_settings JSONB DEFAULT '{}',
         keyboard_shortcuts JSONB DEFAULT '{}',
@@ -98,10 +174,10 @@ export class PGLiteDatabase {
       ON CONFLICT (id) DO NOTHING;
     `);
 
-    // Project State table
+    // Workspace State table
     await this.db.exec(`
-      CREATE TABLE IF NOT EXISTS project_state (
-        project_path TEXT PRIMARY KEY,
+      CREATE TABLE IF NOT EXISTS workspace_state (
+        workspace_path TEXT PRIMARY KEY,
         window_state JSONB,
         recent_files JSONB DEFAULT '[]',
         tab_state JSONB,
@@ -129,7 +205,7 @@ export class PGLiteDatabase {
     await this.db.exec(`
       CREATE TABLE IF NOT EXISTS document_history (
         id SERIAL PRIMARY KEY,
-        project_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
         file_path TEXT NOT NULL,
         snapshot_path TEXT NOT NULL,
         size_bytes INTEGER,
@@ -138,7 +214,7 @@ export class PGLiteDatabase {
         metadata JSONB DEFAULT '{}'
       );
 
-      CREATE INDEX IF NOT EXISTS idx_history_project_file ON document_history(project_id, file_path);
+      CREATE INDEX IF NOT EXISTS idx_history_workspace_file ON document_history(workspace_id, file_path);
       CREATE INDEX IF NOT EXISTS idx_history_timestamp ON document_history(timestamp);
     `);
 
@@ -213,7 +289,7 @@ export class PGLiteDatabase {
     const result = await db.query(`
       SELECT
         (SELECT COUNT(*) FROM ai_sessions) as ai_sessions_count,
-        (SELECT COUNT(*) FROM project_state) as projects_count,
+        (SELECT COUNT(*) FROM workspace_state) as workspaces_count,
         (SELECT COUNT(*) FROM document_history) as history_count,
         pg_database_size(current_database()) as database_size
     `);

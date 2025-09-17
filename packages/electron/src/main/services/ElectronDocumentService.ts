@@ -6,13 +6,13 @@ import { Document, DocumentService } from '@stravu/runtime';
 import crypto from 'crypto';
 
 export class ElectronDocumentService implements DocumentService {
-  private projectPath: string;
+  private workspacePath: string;
   private documents: Document[] = [];
   private watchers: Map<string, (documents: Document[]) => void> = new Map();
   private watchInterval: NodeJS.Timeout | null = null;
 
-  constructor(projectPath: string) {
-    this.projectPath = projectPath;
+  constructor(workspacePath: string) {
+    this.workspacePath = workspacePath;
     // Initial load
     this.refreshDocuments();
 
@@ -79,7 +79,7 @@ export class ElectronDocumentService implements DocumentService {
   private async scanDocuments(): Promise<Document[]> {
     try {
       // Use synchronous file system operations like the file tree
-      return this.scanDirectory(this.projectPath);
+      return this.scanDirectory(this.workspacePath);
     } catch (err) {
       console.error('Error scanning documents:', err);
       return [];
@@ -137,7 +137,7 @@ export class ElectronDocumentService implements DocumentService {
     const window = BrowserWindow.getFocusedWindow();
     if (window) {
       window.webContents.send('open-document', {
-        path: path.join(this.projectPath, doc.path)
+        path: path.join(this.workspacePath, doc.path)
       });
     }
   }

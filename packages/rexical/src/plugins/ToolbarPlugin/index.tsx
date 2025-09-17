@@ -51,6 +51,7 @@ function normalizeCodeLanguageShiki(language: string) {
 import {$isLinkNode, TOGGLE_LINK_COMMAND} from '@lexical/link';
 import { useRuntimeSettings } from '../../context/RuntimeSettingsContext';
 import {$isListNode, ListNode} from '@lexical/list';
+import type { Transformer } from '@lexical/markdown';
 import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
@@ -96,7 +97,7 @@ import {
   SELECTION_CHANGE_COMMAND,
   UNDO_COMMAND,
 } from 'lexical';
-import {Dispatch, useCallback, useEffect, useState} from 'react';
+import {Dispatch, useCallback, useEffect, useMemo, useState} from 'react';
 
 import {useTheme} from '../../context/ThemeContext';
 import {
@@ -116,7 +117,7 @@ import {InsertImageDialog} from '../ImagesPlugin';
 import InsertLayoutDialog from '../LayoutPlugin/InsertLayoutDialog';
 import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
 import {SHORTCUTS} from '../ShortcutsPlugin/shortcuts';
-import {MARKDOWN_TRANSFORMERS} from '../../markdown';
+import { getEditorTransformers } from '../../markdown';
 import {InsertTableDialog} from '../TablePlugin';
 import TableOfContentsDropdownPlugin from '../TableOfContentsPlugin';
 import FontSize from './fontSize';
@@ -518,6 +519,7 @@ export default function ToolbarPlugin({
   markdownOnly = false,
   shouldPreserveNewLinesInMarkdown = true,
   isCodeHighlighted = true,
+  markdownTransformers,
 }: {
   editor: LexicalEditor;
   activeEditor: LexicalEditor;
@@ -526,7 +528,13 @@ export default function ToolbarPlugin({
   markdownOnly?: boolean;
   shouldPreserveNewLinesInMarkdown?: boolean;
   isCodeHighlighted?: boolean;
+  markdownTransformers?: Transformer[];
 }): JSX.Element {
+  const transformers = useMemo(
+    () => markdownTransformers ?? getEditorTransformers(),
+    [markdownTransformers],
+  );
+
   const [selectedElementKey, setSelectedElementKey] = useState<NodeKey | null>(
     null,
   );
@@ -830,13 +838,13 @@ export default function ToolbarPlugin({
       if ($isCodeNode(firstChild) && firstChild.getLanguage() === 'markdown') {
         $convertFromMarkdownString(
           firstChild.getTextContent(),
-          MARKDOWN_TRANSFORMERS,
+          transformers,
           undefined, // node
           true,
         );
       } else {
         const markdown = $convertToMarkdownString(
-          MARKDOWN_TRANSFORMERS,
+          transformers,
           undefined, //node
           true,
         );
@@ -851,7 +859,7 @@ export default function ToolbarPlugin({
       $getRoot().selectStart();
     }, {discrete: true});
 
-  }, [activeEditor, shouldPreserveNewLinesInMarkdown, theme]);
+  }, [activeEditor, shouldPreserveNewLinesInMarkdown, theme, transformers]);
 
   const canViewerSeeInsertDropdown = !toolbarState.isImageCaption;
   const canViewerSeeInsertCodeButton = !toolbarState.isImageCaption;

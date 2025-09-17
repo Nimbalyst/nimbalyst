@@ -79,7 +79,7 @@ export class HistoryManager {
         try {
           const data = await fs.readFile(manifestPath, 'utf-8');
           const manifest = JSON.parse(data);
-          const projectId = path.dirname(manifest.filePath);
+          const workspaceId = path.dirname(manifest.filePath);
 
           for (const snapshot of manifest.snapshots) {
             try {
@@ -100,11 +100,11 @@ export class HistoryManager {
               // Insert into database with actual content
               await database.query(`
                 INSERT INTO document_history (
-                  project_id, file_path, content, size_bytes,
+                  workspace_id, file_path, content, size_bytes,
                   timestamp, version, metadata
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
               `, [
-                projectId,
+                workspaceId,
                 manifest.filePath,
                 compressed,
                 snapshot.size,
@@ -153,16 +153,16 @@ export class HistoryManager {
         await database.initialize();
       }
 
-      // Determine project ID
-      let projectId: string | null = null;
+      // Determine workspace ID
+      let workspaceId: string | null = null;
       const dirPath = path.dirname(filePath);
       if (dirPath !== '/' && dirPath !== path.parse(dirPath).root) {
-        projectId = dirPath;
+        workspaceId = dirPath;
       }
 
       await database.query(`
         INSERT INTO document_history (
-          project_id,
+          workspace_id,
           file_path,
           content,
           size_bytes,
@@ -171,7 +171,7 @@ export class HistoryManager {
           metadata
         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
       `, [
-        projectId,
+        workspaceId,
         filePath,
         compressed, // Store compressed content directly in database
         compressed.length,
@@ -287,20 +287,20 @@ export class HistoryManager {
   }
 
   /**
-   * Delete all history for a project
+   * Delete all history for a workspace
    */
-  async deleteProjectHistory(projectPath: string): Promise<void> {
+  async deleteWorkspaceHistory(workspacePath: string): Promise<void> {
     try {
-      logger.main.info('[HistoryManager] Deleting history for project:', projectPath);
+      logger.main.info('[HistoryManager] Deleting history for workspace:', workspacePath);
 
       await database.query(`
         DELETE FROM document_history
-        WHERE project_id = $1
-      `, [projectPath]);
+        WHERE workspace_id = $1
+      `, [workspacePath]);
 
-      logger.main.info('[HistoryManager] Deleted history for project:', projectPath);
+      logger.main.info('[HistoryManager] Deleted history for workspace:', workspacePath);
     } catch (error) {
-      logger.main.error('[HistoryManager] Failed to delete project history:', error);
+      logger.main.error('[HistoryManager] Failed to delete workspace history:', error);
     }
   }
 }

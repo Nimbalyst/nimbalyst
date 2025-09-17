@@ -148,14 +148,14 @@ export class AIService {
       event,
       provider: AIProviderType,
       documentContext?: DocumentContext,
-      projectPath?: string,
+      workspacePath?: string,
       modelId?: string
     ) => {
       console.log('[AIService] ai:createSession called:', {
         provider,
         modelId,
         hasDocumentContext: !!documentContext,
-        projectPath
+        workspacePath
       });
       
       // Get API key based on provider
@@ -220,7 +220,7 @@ export class AIService {
       const session = await this.sessionManager.createSession(
         provider,
         documentContext,
-        projectPath,
+        workspacePath,
         providerConfig,
         model
       );
@@ -269,7 +269,7 @@ export class AIService {
       message: string,
       documentContext?: DocumentContext,
       sessionId?: string,
-      projectPath?: string
+      workspacePath?: string
     ) => {
       const startTime = Date.now();
       const perfLog: any = {
@@ -286,7 +286,7 @@ export class AIService {
       }
       
       const loadStartTime = Date.now();
-      const session = this.sessionManager.loadSession(sessionId, projectPath);
+      const session = this.sessionManager.loadSession(sessionId, workspacePath);
       perfLog.sessionLoadTime = Date.now() - loadStartTime;
       
       if (!session) {
@@ -710,13 +710,13 @@ export class AIService {
     });
 
     // Get session history
-    ipcMain.handle('ai:getSessions', async (event, projectPath?: string) => {
-      return this.sessionManager.getSessions(projectPath);
+    ipcMain.handle('ai:getSessions', async (event, workspacePath?: string) => {
+      return this.sessionManager.getSessions(workspacePath);
     });
 
     // Load a session
-    ipcMain.handle('ai:loadSession', async (event, sessionId: string, projectPath?: string) => {
-      const session = this.sessionManager.loadSession(sessionId, projectPath);
+    ipcMain.handle('ai:loadSession', async (event, sessionId: string, workspacePath?: string) => {
+      const session = this.sessionManager.loadSession(sessionId, workspacePath);
       if (!session) {
         console.log(`[SESSION] Session not found: ${sessionId} (this is normal if the session was deleted)`);
         return null;
@@ -745,9 +745,9 @@ export class AIService {
       event,
       sessionId: string,
       messages: Message[],
-      projectPath?: string
+      workspacePath?: string
     ) => {
-      const success = this.sessionManager.updateSessionMessages(sessionId, messages, projectPath);
+      const success = this.sessionManager.updateSessionMessages(sessionId, messages, workspacePath);
       return { success };
     });
 
@@ -756,9 +756,9 @@ export class AIService {
       event,
       sessionId: string,
       draftInput: string,
-      projectPath?: string
+      workspacePath?: string
     ) => {
-      const success = this.sessionManager.saveDraftInput(sessionId, draftInput, projectPath);
+      const success = this.sessionManager.saveDraftInput(sessionId, draftInput, workspacePath);
       return { success };
     });
 
@@ -770,8 +770,8 @@ export class AIService {
     });
 
     // Delete session
-    ipcMain.handle('ai:deleteSession', async (event, sessionId: string, projectPath?: string) => {
-      const success = this.sessionManager.deleteSession(sessionId, projectPath);
+    ipcMain.handle('ai:deleteSession', async (event, sessionId: string, workspacePath?: string) => {
+      const success = this.sessionManager.deleteSession(sessionId, workspacePath);
 
       // Clean up provider if it exists
       if (success) {

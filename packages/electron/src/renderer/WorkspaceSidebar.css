@@ -1,5 +1,5 @@
-/* Project Sidebar Styles */
-.project-sidebar {
+/* Workspace Sidebar Styles */
+.workspace-sidebar {
   width: 100%;
   background-color: #f3f4f6;
   border-right: 1px solid #e5e7eb;
@@ -10,14 +10,14 @@
   position: relative;
 }
 
-.project-color-accent {
+.workspace-color-accent {
   height: 3px;
   width: 100%;
   opacity: 0.9;
   flex-shrink: 0;
 }
 
-.project-sidebar-header {
+.workspace-sidebar-header {
   padding: 10px 12px 8px 12px;
   border-bottom: 1px solid #e5e7eb;
   display: flex;
@@ -28,7 +28,7 @@
   min-height: 56px;
 }
 
-.project-identity {
+.workspace-identity {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -36,7 +36,7 @@
   gap: 2px;
 }
 
-.project-name {
+.workspace-name {
   margin: 0;
   font-size: 18px;
   font-weight: 700;
@@ -48,7 +48,7 @@
   line-height: 1.2;
 }
 
-.project-path {
+.workspace-path {
   font-size: 11px;
   color: #6b7280;
   overflow: hidden;
@@ -58,13 +58,13 @@
   font-weight: 400;
 }
 
-.project-sidebar-actions {
+.workspace-sidebar-actions {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.project-action-button {
+.workspace-action-button {
   background: none;
   border: none;
   padding: 6px;
@@ -77,13 +77,13 @@
   transition: all 0.2s;
 }
 
-.project-action-button:hover {
+.workspace-action-button:hover {
   background-color: #f3f4f6;
   color: #1f2937;
 }
 
 /* Legacy class for backward compatibility */
-.project-search-button {
+.workspace-search-button {
   background: none;
   border: none;
   padding: 6px;
@@ -96,16 +96,16 @@
   transition: all 0.2s;
 }
 
-.project-search-button:hover {
+.workspace-search-button:hover {
   background-color: #f3f4f6;
   color: #1f2937;
 }
 
-.project-search-button:active {
+.workspace-search-button:active {
   background-color: #e5e7eb;
 }
 
-.close-project-btn {
+.close-workspace-btn {
   background: none;
   border: none;
   font-size: 20px;
@@ -116,14 +116,14 @@
   transition: background-color 0.2s;
 }
 
-.close-project-btn:hover {
+.close-workspace-btn:hover {
   background-color: #f3f4f6;
   color: #1f2937;
 }
 
 /* Search functionality moved to QuickOpen component (Cmd+K) */
 
-.project-file-tree {
+.workspace-file-tree {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
@@ -133,7 +133,7 @@
 }
 
 /* Root drop zone styles */
-.project-file-tree.drag-over-root {
+.workspace-file-tree.drag-over-root {
   background-color: rgba(59, 130, 246, 0.05);
   border: 2px dashed #3b82f6;
   padding: 6px 0;
@@ -247,30 +247,30 @@
 }
 
 /* Scrollbar styling */
-.project-file-tree::-webkit-scrollbar {
+.workspace-file-tree::-webkit-scrollbar {
   width: 8px;
 }
 
-.project-file-tree::-webkit-scrollbar-track {
+.workspace-file-tree::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.project-file-tree::-webkit-scrollbar-thumb {
+.workspace-file-tree::-webkit-scrollbar-thumb {
   background-color: #d1d5db;
   border-radius: 4px;
 }
 
-.project-file-tree::-webkit-scrollbar-thumb:hover {
+.workspace-file-tree::-webkit-scrollbar-thumb:hover {
   background-color: #9ca3af;
 }
 
 /* Dark mode support */
-.dark-theme .project-sidebar {
+.dark-theme .workspace-sidebar {
   background-color: #2d2d2d;
   border-right-color: #4a4a4a;
 }
 
-.dark-theme .project-file-tree.drag-over-root {
+.dark-theme .workspace-file-tree.drag-over-root {
   background-color: rgba(59, 130, 246, 0.1);
   border-color: #60a5fa;
 }
@@ -280,53 +280,53 @@
   color: #60a5fa;
 }
 
-.dark-theme .project-sidebar-header {
+.dark-theme .workspace-sidebar-header {
   background-color: #1a1a1a;
   border-bottom-color: #4a4a4a;
 }
 
-.dark-theme .project-name {
+.dark-theme .workspace-name {
   color: #ffffff;
 }
 
-.dark-theme .project-path {
+.dark-theme .workspace-path {
   color: #9ca3af;
 }
 
-.dark-theme .project-search-button {
+.dark-theme .workspace-search-button {
   color: #b3b3b3;
 }
 
-.dark-theme .project-search-button:hover {
+.dark-theme .workspace-search-button:hover {
   background-color: #3a3a3a;
   color: #ffffff;
 }
 
-.dark-theme .project-search-button:active {
+.dark-theme .workspace-search-button:active {
   background-color: #4a4a4a;
 }
 
-.dark-theme .close-project-btn {
+.dark-theme .close-workspace-btn {
   color: #b3b3b3;
 }
 
-.dark-theme .close-project-btn:hover {
+.dark-theme .close-workspace-btn:hover {
   background-color: #3a3a3a;
   color: #ffffff;
 }
 
-.dark-theme .project-search {
+.dark-theme .workspace-search {
   background-color: #1a1a1a;
   border-bottom-color: #4a4a4a;
 }
 
-.dark-theme .project-search-input {
+.dark-theme .workspace-search-input {
   background-color: #2d2d2d;
   border-color: #4a4a4a;
   color: #ffffff;
 }
 
-.dark-theme .project-search-input:focus {
+.dark-theme .workspace-search-input:focus {
   border-color: #60a5fa;
 }
 
@@ -357,22 +357,22 @@
   color: #ffffff;
 }
 
-.dark-theme .project-file-tree::-webkit-scrollbar-thumb {
+.dark-theme .workspace-file-tree::-webkit-scrollbar-thumb {
   background-color: #4a4a4a;
 }
 
-.dark-theme .project-file-tree::-webkit-scrollbar-thumb:hover {
+.dark-theme .workspace-file-tree::-webkit-scrollbar-thumb:hover {
   background-color: #5a5a5a;
 }
 
 /* System preference dark mode */
 @media (prefers-color-scheme: dark) {
-  html:not(.light-theme):not(.dark-theme) .project-sidebar {
+  html:not(.light-theme):not(.dark-theme) .workspace-sidebar {
     background-color: #1f2937;
     border-right-color: #374151;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-file-tree.drag-over-root {
+  html:not(.light-theme):not(.dark-theme) .workspace-file-tree.drag-over-root {
     background-color: rgba(59, 130, 246, 0.1);
     border-color: #60a5fa;
   }
@@ -382,40 +382,40 @@
     color: #60a5fa;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-sidebar-header {
+  html:not(.light-theme):not(.dark-theme) .workspace-sidebar-header {
     background-color: #111827;
     border-bottom-color: #374151;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-name {
+  html:not(.light-theme):not(.dark-theme) .workspace-name {
     color: #f3f4f6;
   }
   
-  html:not(.light-theme):not(.dark-theme) .project-path {
+  html:not(.light-theme):not(.dark-theme) .workspace-path {
     color: #9ca3af;
   }
 
-  html:not(.light-theme):not(.dark-theme) .close-project-btn {
+  html:not(.light-theme):not(.dark-theme) .close-workspace-btn {
     color: #9ca3af;
   }
 
-  html:not(.light-theme):not(.dark-theme) .close-project-btn:hover {
+  html:not(.light-theme):not(.dark-theme) .close-workspace-btn:hover {
     background-color: #374151;
     color: #f3f4f6;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-search {
+  html:not(.light-theme):not(.dark-theme) .workspace-search {
     background-color: #111827;
     border-bottom-color: #374151;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-search-input {
+  html:not(.light-theme):not(.dark-theme) .workspace-search-input {
     background-color: #1f2937;
     border-color: #374151;
     color: #f3f4f6;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-search-input:focus {
+  html:not(.light-theme):not(.dark-theme) .workspace-search-input:focus {
     border-color: #3b82f6;
   }
 
@@ -446,22 +446,22 @@
     color: #dbeafe;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-file-tree::-webkit-scrollbar-thumb {
+  html:not(.light-theme):not(.dark-theme) .workspace-file-tree::-webkit-scrollbar-thumb {
     background-color: #4b5563;
   }
 
-  html:not(.light-theme):not(.dark-theme) .project-file-tree::-webkit-scrollbar-thumb:hover {
+  html:not(.light-theme):not(.dark-theme) .workspace-file-tree::-webkit-scrollbar-thumb:hover {
     background-color: #6b7280;
   }
 }
 
 /* Crystal Dark theme */
-.crystal-dark-theme .project-sidebar {
+.crystal-dark-theme .workspace-sidebar {
   background-color: #1F2837;
   border-right-color: #374151;
 }
 
-.crystal-dark-theme .project-file-tree.drag-over-root {
+.crystal-dark-theme .workspace-file-tree.drag-over-root {
   background-color: rgba(59, 130, 246, 0.08);
   border-color: #3b82f6;
 }
@@ -471,53 +471,53 @@
   color: #60a5fa;
 }
 
-.crystal-dark-theme .project-sidebar-header {
+.crystal-dark-theme .workspace-sidebar-header {
   background-color: #0F172A;
   border-bottom-color: #374151;
 }
 
-.crystal-dark-theme .project-name {
+.crystal-dark-theme .workspace-name {
   color: #F3F4F6;
 }
 
-.crystal-dark-theme .project-path {
+.crystal-dark-theme .workspace-path {
   color: #9CA3AF;
 }
 
-.crystal-dark-theme .project-search-button {
+.crystal-dark-theme .workspace-search-button {
   color: #9CA3AF;
 }
 
-.crystal-dark-theme .project-search-button:hover {
+.crystal-dark-theme .workspace-search-button:hover {
   background-color: #374151;
   color: #F3F4F6;
 }
 
-.crystal-dark-theme .project-search-button:active {
+.crystal-dark-theme .workspace-search-button:active {
   background-color: #4B5563;
 }
 
-.crystal-dark-theme .close-project-btn {
+.crystal-dark-theme .close-workspace-btn {
   color: #9CA3AF;
 }
 
-.crystal-dark-theme .close-project-btn:hover {
+.crystal-dark-theme .close-workspace-btn:hover {
   background-color: #374151;
   color: #F3F4F6;
 }
 
-.crystal-dark-theme .project-search {
+.crystal-dark-theme .workspace-search {
   background-color: #0F172A;
   border-bottom-color: #374151;
 }
 
-.crystal-dark-theme .project-search-input {
+.crystal-dark-theme .workspace-search-input {
   background-color: #1F2837;
   border-color: #374151;
   color: #F3F4F6;
 }
 
-.crystal-dark-theme .project-search-input:focus {
+.crystal-dark-theme .workspace-search-input:focus {
   border-color: #3B82F6;
 }
 
@@ -548,11 +548,11 @@
   color: #F3F4F6;
 }
 
-.crystal-dark-theme .project-file-tree::-webkit-scrollbar-thumb {
+.crystal-dark-theme .workspace-file-tree::-webkit-scrollbar-thumb {
   background-color: #4B5563;
 }
 
-.crystal-dark-theme .project-file-tree::-webkit-scrollbar-thumb:hover {
+.crystal-dark-theme .workspace-file-tree::-webkit-scrollbar-thumb:hover {
   background-color: #6B7280;
 }
 

@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import './ProjectManager.css';
+import './WorkspaceManager.css';
 
 // Helper function to apply theme
 const applyTheme = () => {
   if (typeof window === 'undefined') return;
-  
+
   const savedTheme = localStorage.getItem('theme');
   const root = document.documentElement;
-  
+
   // Clear all theme classes first
   root.classList.remove('light-theme', 'dark-theme', 'crystal-dark-theme');
-  
+
   if (savedTheme === 'dark') {
     root.setAttribute('data-theme', 'dark');
     root.classList.add('dark-theme');
@@ -43,7 +43,7 @@ if (typeof window !== 'undefined') {
       applyTheme();
     }
   });
-  
+
   // Also listen for IPC theme changes
   if (window.electronAPI?.onThemeChange) {
     const unsubscribe = window.electronAPI.onThemeChange((theme) => {
@@ -57,7 +57,7 @@ if (typeof window !== 'undefined') {
   }
 }
 
-interface ProjectInfo {
+interface WorkspaceInfo {
   path: string;
   name: string;
   lastOpened: number | string;
@@ -67,91 +67,91 @@ interface ProjectInfo {
   exists: boolean;
 }
 
-interface ProjectStats {
+interface WorkspaceStats {
   fileCount: number;
   markdownCount: number;
   totalSize: number;
   recentFiles: string[];
 }
 
-export const ProjectManager: React.FC = () => {
-  const [projects, setProjects] = useState<ProjectInfo[]>([]);
-  const [selectedProject, setSelectedProject] = useState<ProjectInfo | null>(null);
-  const [projectStats, setProjectStats] = useState<ProjectStats | null>(null);
+export const WorkspaceManager: React.FC = () => {
+  const [workspaces, setWorkspaces] = useState<WorkspaceInfo[]>([]);
+  const [selectedWorkspace, setSelectedWorkspace] = useState<WorkspaceInfo | null>(null);
+  const [workspaceStats, setWorkspaceStats] = useState<WorkspaceStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadProjects();
+    loadWorkspaces();
   }, []);
 
   useEffect(() => {
-    if (selectedProject) {
-      loadProjectStats(selectedProject.path);
+    if (selectedWorkspace) {
+      loadWorkspaceStats(selectedWorkspace.path);
     }
-  }, [selectedProject]);
+  }, [selectedWorkspace]);
 
-  const loadProjects = async () => {
+  const loadWorkspaces = async () => {
     try {
-      const recentProjects = await window.electronAPI.projectManager.getRecentProjects();
-      console.log('Loaded projects:', recentProjects);
-      setProjects(recentProjects);
-      if (recentProjects.length > 0) {
-        setSelectedProject(recentProjects[0]);
+      const recentWorkspaces = await window.electronAPI.workspaceManager.getRecentWorkspaces();
+      console.log('Loaded workspaces:', recentWorkspaces);
+      setWorkspaces(recentWorkspaces);
+      if (recentWorkspaces.length > 0) {
+        setSelectedWorkspace(recentWorkspaces[0]);
       }
     } catch (error) {
-      console.error('Failed to load projects:', error);
+      console.error('Failed to load workspaces:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadProjectStats = async (projectPath: string) => {
+  const loadWorkspaceStats = async (workspacePath: string) => {
     try {
-      const stats = await window.electronAPI.projectManager.getProjectStats(projectPath);
-      setProjectStats(stats);
+      const stats = await window.electronAPI.workspaceManager.getWorkspaceStats(workspacePath);
+      setWorkspaceStats(stats);
     } catch (error) {
-      console.error('Failed to load project stats:', error);
+      console.error('Failed to load workspace stats:', error);
     }
   };
 
-  const handleOpenProject = async () => {
-    if (!selectedProject) return;
+  const handleOpenWorkspace = async () => {
+    if (!selectedWorkspace) return;
 
     try {
-      await window.electronAPI.projectManager.openProject(selectedProject.path);
+      await window.electronAPI.workspaceManager.openWorkspace(selectedWorkspace.path);
     } catch (error) {
-      console.error('Failed to open project:', error);
+      console.error('Failed to open workspace:', error);
     }
   };
 
   const handleBrowse = async () => {
     try {
-      const result = await window.electronAPI.projectManager.openFolderDialog();
+      const result = await window.electronAPI.workspaceManager.openFolderDialog();
       if (result.success) {
-        await window.electronAPI.projectManager.openProject(result.path);
+        await window.electronAPI.workspaceManager.openWorkspace(result.path);
       }
     } catch (error) {
-      console.error('Failed to browse for project:', error);
+      console.error('Failed to browse for workspace:', error);
     }
   };
 
-  const handleCreateProject = async () => {
+  const handleCreateWorkspace = async () => {
     try {
-      const result = await window.electronAPI.projectManager.createProjectDialog();
+      const result = await window.electronAPI.workspaceManager.createWorkspaceDialog();
       if (result.success) {
-        await window.electronAPI.projectManager.openProject(result.path);
+        await window.electronAPI.workspaceManager.openWorkspace(result.path);
       }
     } catch (error) {
-      console.error('Failed to create project:', error);
+      console.error('Failed to create workspace:', error);
     }
   };
 
   const handleRemoveFromRecent = async () => {
-    if (!selectedProject) return;
+    if (!selectedWorkspace) return;
 
     try {
-      await window.electronAPI.projectManager.removeRecent(selectedProject.path);
-      await loadProjects();
+      await window.electronAPI.workspaceManager.removeRecent(selectedWorkspace.path);
+      await loadWorkspaces();
     } catch (error) {
       console.error('Failed to remove from recent:', error);
     }
@@ -214,7 +214,7 @@ export const ProjectManager: React.FC = () => {
   };
 
   return (
-    <div className="project-manager">
+    <div className="workspace-manager">
       <div className="sidebar">
         <div className="sidebar-header">
           <div className="app-branding">
@@ -228,34 +228,34 @@ export const ProjectManager: React.FC = () => {
           </div>
         </div>
 
-        <div className="projects-list">
+        <div className="workspaces-list">
           {loading ? (
             <div className="loading">
               <div className="spinner"></div>
             </div>
-          ) : projects.length === 0 ? (
+          ) : workspaces.length === 0 ? (
             <div className="sidebar-empty">
-              <p>No recent projects</p>
+              <p>No recent workspaces</p>
             </div>
           ) : (
-            projects.map(project => (
+            workspaces.map(workspace => (
               <div
-                key={project.path}
-                className={`project-item ${selectedProject?.path === project.path ? 'selected' : ''}`}
-                onClick={() => setSelectedProject(project)}
-                onDoubleClick={handleOpenProject}
+                key={workspace.path}
+                className={`workspace-item ${selectedWorkspace?.path === workspace.path ? 'selected' : ''}`}
+                onClick={() => setSelectedWorkspace(workspace)}
+                onDoubleClick={handleOpenWorkspace}
               >
-                <div className="project-icon">
+                <div className="workspace-icon">
                   <span className="material-symbols-outlined">folder</span>
                 </div>
-                <div className="project-info">
-                  <div className="project-name">{project.name}</div>
-                  <div className="project-path">{project.path}</div>
-                  <div className="project-meta">
-                    {project.markdownCount !== undefined && (
-                      <span>{project.markdownCount} markdown files</span>
+                <div className="workspace-info">
+                  <div className="workspace-name">{workspace.name}</div>
+                  <div className="workspace-path">{workspace.path}</div>
+                  <div className="workspace-meta">
+                    {workspace.markdownCount !== undefined && (
+                      <span>{workspace.markdownCount} markdown files</span>
                     )}
-                    <span>{formatDate(project.lastOpened)}</span>
+                    <span>{formatDate(workspace.lastOpened)}</span>
                   </div>
                 </div>
               </div>
@@ -265,16 +265,16 @@ export const ProjectManager: React.FC = () => {
       </div>
 
       <div className="content">
-        {selectedProject ? (
+        {selectedWorkspace ? (
           <>
             <div className="content-header">
-              <div className="project-title">
-                <h1>{selectedProject.name}</h1>
-                <div className="project-path">{selectedProject.path}</div>
+              <div className="workspace-title">
+                <h1>{selectedWorkspace.name}</h1>
+                <div className="workspace-path">{selectedWorkspace.path}</div>
               </div>
               <div className="content-actions">
-                <button className="btn btn-primary" onClick={handleOpenProject}>
-                  Open Project
+                <button className="btn btn-primary" onClick={handleOpenWorkspace}>
+                  Open Workspace
                 </button>
                 <button className="btn btn-danger" onClick={handleRemoveFromRecent}>
                   Remove from Recent
@@ -282,33 +282,33 @@ export const ProjectManager: React.FC = () => {
               </div>
             </div>
 
-            <div className="project-details">
-              {projectStats ? (
+            <div className="workspace-details">
+              {workspaceStats ? (
                 <>
                   <div className="stats-grid">
                     <div className="stat-card">
-                      <div className="stat-value">{projectStats.fileCount}</div>
+                      <div className="stat-value">{workspaceStats.fileCount}</div>
                       <div className="stat-label">Total Files</div>
                     </div>
                     <div className="stat-card">
-                      <div className="stat-value">{projectStats.markdownCount}</div>
+                      <div className="stat-value">{workspaceStats.markdownCount}</div>
                       <div className="stat-label">Markdown Files</div>
                     </div>
                     <div className="stat-card">
-                      <div className="stat-value">{formatSize(projectStats.totalSize)}</div>
+                      <div className="stat-value">{formatSize(workspaceStats.totalSize)}</div>
                       <div className="stat-label">Total Size</div>
                     </div>
                     <div className="stat-card">
-                      <div className="stat-value">{formatDate(selectedProject.lastOpened)}</div>
+                      <div className="stat-value">{formatDate(selectedWorkspace.lastOpened)}</div>
                       <div className="stat-label">Last Opened</div>
                     </div>
                   </div>
 
-                  {projectStats.recentFiles.length > 0 && (
+                  {workspaceStats.recentFiles.length > 0 && (
                     <div className="recent-files">
                       <h3>Recent Files</h3>
                       <ul>
-                        {projectStats.recentFiles.map(file => (
+                        {workspaceStats.recentFiles.map(file => (
                           <li key={file}>
                             <span className="material-symbols-outlined">description</span>
                             {file}
@@ -338,7 +338,7 @@ export const ProjectManager: React.FC = () => {
 
               <div className="welcome-info-compact">
                 <p className="welcome-description">
-                  Projects are local folders on your computer. Open any folder to view and edit all markdown files within it.
+                  Workspaces are local folders on your computer. Open any folder to view and edit all markdown files within it.
                 </p>
               </div>
 

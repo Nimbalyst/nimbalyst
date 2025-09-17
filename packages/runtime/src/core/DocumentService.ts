@@ -14,7 +14,7 @@ export interface Document {
 
 export interface DocumentService {
   /**
-   * List all documents in the current project
+   * List all documents in the current workspace
    */
   listDocuments(): Promise<Document[]>;
 

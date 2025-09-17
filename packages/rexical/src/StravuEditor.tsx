@@ -7,7 +7,7 @@
  */
 
 import type { JSX } from 'react';
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { $convertFromMarkdownString } from '@lexical/markdown';
@@ -29,7 +29,7 @@ import Editor from './Editor';
 import PlaygroundEditorTheme from './themes/PlaygroundEditorTheme';
 import EditorNodes from "./nodes/EditorNodes";
 import { pluginRegistry } from './plugins/PluginRegistry';
-import { MARKDOWN_TRANSFORMERS } from './markdown';
+import { getEditorTransformers } from './markdown';
 
 export interface StravuEditorProps {
     config?: EditorConfig;
@@ -40,6 +40,10 @@ function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
     const { theme } = useTheme();
     const containerRef = useRef<HTMLDivElement>(null);
     const widthClass = useResponsiveWidth(containerRef);
+    const markdownTransformers = useMemo(
+        () => config.markdownTransformers ?? getEditorTransformers(),
+        [config.markdownTransformers]
+    );
 
     const initialConfig = {
         // Set initial editor state based on whether we have initial content
@@ -49,7 +53,7 @@ function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
                 return () => {
                     const root = $getRoot();
                     root.clear();
-                    $convertFromMarkdownString(config.initialContent!, MARKDOWN_TRANSFORMERS, undefined, true);
+                    $convertFromMarkdownString(config.initialContent!, markdownTransformers, undefined, true);
                     root.selectStart();
                 };
             } else if (!config.emptyEditor) {

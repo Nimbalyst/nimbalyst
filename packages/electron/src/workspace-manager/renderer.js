@@ -2,18 +2,18 @@ const { ipcRenderer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
-let recentProjects = [];
-let selectedProject = null;
+let recentWorkspaces = [];
+let selectedWorkspace = null;
 
 // Initialize
 async function init() {
   // Apply theme
   const theme = await ipcRenderer.invoke('get-theme');
   applyTheme(theme);
-  
-  // Load recent projects
-  await loadRecentProjects();
-  
+
+  // Load recent workspaces
+  await loadRecentWorkspaces();
+
   // Listen for theme changes
   ipcRenderer.on('theme-change', (event, theme) => {
     applyTheme(theme);
@@ -32,40 +32,40 @@ function applyTheme(theme) {
   }
 }
 
-// Load recent projects
-async function loadRecentProjects() {
+// Load recent workspaces
+async function loadRecentWorkspaces() {
   try {
-    recentProjects = await ipcRenderer.invoke('project-manager:get-recent-projects');
-    renderProjectList();
+    recentWorkspaces = await ipcRenderer.invoke('workspace-manager:get-recent-workspaces');
+    renderWorkspaceList();
   } catch (error) {
-    console.error('Failed to load recent projects:', error);
+    console.error('Failed to load recent workspaces:', error);
   }
 }
 
-// Render project list
-function renderProjectList() {
-  const container = document.getElementById('projectList');
-  
-  if (recentProjects.length === 0) {
+// Render workspace list
+function renderWorkspaceList() {
+  const container = document.getElementById('workspaceList');
+
+  if (recentWorkspaces.length === 0) {
     container.innerHTML = `
       <div style="text-align: center; padding: 40px 20px; color: #9ca3af;">
-        <p style="font-size: 14px;">No recent projects</p>
+        <p style="font-size: 14px;">No recent workspaces</p>
         <p style="font-size: 12px; margin-top: 8px;">Open a folder to get started</p>
       </div>
     `;
     return;
   }
-  
-  container.innerHTML = recentProjects.map(project => {
-    const isSelected = selectedProject && selectedProject.path === project.path;
-    const lastModified = project.lastModified ? formatDate(project.lastModified) : 'Unknown';
-    const fileCount = project.fileCount || 0;
-    
+
+  container.innerHTML = recentWorkspaces.map(workspace => {
+    const isSelected = selectedWorkspace && selectedWorkspace.path === workspace.path;
+    const lastModified = workspace.lastModified ? formatDate(workspace.lastModified) : 'Unknown';
+    const fileCount = workspace.fileCount || 0;
+
     return `
-      <div class="project-item ${isSelected ? 'selected' : ''}" data-path="${escapeHtml(project.path)}">
-        <div class="project-name">${escapeHtml(project.name)}</div>
-        <div class="project-path">${escapeHtml(project.path)}</div>
-        <div class="project-meta">
+      <div class="workspace-item ${isSelected ? 'selected' : ''}" data-path="${escapeHtml(workspace.path)}">
+        <div class="workspace-name">${escapeHtml(workspace.name)}</div>
+        <div class="workspace-path">${escapeHtml(workspace.path)}</div>
+        <div class="workspace-meta">
           <span>${fileCount} files</span>
           <span>•</span>
           <span>${lastModified}</span>
@@ -73,45 +73,45 @@ function renderProjectList() {
       </div>
     `;
   }).join('');
-  
+
   // Add click handlers
-  container.querySelectorAll('.project-item').forEach(item => {
+  container.querySelectorAll('.workspace-item').forEach(item => {
     item.addEventListener('click', () => {
-      const projectPath = item.dataset.path;
-      const project = recentProjects.find(p => p.path === projectPath);
-      if (project) {
-        selectProject(project);
+      const workspacePath = item.dataset.path;
+      const workspace = recentWorkspaces.find(w => w.path === workspacePath);
+      if (workspace) {
+        selectWorkspace(workspace);
       }
     });
   });
 }
 
-// Select a project
-async function selectProject(project) {
-  selectedProject = project;
-  
+// Select a workspace
+async function selectWorkspace(workspace) {
+  selectedWorkspace = workspace;
+
   // Update UI
-  document.querySelectorAll('.project-item').forEach(item => {
+  document.querySelectorAll('.workspace-item').forEach(item => {
     item.classList.remove('selected');
-    if (item.dataset.path === project.path) {
+    if (item.dataset.path === workspace.path) {
       item.classList.add('selected');
     }
   });
-  
-  // Get project stats
-  const stats = await getProjectStats(project.path);
-  
-  // Show project preview
-  showProjectPreview(project, stats);
+
+  // Get workspace stats
+  const stats = await getWorkspaceStats(workspace.path);
+
+  // Show workspace preview
+  showWorkspacePreview(workspace, stats);
 }
 
-// Get project statistics
-async function getProjectStats(projectPath) {
+// Get workspace statistics
+async function getWorkspaceStats(workspacePath) {
   try {
-    const stats = await ipcRenderer.invoke('project-manager:get-project-stats', projectPath);
+    const stats = await ipcRenderer.invoke('workspace-manager:get-workspace-stats', workspacePath);
     return stats;
   } catch (error) {
-    console.error('Failed to get project stats:', error);
+    console.error('Failed to get workspace stats:', error);
     return {
       fileCount: 0,
       totalSize: 0,
@@ -120,25 +120,25 @@ async function getProjectStats(projectPath) {
   }
 }
 
-// Show project preview
-function showProjectPreview(project, stats) {
+// Show workspace preview
+function showWorkspacePreview(workspace, stats) {
   const rightPanel = document.getElementById('rightPanel');
-  
+
   // Format file size
   const formatSize = (bytes) => {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
-  
+
   rightPanel.innerHTML = `
-    <div class="project-preview">
+    <div class="workspace-preview">
       <div class="preview-header">
         <div>
-          <h2 class="preview-title">${escapeHtml(project.name)}</h2>
-          <p class="preview-path">${escapeHtml(project.path)}</p>
+          <h2 class="preview-title">${escapeHtml(workspace.name)}</h2>
+          <p class="preview-path">${escapeHtml(workspace.path)}</p>
         </div>
-        <button class="remove-btn" onclick="removeFromRecent('${escapeHtml(project.path)}')" title="Remove from recent">
+        <button class="remove-btn" onclick="removeFromRecent('${escapeHtml(workspace.path)}')" title="Remove from recent">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
           </svg>
@@ -174,8 +174,8 @@ function showProjectPreview(project, stats) {
       ` : ''}
       
       <div class="preview-actions">
-        <button class="btn btn-primary" onclick="openProject('${escapeHtml(project.path)}')">
-          Open Project
+        <button class="btn btn-primary" onclick="openWorkspace('${escapeHtml(workspace.path)}')">
+          Open Workspace
         </button>
       </div>
     </div>
@@ -185,51 +185,51 @@ function showProjectPreview(project, stats) {
 // Open folder dialog
 async function openFolder() {
   try {
-    const result = await ipcRenderer.invoke('project-manager:open-folder-dialog');
+    const result = await ipcRenderer.invoke('workspace-manager:open-folder-dialog');
     if (result.success && result.path) {
-      await openProject(result.path);
+      await openWorkspace(result.path);
     }
   } catch (error) {
     console.error('Failed to open folder:', error);
   }
 }
 
-// Create new project
-async function createNewProject() {
+// Create new workspace
+async function createNewWorkspace() {
   try {
-    const result = await ipcRenderer.invoke('project-manager:create-project-dialog');
+    const result = await ipcRenderer.invoke('workspace-manager:create-workspace-dialog');
     if (result.success && result.path) {
-      await openProject(result.path);
+      await openWorkspace(result.path);
     }
   } catch (error) {
-    console.error('Failed to create project:', error);
+    console.error('Failed to create workspace:', error);
   }
 }
 
-// Open project (always in new window)
-async function openProject(projectPath) {
+// Open workspace (always in new window)
+async function openWorkspace(workspacePath) {
   try {
-    await ipcRenderer.invoke('project-manager:open-project', projectPath);
-    // Close the project manager after opening
+    await ipcRenderer.invoke('workspace-manager:open-workspace', workspacePath);
+    // Close the workspace manager after opening
     window.close();
   } catch (error) {
-    console.error('Failed to open project:', error);
+    console.error('Failed to open workspace:', error);
   }
 }
 
 // Remove from recent
-async function removeFromRecent(projectPath) {
-  if (!confirm('Remove this project from recent projects?')) {
+async function removeFromRecent(workspacePath) {
+  if (!confirm('Remove this workspace from recent workspaces?')) {
     return;
   }
-  
+
   try {
-    await ipcRenderer.invoke('project-manager:remove-recent', projectPath);
-    await loadRecentProjects();
-    
+    await ipcRenderer.invoke('workspace-manager:remove-recent', workspacePath);
+    await loadRecentWorkspaces();
+
     // Clear preview if this was selected
-    if (selectedProject && selectedProject.path === projectPath) {
-      selectedProject = null;
+    if (selectedWorkspace && selectedWorkspace.path === workspacePath) {
+      selectedWorkspace = null;
       document.getElementById('rightPanel').innerHTML = `
         <div class="empty-state">
           <div class="empty-icon">
@@ -237,8 +237,8 @@ async function removeFromRecent(projectPath) {
               <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
             </svg>
           </div>
-          <h2 class="empty-title">Project Removed</h2>
-          <p class="empty-description">Select another project from the list or open a new folder.</p>
+          <h2 class="empty-title">Workspace Removed</h2>
+          <p class="empty-description">Select another workspace from the list or open a new folder.</p>
         </div>
       `;
     }
@@ -253,22 +253,22 @@ function formatDate(timestamp) {
   const date = new Date(timestamp);
   const now = new Date();
   const diff = now - date;
-  
+
   if (diff < 3600000) {
     const mins = Math.floor(diff / 60000);
     return mins <= 1 ? 'Just now' : `${mins} mins ago`;
   }
-  
+
   if (diff < 86400000) {
     const hours = Math.floor(diff / 3600000);
     return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
   }
-  
+
   if (diff < 604800000) {
     const days = Math.floor(diff / 86400000);
     return `${days} day${days !== 1 ? 's' : ''} ago`;
   }
-  
+
   return date.toLocaleDateString();
 }
 
@@ -282,8 +282,8 @@ function escapeHtml(text) {
 
 // Make functions available globally
 window.openFolder = openFolder;
-window.createNewProject = createNewProject;
-window.openProject = openProject;
+window.createNewWorkspace = createNewWorkspace;
+window.openWorkspace = openWorkspace;
 window.removeFromRecent = removeFromRecent;
 
 // Initialize when DOM is ready

@@ -3,7 +3,7 @@ import { logger } from './utils/logger';
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
-import { StravuEditor, TOGGLE_SEARCH_COMMAND, MARKDOWN_TRANSFORMERS, aiChatBridge, APPROVE_DIFF_COMMAND, REJECT_DIFF_COMMAND } from 'rexical';
+import { StravuEditor, TOGGLE_SEARCH_COMMAND, aiChatBridge, APPROVE_DIFF_COMMAND, REJECT_DIFF_COMMAND } from 'rexical';
 import type { LexicalCommand, ConfigTheme, TextReplacement } from 'rexical';
 // Import styles - handled by vite plugin for both dev and prod
 import 'rexical/styles';
@@ -14,8 +14,8 @@ if (typeof window !== 'undefined' && !window.aiChatBridge) {
   (window as any).aiChatBridge = aiChatBridge;
   logger.ui.info('Set window.aiChatBridge manually');
 }
-import { ProjectSidebar } from './components/ProjectSidebar';
-import { ProjectWelcome } from './components/ProjectWelcome';
+import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx';
+import { WorkspaceWelcome } from './components/WorkspaceWelcome.tsx';
 import { QuickOpen } from './components/QuickOpen';
 import { AIChat } from './components/AIChat';
 import { HistoryDialog } from './components/HistoryDialog';
@@ -23,27 +23,27 @@ import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import { ApiKeyDialog } from './components/ApiKeyDialog';
 import { AIModels } from './components/AIModels/AIModels';
 import { SessionManager } from './components/SessionManager/SessionManager';
-import { ProjectManager } from './components/ProjectManager/ProjectManager';
+import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { NewFileDialog } from './components/NewFileDialog';
 import { TabManager } from './components/TabManager/TabManager';
 import { useTabPreferences } from './hooks/useTabPreferences';
 import { useTabs } from './hooks/useTabs';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
-import './ProjectWelcome.css';
+import './WorkspaceWelcome.css';
 import './components/AIModels/AIModels.css';
 
 // Logging configuration - control which categories are logged
 const LOG_CONFIG = {
   AUTOSAVE: false,  // Set to true to enable autosave logging
   FILE_SYNC: false,  // File sync operations
-  PROJECT_FILE_SELECT: false,  // Project file selection
+  WORKSPACE_FILE_SELECT: false,  // Workspace file selection
   HMR: false,  // Hot Module Replacement
   AUTO_SNAPSHOT: false,  // Automatic snapshots
   IPC_LISTENERS: false,  // IPC listener setup (very verbose!)
   AI_CHAT_STATE: false,  // AI Chat state save/load
   THEME: false,  // Theme changes
   FILE_OPS: false,  // File open/save operations
-  PROJECT_OPS: false,  // Project open/close operations
+  WORKSPACE_OPS: false,  // Workspace open/close operations
 };
 
 // File tree interface
@@ -57,11 +57,12 @@ interface FileTreeItem {
 // Electron API interface
 interface ElectronAPI {
   onFileNew: (callback: () => void) => () => void;
-  onFileNewInProject?: (callback: () => void) => () => void;
+  onFileNewInWorkspace?: (callback: () => void) => () => void;
   onFileOpen: (callback: () => void) => () => void;
-  onProjectOpened: (callback: (data: { projectPath: string; projectName: string; fileTree: FileTreeItem[] }) => void) => () => void;
-  onOpenProjectFile?: (callback: (filePath: string) => void) => () => void;
-  onOpenProjectFromCLI?: (callback: (projectPath: string) => void) => () => void;
+  onWorkspaceOpened: (callback: (data: { workspacePath: string; workspaceName: string; fileTree: FileTreeItem[] }) => void) => () => void;
+  onOpenWorkspaceFile?: (callback: (filePath: string) => void) => () => void;
+  onOpenDocument?: (callback: (data: { path: string }) => void) => () => void;
+  onOpenWorkspaceFromCLI?: (callback: (workspacePath: string) => void) => () => void;
   onFileSave: (callback: () => void) => () => void;
   onFileSaveAs: (callback: () => void) => () => void;
   onFileOpenedFromOS: (callback: (data: { filePath: string; content: string }) => void) => () => void;
@@ -71,14 +72,14 @@ interface ElectronAPI {
   onFileDeleted: (callback: (data: { filePath: string }) => void) => () => void;
   onFileRenamed: (callback: (data: { oldPath: string; newPath: string }) => void) => () => void;
   onFileMoved: (callback: (data: { sourcePath: string; destinationPath: string }) => void) => () => void;
-  onProjectFileTreeUpdated: (callback: (data: { fileTree: FileTreeItem[]; addedPath?: string; removedPath?: string }) => void) => () => void;
+  onWorkspaceFileTreeUpdated: (callback: (data: { fileTree: FileTreeItem[]; addedPath?: string; removedPath?: string }) => void) => () => void;
   onFileChangedOnDisk?: (callback: (data: { path: string }) => void) => () => void;
   onThemeChange: (callback: (theme: string) => void) => () => void;
   onShowAbout: (callback: () => void) => () => void;
   onViewHistory?: (callback: () => void) => () => void;
   onNextTab?: (callback: () => void) => () => void;
   onPreviousTab?: (callback: () => void) => () => void;
-  onLoadSessionFromManager?: (callback: (data: { sessionId: string; projectPath?: string }) => void) => () => void;
+  onLoadSessionFromManager?: (callback: (data: { sessionId: string; workspacePath?: string }) => void) => () => void;
   onShowPreferences?: (callback: () => void) => () => void;
   openFile: () => Promise<{ filePath: string; content: string } | null>;
   saveFile: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
@@ -87,24 +88,24 @@ interface ElectronAPI {
   setTitle: (title: string) => void;
   setCurrentFile: (filePath: string | null) => void;
   // Get initial window state
-  getInitialState?: () => Promise<{ mode: string; projectPath?: string; projectName?: string; fileTree?: FileTreeItem[] } | null>;
-  // Project operations
+  getInitialState?: () => Promise<{ mode: string; workspacePath?: string; workspaceName?: string; fileTree?: FileTreeItem[] } | null>;
+  // Workspace operations
   getFolderContents: (dirPath: string) => Promise<FileTreeItem[]>;
-  switchProjectFile: (filePath: string) => Promise<{ filePath: string; content: string } | null>;
+  switchWorkspaceFile: (filePath: string) => Promise<{ filePath: string; content: string } | null>;
   readFileContent?: (filePath: string) => Promise<{ content: string } | null>;
   // Settings
   getSidebarWidth: () => Promise<number | null>;
   setSidebarWidth: (width: number) => void;
   getAIChatState: () => Promise<{ collapsed: boolean; width: number; sessionId?: string } | null>;
   setAIChatState: (state: { collapsed: boolean; width: number; sessionId?: string }) => void;
-  getRecentProjectFiles?: () => Promise<string[]>;
-  addToProjectRecentFiles?: (filePath: string) => void;
-  searchProjectFileNames?: (projectPath: string, query: string) => Promise<any[]>;
-  searchProjectFileContent?: (projectPath: string, query: string) => Promise<any[]>;
+  getRecentWorkspaceFiles?: () => Promise<string[]>;
+  addToWorkspaceRecentFiles?: (filePath: string) => void;
+  searchWorkspaceFileNames?: (workspacePath: string, query: string) => Promise<any[]>;
+  searchWorkspaceFileContent?: (workspacePath: string, query: string) => Promise<any[]>;
   // Tab state operations
-  getProjectTabState?: () => Promise<any>;
-  saveProjectTabState?: (tabState: any) => void;
-  clearProjectTabState?: () => void;
+  getWorkspaceTabState?: () => Promise<any>;
+  saveWorkspaceTabState?: (tabState: any) => void;
+  clearWorkspaceTabState?: () => void;
   // History operations
   history?: {
     createSnapshot: (filePath: string, state: string, type: string, description?: string) => Promise<void>;
@@ -170,21 +171,21 @@ export default function App() {
     // Set window title for Session Manager
     React.useEffect(() => {
       if (window.electronAPI) {
-        window.electronAPI.setTitle('AI Chat Sessions - All Projects');
+        window.electronAPI.setTitle('AI Chat Sessions - All Workspaces');
       }
     }, []);
-    const filterProject = urlParams.get('filterProject') || undefined;
-    return <SessionManager filterProject={filterProject} />;
+    const filterWorkspace = urlParams.get('filterWorkspace') || undefined;
+    return <SessionManager filterWorkspace={filterWorkspace} />;
   }
 
-  if (windowMode === 'project-manager') {
-    // Set window title for Project Manager
+  if (windowMode === 'workspace-manager') {
+    // Set window title for Workspace Manager
     React.useEffect(() => {
       if (window.electronAPI) {
-        window.electronAPI.setTitle('Project Manager - Preditor');
+        window.electronAPI.setTitle('Workspace Manager - Preditor');
       }
     }, []);
-    return <ProjectManager />;
+    return <WorkspaceManager />;
   }
 
   const contentRef = useRef('');
@@ -196,9 +197,9 @@ export default function App() {
   const tabStatesRef = useRef<Map<string, { isDirty: boolean }>>(new Map());  // Track tab dirty states without re-renders
   const tabsRef = useRef<any>(null);  // Reference to current tabs object for use in intervals only
   const [isInitializing, setIsInitializing] = useState(true);
-  const [projectMode, setProjectMode] = useState(false);
-  const [projectPath, setProjectPath] = useState<string | null>(null);
-  const [projectName, setProjectName] = useState<string | null>(null);
+  const [workspaceMode, setWorkspaceMode] = useState(false);
+  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const [workspaceName, setWorkspaceName] = useState<string | null>(null);
   const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
   // Initialize theme from localStorage immediately
   const [theme, setTheme] = useState<ConfigTheme>(() => {
@@ -207,7 +208,7 @@ export default function App() {
   });
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
-  const [recentProjectFiles, setRecentProjectFiles] = useState<string[]>([]);
+  const [recentWorkspaceFiles, setRecentWorkspaceFiles] = useState<string[]>([]);
   const [isNewFileDialogOpen, setIsNewFileDialogOpen] = useState(false);
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
@@ -215,7 +216,7 @@ export default function App() {
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
   const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
-  const [sessionToLoad, setSessionToLoad] = useState<{ sessionId: string; projectPath?: string } | null>(null);
+  const [sessionToLoad, setSessionToLoad] = useState<{ sessionId: string; workspacePath?: string } | null>(null);
   const [currentAISessionId, setCurrentAISessionId] = useState<string | null>(null);
   const [diffError, setDiffError] = useState<{ isOpen: boolean; title: string; message: string; details?: any }>({
     isOpen: false,
@@ -231,7 +232,7 @@ export default function App() {
 
   // Tab management state
   const tabPreferences = useTabPreferences();
-  // console.log('[APP] Creating useTabs hook, projectMode:', projectMode, 'projectPath:', projectPath);
+  // console.log('[APP] Creating useTabs hook, workspaceMode:', workspaceMode, 'workspacePath:', workspacePath);
   const tabs = useTabs({
     maxTabs: tabPreferences.preferences.maxTabs,
     enabled: tabPreferences.preferences.enabled,
@@ -254,7 +255,7 @@ export default function App() {
         // If tab has no content, load it from file
         if (!tab.content && window.electronAPI) {
           try {
-            const result = await window.electronAPI.switchProjectFile(tab.filePath);
+            const result = await window.electronAPI.switchWorkspaceFile(tab.filePath);
             if (result) {
               tab.content = result.content;
               tabs.updateTab(tab.id, { content: result.content });
@@ -423,10 +424,10 @@ export default function App() {
           if (LOG_CONFIG.HMR) console.log('[HMR] Restoring dev state:', state);
 
           // Restore the state
-          if (state.projectMode) {
-            setProjectMode(true);
-            setProjectPath(state.projectPath);
-            setProjectName(state.projectName);
+          if (state.workspaceMode) {
+            setWorkspaceMode(true);
+            setWorkspacePath(state.workspacePath);
+            setWorkspaceName(state.workspaceName);
             setFileTree(state.fileTree || []);
           }
 
@@ -475,9 +476,9 @@ export default function App() {
     if (process.env.NODE_ENV === 'development') {
       const saveDevState = () => {
         const state = {
-          projectMode,
-          projectPath,
-          projectName,
+          workspaceMode,
+          workspacePath,
+          workspaceName,
           fileTree,
           filePath: currentFilePath,
           fileName: currentFileName,
@@ -497,7 +498,7 @@ export default function App() {
         window.removeEventListener('beforeunload', saveDevState);
       };
     }
-  }, [projectMode, projectPath, projectName, fileTree, currentFilePath, currentFileName, sidebarWidth, isDirty, theme]);
+  }, [workspaceMode, workspacePath, workspaceName, fileTree, currentFilePath, currentFileName, sidebarWidth, isDirty, theme]);
 
   // Load saved sidebar width and AI chat state on mount
   useEffect(() => {
@@ -764,11 +765,11 @@ export default function App() {
     }
   }, [currentFilePath, handleSaveAs]);
 
-  // Handle close project
-  const handleCloseProject = useCallback(async () => {
+  // Handle close workspace
+  const handleCloseWorkspace = useCallback(async () => {
     // Auto-save current file if dirty (no prompt needed with autosave)
     if (isDirty && getContentRef.current) {
-      if (LOG_CONFIG.PROJECT_OPS) console.log('[CLOSE_PROJECT] Auto-saving current file before closing');
+      if (LOG_CONFIG.WORKSPACE_OPS) console.log('[CLOSE_WORKSPACE] Auto-saving current file before closing');
       await handleSave();
     }
 
@@ -776,18 +777,18 @@ export default function App() {
     window.close();
   }, [isDirty, handleSave]);
 
-  // Handle file selection in project
-  const handleProjectFileSelect = useCallback(async (filePath: string) => {
+  // Handle file selection in workspace
+  const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
     if (!window.electronAPI) return;
 
-    if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] Selecting file:', filePath);
+    if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Selecting file:', filePath);
 
     // If tabs are enabled, check if file is already open in a tab
     console.log('[TABS] Tab preferences:', tabPreferences.preferences);
     if (tabPreferences.preferences.enabled) {
       const existingTab = tabs.findTabByPath(filePath);
       if (existingTab) {
-        if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] File already open in tab, switching');
+        if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already open in tab, switching');
         tabs.switchTab(existingTab.id);
         return;
       }
@@ -795,14 +796,14 @@ export default function App() {
 
     // Auto-save current file if dirty (no prompt needed with autosave)
     if (isDirty && getContentRef.current && currentFilePath && currentFilePath !== filePath) {
-      if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] Auto-saving current file before switching');
+      if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Auto-saving current file before switching');
       await handleSave();
     }
 
     try {
-      const result = await window.electronAPI.switchProjectFile(filePath);
+      const result = await window.electronAPI.switchWorkspaceFile(filePath);
       if (result) {
-        if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] File loaded successfully');
+        if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File loaded successfully');
 
         // If tabs are enabled, add a new tab
         if (tabPreferences.preferences.enabled) {
@@ -841,12 +842,12 @@ export default function App() {
         setCurrentDirectory(dirPath);
 
         // Add to recent files
-        if (window.electronAPI?.addToProjectRecentFiles) {
-          window.electronAPI.addToProjectRecentFiles(filePath);
+        if (window.electronAPI?.addToWorkspaceRecentFiles) {
+          window.electronAPI.addToWorkspaceRecentFiles(filePath);
         }
 
         // Explicitly update the current file in main process (redundant but safe)
-        if (LOG_CONFIG.PROJECT_FILE_SELECT) console.log('[PROJECT_FILE_SELECT] Ensuring backend has correct file path');
+        if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Ensuring backend has correct file path');
         const syncResult = window.electronAPI.setCurrentFile(filePath);
         if (syncResult && typeof syncResult.then === 'function') {
           await syncResult;
@@ -888,7 +889,7 @@ export default function App() {
         }
       }
     } catch (error) {
-      console.error('Failed to switch project file:', error);
+      console.error('Failed to switch workspace file:', error);
     }
   }, [isDirty, currentFilePath, handleSave, tabs, tabPreferences]);
 
@@ -897,11 +898,11 @@ export default function App() {
     if (!window.electronAPI) return;
 
     let title = 'Preditor';
-    if (projectMode && projectName) {
+    if (workspaceMode && workspaceName) {
       if (currentFileName) {
-        title = `${currentFileName}${isDirty ? ' •' : ''} - ${projectName} - Preditor`;
+        title = `${currentFileName}${isDirty ? ' •' : ''} - ${workspaceName} - Preditor`;
       } else {
-        title = `${projectName} - Preditor`;
+        title = `${workspaceName} - Preditor`;
       }
     } else if (currentFileName) {
       title = `${currentFileName}${isDirty ? ' •' : ''} - Preditor`;
@@ -909,7 +910,7 @@ export default function App() {
 
     window.electronAPI.setTitle(title);
     window.electronAPI.setDocumentEdited(isDirty);
-  }, [currentFileName, isDirty, projectMode, projectName]);
+  }, [currentFileName, isDirty, workspaceMode, workspaceName]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -920,12 +921,12 @@ export default function App() {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        if (projectMode) {
+        if (workspaceMode) {
           // Load recent files before showing dialog
-          if (window.electronAPI?.getRecentProjectFiles) {
-            window.electronAPI.getRecentProjectFiles().then(files => {
+          if (window.electronAPI?.getRecentWorkspaceFiles) {
+            window.electronAPI.getRecentWorkspaceFiles().then(files => {
               // console.log('[RECENT_FILES] Loaded files for QuickOpen:', files);
-              setRecentProjectFiles(files || []);
+              setRecentWorkspaceFiles(files || []);
             }).catch(error => {
               console.error('[RECENT_FILES] Failed to load:', error);
             });
@@ -935,7 +936,7 @@ export default function App() {
         return false;
       }
       // Cmd+Shift+A (Mac) or Ctrl+Shift+A (Windows/Linux) for AI Chat
-      if (projectMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'a') {
+      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'a') {
         e.preventDefault();
         setIsAIChatCollapsed(prev => !prev);
       }
@@ -959,7 +960,7 @@ export default function App() {
     // Use capture phase to intercept before any other handlers (like Lexical's)
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [projectMode, currentFilePath]);
+  }, [workspaceMode, currentFilePath]);
 
   // Save AI Chat state when it changes (but only after initial load)
   useEffect(() => {
@@ -974,35 +975,35 @@ export default function App() {
     }
   }, [isAIChatCollapsed, aiChatWidth, currentAISessionId, isAIChatStateLoaded]);
 
-  // Load recent project files when in project mode
+  // Load recent workspace files when in workspace mode
   useEffect(() => {
-    if (!projectMode || !window.electronAPI) return;
+    if (!workspaceMode || !window.electronAPI) return;
 
     const loadRecentFiles = async () => {
       try {
-        if (window.electronAPI.getRecentProjectFiles) {
-          // console.log('[RECENT_FILES] Loading recent files for project');
-          const files = await window.electronAPI.getRecentProjectFiles();
+        if (window.electronAPI.getRecentWorkspaceFiles) {
+          // console.log('[RECENT_FILES] Loading recent files for workspace');
+          const files = await window.electronAPI.getRecentWorkspaceFiles();
           // console.log('[RECENT_FILES] Loaded recent files:', files);
-          setRecentProjectFiles(files || []);
+          setRecentWorkspaceFiles(files || []);
         } else {
-          console.warn('[RECENT_FILES] getRecentProjectFiles API not available');
+          console.warn('[RECENT_FILES] getRecentWorkspaceFiles API not available');
         }
       } catch (error) {
-        console.error('[RECENT_FILES] Failed to load recent project files:', error);
+        console.error('[RECENT_FILES] Failed to load recent workspace files:', error);
       }
     };
 
     loadRecentFiles();
-  }, [projectMode, currentFilePath]); // Reload when current file changes
+  }, [workspaceMode, currentFilePath]); // Reload when current file changes
 
   // Handle QuickOpen file selection
   const handleQuickOpenFileSelect = useCallback(async (filePath: string) => {
-    await handleProjectFileSelect(filePath);
-    // Recent files are now added inside handleProjectFileSelect
-  }, [handleProjectFileSelect]);
+    await handleWorkspaceFileSelect(filePath);
+    // Recent files are now added inside handleWorkspaceFileSelect
+  }, [handleWorkspaceFileSelect]);
 
-  // Handle creating a new file in project
+  // Handle creating a new file in workspace
   const handleCreateNewFile = useCallback(async (fileName: string) => {
     if (!window.electronAPI || !currentDirectory) return;
 
@@ -1013,18 +1014,18 @@ export default function App() {
       await window.electronAPI.createFile(filePath, '');
 
       // Open the newly created file
-      await handleProjectFileSelect(filePath);
+      await handleWorkspaceFileSelect(filePath);
 
       // Refresh file tree
-      if (projectPath) {
-        const tree = await window.electronAPI.getFolderContents(projectPath);
+      if (workspacePath) {
+        const tree = await window.electronAPI.getFolderContents(workspacePath);
         setFileTree(tree);
       }
     } catch (error) {
       console.error('Failed to create file:', error);
       alert('Failed to create file: ' + error);
     }
-  }, [currentDirectory, projectPath, handleProjectFileSelect]);
+  }, [currentDirectory, workspacePath, handleWorkspaceFileSelect]);
 
   // Handle restoring content from history
   const handleRestoreFromHistory = useCallback((content: string) => {
@@ -1310,7 +1311,7 @@ export default function App() {
         // Load content if needed
         if (!tabs.activeTab.content && window.electronAPI) {
           console.log('[APP] Loading content for restored active tab');
-          window.electronAPI.switchProjectFile(tabs.activeTab.filePath).then(result => {
+          window.electronAPI.switchWorkspaceFile(tabs.activeTab.filePath).then(result => {
             if (result) {
               tabs.updateTab(tabs.activeTab.id, { content: result.content });
               setCurrentFilePath(tabs.activeTab.filePath);
@@ -1360,11 +1361,11 @@ export default function App() {
         // Load window initial state
         if (window.electronAPI?.getInitialState) {
           const initialState = await window.electronAPI.getInitialState();
-          if (initialState && initialState.mode === 'project') {
-            // Set project state immediately
-            setProjectMode(true);
-            setProjectPath(initialState.projectPath);
-            setProjectName(initialState.projectName);
+          if (initialState && initialState.mode === 'workspace') {
+            // Set workspace state immediately
+            setWorkspaceMode(true);
+            setWorkspacePath(initialState.workspacePath);
+            setWorkspaceName(initialState.workspaceName);
             setFileTree(initialState.fileTree || []);
           }
         }
@@ -1407,13 +1408,13 @@ export default function App() {
 
     cleanupFns.push(window.electronAPI.onFileNew(handleNew));
 
-    // Handle new file in project mode
-    if (window.electronAPI.onFileNewInProject) {
-      cleanupFns.push(window.electronAPI.onFileNewInProject(() => {
-        if (projectMode) {
-          // Use current directory or project root
-          if (!currentDirectory && projectPath) {
-            setCurrentDirectory(projectPath);
+    // Handle new file in workspace mode
+    if (window.electronAPI.onFileNewInWorkspace) {
+      cleanupFns.push(window.electronAPI.onFileNewInWorkspace(() => {
+        if (workspaceMode) {
+          // Use current directory or workspace root
+          if (!currentDirectory && workspacePath) {
+            setCurrentDirectory(workspacePath);
           }
           setIsNewFileDialogOpen(true);
         }
@@ -1422,14 +1423,14 @@ export default function App() {
     cleanupFns.push(window.electronAPI.onFileOpen(handleOpen));
     cleanupFns.push(window.electronAPI.onFileSave(handleSave));
     cleanupFns.push(window.electronAPI.onFileSaveAs(handleSaveAs));
-    cleanupFns.push(window.electronAPI.onProjectOpened(async (data) => {
-      if (LOG_CONFIG.PROJECT_OPS) console.log('[PROJECT] Project opened:', data);
-      setProjectMode(true);
-      setProjectPath(data.projectPath);
-      setProjectName(data.projectName);
+    cleanupFns.push(window.electronAPI.onWorkspaceOpened(async (data) => {
+      if (LOG_CONFIG.WORKSPACE_OPS) console.log('[WORKSPACE] Workspace opened:', data);
+      setWorkspaceMode(true);
+      setWorkspacePath(data.workspacePath);
+      setWorkspaceName(data.workspaceName);
       setFileTree(data.fileTree);
-      // Set current directory to project root
-      setCurrentDirectory(data.projectPath);
+      // Set current directory to workspace root
+      setCurrentDirectory(data.workspacePath);
       // Clear current document
       contentRef.current = '';
       setCurrentFilePath(null);
@@ -1441,10 +1442,10 @@ export default function App() {
     setContentVersion(v => v + 1);
       isInitializedRef.current = false;
 
-      // Restore AI Chat state when opening a project
+      // Restore AI Chat state when opening a workspace
       try {
         const aiChatState = await window.electronAPI.getAIChatState();
-        console.log('Restoring AI Chat state for project:', aiChatState);
+        console.log('Restoring AI Chat state for workspace:', aiChatState);
         if (aiChatState) {
           setIsAIChatCollapsed(aiChatState.collapsed);
           setAIChatWidth(aiChatState.width);
@@ -1457,22 +1458,33 @@ export default function App() {
       }
     }));
 
-    // Handle opening a specific file in a project (used when restoring project state)
-    if (window.electronAPI.onOpenProjectFile) {
-      cleanupFns.push(window.electronAPI.onOpenProjectFile(async (filePath) => {
-        console.log('Opening project file from saved state:', filePath);
+    // Handle opening a specific file in a workspace (used when restoring workspace state)
+    if (window.electronAPI.onOpenWorkspaceFile) {
+      cleanupFns.push(window.electronAPI.onOpenWorkspaceFile(async (filePath) => {
+        console.log('Opening workspace file from saved state:', filePath);
         // Use the existing file selection handler
-        await handleProjectFileSelect(filePath);
+        await handleWorkspaceFileSelect(filePath);
       }));
     }
 
-    // Handle project open from CLI
-    if (window.electronAPI.onOpenProjectFromCLI) {
-      cleanupFns.push(window.electronAPI.onOpenProjectFromCLI(async (projectPath) => {
-        console.log('Opening project from CLI:', projectPath);
-        // Open the project using the existing openProject API
-        if (window.electronAPI.openProject) {
-          await window.electronAPI.openProject(projectPath);
+    if (window.electronAPI.onOpenDocument) {
+      cleanupFns.push(window.electronAPI.onOpenDocument(async ({ path }) => {
+        console.log('[DOCUMENT_LINK] Renderer received open-document for path:', path);
+        try {
+          await handleWorkspaceFileSelect(path);
+        } catch (error) {
+          console.error('[DOCUMENT_LINK] Failed to open document reference:', error);
+        }
+      }));
+    }
+
+    // Handle workspace open from CLI
+    if (window.electronAPI.onOpenWorkspaceFromCLI) {
+      cleanupFns.push(window.electronAPI.onOpenWorkspaceFromCLI(async (workspacePath) => {
+        console.log('Opening workspace from CLI:', workspacePath);
+        // Open the workspace using the existing openWorkspace API
+        if (window.electronAPI.openWorkspace) {
+          await window.electronAPI.openWorkspace(workspacePath);
         }
       }));
     }
@@ -1579,7 +1591,7 @@ export default function App() {
             // Read the file content without touching the watcher
             const result = window.electronAPI.readFileContent
               ? await window.electronAPI.readFileContent(data.path)
-              : await window.electronAPI.switchProjectFile(data.path);
+              : await window.electronAPI.switchWorkspaceFile(data.path);
             if (result && result.content !== undefined) {
               // Get current content from the editor
               const currentContent = getContentRef.current ? getContentRef.current() : contentRef.current;
@@ -1705,8 +1717,8 @@ export default function App() {
                   tabs.updateTab(tabs.activeTabId, { content: res.content });
                 }
               }
-            } else if (window.electronAPI?.switchProjectFile) {
-              const res = await window.electronAPI.switchProjectFile(currentFilePath);
+            } else if (window.electronAPI?.switchWorkspaceFile) {
+              const res = await window.electronAPI.switchWorkspaceFile(currentFilePath);
               if (res?.content !== undefined) {
                 contentRef.current = res.content;
                 initialContentRef.current = res.content;
@@ -1760,24 +1772,24 @@ export default function App() {
         setCurrentFileName(data.newPath.split('/').pop() || data.newPath);
       }
     }));
-    cleanupFns.push(window.electronAPI.onProjectFileTreeUpdated((data) => {
-      // console.log('Project file tree updated:', data);
+    cleanupFns.push(window.electronAPI.onWorkspaceFileTreeUpdated((data) => {
+      // console.log('Workspace file tree updated:', data);
       setFileTree(data.fileTree);
     }));
 
     // Load session from Session Manager
     if (window.electronAPI.onLoadSessionFromManager) {
-      cleanupFns.push(window.electronAPI.onLoadSessionFromManager(async (data: { sessionId: string; projectPath?: string }) => {
+      cleanupFns.push(window.electronAPI.onLoadSessionFromManager(async (data: { sessionId: string; workspacePath?: string }) => {
         console.log('Loading session from manager:', data);
 
-        // If there's a project path and we're not in project mode, open the project first
-        if (data.projectPath && !projectMode) {
-          // Open the project
-          const projectName = data.projectPath.split('/').pop() || 'Project';
-          const fileTree = await window.electronAPI.getFolderContents(data.projectPath);
-          setProjectMode(true);
-          setProjectPath(data.projectPath);
-          setProjectName(projectName);
+        // If there's a workspace path and we're not in workspace mode, open the workspace first
+        if (data.workspacePath && !workspaceMode) {
+          // Open the workspace
+          const workspaceName = data.workspacePath.split('/').pop() || 'Workspace';
+          const fileTree = await window.electronAPI.getFolderContents(data.workspacePath);
+          setWorkspaceMode(true);
+          setWorkspacePath(data.workspacePath);
+          setWorkspaceName(workspaceName);
           setFileTree(fileTree);
         }
 
@@ -1956,7 +1968,7 @@ export default function App() {
       // console.log('Cleaning up IPC listeners');
       cleanupFns.forEach(cleanup => cleanup());
     };
-  }, [handleNew, handleOpen, handleSave, handleSaveAs, currentFilePath, isDirty]);
+  }, [handleNew, handleOpen, handleSave, handleSaveAs, handleWorkspaceFileSelect, currentFilePath, isDirty, workspaceMode]);
 
   logger.ui.info('Rendering App with config:', {
     contentLength: contentRef.current.length,
@@ -1973,32 +1985,32 @@ export default function App() {
 
   return (
     <div
-      style={{ height: '100vh', display: 'flex', flexDirection: projectMode ? 'row' : 'column' }}
+      style={{ height: '100vh', display: 'flex', flexDirection: workspaceMode ? 'row' : 'column' }}
       onKeyDown={(e) => {
         // Intercept Cmd+K/Ctrl+K before it reaches Lexical editor
         if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
           e.preventDefault();
           e.stopPropagation();
-          if (projectMode) {
+          if (workspaceMode) {
             setIsQuickOpenVisible(true);
           }
         }
       }}
     >
-      {projectMode && projectName && (
+      {workspaceMode && workspaceName && (
         <>
           <div ref={sidebarRef} style={{ width: sidebarWidth, position: 'relative' }}>
-            <ProjectSidebar
-              projectName={projectName}
-              projectPath={projectPath || ''}
+            <WorkspaceSidebar
+              workspaceName={workspaceName}
+              workspacePath={workspacePath || ''}
               fileTree={fileTree}
               currentFilePath={currentFilePath}
-              onFileSelect={handleProjectFileSelect}
-              onCloseProject={handleCloseProject}
+              onFileSelect={handleWorkspaceFileSelect}
+              onCloseWorkspace={handleCloseWorkspace}
               onOpenQuickSearch={() => setIsQuickOpenVisible(true)}
               onRefreshFileTree={async () => {
-                if (projectPath && window.electronAPI) {
-                  const tree = await window.electronAPI.getFolderContents(projectPath);
+                if (workspacePath && window.electronAPI) {
+                  const tree = await window.electronAPI.getFolderContents(workspacePath);
                   setFileTree(tree);
                 }
               }}
@@ -2034,11 +2046,11 @@ export default function App() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/*{console.log('[APP] Rendering TabManager check:', {*/}
         {/*  enabled: tabPreferences.preferences.enabled,*/}
-        {/*  projectMode,*/}
+        {/*  workspaceMode,*/}
         {/*  numTabs: tabs.tabs.length,*/}
         {/*  activeTabId: tabs.activeTabId*/}
         {/*})}*/}
-        {tabPreferences.preferences.enabled && projectMode ? (
+        {tabPreferences.preferences.enabled && workspaceMode ? (
           <TabManager
             tabs={tabs.tabs}
             activeTabId={tabs.activeTabId}
@@ -2103,16 +2115,15 @@ export default function App() {
                     editorRef.current = editor;
                     searchCommandRef.current = TOGGLE_SEARCH_COMMAND;
                   },
-                  theme: theme,
-                  markdownTransformers: MARKDOWN_TRANSFORMERS
+                  theme: theme
                 }}
               />
             ) : (
-              <ProjectWelcome projectName={projectName || 'Project'} />
+              <WorkspaceWelcome workspaceName={workspaceName || 'Workspace'} />
             )}
           </TabManager>
-        ) : projectMode && !currentFilePath ? (
-          <ProjectWelcome projectName={projectName || 'Project'} />
+        ) : workspaceMode && !currentFilePath ? (
+          <WorkspaceWelcome workspaceName={workspaceName || 'Workspace'} />
         ) : (
           <StravuEditor
             key={`${contentVersion}-${theme}`}
@@ -2152,13 +2163,13 @@ export default function App() {
           />
         )}
       </div>
-      {projectMode && (
+      {workspaceMode && (
         <AIChat
           isCollapsed={isAIChatCollapsed}
           onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}
           width={aiChatWidth}
           onWidthChange={setAIChatWidth}
-          projectPath={projectPath || undefined}
+          workspacePath={workspacePath || undefined}
           sessionToLoad={sessionToLoad}
           onSessionLoaded={() => setSessionToLoad(null)}
           onSessionIdChange={setCurrentAISessionId}
@@ -2193,21 +2204,21 @@ export default function App() {
           }}
         />
       )}
-      {projectMode && projectPath && (
+      {workspaceMode && workspacePath && (
         <>
           <QuickOpen
             isOpen={isQuickOpenVisible}
             onClose={() => setIsQuickOpenVisible(false)}
-            projectPath={projectPath}
+            workspacePath={workspacePath}
             currentFilePath={currentFilePath}
-            recentFiles={recentProjectFiles}
+            recentFiles={recentWorkspaceFiles}
             onFileSelect={handleQuickOpenFileSelect}
           />
           <NewFileDialog
             isOpen={isNewFileDialogOpen}
             onClose={() => setIsNewFileDialogOpen(false)}
-            currentDirectory={currentDirectory || projectPath}
-            projectPath={projectPath}
+            currentDirectory={currentDirectory || workspacePath}
+            workspacePath={workspacePath}
             onCreateFile={handleCreateNewFile}
           />
         </>

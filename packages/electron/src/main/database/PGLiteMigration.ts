@@ -53,7 +53,7 @@ export class PGLiteMigration {
       await database.transaction(async (tx) => {
         await this.migrateAISessions(tx);
         await this.migrateAppSettings(tx);
-        await this.migrateProjectStates(tx);
+        await this.migrateWorkspaceStates(tx);
         await this.migrateSessionState(tx);
       });
 
@@ -82,13 +82,13 @@ export class PGLiteMigration {
       const sessionsByProject = aiSessionsStore.get('sessionsByProject', {}) as any;
 
       let count = 0;
-      for (const [projectPath, sessions] of Object.entries(sessionsByProject)) {
+      for (const [workspacePath, sessions] of Object.entries(sessionsByProject)) {
         if (!Array.isArray(sessions)) continue;
 
         for (const session of sessions as any[]) {
           await tx.query(`
             INSERT INTO ai_sessions (
-              id, project_id, file_path, provider, model, title,
+              id, workspace_id, file_path, provider, model, title,
               messages, document_context, provider_config,
               provider_session_id, draft_input, created_at, updated_at
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
@@ -96,7 +96,7 @@ export class PGLiteMigration {
             ON CONFLICT (id) DO NOTHING
           `, [
             session.id || uuidv4(),
-            session.projectPath || projectPath,
+            session.workspacePath || workspacePath,
             session.documentContext?.filePath || null,
             session.provider || 'claude',
             session.model || null,
@@ -131,7 +131,7 @@ export class PGLiteMigration {
       const aiSettingsStore = new Store({ name: 'ai-settings' });
 
       const theme = configStore.get('theme', 'system');
-      const recentProjects = configStore.get('recent.projects', []) as any[];
+      const recentWorkspaces = configStore.get('recent.projects', []) as any[]; // Support old key for migration
       const aiProviders = aiSettingsStore.get('providers', {}) as any;
       const keyboardShortcuts = configStore.get('keyboardShortcuts', {}) as any;
 
@@ -139,14 +139,14 @@ export class PGLiteMigration {
         UPDATE app_settings
         SET
           theme = $1,
-          recent_projects = $2,
+          recent_workspaces = $2,
           ai_providers = $3,
           keyboard_shortcuts = $4,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = 'default'
       `, [
         theme,
-        recentProjects,  // PGLite JSONB handles serialization automatically
+        recentWorkspaces,  // PGLite JSONB handles serialization automatically
         aiProviders,     // PGLite JSONB handles serialization automatically
         keyboardShortcuts // PGLite JSONB handles serialization automatically
       ]);
@@ -159,10 +159,10 @@ export class PGLiteMigration {
   }
 
   /**
-   * Migrate Project States
+   * Migrate Workspace States
    */
-  private async migrateProjectStates(tx: any): Promise<void> {
-    logger.main.info('[PGLite Migration] Migrating project states...');
+  private async migrateWorkspaceStates(tx: any): Promise<void> {
+    logger.main.info('[PGLite Migration] Migrating workspace states...');
 
     try {
       const configStore = new Store();
@@ -172,59 +172,59 @@ export class PGLiteMigration {
       const projectRecentFiles = configStore.get('projectRecentFiles', {}) as any;
       const projectTabs = configStore.get('projectTabs', {}) as any;
       const aiChatStates = configStore.get('projectAIChatStates', {}) as any;
-      const recentProjects = configStore.get('recent.projects', []) as any[];
+      const recentWorkspaces = configStore.get('recent.projects', []) as any[];
 
       // Debug logging to see what data we found
       logger.main.info('[PGLite Migration DEBUG] projectWindowStates keys:', Object.keys(projectWindowStates));
       logger.main.info('[PGLite Migration DEBUG] projectRecentFiles keys:', Object.keys(projectRecentFiles));
       logger.main.info('[PGLite Migration DEBUG] projectTabs keys:', Object.keys(projectTabs));
-      logger.main.info('[PGLite Migration DEBUG] recentProjects length:', recentProjects.length);
+      logger.main.info('[PGLite Migration DEBUG] recentWorkspaces length:', recentWorkspaces.length);
 
-      const projectPaths = new Set([
+      const workspacePaths = new Set([
         ...Object.keys(projectWindowStates),
         ...Object.keys(projectRecentFiles),
         ...Object.keys(projectTabs),
         ...Object.keys(aiChatStates),
-        ...recentProjects.map((p: any) => p.path)
+        ...recentWorkspaces.map((p: any) => p.path)
       ]);
 
       let count = 0;
-      for (const projectPath of projectPaths) {
-        logger.main.info(`[PGLite Migration DEBUG] Processing project: ${projectPath}`);
+      for (const workspacePath of workspacePaths) {
+        logger.main.info(`[PGLite Migration DEBUG] Processing workspace: ${workspacePath}`);
 
         // Build documents object with recent documents and tabs
         const documents = {
-          recentDocuments: projectRecentFiles[projectPath] || [],
-          openTabs: projectTabs[projectPath]?.tabs || [],
-          activeTabId: projectTabs[projectPath]?.activeTabId || null,
-          tabOrder: projectTabs[projectPath]?.tabOrder || []
+          recentDocuments: projectRecentFiles[workspacePath] || [],
+          openTabs: projectTabs[workspacePath]?.tabs || [],
+          activeTabId: projectTabs[workspacePath]?.activeTabId || null,
+          tabOrder: projectTabs[workspacePath]?.tabOrder || []
         };
 
-        logger.main.info(`[PGLite Migration DEBUG] Documents for ${projectPath}: recentDocs=${documents.recentDocuments.length}, tabs=${documents.openTabs.length}`);
+        logger.main.info(`[PGLite Migration DEBUG] Documents for ${workspacePath}: recentDocs=${documents.recentDocuments.length}, tabs=${documents.openTabs.length}`);
 
 
         // Build UI state
         const uiState = {
           sidebarWidth: configStore.get('sidebarWidth', 240),
           sidebarCollapsed: false,
-          aiChatWidth: aiChatStates[projectPath]?.width || 350,
-          aiChatCollapsed: aiChatStates[projectPath]?.collapsed || false
+          aiChatWidth: aiChatStates[workspacePath]?.width || 350,
+          aiChatCollapsed: aiChatStates[workspacePath]?.collapsed || false
         };
 
         // Build AI chat state
         const aiChat = {
-          currentSessionId: aiChatStates[projectPath]?.sessionId,
-          draftInput: aiChatStates[projectPath]?.draftInput,
+          currentSessionId: aiChatStates[workspacePath]?.sessionId,
+          draftInput: aiChatStates[workspacePath]?.draftInput,
           sessionHistory: []
         };
 
         await tx.query(`
-          INSERT INTO project_state (
-            project_path, last_opened, window_state, ui_state, documents,
+          INSERT INTO workspace_state (
+            workspace_path, last_opened, window_state, ui_state, documents,
             file_tree, ai_chat, editor_settings, preferences,
             version, updated_at
           ) VALUES ($1, CURRENT_TIMESTAMP, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
-          ON CONFLICT (project_path)
+          ON CONFLICT (workspace_path)
           DO UPDATE SET
             last_opened = CURRENT_TIMESTAMP,
             window_state = EXCLUDED.window_state,
@@ -237,8 +237,8 @@ export class PGLiteMigration {
             version = EXCLUDED.version,
             updated_at = CURRENT_TIMESTAMP
         `, [
-          projectPath,
-          projectWindowStates[projectPath] || {width: 1200, height: 800},  // PGLite JSONB handles serialization
+          workspacePath,
+          projectWindowStates[workspacePath] || {width: 1200, height: 800},  // PGLite JSONB handles serialization
           uiState,  // PGLite JSONB handles serialization
           documents,  // PGLite JSONB handles serialization
           {expandedFolders: [], scrollPosition: 0},  // PGLite JSONB handles serialization
@@ -250,7 +250,7 @@ export class PGLiteMigration {
         count++;
       }
 
-      logger.main.info(`[PGLite Migration] Migrated ${count} project states`);
+      logger.main.info(`[PGLite Migration] Migrated ${count} workspace states`);
     } catch (error) {
       logger.main.error('[PGLite Migration] Failed to migrate project states:', error);
       throw error;

@@ -9,7 +9,7 @@ log.initialize();
 export enum LogComponent {
   // File operations
   FILE_WATCHER = 'FILE_WATCHER',
-  PROJECT_WATCHER = 'PROJECT_WATCHER',
+  WORKSPACE_WATCHER = 'WORKSPACE_WATCHER',
   FILE_OPERATIONS = 'FILE_OPERATIONS',
   FILE_TREE = 'FILE_TREE',
   FILE = 'FILE',
@@ -84,7 +84,7 @@ const defaultConfig: LoggerConfig = {
       enabled: true,
       level: process.env.NODE_ENV === 'development' ? LogLevel.DEBUG : LogLevel.WARN
     },
-    [LogComponent.PROJECT_WATCHER]: {
+    [LogComponent.WORKSPACE_WATCHER]: {
       enabled: true,
       level: process.env.NODE_ENV === 'development' ? LogLevel.DEBUG : LogLevel.WARN
     },
@@ -302,7 +302,7 @@ configureLogger();
 export const logger = {
   // File operations
   fileWatcher: createComponentLogger(LogComponent.FILE_WATCHER),
-  projectWatcher: createComponentLogger(LogComponent.PROJECT_WATCHER),
+  workspaceWatcher: createComponentLogger(LogComponent.WORKSPACE_WATCHER),
   fileOperations: createComponentLogger(LogComponent.FILE_OPERATIONS),
   fileTree: createComponentLogger(LogComponent.FILE_TREE),
   file: createComponentLogger(LogComponent.FILE),

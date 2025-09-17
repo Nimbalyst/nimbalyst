@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import { windows, windowStates, createWindow, windowFocusOrder, windowDevToolsState, getWindowId } from '../window/WindowManager';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getSessionState, saveSessionState as saveToStore, SessionState } from '../utils/store';
-import { startProjectWatcher } from '../file/ProjectWatcher';
+import { startWorkspaceWatcher } from '../file/WorkspaceWatcher.ts';
 import { getFolderContents } from '../utils/FileTree';
 import { basename } from 'path';
 import { logger } from '../utils/logger';
@@ -34,8 +34,8 @@ export async function saveSessionState() {
         if (state.filePath) {
             sessionWindow.filePath = state.filePath;
         }
-        if (state.projectPath) {
-            sessionWindow.projectPath = state.projectPath;
+        if (state.workspacePath) {
+            sessionWindow.workspacePath = state.workspacePath;
         }
 
         sessionWindows.push(sessionWindow);
@@ -77,17 +77,17 @@ export async function restoreSessionState(): Promise<boolean> {
         setTimeout(() => {
             let window: BrowserWindow | null = null;
 
-            if (sessionWindow.mode === 'project' && sessionWindow.projectPath) {
-                // Check if project path still exists
-                if (existsSync(sessionWindow.projectPath)) {
-                    // Restore project window
-                    window = createWindow(false, true, sessionWindow.projectPath, sessionWindow.bounds);
-                    logger.session.info(`Restored project window: ${sessionWindow.projectPath}`);
+            if (sessionWindow.mode === 'workspace' && sessionWindow.workspacePath) {
+                // Check if workspace path still exists
+                if (existsSync(sessionWindow.workspacePath)) {
+                    // Restore workspace window
+                    window = createWindow(false, true, sessionWindow.workspacePath, sessionWindow.bounds);
+                    logger.session.info(`Restored workspace window: ${sessionWindow.workspacePath}`);
 
-                    // If there was a file open in the project, restore it
+                    // If there was a file open in the workspace, restore it
                     if (sessionWindow.filePath && existsSync(sessionWindow.filePath)) {
                         window.once('ready-to-show', () => {
-                            // Wait a bit for the project to load
+                            // Wait a bit for the workspace to load
                             setTimeout(() => {
                                 window.webContents.send('file-opened-from-os', {
                                     filePath: sessionWindow.filePath,
@@ -106,10 +106,10 @@ export async function restoreSessionState(): Promise<boolean> {
                                 }
                             }, 500);
                         });
-                        logger.session.info(`Restored file in project: ${sessionWindow.filePath}`);
+                        logger.session.info(`Restored file in workspace: ${sessionWindow.filePath}`);
                     }
                 } else {
-                    logger.session.warn(`Project path no longer exists: ${sessionWindow.projectPath}`);
+                    logger.session.warn(`Workspace path no longer exists: ${sessionWindow.workspacePath}`);
                 }
             } else if (sessionWindow.mode === 'document' && sessionWindow.filePath) {
                 // Check if file still exists
@@ -132,7 +132,7 @@ export async function restoreSessionState(): Promise<boolean> {
                     highestFocusOrder = focusOrder;
                     lastFocusedWindow = window;
                 }
-                
+
                 // Restore dev tools state
                 if (sessionWindow.devToolsOpen) {
                     // Wait for window to be ready before opening dev tools

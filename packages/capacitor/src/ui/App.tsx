@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { initDB, ProjectsRepository, DocumentsRepository, type DocumentRecord, type Project } from '@stravu/runtime';
+import { initDB, WorkspaceRepository, DocumentsRepository, type DocumentRecord, type Workspace } from '@stravu/runtime';
 import { StravuEditor } from 'rexical';
 import { AIPanel } from './AIPanel';
 
 export function App() {
   const [ready, setReady] = useState(false);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [activeProject, setActiveProject] = useState<Project | null>(null);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspace, setActiveWorkspace] = useState<Workspace | null>(null);
   const [docs, setDocs] = useState<DocumentRecord[]>([]);
   const [activeDoc, setActiveDoc] = useState<DocumentRecord | null>(null);
   const [aiOpen, setAiOpen] = useState(true);
@@ -17,30 +17,30 @@ export function App() {
   useEffect(() => {
     (async () => {
       await initDB();
-      const ps = await ProjectsRepository.list();
-      let project = ps[0];
-      if (!project) {
-        project = await ProjectsRepository.create('My Notes');
+      const ws = await WorkspaceRepository.list();
+      let workspace = ws[0];
+      if (!workspace) {
+        workspace = await WorkspaceRepository.create('My Notes');
       }
-      setProjects([project, ...ps.filter(p => p.id !== project.id)]);
-      setActiveProject(project);
+      setWorkspaces([workspace, ...ws.filter(w => w.id !== workspace.id)]);
+      setActiveWorkspace(workspace);
       setReady(true);
     })();
   }, []);
 
   useEffect(() => {
-    if (!activeProject) return;
+    if (!activeWorkspace) return;
     (async () => {
-      const ds = await DocumentsRepository.list(activeProject.id);
+      const ds = await DocumentsRepository.list(activeWorkspace.id);
       setDocs(ds);
       if (ds.length) setActiveDoc(ds[0]);
     })();
-  }, [activeProject?.id]);
+  }, [activeWorkspace?.id]);
 
   const onNewDoc = async () => {
-    if (!activeProject) return;
-    const created = await DocumentsRepository.create(activeProject.id, 'Untitled');
-    const ds = await DocumentsRepository.list(activeProject.id);
+    if (!activeWorkspace) return;
+    const created = await DocumentsRepository.create(activeWorkspace.id, 'Untitled');
+    const ds = await DocumentsRepository.list(activeWorkspace.id);
     setDocs(ds);
     setActiveDoc(created);
   };
@@ -56,7 +56,7 @@ export function App() {
       await DocumentsRepository.save(payload);
       pendingSave.current = null;
     }
-    const ds = await DocumentsRepository.list(activeDoc.projectId);
+    const ds = await DocumentsRepository.list(activeDoc.workspaceId);
     setDocs(ds);
   };
 
@@ -101,7 +101,7 @@ export function App() {
 
   const onRenameDoc = async (doc: DocumentRecord, title: string) => {
     await DocumentsRepository.save({ id: doc.id, title, content: doc.content });
-    const ds = await DocumentsRepository.list(doc.projectId);
+    const ds = await DocumentsRepository.list(doc.workspaceId);
     setDocs(ds);
     if (activeDoc?.id === doc.id) setActiveDoc({ ...activeDoc, title });
   };
@@ -114,7 +114,7 @@ export function App() {
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           <button className="btn" onClick={onNewDoc}>New Doc</button>
         </div>
-        <div className="muted">{activeProject?.name}</div>
+        <div className="muted">{activeWorkspace?.name}</div>
         <ul className="list">
           {docs.map(d => (
             <li key={d.id} className={activeDoc?.id === d.id ? 'active' : ''} onClick={() => { onSelectDoc(d); setSidebarOpen(false); }}>
@@ -131,7 +131,7 @@ export function App() {
               <button className="btn" onClick={() => { onNewDoc(); }}>New Doc</button>
               <button className="btn" onClick={() => setSidebarOpen(false)}>Close</button>
             </div>
-            <div className="muted">{activeProject?.name}</div>
+            <div className="muted">{activeWorkspace?.name}</div>
             <ul className="list">
               {docs.map(d => (
                 <li key={d.id} className={activeDoc?.id === d.id ? 'active' : ''} onClick={() => { onSelectDoc(d); setSidebarOpen(false); }}>

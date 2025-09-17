@@ -52,7 +52,7 @@ export interface SessionData {
   timestamp: number;
   messages: Message[];
   documentContext?: DocumentContext;
-  projectPath?: string;
+  workspacePath?: string;
   name?: string;
   title?: string;
   draftInput?: string;

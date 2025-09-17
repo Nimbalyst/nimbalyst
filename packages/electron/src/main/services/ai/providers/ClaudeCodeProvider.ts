@@ -61,8 +61,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const systemPrompt = this.buildSystemPrompt(documentContext);
       console.log(`[ClaudeCodeProvider] System prompt build took ${Date.now() - promptBuildStart}ms, length: ${systemPrompt.length}`);
 
-      // Get project path from document context
-      const projectPath = documentContext?.filePath?.split('/').slice(0, -1).join('/') || process.cwd();
+      // Get workspace path from document context
+      const workspacePath = documentContext?.filePath?.split('/').slice(0, -1).join('/') || process.cwd();
 
       // Build options for claude-code
       const options: any = {
@@ -70,7 +70,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         customSystemPrompt: systemPrompt,
         mcpServers: this.getMcpServersConfig(),
         allowedTools: ['*'],
-        cwd: projectPath,
+        cwd: workspacePath,
         abortController: this.abortController,
         model: this.config.model || 'claude-3-5-sonnet-20241022',
         permissionMode: 'bypassPermissions'

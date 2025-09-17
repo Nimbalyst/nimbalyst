@@ -3,9 +3,9 @@ import { join, basename } from 'path';
 import { existsSync } from 'fs';
 import { WindowState, FileTreeItem } from '../types';
 import { WINDOW_CASCADE_OFFSET } from '../utils/constants';
-import { getTheme, saveProjectWindowState } from '../utils/store';
+import { getTheme, saveWorkspaceWindowState } from '../utils/store';
 import { stopFileWatcher } from '../file/FileWatcher';
-import { stopProjectWatcher, startProjectWatcher } from '../file/ProjectWatcher';
+import { stopWorkspaceWatcher, startWorkspaceWatcher } from '../file/WorkspaceWatcher.ts';
 import { getFolderContents } from '../utils/FileTree';
 import { getTitleBarColors } from '../theme/ThemeManager';
 import { ElectronDocumentService, setupDocumentServiceHandlers } from '../services/ElectronDocumentService';
@@ -17,7 +17,7 @@ export const savingWindows = new Set<number>();
 export const windowFocusOrder = new Map<number, number>(); // Track focus order for each window
 export const windowDevToolsState = new Map<number, boolean>(); // Track dev tools state for each window
 
-// Store document services for each project
+// Store document services for each workspace
 const documentServices = new Map<string, ElectronDocumentService>();
 
 let windowIdCounter = 0;
@@ -43,9 +43,9 @@ export function getFocusedOrNewWindow(): BrowserWindow {
 }
 
 export function createWindow(
-    isOpeningFile: boolean = false, 
-    isProjectMode: boolean = false, 
-    projectPath: string | null = null, 
+    isOpeningFile: boolean = false,
+    isWorkspaceMode: boolean = false,
+    workspacePath: string | null = null,
     savedBounds?: { x: number; y: number; width: number; height: number }
 ): BrowserWindow {
     const startTime = Date.now();
@@ -54,7 +54,7 @@ export function createWindow(
 
         // Set up icon path based on platform
         let iconPath: string | undefined;
-        
+
         if (process.platform === 'darwin') {
             iconPath = join(__dirname, '../../resources/icon.png');
         } else if (process.platform === 'win32') {
@@ -123,7 +123,7 @@ export function createWindow(
             height,
             x,
             y,
-            title: isProjectMode && projectPath ? basename(projectPath) : 'Preditor',
+            title: isWorkspaceMode && workspacePath ? basename(workspacePath) : 'Preditor',
             backgroundColor,
             webPreferences: {
                 nodeIntegration: false,
@@ -149,14 +149,14 @@ export function createWindow(
         // Store window and initial state
         windows.set(windowId, window);
         windowStates.set(windowId, {
-            mode: isProjectMode ? 'project' : 'document',
+            mode: isWorkspaceMode ? 'workspace' : 'document',
             filePath: null,
-            projectPath: isProjectMode ? projectPath : null,
+            workspacePath: isWorkspaceMode ? workspacePath : null,
             documentEdited: false
         });
         windowFocusOrder.set(windowId, ++focusOrderCounter); // Track initial focus order
-        
-        console.log('[MAIN] Window stored in maps. Mode:', isProjectMode ? 'project' : 'document');
+
+        console.log('[MAIN] Window stored in maps. Mode:', isWorkspaceMode ? 'workspace' : 'document');
         console.log('[MAIN] Windows Map now has:', windows.size, 'windows');
         console.log('[MAIN] Window IDs in map:', [...windows.keys()]);
 
@@ -168,7 +168,7 @@ export function createWindow(
             window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
                 const levelNames = ['verbose', 'info', 'warning', 'error'];
                 const levelName = levelNames[level] || 'unknown';
-                
+
                 // Send to main process for file logging
                 const timestamp = new Date().toISOString();
                 const logData = {
@@ -177,7 +177,7 @@ export function createWindow(
                     source: sourceId || 'renderer',
                     message: `${message} ${line ? `(line ${line})` : ''}`
                 };
-                
+
                 // Emit to IPC for file logging
                 ipcMain.emit('console-log', null, logData);
             });
@@ -220,16 +220,16 @@ export function createWindow(
         });
 
         window.on('close', (event) => {
-            // Save project-specific window state before closing
+            // Save workspace-specific window state before closing
             const state = windowStates.get(windowId);
-            if (state?.mode === 'project' && state.projectPath) {
+            if (state?.mode === 'workspace' && state.workspacePath) {
                 const bounds = window.getBounds();
                 const focusOrder = windowFocusOrder.get(windowId) || 0;
                 const devToolsOpen = windowDevToolsState.get(windowId) || false;
-                
-                saveProjectWindowState(state.projectPath, {
-                    mode: 'project',
-                    projectPath: state.projectPath,
+
+                saveWorkspaceWindowState(state.workspacePath, {
+                    mode: 'workspace',
+                    workspacePath: state.workspacePath,
                     filePath: state.filePath,
                     bounds,
                     focusOrder,
@@ -246,21 +246,21 @@ export function createWindow(
             windowFocusOrder.delete(windowId);
             windowDevToolsState.delete(windowId);
             stopFileWatcher(windowId);
-            stopProjectWatcher(windowId);
+            stopWorkspaceWatcher(windowId);
 
-            // Clean up document service if this was the last window for the project
-            if (state?.mode === 'project' && state.projectPath) {
-                // Check if any other windows are using this project
-                const otherProjectWindows = Array.from(windowStates.values())
-                    .filter(s => s.mode === 'project' && s.projectPath === state.projectPath);
+            // Clean up document service if this was the last window for the workspace
+            if (state?.mode === 'workspace' && state.workspacePath) {
+                // Check if any other windows are using this workspace
+                const otherWorkspaceWindows = Array.from(windowStates.values())
+                    .filter(s => s.mode === 'workspace' && s.workspacePath === state.workspacePath);
 
-                if (otherProjectWindows.length === 0) {
+                if (otherWorkspaceWindows.length === 0) {
                     // Clean up document service if no other windows are using it
-                    const docService = documentServices.get(state.projectPath);
+                    const docService = documentServices.get(state.workspacePath);
                     if (docService) {
                         docService.destroy();
-                        documentServices.delete(state.projectPath);
-                        console.log('[MAIN] Destroyed DocumentService for project:', state.projectPath);
+                        documentServices.delete(state.workspacePath);
+                        console.log('[MAIN] Destroyed DocumentService for workspace:', state.workspacePath);
                     }
                 }
             }
@@ -307,7 +307,7 @@ export function createWindow(
                 return window.loadFile(htmlPath);
             }
         };
-        
+
         loadContent().catch(err => {
             console.error('[MAIN] Failed to load window content:', err);
             // Try to reload once
@@ -346,7 +346,7 @@ export function createWindow(
                 message: 'The window is not responding',
                 detail: 'Would you like to reload the window?'
             });
-            
+
             if (choice === 0 && !window.isDestroyed()) {
                 window.reload();
             }
@@ -360,25 +360,25 @@ export function createWindow(
         // When the window is ready, send initial data
         window.webContents.once('did-finish-load', () => {
             console.log('[MAIN] did-finish-load at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
-            
+
             // Send the current theme to the new window
             const theme = getTheme();
             window.webContents.send('theme-change', theme);
 
-            if (isProjectMode && projectPath) {
-                // Don't send 'project-opened' here - the renderer already knows it's in project mode
+            if (isWorkspaceMode && workspacePath) {
+                // Don't send 'workspace-opened' here - the renderer already knows it's in workspace mode
                 // from the initial state. Sending this event causes the tabs to be cleared.
-                // Just start watching the project directory for changes
+                // Just start watching the workspace directory for changes
                 setTimeout(() => {
-                    startProjectWatcher(window, projectPath);
+                    startWorkspaceWatcher(window, workspacePath);
                 }, 100);
 
-                // Create document service for this project if it doesn't exist
-                if (!documentServices.has(projectPath)) {
-                    const docService = new ElectronDocumentService(projectPath);
-                    documentServices.set(projectPath, docService);
+                // Create document service for this workspace if it doesn't exist
+                if (!documentServices.has(workspacePath)) {
+                    const docService = new ElectronDocumentService(workspacePath);
+                    documentServices.set(workspacePath, docService);
                     setupDocumentServiceHandlers(docService);
-                    console.log('[MAIN] Created DocumentService for project:', projectPath);
+                    console.log('[MAIN] Created DocumentService for workspace:', workspacePath);
                 }
             } else if (!isOpeningFile) {
                 // Create new untitled document
@@ -431,13 +431,13 @@ export function updateWindowTitle(window: BrowserWindow) {
     let title = 'Untitled';
 
     if (state) {
-        if (state.mode === 'project' && state.projectPath) {
-            const projectName = basename(state.projectPath);
+        if (state.mode === 'workspace' && state.workspacePath) {
+            const workspaceName = basename(state.workspacePath);
             if (state.filePath) {
                 const fileName = basename(state.filePath);
-                title = `${fileName} - ${projectName}`;
+                title = `${fileName} - ${workspaceName}`;
             } else {
-                title = projectName;
+                title = workspaceName;
             }
         } else if (state.filePath) {
             title = basename(state.filePath);

@@ -5,7 +5,7 @@ import { basename } from 'path';
 import { loadFileIntoWindow, saveFile } from '../file/FileOperations';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { AUTOSAVE_DELAY } from '../utils/constants';
-import { addProjectRecentFile } from '../utils/store';
+import { addWorkspaceRecentFile } from '../utils/store';
 import { logger } from '../utils/logger';
 
 export function registerFileHandlers() {
@@ -70,13 +70,13 @@ export function registerFileHandlers() {
         // console.log('[SAVE] Current state:', {
         //     hasState: !!state,
         //     filePath: state?.filePath,
-        //     projectPath: state?.projectPath,
+        //     workspacePath: state?.workspacePath,
         //     documentEdited: state?.documentEdited
         // });
         // console.log('[SAVE] All window states:', Array.from(windowStates.entries()).map(([id, s]) => ({
         //     windowId: id,
         //     filePath: s?.filePath,
-        //     projectPath: s?.projectPath
+        //     workspacePath: s?.workspacePath
         // })));
 
         try {
@@ -204,7 +204,7 @@ export function registerFileHandlers() {
             state = {
                 filePath: null,
                 documentEdited: false,
-                projectPath: null
+                workspacePath: null
             };
             windowStates.set(windowId, state);
         }
@@ -248,7 +248,7 @@ export function registerFileHandlers() {
         console.log('[SET_FILE] ✓ File path update complete');
         console.log('[SET_FILE] Final state:', {
             filePath: state.filePath,
-            projectPath: state.projectPath,
+            workspacePath: state.workspacePath,
             documentEdited: state.documentEdited
         });
 

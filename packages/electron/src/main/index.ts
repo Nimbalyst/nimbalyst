@@ -7,10 +7,10 @@ import { loadFileIntoWindow } from './file/FileOperations';
 import { createApplicationMenu, updateApplicationMenu } from './menu/ApplicationMenu';
 import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
 import { saveSessionState, restoreSessionState } from './session/SessionState';
-import { createProjectManagerWindow, setupProjectManagerHandlers } from './window/ProjectManagerWindow';
+import { createWorkspaceManagerWindow, setupWorkspaceManagerHandlers } from './window/WorkspaceManagerWindow.ts';
 import { registerSessionManagerHandlers } from './window/SessionManagerWindow';
 import { registerFileHandlers } from './ipc/FileHandlers';
-import { registerProjectHandlers } from './ipc/ProjectHandlers';
+import { registerWorkspaceHandlers } from './ipc/WorkspaceHandlers.ts';
 import { registerSettingsHandlers } from './ipc/SettingsHandlers';
 import { registerWindowHandlers } from './ipc/WindowHandlers';
 import { registerHistoryHandlers } from './ipc/HistoryHandlers';
@@ -22,15 +22,15 @@ import { logger } from './utils/logger';
 import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
 import { setupForceQuit, cancelForceQuit } from './utils/forceQuit';
 import { stopAllFileWatchers } from './file/FileWatcher';
-import { stopAllProjectWatchers } from './file/ProjectWatcher';
+import { stopAllWorkspaceWatchers } from './file/WorkspaceWatcher.ts';
 import { autoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
 import { migrateUserData } from './migration/dataMigration';
 import { initializeDatabase } from './database/initialize';
 
 // Track pending file to open
 let pendingFilePath: string | null = null;
-// Track pending project to open
-let pendingProjectPath: string | null = null;
+// Track pending workspace to open
+let pendingWorkspacePath: string | null = null;
 
 // Session save interval
 let sessionSaveInterval: NodeJS.Timeout | null = null;
@@ -114,9 +114,9 @@ function parseCommandLineArgs() {
     const args = process.argv.slice(app.isPackaged ? 1 : 2);
 
     for (let i = 0; i < args.length; i++) {
-        if (args[i] === '--project' && i + 1 < args.length) {
-            pendingProjectPath = args[i + 1];
-            logger.main.info(`Project path from CLI: ${pendingProjectPath}`);
+        if (args[i] === '--workspace' && i + 1 < args.length) {
+            pendingWorkspacePath = args[i + 1];
+            logger.main.info(`Workspace path from CLI: ${pendingWorkspacePath}`);
         }
     }
 }
@@ -175,13 +175,13 @@ app.whenReady().then(async () => {
 
     // Register all IPC handlers
     registerFileHandlers();
-    registerProjectHandlers();
+    registerWorkspaceHandlers();
     registerSettingsHandlers();
     registerWindowHandlers();
     await registerHistoryHandlers();
     await registerSessionHandlers();
     registerSessionManagerHandlers();
-    setupProjectManagerHandlers();
+    setupWorkspaceManagerHandlers();
 
     // Initialize AI service
     aiService = new AIService();
@@ -200,20 +200,20 @@ app.whenReady().then(async () => {
         updateDocumentState(state);
     });
 
-    // Try to restore session, otherwise show Project Manager
+    // Try to restore session, otherwise show Workspace Manager
     const sessionRestored = await restoreSessionState();
 
-    if (pendingProjectPath) {
-        // Handle project path from CLI
+    if (pendingWorkspacePath) {
+        // Handle workspace path from CLI
         const window = createWindow(true);
         window.once('ready-to-show', () => {
-            // Send project open event to renderer
-            window.webContents.send('open-project-from-cli', pendingProjectPath);
-            pendingProjectPath = null;
+            // Send workspace open event to renderer
+            window.webContents.send('open-workspace-from-cli', pendingWorkspacePath);
+            pendingWorkspacePath = null;
         });
     } else if (!sessionRestored && !pendingFilePath) {
-        // No session to restore and no file to open, show Project Manager
-        createProjectManagerWindow();
+        // No session to restore and no file to open, show Workspace Manager
+        createWorkspaceManagerWindow();
     } else if (pendingFilePath) {
         // Handle pending file if we have one
         const window = createWindow(true);
@@ -409,9 +409,9 @@ app.on('before-quit', async (event) => {
         stopAllFileWatchers();
         console.log('[QUIT] stopAllFileWatchers returned');
 
-        console.log('[QUIT] Calling stopAllProjectWatchers...');
-        stopAllProjectWatchers();
-        console.log('[QUIT] stopAllProjectWatchers returned');
+        console.log('[QUIT] Calling stopAllWorkspaceWatchers...');
+        stopAllWorkspaceWatchers();
+        console.log('[QUIT] stopAllWorkspaceWatchers returned');
 
         if (canWriteLogs && debugLog) {
             try {
@@ -581,11 +581,11 @@ app.on('before-quit', async (event) => {
 app.on('window-all-closed', () => {
   logger.main.info('All windows closed');
   // On macOS, keep app running when all windows are closed
-  // and show the Project Manager, but NOT when we are quitting.
+  // and show the Workspace Manager, but NOT when we are quitting.
   if (process.platform === 'darwin') {
     if (!isAppQuitting) {
-      // Only show the Project Manager when not quitting the app
-      createProjectManagerWindow();
+      // Only show the Workspace Manager when not quitting the app
+      createWorkspaceManagerWindow();
     }
     // If we are quitting, do nothing here and allow normal quit to proceed
   } else {

@@ -18,8 +18,8 @@ interface AIChatProps {
   onWidthChange: (width: number) => void;
   documentContext?: DocumentContext & { getLatestContent?: () => string };
   onApplyEdit?: (edit: any, prompt?: string, aiResponse?: string) => void;
-  projectPath?: string;
-  sessionToLoad?: { sessionId: string; projectPath?: string } | null;
+  workspacePath?: string;
+  sessionToLoad?: { sessionId: string; workspacePath?: string } | null;
   onSessionLoaded?: () => void;
   onSessionIdChange?: (sessionId: string | null) => void;
 }
@@ -31,7 +31,7 @@ export function AIChat({
   onWidthChange,
   documentContext,
   onApplyEdit,
-  projectPath,
+  workspacePath,
   sessionToLoad,
   onSessionLoaded,
   onSessionIdChange,
@@ -129,7 +129,7 @@ export function AIChat({
   // Load sessions on mount
   const loadSessions = useCallback(async () => {
     try {
-      const allSessions = await aiApi.getSessions(projectPath);
+      const allSessions = await aiApi.getSessions(workspacePath);
       setSessions(allSessions || []);
 
       // Sync currentModel with actual session if we have one
@@ -150,7 +150,7 @@ export function AIChat({
     } catch (error) {
       logger.session.info('Failed to load sessions:', error);
     }
-  }, [projectPath, currentSessionId, currentModel]);
+  }, [workspacePath, currentSessionId, currentModel]);
 
   // Set up all event listeners FIRST (before initialization)
   useEffect(() => {
@@ -648,13 +648,13 @@ export function AIChat({
       try {
         await aiApi.initialize();
 
-        // First check if there's an existing session for this project
-        const existingSessions = await aiApi.getSessions(projectPath);
+        // First check if there's an existing session for this workspace
+        const existingSessions = await aiApi.getSessions(workspacePath);
         let session;
 
         if (existingSessions && existingSessions.length > 0) {
           // Load the most recent session
-          session = await aiApi.loadSession(existingSessions[0].id, projectPath);
+          session = await aiApi.loadSession(existingSessions[0].id, workspacePath);
 
           // ALWAYS restore the provider and model from the session
           // This ensures the UI shows what's actually being used
@@ -736,7 +736,7 @@ export function AIChat({
     return () => {
       mounted = false;
     };
-  }, [projectPath, documentContext, loadSessions, hasApiKey]);
+  }, [workspacePath, documentContext, loadSessions, hasApiKey]);
 
   // Update document context when it changes
   useEffect(() => {
@@ -848,7 +848,7 @@ export function AIChat({
 
     try {
       // Send message to Claude with fresh document context and session ID
-      await aiApi.sendMessage(message, freshDocumentContext, currentSessionId!, projectPath);
+      await aiApi.sendMessage(message, freshDocumentContext, currentSessionId!, workspacePath);
       // Reload sessions to update message counts
       await loadSessions();
     } catch (error: any) {
@@ -871,7 +871,7 @@ export function AIChat({
       }]);
       setIsLoading(false);
     }
-  }, [isInitialized, documentContext, loadSessions, currentSessionId, projectPath]);
+  }, [isInitialized, documentContext, loadSessions, currentSessionId, workspacePath]);
 
   const handleNavigateHistory = useCallback((direction: 'up' | 'down') => {
     const userMessages = messages.filter(m => m.role === 'user');
@@ -978,7 +978,7 @@ export function AIChat({
         selection: documentContext.selection
       } : undefined;
 
-      const session = await aiApi.createSession(cleanDocumentContext, projectPath, provider as any, model);
+      const session = await aiApi.createSession(cleanDocumentContext, workspacePath, provider as any, model);
       setCurrentSessionId(session.id);
       setMessages([]);
       setInputValue(''); // Clear input for new session
@@ -1019,15 +1019,15 @@ export function AIChat({
         }]);
       }
     }
-  }, [documentContext, projectPath, currentModel, loadSessions, onShowApiKeyError]);
+  }, [documentContext, workspacePath, currentModel, loadSessions, onShowApiKeyError]);
 
   const handleOpenSessionManager = useCallback(async () => {
     try {
-      await (window as any).electronAPI.openSessionManager(projectPath);
+      await (window as any).electronAPI.openSessionManager(workspacePath);
     } catch (error) {
       logger.session.info('Failed to open session manager:', error);
     }
-  }, [projectPath]);
+  }, [workspacePath]);
 
   // Sync messages to backend whenever they change
   useEffect(() => {
@@ -1035,7 +1035,7 @@ export function AIChat({
 
     const syncMessages = async () => {
       try {
-        await aiApi.updateSessionMessages(currentSessionId, messages, projectPath);
+        await aiApi.updateSessionMessages(currentSessionId, messages, workspacePath);
         // Reload sessions to update message counts
         await loadSessions();
       } catch (error) {
@@ -1046,7 +1046,7 @@ export function AIChat({
     // Debounce to avoid too many updates
     const timeoutId = setTimeout(syncMessages, 500);
     return () => clearTimeout(timeoutId);
-  }, [messages, currentSessionId, projectPath, loadSessions]);
+  }, [messages, currentSessionId, workspacePath, loadSessions]);
 
   // Save draft input whenever it changes
   useEffect(() => {
@@ -1054,7 +1054,7 @@ export function AIChat({
 
     const saveDraft = async () => {
       try {
-        await aiApi.saveDraftInput(currentSessionId, inputValue, projectPath);
+        await aiApi.saveDraftInput(currentSessionId, inputValue, workspacePath);
       } catch (error) {
         logger.session.info('Failed to save draft input:', error);
       }
@@ -1063,11 +1063,11 @@ export function AIChat({
     // Debounce to avoid too many saves
     const timeoutId = setTimeout(saveDraft, 1000);
     return () => clearTimeout(timeoutId);
-  }, [inputValue, currentSessionId, projectPath, isInitialized]);
+  }, [inputValue, currentSessionId, workspacePath, isInitialized]);
 
   const handleSessionSelect = useCallback(async (sessionId: string) => {
     try {
-      const session = await aiApi.loadSession(sessionId, projectPath);
+      const session = await aiApi.loadSession(sessionId, workspacePath);
 
       // Handle case where session doesn't exist (was deleted)
       if (!session) {
@@ -1129,12 +1129,12 @@ export function AIChat({
         onSessionIdChange(null);
       }
     }
-  }, [projectPath, onSessionIdChange]);
+  }, [workspacePath, onSessionIdChange]);
 
   const handleDeleteSession = useCallback(async (sessionId: string) => {
     try {
       // Delete the session
-      await aiApi.deleteSession(sessionId, projectPath);
+      await aiApi.deleteSession(sessionId, workspacePath);
 
       // If we deleted the current session, clear the UI but don't create a new one yet
       if (sessionId === currentSessionId) {
@@ -1147,7 +1147,7 @@ export function AIChat({
     } catch (error) {
       logger.session.info('Failed to delete session:', error);
     }
-  }, [currentSessionId, projectPath, loadSessions]);
+  }, [currentSessionId, workspacePath, loadSessions]);
 
   const handleRenameSession = useCallback(async (sessionId: string, newName: string) => {
     try {
@@ -1200,7 +1200,7 @@ export function AIChat({
       `Chat Session Export`,
       `Date: ${new Date().toISOString()}`,
       `Session ID: ${currentSessionId || 'None'}`,
-      `Project: ${projectPath || 'None'}`,
+      `Workspace: ${workspacePath || 'None'}`,
       `Provider: ${sessions.find(s => s.id === currentSessionId)?.provider || 'None'}`,
       `Model: ${sessions.find(s => s.id === currentSessionId)?.model || 'None'}`,
       `Messages: ${messages.length}`,
@@ -1216,7 +1216,7 @@ export function AIChat({
     }).catch(err => {
       logger.ui.info('Failed to copy chat:', err);
     });
-  }, [messages, currentSessionId, projectPath, sessions]);
+  }, [messages, currentSessionId, workspacePath, sessions]);
 
   // Handle loading a specific session from Session Manager
   useEffect(() => {

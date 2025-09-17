@@ -67,7 +67,8 @@ export {
   createHeadlessEditorFromEditor, 
   markdownToJSONSync,
   type InsertMode,
-  MARKDOWN_TRANSFORMERS
+  MARKDOWN_TRANSFORMERS,
+  getEditorTransformers
 } from './markdown';
 
 // Diff plugin and hook

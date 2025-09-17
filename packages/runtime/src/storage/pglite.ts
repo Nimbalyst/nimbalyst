@@ -49,7 +49,7 @@ export async function initDB(): Promise<PGlite> {
 
 async function ensureSchema(db: PGlite): Promise<void> {
   await db.exec(`
-    CREATE TABLE IF NOT EXISTS projects (
+    CREATE TABLE IF NOT EXISTS workspaces (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       created_at BIGINT NOT NULL,
@@ -58,14 +58,14 @@ async function ensureSchema(db: PGlite): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS documents (
       id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
+      workspace_id TEXT NOT NULL,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
       created_at BIGINT NOT NULL,
       updated_at BIGINT NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id);
+    CREATE INDEX IF NOT EXISTS idx_documents_workspace ON documents(workspace_id);
 
     CREATE TABLE IF NOT EXISTS settings (
       id TEXT PRIMARY KEY DEFAULT 'default',

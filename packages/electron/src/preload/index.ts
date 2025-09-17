@@ -42,28 +42,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('file-new', callback);
     return () => ipcRenderer.removeListener('file-new', callback);
   },
-  onFileNewInProject: (callback: () => void) => {
-    ipcRenderer.on('file-new-in-project', callback);
-    return () => ipcRenderer.removeListener('file-new-in-project', callback);
+  onFileNewInWorkspace: (callback: () => void) => {
+    ipcRenderer.on('file-new-in-workspace', callback);
+    return () => ipcRenderer.removeListener('file-new-in-workspace', callback);
   },
   onFileOpen: (callback: () => void) => {
     ipcRenderer.on('file-open', callback);
     return () => ipcRenderer.removeListener('file-open', callback);
   },
-  onProjectOpened: (callback: (data: { projectPath: string; projectName: string; fileTree: any[] }) => void) => {
+  onWorkspaceOpened: (callback: (data: { workspacePath: string; workspaceName: string; fileTree: any[] }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
-    ipcRenderer.on('project-opened', handler);
-    return () => ipcRenderer.removeListener('project-opened', handler);
+    ipcRenderer.on('workspace-opened', handler);
+    return () => ipcRenderer.removeListener('workspace-opened', handler);
   },
-  onOpenProjectFile: (callback: (filePath: string) => void) => {
+  onOpenWorkspaceFile: (callback: (filePath: string) => void) => {
     const handler = (_event: any, filePath: string) => callback(filePath);
-    ipcRenderer.on('open-project-file', handler);
-    return () => ipcRenderer.removeListener('open-project-file', handler);
+    ipcRenderer.on('open-workspace-file', handler);
+    return () => ipcRenderer.removeListener('open-workspace-file', handler);
   },
-  onOpenProjectFromCLI: (callback: (projectPath: string) => void) => {
-    const handler = (_event: any, projectPath: string) => callback(projectPath);
-    ipcRenderer.on('open-project-from-cli', handler);
-    return () => ipcRenderer.removeListener('open-project-from-cli', handler);
+  onOpenDocument: (callback: (data: { path: string }) => void) => {
+    const handler = (_event: any, data: { path: string }) => callback(data);
+    ipcRenderer.on('open-document', handler);
+    return () => ipcRenderer.removeListener('open-document', handler);
+  },
+  onOpenWorkspaceFromCLI: (callback: (workspacePath: string) => void) => {
+    const handler = (_event: any, workspacePath: string) => callback(workspacePath);
+    ipcRenderer.on('open-workspace-from-cli', handler);
+    return () => ipcRenderer.removeListener('open-workspace-from-cli', handler);
   },
   onFileSave: (callback: () => void) => {
     ipcRenderer.on('file-save', callback);
@@ -109,28 +114,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('view-history', callback);
     return () => ipcRenderer.removeListener('view-history', callback);
   },
-  
+
   onNextTab: (callback: () => void) => {
     ipcRenderer.on('next-tab', callback);
     return () => ipcRenderer.removeListener('next-tab', callback);
   },
-  
+
   onPreviousTab: (callback: () => void) => {
     ipcRenderer.on('previous-tab', callback);
     return () => ipcRenderer.removeListener('previous-tab', callback);
   },
-  
+
   onApproveAction: (callback: () => void) => {
     ipcRenderer.on('approve-action', callback);
     return () => ipcRenderer.removeListener('approve-action', callback);
   },
-  
+
   onRejectAction: (callback: () => void) => {
     ipcRenderer.on('reject-action', callback);
     return () => ipcRenderer.removeListener('reject-action', callback);
   },
-  
-  onLoadSessionFromManager: (callback: (data: { sessionId: string; projectPath?: string }) => void) => {
+
+  onLoadSessionFromManager: (callback: (data: { sessionId: string; workspacePath?: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('load-session-from-manager', handler);
     return () => ipcRenderer.removeListener('load-session-from-manager', handler);
@@ -154,120 +159,120 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Get initial window state
   getInitialState: () => ipcRenderer.invoke('get-initial-state'),
-  // Project operations
+  // Workspace operations
   getFolderContents: (dirPath: string) => ipcRenderer.invoke('get-folder-contents', dirPath),
   createFile: (filePath: string, content: string) => ipcRenderer.invoke('create-file', filePath, content),
   createFolder: (folderPath: string) => ipcRenderer.invoke('create-folder', folderPath),
-  switchProjectFile: (filePath: string) => ipcRenderer.invoke('switch-project-file', filePath),
+  switchWorkspaceFile: (filePath: string) => ipcRenderer.invoke('switch-workspace-file', filePath),
   readFileContent: (filePath: string) => ipcRenderer.invoke('read-file-content', filePath),
-  
+
   // File context menu operations
   renameFile: (oldPath: string, newName: string) => ipcRenderer.invoke('rename-file', oldPath, newName),
   deleteFile: (filePath: string) => ipcRenderer.invoke('delete-file', filePath),
   openFileInNewWindow: (filePath: string) => ipcRenderer.invoke('open-file-in-new-window', filePath),
-  openSessionManager: (filterProject?: string) => ipcRenderer.invoke('open-session-manager', filterProject),
+  openSessionManager: (filterWorkspace?: string) => ipcRenderer.invoke('open-session-manager', filterWorkspace),
   showInFinder: (filePath: string) => ipcRenderer.invoke('show-in-finder', filePath),
   moveFile: (sourcePath: string, targetPath: string) => ipcRenderer.invoke('move-file', sourcePath, targetPath),
   copyFile: (sourcePath: string, targetPath: string) => ipcRenderer.invoke('copy-file', sourcePath, targetPath),
-  
+
   // File change event listeners
   onFileRenamed: (callback: (data: { oldPath: string; newPath: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('file-renamed', handler);
     return () => ipcRenderer.removeListener('file-renamed', handler);
   },
-  
+
   onFileMoved: (callback: (data: { sourcePath: string; destinationPath: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('file-moved', handler);
     return () => ipcRenderer.removeListener('file-moved', handler);
   },
-  
+
   onFileCopied: (callback: (data: { sourcePath: string; destinationPath: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('file-copied', handler);
     return () => ipcRenderer.removeListener('file-copied', handler);
   },
-  
-  onProjectFileTreeUpdated: (callback: (data: { fileTree: any[]; addedPath?: string; removedPath?: string }) => void) => {
+
+  onWorkspaceFileTreeUpdated: (callback: (data: { fileTree: any[]; addedPath?: string; removedPath?: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
-    ipcRenderer.on('project-file-tree-updated', handler);
-    return () => ipcRenderer.removeListener('project-file-tree-updated', handler);
+    ipcRenderer.on('workspace-file-tree-updated', handler);
+    return () => ipcRenderer.removeListener('workspace-file-tree-updated', handler);
   },
-  
+
   onFileChangedOnDisk: (callback: (data: { path: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('file-changed-on-disk', handler);
     return () => ipcRenderer.removeListener('file-changed-on-disk', handler);
   },
-  
+
   // Settings operations
   getSidebarWidth: () => ipcRenderer.invoke('get-sidebar-width'),
   setSidebarWidth: (width: number) => ipcRenderer.send('set-sidebar-width', width),
   getAIChatState: () => ipcRenderer.invoke('get-ai-chat-state'),
   setAIChatState: (state: { collapsed: boolean; width: number; sessionId?: string }) => ipcRenderer.send('set-ai-chat-state', state),
-  
+
   // QuickOpen operations
-  searchProjectFiles: (projectPath: string, query: string) => ipcRenderer.invoke('search-project-files', projectPath, query),
-  searchProjectFileNames: (projectPath: string, query: string) => ipcRenderer.invoke('search-project-file-names', projectPath, query),
-  searchProjectFileContent: (projectPath: string, query: string) => ipcRenderer.invoke('search-project-file-content', projectPath, query),
-  getRecentProjectFiles: () => ipcRenderer.invoke('get-recent-project-files'),
-  addToProjectRecentFiles: (filePath: string) => ipcRenderer.send('add-to-project-recent-files', filePath),
-  
+  searchWorkspaceFiles: (workspacePath: string, query: string) => ipcRenderer.invoke('search-workspace-files', workspacePath, query),
+  searchWorkspaceFileNames: (workspacePath: string, query: string) => ipcRenderer.invoke('search-workspace-file-names', workspacePath, query),
+  searchWorkspaceFileContent: (workspacePath: string, query: string) => ipcRenderer.invoke('search-workspace-file-content', workspacePath, query),
+  getRecentWorkspaceFiles: () => ipcRenderer.invoke('get-recent-workspace-files'),
+  addToWorkspaceRecentFiles: (filePath: string) => ipcRenderer.send('add-to-workspace-recent-files', filePath),
+
   // Tab state operations
-  getProjectTabState: () => ipcRenderer.invoke('get-project-tab-state'),
-  saveProjectTabState: (tabState: any) => ipcRenderer.send('save-project-tab-state', tabState),
-  clearProjectTabState: () => ipcRenderer.send('clear-project-tab-state'),
-  
+  getWorkspaceTabState: () => ipcRenderer.invoke('get-workspace-tab-state'),
+  saveWorkspaceTabState: (tabState: any) => ipcRenderer.send('save-workspace-tab-state', tabState),
+  clearWorkspaceTabState: () => ipcRenderer.send('clear-workspace-tab-state'),
+
   // History operations
   history: {
-    createSnapshot: (filePath: string, state: string, type: string, description?: string) => 
+    createSnapshot: (filePath: string, state: string, type: string, description?: string) =>
       ipcRenderer.invoke('history:create-snapshot', filePath, state, type, description),
-    listSnapshots: (filePath: string) => 
+    listSnapshots: (filePath: string) =>
       ipcRenderer.invoke('history:list-snapshots', filePath),
-    loadSnapshot: (filePath: string, timestamp: string) => 
+    loadSnapshot: (filePath: string, timestamp: string) =>
       ipcRenderer.invoke('history:load-snapshot', filePath, timestamp),
-    deleteSnapshot: (filePath: string, timestamp: string) => 
+    deleteSnapshot: (filePath: string, timestamp: string) =>
       ipcRenderer.invoke('history:delete-snapshot', filePath, timestamp),
   },
-  
+
   // Session operations
   session: {
-    create: (filePath: string, type: string, source?: any) => 
+    create: (filePath: string, type: string, source?: any) =>
       ipcRenderer.invoke('session:create', filePath, type, source),
-    load: (sessionId: string) => 
+    load: (sessionId: string) =>
       ipcRenderer.invoke('session:load', sessionId),
-    save: (session: any) => 
+    save: (session: any) =>
       ipcRenderer.invoke('session:save', session),
-    delete: (sessionId: string) => 
+    delete: (sessionId: string) =>
       ipcRenderer.invoke('session:delete', sessionId),
-    getActive: (filePath: string) => 
+    getActive: (filePath: string) =>
       ipcRenderer.invoke('session:get-active', filePath),
-    setActive: (filePath: string, sessionId: string, type: string) => 
+    setActive: (filePath: string, sessionId: string, type: string) =>
       ipcRenderer.invoke('session:set-active', filePath, sessionId, type),
-    checkConflicts: (session: any, currentMarkdownHash: string) => 
+    checkConflicts: (session: any, currentMarkdownHash: string) =>
       ipcRenderer.invoke('session:check-conflicts', session, currentMarkdownHash),
-    resolveConflict: (session: any, resolution: string, newBaseHash?: string) => 
+    resolveConflict: (session: any, resolution: string, newBaseHash?: string) =>
       ipcRenderer.invoke('session:resolve-conflict', session, resolution, newBaseHash),
-    createCheckpoint: (sessionId: string, state: string) => 
+    createCheckpoint: (sessionId: string, state: string) =>
       ipcRenderer.invoke('session:create-checkpoint', sessionId, state),
   },
 
   // AI operations (new unified interface)
   aiHasApiKey: () => ipcRenderer.invoke('ai:hasApiKey'),
   aiInitialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
-  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, projectPath?: string, modelId?: string) => 
-    ipcRenderer.invoke('ai:createSession', provider, documentContext, projectPath, modelId),
-  aiSendMessage: (message: string, documentContext?: any, sessionId?: string, projectPath?: string) => 
-    ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, projectPath),
-  aiGetSessions: (projectPath?: string) => ipcRenderer.invoke('ai:getSessions', projectPath),
-  aiLoadSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:loadSession', sessionId, projectPath),
+  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string) =>
+    ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId),
+  aiSendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) =>
+    ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, workspacePath),
+  aiGetSessions: (workspacePath?: string) => ipcRenderer.invoke('ai:getSessions', workspacePath),
+  aiLoadSession: (sessionId: string, workspacePath?: string) => ipcRenderer.invoke('ai:loadSession', sessionId, workspacePath),
   aiClearSession: () => ipcRenderer.invoke('ai:clearSession'),
-  aiUpdateSessionMessages: (sessionId: string, messages: any[], projectPath?: string) => 
-    ipcRenderer.invoke('ai:updateSessionMessages', sessionId, messages, projectPath),
-  aiSaveDraftInput: (sessionId: string, draftInput: string, projectPath?: string) => 
-    ipcRenderer.invoke('ai:saveDraftInput', sessionId, draftInput, projectPath),
-  aiDeleteSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:deleteSession', sessionId, projectPath),
+  aiUpdateSessionMessages: (sessionId: string, messages: any[], workspacePath?: string) =>
+    ipcRenderer.invoke('ai:updateSessionMessages', sessionId, messages, workspacePath),
+  aiSaveDraftInput: (sessionId: string, draftInput: string, workspacePath?: string) =>
+    ipcRenderer.invoke('ai:saveDraftInput', sessionId, draftInput, workspacePath),
+  aiDeleteSession: (sessionId: string, workspacePath?: string) => ipcRenderer.invoke('ai:deleteSession', sessionId, workspacePath),
   getAISettings: () => ipcRenderer.invoke('ai:getSettings'),
   saveAISettings: (settings: any) => ipcRenderer.invoke('ai:saveSettings', settings),
   testAIConnection: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio') => ipcRenderer.invoke('ai:testConnection', provider),
@@ -279,7 +284,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   aiGetModels: () => ipcRenderer.invoke('ai:getModels'),
   aiGetAllModels: () => ipcRenderer.invoke('ai:getAllModels'),
   aiClearModelCache: () => ipcRenderer.invoke('ai:clearModelCache'),
-  
+
   // AI event listeners (new)
   onAIStreamResponse: (callback: (data: any) => void) => {
     const handler = (_event: any, data: any) => callback(data);
@@ -316,7 +321,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('ai:performanceMetrics', handler);
     return () => ipcRenderer.removeListener('ai:performanceMetrics', handler);
   },
-  
+
   // Additional AI operations that weren't in the first block
   aiCancelRequest: () => ipcRenderer.invoke('ai:cancelRequest'),
   aiApplyEdit: (edit: any) => ipcRenderer.invoke('ai:applyEdit', edit),
@@ -350,7 +355,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
     ipcRenderer.send(resultChannel, safeResult);
   },
-  updateMcpDocumentState: (state: any) => 
+  updateMcpDocumentState: (state: any) =>
     ipcRenderer.send('mcp:updateDocumentState', state),
   clearMcpDocumentState: () => ipcRenderer.invoke('mcp:clearDocumentState'),
 
@@ -358,38 +363,38 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ai: {
     hasApiKey: () => ipcRenderer.invoke('ai:hasApiKey'),
     initialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
-    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, projectPath?: string, modelId?: string) => 
-      ipcRenderer.invoke('ai:createSession', provider, documentContext, projectPath, modelId),
-    sendMessage: (message: string, documentContext?: any, sessionId?: string, projectPath?: string) => 
-      ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, projectPath),
-    getSessions: (projectPath?: string) => ipcRenderer.invoke('ai:getSessions', projectPath),
-    loadSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:loadSession', sessionId, projectPath),
+    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string) =>
+      ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId),
+    sendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) =>
+      ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, workspacePath),
+    getSessions: (workspacePath?: string) => ipcRenderer.invoke('ai:getSessions', workspacePath),
+    loadSession: (sessionId: string, workspacePath?: string) => ipcRenderer.invoke('ai:loadSession', sessionId, workspacePath),
     clearSession: () => ipcRenderer.invoke('ai:clearSession'),
-    updateSessionMessages: (sessionId: string, messages: any[], projectPath?: string) => 
-      ipcRenderer.invoke('ai:updateSessionMessages', sessionId, messages, projectPath),
-    saveDraftInput: (sessionId: string, draftInput: string, projectPath?: string) => 
-      ipcRenderer.invoke('ai:saveDraftInput', sessionId, draftInput, projectPath),
-    deleteSession: (sessionId: string, projectPath?: string) => ipcRenderer.invoke('ai:deleteSession', sessionId, projectPath),
+    updateSessionMessages: (sessionId: string, messages: any[], workspacePath?: string) =>
+      ipcRenderer.invoke('ai:updateSessionMessages', sessionId, messages, workspacePath),
+    saveDraftInput: (sessionId: string, draftInput: string, workspacePath?: string) =>
+      ipcRenderer.invoke('ai:saveDraftInput', sessionId, draftInput, workspacePath),
+    deleteSession: (sessionId: string, workspacePath?: string) => ipcRenderer.invoke('ai:deleteSession', sessionId, workspacePath),
     getSettings: () => ipcRenderer.invoke('ai:getSettings'),
     saveSettings: (settings: any) => ipcRenderer.invoke('ai:saveSettings', settings),
     testConnection: (provider: string) => ipcRenderer.invoke('ai:testConnection', provider),
     getModels: () => ipcRenderer.invoke('ai:getModels'),
-    
+
     // Session Manager specific methods
     getAllSessions: () => ipcRenderer.invoke('session-manager:get-all-sessions'),
-    openSessionInWindow: (sessionId: string, projectPath?: string) => 
-      ipcRenderer.invoke('session-manager:open-session', sessionId, projectPath),
+    openSessionInWindow: (sessionId: string, workspacePath?: string) =>
+      ipcRenderer.invoke('session-manager:open-session', sessionId, workspacePath),
     exportSession: (session: any) => ipcRenderer.invoke('session-manager:export-session', session),
   },
 
-  // Project Manager
-  projectManager: {
-    getRecentProjects: () => ipcRenderer.invoke('project-manager:get-recent-projects'),
-    getProjectStats: (projectPath: string) => ipcRenderer.invoke('project-manager:get-project-stats', projectPath),
-    openFolderDialog: () => ipcRenderer.invoke('project-manager:open-folder-dialog'),
-    createProjectDialog: () => ipcRenderer.invoke('project-manager:create-project-dialog'),
-    openProject: (projectPath: string) => ipcRenderer.invoke('project-manager:open-project', projectPath),
-    removeRecent: (projectPath: string) => ipcRenderer.invoke('project-manager:remove-recent', projectPath),
+  // Workspace Manager
+  workspaceManager: {
+    getRecentWorkspaces: () => ipcRenderer.invoke('workspace-manager:get-recent-workspaces'),
+    getWorkspaceStats: (workspacePath: string) => ipcRenderer.invoke('workspace-manager:get-workspace-stats', workspacePath),
+    openFolderDialog: () => ipcRenderer.invoke('workspace-manager:open-folder-dialog'),
+    createWorkspaceDialog: () => ipcRenderer.invoke('workspace-manager:create-workspace-dialog'),
+    openWorkspace: (workspacePath: string) => ipcRenderer.invoke('workspace-manager:open-workspace', workspacePath),
+    removeRecent: (workspacePath: string) => ipcRenderer.invoke('workspace-manager:remove-recent', workspacePath),
   },
 
 

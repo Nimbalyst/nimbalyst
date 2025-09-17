@@ -18,13 +18,13 @@ export function registerWindowHandlers() {
         const state = windowStates.get(windowId);
         if (!state) return null;
 
-        // If it's a project mode window, return the full initial state
-        if (state.mode === 'project' && state.projectPath) {
-            const fileTree = getFolderContents(state.projectPath);
+        // If it's a workspace mode window, return the full initial state
+        if (state.mode === 'workspace' && state.workspacePath) {
+            const fileTree = getFolderContents(state.workspacePath);
             return {
-                mode: 'project',
-                projectPath: state.projectPath,
-                projectName: basename(state.projectPath),
+                mode: 'workspace',
+                workspacePath: state.workspacePath,
+                workspaceName: basename(state.workspacePath),
                 fileTree
             };
         }

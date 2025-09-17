@@ -8,7 +8,7 @@ import { SessionData, Message, DocumentContext, AIProviderType } from './types';
 
 export class SessionManager {
   private store: Store | null = null;
-  // REMOVED currentSession and currentProjectPath - they cause cross-window contamination!
+  // REMOVED currentSession and currentWorkspacePath - they cause cross-window contamination!
   // Each window should track its own session by ID
 
   constructor() {
@@ -20,11 +20,11 @@ export class SessionManager {
       this.store = new Store({
         name: 'ai-sessions',
         schema: {
-          sessionsByProject: {
+          sessionsByWorkspace: {
             type: 'object',
             default: {}
           },
-          currentSessionByProject: {
+          currentSessionByWorkspace: {
             type: 'object',
             default: {}
           }
@@ -40,12 +40,12 @@ export class SessionManager {
   async createSession(
     provider: AIProviderType,
     documentContext?: DocumentContext,
-    projectPath?: string,
+    workspacePath?: string,
     providerConfig?: any,
     model?: string
   ): Promise<SessionData> {
     const sessionId = uuidv4();
-    const project = projectPath || documentContext?.filePath?.split('/').slice(0, -1).join('/') || 'default';
+    const workspace = workspacePath || documentContext?.filePath?.split('/').slice(0, -1).join('/') || 'default';
     
     const session: SessionData = {
       id: sessionId,
@@ -54,19 +54,19 @@ export class SessionManager {
       timestamp: Date.now(),
       messages: [],
       documentContext,
-      projectPath: project,
+      workspacePath: workspace,
       title: 'New conversation',
       providerConfig
     };
 
     this.currentSession = session;
-    this.currentProjectPath = project;
+    this.currentWorkspacePath = workspace;
     this.saveSession(session);
 
-    // Set as current session for this project
-    const currentByProject = this.getStore().get('currentSessionByProject', {}) as Record<string, string>;
-    currentByProject[project] = sessionId;
-    this.getStore().set('currentSessionByProject', currentByProject);
+    // Set as current session for this workspace
+    const currentByWorkspace = this.getStore().get('currentSessionByWorkspace', {}) as Record<string, string>;
+    currentByWorkspace[workspace] = sessionId;
+    this.getStore().set('currentSessionByWorkspace', currentByWorkspace);
 
     return session;
   }
@@ -74,10 +74,10 @@ export class SessionManager {
   /**
    * Load an existing session
    */
-  loadSession(sessionId: string, projectPath?: string): SessionData | null {
-    const project = projectPath || this.currentProjectPath || 'default';
-    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
-    const sessions = sessionsByProject[project] || [];
+  loadSession(sessionId: string, workspacePath?: string): SessionData | null {
+    const workspace = workspacePath || this.currentWorkspacePath || 'default';
+    const sessionsByWorkspace = this.getStore().get('sessionsByWorkspace', {}) as Record<string, SessionData[]>;
+    const sessions = sessionsByWorkspace[workspace] || [];
     const session = sessions.find(s => s.id === sessionId);
     
     if (session) {
@@ -100,12 +100,12 @@ export class SessionManager {
       }
       
       this.currentSession = session;
-      this.currentProjectPath = project;
+      this.currentWorkspacePath = workspace;
 
-      // Set as current session for this project
-      const currentByProject = this.getStore().get('currentSessionByProject', {}) as Record<string, string>;
-      currentByProject[project] = sessionId;
-      this.getStore().set('currentSessionByProject', currentByProject);
+      // Set as current session for this workspace
+      const currentByWorkspace = this.getStore().get('currentSessionByWorkspace', {}) as Record<string, string>;
+      currentByWorkspace[workspace] = sessionId;
+      this.getStore().set('currentSessionByWorkspace', currentByWorkspace);
 
       return session;
     }
@@ -114,12 +114,12 @@ export class SessionManager {
   }
 
   /**
-   * Get all sessions for a project
+   * Get all sessions for a workspace
    */
-  getSessions(projectPath?: string): SessionData[] {
-    const project = projectPath || this.currentProjectPath || 'default';
-    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
-    const sessions = sessionsByProject[project] || [];
+  getSessions(workspacePath?: string): SessionData[] {
+    const workspace = workspacePath || this.currentWorkspacePath || 'default';
+    const sessionsByWorkspace = this.getStore().get('sessionsByWorkspace', {}) as Record<string, SessionData[]>;
+    const sessions = sessionsByWorkspace[workspace] || [];
     // Sort by timestamp descending (newest first)
     return sessions.sort((a, b) => b.timestamp - a.timestamp);
   }
@@ -142,22 +142,22 @@ export class SessionManager {
       throw new Error('No session ID provided and no current session loaded');
     }
     
-    // Find the session by ID across all projects
-    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
+    // Find the session by ID across all workspaces
+    const sessionsByWorkspace = this.getStore().get('sessionsByWorkspace', {}) as Record<string, SessionData[]>;
     let targetSession: SessionData | null = null;
-    let targetProject: string | null = null;
+    let targetWorkspace: string | null = null;
     
-    // Search through all projects to find the session
-    for (const [project, sessions] of Object.entries(sessionsByProject)) {
+    // Search through all workspaces to find the session
+    for (const [workspace, sessions] of Object.entries(sessionsByWorkspace)) {
       const session = sessions.find(s => s.id === targetSessionId);
       if (session) {
         targetSession = session;
-        targetProject = project;
+        targetWorkspace = workspace;
         break;
       }
     }
     
-    if (!targetSession || !targetProject) {
+    if (!targetSession || !targetWorkspace) {
       throw new Error(`Session not found: ${targetSessionId}`);
     }
     
@@ -178,11 +178,11 @@ export class SessionManager {
     }
     
     // Save the updated session
-    const updatedSessions = sessionsByProject[targetProject].map(s => 
+    const updatedSessions = sessionsByWorkspace[targetWorkspace].map(s =>
       s.id === targetSessionId ? targetSession : s
     );
-    sessionsByProject[targetProject] = updatedSessions;
-    this.getStore().set('sessionsByProject', sessionsByProject);
+    sessionsByWorkspace[targetWorkspace] = updatedSessions;
+    this.getStore().set('sessionsByWorkspace', sessionsByWorkspace);
     
     // Update current session if it matches
     if (this.currentSession?.id === targetSessionId) {
@@ -193,10 +193,10 @@ export class SessionManager {
   /**
    * Update session messages (for syncing streaming messages)
    */
-  updateSessionMessages(sessionId: string, messages: Message[], projectPath?: string): boolean {
-    const project = projectPath || this.currentProjectPath || 'default';
-    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
-    const sessions = sessionsByProject[project] || [];
+  updateSessionMessages(sessionId: string, messages: Message[], workspacePath?: string): boolean {
+    const workspace = workspacePath || this.currentWorkspacePath || 'default';
+    const sessionsByWorkspace = this.getStore().get('sessionsByWorkspace', {}) as Record<string, SessionData[]>;
+    const sessions = sessionsByWorkspace[workspace] || [];
     const session = sessions.find(s => s.id === sessionId);
 
     if (session) {
@@ -217,10 +217,10 @@ export class SessionManager {
   /**
    * Save draft input for a session
    */
-  saveDraftInput(sessionId: string, draftInput: string, projectPath?: string): boolean {
-    const project = projectPath || this.currentProjectPath || 'default';
-    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
-    const sessions = sessionsByProject[project] || [];
+  saveDraftInput(sessionId: string, draftInput: string, workspacePath?: string): boolean {
+    const workspace = workspacePath || this.currentWorkspacePath || 'default';
+    const sessionsByWorkspace = this.getStore().get('sessionsByWorkspace', {}) as Record<string, SessionData[]>;
+    const sessions = sessionsByWorkspace[workspace] || [];
     const session = sessions.find(s => s.id === sessionId);
 
     if (session) {
@@ -259,27 +259,27 @@ export class SessionManager {
   /**
    * Delete a session
    */
-  deleteSession(sessionId: string, projectPath?: string): boolean {
-    const project = projectPath || this.currentProjectPath || 'default';
-    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
-    const sessions = sessionsByProject[project] || [];
+  deleteSession(sessionId: string, workspacePath?: string): boolean {
+    const workspace = workspacePath || this.currentWorkspacePath || 'default';
+    const sessionsByWorkspace = this.getStore().get('sessionsByWorkspace', {}) as Record<string, SessionData[]>;
+    const sessions = sessionsByWorkspace[workspace] || [];
 
     // Filter out the session to delete
     const updatedSessions = sessions.filter(s => s.id !== sessionId);
 
     // Update the store
-    sessionsByProject[project] = updatedSessions;
-    this.getStore().set('sessionsByProject', sessionsByProject);
+    sessionsByWorkspace[workspace] = updatedSessions;
+    this.getStore().set('sessionsByWorkspace', sessionsByWorkspace);
 
     // If we deleted the current session, clear it
     if (this.currentSession?.id === sessionId) {
       this.currentSession = null;
 
       // Clear from current session tracking
-      const currentByProject = this.getStore().get('currentSessionByProject', {}) as Record<string, string>;
-      if (currentByProject[project] === sessionId) {
-        delete currentByProject[project];
-        this.getStore().set('currentSessionByProject', currentByProject);
+      const currentByWorkspace = this.getStore().get('currentSessionByWorkspace', {}) as Record<string, string>;
+      if (currentByWorkspace[workspace] === sessionId) {
+        delete currentByWorkspace[workspace];
+        this.getStore().set('currentSessionByWorkspace', currentByWorkspace);
       }
     }
 
@@ -297,14 +297,14 @@ export class SessionManager {
    * Save a session to the store
    */
   private saveSession(session: SessionData): void {
-    const project = session.projectPath || this.currentProjectPath || 'default';
-    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
+    const workspace = session.workspacePath || this.currentWorkspacePath || 'default';
+    const sessionsByWorkspace = this.getStore().get('sessionsByWorkspace', {}) as Record<string, SessionData[]>;
     
-    if (!sessionsByProject[project]) {
-      sessionsByProject[project] = [];
+    if (!sessionsByWorkspace[workspace]) {
+      sessionsByWorkspace[workspace] = [];
     }
     
-    const sessions = sessionsByProject[project];
+    const sessions = sessionsByWorkspace[workspace];
     const index = sessions.findIndex(s => s.id === session.id);
     
     if (index >= 0) {
@@ -313,24 +313,24 @@ export class SessionManager {
       sessions.push(session);
     }
     
-    // Keep only last 50 sessions per project
+    // Keep only last 50 sessions per workspace
     if (sessions.length > 50) {
       sessions.splice(0, sessions.length - 50);
     }
     
-    sessionsByProject[project] = sessions;
-    this.getStore().set('sessionsByProject', sessionsByProject);
+    sessionsByWorkspace[workspace] = sessions;
+    this.getStore().set('sessionsByWorkspace', sessionsByWorkspace);
   }
 
   /**
    * Clean up empty messages from all sessions
    */
   cleanupAllSessions(): number {
-    const sessionsByProject = this.getStore().get('sessionsByProject', {}) as Record<string, SessionData[]>;
+    const sessionsByWorkspace = this.getStore().get('sessionsByWorkspace', {}) as Record<string, SessionData[]>;
     let totalCleaned = 0;
     
-    for (const project in sessionsByProject) {
-      const sessions = sessionsByProject[project];
+    for (const workspace in sessionsByWorkspace) {
+      const sessions = sessionsByWorkspace[workspace];
       for (const session of sessions) {
         const originalCount = session.messages.length;
         session.messages = session.messages.filter(msg => {
@@ -345,13 +345,13 @@ export class SessionManager {
         const cleaned = originalCount - session.messages.length;
         if (cleaned > 0) {
           totalCleaned += cleaned;
-          console.log(`[SessionManager] Cleaned ${cleaned} empty messages from session ${session.id} in project ${project}`);
+          console.log(`[SessionManager] Cleaned ${cleaned} empty messages from session ${session.id} in workspace ${workspace}`);
         }
       }
     }
     
     if (totalCleaned > 0) {
-      this.getStore().set('sessionsByProject', sessionsByProject);
+      this.getStore().set('sessionsByWorkspace', sessionsByWorkspace);
       console.log(`[SessionManager] Total cleaned: ${totalCleaned} empty messages across all sessions`);
     }
     

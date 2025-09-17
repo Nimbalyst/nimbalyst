@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { FileTree } from './FileTree';
 import { InputModal } from './InputModal';
-import '../ProjectSidebar.css';
+import '../WorkspaceSidebar.css';
 
 interface FileTreeItem {
   name: string;
@@ -10,41 +10,41 @@ interface FileTreeItem {
   children?: FileTreeItem[];
 }
 
-interface ProjectSidebarProps {
-  projectName: string;
-  projectPath: string;
+interface WorkspaceSidebarProps {
+  workspaceName: string;
+  workspacePath: string;
   fileTree: FileTreeItem[];
   currentFilePath: string | null;
   onFileSelect: (filePath: string) => void;
-  onCloseProject: () => void;
+  onCloseWorkspace: () => void;
   onOpenQuickSearch?: () => void;
   onRefreshFileTree?: () => void;
 }
 
-// Generate a consistent color based on project path
-function generateProjectColor(path: string): string {
+// Generate a consistent color based on workspace path
+function generateWorkspaceColor(path: string): string {
   let hash = 0;
   for (let i = 0; i < path.length; i++) {
     hash = ((hash << 5) - hash) + path.charCodeAt(i);
     hash = hash & hash;
   }
-  
+
   // Generate a hue value (0-360)
   const hue = Math.abs(hash) % 360;
   // Use consistent saturation and lightness for pleasant colors
   return `hsl(${hue}, 65%, 55%)`;
 }
 
-export function ProjectSidebar({
-  projectName,
-  projectPath,
+export function WorkspaceSidebar({
+  workspaceName,
+  workspacePath,
   fileTree,
   currentFilePath,
   onFileSelect,
-  onCloseProject,
+  onCloseWorkspace,
   onOpenQuickSearch,
   onRefreshFileTree
-}: ProjectSidebarProps) {
+}: WorkspaceSidebarProps) {
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [isDragOverRoot, setIsDragOverRoot] = useState(false);
@@ -52,7 +52,7 @@ export function ProjectSidebar({
 
   const handleNewFile = () => {
     // If a file is currently selected, use its parent directory
-    // Otherwise use the project root
+    // Otherwise use the workspace root
     if (currentFilePath) {
       const parentDir = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
       setTargetFolder(parentDir);
@@ -62,7 +62,7 @@ export function ProjectSidebar({
 
   const handleNewFolder = () => {
     // If a file is currently selected, use its parent directory
-    // Otherwise use the project root
+    // Otherwise use the workspace root
     if (currentFilePath) {
       const parentDir = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
       setTargetFolder(parentDir);
@@ -81,7 +81,7 @@ export function ProjectSidebar({
       : `${fileName}.md`;
 
     try {
-      const basePath = targetFolder || projectPath;
+      const basePath = targetFolder || workspacePath;
       const filePath = `${basePath}/${fullFileName}`;
       const content = `# ${fullFileName.replace('.md', '')}\n\n`;
 
@@ -107,7 +107,7 @@ export function ProjectSidebar({
     setIsFolderModalOpen(false);
 
     try {
-      const basePath = targetFolder || projectPath;
+      const basePath = targetFolder || workspacePath;
       const folderPath = `${basePath}/${folderName}`;
 
       const result = await (window as any).electronAPI?.createFolder?.(folderPath);
@@ -171,14 +171,14 @@ export function ProjectSidebar({
 
     try {
       if (isCopy) {
-        const result = await (window as any).electronAPI.copyFile(sourcePath, projectPath);
+        const result = await (window as any).electronAPI.copyFile(sourcePath, workspacePath);
         if (!result.success) {
           console.error('Failed to copy to root:', result.error);
         } else if (onRefreshFileTree) {
           onRefreshFileTree();
         }
       } else {
-        const result = await (window as any).electronAPI.moveFile(sourcePath, projectPath);
+        const result = await (window as any).electronAPI.moveFile(sourcePath, workspacePath);
         if (!result.success) {
           console.error('Failed to move to root:', result.error);
         } else if (onRefreshFileTree) {
@@ -201,27 +201,27 @@ export function ProjectSidebar({
     setIsDragOverRoot(false);
   };
 
-  const projectColor = generateProjectColor(projectPath);
+  const workspaceColor = generateWorkspaceColor(workspacePath);
 
   return (
-    <div className="project-sidebar"
+    <div className="workspace-sidebar"
       onDragOver={handleRootDragOver}
       onDragLeave={handleRootDragLeave}
       onDrop={handleRootDrop}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="project-color-accent" style={{ backgroundColor: projectColor }} />
-      <div className="project-sidebar-header">
-        <div className="project-identity">
-          <h3 className="project-name">{projectName}</h3>
-          <div className="project-path" title={projectPath}>
-            {projectPath}
+      <div className="workspace-color-accent" style={{ backgroundColor: workspaceColor }} />
+      <div className="workspace-sidebar-header">
+        <div className="workspace-identity">
+          <h3 className="workspace-name">{workspaceName}</h3>
+          <div className="workspace-path" title={workspacePath}>
+            {workspacePath}
           </div>
         </div>
-        <div className="project-sidebar-actions">
+        <div className="workspace-sidebar-actions">
           <button
-            className="project-action-button"
+            className="workspace-action-button"
             onClick={handleNewFile}
             title="New file"
             aria-label="New file"
@@ -231,7 +231,7 @@ export function ProjectSidebar({
             </span>
           </button>
           <button
-            className="project-action-button"
+            className="workspace-action-button"
             onClick={handleNewFolder}
             title="New folder"
             aria-label="New folder"
@@ -242,7 +242,7 @@ export function ProjectSidebar({
           </button>
           {onOpenQuickSearch && (
             <button
-              className="project-action-button"
+              className="workspace-action-button"
               onClick={onOpenQuickSearch}
               title="Search files (⌘K)"
               aria-label="Search files"
@@ -255,7 +255,7 @@ export function ProjectSidebar({
         </div>
       </div>
 
-      <div className={`project-file-tree ${isDragOverRoot ? 'drag-over-root' : ''}`}>
+      <div className={`workspace-file-tree ${isDragOverRoot ? 'drag-over-root' : ''}`}>
 
         <FileTree
           items={fileTree}
@@ -268,7 +268,7 @@ export function ProjectSidebar({
         />
           {isDragOverRoot && (
               <div className="root-drop-indicator">
-                  Drop here to move to project root
+                  Drop here to move to workspace root
               </div>
           )}
       </div>

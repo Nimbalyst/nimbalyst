@@ -96,6 +96,14 @@ export class DocumentReferenceNode extends TextNode {
         const dom = super.createDOM(config);
         dom.spellcheck = false;
         dom.className = 'document-reference';
+        dom.setAttribute('data-document-id', this.__documentId);
+        dom.setAttribute('data-name', this.__name);
+        dom.setAttribute('data-path', this.__path);
+        if (this.__workspace) {
+            dom.setAttribute('data-workspace', this.__workspace);
+        } else {
+            dom.removeAttribute('data-workspace');
+        }
         return dom;
     }
 

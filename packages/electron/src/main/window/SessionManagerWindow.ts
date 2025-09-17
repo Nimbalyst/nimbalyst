@@ -5,7 +5,7 @@ import Store from 'electron-store';
 
 let sessionManagerWindow: BrowserWindow | null = null;
 
-export function createSessionManagerWindow(filterProject?: string) {
+export function createSessionManagerWindow(filterWorkspace?: string) {
   // If window already exists, check if it's healthy
   if (sessionManagerWindow && !sessionManagerWindow.isDestroyed()) {
     // Check if the window content is corrupted
@@ -15,22 +15,22 @@ export function createSessionManagerWindow(filterProject?: string) {
       if (isHealthy) {
         sessionManagerWindow?.focus();
         // Send filter update if provided
-        if (filterProject) {
-          sessionManagerWindow?.webContents.send('filter-project', filterProject);
+        if (filterWorkspace) {
+          sessionManagerWindow?.webContents.send('filter-workspace', filterWorkspace);
         }
       } else {
         // Window content is corrupted, recreate it
         console.warn('[SessionManager] Window content corrupted, recreating window');
         sessionManagerWindow?.destroy();
         sessionManagerWindow = null;
-        createSessionManagerWindow(filterProject);
+        createSessionManagerWindow(filterWorkspace);
       }
     }).catch(() => {
       // Error checking health, recreate window
       console.warn('[SessionManager] Error checking window health, recreating window');
       sessionManagerWindow?.destroy();
       sessionManagerWindow = null;
-      createSessionManagerWindow(filterProject);
+      createSessionManagerWindow(filterWorkspace);
     });
     return;
   }
@@ -41,7 +41,7 @@ export function createSessionManagerWindow(filterProject?: string) {
     height: 600,
     minWidth: 600,
     minHeight: 400,
-    title: 'AI Chat Sessions - All Projects',
+    title: 'AI Chat Sessions - All Workspaces',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -58,14 +58,14 @@ export function createSessionManagerWindow(filterProject?: string) {
   // Load the main app with a query parameter to indicate Session Manager mode
   const loadContent = () => {
     if (process.env.NODE_ENV === 'development') {
-      const url = filterProject 
-        ? `http://localhost:5273/?mode=session-manager&filterProject=${encodeURIComponent(filterProject)}`
+      const url = filterWorkspace
+        ? `http://localhost:5273/?mode=session-manager&filterWorkspace=${encodeURIComponent(filterWorkspace)}`
         : 'http://localhost:5273/?mode=session-manager';
       return sessionManagerWindow!.loadURL(url);
     } else {
       const query: any = { mode: 'session-manager' };
-      if (filterProject) {
-        query.filterProject = filterProject;
+      if (filterWorkspace) {
+        query.filterWorkspace = filterWorkspace;
       }
       return sessionManagerWindow!.loadFile(join(__dirname, '../renderer/index.html'), { query });
     }
@@ -125,18 +125,18 @@ export function createSessionManagerWindow(filterProject?: string) {
 }
 
 export function registerSessionManagerHandlers() {
-  // Get all sessions from all projects
+  // Get all sessions from all workspaces
   ipcMain.handle('session-manager:get-all-sessions', async () => {
     const store = new Store({ name: 'ai-sessions' });
-    const sessionsByProject = store.get('sessionsByProject', {}) as Record<string, any[]>;
+    const sessionsByWorkspace = store.get('sessionsByWorkspace', {}) as Record<string, any[]>;
     
-    // Flatten all sessions from all projects
+    // Flatten all sessions from all workspaces
     const allSessions: any[] = [];
-    for (const [projectPath, sessions] of Object.entries(sessionsByProject)) {
+    for (const [workspacePath, sessions] of Object.entries(sessionsByWorkspace)) {
       sessions.forEach(session => {
         allSessions.push({
           ...session,
-          projectPath: projectPath === 'default' ? null : projectPath
+          workspacePath: workspacePath === 'default' ? null : workspacePath
         });
       });
     }
@@ -148,7 +148,7 @@ export function registerSessionManagerHandlers() {
   });
 
   // Open a session
-  ipcMain.handle('session-manager:open-session', async (event, sessionId: string, projectPath?: string) => {
+  ipcMain.handle('session-manager:open-session', async (event, sessionId: string, workspacePath?: string) => {
     // Find or create a window
     const windows = BrowserWindow.getAllWindows().filter(w => w !== sessionManagerWindow);
     let targetWindow = windows.find(w => !w.isDestroyed());
@@ -160,7 +160,7 @@ export function registerSessionManagerHandlers() {
     }
     
     // Send message to load the session
-    targetWindow.webContents.send('load-session-from-manager', { sessionId, projectPath });
+    targetWindow.webContents.send('load-session-from-manager', { sessionId, workspacePath });
     targetWindow.focus();
     
     return { success: true };
