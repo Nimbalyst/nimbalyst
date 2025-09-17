@@ -81,7 +81,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
       // First, get file name matches immediately
       if (api.searchWorkspaceFileNames) {
         const fileNameResults = await api.searchWorkspaceFileNames(workspacePath, query);
-        console.log('File name results:', fileNameResults);
+        // console.log('File name results:', fileNameResults);
 
         // Process and display file name results immediately
         if (Array.isArray(fileNameResults)) {
@@ -105,7 +105,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
       if (api.searchWorkspaceFileContent) {
         // Run content search asynchronously without blocking
         api.searchWorkspaceFileContent(workspacePath, query).then((contentResults: any) => {
-          console.log('Content search results:', contentResults);
+          // console.log('Content search results:', contentResults);
 
           // Merge content results with existing file name results
           if (Array.isArray(contentResults)) {
@@ -199,10 +199,10 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   // Scroll selected item into view
   useEffect(() => {
     if (!resultsListRef.current) return;
-    
+
     const items = resultsListRef.current.querySelectorAll('.quick-open-item');
     const selectedItem = items[selectedIndex] as HTMLElement;
-    
+
     if (selectedItem) {
       selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
