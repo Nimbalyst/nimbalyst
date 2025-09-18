@@ -1,8 +1,8 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
-import { Document, DocumentService } from '@stravu/runtime';
+import { Document, DocumentService, DocumentOpenOptions } from '@stravu/runtime';
 import crypto from 'crypto';
 
 export class ElectronDocumentService implements DocumentService {
@@ -127,10 +127,29 @@ export class ElectronDocumentService implements DocumentService {
     };
   }
 
-  async openDocument(documentId: string): Promise<void> {
-    const doc = await this.getDocument(documentId);
+  async openDocument(documentId: string, fallback?: DocumentOpenOptions): Promise<void> {
+    let doc: Document | null = null;
+
+    if (documentId) {
+      doc = await this.getDocument(documentId);
+    }
+
+    if (!doc && fallback?.path) {
+      doc = await this.getDocumentByPath(fallback.path);
+    }
+
+    if (!doc && fallback?.name) {
+      const documents = await this.listDocuments();
+      doc =
+        documents.find(d => d.name === fallback.name) ||
+        documents.find(d => d.path.split(/[\\/]/).pop() === fallback.name) ||
+        null;
+    }
+
     if (!doc) {
-      throw new Error(`Document with id ${documentId} not found`);
+      throw new Error(
+        `Document not found (id=${documentId || 'n/a'}, path=${fallback?.path ?? 'n/a'}, name=${fallback?.name ?? 'n/a'})`
+      );
     }
 
     // Send message to renderer to open the document
@@ -151,45 +170,93 @@ export class ElectronDocumentService implements DocumentService {
   }
 }
 
-// Track if handlers have been registered
+type DocumentServiceResolver = (event: IpcMainEvent | IpcMainInvokeEvent) => ElectronDocumentService | null;
+
 let handlersRegistered = false;
+let resolveDocumentService: DocumentServiceResolver | null = null;
+
+function requireDocumentService(event: IpcMainEvent | IpcMainInvokeEvent): ElectronDocumentService {
+  if (!resolveDocumentService) {
+    throw new Error('[DocumentService] Resolver not registered');
+  }
+  const service = resolveDocumentService(event);
+  if (!service) {
+    throw new Error('[DocumentService] No document service available for sender');
+  }
+  return service;
+}
 
 // IPC handler setup
-export function setupDocumentServiceHandlers(documentService: ElectronDocumentService) {
-  // Only register handlers once
+export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) {
+  resolveDocumentService = resolver;
+
   if (handlersRegistered) {
-    console.log('[DocumentService] Handlers already registered, skipping');
     return;
   }
   handlersRegistered = true;
 
-  ipcMain.handle('document-service:list', async () => {
-    return documentService.listDocuments();
+  ipcMain.handle('document-service:list', async (event) => {
+    try {
+      return await requireDocumentService(event).listDocuments();
+    } catch (error) {
+      console.error('[DocumentService] list failed:', error);
+      return [];
+    }
   });
 
   ipcMain.handle('document-service:search', async (event, query: string) => {
-    return documentService.searchDocuments(query);
+    try {
+      return await requireDocumentService(event).searchDocuments(query);
+    } catch (error) {
+      console.error('[DocumentService] search failed:', error);
+      return [];
+    }
   });
 
   ipcMain.handle('document-service:get', async (event, id: string) => {
-    return documentService.getDocument(id);
+    try {
+      return await requireDocumentService(event).getDocument(id);
+    } catch (error) {
+      console.error('[DocumentService] get failed:', error);
+      return null;
+    }
   });
 
   ipcMain.handle('document-service:get-by-path', async (event, path: string) => {
-    return documentService.getDocumentByPath(path);
+    try {
+      return await requireDocumentService(event).getDocumentByPath(path);
+    } catch (error) {
+      console.error('[DocumentService] getByPath failed:', error);
+      return null;
+    }
   });
 
-  ipcMain.handle('document-service:open', async (event, id: string) => {
-    return documentService.openDocument(id);
+  ipcMain.handle('document-service:open', async (event, payload: { documentId: string; fallback?: DocumentOpenOptions }) => {
+    try {
+      const { documentId, fallback } = payload ?? { documentId: '' };
+      return await requireDocumentService(event).openDocument(documentId, fallback);
+    } catch (error) {
+      console.error('[DocumentService] open failed:', error);
+      throw error;
+    }
   });
 
   // Handle watch subscriptions
   ipcMain.on('document-service:watch', (event) => {
-    const unsubscribe = documentService.watchDocuments((documents) => {
-      event.sender.send('document-service:documents-changed', documents);
-    });
+    let unsubscribe: (() => void) | undefined;
+    try {
+      const service = requireDocumentService(event);
+      unsubscribe = service.watchDocuments((documents) => {
+        event.sender.send('document-service:documents-changed', documents);
+      });
+    } catch (error) {
+      console.error('[DocumentService] watch failed to start:', error);
+      event.sender.send('document-service:documents-changed', []);
+    }
 
-    // Clean up when renderer is destroyed
-    event.sender.once('destroyed', unsubscribe);
+    if (unsubscribe) {
+      // Clean up when renderer is destroyed
+      event.sender.once('destroyed', unsubscribe);
+    }
   });
 }

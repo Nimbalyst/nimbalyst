@@ -4,8 +4,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { ProviderFactory } from '../ProviderFactory';
-import { DocumentContext } from '../types';
+import { ProviderFactory } from '../../server/ProviderFactory';
+import type { DocumentContext } from '../../server/types';
 
 describe('Claude SDK Provider - Tool Usage', () => {
   const apiKey = process.env.ANTHROPIC_API_KEY;

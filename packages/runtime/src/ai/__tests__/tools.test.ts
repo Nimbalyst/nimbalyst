@@ -38,7 +38,7 @@ describe('ToolRegistry', () => {
       name: 'customTool',
       description: 'Custom tool',
       parameters: {
-        type: 'object',
+        type: 'object' as const,
         properties: {},
       },
     };

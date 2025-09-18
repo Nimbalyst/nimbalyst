@@ -4,12 +4,13 @@
 
 import { query } from '@anthropic-ai/claude-code';
 import { BaseAIProvider } from '../AIProvider';
-import { 
-  DocumentContext, 
-  ProviderConfig, 
-  ProviderCapabilities, 
+import {
+  DocumentContext,
+  ProviderConfig,
+  ProviderCapabilities,
   StreamChunk,
-  AIModel 
+  AIModel,
+  DiffArgs,
 } from '../types';
 import path from 'path';
 import fs from 'fs';
@@ -113,7 +114,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const queryIterator = query({
         prompt: message,
         options
-      });
+      }) as AsyncIterable<any>;
 
       let fullContent = '';
       let chunkCount = 0;
@@ -121,7 +122,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       let toolCallCount = 0;
 
       // Stream the response
-      for await (const chunk of queryIterator) {
+      for await (const rawChunk of queryIterator) {
+        const chunk = rawChunk as any;
         chunkCount++;
         
         if (!firstChunkTime) {
@@ -144,9 +146,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           }
 
           if (chunk.type === 'assistant' && chunk.message) {
-            const content = chunk.message.content;
+            const content = chunk.message.content as any;
             if (Array.isArray(content)) {
-              for (const block of content) {
+              for (const rawBlock of content) {
+                const block = rawBlock as any;
                 if (block.type === 'text') {
                   fullContent += block.text;
                   yield {
@@ -173,7 +176,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   if (block.name === 'applyDiff' && this.toolHandler) {
                     console.log(`[ClaudeCodeProvider] Executing non-MCP applyDiff tool`);
                     try {
-                      const result = await this.toolHandler.applyDiff(block.input);
+                      const result = await this.toolHandler.applyDiff(block.input as DiffArgs);
                       console.log(`[ClaudeCodeProvider] applyDiff result:`, result);
                       // Tool result will be sent back to Claude Code automatically
                     } catch (error) {
@@ -195,29 +198,30 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           } else if (chunk.type === 'tool_call' || chunk.type === 'tool_use') {
             // Standalone tool call event
             toolCallCount++;
-            console.log(`[ClaudeCodeProvider] Standalone tool call #${toolCallCount}: ${chunk.name}`);
+            const toolChunk = chunk as any;
+            console.log(`[ClaudeCodeProvider] Standalone tool call #${toolCallCount}: ${toolChunk.name}`);
             
             yield {
               type: 'tool_call',
               toolCall: {
-                name: chunk.name || 'unknown',
-                arguments: chunk.input
+                name: toolChunk.name || 'unknown',
+                arguments: toolChunk.input
               }
             };
 
             // Handle applyDiff - only non-MCP versions
             // MCP tools are handled by the MCP server directly
-            if (chunk.name === 'applyDiff' && chunk.input && this.toolHandler) {
+            if (toolChunk.name === 'applyDiff' && toolChunk.input && this.toolHandler) {
               console.log(`[ClaudeCodeProvider] Executing non-MCP applyDiff tool (standalone)`);
               try {
-                const result = await this.toolHandler.applyDiff(chunk.input);
+                const result = await this.toolHandler.applyDiff(toolChunk.input as DiffArgs);
                 console.log(`[ClaudeCodeProvider] applyDiff result:`, result);
               } catch (error) {
                 console.error('[ClaudeCodeProvider] Error executing applyDiff:', error);
               }
-            } else if (chunk.name?.endsWith('__applyDiff')) {
+            } else if (toolChunk.name?.endsWith('__applyDiff')) {
               // MCP applyDiff - handled by MCP server
-              console.log(`[ClaudeCodeProvider] MCP applyDiff (standalone): ${chunk.name} - handled by MCP server`);
+              console.log(`[ClaudeCodeProvider] MCP applyDiff (standalone): ${toolChunk.name} - handled by MCP server`);
             }
           } else if (chunk.type === 'text') {
             const text = chunk.text || chunk.content || '';
@@ -338,7 +342,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     }
   }
 
-  private buildSystemPrompt(documentContext?: DocumentContext): string {
+  protected buildSystemPrompt(documentContext?: DocumentContext): string {
     const basePrompt = super.buildSystemPrompt(documentContext);
     
     // If no document is open, return just the base prompt (which already has the no-document warning)

@@ -1,7 +1,9 @@
 import { BrowserWindow, ipcMain, dialog, app } from 'electron';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import Store from 'electron-store';
+import { AISessionsRepository } from '@stravu/runtime';
+import { WorkspaceRepository } from '@stravu/runtime';
+import { database } from '../database/PGLiteDatabaseWorker';
 
 let sessionManagerWindow: BrowserWindow | null = null;
 
@@ -127,23 +129,42 @@ export function createSessionManagerWindow(filterWorkspace?: string) {
 export function registerSessionManagerHandlers() {
   // Get all sessions from all workspaces
   ipcMain.handle('session-manager:get-all-sessions', async () => {
-    const store = new Store({ name: 'ai-sessions' });
-    const sessionsByWorkspace = store.get('sessionsByWorkspace', {}) as Record<string, any[]>;
-    
-    // Flatten all sessions from all workspaces
-    const allSessions: any[] = [];
-    for (const [workspacePath, sessions] of Object.entries(sessionsByWorkspace)) {
-      sessions.forEach(session => {
-        allSessions.push({
-          ...session,
-          workspacePath: workspacePath === 'default' ? null : workspacePath
-        });
+    const workspaces = await WorkspaceRepository.list();
+    const workspaceIds = new Set<string>(workspaces.map(ws => ws.id));
+
+    try {
+      const result = await database.query('SELECT DISTINCT workspace_id FROM ai_sessions');
+      result.rows.forEach((row: any) => {
+        if (row.workspace_id) workspaceIds.add(row.workspace_id);
       });
+    } catch (error) {
+      console.warn('[SessionManager] Failed to fetch distinct workspace ids from ai_sessions', error);
     }
-    
-    // Sort by timestamp descending (newest first)
-    allSessions.sort((a, b) => b.timestamp - a.timestamp);
-    
+
+    const allSessions: any[] = [];
+    for (const workspaceId of workspaceIds) {
+      try {
+        const entries = await AISessionsRepository.list(workspaceId);
+        for (const entry of entries) {
+          const session = await AISessionsRepository.get(entry.id);
+          if (!session) continue;
+          allSessions.push({
+            id: session.id,
+            provider: session.provider,
+            model: session.model,
+            title: session.title,
+            timestamp: session.updatedAt,
+            messages: session.messages,
+            workspacePath: workspaceId === 'default' ? null : workspaceId,
+          });
+        }
+      } catch (error) {
+        console.warn(`[SessionManager] Failed to load sessions for workspace ${workspaceId}:`, error);
+      }
+    }
+
+    allSessions.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+
     return allSessions;
   });
 
@@ -169,7 +190,10 @@ export function registerSessionManagerHandlers() {
   // Export session to file
   ipcMain.handle('session-manager:export-session', async (event, session: any) => {
     if (!sessionManagerWindow) return { success: false };
-    
+
+    const latest = await AISessionsRepository.get(session.id);
+    const workspacePath = latest?.metadata?.workspaceId ?? session.workspacePath;
+
     const result = await dialog.showSaveDialog(sessionManagerWindow, {
       title: 'Export Session',
       defaultPath: `claude-session-${session.id}.json`,
@@ -182,7 +206,8 @@ export function registerSessionManagerHandlers() {
     if (!result.canceled && result.filePath) {
       try {
         const exportData = {
-          ...session,
+          ...(latest ?? session),
+          workspacePath,
           exportDate: new Date().toISOString(),
           appVersion: app.getVersion()
         };

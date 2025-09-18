@@ -189,73 +189,6 @@ class PGLiteWorker {
       CREATE INDEX IF NOT EXISTS idx_ai_sessions_created ON ai_sessions(created_at);
     `);
 
-    // App Settings table - GLOBAL settings only
-    await this.db.exec(`
-      CREATE TABLE IF NOT EXISTS app_settings (
-        id TEXT PRIMARY KEY DEFAULT 'default',
-        theme TEXT DEFAULT 'system',
-        recent_workspaces JSONB DEFAULT '[]',
-        ai_providers JSONB DEFAULT '{}',
-        global_editor_settings JSONB DEFAULT '{}',
-        keyboard_shortcuts JSONB DEFAULT '{}',
-        auto_update_enabled BOOLEAN DEFAULT true,
-        telemetry_enabled BOOLEAN DEFAULT false,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      INSERT INTO app_settings (id) VALUES ('default')
-      ON CONFLICT (id) DO NOTHING;
-    `);
-
-    // Workspace State table with comprehensive state
-    await this.db.exec(`
-      CREATE TABLE IF NOT EXISTS workspace_state (
-        workspace_path TEXT PRIMARY KEY,
-        last_opened TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-        -- Window state
-        window_state JSONB DEFAULT '{"width": 1200, "height": 800}',
-
-        -- UI layout state
-        ui_state JSONB DEFAULT '{"sidebarWidth": 240, "sidebarCollapsed": false, "aiChatWidth": 350, "aiChatCollapsed": false}',
-
-        -- Documents and tabs
-        documents JSONB DEFAULT '{"recentDocuments": [], "openTabs": [], "activeTabId": null, "tabOrder": []}',
-
-        -- File tree state
-        file_tree JSONB DEFAULT '{"expandedFolders": [], "scrollPosition": 0}',
-
-        -- AI Chat state
-        ai_chat JSONB DEFAULT '{"sessionHistory": []}',
-
-        -- Editor settings
-        editor_settings JSONB,
-
-        -- Workspace preferences
-        preferences JSONB DEFAULT '{"autoSave": true, "autoSaveInterval": 30000}',
-
-        -- Metadata
-        version TEXT DEFAULT '1.0.0',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_workspace_state_last_opened ON workspace_state(last_opened);
-    `);
-
-    // Session State table
-    await this.db.exec(`
-      CREATE TABLE IF NOT EXISTS session_state (
-        id TEXT PRIMARY KEY DEFAULT 'current',
-        windows JSONB DEFAULT '[]',
-        focused_window_id TEXT,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      INSERT INTO session_state (id) VALUES ('current')
-      ON CONFLICT (id) DO NOTHING;
-    `);
-
     // Document History table
     await this.db.exec(`
       CREATE TABLE IF NOT EXISTS document_history (
@@ -312,7 +245,6 @@ class PGLiteWorker {
     const result = await this.db.query(`
       SELECT
         (SELECT COUNT(*) FROM ai_sessions) as ai_sessions_count,
-        (SELECT COUNT(*) FROM workspace_state) as workspaces_count,
         (SELECT COUNT(*) FROM document_history) as history_count,
         pg_database_size(current_database()) as database_size
     `);

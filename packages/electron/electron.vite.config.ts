@@ -83,9 +83,7 @@ const optimizeExcalidrawPlugin = () => {
 };
 
 const isDev = process.env.NODE_ENV !== 'production';
-const runtimeSrcEntry = resolve(__dirname, '../runtime/src/index.ts');
-const runtimeDistEntry = resolve(__dirname, '../runtime/dist/index.js');
-const runtimeProdEntry = fs.existsSync(runtimeDistEntry) ? runtimeDistEntry : runtimeSrcEntry;
+const runtimeSrcDir = resolve(__dirname, '../runtime/src');
 
 export default defineConfig({
   main: {
@@ -93,8 +91,8 @@ export default defineConfig({
       alias: {
         // Normalize legacy name to current
         '@stravu-editor/runtime': '@stravu/runtime',
-        // Map runtime package for dev HMR; point to dist in prod
-        '@stravu/runtime': isDev ? runtimeSrcEntry : runtimeProdEntry
+        // Map runtime package for dev HMR; point to dist in prod if available
+        '@stravu/runtime': runtimeSrcDir
       }
     },
     build: {
@@ -111,7 +109,7 @@ export default defineConfig({
     resolve: {
       alias: {
         '@stravu-editor/runtime': '@stravu/runtime',
-        '@stravu/runtime': isDev ? runtimeSrcEntry : runtimeProdEntry
+        '@stravu/runtime': runtimeSrcDir
       }
     },
     build: {
@@ -177,7 +175,7 @@ export default defineConfig({
         '@excalidraw/mermaid-to-excalidraw': resolve(__dirname, '../rexical/src/mocks/mermaid-mock.ts'),
         // Ensure renderer also points runtime imports at source during dev
         '@stravu-editor/runtime': '@stravu/runtime',
-        '@stravu/runtime': isDev ? runtimeSrcEntry : runtimeProdEntry
+        '@stravu/runtime': runtimeSrcDir
       },
       dedupe: [
         'react',

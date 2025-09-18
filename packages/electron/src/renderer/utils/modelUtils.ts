@@ -2,7 +2,7 @@
  * Model display utilities for renderer components
  */
 
-import { CLAUDE_MODELS, OPENAI_MODELS } from '../../shared/modelConstants';
+import { CLAUDE_MODELS, OPENAI_MODELS } from '@stravu/runtime/ai/modelConstants';
 
 interface ModelInfo {
   providerId: string;

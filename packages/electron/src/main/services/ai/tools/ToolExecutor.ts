@@ -4,7 +4,7 @@
 
 import { WebContents, ipcMain } from 'electron';
 import { EventEmitter } from 'events';
-import { DiffArgs, DiffResult, ToolDefinition } from '../types';
+import type { DiffArgs, DiffResult, ToolDefinition } from '@stravu/runtime/ai/server/types';
 import { toolRegistry } from './ToolRegistry';
 import { logger } from '../../../utils/logger';
 

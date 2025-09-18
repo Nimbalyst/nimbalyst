@@ -15,7 +15,7 @@ import {
   Message,
   AIModel
 } from '../types';
-import { OPENAI_MODELS, DEFAULT_MODELS } from '../../../../shared/modelConstants';
+import { OPENAI_MODELS, DEFAULT_MODELS } from '../../modelConstants';
 
 export class OpenAIProvider extends BaseAIProvider {
   private openai: OpenAI | null = null;
@@ -39,7 +39,7 @@ export class OpenAIProvider extends BaseAIProvider {
     }
 
     // Use consistent timeout for all models
-    const timeout = 60000; // 60 seconds
+    const timeout = 90000; // 90 seconds
     console.log(`[OpenAIProvider] Creating OpenAI client with timeout: ${timeout}ms, maxRetries: 0`);
     this.openai = new OpenAI({
       apiKey: config.apiKey,
@@ -196,7 +196,8 @@ export class OpenAIProvider extends BaseAIProvider {
         console.log(`[OpenAIProvider] await returned after ${afterAwait - beforeAwait}ms`);
         
         console.log(`[OpenAIProvider] completions.create returned after ${Date.now() - createStartTime}ms`);
-        console.log(`[OpenAIProvider] Response type: ${typeof response}, has Symbol.asyncIterator: ${!!response[Symbol.asyncIterator]}`);
+        const hasAsyncIterator = !!(response as any)?.[Symbol.asyncIterator];
+        console.log(`[OpenAIProvider] Response type: ${typeof response}, has Symbol.asyncIterator: ${hasAsyncIterator}`);
       } catch (error: any) {
         console.error(`[OpenAIProvider] completions.create failed after ${Date.now() - apiCallStartTime}ms:`, error);
         console.error(`[OpenAIProvider] Error details:`, {
@@ -228,7 +229,8 @@ export class OpenAIProvider extends BaseAIProvider {
         }
       }, 5000);
       
-      for await (const chunk of response) {
+      const responseStream = response as unknown as AsyncIterable<any>;
+      for await (const chunk of responseStream) {
         if (chunkCount === 0) {
           console.log(`[OpenAIProvider] Iteration started, first chunk arriving after ${Date.now() - iteratorStartTime}ms`);
         }
@@ -402,7 +404,7 @@ export class OpenAIProvider extends BaseAIProvider {
     this.openai = null;
   }
 
-  private buildSystemPrompt(documentContext?: DocumentContext): string {
+  protected buildSystemPrompt(documentContext?: DocumentContext): string {
     // The base prompt now includes all tool usage instructions
     return super.buildSystemPrompt(documentContext);
   }

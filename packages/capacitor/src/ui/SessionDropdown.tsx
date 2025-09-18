@@ -1,9 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { AISessionsRepository } from '@stravu/runtime';
+import { AISessionsRepository, type SessionListItem } from '@stravu/runtime';
 
-export function SessionDropdown({ open, onClose, onSelect }: { open: boolean; onClose: () => void; onSelect: (id: string) => void }) {
-  const [sessions, setSessions] = useState<{ id: string; provider: string; model?: string; updatedAt: number }[]>([]);
-  useEffect(() => { if (open) { AISessionsRepository.list().then(setSessions).catch(()=>setSessions([])); } }, [open]);
+interface SessionDropdownProps {
+  open: boolean;
+  onClose: () => void;
+  onSelect: (id: string) => void;
+  workspaceId: string;
+}
+
+export function SessionDropdown({ open, onClose, onSelect, workspaceId }: SessionDropdownProps) {
+  const [sessions, setSessions] = useState<SessionListItem[]>([]);
+  useEffect(() => {
+    if (open) {
+      AISessionsRepository.list(workspaceId)
+        .then(setSessions)
+        .catch(() => setSessions([]));
+    }
+  }, [open, workspaceId]);
   if (!open) return null;
   return (
     <div style={{ position: 'absolute', inset: 0 }} onClick={onClose}>

@@ -2,15 +2,20 @@
  * Common types for AI provider abstraction
  */
 
+import type { ToolDefinition } from '../tools';
+export type { ToolDefinition } from '../tools';
+
 export interface DocumentContext {
-  filePath: string;
-  fileType: string;
+  filePath?: string;
+  fileType?: string;
   content: string;
   cursorPosition?: { line: number; column: number };
-  selection?: { 
-    start: { line: number; column: number }; 
-    end: { line: number; column: number } 
-  };
+  selection?:
+    | string
+    | {
+        start: { line: number; column: number };
+        end: { line: number; column: number };
+      };
 }
 
 export interface Message {
@@ -20,6 +25,7 @@ export interface Message {
   // Additional fields for rich message types
   edits?: any[];
   toolCall?: {
+    id?: string;
     name: string;
     arguments?: any;
     result?: any;
@@ -92,6 +98,7 @@ export interface StreamChunk {
   type: 'text' | 'tool_call' | 'tool_error' | 'error' | 'complete' | 'stream_edit_start' | 'stream_edit_content' | 'stream_edit_end';
   content?: string;
   toolCall?: {
+    id?: string;
     name: string;
     arguments?: any;
     result?: any;
@@ -118,18 +125,6 @@ export interface DiffResult {
   success: boolean;
   error?: string;
   appliedCount?: number;
-}
-
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: {
-    type: 'object';
-    properties: Record<string, any>;
-    required?: string[];
-  };
-  handler?: (args: any) => Promise<any>;
-  source?: 'main' | 'renderer'; // Where the tool executes
 }
 
 export interface ToolHandler {

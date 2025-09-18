@@ -46,13 +46,13 @@ export async function saveSessionState() {
         lastUpdated: Date.now()
     };
 
-    await saveToStore(sessionState);
+    saveToStore(sessionState);
     // logger.session.debug('Saved session state:', sessionState);
 }
 
 // Restore session state
 export async function restoreSessionState(): Promise<boolean> {
-    const sessionState = await getSessionState();
+    const sessionState = getSessionState();
 
     if (!sessionState || !sessionState.windows || sessionState.windows.length === 0) {
         return false;

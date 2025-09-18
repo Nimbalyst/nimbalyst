@@ -1,4 +1,5 @@
 import { app, BrowserWindow, nativeTheme, nativeImage, ipcMain } from 'electron';
+import type { SessionStore } from '@stravu/runtime';
 import { join } from 'path';
 import { existsSync, writeFileSync, appendFileSync } from 'fs';
 
@@ -26,6 +27,7 @@ import { stopAllWorkspaceWatchers } from './file/WorkspaceWatcher.ts';
 import { autoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
 import { migrateUserData } from './migration/dataMigration';
 import { initializeDatabase } from './database/initialize';
+import type { SessionStore } from '@stravu/runtime';
 
 // Track pending file to open
 let pendingFilePath: string | null = null;
@@ -45,6 +47,7 @@ const appStartTime = Date.now();
 
 // AI service instance
 let aiService: AIService | null = null;
+let runtimeSessionStore: SessionStore | null = null;
 let mcpHttpServer: any = null;
 
 // Initialize logging
@@ -144,9 +147,9 @@ app.whenReady().then(async () => {
 
     // Initialize PGLite database
     try {
-        await initializeDatabase();
+        runtimeSessionStore = await initializeDatabase();
         logger.main.info('Database initialization completed');
-    } catch (error) {
+      } catch (error) {
         logger.main.error('Error initializing database:', error);
 
         // Show error dialog to user
@@ -184,7 +187,10 @@ app.whenReady().then(async () => {
     setupWorkspaceManagerHandlers();
 
     // Initialize AI service
-    aiService = new AIService();
+    if (!runtimeSessionStore) {
+        throw new Error('AI session store unavailable after database initialization');
+    }
+    aiService = new AIService(runtimeSessionStore);
 
     // Start MCP SSE server
     try {

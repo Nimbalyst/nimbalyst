@@ -126,22 +126,11 @@ export class ToolRegistry {
   }
 
   toOpenAI(): any[] {
-    return this.getAll().map(tool => ({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-      },
-    }));
+    return toOpenAITools(this.getAll());
   }
 
   toAnthropic(): any[] {
-    return this.getAll().map(tool => ({
-      name: tool.name,
-      description: tool.description,
-      input_schema: tool.parameters,
-    }));
+    return toAnthropicTools(this.getAll());
   }
 
   on(event: ToolRegistryEventName, listener: ToolRegistryEventListener): void {
@@ -343,3 +332,22 @@ export class RuntimeToolExecutor {
 
 export const toolRegistry = new ToolRegistry();
 export const ToolExecutor = new RuntimeToolExecutor(toolRegistry);
+
+export function toOpenAITools(tools: ToolDefinition[]): any[] {
+  return tools.map(tool => ({
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    },
+  }));
+}
+
+export function toAnthropicTools(tools: ToolDefinition[]): any[] {
+  return tools.map(tool => ({
+    name: tool.name,
+    description: tool.description,
+    input_schema: tool.parameters,
+  }));
+}

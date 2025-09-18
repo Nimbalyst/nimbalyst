@@ -72,7 +72,9 @@ export function DocumentLinkPlugin({
       }
 
       const documentId = referenceElement.getAttribute('data-document-id');
-      if (!documentId) {
+      const documentPath = referenceElement.getAttribute('data-path') || undefined;
+      const documentName = referenceElement.getAttribute('data-name') || referenceElement.textContent || undefined;
+      if (!documentId && !documentPath) {
         return;
       }
 
@@ -90,11 +92,18 @@ export function DocumentLinkPlugin({
 
       event.preventDefault();
       try {
-        console.log('[DocumentLinkPlugin] Opening document reference', documentId);
+        if (documentId) {
+          console.log('[DocumentLinkPlugin] Opening document reference', documentId);
+        } else if (documentPath) {
+          console.log('[DocumentLinkPlugin] Opening document reference by path', documentPath);
+        }
       } catch {}
-      void documentService.openDocument(documentId).catch((error) => {
-        console.error('Failed to open document reference', error);
-      });
+
+      void documentService
+        .openDocument(documentId ?? '', { path: documentPath, name: documentName })
+        .catch(error => {
+          console.error('Failed to open document reference', error);
+        });
     };
 
     const onClick = (event: MouseEvent) => handleDocumentReferenceClick(event, (button) => button === 0);

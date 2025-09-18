@@ -1,4 +1,4 @@
-import { Document, DocumentService } from '@stravu/runtime';
+import { Document, DocumentService, DocumentOpenOptions } from '@stravu/runtime';
 
 /**
  * Renderer-side DocumentService that communicates with the main process
@@ -44,8 +44,8 @@ export class RendererDocumentService implements DocumentService {
     };
   }
 
-  async openDocument(documentId: string): Promise<void> {
-    return window.api.invoke('document-service:open', documentId);
+  async openDocument(documentId: string, fallback?: DocumentOpenOptions): Promise<void> {
+    return window.api.invoke('document-service:open', { documentId, fallback });
   }
 }
 

@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { SessionManager } from '../SessionManager';
+import { SessionManager } from '@stravu/runtime/ai/server/SessionManager';
 
 // Initialize session manager
 const sessionManager = new SessionManager();

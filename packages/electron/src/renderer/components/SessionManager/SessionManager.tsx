@@ -4,13 +4,13 @@ import './SessionManager.css';
 // Helper function to apply theme
 const applyTheme = () => {
   if (typeof window === 'undefined') return;
-  
+
   const savedTheme = localStorage.getItem('theme');
   const root = document.documentElement;
-  
+
   // Clear all theme classes first
   root.classList.remove('light-theme', 'dark-theme', 'crystal-dark-theme');
-  
+
   if (savedTheme === 'dark') {
     root.setAttribute('data-theme', 'dark');
     root.classList.add('dark-theme');
@@ -43,7 +43,7 @@ if (typeof window !== 'undefined') {
       applyTheme();
     }
   });
-  
+
   // Also listen for IPC theme changes
   if (window.electronAPI?.onThemeChange) {
     const unsubscribe = window.electronAPI.onThemeChange((theme) => {
@@ -103,7 +103,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
       const searchLower = searchTerm.toLowerCase();
       return (
         session.title?.toLowerCase().includes(searchLower) ||
-        session.messages.some(msg => 
+        session.messages.some(msg =>
           msg.content?.toLowerCase().includes(searchLower)
         ) ||
         session.workspacePath?.toLowerCase().includes(searchLower)
@@ -115,7 +115,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
 
   const handleOpenSession = async () => {
     if (!selectedSession) return;
-    
+
     try {
       await window.electronAPI.ai.openSessionInWindow(
         selectedSession.id,
@@ -128,7 +128,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
 
   const handleExportSession = async () => {
     if (!selectedSession) return;
-    
+
     try {
       const result = await window.electronAPI.ai.exportSession(selectedSession);
       if (result.success) {
@@ -141,7 +141,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
 
   const handleDeleteSession = async () => {
     if (!selectedSession) return;
-    
+
     if (!confirm('Are you sure you want to delete this session?')) {
       return;
     }
@@ -199,7 +199,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
             />
           </div>
         </div>
-        
+
         <div className="session-stats">
           {filteredSessions.length} session{filteredSessions.length !== 1 ? 's' : ''}
           {filterWorkspace && (
@@ -292,9 +292,23 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
                           </div>
                         )}
                       </div>
+                    ) : message.isStreamingStatus && message.streamingData ? (
+                      <div className="streaming-status">
+                        <div className="streaming-info">
+                          <strong>Streamed Content</strong>
+                          <span className="streaming-mode">Mode: {message.streamingData.mode}</span>
+                          <span className="streaming-position">Position: {message.streamingData.position}</span>
+                        </div>
+                        {message.streamingData.content && (
+                          <div className="streaming-content">
+                            <pre>{message.streamingData.content}</pre>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <pre>{message.content || '(empty)'}</pre>
                     )}
+
                   </div>
                 </div>
               ))}

@@ -49,7 +49,7 @@ export function registerFileHandlers() {
     });
 
     // Save file
-    ipcMain.handle('save-file', async (event, content: string) => {
+    ipcMain.handle('save-file', async (event, content: string, specificFilePath: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {
             console.error('[SAVE] ✗ No window found for event sender');
@@ -62,7 +62,8 @@ export function registerFileHandlers() {
             return null;
         }
         const state = windowStates.get(windowId);
-        const filePath = state?.filePath;
+        // ALWAYS use the specificFilePath provided
+        const filePath = specificFilePath;
 
         // console.log('[SAVE] save-file handler called at', new Date().toISOString());
         // console.log('[SAVE] Window ID:', windowId);

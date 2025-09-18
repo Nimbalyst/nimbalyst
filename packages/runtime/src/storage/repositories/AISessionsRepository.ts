@@ -1,36 +1,73 @@
-import { DefaultSessionManager, SessionManager } from '../../ai/sessionManager';
 import type { ChatMessage, ChatSession } from '../../ai/types';
+import {
+  type CreateSessionPayload,
+  type SessionListItem,
+  type SessionStore,
+  type UpdateSessionMetadataPayload,
+  getSessionStore,
+  hasSessionStore,
+  setSessionStore,
+} from '../../ai/adapters/sessionStore';
 
-function ensureInitialized(manager: SessionManager): Promise<void> {
-  return manager.initialize().catch(() => Promise.resolve());
+function requireStore(): SessionStore {
+  if (!hasSessionStore()) {
+    throw new Error('Session store adapter has not been provided to the runtime');
+  }
+  return getSessionStore();
 }
 
 export const AISessionsRepository = {
-  async create(id: string, provider: string, model: string): Promise<void> {
-    await ensureInitialized(DefaultSessionManager);
-    const existing = DefaultSessionManager.get(id);
-    if (existing) return;
-    await DefaultSessionManager.create({ id, provider, model });
+  setStore(store: SessionStore): void {
+    setSessionStore(store);
   },
-  async appendMessage(id: string, msg: ChatMessage): Promise<void> {
-    await ensureInitialized(DefaultSessionManager);
-    await DefaultSessionManager.addMessage(id, msg);
+
+  registerStore(store: SessionStore): void {
+    setSessionStore(store);
   },
-  async get(id: string): Promise<ChatSession | null> {
-    await ensureInitialized(DefaultSessionManager);
-    return DefaultSessionManager.get(id);
+
+  clearStore(): void {
+    setSessionStore(null);
   },
-  async list(): Promise<{ id: string; provider: string; model?: string; updatedAt: number }[]> {
-    await ensureInitialized(DefaultSessionManager);
-    return DefaultSessionManager.list().map(session => ({
-      id: session.id,
-      provider: session.provider,
-      model: session.model,
-      updatedAt: session.updatedAt
-    }));
+
+  getStore(): SessionStore {
+    return requireStore();
   },
-  async delete(id: string): Promise<void> {
-    await ensureInitialized(DefaultSessionManager);
-    await DefaultSessionManager.delete(id);
-  }
+
+  async ensureReady(): Promise<void> {
+    await requireStore().ensureReady();
+  },
+
+  async create(payload: CreateSessionPayload): Promise<void> {
+    await requireStore().create(payload);
+  },
+
+  async appendMessage(sessionId: string, message: ChatMessage): Promise<void> {
+    await requireStore().appendMessage(sessionId, message);
+  },
+
+  async replaceMessages(sessionId: string, messages: ChatMessage[]): Promise<void> {
+    await requireStore().replaceMessages(sessionId, messages);
+  },
+
+  async updateMetadata(sessionId: string, metadata: UpdateSessionMetadataPayload): Promise<void> {
+    await requireStore().updateMetadata(sessionId, metadata);
+  },
+
+  async get(sessionId: string): Promise<ChatSession | null> {
+    return await requireStore().get(sessionId);
+  },
+
+  async list(workspaceId: string): Promise<SessionListItem[]> {
+    return await requireStore().list(workspaceId);
+  },
+
+  async delete(sessionId: string): Promise<void> {
+    await requireStore().delete(sessionId);
+  },
+};
+
+export type {
+  CreateSessionPayload,
+  SessionListItem,
+  UpdateSessionMetadataPayload,
 };

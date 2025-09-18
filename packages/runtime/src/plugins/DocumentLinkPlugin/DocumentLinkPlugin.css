@@ -29,3 +29,8 @@
     box-shadow: rgb(180 213 255) 0px 0px 0px 2px;
     outline: none;
 }
+
+.document-reference:hover {
+    background-color: rgba(128, 128, 128, 0.2);
+    text-decoration: underline;
+}

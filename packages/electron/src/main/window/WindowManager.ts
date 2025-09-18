@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, app, nativeImage, ipcMain } from 'electron';
+import { BrowserWindow, dialog, app, nativeImage, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import { join, basename } from 'path';
 import { existsSync } from 'fs';
 import { WindowState, FileTreeItem } from '../types';
@@ -19,6 +19,22 @@ export const windowDevToolsState = new Map<number, boolean>(); // Track dev tool
 
 // Store document services for each workspace
 const documentServices = new Map<string, ElectronDocumentService>();
+
+function resolveDocumentServiceForEvent(event: IpcMainEvent | IpcMainInvokeEvent): ElectronDocumentService | null {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!browserWindow) {
+        return null;
+    }
+    const windowId = getWindowId(browserWindow);
+    if (windowId === null) {
+        return null;
+    }
+    const state = windowStates.get(windowId);
+    if (!state || state.mode !== 'workspace' || !state.workspacePath) {
+        return null;
+    }
+    return documentServices.get(state.workspacePath) ?? null;
+}
 
 let windowIdCounter = 0;
 let windowPositionOffset = 0;
@@ -154,6 +170,14 @@ export function createWindow(
             workspacePath: isWorkspaceMode ? workspacePath : null,
             documentEdited: false
         });
+        if (isWorkspaceMode && workspacePath) {
+            if (!documentServices.has(workspacePath)) {
+                const docService = new ElectronDocumentService(workspacePath);
+                documentServices.set(workspacePath, docService);
+                setupDocumentServiceHandlers(resolveDocumentServiceForEvent);
+                console.log('[MAIN] Created DocumentService for workspace:', workspacePath);
+            }
+        }
         windowFocusOrder.set(windowId, ++focusOrderCounter); // Track initial focus order
 
         console.log('[MAIN] Window stored in maps. Mode:', isWorkspaceMode ? 'workspace' : 'document');
@@ -372,14 +396,6 @@ export function createWindow(
                 setTimeout(() => {
                     startWorkspaceWatcher(window, workspacePath);
                 }, 100);
-
-                // Create document service for this workspace if it doesn't exist
-                if (!documentServices.has(workspacePath)) {
-                    const docService = new ElectronDocumentService(workspacePath);
-                    documentServices.set(workspacePath, docService);
-                    setupDocumentServiceHandlers(docService);
-                    console.log('[MAIN] Created DocumentService for workspace:', workspacePath);
-                }
             } else if (!isOpeningFile) {
                 // Create new untitled document
                 untitledCounter++;

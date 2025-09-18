@@ -14,6 +14,10 @@ export interface TabData {
     column: number;
   };
   lastSaved?: Date;
+  // Track the content hash to detect mismatches
+  contentHash?: string;
+  // Track when content was last loaded from file
+  contentLoadedAt?: Date;
 }
 
 interface UseTabsOptions {
@@ -36,6 +40,17 @@ interface UseTabsResult {
   getTabState: (tabId: string) => TabData | undefined;
   closeAllTabs: () => void;
   closeSavedTabs: () => void;
+}
+
+// Simple hash function for content validation
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash.toString(16);
 }
 
 export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
@@ -101,7 +116,9 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
       content,
       isDirty: false,
       isPinned: false,
-      lastSaved: new Date()
+      lastSaved: new Date(),
+      contentHash: simpleHash(content),
+      contentLoadedAt: new Date()
     };
 
     setTabs(prev => new Map(prev).set(tabId, newTab));
@@ -277,7 +294,9 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
                 content: '', // Content will be loaded when tab is selected
                 isDirty: false, // Reset dirty state on restore
                 isPinned: tab.isPinned,
-                lastSaved: tab.lastSaved ? new Date(tab.lastSaved) : undefined
+                lastSaved: tab.lastSaved ? new Date(tab.lastSaved) : undefined,
+                contentHash: undefined,
+                contentLoadedAt: undefined
               };
               restoredTabs.set(tab.id, restoredTab);
             }

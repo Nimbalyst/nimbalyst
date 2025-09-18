@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { SettingsRepository, getOpenAIModels, getAnthropicModels, getLMStudioModels, type AIModelInfo, type AISettings } from '@stravu/runtime';
+import { getOpenAIModels, getAnthropicModels, getLMStudioModels } from '@stravu/runtime';
+import type { AIModelInfo, AISettings } from './aiSettingsStore';
+import { getSettings, updateAISettings } from './aiSettingsStore';
 
 interface Props { open: boolean; onClose: () => void; }
 
@@ -10,14 +12,16 @@ export function AIModelsSheet({ open, onClose }: Props) {
   const [lmstudioModels, setLmstudioModels] = useState<AIModelInfo[]>([]);
   const p = ai.providers || (ai.providers = {});
 
-  useEffect(() => { (async () => {
-    const s = await SettingsRepository.get();
-    setAI({ defaultProvider: 'lmstudio', providers: {}, ...s.ai });
-  })(); }, []);
+  useEffect(() => {
+    (async () => {
+      const s = await getSettings();
+      setAI({ defaultProvider: 'lmstudio', providers: {}, ...s.ai });
+    })();
+  }, []);
 
   const save = async (next: AISettings) => {
     setAI(next);
-    await SettingsRepository.updateAI(next);
+    await updateAISettings(next);
   };
 
   if (!open) return null;

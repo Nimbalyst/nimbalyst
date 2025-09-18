@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { sendStreamingEdit, sendStreamingEditWithProvider, type DocumentContext, SettingsRepository, AISessionsRepository, type ChatMessage } from '@stravu/runtime';
+import { sendStreamingEdit, sendStreamingEditWithProvider, type DocumentContext, AISessionsRepository, type ChatMessage } from '@stravu/runtime';
+import { getSettings, updateAISettings } from './aiSettingsStore';
 import { ToolExecutor, toolRegistry } from '@stravu/runtime';
 import { AIModelsSheet } from './AIModelsSheet';
 import { ModelPicker } from './ModelPicker';
@@ -10,9 +11,10 @@ interface AIPanelProps {
   open: boolean;
   onClose: () => void;
   document?: DocumentContext;
+  workspaceId: string;
 }
 
-export function AIPanel({ open, onClose, document }: AIPanelProps) {
+export function AIPanel({ open, onClose, document, workspaceId }: AIPanelProps) {
   const [prompt, setPrompt] = useState('Continue writing this section.');
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(true);
@@ -34,7 +36,7 @@ export function AIPanel({ open, onClose, document }: AIPanelProps) {
 
   useEffect(() => {
     (async () => {
-      const s = await SettingsRepository.get();
+      const s = await getSettings();
       const ai = s.ai || ({} as any);
       const prov = ai.defaultProvider || ai.provider;
       if (prov) setProvider(prov);
@@ -49,7 +51,7 @@ export function AIPanel({ open, onClose, document }: AIPanelProps) {
       }
       const restoredId = ai.lastSessionId || sessionId;
       setSessionId(restoredId);
-      if (!ai.lastSessionId) await SettingsRepository.updateAI({ lastSessionId: restoredId });
+      if (!ai.lastSessionId) await updateAISettings({ lastSessionId: restoredId });
       const sess = await AISessionsRepository.get(restoredId);
       if (sess?.messages?.length) {
         const simplified = sess.messages
@@ -63,7 +65,7 @@ export function AIPanel({ open, onClose, document }: AIPanelProps) {
     // Helpful defaults: when switching to LM Studio and no baseUrl set, use the dev proxy
     if (provider === 'lmstudio' && !baseUrl) setBaseUrl('/lmstudio/v1');
     (async () => {
-      const s = await SettingsRepository.get();
+      const s = await getSettings();
       const p = s.ai.providers || ({} as any);
       const list: string[] = (p[provider]?.selectedModels) || [];
       setAvailableModels(list);
@@ -71,7 +73,7 @@ export function AIPanel({ open, onClose, document }: AIPanelProps) {
     })();
   }, [provider]);
   useEffect(() => {
-    void SettingsRepository.updateAI({ provider, model, endpoint, baseUrl, apiKey, lastSessionId: sessionId });
+    void updateAISettings({ provider, model, endpoint, baseUrl, apiKey, lastSessionId: sessionId });
   }, [provider, model, endpoint, baseUrl, apiKey, sessionId]);
 
   useEffect(() => {
@@ -86,9 +88,15 @@ export function AIPanel({ open, onClose, document }: AIPanelProps) {
     if (busy) { console.warn('[ai] onSend: already busy'); return; }
     setBusy(true); setExpanded(true); setError(null);
     const ac = new AbortController(); abortRef.current = ac;
-    const timeoutId = setTimeout(() => { try { ac.abort(); } catch {} }, 60000);
+    const timeoutId = setTimeout(() => { try { ac.abort(); } catch {} }, 90000);
     try {
-      await AISessionsRepository.create(sessionId, provider, model).catch(()=>{});
+      await AISessionsRepository.create({
+        id: sessionId,
+        provider,
+        model,
+        workspaceId,
+        documentContext: document ? { filePath: document.filePath, fileType: document.fileType, content: document.content } : undefined,
+      }).catch(() => {});
       await AISessionsRepository.appendMessage(sessionId, { role: 'user', content: prompt, timestamp: Date.now() });
       const userMsgId = `m_${Date.now()}_u`;
       const asstMsgId = `m_${Date.now()}_a`;
@@ -138,8 +146,13 @@ export function AIPanel({ open, onClose, document }: AIPanelProps) {
       const newId = `sess_${Date.now()}`;
       setSessionId(newId);
       setMessages([]);
-      await AISessionsRepository.create(newId, provider, model).catch(()=>{});
-      await SettingsRepository.updateAI({ lastSessionId: newId });
+      await AISessionsRepository.create({
+        id: newId,
+        provider,
+        model,
+        workspaceId,
+      }).catch(() => {});
+      await updateAISettings({ lastSessionId: newId });
     };
     window.addEventListener('ai:new-conversation', handler as any);
     return () => window.removeEventListener('ai:new-conversation', handler as any);
@@ -198,7 +211,11 @@ export function AIPanel({ open, onClose, document }: AIPanelProps) {
         )}
       </div>
       <AIModelsSheet open={showModels} onClose={() => setShowModels(false)} />
-      <SessionDropdown open={showSessions} onClose={() => setShowSessions(false)} onSelect={async (id) => {
+      <SessionDropdown
+        open={showSessions}
+        onClose={() => setShowSessions(false)}
+        workspaceId={workspaceId}
+        onSelect={async (id) => {
         const sess = await AISessionsRepository.get(id);
         if (sess) {
           setSessionId(id);
@@ -208,9 +225,10 @@ export function AIPanel({ open, onClose, document }: AIPanelProps) {
             .filter((m: ChatMessage) => m.role === 'user' || m.role === 'assistant')
             .map((m: ChatMessage, i: number) => ({ role: m.role as 'user' | 'assistant', content: m.content, id: `m_${i}_${m.role[0]}` }));
           setMessages(simplified);
-          await SettingsRepository.updateAI({ lastSessionId: id, provider: sess.provider as any, model: sess.model });
+          await updateAISettings({ lastSessionId: id, provider: sess.provider as any, model: sess.model });
         }
-      }} />
+        }}
+      />
       <ModelPicker
         open={showModelPicker}
         onClose={() => setShowModelPicker(false)}
@@ -218,7 +236,12 @@ export function AIPanel({ open, onClose, document }: AIPanelProps) {
         currentModel={model}
         onSelect={async (prov, mdl) => { 
           setProvider(prov); setModel(mdl);
-          await SettingsRepository.updateAI({ provider: prov, model: mdl, defaultProvider: prov, providers: { [prov]: { defaultModel: mdl } } as any });
+          await updateAISettings({
+            provider: prov,
+            model: mdl,
+            defaultProvider: prov,
+            providers: { [prov]: { defaultModel: mdl } } as any,
+          });
         }}
         onConfigure={() => { setShowModelPicker(false); setShowModels(true); }}
       />

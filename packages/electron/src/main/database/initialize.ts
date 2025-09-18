@@ -5,15 +5,21 @@
 
 import { app } from 'electron';
 import { database } from './PGLiteDatabaseWorker';
-import { migrationService } from './PGLiteMigration';
 import { logger } from '../utils/logger';
-import { enablePGLite } from '../utils/store';
+import { useExternalDB } from '@stravu/runtime/storage/pglite';
+import { createPgliteSessionStore } from '@stravu/runtime';
+import type { SessionStore } from '@stravu/runtime';
 
 /**
  * Initialize the database system
  * Should be called when the app is ready
  */
-export async function initializeDatabase(): Promise<void> {
+let cachedSessionStore: SessionStore | null = null;
+
+export async function initializeDatabase(): Promise<SessionStore> {
+  if (cachedSessionStore && database.isInitialized()) {
+    return cachedSessionStore;
+  }
   logger.main.info('[Database] Initializing PGLite database system...');
 
   try {
@@ -21,21 +27,24 @@ export async function initializeDatabase(): Promise<void> {
     await database.initialize();
     logger.main.info('[Database] PGLite initialized successfully');
 
-    // Enable PGLite in the store utilities
-    enablePGLite();
+    // Share worker-backed database with runtime storage helpers
+    await useExternalDB({
+      query: database.query.bind(database),
+      exec: database.exec.bind(database),
+    });
 
-    // Check if migration is needed
-    if (!migrationService.isMigrated()) {
-      logger.main.info('[Database] Starting data migration from electron-store to PGLite...');
-      await migrationService.migrate();
-      logger.main.info('[Database] Data migration completed');
-    } else {
-      const status = migrationService.getStatus();
-      logger.main.info('[Database] Data already migrated', {
-        migratedAt: new Date(status.migratedAt!).toISOString(),
-        version: status.version
-      });
-    }
+    const sessionStore = createPgliteSessionStore(
+      {
+        query: database.query.bind(database),
+      },
+      async () => {
+        if (!database.isInitialized()) {
+          await database.initialize();
+        }
+      }
+    );
+    cachedSessionStore = sessionStore;
+    logger.main.info('[Database] Runtime storage initialized');
 
     // Get database stats
     const stats = await database.getStats();
@@ -48,13 +57,20 @@ export async function initializeDatabase(): Promise<void> {
     });
 
     logger.main.info('[Database] Database system ready');
+
+    return sessionStore;
   } catch (error) {
     logger.main.error('[Database] Failed to initialize database:', error);
     // Don't throw in production - fall back to electron-store
     if (process.env.NODE_ENV === 'development') {
       throw error;
     }
+    throw error;
   }
+}
+
+export function getRuntimeSessionStore(): SessionStore | null {
+  return cachedSessionStore;
 }
 
 /**
@@ -66,10 +82,3 @@ export function getDatabase() {
 
 // Export database directly for protocol server
 export { database };
-
-/**
- * Get migration status
- */
-export function getMigrationStatus() {
-  return migrationService.getStatus();
-}

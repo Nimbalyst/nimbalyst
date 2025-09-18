@@ -4,11 +4,12 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import Store from 'electron-store';
-import { SessionManager } from './SessionManager';
-import { ProviderFactory } from './ProviderFactory';
-import { ModelRegistry } from './ModelRegistry';
-import { AIProvider } from './AIProvider';
-import {
+import { SessionManager } from '@stravu/runtime/ai/server/SessionManager';
+import { ProviderFactory } from '@stravu/runtime/ai/server/ProviderFactory';
+import { ModelRegistry } from '@stravu/runtime/ai/server/ModelRegistry';
+import type { SessionStore } from '@stravu/runtime';
+import type { AIProvider } from '@stravu/runtime/ai/server/AIProvider';
+import type {
   DocumentContext,
   Message,
   ProviderConfig,
@@ -16,8 +17,8 @@ import {
   DiffArgs,
   DiffResult,
   AIProviderType,
-  AIModel
-} from './types';
+  AIModel,
+} from '@stravu/runtime/ai/server/types';
 import { updateDocumentState } from '../../mcp/httpServer';
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 import { logger } from '../../utils/logger';
@@ -35,8 +36,8 @@ export class AIService {
   // Track providers per window to avoid cross-window conflicts
   private providersByWindow: Map<number, AIProvider> = new Map();
 
-  constructor() {
-    this.sessionManager = new SessionManager();
+  constructor(sessionStore: SessionStore) {
+    this.sessionManager = new SessionManager(sessionStore);
     
     // Register built-in tools
     console.log('[AIService] Registering built-in tools...');
@@ -286,7 +287,7 @@ export class AIService {
       }
       
       const loadStartTime = Date.now();
-      const session = this.sessionManager.loadSession(sessionId, workspacePath);
+      const session = await this.sessionManager.loadSession(sessionId, workspacePath);
       perfLog.sessionLoadTime = Date.now() - loadStartTime;
       
       if (!session) {
@@ -310,7 +311,7 @@ export class AIService {
         content: message,
         timestamp: Date.now()
       };
-      this.sessionManager.addMessage(userMessage, session.id);
+      await this.sessionManager.addMessage(userMessage, session.id);
 
       // Update MCP document state if provided
       if (documentContext) {
@@ -492,7 +493,7 @@ export class AIService {
                     toolCall: chunk.toolCall,
                     ...(toolResult !== undefined ? { errorMessage: toolResult?.error, isError: toolResult?.success === false } : {})
                   };
-                  this.sessionManager.addMessage(toolMessage, session.id);
+                  await this.sessionManager.addMessage(toolMessage, session.id);
                 }
 
                 // Send tool call to renderer
@@ -553,7 +554,7 @@ export class AIService {
                   isError: true,
                   errorMessage: chunk.toolError.error
                 };
-                this.sessionManager.addMessage(errorMessage, session.id);
+                await this.sessionManager.addMessage(errorMessage, session.id);
 
                 event.sender.send('ai:streamResponse', {
                   partial: '',
@@ -636,7 +637,7 @@ export class AIService {
                   timestamp: Date.now(),
                   ...(edits.length > 0 && { edits })  // Include edits if any
                 };
-                this.sessionManager.addMessage(assistantMessage, session.id);
+                await this.sessionManager.addMessage(assistantMessage, session.id);
               } else if (edits.length > 0) {
                 // If there were edits but no text response
                 const assistantMessage: Message = {
@@ -645,7 +646,7 @@ export class AIService {
                   timestamp: Date.now(),
                   edits
                 };
-                this.sessionManager.addMessage(assistantMessage, session.id);
+                await this.sessionManager.addMessage(assistantMessage, session.id);
               } else if (hasStreamingContent) {
                 // If we used streamContent, add a message to track it
                 const assistantMessage: Message = {
@@ -660,7 +661,7 @@ export class AIService {
                     isActive: false
                   }
                 };
-                this.sessionManager.addMessage(assistantMessage, session.id);
+                await this.sessionManager.addMessage(assistantMessage, session.id);
               } else if (toolCalls.length > 0) {
                 // If there were only other tool calls and no text
                 const assistantMessage: Message = {
@@ -668,14 +669,14 @@ export class AIService {
                   content: '[Tool calls executed]',
                   timestamp: Date.now()
                 };
-                this.sessionManager.addMessage(assistantMessage, session.id);
+                await this.sessionManager.addMessage(assistantMessage, session.id);
               }
 
               // Update provider session data if available
               if (provider.getProviderSessionData) {
                 const providerData = provider.getProviderSessionData(session.id);
                 if (providerData?.claudeSessionId) {
-                  this.sessionManager.updateProviderSessionData(session.id, providerData.claudeSessionId);
+                  await this.sessionManager.updateProviderSessionData(session.id, providerData.claudeSessionId);
                 }
               }
 
@@ -711,12 +712,12 @@ export class AIService {
 
     // Get session history
     ipcMain.handle('ai:getSessions', async (event, workspacePath?: string) => {
-      return this.sessionManager.getSessions(workspacePath);
+      return await this.sessionManager.getSessions(workspacePath);
     });
 
     // Load a session
     ipcMain.handle('ai:loadSession', async (event, sessionId: string, workspacePath?: string) => {
-      const session = this.sessionManager.loadSession(sessionId, workspacePath);
+      const session = await this.sessionManager.loadSession(sessionId, workspacePath);
       if (!session) {
         console.log(`[SESSION] Session not found: ${sessionId} (this is normal if the session was deleted)`);
         return null;
@@ -747,7 +748,7 @@ export class AIService {
       messages: Message[],
       workspacePath?: string
     ) => {
-      const success = this.sessionManager.updateSessionMessages(sessionId, messages, workspacePath);
+      const success = await this.sessionManager.updateSessionMessages(sessionId, messages, workspacePath);
       return { success };
     });
 
@@ -758,7 +759,7 @@ export class AIService {
       draftInput: string,
       workspacePath?: string
     ) => {
-      const success = this.sessionManager.saveDraftInput(sessionId, draftInput, workspacePath);
+      const success = await this.sessionManager.saveDraftInput(sessionId, draftInput, workspacePath);
       return { success };
     });
 
@@ -771,7 +772,7 @@ export class AIService {
 
     // Delete session
     ipcMain.handle('ai:deleteSession', async (event, sessionId: string, workspacePath?: string) => {
-      const success = this.sessionManager.deleteSession(sessionId, workspacePath);
+      const success = await this.sessionManager.deleteSession(sessionId, workspacePath);
 
       // Clean up provider if it exists
       if (success) {
@@ -886,8 +887,8 @@ export class AIService {
           console.log('[AIService] testConnection - Testing provider:', provider);
           
           const testProvider = provider === 'claude'
-            ? new (await import('./providers/ClaudeProvider')).ClaudeProvider()
-            : new (await import('./providers/ClaudeCodeProvider')).ClaudeCodeProvider();
+            ? new (await import('@stravu/runtime/ai/server/providers/ClaudeProvider')).ClaudeProvider()
+            : new (await import('@stravu/runtime/ai/server/providers/ClaudeCodeProvider')).ClaudeCodeProvider();
 
           // Initialize with a default model for testing
           const config: any = { apiKey };

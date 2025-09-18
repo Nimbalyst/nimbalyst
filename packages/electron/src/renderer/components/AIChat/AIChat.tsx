@@ -2,13 +2,11 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatHeader } from './ChatHeader';
 import { ChatMessages } from './ChatMessages';
 import { ChatInput } from './ChatInput';
-import { SessionDropdown } from './SessionDropdown';
-import { NewSessionButton } from './NewSessionButton';
 import { EmptyState } from './EmptyState';
 import { PerformanceMetrics } from './PerformanceMetrics';
 import { aiApi, DocumentContext } from '../../services/aiApi';
 import { logger } from '../../utils/logger';
-import { DEFAULT_MODELS } from '../../../shared/modelConstants';
+import { DEFAULT_MODELS } from '@stravu/runtime/ai/modelConstants';
 import './AIChat.css';
 
 interface AIChatProps {
@@ -74,6 +72,23 @@ export function AIChat({
     // Load performance metrics visibility from localStorage
     return localStorage.getItem('ai-show-performance-metrics') === 'true';
   });
+
+  // Get the current session for easy access
+  const getCurrentSession = () => {
+    if (!currentSessionId) return null;
+    return sessions.find(s => s.id === currentSessionId) || null;
+  };
+
+  // Get the effective model ID from the current session
+  const getEffectiveModelId = () => {
+    const session = getCurrentSession();
+    if (session) {
+      return session.provider === 'claude-code'
+        ? 'claude-code'
+        : `${session.provider}:${session.model}`;
+    }
+    return currentModel;
+  };
 
   // Parse provider and model from the combined ID
   const parseModelId = (modelId: string): { provider: string; model: string | undefined } => {
@@ -389,13 +404,13 @@ export function AIChat({
         clearTimeout(streamTimeoutRef.current);
       }
 
-      // Set a timeout to detect stuck streaming (30 seconds)
+      // Set a timeout to detect stuck streaming (90 seconds)
       streamTimeoutRef.current = setTimeout(() => {
         if (isStreamingToEditorRef.current) {
           logger.streaming.info('⚠️ Streaming timeout - ending stuck session');
-          handleStreamEditEnd({ error: 'Streaming timeout after 60 seconds' });
+          handleStreamEditEnd({ error: 'Streaming timeout after 90 seconds' });
         }
-      }, 60000);
+      }, 90000);
 
       // Generate a unique ID for this streaming session
       const editId = `stream-${Date.now()}`;
@@ -817,22 +832,41 @@ export function AIChat({
     }
 
     // Get the session to find out what provider to use
-    const currentSession = sessions.find(s => s.id === currentSessionId);
-    if (!currentSession) {
-      console.error('[AIChat] Session not found in sessions list');
+    let sessionForSend = sessions.find(s => s.id === currentSessionId);
+    if (!sessionForSend) {
+      console.error('[AIChat] Session not found in sessions list, attempting to reload');
+      const reloaded = await aiApi.loadSession(currentSessionId, workspacePath);
+      if (!reloaded) {
+        setIsLoading(false);
+        return;
+      }
+      sessionForSend = reloaded;
+      setSessions(prev => {
+        const filtered = prev.filter(s => s.id !== reloaded.id);
+        return [{ ...reloaded }, ...filtered];
+      });
+      const expectedModelId = reloaded.provider === 'claude-code'
+        ? 'claude-code'
+        : `${reloaded.provider}:${reloaded.model}`;
+      if (currentModel !== expectedModelId) {
+        setCurrentModel(expectedModelId);
+      }
+    }
+
+    if (!sessionForSend) {
       setIsLoading(false);
       return;
     }
 
     // Use the session's provider - it's the source of truth
-    const actualProvider = currentSession.provider;
-    const actualModel = currentSession.model;
+    const actualProvider = sessionForSend.provider;
+    const actualModel = sessionForSend.model;
     console.log(`[AIChat] Using session provider: ${actualProvider}, model: ${actualModel}`);
 
     // Sync UI model to match session
-    const expectedModelId = currentSession.provider === 'claude-code'
+    const expectedModelId = sessionForSend.provider === 'claude-code'
       ? 'claude-code'
-      : `${currentSession.provider}:${currentSession.model}`;
+      : `${sessionForSend.provider}:${sessionForSend.model}`;
 
     if (currentModel !== expectedModelId) {
       console.log(`[AIChat] Syncing UI model to match session: ${currentModel} -> ${expectedModelId}`);
@@ -1115,6 +1149,12 @@ export function AIChat({
 
       setMessages(chatMessages);
 
+      // Ensure this session is reflected in the cached list immediately
+      setSessions(prev => {
+        const filtered = prev.filter(s => s.id !== session.id);
+        return [{ ...session }, ...filtered];
+      });
+
       // Restore draft input for this session
       setInputValue(session.draftInput || '');
 
@@ -1273,31 +1313,6 @@ export function AIChat({
 
       <ChatHeader
         onToggleCollapse={onToggleCollapse}
-        provider={(() => {
-          // Get provider from actual session, not UI state
-          if (currentSessionId) {
-            const session = sessions.find(s => s.id === currentSessionId);
-            if (session) {
-              return session.provider;
-            }
-          }
-          // Fallback to parsed model if no session
-          return currentModel ? parseModelId(currentModel).provider : undefined;
-        })()}
-        model={(() => {
-          // Get model from actual session, not UI state
-          if (currentSessionId) {
-            const session = sessions.find(s => s.id === currentSessionId);
-            if (session) {
-              // Format as provider:model or just provider for claude-code
-              return session.provider === 'claude-code'
-                ? 'claude-code'
-                : `${session.provider}:${session.model}`;
-            }
-          }
-          // Fallback to current model
-          return currentModel || undefined;
-        })()}
         showPerformanceMetrics={showPerformanceMetrics}
         onTogglePerformanceMetrics={() => {
           const newValue = !showPerformanceMetrics;
@@ -1305,44 +1320,18 @@ export function AIChat({
           localStorage.setItem('ai-show-performance-metrics', String(newValue));
         }}
         onCopyChat={handleCopyChat}
-      >
-        <SessionDropdown
-          currentSessionId={currentSessionId}
-          sessions={sessions.map(s => ({
-            id: s.id,
-            timestamp: s.timestamp,
-            name: s.name,
-            title: s.title,
-            messageCount: s.messages?.length || 0,
-            provider: s.provider,
-            model: s.model
-          }))}
-          onSessionSelect={handleSessionSelect}
-          onNewSession={() => handleNewSession()}
-          onDeleteSession={handleDeleteSession}
-          onRenameSession={handleRenameSession}
-          onOpenSessionManager={handleOpenSessionManager}
-        />
-        <NewSessionButton
-          currentModel={(() => {
-            // Get the actual model from the current session, not stale UI state
-            if (currentSessionId) {
-              const session = sessions.find(s => s.id === currentSessionId);
-              if (session) {
-                // Return the proper model ID format
-                return session.provider === 'claude-code'
-                  ? 'claude-code'
-                  : `${session.provider}:${session.model}`;
-              }
-            }
-            return currentModel;
-          })()}
-          onNewSession={handleNewSession}
-          onOpenSettings={() => window.electronAPI.openAIModels()}
-          disabled={isLoading}
-          hasUnsavedInput={inputValue.trim().length > 0}
-        />
-      </ChatHeader>
+        currentSessionId={currentSessionId}
+        sessions={sessions}
+        currentModel={currentModel}
+        isLoading={isLoading}
+        hasUnsavedInput={inputValue.trim().length > 0}
+        onSessionSelect={handleSessionSelect}
+        onNewSession={handleNewSession}
+        onDeleteSession={handleDeleteSession}
+        onRenameSession={handleRenameSession}
+        onOpenSessionManager={handleOpenSessionManager}
+        onOpenSettings={() => window.electronAPI.openAIModels()}
+      />
 
       {hasApiKey === false ? (
         <EmptyState
@@ -1365,8 +1354,11 @@ export function AIChat({
             messages={messages}
             isLoading={isLoading}
             onApplyEdit={handleApplyEdit}
-            provider={currentModel ? parseModelId(currentModel).provider : undefined}
-            modelName={currentModel ? getModelDisplayName(currentModel) : undefined}
+            provider={getCurrentSession()?.provider || (currentModel ? parseModelId(currentModel).provider : undefined)}
+            modelName={(() => {
+              const effectiveModel = getEffectiveModelId();
+              return effectiveModel ? getModelDisplayName(effectiveModel) : undefined;
+            })()}
             hasDocument={!!documentContext && !!(documentContext.filePath || documentContext.content)}
           />
 

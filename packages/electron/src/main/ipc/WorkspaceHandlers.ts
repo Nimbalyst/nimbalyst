@@ -5,11 +5,12 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
-import { windowStates, getWindowId } from '../window/WindowManager';
+import { windowStates, getWindowId, createWindow } from '../window/WindowManager';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { getFolderContents } from '../utils/FileTree';
 import { getWorkspaceRecentFiles, addWorkspaceRecentFile, store, getWorkspaceTabState, saveWorkspaceTabState, clearWorkspaceTabState } from '../utils/store';
+import { loadFileIntoWindow } from '../file/FileOperations';
 
 export function registerWorkspaceHandlers() {
     // Get folder contents
@@ -440,7 +441,7 @@ export function registerWorkspaceHandlers() {
         if (!state || !state.workspacePath) return [];
 
         // Get recent files for this workspace from store
-        const workspaceRecentFiles = await getWorkspaceRecentFiles(state.workspacePath);
+        const workspaceRecentFiles = getWorkspaceRecentFiles(state.workspacePath);
 
         // Ensure it's an array before filtering
         if (!Array.isArray(workspaceRecentFiles)) {
@@ -460,7 +461,7 @@ export function registerWorkspaceHandlers() {
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return;
 
-        await addWorkspaceRecentFile(state.workspacePath, filePath);
+        addWorkspaceRecentFile(state.workspacePath, filePath);
     });
 
     // Get workspace tab state
@@ -471,7 +472,7 @@ export function registerWorkspaceHandlers() {
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return null;
 
-        return await getWorkspaceTabState(state.workspacePath);
+        return getWorkspaceTabState(state.workspacePath);
     });
 
     // Save workspace tab state
@@ -482,7 +483,7 @@ export function registerWorkspaceHandlers() {
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return;
 
-        await saveWorkspaceTabState(state.workspacePath, tabState);
+        saveWorkspaceTabState(state.workspacePath, tabState);
     });
 
     // Clear workspace tab state
@@ -695,9 +696,6 @@ export function registerWorkspaceHandlers() {
 
     ipcMain.handle('open-file-in-new-window', async (event, filePath: string) => {
         try {
-            const { createWindow } = require('../window/WindowManager');
-            const { loadFileIntoWindow } = require('../file/FileOperations');
-
             const newWindow = createWindow(true, false);
             newWindow.once('ready-to-show', () => {
                 loadFileIntoWindow(newWindow, filePath);

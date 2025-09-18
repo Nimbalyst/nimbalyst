@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { SettingsRepository, type AISettings } from '@stravu/runtime';
+import type { AISettings } from './aiSettingsStore';
+import { getSettings, updateAISettings } from './aiSettingsStore';
 import { OpenAIIcon, ClaudeIcon, LMStudioIcon } from './ProviderIcons';
 
 interface Props {
@@ -14,7 +15,14 @@ interface Props {
 export function ModelPicker({ open, onClose, currentProvider, currentModel, onSelect, onConfigure }: Props) {
   const [ai, setAI] = useState<AISettings>({ providers: {}, defaultProvider: 'lmstudio' });
 
-  useEffect(() => { if (open) { (async () => { const s = await SettingsRepository.get(); setAI({ defaultProvider: 'lmstudio', providers: {}, ...s.ai }); })(); } }, [open]);
+  useEffect(() => {
+    if (open) {
+      (async () => {
+        const s = await getSettings();
+        setAI({ defaultProvider: 'lmstudio', providers: {}, ...s.ai });
+      })();
+    }
+  }, [open]);
 
   if (!open) return null;
 

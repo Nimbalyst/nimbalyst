@@ -148,7 +148,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // File operations
   openFile: () => ipcRenderer.invoke('open-file'),
-  saveFile: (content: string) => ipcRenderer.invoke('save-file', content),
+  saveFile: (content: string, filePath: string) => ipcRenderer.invoke('save-file', content, filePath),
   saveFileAs: (content: string) => ipcRenderer.invoke('save-file-as', content),
   showErrorDialog: (title: string, message: string) => ipcRenderer.invoke('show-error-dialog', title, message),
 
@@ -207,10 +207,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Settings operations
-  getSidebarWidth: () => ipcRenderer.invoke('get-sidebar-width'),
-  setSidebarWidth: (width: number) => ipcRenderer.send('set-sidebar-width', width),
-  getAIChatState: () => ipcRenderer.invoke('get-ai-chat-state'),
-  setAIChatState: (state: { collapsed: boolean; width: number; sessionId?: string }) => ipcRenderer.send('set-ai-chat-state', state),
+  getSidebarWidth: (workspacePath: string) => ipcRenderer.invoke('get-sidebar-width', workspacePath),
+  setSidebarWidth: (workspacePath: string, width: number) => ipcRenderer.send('set-sidebar-width', { workspacePath, width }),
+  getAIChatState: (workspacePath: string) => ipcRenderer.invoke('get-ai-chat-state', workspacePath),
+  setAIChatState: (state: { collapsed: boolean; width: number; sessionId?: string; workspacePath: string }) => ipcRenderer.send('set-ai-chat-state', state),
 
   // QuickOpen operations
   searchWorkspaceFiles: (workspacePath: string, query: string) => ipcRenderer.invoke('search-workspace-files', workspacePath, query),
@@ -404,7 +404,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     search: (query: string) => ipcRenderer.invoke('document-service:search', query),
     get: (id: string) => ipcRenderer.invoke('document-service:get', id),
     getByPath: (path: string) => ipcRenderer.invoke('document-service:get-by-path', path),
-    open: (id: string) => ipcRenderer.invoke('document-service:open', id),
+    open: (id: string, fallback?: { path?: string; name?: string }) => ipcRenderer.invoke('document-service:open', { documentId: id, fallback }),
     watch: () => ipcRenderer.send('document-service:watch'),
     onDocumentsChanged: (callback: (documents: any[]) => void) => {
       const handler = (_event: any, documents: any[]) => callback(documents);

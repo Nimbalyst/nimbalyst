@@ -22,9 +22,16 @@ The user needs to open a document first before you can help with editing.
 You can still answer questions, provide information, and have general conversations.`;
   }
 
-  const selectionPreview = (documentContext as any).selection
-    ? String((documentContext as any).selection).slice(0, 100) + (((documentContext as any).selection || '').length > 100 ? '...' : '')
-    : '';
+  let selectionPreview = '';
+  const selection = (documentContext as any)?.selection;
+  if (typeof selection === 'string') {
+    selectionPreview = selection.slice(0, 100) + (selection.length > 100 ? '...' : '');
+  } else if (selection && typeof selection === 'object') {
+    const selectionText = (selection as any).text ?? (selection as any).content;
+    if (typeof selectionText === 'string') {
+      selectionPreview = selectionText.slice(0, 100) + (selectionText.length > 100 ? '...' : '');
+    }
+  }
 
   return base + `
 

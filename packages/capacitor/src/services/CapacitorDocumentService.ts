@@ -1,4 +1,4 @@
-import { Document, DocumentService } from '@stravu/runtime';
+import { Document, DocumentService, DocumentOpenOptions } from '@stravu/runtime';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 /**
@@ -130,10 +130,22 @@ export class CapacitorDocumentService implements DocumentService {
     };
   }
 
-  async openDocument(documentId: string): Promise<void> {
-    const doc = await this.getDocument(documentId);
+  async openDocument(documentId: string, fallback?: DocumentOpenOptions): Promise<void> {
+    let doc = await this.getDocument(documentId);
+    if (!doc && fallback?.path) {
+      doc = await this.getDocumentByPath(fallback.path);
+    }
+    if (!doc && fallback?.name) {
+      const documents = await this.listDocuments();
+      doc =
+        documents.find(d => d.name === fallback.name) ||
+        documents.find(d => d.path.split(/[\\/]/).pop() === fallback.name) ||
+        null;
+    }
     if (!doc) {
-      throw new Error(`Document with id ${documentId} not found`);
+      throw new Error(
+        `Document not found (id=${documentId || 'n/a'}, path=${fallback?.path ?? 'n/a'}, name=${fallback?.name ?? 'n/a'})`
+      );
     }
 
     // In Capacitor, we might trigger a custom event or use a plugin

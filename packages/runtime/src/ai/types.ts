@@ -23,6 +23,7 @@ export interface ProviderRequest {
 }
 
 export interface ChatToolCall {
+  id?: string;
   name: string;
   arguments?: any;
   result?: any;

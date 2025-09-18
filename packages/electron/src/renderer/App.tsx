@@ -82,7 +82,7 @@ interface ElectronAPI {
   onLoadSessionFromManager?: (callback: (data: { sessionId: string; workspacePath?: string }) => void) => () => void;
   onShowPreferences?: (callback: () => void) => () => void;
   openFile: () => Promise<{ filePath: string; content: string } | null>;
-  saveFile: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
+  saveFile: (content: string, filePath: string) => Promise<{ success: boolean; filePath: string } | null>;
   saveFileAs: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
   setDocumentEdited: (edited: boolean) => void;
   setTitle: (title: string) => void;
@@ -94,10 +94,10 @@ interface ElectronAPI {
   switchWorkspaceFile: (filePath: string) => Promise<{ filePath: string; content: string } | null>;
   readFileContent?: (filePath: string) => Promise<{ content: string } | null>;
   // Settings
-  getSidebarWidth: () => Promise<number | null>;
-  setSidebarWidth: (width: number) => void;
-  getAIChatState: () => Promise<{ collapsed: boolean; width: number; sessionId?: string } | null>;
-  setAIChatState: (state: { collapsed: boolean; width: number; sessionId?: string }) => void;
+  getSidebarWidth: (workspacePath: string) => Promise<number>;
+  setSidebarWidth: (workspacePath: string, width: number) => void;
+  getAIChatState: (workspacePath: string) => Promise<{ collapsed: boolean; width: number; currentSessionId?: string; draftInput?: string } | null>;
+  setAIChatState: (state: { workspacePath: string; collapsed: boolean; width: number; currentSessionId?: string; draftInput?: string }) => void;
   getRecentWorkspaceFiles?: () => Promise<string[]>;
   addToWorkspaceRecentFiles?: (filePath: string) => void;
   searchWorkspaceFileNames?: (workspacePath: string, query: string) => Promise<any[]>;
@@ -227,6 +227,21 @@ export default function App() {
   const [lastPrompt, setLastPrompt] = useState<string>('');
   const [lastAIResponse, setLastAIResponse] = useState<string>('');
 
+  // Sync theme with main process preference on mount
+  useEffect(() => {
+    if (!window.electronAPI?.getTheme) return;
+    window.electronAPI
+      .getTheme()
+      .then(themeValue => {
+        if (!themeValue) return;
+        const resolvedTheme = (themeValue === 'system' ? 'auto' : themeValue) as ConfigTheme;
+        setTheme(resolvedTheme);
+      })
+      .catch(error => {
+        console.error('[THEME] Failed to load theme from main process:', error);
+      });
+  }, []);
+
   // Track when we last saved to ignore file change events shortly after
   const lastSaveTimeRef = useRef<number>(0);
 
@@ -350,6 +365,11 @@ export default function App() {
   const autoSaveIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const autoSnapshotIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastSnapshotContentRef = useRef<string>('');
+
+  // Autosave cancellation and validation
+  const autoSaveCancellationRef = useRef<AbortController | null>(null);
+  const activeSavesRef = useRef<Set<string>>(new Set());
+  const lastSavePathRef = useRef<string | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef<boolean>(false);
 
@@ -500,32 +520,24 @@ export default function App() {
     }
   }, [workspaceMode, workspacePath, workspaceName, fileTree, currentFilePath, currentFileName, sidebarWidth, isDirty, theme]);
 
-  // Load saved sidebar width and AI chat state on mount
+  // Prepare AI chat state loading
   useEffect(() => {
-    if (window.electronAPI) {
-      window.electronAPI.getSidebarWidth().then((width) => {
-        if (width) {
+    setIsAIChatStateLoaded(false);
+  }, []);
+
+  // Load persisted sidebar width once workspace is known
+  useEffect(() => {
+    if (!workspacePath || !window.electronAPI?.getSidebarWidth) return;
+    window.electronAPI.getSidebarWidth(workspacePath)
+      .then(width => {
+        if (typeof width === 'number') {
           setSidebarWidth(width);
         }
+      })
+      .catch(error => {
+        console.error('Failed to load workspace sidebar width:', error);
       });
-
-      window.electronAPI.getAIChatState().then((state) => {
-        if (LOG_CONFIG.AI_CHAT_STATE) console.log('[AI_CHAT] Loaded AI Chat state:', state);
-        if (state) {
-          setIsAIChatCollapsed(state.collapsed);
-          setAIChatWidth(state.width);
-          // If there's a saved session ID, load it
-          if (state.sessionId) {
-            setSessionToLoad({ sessionId: state.sessionId });
-          }
-        }
-        setIsAIChatStateLoaded(true);
-      }).catch(error => {
-        console.error('Failed to load AI Chat state:', error);
-        setIsAIChatStateLoaded(true);
-      });
-    }
-  }, []);
+  }, [workspacePath]);
 
   // Handle sidebar resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -551,8 +563,8 @@ export default function App() {
       document.body.style.userSelect = '';
 
       // Save the width
-      if (window.electronAPI) {
-        window.electronAPI.setSidebarWidth(sidebarWidth);
+      if (window.electronAPI && workspacePath) {
+        window.electronAPI.setSidebarWidth(workspacePath, sidebarWidth);
       }
     };
 
@@ -779,6 +791,13 @@ export default function App() {
 
   // Handle file selection in workspace
   const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
+    // Cancel any pending autosave for the previous file
+    if (autoSaveCancellationRef.current) {
+      console.log('[FILE_SELECT] Cancelling pending autosave');
+      autoSaveCancellationRef.current.abort();
+      autoSaveCancellationRef.current = null;
+    }
+
     if (!window.electronAPI) return;
 
     if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Selecting file:', filePath);
@@ -964,16 +983,18 @@ export default function App() {
 
   // Save AI Chat state when it changes (but only after initial load)
   useEffect(() => {
+    if (!workspacePath || !workspaceMode) return;
     if (isAIChatStateLoaded && window.electronAPI.setAIChatState) {
       const state = {
+        workspacePath,
         collapsed: isAIChatCollapsed,
         width: aiChatWidth,
-        sessionId: currentAISessionId || undefined
+        currentSessionId: currentAISessionId || undefined,
       };
       if (LOG_CONFIG.AI_CHAT_STATE) console.log('[AI_CHAT] Saving AI Chat state:', state);
       window.electronAPI.setAIChatState(state);
     }
-  }, [isAIChatCollapsed, aiChatWidth, currentAISessionId, isAIChatStateLoaded]);
+  }, [isAIChatCollapsed, aiChatWidth, currentAISessionId, isAIChatStateLoaded, workspacePath, workspaceMode]);
 
   // Load recent workspace files when in workspace mode
   useEffect(() => {
@@ -1036,6 +1057,9 @@ export default function App() {
       activeTabId: tabs.activeTabId
     });
 
+    // Update the content ref first to ensure it's available for the remount
+    contentRef.current = content;
+
     // Update content version to force editor remount
     contentVersionRef.current += 1;
     setContentVersion(v => v + 1);
@@ -1043,12 +1067,10 @@ export default function App() {
 
     // Update the content based on tab mode
     if (tabPreferences.preferences.enabled && tabs.activeTabId) {
-      // In tab mode, update the active tab's content
+      // In tab mode, also update the active tab's content
       tabs.updateTab(tabs.activeTabId, { content });
       console.log('[App] Updated tab content for tab:', tabs.activeTabId);
     } else {
-      // In single file mode, just update the content state
-      contentRef.current = content;
       console.log('[App] Updated content state directly');
     }
 
@@ -1093,13 +1115,18 @@ export default function App() {
       if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Setting up autosave for:', currentFilePath);
 
       autoSaveIntervalRef.current = setInterval(async () => {
+        // Capture values at the start of the interval to prevent race conditions
+        const saveFilePath = currentFilePath;
+        const isDirtyNow = isDirtyRef.current;
+        const getContentNow = getContentRef.current;
+
         console.log('[AUTOSAVE INTERVAL] Checking:', {
-          isDirtyRef: isDirtyRef.current,
-          currentFilePath,
-          hasGetContent: !!getContentRef.current,
+          isDirtyRef: isDirtyNow,
+          currentFilePath: saveFilePath,
+          hasGetContent: !!getContentNow,
           hasElectronAPI: !!window.electronAPI
         });
-        if (isDirtyRef.current && currentFilePath && getContentRef.current && window.electronAPI) {
+        if (isDirtyNow && saveFilePath && getContentNow && window.electronAPI) {
           if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Starting save attempt...');
           if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Current state:', {
             isDirty: isDirtyRef.current,
@@ -1108,39 +1135,78 @@ export default function App() {
             timestamp: new Date().toISOString()
           });
 
+          // Validate that the file path hasn't changed since we started
+          if (saveFilePath !== currentFilePath) {
+            console.warn('[AUTOSAVE] File path changed during autosave, aborting:', {
+              original: saveFilePath,
+              current: currentFilePath
+            });
+            return;
+          }
+
+          // Create abort controller for this save
+          const abortController = new AbortController();
+          autoSaveCancellationRef.current = abortController;
+
           try {
-            const content = getContentRef.current();
-            if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Got content, length:', contentRef.current.length);
+            const content = getContentNow();
+            if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Got content, length:', content.length);
+
+            // Check for abort before proceeding
+            if (abortController.signal.aborted) {
+              console.log('[AUTOSAVE] Save cancelled before execution');
+              return;
+            }
 
             // First ensure the backend knows the current file path
             if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Ensuring backend has current file path...');
-            const setFileResult = window.electronAPI.setCurrentFile(currentFilePath);
+            const setFileResult = window.electronAPI.setCurrentFile(saveFilePath);
             // Handle both promise and non-promise returns
             if (setFileResult && typeof setFileResult.then === 'function') {
               await setFileResult;
             }
 
+            // Check for abort again
+            if (abortController.signal.aborted) {
+              console.log('[AUTOSAVE] Save cancelled after setting file path');
+              return;
+            }
+
             // Small delay to ensure the backend has processed the file path update
             await new Promise(resolve => setTimeout(resolve, 100));
 
+            // Final check before save
+            if (abortController.signal.aborted) {
+              console.log('[AUTOSAVE] Save cancelled before saveFile call');
+              return;
+            }
+
             if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Calling saveFile...');
-            const result = await window.electronAPI.saveFile(content);
+            const result = await window.electronAPI.saveFile(content, saveFilePath);
             if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Save result:', result);
 
             if (result && result.success) {
-              // Mark the time we saved to ignore file change events
-              lastSaveTimeRef.current = Date.now();
-              isDirtyRef.current = false;
-              setIsDirty(false);
-              initialContentRef.current = content;
-              if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] ✓ Autosaved successfully to:', result.filePath);
+              // Double-check file path hasn't changed after save
+              if (saveFilePath === currentFilePath) {
+                // Mark the time we saved to ignore file change events
+                lastSaveTimeRef.current = Date.now();
+                isDirtyRef.current = false;
+                setIsDirty(false);
+                initialContentRef.current = content;
+                if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] ✓ Autosaved successfully to:', result.filePath);
+              } else {
+                console.warn('[AUTOSAVE] File path changed after save, not updating dirty state:', {
+                  saved: saveFilePath,
+                  current: currentFilePath
+                });
+              }
             } else {
               if (LOG_CONFIG.AUTOSAVE) console.error('[AUTOSAVE] ✗ Save failed - result:', result);
               if (LOG_CONFIG.AUTOSAVE) console.error('[AUTOSAVE] This typically means the backend lost track of the file path');
 
               // Try to recover by re-syncing the file path
               if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Attempting recovery by re-syncing file path...');
-              const recoverResult = window.electronAPI.setCurrentFile(currentFilePath);
+              const recoverResult = window.electronAPI.setCurrentFile(saveFilePath);
               if (recoverResult && typeof recoverResult.then === 'function') {
                 await recoverResult;
               }
@@ -1221,17 +1287,43 @@ export default function App() {
           //   hasGetContent: !!getContentRef.current
           // });
 
-          if (isDirtyRef.current && currentFilePath && getContentRef.current && window.electronAPI) {
+          // Capture values at interval start
+          const saveFilePath = currentFilePath;
+          const isDirtyNow = isDirtyRef.current;
+          const getContentNow = getContentRef.current;
+
+          if (isDirtyNow && saveFilePath && getContentNow && window.electronAPI) {
+            // Validate file path hasn't changed
+            if (saveFilePath !== currentFilePath) {
+              console.warn('[AUTOSAVE] File path changed, aborting autosave');
+              return;
+            }
+
+            // Create abort controller
+            const abortController = new AbortController();
+            autoSaveCancellationRef.current = abortController;
+
             // console.log('[AUTOSAVE] Saving...');
             try {
-              const content = getContentRef.current();
-              const result = await window.electronAPI.saveFile(content);
+              const content = getContentNow();
+
+              // Check for abort
+              if (abortController.signal.aborted) {
+                return;
+              }
+
+              const result = await window.electronAPI.saveFile(content, saveFilePath);
               if (result && result.success) {
-                // Mark the time we saved to ignore file change events
-                lastSaveTimeRef.current = Date.now();
-                isDirtyRef.current = false;
-                setIsDirty(false);
-                initialContentRef.current = content;
+                // Validate path again after save
+                if (saveFilePath === currentFilePath) {
+                  // Mark the time we saved to ignore file change events
+                  lastSaveTimeRef.current = Date.now();
+                  isDirtyRef.current = false;
+                  setIsDirty(false);
+                  initialContentRef.current = content;
+                } else {
+                  console.warn('[AUTOSAVE] File path changed after save, skipping dirty state update');
+                }
 
                 // Update the tab's dirty state using ref to get current tabs
                 if (tabsRef.current && tabsRef.current.activeTabId) {
@@ -1444,13 +1536,15 @@ export default function App() {
 
       // Restore AI Chat state when opening a workspace
       try {
-        const aiChatState = await window.electronAPI.getAIChatState();
+        const aiChatState = await window.electronAPI.getAIChatState(data.workspacePath);
         console.log('Restoring AI Chat state for workspace:', aiChatState);
         if (aiChatState) {
           setIsAIChatCollapsed(aiChatState.collapsed);
           setAIChatWidth(aiChatState.width);
+          if (aiChatState.currentSessionId) {
+            setSessionToLoad({ sessionId: aiChatState.currentSessionId, workspacePath: data.workspacePath });
+          }
         }
-        // Make sure the loaded flag is set so future changes will be saved
         setIsAIChatStateLoaded(true);
       } catch (error) {
         console.error('Failed to restore AI Chat state:', error);
@@ -1577,8 +1671,32 @@ export default function App() {
     // Handle file changes on disk
     if (window.electronAPI.onFileChangedOnDisk) {
       cleanupFns.push(window.electronAPI.onFileChangedOnDisk(async (data) => {
-        // console.log('File changed on disk:', data.path);
-        if (currentFilePath === data.path) {
+        console.log('[FILE_WATCH] File changed on disk event received:', data.path);
+
+        // CRITICAL: Check if we're in tab mode and if this is the active tab's file
+        let shouldReload = false;
+        let fileToCheck = currentFilePath;
+
+        if (tabPreferences.preferences.enabled && tabs.activeTab) {
+          // In tab mode, only reload if it's the active tab's file
+          fileToCheck = tabs.activeTab.filePath;
+          shouldReload = (fileToCheck === data.path);
+          console.log('[FILE_WATCH] Tab mode check:', {
+            activeTabPath: fileToCheck,
+            changedPath: data.path,
+            shouldReload
+          });
+        } else {
+          // In single-file mode, check against current file
+          shouldReload = (currentFilePath === data.path);
+          console.log('[FILE_WATCH] Single-file mode check:', {
+            currentPath: currentFilePath,
+            changedPath: data.path,
+            shouldReload
+          });
+        }
+
+        if (shouldReload) {
           // Check if this change is from our own save (within 2 seconds)
           const timeSinceLastSave = Date.now() - lastSaveTimeRef.current;
           if (timeSinceLastSave < 2000) {
@@ -1614,7 +1732,8 @@ export default function App() {
               // Content is different, handle based on dirty state
               if (!isDirtyRef.current) {
                 // File is not dirty, reload it automatically
-                console.log('File is not dirty, reloading from disk with content:', result.content.substring(0, 100));
+                console.log('[FILE_WATCH] File is not dirty, reloading from disk');
+                console.log('[FILE_WATCH] Loading content for path:', data.path, 'first 100 chars:', result.content.substring(0, 100));
                 contentRef.current = result.content;
                 initialContentRef.current = result.content;
                 contentVersionRef.current += 1;
@@ -1630,7 +1749,7 @@ export default function App() {
                 }
               } else {
                 // File is dirty, we have a conflict
-                console.log('File changed on disk but local changes exist');
+                console.log('[FILE_WATCH] File changed on disk but local changes exist');
                 const choice = confirm(
                   'The file has been changed on disk but you have unsaved changes.\n\n' +
                   'Do you want to reload the file from disk and lose your changes?\n\n' +
@@ -1652,8 +1771,10 @@ export default function App() {
               }
             }
           } catch (error) {
-            console.error('Failed to check file changes:', error);
+            console.error('[FILE_WATCH] Failed to check file changes:', error);
           }
+        } else {
+          console.log('[FILE_WATCH] Ignoring file change for non-active file:', data.path);
         }
       }));
     }
@@ -2014,6 +2135,9 @@ export default function App() {
                   setFileTree(tree);
                 }
               }}
+              onViewHistory={(filePath) => {
+                setIsHistoryDialogOpen(true);
+              }}
             />
           </div>
           <div
@@ -2064,6 +2188,12 @@ export default function App() {
               const tab = tabs.getTabState(tabId);
               if (tab) {
                 tabs.updateTab(tabId, { isPinned: !tab.isPinned });
+              }
+            }}
+            onViewHistory={(tabId) => {
+              const tab = tabs.getTabState(tabId);
+              if (tab && tab.filePath) {
+                setIsHistoryDialogOpen(true);
               }
             }}
           >

@@ -12,6 +12,11 @@ export interface Document {
   size?: number;
 }
 
+export interface DocumentOpenOptions {
+  path?: string;
+  name?: string;
+}
+
 export interface DocumentService {
   /**
    * List all documents in the current workspace
@@ -41,7 +46,7 @@ export interface DocumentService {
   /**
    * Open a document (platform-specific implementation)
    */
-  openDocument(documentId: string): Promise<void>;
+  openDocument(documentId: string, fallback?: DocumentOpenOptions): Promise<void>;
 }
 
 /**

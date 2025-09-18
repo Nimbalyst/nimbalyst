@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { initDB, WorkspaceRepository, DocumentsRepository, type DocumentRecord, type Workspace } from '@stravu/runtime';
+import { initDB, WorkspaceRepository, DocumentsRepository, AISessionsRepository, createPgliteSessionStore, type DocumentRecord, type Workspace } from '@stravu/runtime';
 import { StravuEditor } from 'rexical';
 import { AIPanel } from './AIPanel';
 
@@ -16,7 +16,8 @@ export function App() {
 
   useEffect(() => {
     (async () => {
-      await initDB();
+      const db = await initDB();
+      AISessionsRepository.registerStore(createPgliteSessionStore(db));
       const ws = await WorkspaceRepository.list();
       let workspace = ws[0];
       if (!workspace) {
@@ -179,6 +180,7 @@ export function App() {
       <AIPanel
         open={aiOpen}
         onClose={() => setAiOpen(false)}
+        workspaceId={activeWorkspace?.id ?? 'default'}
         document={activeDoc ? { content: activeDoc.content, fileType: 'markdown', filePath: activeDoc.title } : undefined}
       />
     </div>

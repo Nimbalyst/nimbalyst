@@ -48,10 +48,10 @@ interface ElectronAPI {
   copyFile: (sourcePath: string, targetPath: string) => Promise<{ success: boolean; newPath?: string; error?: string }>;
 
   // Settings operations
-  getSidebarWidth: () => Promise<number>;
-  setSidebarWidth: (width: number) => void;
-  getAIChatState: () => Promise<{ collapsed: boolean; width: number; sessionId?: string }>;
-  setAIChatState: (state: { collapsed: boolean; width: number; sessionId?: string }) => void;
+  getSidebarWidth: (workspacePath: string) => Promise<number>;
+  setSidebarWidth: (workspacePath: string, width: number) => void;
+  getAIChatState: (workspacePath: string) => Promise<{ collapsed: boolean; width: number; currentSessionId?: string; draftInput?: string }>;
+  setAIChatState: (state: { workspacePath: string; collapsed: boolean; width: number; currentSessionId?: string; draftInput?: string }) => void;
 
   // QuickOpen operations
   searchWorkspaceFiles: (workspacePath: string, query: string) => Promise<any[]>;

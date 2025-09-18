@@ -373,6 +373,54 @@
   color: var(--text-secondary);
 }
 
+/* Streaming status styling */
+.streaming-status {
+  background: var(--background-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 13px;
+}
+
+.streaming-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.streaming-info strong {
+  font-weight: 500;
+  color: var(--primary-color);
+}
+
+.streaming-mode,
+.streaming-position {
+  font-size: 12px;
+  padding: 2px 6px;
+  background: var(--background-tertiary);
+  border-radius: 3px;
+  color: var(--text-secondary);
+}
+
+.streaming-content {
+  margin-top: 12px;
+}
+
+.streaming-content pre {
+  background: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 12px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+  overflow-x: auto;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
 /* Loading and empty states */
 .loading {
   padding: 32px;

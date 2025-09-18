@@ -478,7 +478,7 @@ export class LMStudioProvider extends BaseAIProvider {
     this.abort();
   }
 
-  private buildSystemPrompt(documentContext?: DocumentContext): string {
+  protected buildSystemPrompt(documentContext?: DocumentContext): string {
     // The base prompt now includes all tool usage instructions
     return super.buildSystemPrompt(documentContext);
   }

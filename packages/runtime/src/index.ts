@@ -10,7 +10,8 @@ export * from './ai/client';
 export * from './ai/models';
 export * from './ai/tools';
 export * from './ai/sessionManager';
-export * from './storage/repositories/SettingsRepository';
+export * from './ai/modelConstants';
+export * from './ai/adapters/sessionStore';
 export * from './storage/repositories/AISessionsRepository';
 // Plugins
 export { DocumentLinkPlugin } from './plugins/DocumentLinkPlugin';

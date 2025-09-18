@@ -268,6 +268,7 @@ async function createRecentSubmenu(): any[] {
 export async function createApplicationMenu() {
     // Get current theme from store
     const currentTheme = getTheme();
+    const isDev = process.env.NODE_ENV !== 'production';
 
     const template: any[] = [
         {
@@ -750,13 +751,15 @@ export async function createApplicationMenu() {
                         }
                     }
                 },
-                { type: 'separator' },
-                {
-                    label: 'Start Database Server',
-                    click: async () => {
-                        try {
-                            const { database } = await import('../database/initialize');
-                            const result = await database.startProtocolServer();
+                // Database menu items - only show in development mode
+                ...(isDev ? [
+                    { type: 'separator' },
+                    {
+                        label: 'Start Database Server',
+                        click: async () => {
+                            try {
+                                const { database } = await import('../database/initialize');
+                                const result = await database.startProtocolServer();
 
                             const focused = BrowserWindow.getFocusedWindow();
                             if (focused) {
@@ -865,6 +868,7 @@ Note: Only one connection at a time is supported.`,
                         }
                     }
                 }
+                ] : [])
             ]
         }
     ];

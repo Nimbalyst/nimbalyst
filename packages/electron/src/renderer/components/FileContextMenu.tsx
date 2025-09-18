@@ -15,6 +15,7 @@ interface FileContextMenuProps {
   onShowInFinder: (filePath: string) => void;
   onNewFile?: (folderPath: string) => void;
   onNewFolder?: (folderPath: string) => void;
+  onViewHistory?: (filePath: string) => void;
 }
 
 export function FileContextMenu({
@@ -29,7 +30,8 @@ export function FileContextMenu({
   onOpenInNewWindow,
   onShowInFinder,
   onNewFile,
-  onNewFolder
+  onNewFolder,
+  onViewHistory
 }: FileContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -184,12 +186,20 @@ export function FileContextMenu({
       )}
       
       {fileType === 'file' && (
-        <div className="context-menu-item" onClick={handleOpenInNewWindow}>
-          <MaterialSymbol icon="open_in_new" size={18} />
-          <span>Open in New Window</span>
-        </div>
+        <>
+          <div className="context-menu-item" onClick={handleOpenInNewWindow}>
+            <MaterialSymbol icon="open_in_new" size={18} />
+            <span>Open in New Window</span>
+          </div>
+          {onViewHistory && (
+            <div className="context-menu-item" onClick={() => { onViewHistory(filePath); onClose(); }}>
+              <MaterialSymbol icon="history" size={18} />
+              <span>View History...</span>
+            </div>
+          )}
+        </>
       )}
-      
+
       <div className="context-menu-item" onClick={handleRenameClick}>
         <MaterialSymbol icon="edit" size={18} />
         <span>Rename</span>

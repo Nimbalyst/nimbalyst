@@ -4,12 +4,11 @@
 
 export { ToolRegistry, toolRegistry } from './ToolRegistry';
 export { ToolExecutor } from './ToolExecutor';
-export { 
-  BUILT_IN_TOOLS, 
-  RENDERER_TOOLS,
+export {
+  BUILT_IN_TOOLS,
   toAnthropicTools,
-  toOpenAITools 
-} from './definitions';
+  toOpenAITools,
+} from '@stravu/runtime/ai/tools';
 
 // Re-export types for convenience
-export type { ToolDefinition } from '../types';
+export type { ToolDefinition } from '@stravu/runtime/ai/server/types';

@@ -1,4 +1,4 @@
-import { Document, DocumentService } from '@stravu/runtime';
+import { Document, DocumentService, DocumentOpenOptions } from '@stravu/runtime';
 
 // Access the electronAPI exposed by the preload script
 declare global {
@@ -8,7 +8,7 @@ declare global {
         list: () => Promise<Document[]>;
         search: (query: string) => Promise<Document[]>;
         get: (id: string) => Promise<Document | null>;
-        open: (id: string) => Promise<void>;
+        open: (id: string, fallback?: DocumentOpenOptions) => Promise<void>;
         watch: () => void;
         onDocumentsChanged: (callback: (documents: Document[]) => void) => () => void;
       };
@@ -33,8 +33,8 @@ export class ElectronRendererDocumentService implements DocumentService {
     return window.electronAPI.documentService.get(id);
   }
 
-  async openDocument(documentId: string): Promise<void> {
-    return window.electronAPI.documentService.open(documentId);
+  async openDocument(documentId: string, fallback?: DocumentOpenOptions): Promise<void> {
+    return window.electronAPI.documentService.open(documentId, fallback);
   }
 
   watchDocuments(callback: (documents: Document[]) => void): () => void {

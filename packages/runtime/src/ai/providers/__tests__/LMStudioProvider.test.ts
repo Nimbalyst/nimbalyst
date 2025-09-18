@@ -4,8 +4,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { ProviderFactory } from '../ProviderFactory';
-import { DocumentContext } from '../types';
+import { ProviderFactory } from '../../server/ProviderFactory';
+import type { DocumentContext } from '../../server/types';
 
 describe('LMStudio Provider - Tool Usage', () => {
   afterEach(() => {
@@ -145,7 +145,7 @@ describe('LMStudio Provider - Tool Usage', () => {
       // This isn't necessarily a failure - model might be responding differently
       console.log('Note: Model may need specific prompting to use tools');
     }
-  }, 60000); // 60 second timeout for slow local model
+  }, 90000); // 90 second timeout for slow local model
 
   it('should use streamContent tool to insert content', async () => {
     // Document where we'll insert content
@@ -230,5 +230,5 @@ describe('LMStudio Provider - Tool Usage', () => {
       console.log('⚠️ Model did not use streaming');
       console.log('Response chunks:', chunks.map(c => c.type).join(', '));
     }
-  }, 30000); // 30 second timeout for slow local model
+  }, 90000); // 90 second timeout for slow local model
 });

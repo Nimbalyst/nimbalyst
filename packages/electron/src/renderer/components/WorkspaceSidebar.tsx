@@ -19,6 +19,7 @@ interface WorkspaceSidebarProps {
   onCloseWorkspace: () => void;
   onOpenQuickSearch?: () => void;
   onRefreshFileTree?: () => void;
+  onViewHistory?: (filePath: string) => void;
 }
 
 // Generate a consistent color based on workspace path
@@ -43,7 +44,8 @@ export function WorkspaceSidebar({
   onFileSelect,
   onCloseWorkspace,
   onOpenQuickSearch,
-  onRefreshFileTree
+  onRefreshFileTree,
+  onViewHistory
 }: WorkspaceSidebarProps) {
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
@@ -265,6 +267,7 @@ export function WorkspaceSidebar({
           onNewFile={handleNewFileInFolder}
           onNewFolder={handleNewFolderInFolder}
           onRefreshFileTree={onRefreshFileTree}
+          onViewHistory={onViewHistory}
         />
           {isDragOverRoot && (
               <div className="root-drop-indicator">

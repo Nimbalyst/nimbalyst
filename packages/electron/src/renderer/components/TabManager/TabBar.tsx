@@ -8,6 +8,7 @@ interface TabBarProps {
   onTabClose: (tabId: string) => void;
   onNewTab: () => void;
   onTogglePin: (tabId: string) => void;
+  onViewHistory?: (tabId: string) => void;
 }
 
 export const TabBar: React.FC<TabBarProps> = ({
@@ -16,7 +17,8 @@ export const TabBar: React.FC<TabBarProps> = ({
   onTabSelect,
   onTabClose,
   onNewTab,
-  onTogglePin
+  onTogglePin,
+  onViewHistory
 }) => {
   const [contextMenuTab, setContextMenuTab] = useState<string | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -94,6 +96,13 @@ export const TabBar: React.FC<TabBarProps> = ({
     }
     closeContextMenu();
   }, [contextMenuTab, onTogglePin, closeContextMenu]);
+
+  const handleViewHistory = useCallback(() => {
+    if (contextMenuTab && onViewHistory) {
+      onViewHistory(contextMenuTab);
+    }
+    closeContextMenu();
+  }, [contextMenuTab, onViewHistory, closeContextMenu]);
 
   // Toggle tab menu
   const toggleTabMenu = useCallback(() => {
@@ -344,6 +353,14 @@ export const TabBar: React.FC<TabBarProps> = ({
           <div className="context-menu-item" onClick={handleTogglePin}>
             {tabs.find(t => t.id === contextMenuTab)?.isPinned ? 'Unpin' : 'Pin'} Tab
           </div>
+          {onViewHistory && (
+            <>
+              <div className="context-menu-separator" />
+              <div className="context-menu-item" onClick={handleViewHistory}>
+                View History...
+              </div>
+            </>
+          )}
           <div className="context-menu-separator" />
           <div className="context-menu-item" onClick={() => { onTabClose(contextMenuTab); closeContextMenu(); }}>
             Close

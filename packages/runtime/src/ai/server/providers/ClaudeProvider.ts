@@ -11,8 +11,7 @@ import {
   StreamChunk,
   AIModel 
 } from '../types';
-import { CLAUDE_MODELS, DEFAULT_MODELS } from '../../../../shared/modelConstants';
-import { logger } from '../../../utils/logger';
+import { CLAUDE_MODELS, DEFAULT_MODELS } from '../../modelConstants';
 
 const LOG_PREVIEW_LENGTH = 400;
 
@@ -65,7 +64,7 @@ export class ClaudeProvider extends BaseAIProvider {
     this.abortController = new AbortController();
 
     // Build messages array for Anthropic API
-    const apiMessages = [];
+    const apiMessages: any[] = [];
     
     // Add existing messages if provided
     if (messages && messages.length > 0) {
@@ -94,7 +93,7 @@ export class ClaudeProvider extends BaseAIProvider {
       // Only define tools if we have a document open
       const hasDocument = documentContext && (documentContext.filePath || documentContext.content);
       // Use the centralized tool system
-      const tools: Anthropic.Tool[] = hasDocument ? this.getToolsInAnthropicFormat() : [];
+      const tools = hasDocument ? this.getToolsInAnthropicFormat() : [];
 
       // Create the message with full conversation history
       if (!this.config.model) {
@@ -131,7 +130,8 @@ export class ClaudeProvider extends BaseAIProvider {
       let streamConfig: any = null;
 
       // Stream the response
-      for await (const chunk of response) {
+      for await (const rawChunk of response as AsyncIterable<any>) {
+        const chunk = rawChunk as any;
         console.log('[ClaudeProvider] Chunk received:', {
           type: chunk.type,
           toolName: chunk.content_block?.name,
@@ -166,18 +166,18 @@ export class ClaudeProvider extends BaseAIProvider {
             };
           } else if (chunk.delta.type === 'input_json_delta') {
             // Accumulate tool input JSON
-            toolInputBuffer += chunk.delta.partial_json;
+            toolInputBuffer += (chunk.delta as any)?.partial_json ?? '';
             
             console.log('[ClaudeProvider] input_json_delta received:', {
               toolName: currentToolUse?.name,
               isStreamingContent,
               bufferLength: toolInputBuffer.length,
-              partialJson: chunk.delta.partial_json?.substring(0, 100)
+              partialJson: (chunk.delta as any)?.partial_json?.substring(0, 100)
             });
             
             // Special handling for streamContent tool - stream the content as it arrives
             if (isStreamingContent && currentToolUse?.name === 'streamContent') {
-              const partialJson = chunk.delta.partial_json;
+              const partialJson = (chunk.delta as any)?.partial_json;
               console.log('[ClaudeProvider] Processing streaming chunk:', {
                 length: partialJson?.length,
                 preview: partialJson?.substring(0, 50),
@@ -277,7 +277,9 @@ export class ClaudeProvider extends BaseAIProvider {
             try {
               // Parse the complete tool input
               if (currentToolUse.name === 'applyDiff') {
-                logger.aiClaude.info('[ClaudeProvider] applyDiff raw input', previewForLog(toolInputBuffer));
+                try {
+                  console.info('[ClaudeProvider] applyDiff raw input', previewForLog(toolInputBuffer));
+                } catch {}
               }
 
               currentToolUse.input = JSON.parse(toolInputBuffer);
@@ -288,18 +290,24 @@ export class ClaudeProvider extends BaseAIProvider {
               if (currentToolUse.name === 'applyDiff') {
                 const replacements = (currentToolUse.input as any)?.replacements;
                 if (!Array.isArray(replacements) || replacements.length === 0) {
-                  logger.aiClaude.warn('[ClaudeProvider] applyDiff tool call missing replacements', {
-                    inputKeys: currentToolUse.input ? Object.keys(currentToolUse.input) : []
-                  });
+                  try {
+                    console.warn('[ClaudeProvider] applyDiff tool call missing replacements', {
+                      inputKeys: currentToolUse.input ? Object.keys(currentToolUse.input) : []
+                    });
+                  } catch {}
                 } else {
-                  logger.aiClaude.info('[ClaudeProvider] applyDiff replacements received', {
-                    count: replacements.length
-                  });
+                  try {
+                    console.info('[ClaudeProvider] applyDiff replacements received', {
+                      count: replacements.length
+                    });
+                  } catch {}
                 }
 
                 if (this.toolHandler) {
                   executionResult = await this.toolHandler.applyDiff(currentToolUse.input);
-                  logger.aiClaude.info('[ClaudeProvider] applyDiff execution result', executionResult);
+                  try {
+                    console.info('[ClaudeProvider] applyDiff execution result', executionResult);
+                  } catch {}
 
                   if (!executionResult?.success) {
                     const errorMessage = executionResult?.error || 'applyDiff execution failed';
@@ -356,10 +364,12 @@ export class ClaudeProvider extends BaseAIProvider {
         } else if (chunk.type === 'message_stop') {
           // Message complete
           if (fullContent) {
-            logger.aiClaude.info('[ClaudeProvider] Assistant response', {
-              length: fullContent.length,
-              preview: previewForLog(fullContent)
-            });
+            try {
+              console.info('[ClaudeProvider] Assistant response', {
+                length: fullContent.length,
+                preview: previewForLog(fullContent)
+              });
+            } catch {}
           }
           yield {
             type: 'complete',
@@ -405,7 +415,7 @@ export class ClaudeProvider extends BaseAIProvider {
     };
   }
 
-  private buildSystemPrompt(documentContext?: DocumentContext): string {
+  protected buildSystemPrompt(documentContext?: DocumentContext): string {
     // The base prompt now includes all tool usage instructions
     return super.buildSystemPrompt(documentContext);
   }
