@@ -26,7 +26,7 @@ import { TablePlugin } from '@lexical/react/LexicalTablePlugin';
 import { useLexicalEditable } from '@lexical/react/useLexicalEditable';
 import { CAN_USE_DOM } from '@lexical/utils';
 
-import { $convertToMarkdownString } from '@lexical/markdown';
+import { $convertToEnhancedMarkdownString } from './markdown';
 
 import { DEFAULT_EDITOR_CONFIG, type EditorConfig } from './EditorConfig';
 import { useSharedHistoryContext } from './context/SharedHistoryContext';
@@ -136,11 +136,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     if (config.onGetContent) {
       const getContent = () => {
         return editor.read(() => {
-          const markdown = $convertToMarkdownString(markdownTransformers, undefined, true);
-          // remove frontmatter
-          const frontmatterRegex = /^---\s*\n(?:.*\n)*?---\s*\n/;
-          const markdownWithoutFrontmatter = markdown.replace(frontmatterRegex, '');
-          return markdownWithoutFrontmatter;
+          return $convertToEnhancedMarkdownString(markdownTransformers);
         });
       };
       config.onGetContent(getContent);
@@ -162,10 +158,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
 
       if (config.onContentChange) {
         const content = editor.read(() => {
-          const markdown = $convertToMarkdownString(markdownTransformers, undefined, true);
-          const frontmatterRegex = /^---\s*\n(?:.*\n)*?---\s*\n/;
-          const markdownWithoutFrontmatter = markdown.replace(frontmatterRegex, '');
-          return markdownWithoutFrontmatter;
+          return $convertToEnhancedMarkdownString(markdownTransformers);
         });
         config.onContentChange(content);
       }

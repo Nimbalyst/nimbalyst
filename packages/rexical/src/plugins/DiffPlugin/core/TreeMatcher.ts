@@ -7,7 +7,7 @@
  */
 
 import type {Transformer} from '@lexical/markdown';
-import {$convertNodeToMarkdownString} from '../../../markdown/nodeMarkdownExport';
+import { $convertNodeToEnhancedMarkdownString } from "../../../markdown";
 import {
   $getNodeByKey,
   LexicalEditor,
@@ -185,7 +185,7 @@ export class WindowedTreeMatcher {
     try {
       if ($isElementNode(node)) {
         // For element nodes, convert to markdown using our custom function
-        markdown = $convertNodeToMarkdownString(
+        markdown = $convertNodeToEnhancedMarkdownString(
           this.config.transformers,
           node
         );
@@ -196,7 +196,7 @@ export class WindowedTreeMatcher {
         if (parent && $isElementNode(parent) && parent.getType() === 'paragraph') {
           try {
             // Convert parent to markdown to preserve link formatting
-            markdown = $convertNodeToMarkdownString(
+            markdown = $convertNodeToEnhancedMarkdownString(
               this.config.transformers,
               parent
             );
@@ -322,9 +322,9 @@ export class WindowedTreeMatcher {
               );
               console.log('  Has TABLE_TRANSFORMER?', hasTableTransformer);
             }
-            markdown = $convertNodeToMarkdownString(this.config.transformers, child);
+            markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, child);
             // try {
-            //   markdown = $convertNodeToMarkdownString(this.config.transformers, child);
+            //   markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, child);
             // } catch (error) {
             //   console.error('  Error converting node to markdown:', error);
             //   markdown = child.getTextContent();
@@ -339,7 +339,7 @@ export class WindowedTreeMatcher {
             const parent = child.getParent();
             if (parent && $isElementNode(parent) && parent.getType() === 'paragraph') {
               try {
-                markdown = $convertNodeToMarkdownString(this.config.transformers, parent);
+                markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, parent);
               } catch {
                 markdown = child.getTextContent();
               }
@@ -394,9 +394,9 @@ export class WindowedTreeMatcher {
               );
               console.log('  Has TABLE_TRANSFORMER?', hasTableTransformer);
             }
-            markdown = $convertNodeToMarkdownString(this.config.transformers, child);
+            markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, child);
             // try {
-            //   markdown = $convertNodeToMarkdownString(this.config.transformers, child);
+            //   markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, child);
             // } catch (error) {
             //   console.error('  Error converting node to markdown:', error);
             //   markdown = child.getTextContent();
@@ -411,7 +411,7 @@ export class WindowedTreeMatcher {
             const parent = child.getParent();
             if (parent && $isElementNode(parent)) {
               try {
-                markdown = $convertNodeToMarkdownString(this.config.transformers, parent);
+                markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, parent);
               } catch {
                 markdown = child.getTextContent();
               }

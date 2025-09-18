@@ -16,9 +16,9 @@ import {
   TableRowNode,
 } from '@lexical/table';
 import {
-  $convertFromMarkdownString,
-} from '@lexical/markdown';
-import { $convertNodeToMarkdownString } from '../../markdown/nodeMarkdownExport';
+  $convertNodeToEnhancedMarkdownString,
+  $convertFromEnhancedMarkdownString
+} from '../../markdown';
 import {
   $isParagraphNode,
   $isTextNode,
@@ -57,9 +57,9 @@ export const TABLE_TRANSFORMER: ElementTransformer = {
       for (const cell of row.getChildren()) {
         // It's TableCellNode so it's just to make flow happy
         if ($isTableCellNode(cell)) {
-          // Use $convertNodeToMarkdownString for single nodes, not $convertToMarkdownString
+          // Use $convertNodeToEnhancedMarkdownString for single nodes
           rowOutput.push(
-            $convertNodeToMarkdownString(getTransformers(), cell)
+            $convertNodeToEnhancedMarkdownString(getTransformers(), cell)
               .replace(/\n/g, '\\n')
               .trim(),
           );
@@ -179,7 +179,7 @@ function getTableColumnsSize(table: TableNode) {
 const $createTableCell = (textContent: string): TableCellNode => {
   textContent = textContent.replace(/\\n/g, '\n');
   const cell = $createTableCellNode(TableCellHeaderStates.NO_STATUS);
-  $convertFromMarkdownString(textContent, getTransformers(), cell);
+  $convertFromEnhancedMarkdownString(textContent, getTransformers(), cell, { preserveNewLines: false, extractFrontmatter: false });
   return cell;
 };
 

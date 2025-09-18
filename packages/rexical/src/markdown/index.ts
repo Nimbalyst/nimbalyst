@@ -91,6 +91,33 @@ export function createTransformers(
 }
 
 // Re-export for convenience
-export { $convertFromMarkdownString, $convertToMarkdownString } from '@lexical/markdown';
+// Note: Use the enhanced versions instead ($convertFromEnhancedMarkdownString, $convertToEnhancedMarkdownString)
 export { MarkdownStreamProcessor, createHeadlessEditorFromEditor, markdownToJSONSync } from './MarkdownStreamProcessor';
 export type { InsertMode } from './MarkdownStreamProcessor';
+
+// Enhanced markdown system with frontmatter support
+export {
+  $convertToEnhancedMarkdownString,
+  $convertNodeToEnhancedMarkdownString,
+  type EnhancedExportOptions,
+} from './EnhancedMarkdownExport';
+
+export {
+  $convertFromEnhancedMarkdownString,
+  $updateFrontmatter,
+  $mergeFrontmatter,
+  $getFrontmatter,
+  parseEnhancedMarkdown,
+  type EnhancedImportOptions,
+  type EnhancedImportResult,
+} from './EnhancedMarkdownImport';
+
+export {
+  $setFrontmatter,
+  parseFrontmatter,
+  serializeWithFrontmatter,
+  hasFrontmatter,
+  isValidFrontmatter,
+  type FrontmatterData,
+} from './FrontmatterUtils';
+

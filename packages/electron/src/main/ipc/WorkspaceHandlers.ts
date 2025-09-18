@@ -132,14 +132,16 @@ export function registerWorkspaceHandlers() {
     // Search workspace file names only (fast)
     ipcMain.handle('search-workspace-file-names', async (event, workspacePath: string, query: string) => {
         try {
-            const trimmedQuery = query.trim();
+            const trimmedQuery = query.trim().toLowerCase();
             if (!trimmedQuery) return [];
 
             // Escape special characters for shell
-            const escapedTerm = trimmedQuery.replace(/["'\\]/g, '\\$&');
+            const escapedPath = workspacePath.replace(/["'\\]/g, '\\$&');
 
-            const fileNameCommand = `find "${workspacePath}" -path "*/node_modules/*" -prune -o \( -name "*.md" -o -name "*.markdown" \) -print 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
-            const { stdout: fileMatches } = await execAsync(fileNameCommand);
+            // First find all markdown files, then filter by basename matching the query
+            // Using awk to extract basename and match against query
+            const fileNameCommand = `find "${escapedPath}" -path "*/node_modules/*" -prune -o -type f \\( -name "*.md" -o -name "*.markdown" \\) -print 2>/dev/null | while read -r file; do basename="\$(basename "\$file")"; if echo "\$basename" | grep -qi "${trimmedQuery.replace(/["'\\]/g, '\\$&')}"; then echo "\$file"; fi; done | head -50`;
+            const { stdout: fileMatches } = await execAsync(fileNameCommand, { shell: '/bin/bash' });
 
             const results = [];
             if (fileMatches) {

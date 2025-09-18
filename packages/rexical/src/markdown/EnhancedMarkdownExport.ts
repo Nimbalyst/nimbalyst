@@ -1,9 +1,11 @@
 /**
- * Custom markdown export for individual nodes.
- * This fixes the issue where the standard Lexical $convertToMarkdownString
- * doesn't properly handle exporting individual non-root nodes.
+ * Enhanced markdown export with frontmatter support.
+ * This module extends Lexical's markdown export capabilities to support:
+ * - Individual node export (not just root nodes)
+ * - Frontmatter metadata export from root node state
+ * - Proper handling of all node types
  *
- * Based on the fix from our fork of lexical-markdown.
+ * Replaces the previous custom implementation in nodeMarkdownExport.ts
  */
 
 import {
@@ -26,38 +28,77 @@ import type {
   Transformer,
 } from '@lexical/markdown';
 
+import {
+  $getFrontmatter,
+  serializeWithFrontmatter,
+  type FrontmatterData
+} from './FrontmatterUtils';
+
+/**
+ * Options for enhanced markdown export.
+ */
+export interface EnhancedExportOptions {
+  shouldPreserveNewLines?: boolean;
+  includeFrontmatter?: boolean;
+}
+
+/**
+ * Convert the entire editor to markdown string with optional frontmatter.
+ * This is the primary export for full document conversion.
+ */
+export function $convertToEnhancedMarkdownString(
+  transformers: Array<Transformer>,
+  options: EnhancedExportOptions = {}
+): string {
+  const {
+    shouldPreserveNewLines = true,
+    includeFrontmatter = true
+  } = options;
+
+  // Get the markdown content
+  const markdownContent = $convertNodeToEnhancedMarkdownString(
+    transformers,
+    null,
+    shouldPreserveNewLines
+  );
+
+  // Add frontmatter if requested and available
+  if (includeFrontmatter) {
+    const frontmatter = $getFrontmatter();
+    return serializeWithFrontmatter(markdownContent, frontmatter);
+  }
+
+  return markdownContent;
+}
+
 /**
  * Convert a single node to markdown string.
  * Unlike the standard $convertToMarkdownString, this properly handles individual nodes.
  */
-export function $convertNodeToMarkdownString(
+export function $convertNodeToEnhancedMarkdownString(
   transformers: Array<Transformer>,
   node?: ElementNode | null,
-  shouldPreserveNewLines: boolean = false,
+  shouldPreserveNewLines: boolean = true,
 ): string {
-  const exportMarkdown = createMarkdownExport(
+  const exportMarkdown = createEnhancedMarkdownExport(
     transformers,
     shouldPreserveNewLines,
   );
-  const result = exportMarkdown(node);
-  if (node && node.getType && node.getType() === 'table') {
-    console.log('  $convertNodeToMarkdownString final result for table:', result);
-  }
-  return result;
+  return exportMarkdown(node);
 }
 
 /**
- * Create a markdown export function with the provided transformers.
- * This is the fixed version that properly handles individual nodes.
+ * Create an enhanced markdown export function with the provided transformers.
+ * This properly handles individual nodes and maintains compatibility with standard Lexical export.
  */
-function createMarkdownExport(
+function createEnhancedMarkdownExport(
   transformers: Array<Transformer>,
-  shouldPreserveNewLines: boolean = false,
+  shouldPreserveNewLines: boolean = true,
 ): (node?: ElementNode | null) => string {
   const byType = transformersByType(transformers);
   const isNewlineDelimited = !byType.multilineElement.length;
-  
-  // Like Lexical, only use single-format transformers and put code formats at the end
+
+  // Only use single-format transformers and put code formats at the end
   const textFormatTransformers = byType.textFormat
     .filter((transformer) => transformer.format.length === 1)
     .sort((a, b) => {
@@ -65,21 +106,17 @@ function createMarkdownExport(
         Number(a.format.includes('code')) - Number(b.format.includes('code'))
       );
     });
-  
+
   const textMatchTransformers = byType.textMatch;
   const elementTransformers = [...byType.element, ...byType.multilineElement];
 
   return (node) => {
     const output: string[] = [];
-    if (node && node.getType && node.getType() === 'table') {
-      console.log('  createMarkdownExport called with table node');
-      console.log('  Is root or shadow?', $isRootOrShadowRoot(node));
-    }
 
     // Export a specific node if provided, otherwise export the entire document
     // HACK: TableNode incorrectly reports as root/shadow, so explicitly check for it
     if (node && (!$isRootOrShadowRoot(node) || node.getType() === 'table')) {
-      // CRITICAL FIX: Export the single node directly
+      // Export the single node directly
       const result = exportTopLevelElements(
         node,
         elementTransformers,
@@ -88,16 +125,8 @@ function createMarkdownExport(
         shouldPreserveNewLines,
       );
 
-      if (result != null) {
-        if (node.getType() === 'table') {
-          console.log('  createMarkdownExport: GOT RESULT:', result.substring(0, 100));
-          console.log('  createMarkdownExport: pushing result to output');
-        }
+      if (result !== null) {
         output.push(result);
-        if (node.getType() === 'table') {
-          console.log('  createMarkdownExport: output array now has', output.length, 'items');
-          console.log('  createMarkdownExport: output[0]:', output[0].substring(0, 100));
-        }
       }
     } else {
       // Standard behavior for root nodes
@@ -113,7 +142,7 @@ function createMarkdownExport(
           shouldPreserveNewLines,
         );
 
-        if (result != null) {
+        if (result !== null) {
           output.push(
             // separate consecutive group of texts with a line break
             isNewlineDelimited &&
@@ -127,12 +156,9 @@ function createMarkdownExport(
       }
     }
 
-    // Ensure consecutive groups of texts are at least \n\n apart
-    const finalResult = output.join('\n\n');
-    if (node && node.getType && node.getType() === 'table') {
-      console.log('  createMarkdownExport: final result:', finalResult.substring(0, 100));
-    }
-    return finalResult;
+    // Join with appropriate separator based on newline preservation
+    // When preserving newlines, empty paragraphs are already represented correctly
+    return output.join(shouldPreserveNewLines ? '\n' : '\n\n');
   };
 }
 
@@ -143,17 +169,11 @@ function exportTopLevelElements(
   textMatchTransformers: Array<TextMatchTransformer>,
   shouldPreserveNewLines: boolean = false,
 ): string | null {
-  // Debug: log what node type we're exporting
-  // console.log('exportTopLevelElements called with node type:', node.getType());
-  // console.log('Number of element transformers:', elementTransformers.length);
-
   for (const transformer of elementTransformers) {
     if (!transformer.export) {
       continue;
     }
-    if (node.getType() === 'table') {
-      console.log('  Trying transformer for table:', transformer.type, transformer.dependencies?.map?.(d => typeof d === 'function' ? d.name : d));
-    }
+
     const result = transformer.export(node, (_node) =>
       exportChildren(
         _node,
@@ -167,16 +187,11 @@ function exportTopLevelElements(
     );
 
     if (result != null) {
-      if (node.getType() === 'table') {
-        console.log('  ✅ Table transformer matched and returned:', result.substring(0, 100));
-        console.log('  Full table result:', result);
-      }
       return result;
     }
   }
 
   if ($isElementNode(node)) {
-    // console.log('  No transformer matched, falling back to exportChildren for:', node.getType());
     return exportChildren(
       node,
       textFormatTransformers,
@@ -197,7 +212,6 @@ function exportChildren(
   node: ElementNode,
   textFormatTransformers: Array<TextFormatTransformer>,
   textMatchTransformers: Array<TextMatchTransformer>,
-  // In case text content is plain text then we can skip text matching
   textContent?: string,
   textTransformer?: TextFormatTransformer | null,
   shouldPreserveNewLines: boolean = false,
@@ -224,7 +238,7 @@ function exportChildren(
         // First check for text format transformers
         const hasFormatting = child.getFormat() !== 0;
         let handled = false;
-        
+
         if (hasFormatting) {
           // Use a simplified version of Lexical's exportTextFormat
           const formattedText = exportTextFormat(
@@ -243,7 +257,7 @@ function exportChildren(
             const result = transformer.export(
               child,
               textContentForTransform,
-              (_node, textContent) =>
+              (_node: ElementNode, textContent?: string) =>
                 exportChildren(
                   _node,
                   textFormatTransformers,
@@ -262,7 +276,7 @@ function exportChildren(
             }
           }
         }
-        
+
         if (!handled) {
           output.push(textContentForTransform);
         }
@@ -276,7 +290,7 @@ function exportChildren(
         }
         const result = transformer.export(
           child,
-          (_node) =>
+          (_node: ElementNode) =>
             exportChildren(
               _node,
               textFormatTransformers,
@@ -296,8 +310,6 @@ function exportChildren(
       }
 
       if (!handled) {
-        // We need to get the element transformers from the parent scope
-        // The module-level elementTransformers is empty, we need the actual ones
         const result = exportTopLevelElements(
           child,
           elementTransformers || [],
@@ -325,38 +337,38 @@ function exportTextFormat(
 ): string {
   // Simplified version of Lexical's exportTextFormat
   // We don't track unclosed tags across siblings since we're exporting individual nodes
-  
+
   let output = textContent;
-  
+
   // If node has no format, return original text
   if (node.getFormat() === 0) {
     return output;
   }
-  
+
   // Don't escape markdown characters if this is code
   if (!node.hasFormat('code')) {
     output = output.replace(/([*_`~\\])/g, '\\$1');
   }
-  
+
   // Collect applicable transformers
   const applied: string[] = [];
-  
+
   for (const transformer of textTransformers) {
     // Only use single-format transformers for export
     if (transformer.format.length !== 1) {
       continue;
     }
-    
+
     const format = transformer.format[0];
     if (node.hasFormat(format)) {
       applied.push(transformer.tag);
     }
   }
-  
+
   // Apply tags in order (opening at start, closing at end in reverse)
   const openingTags = applied.join('');
   const closingTags = applied.slice().reverse().join('');
-  
+
   return openingTags + output + closingTags;
 }
 

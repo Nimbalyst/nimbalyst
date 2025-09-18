@@ -4,7 +4,8 @@
  */
 
 import {$createTextNode, $isElementNode, $isTextNode, LexicalNode} from 'lexical';
-import {$convertFromMarkdownString, $convertToMarkdownString, MultilineElementTransformer} from '@lexical/markdown';
+import {MultilineElementTransformer} from '@lexical/markdown';
+import {$convertFromEnhancedMarkdownString, $convertNodeToEnhancedMarkdownString} from '../../markdown';
 import {
     $createStyledCollapsible,
 } from './index';
@@ -71,7 +72,7 @@ export const COLLAPSIBLE_TRANSFORMER: MultilineElementTransformer = {
 
         try {
             // Convert each child to markdown
-            bodyMarkdown =  $convertToMarkdownString(CORE_TRANSFORMERS, contentNode, true)
+            bodyMarkdown =  $convertNodeToEnhancedMarkdownString(CORE_TRANSFORMERS, contentNode, { shouldPreserveNewLines: true })
         } catch (error) {
             console.warn('Failed to process content children:', error);
             return null;
@@ -169,7 +170,7 @@ export const COLLAPSIBLE_TRANSFORMER: MultilineElementTransformer = {
         // Parse the body content as markdown
         if (content) {
             try {
-                $convertFromMarkdownString(content, CORE_TRANSFORMERS, contentNode, true, false);
+                $convertFromEnhancedMarkdownString(content, CORE_TRANSFORMERS, contentNode, { preserveNewLines: true, extractFrontmatter: false });
             } catch (error) {
                 console.warn('Failed to convert markdown to nodes:', error);
                 // Fallback: add as plain text

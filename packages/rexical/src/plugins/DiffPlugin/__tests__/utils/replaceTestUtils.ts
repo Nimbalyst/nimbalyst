@@ -2,9 +2,9 @@
 import type {Transformer} from '@lexical/markdown';
 
 import {
-  $convertFromMarkdownString,
-  $convertToMarkdownString,
-} from '@lexical/markdown';
+  $convertFromEnhancedMarkdownString,
+  $convertToEnhancedMarkdownString,
+} from '../../../../markdown';
 import {createHeadlessEditorFromEditor} from '../../../../markdown/MarkdownStreamProcessor';
 import {
   $getRoot,
@@ -106,12 +106,11 @@ export function setupMarkdownReplaceTest(
     () => {
       const root = $getRoot();
       root.clear();
-      $convertFromMarkdownString(
+      $convertFromEnhancedMarkdownString(
         originalMarkdown,
         transformers,
         root,
-        true,
-        false,
+        { preserveNewLines: true, extractFrontmatter: false }
       );
     },
     {discrete: true},
@@ -119,7 +118,7 @@ export function setupMarkdownReplaceTest(
 
   // Extract the actual markdown that the editor produces
   const actualOriginalMarkdown = replaceEditor.getEditorState().read(() => {
-    return $convertToMarkdownString(transformers, undefined, true);
+    return $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false });
   });
 
   // Create source and target headless editors using the same configuration as the main editor
@@ -148,12 +147,11 @@ export function setupMarkdownReplaceTest(
     () => {
       const root = $getRoot();
       root.clear();
-      $convertFromMarkdownString(
+      $convertFromEnhancedMarkdownString(
         targetMarkdown,
         transformers,
         root,
-        true,
-        false,
+        { preserveNewLines: true, extractFrontmatter: false }
       );
     },
     {discrete: true},
@@ -161,7 +159,7 @@ export function setupMarkdownReplaceTest(
 
   // Get the properly processed target markdown (with escaping applied)
   const processedTargetMarkdown = targetEditor.getEditorState().read(() => {
-    return $convertToMarkdownString(transformers, undefined, true);
+    return $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false });
   });
 
   // Get serialized states for debugging
@@ -254,7 +252,7 @@ export function setupMarkdownReplaceTest(
     $approveDiffs(approveEditor);
 
     return approveEditor.getEditorState().read(() => {
-      return $convertToMarkdownString(transformers, undefined, true);
+      return $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false });
     });
   };
 
@@ -281,7 +279,7 @@ export function setupMarkdownReplaceTest(
     $rejectDiffs(rejectEditor);
 
     return rejectEditor.getEditorState().read(() => {
-      return $convertToMarkdownString(transformers, undefined, true);
+      return $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false });
     });
   };
 

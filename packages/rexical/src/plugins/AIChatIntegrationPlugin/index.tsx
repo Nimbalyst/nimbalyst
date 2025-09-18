@@ -17,7 +17,7 @@ import { MarkdownStreamProcessor } from '../../markdown/MarkdownStreamProcessor'
 import { getEditorTransformers } from '../../markdown';
 import { $isHeadingNode } from '@lexical/rich-text';
 import { $isListNode } from '@lexical/list';
-import { $convertToMarkdownString } from '@lexical/markdown';
+import { $convertToEnhancedMarkdownString, $convertNodeToEnhancedMarkdownString } from '../../markdown';
 
 // Global event emitter for AI chat integration
 interface AIChatEvent {
@@ -189,7 +189,7 @@ function findInsertionPoint(
   logger.log('streaming', 'No heading match, searching within content...');
 
   // Convert full document to markdown for searching
-  const fullMarkdown = $convertToMarkdownString(transformers, undefined, true);
+  const fullMarkdown = $convertToEnhancedMarkdownString(transformers, { includeFrontmatter: false });
   const searchIndex = fullMarkdown.toLowerCase().indexOf(searchTarget);
 
   if (searchIndex >= 0) {
@@ -199,7 +199,7 @@ function findInsertionPoint(
     let currentPos = 0;
     for (let i = 0; i < children.length; i++) {
       const child = children[i];
-      const nodeMarkdown = $convertToMarkdownString(transformers, child, true);
+      const nodeMarkdown = $convertNodeToEnhancedMarkdownString(transformers, child, true);
       const nodeLength = nodeMarkdown.length;
 
       if (currentPos <= searchIndex && searchIndex < currentPos + nodeLength) {

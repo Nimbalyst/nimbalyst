@@ -3,9 +3,9 @@
 import type {Transformer} from '@lexical/markdown';
 
 import {
-  $convertFromMarkdownString,
-  $convertToMarkdownString,
-} from '@lexical/markdown';
+  $convertFromEnhancedMarkdownString,
+  $convertToEnhancedMarkdownString,
+} from '../../../../markdown';
 import {createHeadlessEditorFromEditor} from '../../../../markdown/MarkdownStreamProcessor';
 import {
     MARKDOWN_TEST_TRANSFORMERS,
@@ -193,12 +193,11 @@ export function setupMarkdownDiffTest(
     () => {
       const root = $getRoot();
       root.clear();
-      $convertFromMarkdownString(
+      $convertFromEnhancedMarkdownString(
         originalMarkdown,
         transformers,
         root,
-        true,
-        false,
+        { preserveNewLines: true, extractFrontmatter: false }
       );
     },
     {discrete: true},
@@ -206,7 +205,7 @@ export function setupMarkdownDiffTest(
 
   // Extract the actual markdown that the editor produces
   const actualOriginalMarkdown = diffEditor.getEditorState().read(() => {
-    return $convertToMarkdownString(transformers, undefined, true);
+    return $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false });
   });
 
   // Generate diff
@@ -225,12 +224,11 @@ export function setupMarkdownDiffTest(
     () => {
       const root = $getRoot();
       root.clear();
-      $convertFromMarkdownString(
+      $convertFromEnhancedMarkdownString(
         actualOriginalMarkdown,
         transformers,
         root,
-        true,
-        false,
+        { preserveNewLines: true, extractFrontmatter: false }
       );
     },
     {discrete: true},
@@ -241,12 +239,11 @@ export function setupMarkdownDiffTest(
     () => {
       const root = $getRoot();
       root.clear();
-      $convertFromMarkdownString(
+      $convertFromEnhancedMarkdownString(
         targetMarkdown,
         transformers,
         root,
-        true,
-        false,
+        { preserveNewLines: true, extractFrontmatter: false }
       );
     },
     {discrete: true},
@@ -254,7 +251,7 @@ export function setupMarkdownDiffTest(
 
   // Extract normalized target markdown from the target editor
   const normalizedTargetMarkdown = targetEditor.getEditorState().read(() => {
-    return $convertToMarkdownString(transformers, undefined, true);
+    return $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false });
   });
 
   // Get serialized states for debugging
@@ -277,12 +274,11 @@ export function setupMarkdownDiffTest(
     () => {
       const root = $getRoot();
       root.clear();
-      $convertFromMarkdownString(
+      $convertFromEnhancedMarkdownString(
         actualOriginalMarkdown,
         transformers,
         root,
-        true,
-        false,
+        { preserveNewLines: true, extractFrontmatter: false }
       );
     },
     {discrete: true},
@@ -294,12 +290,11 @@ export function setupMarkdownDiffTest(
     () => {
       const root = $getRoot();
       root.clear();
-      $convertFromMarkdownString(
+      $convertFromEnhancedMarkdownString(
         actualOriginalMarkdown,
         transformers,
         root,
-        true,
-        false,
+        { preserveNewLines: true, extractFrontmatter: false }
       );
     },
     {discrete: true},
@@ -379,7 +374,7 @@ export function setupMarkdownDiffTest(
     $rejectDiffs(rejectEditor);
 
     return rejectEditor.getEditorState().read(() => {
-      return $convertToMarkdownString(transformers, undefined, true);
+      return $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false });
     });
   };
 

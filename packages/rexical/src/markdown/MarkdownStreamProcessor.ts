@@ -27,11 +27,14 @@ import {
 } from 'lexical';
 
 import {
-  $convertFromMarkdownString,
-  $convertToMarkdownString,
   Transformer,
   TRANSFORMERS,
 } from '@lexical/markdown';
+import {
+  $convertFromEnhancedMarkdownString,
+  $convertToEnhancedMarkdownString,
+  $convertNodeToEnhancedMarkdownString,
+} from './index';
 
 export type InsertMode = 'extend' | 'after';
 
@@ -126,12 +129,11 @@ export function markdownToJSONSync(
 
   headlessEditor.update(
     () => {
-      $convertFromMarkdownString(
+      $convertFromEnhancedMarkdownString(
         markdown,
         transformers,
         undefined,
-        true,
-        false,
+        { preserveNewLines: true, extractFrontmatter: false }
       );
     },
     {discrete: true},
@@ -254,7 +256,7 @@ export class MarkdownStreamProcessor {
         this.nextNodeKey = nextSibling ? nextSibling.getKey() : null;
 
         const markdown = $isElementNode(startingNode)
-          ? $convertToMarkdownString(this.transformers, startingNode, true)
+          ? $convertNodeToEnhancedMarkdownString(this.transformers, startingNode, true)
           : '';
 
         this.currentRootChildMarkdown = markdown;
@@ -275,7 +277,7 @@ export class MarkdownStreamProcessor {
       this.nextNodeKey = null;
 
       // Get the markdown for just the starting node, not the entire document
-      const markdown = $convertToMarkdownString(
+      const markdown = $convertNodeToEnhancedMarkdownString(
         this.transformers,
         lastChild as ElementNode,
         true,
@@ -319,9 +321,9 @@ export class MarkdownStreamProcessor {
       this.workingNodeKey = rootChild?.getKey();
       this.nextNodeKey = nextSibling.getKey();
 
-      let markdown = $convertToMarkdownString(
+      let markdown = $convertNodeToEnhancedMarkdownString(
         this.transformers,
-        rootChild,
+        rootChild as ElementNode,
         true,
       );
 

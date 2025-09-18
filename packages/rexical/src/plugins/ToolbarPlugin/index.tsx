@@ -53,9 +53,9 @@ import { useRuntimeSettings } from '../../context/RuntimeSettingsContext';
 import {$isListNode, ListNode} from '@lexical/list';
 import type { Transformer } from '@lexical/markdown';
 import {
-  $convertFromMarkdownString,
-  $convertToMarkdownString,
-} from '@lexical/markdown';
+  $convertFromEnhancedMarkdownString,
+  $convertToEnhancedMarkdownString,
+} from '../../markdown';
 import {INSERT_EMBED_COMMAND} from '@lexical/react/LexicalAutoEmbedPlugin';
 import {INSERT_HORIZONTAL_RULE_COMMAND} from '@lexical/react/LexicalHorizontalRuleNode';
 import {$isHeadingNode} from '@lexical/rich-text';
@@ -836,18 +836,12 @@ export default function ToolbarPlugin({
       const root = $getRoot();
       const firstChild = root.getFirstChild();
       if ($isCodeNode(firstChild) && firstChild.getLanguage() === 'markdown') {
-        $convertFromMarkdownString(
+        $convertFromEnhancedMarkdownString(
           firstChild.getTextContent(),
-          transformers,
-          undefined, // node
-          true,
+          transformers
         );
       } else {
-        const markdown = $convertToMarkdownString(
-          transformers,
-          undefined, //node
-          true,
-        );
+        const markdown = $convertToEnhancedMarkdownString(transformers);
         const codeNode = $createCodeNode('markdown');
         codeNode.setTheme(THEME_MAPPING[theme]);
         codeNode.append($createTextNode(markdown));

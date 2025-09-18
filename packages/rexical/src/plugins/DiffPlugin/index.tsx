@@ -25,7 +25,7 @@ import {
 } from './core/exports';
 
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $convertToMarkdownString } from '@lexical/markdown';
+import { $convertToEnhancedMarkdownString } from '../../markdown';
 import { $isTableNode, $isTableRowNode, $isTableCellNode } from '@lexical/table';
 import {
   $createTextNode,
@@ -171,7 +171,7 @@ export function DiffPlugin(): JSX.Element | null {
         try {
           // Get current markdown content
           const currentMarkdown = editor.getEditorState().read(() => {
-            return $convertToMarkdownString(MARKDOWN_TRANSFORMERS, undefined, true);
+            return $convertToEnhancedMarkdownString(MARKDOWN_TRANSFORMERS);
           });
 
           console.log('Applying diff with replacements:', replacements);
@@ -290,7 +290,7 @@ export function useDiffCommands() {
 
   const getCurrentMarkdown = useCallback(() => {
     return editor.getEditorState().read(() => {
-      return $convertToMarkdownString(MARKDOWN_TRANSFORMERS, undefined, true);
+      return $convertToEnhancedMarkdownString(MARKDOWN_TRANSFORMERS, undefined, true);
     });
   }, [editor]);
 

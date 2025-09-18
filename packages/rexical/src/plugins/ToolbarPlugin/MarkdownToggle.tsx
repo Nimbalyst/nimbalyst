@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $createTextNode, $getRoot } from 'lexical';
 import { $isCodeNode, CodeNode } from '@lexical/code';
-import { $convertFromMarkdownString, $convertToMarkdownString } from '@lexical/markdown';
+import { $convertFromEnhancedMarkdownString, $convertToEnhancedMarkdownString } from '../../markdown';
 import { MARKDOWN_TRANSFORMERS } from '../../markdown';
 
 const MarkdownToggle = () => {
@@ -14,19 +14,12 @@ const MarkdownToggle = () => {
             const root = $getRoot();
             const firstChild = root.getFirstChild();
             if ($isCodeNode(firstChild) && firstChild.getLanguage() === 'markdown') {
-                $convertFromMarkdownString(
+                $convertFromEnhancedMarkdownString(
                     firstChild.getTextContent(),
-                    MARKDOWN_TRANSFORMERS,
-                    undefined, // node
-                    shouldPreserveNewLinesInMarkdown,
-                    false, // shouldMergeAdjacentLines
+                    MARKDOWN_TRANSFORMERS
                 );
             } else {
-                const markdown = $convertToMarkdownString(
-                    MARKDOWN_TRANSFORMERS,
-                    undefined, //node
-                    shouldPreserveNewLinesInMarkdown,
-                );
+                const markdown = $convertToEnhancedMarkdownString(MARKDOWN_TRANSFORMERS);
                 // GH: Had to not use $create because the $applyNodeReplacement fails on duplicate key
                 // not sure what changed
                 const codeNode = new CodeNode('markdown');

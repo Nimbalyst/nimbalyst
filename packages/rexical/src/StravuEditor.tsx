@@ -10,7 +10,7 @@ import type { JSX } from 'react';
 import { useMemo, useRef } from 'react';
 
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
-import { $convertFromMarkdownString } from '@lexical/markdown';
+import { $convertFromEnhancedMarkdownString } from './markdown';
 import {
     $createParagraphNode,
     $createTextNode,
@@ -53,7 +53,7 @@ function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
                 return () => {
                     const root = $getRoot();
                     root.clear();
-                    $convertFromMarkdownString(config.initialContent!, markdownTransformers, undefined, true);
+                    $convertFromEnhancedMarkdownString(config.initialContent!, markdownTransformers);
                     root.selectStart();
                 };
             } else if (!config.emptyEditor) {

@@ -16,8 +16,10 @@ import {
     $setDiffState,
     $setOriginalMarkdown
 } from '../core/DiffState';
-import { $convertNodeToMarkdownString } from '../../../markdown/nodeMarkdownExport';
-import { $convertFromMarkdownString } from '@lexical/markdown';
+import {
+    $convertNodeToEnhancedMarkdownString,
+    $convertFromEnhancedMarkdownString
+} from "../../../markdown";
 import { MARKDOWN_TRANSFORMERS } from '../../../markdown';
 
 export class TableDiffHandler implements DiffNodeHandler {
@@ -175,7 +177,7 @@ export class TableDiffHandler implements DiffNodeHandler {
 
               // Apply the new content from the target
               if (targetCellMarkdown.trim()) {
-                $convertFromMarkdownString(targetCellMarkdown, transformers, liveCell);
+                $convertFromEnhancedMarkdownString(targetCellMarkdown, transformers, liveCell, { preserveNewLines: true, extractFrontmatter: false });
               }
             }
           }
@@ -285,7 +287,7 @@ export class TableDiffHandler implements DiffNodeHandler {
           if (originalMarkdown.trim()) {
             // Parse the markdown back into the cell
             // Use the same transformers that were used originally
-            $convertFromMarkdownString(originalMarkdown, MARKDOWN_TRANSFORMERS, cell);
+            $convertFromEnhancedMarkdownString(originalMarkdown, MARKDOWN_TRANSFORMERS, cell, { preserveNewLines: true, extractFrontmatter: false });
           }
 
           // Clear the diff state and original markdown

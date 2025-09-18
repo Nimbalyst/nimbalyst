@@ -119,10 +119,10 @@
 
 import type {Transformer} from '@lexical/markdown';
 import {
-  $convertFromMarkdownString,
-  $convertToMarkdownString,
-} from '@lexical/markdown';
-import {$convertNodeToMarkdownString} from '../../../markdown/nodeMarkdownExport';
+  $convertFromEnhancedMarkdownString,
+  $convertNodeToEnhancedMarkdownString,
+  $convertToEnhancedMarkdownString
+} from "../../../markdown";
 import type {ElementNode, LexicalEditor, SerializedLexicalNode} from 'lexical';
 import {
   $getNodeByKey,
@@ -482,7 +482,7 @@ export function applyMarkdownDiff(
   try {
     // Get the original markdown from the editor
     const originalMarkdown = editor.getEditorState().read(() => {
-      return $convertToMarkdownString(transformers, undefined, true);
+      return $convertToEnhancedMarkdownString(transformers);
     });
 
     let newMarkdown: string;
@@ -641,12 +641,11 @@ export function applyMarkdownDiffToDocument(
         () => {
           const root = $getRoot();
           root.clear();
-          $convertFromMarkdownString(
+          $convertFromEnhancedMarkdownString(
             originalMarkdown,
             transformers,
             undefined,
-            true,
-            false,
+            { preserveNewLines: true, extractFrontmatter: false }
           );
         },
         {discrete: true},
@@ -656,12 +655,11 @@ export function applyMarkdownDiffToDocument(
         () => {
           const root = $getRoot();
           root.clear();
-          $convertFromMarkdownString(
+          $convertFromEnhancedMarkdownString(
             newMarkdown,
             transformers,
             root,
-            true,
-            false,
+            { preserveNewLines: true, extractFrontmatter: false }
           );
         },
         {discrete: true},
@@ -706,7 +704,7 @@ export function applyMarkdownDiffToDocument(
         }
         let markdown = '';
         try {
-          markdown = $convertNodeToMarkdownString(
+          markdown = $convertNodeToEnhancedMarkdownString(
             transformers,
             child as ElementNode
           ).trim();
@@ -1040,7 +1038,7 @@ export function $applySubTreeDiff(
       // Always use proper markdown conversion to preserve formatting and structure
       let markdown: string;
       try {
-        markdown = $convertNodeToMarkdownString(
+        markdown = $convertNodeToEnhancedMarkdownString(
           transformers,
           child
         ).trim();

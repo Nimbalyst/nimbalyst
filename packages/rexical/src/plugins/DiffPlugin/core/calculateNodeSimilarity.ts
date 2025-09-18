@@ -14,9 +14,10 @@ import type {
   SerializedTextNode,
 } from 'lexical';
 
-import {$convertToMarkdownString, TRANSFORMERS} from '@lexical/markdown';
+import { $convertToEnhancedMarkdownString } from '../../../markdown';
+import { MARKDOWN_TRANSFORMERS as TRANSFORMERS } from '../../../markdown';
 import {$isElementNode} from 'lexical';
-import { $convertNodeToMarkdownString } from "../../../markdown/nodeMarkdownExport.ts";
+import { $convertNodeToEnhancedMarkdownString } from "../../../markdown";
 
 /**
  * Calculate similarity between two nodes based on content and structure
@@ -101,8 +102,7 @@ export function $getNodeMarkdown(
   // For live nodes, use $convertToMarkdownString on the node directly
   if ('getTextContent' in node && typeof node.getTextContent === 'function') {
     if ($isElementNode(node)) {
-      // return $convertNodeToMarkdownString(TRANSFORMERS, node);
-      return $convertToMarkdownString(TRANSFORMERS, node);
+      return $convertNodeToEnhancedMarkdownString(TRANSFORMERS, node);
     } else {
       // For text nodes, we need to check if parent has special formatting like links
       // Since we can't access parent from here, return text content
