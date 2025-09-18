@@ -244,4 +244,11 @@ export class SessionManager {
       this.currentSession = { ...this.currentSession, providerSessionId };
     }
   }
+
+  async updateSessionTitle(sessionId: string, title: string): Promise<void> {
+    await AISessionsRepository.updateMetadata(sessionId, { title });
+    if (this.currentSession?.id === sessionId) {
+      this.currentSession = { ...this.currentSession, title };
+    }
+  }
 }

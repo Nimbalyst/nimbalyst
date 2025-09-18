@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ProviderIcon } from '../icons/ProviderIcons';
 import './SessionManager.css';
 
 // Helper function to apply theme
@@ -225,19 +226,24 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
                 className={`session-item ${selectedSession?.id === session.id ? 'selected' : ''}`}
                 onClick={() => setSelectedSession(session)}
               >
-                <div className="session-item-title">
-                  {session.title || `Session ${session.id.slice(0, 8)}`}
+                <div className="session-item-icon">
+                  <ProviderIcon provider={session.provider} size={16} />
                 </div>
-                <div className="session-item-meta">
-                  <span className={`session-item-provider ${getProviderClass(session.provider)}`}>
-                    {session.provider}
-                  </span>
-                  <span className="session-item-workspace">
-                    {getWorkspaceName(session.workspacePath)}
-                  </span>
-                  <span className="session-item-date">
-                    {formatDate(session.timestamp)}
-                  </span>
+                <div className="session-item-content">
+                  <div className="session-item-title">
+                    {session.title || `Session ${session.id.slice(0, 8)}`}
+                  </div>
+                  <div className="session-item-meta">
+                    <span className={`session-item-provider ${getProviderClass(session.provider)}`}>
+                      {session.provider}
+                    </span>
+                    <span className="session-item-workspace">
+                      {getWorkspaceName(session.workspacePath)}
+                    </span>
+                    <span className="session-item-date">
+                      {formatDate(session.timestamp)}
+                    </span>
+                  </div>
                 </div>
               </div>
             ))

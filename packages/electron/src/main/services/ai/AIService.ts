@@ -313,6 +313,13 @@ export class AIService {
       };
       await this.sessionManager.addMessage(userMessage, session.id);
 
+      // Update session title if this is the first user message
+      if (session.messages.length === 0 || (session.messages.length === 1 && session.messages[0].role === 'user')) {
+        // Generate a title from the first message (truncate to 100 chars)
+        const title = message.length > 100 ? message.substring(0, 97) + '...' : message;
+        await this.sessionManager.updateSessionTitle(session.id, title);
+      }
+
       // Update MCP document state if provided
       if (documentContext) {
         updateDocumentState(documentContext, sessionId);

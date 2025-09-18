@@ -3,6 +3,7 @@ import { join } from 'path';
 import { writeFileSync } from 'fs';
 import { AISessionsRepository } from '@stravu/runtime';
 import { getWorkspaceRepository } from '../services/RepositoryManager';
+import { database } from '../database/PGLiteDatabaseWorker';
 
 let sessionManagerWindow: BrowserWindow | null = null;
 
