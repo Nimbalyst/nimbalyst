@@ -138,7 +138,7 @@ export function registerWorkspaceHandlers() {
             // Escape special characters for shell
             const escapedTerm = trimmedQuery.replace(/["'\\]/g, '\\$&');
 
-            const fileNameCommand = `find "${workspacePath}" -name "*.md" -o -name "*.markdown" 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
+            const fileNameCommand = `find "${workspacePath}" -path "*/node_modules/*" -prune -o \( -name "*.md" -o -name "*.markdown" \) -print 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
             const { stdout: fileMatches } = await execAsync(fileNameCommand);
 
             const results = [];
@@ -220,7 +220,8 @@ export function registerWorkspaceHandlers() {
                 }
             }
 
-            const contentCommand = `"${rgPath}" --type md -i --json "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
+            // Avoid scanning node_modules to keep quick open results relevant
+            const contentCommand = `"${rgPath}" --type md -i --json --glob "!**/node_modules/**" "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
             const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
 
             const contentMatches = new Map<string, any>();
@@ -274,7 +275,7 @@ export function registerWorkspaceHandlers() {
 
             // First, search file names
             try {
-                const fileNameCommand = `find "${workspacePath}" -name "*.md" -o -name "*.markdown" 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
+                const fileNameCommand = `find "${workspacePath}" -path "*/node_modules/*" -prune -o \( -name "*.md" -o -name "*.markdown" \) -print 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
                 const { stdout: fileMatches } = await execAsync(fileNameCommand);
 
                 if (fileMatches) {
@@ -365,7 +366,8 @@ export function registerWorkspaceHandlers() {
                     console.warn('[SEARCH] Could not find bundled ripgrep, falling back to system rg');
                 }
 
-                contentCommand = `"${rgPath}" --type md -i --json "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
+                // Avoid scanning node_modules to keep quick open results relevant
+                contentCommand = `"${rgPath}" --type md -i --json --glob "!**/node_modules/**" "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
                 const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
 
                 if (stdout) {
