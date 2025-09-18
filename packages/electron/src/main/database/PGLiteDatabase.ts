@@ -7,7 +7,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { app } from 'electron';
 import path from 'path';
 import { logger } from '../utils/logger';
-import { initDB as registerRuntimeDB } from '@stravu/runtime/storage/pglite';
+import { ensureRuntimeSchema } from './schema';
 
 export class PGLiteDatabase {
   private db: PGlite | null = null;
@@ -46,7 +46,7 @@ export class PGLiteDatabase {
       await this.runMigrations();
 
       // Create schemas
-      await registerRuntimeDB({ existingInstance: this.db });
+      await ensureRuntimeSchema(this.db);
       logger.main.info('[PGLite] Runtime schema ensured');
 
       this.initialized = true;

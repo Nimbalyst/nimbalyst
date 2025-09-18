@@ -115,7 +115,7 @@ export class ToolExecutor extends EventEmitter {
     if (!tool) {
       throw new Error(`Tool ${name} not found`);
     }
-    
+
     // Handle built-in tools
     switch (name) {
       case 'applyDiff':
@@ -123,7 +123,17 @@ export class ToolExecutor extends EventEmitter {
       case 'streamContent':
         return await this.streamContent(args);
       default:
-        // Execute custom tool
+        // Check if tool has a handler (e.g., file tools)
+        if (typeof tool.handler === 'function') {
+          logger.ai.info(`[ToolExecutor] Executing tool with handler: ${name}`);
+          try {
+            return await tool.handler(args);
+          } catch (error) {
+            logger.ai.error(`[ToolExecutor] Tool ${name} execution failed:`, error);
+            throw error;
+          }
+        }
+        // Execute custom/renderer tool
         return await this.executeCustomTool(tool, args);
     }
   }

@@ -1,5 +1,5 @@
 /**
- * PGlite-backed session manager shared across hosts
+ * Session manager with injectable storage backend
  */
 
 import { v4 as uuidv4 } from 'uuid';

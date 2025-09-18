@@ -1,7 +1,6 @@
 export * from './core/types';
 export * from './core/DocumentService';
-export * from './storage/pglite';
-export * from './storage/repositories/WorkspaceRepository';
+export * from './core/FileSystemService';
 export * from './storage/repositories/DocumentsRepository';
 // AI
 export * from './ai/types';

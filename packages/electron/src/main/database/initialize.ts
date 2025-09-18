@@ -6,19 +6,16 @@
 import { app } from 'electron';
 import { database } from './PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
-import { useExternalDB } from '@stravu/runtime/storage/pglite';
-import { createPgliteSessionStore } from '@stravu/runtime';
 import type { SessionStore } from '@stravu/runtime';
+import { repositoryManager } from '../services/RepositoryManager';
 
 /**
  * Initialize the database system
  * Should be called when the app is ready
  */
-let cachedSessionStore: SessionStore | null = null;
-
 export async function initializeDatabase(): Promise<SessionStore> {
-  if (cachedSessionStore && database.isInitialized()) {
-    return cachedSessionStore;
+  if (repositoryManager.isInitialized()) {
+    return repositoryManager.getSessionStore();
   }
   logger.main.info('[Database] Initializing PGLite database system...');
 
@@ -27,24 +24,10 @@ export async function initializeDatabase(): Promise<SessionStore> {
     await database.initialize();
     logger.main.info('[Database] PGLite initialized successfully');
 
-    // Share worker-backed database with runtime storage helpers
-    await useExternalDB({
-      query: database.query.bind(database),
-      exec: database.exec.bind(database),
-    });
-
-    const sessionStore = createPgliteSessionStore(
-      {
-        query: database.query.bind(database),
-      },
-      async () => {
-        if (!database.isInitialized()) {
-          await database.initialize();
-        }
-      }
-    );
-    cachedSessionStore = sessionStore;
-    logger.main.info('[Database] Runtime storage initialized');
+    // Initialize all repositories
+    await repositoryManager.initialize();
+    const sessionStore = repositoryManager.getSessionStore();
+    logger.main.info('[Database] All repositories initialized');
 
     // Get database stats
     const stats = await database.getStats();
@@ -70,7 +53,7 @@ export async function initializeDatabase(): Promise<SessionStore> {
 }
 
 export function getRuntimeSessionStore(): SessionStore | null {
-  return cachedSessionStore;
+  return repositoryManager.isInitialized() ? repositoryManager.getSessionStore() : null;
 }
 
 /**

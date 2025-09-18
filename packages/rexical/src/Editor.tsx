@@ -230,7 +230,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         <ComponentPickerPlugin />
         <EmojiPickerPlugin />
         <AutoEmbedPlugin />
-        <EmojisPlugin />
+        {/*<EmojisPlugin />*/}
         <HashtagPlugin />
         <SpeechToTextPlugin />
 

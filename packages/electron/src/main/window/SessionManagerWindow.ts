@@ -2,8 +2,7 @@ import { BrowserWindow, ipcMain, dialog, app } from 'electron';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
 import { AISessionsRepository } from '@stravu/runtime';
-import { WorkspaceRepository } from '@stravu/runtime';
-import { database } from '../database/PGLiteDatabaseWorker';
+import { getWorkspaceRepository } from '../services/RepositoryManager';
 
 let sessionManagerWindow: BrowserWindow | null = null;
 
@@ -129,7 +128,7 @@ export function createSessionManagerWindow(filterWorkspace?: string) {
 export function registerSessionManagerHandlers() {
   // Get all sessions from all workspaces
   ipcMain.handle('session-manager:get-all-sessions', async () => {
-    const workspaces = await WorkspaceRepository.list();
+    const workspaces = await getWorkspaceRepository().list();
     const workspaceIds = new Set<string>(workspaces.map(ws => ws.id));
 
     try {

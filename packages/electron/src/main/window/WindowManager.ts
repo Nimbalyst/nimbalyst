@@ -9,6 +9,8 @@ import { stopWorkspaceWatcher, startWorkspaceWatcher } from '../file/WorkspaceWa
 import { getFolderContents } from '../utils/FileTree';
 import { getTitleBarColors } from '../theme/ThemeManager';
 import { ElectronDocumentService, setupDocumentServiceHandlers } from '../services/ElectronDocumentService';
+import { ElectronFileSystemService } from '../services/ElectronFileSystemService';
+import { setFileSystemService, clearFileSystemService } from '@stravu/runtime';
 
 // Window management
 export const windows = new Map<number, BrowserWindow>();
@@ -19,6 +21,8 @@ export const windowDevToolsState = new Map<number, boolean>(); // Track dev tool
 
 // Store document services for each workspace
 const documentServices = new Map<string, ElectronDocumentService>();
+// Store file system services for each workspace
+const fileSystemServices = new Map<string, ElectronFileSystemService>();
 
 function resolveDocumentServiceForEvent(event: IpcMainEvent | IpcMainInvokeEvent): ElectronDocumentService | null {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
@@ -177,6 +181,13 @@ export function createWindow(
                 setupDocumentServiceHandlers(resolveDocumentServiceForEvent);
                 console.log('[MAIN] Created DocumentService for workspace:', workspacePath);
             }
+            if (!fileSystemServices.has(workspacePath)) {
+                const fileSystemService = new ElectronFileSystemService(workspacePath);
+                fileSystemServices.set(workspacePath, fileSystemService);
+                // Set the file system service globally for the runtime
+                setFileSystemService(fileSystemService);
+                console.log('[MAIN] Created FileSystemService for workspace:', workspacePath);
+            }
         }
         windowFocusOrder.set(windowId, ++focusOrderCounter); // Track initial focus order
 
@@ -285,6 +296,14 @@ export function createWindow(
                         docService.destroy();
                         documentServices.delete(state.workspacePath);
                         console.log('[MAIN] Destroyed DocumentService for workspace:', state.workspacePath);
+                    }
+                    // Clean up file system service
+                    const fileSystemService = fileSystemServices.get(state.workspacePath);
+                    if (fileSystemService) {
+                        fileSystemService.destroy();
+                        fileSystemServices.delete(state.workspacePath);
+                        clearFileSystemService();
+                        console.log('[MAIN] Destroyed FileSystemService for workspace:', state.workspacePath);
                     }
                 }
             }

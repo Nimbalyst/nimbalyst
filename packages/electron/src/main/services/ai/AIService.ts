@@ -38,14 +38,14 @@ export class AIService {
 
   constructor(sessionStore: SessionStore) {
     this.sessionManager = new SessionManager(sessionStore);
-    
-    // Register built-in tools
+
+    // Register built-in tools (which now includes file tools)
     console.log('[AIService] Registering built-in tools...');
     for (const tool of BUILT_IN_TOOLS) {
       toolRegistry.register(tool);
       console.log(`[AIService] Registered tool: ${tool.name}`);
     }
-    
+
     // Delay initialization until first use
     this.initializeApiKeys();
     this.setupIpcHandlers();

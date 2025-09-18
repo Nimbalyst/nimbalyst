@@ -1,5 +1,6 @@
 import type { StreamingConfig } from '../types';
 import { applyReplacements, endStreamingEdit, startStreamingEdit, streamContent } from '../editorBridge';
+import { FILE_TOOLS } from './fileTools';
 
 export type ToolSource = 'runtime' | 'renderer' | 'main';
 
@@ -78,6 +79,8 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     },
     source: 'runtime',
   },
+  // Add file operation tools
+  ...FILE_TOOLS,
 ];
 
 type ToolRegistryEventName = 'tool:registered' | 'tool:unregistered';
