@@ -35,6 +35,7 @@ export const streamOpenAI: ProviderStream = async function* (
     tools: toolRegistry.toOpenAI(),
     tool_choice: 'auto',
     stream: true,
+    stream_options: { include_usage: true }, // Request usage data in streaming response
   }, { signal });
 
   const accum: Record<number, { name?: string; args: string }> = {};

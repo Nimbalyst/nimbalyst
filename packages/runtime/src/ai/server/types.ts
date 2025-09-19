@@ -39,6 +39,11 @@ export interface Message {
     content: string;
     isActive: boolean;
   };
+  tokenUsage?: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  };
 }
 
 export type AIProviderType = 'claude' | 'claude-code' | 'openai' | 'lmstudio';
@@ -112,6 +117,11 @@ export interface StreamChunk {
   error?: string;
   isComplete?: boolean;
   config?: any; // For stream_edit_start
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  };
 }
 
 export interface DiffArgs {

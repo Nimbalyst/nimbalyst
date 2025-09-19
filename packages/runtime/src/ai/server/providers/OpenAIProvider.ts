@@ -127,7 +127,8 @@ export class OpenAIProvider extends BaseAIProvider {
         messages: apiMessages,
         tools,
         tool_choice: tools.length > 0 ? 'auto' : undefined,  // Only set if we have tools
-        stream: true
+        stream: true,
+        stream_options: { include_usage: true }  // Request usage data in streaming response
       };
       
       // Some models (o1 series, gpt-5, gpt-4.5) don't support temperature parameter
@@ -217,6 +218,7 @@ export class OpenAIProvider extends BaseAIProvider {
       let chunkCount = 0;
       let firstChunkTime: number | undefined;
       let toolCallCount = 0;
+      let usageData: any = null;
 
       // Stream the response
       console.log(`[OpenAIProvider] About to start iterating response stream at ${new Date().toISOString()}`);
@@ -235,7 +237,17 @@ export class OpenAIProvider extends BaseAIProvider {
           console.log(`[OpenAIProvider] Iteration started, first chunk arriving after ${Date.now() - iteratorStartTime}ms`);
         }
         chunkCount++;
-        
+
+        // Debug: Log chunk structure to understand usage data format
+        if (chunkCount <= 3 || chunk.usage || chunk.choices?.[0]?.finish_reason) {
+          console.log(`[OpenAIProvider] Chunk #${chunkCount} structure:`, {
+            hasUsage: !!chunk.usage,
+            hasChoices: !!chunk.choices,
+            finishReason: chunk.choices?.[0]?.finish_reason,
+            keys: Object.keys(chunk)
+          });
+        }
+
         if (!firstChunkTime) {
           firstChunkTime = Date.now();
           clearTimeout(timeoutCheck);  // Clear the timeout check
@@ -344,7 +356,7 @@ export class OpenAIProvider extends BaseAIProvider {
         const finishReason = chunk.choices[0]?.finish_reason;
         if (finishReason) {
           console.log(`[OpenAIProvider] Chunk #${chunkCount} finish_reason: '${finishReason}'`);
-          
+
           if (finishReason === 'stop') {
             // Message complete - log it but don't yield complete yet
             const totalTime = Date.now() - startTime;
@@ -353,13 +365,33 @@ export class OpenAIProvider extends BaseAIProvider {
             console.warn(`[OpenAIProvider] Unexpected finish_reason: ${finishReason}`);
           }
         }
+
+        // Check for usage data in the chunk (OpenAI includes it in the final chunk)
+        if (chunk.usage) {
+          usageData = chunk.usage;
+          console.log('[OpenAIProvider] Usage data from stream:', usageData);
+        }
+
+        // Check if this is the last chunk with usage
+        if (chunk.x_groq && chunk.x_groq.usage) {
+          // Some providers send usage in x_groq
+          usageData = chunk.x_groq.usage;
+          console.log('[OpenAIProvider] Usage data from x_groq:', usageData);
+        }
       }
       
-      // Yield complete AFTER the loop ends
+      // Yield complete AFTER the loop ends with usage data if available
       yield {
         type: 'complete',
         content: fullContent,
-        isComplete: true
+        isComplete: true,
+        ...(usageData ? {
+          usage: {
+            input_tokens: usageData.prompt_tokens || usageData.input_tokens || 0,
+            output_tokens: usageData.completion_tokens || usageData.output_tokens || 0,
+            total_tokens: usageData.total_tokens || ((usageData.prompt_tokens || 0) + (usageData.completion_tokens || 0))
+          }
+        } : {})
       };
 
     } catch (error: any) {

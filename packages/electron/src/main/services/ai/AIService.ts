@@ -604,8 +604,14 @@ export class AIService {
               perfLog.textChunks = textChunks;
               perfLog.toolCallCount = toolCallCount;
               perfLog.responseLength = fullResponse.length;
+
+              // Capture token usage if available
+              const tokenUsage = chunk.usage;
               
               console.log('[AIService] Stream complete - Performance metrics:', perfLog);
+              if (tokenUsage) {
+                console.log('[AIService] Token usage:', tokenUsage);
+              }
               if (fullResponse) {
                 logger.ai.info('[AIService] Assistant final response', {
                   length: fullResponse.length,
@@ -625,7 +631,7 @@ export class AIService {
                 });
               }
               
-              // Send completion metrics
+              // Send completion metrics with token usage if available
               event.sender.send('ai:performanceMetrics', {
                 phase: 'complete',
                 totalTime: perfLog.totalTime,
@@ -633,7 +639,8 @@ export class AIService {
                 chunkCount: chunkCount,
                 textChunks: textChunks,
                 toolCallCount: toolCallCount,
-                responseLength: fullResponse.length
+                responseLength: fullResponse.length,
+                ...(tokenUsage && { tokenUsage })
               });
               
               // Only add assistant message if there's actual content or edits
@@ -642,7 +649,8 @@ export class AIService {
                   role: 'assistant',
                   content: fullResponse,
                   timestamp: Date.now(),
-                  ...(edits.length > 0 && { edits })  // Include edits if any
+                  ...(edits.length > 0 && { edits }),  // Include edits if any
+                  ...(tokenUsage && { tokenUsage })  // Include token usage if available
                 };
                 await this.sessionManager.addMessage(assistantMessage, session.id);
               } else if (edits.length > 0) {
@@ -651,7 +659,8 @@ export class AIService {
                   role: 'assistant',
                   content: '',  // Empty content since the action was just edits
                   timestamp: Date.now(),
-                  edits
+                  edits,
+                  ...(tokenUsage && { tokenUsage })  // Include token usage if available
                 };
                 await this.sessionManager.addMessage(assistantMessage, session.id);
               } else if (hasStreamingContent) {
@@ -666,7 +675,8 @@ export class AIService {
                     mode: 'after',
                     content: '[Content streamed to editor]',
                     isActive: false
-                  }
+                  },
+                  ...(tokenUsage && { tokenUsage })  // Include token usage if available
                 };
                 await this.sessionManager.addMessage(assistantMessage, session.id);
               } else if (toolCalls.length > 0) {
@@ -674,7 +684,8 @@ export class AIService {
                 const assistantMessage: Message = {
                   role: 'assistant',
                   content: '[Tool calls executed]',
-                  timestamp: Date.now()
+                  timestamp: Date.now(),
+                  ...(tokenUsage && { tokenUsage })  // Include token usage if available
                 };
                 await this.sessionManager.addMessage(assistantMessage, session.id);
               }

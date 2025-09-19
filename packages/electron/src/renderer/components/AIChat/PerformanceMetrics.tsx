@@ -16,6 +16,11 @@ interface MetricData {
   responseLength?: number;
   errorTime?: number;
   error?: string;
+  tokenUsage?: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+  };
 }
 
 interface PerformanceMetricsProps {
@@ -84,6 +89,11 @@ export function PerformanceMetrics({ show }: PerformanceMetricsProps) {
     ? history.reduce((acc, m) => acc + (m.totalTime || 0), 0) / history.filter(m => m.totalTime).length
     : 0;
 
+  const totalTokens = history.reduce((acc, m) => acc + (m.tokenUsage?.total_tokens || 0), 0);
+  const avgTokensPerRequest = history.filter(m => m.tokenUsage).length > 0
+    ? totalTokens / history.filter(m => m.tokenUsage).length
+    : 0;
+
   return (
     <div className="performance-metrics">
       <div className="metrics-header">
@@ -143,6 +153,25 @@ export function PerformanceMetrics({ show }: PerformanceMetricsProps) {
           <span className="metric-label">Context</span>
           <span className="metric-value">{metrics.contextMessages || 0} msgs</span>
         </div>
+
+        {metrics.tokenUsage && (
+          <>
+            <div className="metric-item">
+              <span className="metric-label">Input Tokens</span>
+              <span className="metric-value">{metrics.tokenUsage.input_tokens.toLocaleString()}</span>
+            </div>
+
+            <div className="metric-item">
+              <span className="metric-label">Output Tokens</span>
+              <span className="metric-value">{metrics.tokenUsage.output_tokens.toLocaleString()}</span>
+            </div>
+
+            <div className="metric-item">
+              <span className="metric-label">Total Tokens</span>
+              <span className="metric-value">{metrics.tokenUsage.total_tokens.toLocaleString()}</span>
+            </div>
+          </>
+        )}
       </div>
 
       {history.length > 0 && (
@@ -151,6 +180,12 @@ export function PerformanceMetrics({ show }: PerformanceMetricsProps) {
           <div className="history-stats">
             <span>First chunk: {formatTime(avgTimeToFirstChunk)}</span>
             <span>Total: {formatTime(avgTotalTime)}</span>
+            {totalTokens > 0 && (
+              <>
+                <span>Tokens/req: {Math.round(avgTokensPerRequest).toLocaleString()}</span>
+                <span>Total tokens: {totalTokens.toLocaleString()}</span>
+              </>
+            )}
           </div>
         </div>
       )}

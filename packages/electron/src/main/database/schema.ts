@@ -91,6 +91,8 @@ async function createAISessionsTable(db: PGlite): Promise<void> {
       provider_config JSONB,
       provider_session_id TEXT,
       draft_input TEXT,
+      token_usage JSONB DEFAULT '{}',
+      total_tokens JSONB DEFAULT '{"input": 0, "output": 0, "total": 0}',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -110,6 +112,8 @@ async function createAISessionsTable(db: PGlite): Promise<void> {
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS provider_config JSONB",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS provider_session_id TEXT",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS draft_input TEXT",
+    "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS token_usage JSONB DEFAULT '{}'",
+    "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS total_tokens JSONB DEFAULT '{\"input\": 0, \"output\": 0, \"total\": 0}'",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
   ];

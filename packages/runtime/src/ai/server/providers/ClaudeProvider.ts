@@ -110,17 +110,20 @@ export class ClaudeProvider extends BaseAIProvider {
       console.log('[ClaudeProvider] About to call Anthropic API with model:', modelId);
       console.log('[ClaudeProvider] Stack trace:', new Error().stack);
       
-      const response = await this.anthropic.messages.create({
+      // Use the stream helper for better usage data support
+      const stream = this.anthropic.messages.stream({
         model: modelId,
         max_tokens: this.config.maxTokens || 4000,
         temperature: this.config.temperature || 0,
         system: systemPrompt,
         messages: apiMessages,
         ...(tools.length > 0 ? { tools } : {}),
-        stream: true
-      }, {
-        signal: this.abortController.signal
       });
+
+      // Set the abort signal
+      if (this.abortController.signal) {
+        stream._run.controller = this.abortController;
+      }
 
       let fullContent = '';
       let currentToolUse: any = null;
@@ -128,9 +131,10 @@ export class ClaudeProvider extends BaseAIProvider {
       let isStreamingContent = false;
       let streamContentBuffer = '';
       let streamConfig: any = null;
+      let usageData: any = null;
 
       // Stream the response
-      for await (const rawChunk of response as AsyncIterable<any>) {
+      for await (const rawChunk of stream as AsyncIterable<any>) {
         const chunk = rawChunk as any;
         console.log('[ClaudeProvider] Chunk received:', {
           type: chunk.type,
@@ -362,22 +366,49 @@ export class ClaudeProvider extends BaseAIProvider {
             toolInputBuffer = '';
           }
         } else if (chunk.type === 'message_stop') {
-          // Message complete
-          if (fullContent) {
-            try {
-              console.info('[ClaudeProvider] Assistant response', {
-                length: fullContent.length,
-                preview: previewForLog(fullContent)
-              });
-            } catch {}
+          // Message complete - capture usage if available
+          if (chunk.usage) {
+            usageData = chunk.usage;
+            console.log('[ClaudeProvider] Usage data from message_stop:', usageData);
           }
-          yield {
-            type: 'complete',
-            content: fullContent,
-            isComplete: true
-          };
         }
       }
+
+      // After streaming completes, try to get usage data from finalMessage
+      try {
+        const finalMessage = await stream.finalMessage();
+        if (finalMessage?.usage) {
+          usageData = finalMessage.usage;
+          console.log('[ClaudeProvider] Usage data from finalMessage:', usageData);
+        }
+      } catch (e) {
+        console.error('[ClaudeProvider] Failed to get final message:', e);
+      }
+
+      // Log assistant response
+      if (fullContent) {
+        try {
+          console.info('[ClaudeProvider] Assistant response', {
+            length: fullContent.length,
+            preview: previewForLog(fullContent),
+            usage: usageData
+          });
+        } catch {}
+      }
+
+      // Yield the complete chunk with usage data if available
+      yield {
+        type: 'complete',
+        content: fullContent,
+        isComplete: true,
+        ...(usageData ? {
+          usage: {
+            input_tokens: usageData.input_tokens || 0,
+            output_tokens: usageData.output_tokens || 0,
+            total_tokens: (usageData.input_tokens || 0) + (usageData.output_tokens || 0)
+          }
+        } : {})
+      };
 
     } catch (error: any) {
       if (error.name === 'AbortError') {
