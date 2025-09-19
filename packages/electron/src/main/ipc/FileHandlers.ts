@@ -65,7 +65,7 @@ export function registerFileHandlers() {
         // ALWAYS use the specificFilePath provided
         const filePath = specificFilePath;
 
-        // console.log('[SAVE] save-file handler called at', new Date().toISOString());
+        console.log('[SAVE] save-file handler called at', new Date().toISOString(), 'for path:', filePath);
         // console.log('[SAVE] Window ID:', windowId);
         // console.log('[SAVE] Window state exists:', !!state);
         // console.log('[SAVE] Current state:', {

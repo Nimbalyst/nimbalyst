@@ -370,6 +370,7 @@ export default function App() {
   const autoSaveCancellationRef = useRef<AbortController | null>(null);
   const activeSavesRef = useRef<Set<string>>(new Set());
   const lastSavePathRef = useRef<string | null>(null);
+  const lastChangeTimeRef = useRef<number>(0);  // Track when content last changed for debouncing
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef<boolean>(false);
 
@@ -1127,6 +1128,14 @@ export default function App() {
           hasElectronAPI: !!window.electronAPI
         });
         if (isDirtyNow && saveFilePath && getContentNow && window.electronAPI) {
+          // Check debounce: only save if 1500ms have passed since last change
+          const timeSinceLastChange = Date.now() - lastChangeTimeRef.current;
+          if (timeSinceLastChange < 1500) {
+            // console.log('[AUTOSAVE_DEBOUNCE] Skipping save - only', timeSinceLastChange, 'ms since last change (need 1500ms)');
+            return;
+          }
+          console.log('[AUTOSAVE_DEBOUNCE] Proceeding with save -', timeSinceLastChange, 'ms since last change');
+
           if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Starting save attempt...');
           if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Current state:', {
             isDirty: isDirtyRef.current,
@@ -1182,6 +1191,7 @@ export default function App() {
             }
 
             if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Calling saveFile...');
+            // console.log('[AUTOSAVE_TRIGGER] About to save file via autosave at', new Date().toISOString());
             const result = await window.electronAPI.saveFile(content, saveFilePath);
             if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Save result:', result);
 
@@ -1278,7 +1288,7 @@ export default function App() {
       if (getContentRef.current) {
         clearInterval(checkInterval);
 
-        console.log('[AUTOSAVE] Setting up autosave interval - getContentRef is now available');
+        // console.log('[AUTOSAVE] Setting up autosave interval - getContentRef is now available');
 
         autoSaveIntervalRef.current = setInterval(async () => {
           // console.log('[AUTOSAVE CHECK] Checking dirty state:', {
@@ -1293,6 +1303,14 @@ export default function App() {
           const getContentNow = getContentRef.current;
 
           if (isDirtyNow && saveFilePath && getContentNow && window.electronAPI) {
+            // Check debounce: only save if 1500ms have passed since last change
+            const timeSinceLastChange = Date.now() - lastChangeTimeRef.current;
+            if (timeSinceLastChange < 1500) {
+              // console.log('[AUTOSAVE_DEBOUNCE] Skipping save - only', timeSinceLastChange, 'ms since last change (need 1500ms)');
+              return;
+            }
+            // console.log('[AUTOSAVE_DEBOUNCE] Proceeding with save -', timeSinceLastChange, 'ms since last change');
+
             // Validate file path hasn't changed
             if (saveFilePath !== currentFilePath) {
               console.warn('[AUTOSAVE] File path changed, aborting autosave');
@@ -1312,6 +1330,7 @@ export default function App() {
                 return;
               }
 
+              // console.log('[AUTOSAVE_TRIGGER] About to save file via autosave at', new Date().toISOString());
               const result = await window.electronAPI.saveFile(content, saveFilePath);
               if (result && result.success) {
                 // Validate path again after save
@@ -1671,7 +1690,7 @@ export default function App() {
     // Handle file changes on disk
     if (window.electronAPI.onFileChangedOnDisk) {
       cleanupFns.push(window.electronAPI.onFileChangedOnDisk(async (data) => {
-        console.log('[FILE_WATCH] File changed on disk event received:', data.path);
+        // console.log('[FILE_WATCH] File changed on disk event received:', data.path);
 
         // CRITICAL: Check if we're in tab mode and if this is the active tab's file
         let shouldReload = false;
@@ -2218,6 +2237,13 @@ export default function App() {
                       //   isDirtyRef: isDirtyRef.current
                       // });
 
+                      // Track when content last changed for debouncing
+                      if (hasChanged) {
+                        const now = Date.now();
+                        // console.log('[CONTENT_CHANGE] Content marked dirty at', new Date(now).toISOString());
+                        lastChangeTimeRef.current = now;
+                      }
+
                       // Update ref immediately for autosave
                       isDirtyRef.current = hasChanged;
 
@@ -2266,6 +2292,13 @@ export default function App() {
               // Keep the latest content in memory to prevent losing edits
               contentRef.current = currentContent;
               const hasChanged = currentContent !== initialContentRef.current;
+
+              // Track when content last changed for debouncing
+              if (hasChanged) {
+                const now = Date.now();
+                // console.log('[CONTENT_CHANGE] Content marked dirty at', new Date(now).toISOString());
+                lastChangeTimeRef.current = now;
+              }
 
               // Update ref immediately for autosave
               isDirtyRef.current = hasChanged;
