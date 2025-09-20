@@ -170,7 +170,7 @@ export const COLLAPSIBLE_TRANSFORMER: MultilineElementTransformer = {
         // Parse the body content as markdown
         if (content) {
             try {
-                $convertFromEnhancedMarkdownString(content, CORE_TRANSFORMERS, contentNode, { preserveNewLines: true, extractFrontmatter: false });
+                $convertFromEnhancedMarkdownString(content, CORE_TRANSFORMERS, contentNode, true, false);
             } catch (error) {
                 console.warn('Failed to convert markdown to nodes:', error);
                 // Fallback: add as plain text

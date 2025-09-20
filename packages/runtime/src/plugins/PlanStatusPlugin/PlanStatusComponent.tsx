@@ -18,11 +18,12 @@ interface PlanStatusComponentProps {
 
 const statusOptions = [
   { value: 'draft', label: 'Draft', color: '#6b7280' },
-  { value: 'planned', label: 'Planned', color: '#3b82f6' },
-  { value: 'in-progress', label: 'In Progress', color: '#f59e0b' },
-  { value: 'review', label: 'In Review', color: '#8b5cf6' },
+  { value: 'ready-for-development', label: 'Ready for Dev', color: '#3b82f6' },
+  { value: 'in-development', label: 'In Development', color: '#f59e0b' },
+  { value: 'in-review', label: 'In Review', color: '#8b5cf6' },
   { value: 'completed', label: 'Completed', color: '#10b981' },
-  { value: 'cancelled', label: 'Cancelled', color: '#ef4444' },
+  { value: 'rejected', label: 'Rejected', color: '#ef4444' },
+  { value: 'blocked', label: 'Blocked', color: '#dc2626' },
 ];
 
 const priorityOptions = [
@@ -41,15 +42,6 @@ const planTypeOptions = [
   { value: 'research', label: 'Research' },
 ];
 
-const stateOptions = [
-  { value: 'ideation', label: 'Ideation' },
-  { value: 'planning', label: 'Planning' },
-  { value: 'development', label: 'Development' },
-  { value: 'testing', label: 'Testing' },
-  { value: 'deployment', label: 'Deployment' },
-  { value: 'maintenance', label: 'Maintenance' },
-];
-
 type FrontmatterWithPlanStatus = FrontmatterData & {
   planStatus?: PlanStatusConfig;
 };
@@ -63,14 +55,12 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
-  const [showStateDropdown, setShowStateDropdown] = useState(false);
   const [showPlanTypeDropdown, setShowPlanTypeDropdown] = useState(false);
 
   // Data fields
   const [planId, setPlanId] = useState('');
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState('draft');
-  const [state, setState] = useState('ideation');
   const [planType, setPlanType] = useState('feature');
   const [priority, setPriority] = useState('medium');
   const [owner, setOwner] = useState('');
@@ -95,7 +85,6 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
         setPlanId(config?.planId ?? '');
         setTitle(config?.title ?? '');
         setStatus(config?.status ?? 'draft');
-        setState(config?.state ?? 'ideation');
         setPlanType(config?.planType ?? 'feature');
         setPriority(config?.priority ?? 'medium');
         setOwner(config?.owner ?? '');
@@ -164,7 +153,6 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
         setEditingField(null);
         setShowStatusDropdown(false);
         setShowPriorityDropdown(false);
-        setShowStateDropdown(false);
         setShowPlanTypeDropdown(false);
       }
     };
@@ -266,9 +254,32 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
             )}
           </div>
 
-          {/* Title */}
-          <div className="plan-status-title">
-            {title || 'Untitled Plan'}
+          {/* Title - Click to edit */}
+          <div
+            className={`plan-status-title ${editingField === 'title' ? 'editing' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingField('title');
+            }}
+          >
+            {editingField === 'title' ? (
+              <input
+                className="plan-status-inline-input"
+                value={title}
+                onChange={(e) => handleFieldEdit('title', e.target.value)}
+                onBlur={() => setEditingField(null)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    setEditingField(null);
+                  }
+                }}
+                autoFocus
+                placeholder="Untitled Plan"
+              />
+            ) : (
+              title || 'Untitled Plan'
+            )}
           </div>
 
           {/* Status Badge - Click for dropdown */}
@@ -362,10 +373,6 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
             <span className="plan-status-progress-text">{progress}%</span>
           </div>
 
-          <div className="plan-status-summary-item">
-            <span className="plan-status-summary-label">Updated:</span>
-            <span>{updated ? formatDate(updated.split('T')[0]) : 'Never'}</span>
-          </div>
         </div>
 
         {/* Tags row - if tags exist */}
@@ -405,36 +412,6 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
                             setPlanType(option.value);
                             updateNodeState({ planType: option.value });
                             setShowPlanTypeDropdown(false);
-                          }}
-                        >
-                          {option.label}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* State field */}
-              <div className="plan-status-detail-item">
-                <div className="plan-status-detail-label">State</div>
-                <div
-                  className={`plan-status-detail-value ${editingField === 'state' ? 'editing' : ''}`}
-                  onClick={() => setShowStateDropdown(!showStateDropdown)}
-                  style={{ position: 'relative' }}
-                >
-                  {stateOptions.find(opt => opt.value === state)?.label || 'Ideation'}
-                  {showStateDropdown && (
-                    <div className="plan-status-select">
-                      {stateOptions.map(option => (
-                        <div
-                          key={option.value}
-                          className={`plan-status-select-option ${option.value === state ? 'selected' : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setState(option.value);
-                            updateNodeState({ state: option.value });
-                            setShowStateDropdown(false);
                           }}
                         >
                           {option.label}

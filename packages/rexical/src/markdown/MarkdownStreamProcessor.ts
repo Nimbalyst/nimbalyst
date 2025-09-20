@@ -133,7 +133,8 @@ export function markdownToJSONSync(
         markdown,
         transformers,
         undefined,
-        { preserveNewLines: true, extractFrontmatter: false }
+        true,
+        false
       );
     },
     {discrete: true},

@@ -712,7 +712,8 @@ export function applyMarkdownDiffToDocument(
             originalMarkdown,
             transformers,
             undefined,
-            { preserveNewLines: true, extractFrontmatter: false }
+            true,
+            false
           );
         },
         {discrete: true},
@@ -725,8 +726,9 @@ export function applyMarkdownDiffToDocument(
           $convertFromEnhancedMarkdownString(
             newMarkdown,
             transformers,
-            root,
-            { preserveNewLines: true, extractFrontmatter: false }
+            undefined,
+            true,
+            false
           );
         },
         {discrete: true},

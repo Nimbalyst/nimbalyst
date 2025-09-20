@@ -7,6 +7,7 @@
  */
 
 import { $convertFromMarkdownString, Transformer } from '@lexical/markdown';
+import { ElementNode } from 'lexical';
 
 import {
   $setFrontmatter,
@@ -40,19 +41,18 @@ export interface EnhancedImportResult {
  *
  * @param markdown - The markdown string to import (may include frontmatter)
  * @param transformers - Array of transformers for markdown conversion
- * @param options - Import options
+ * @param node - Optional node to append content to (default: root)
+ * @param preserveNewLines - Whether to preserve newlines (default: true)
+ * @param extractFrontmatter - Whether to extract frontmatter (default: true)
  * @returns Result containing extracted frontmatter data
  */
 export function $convertFromEnhancedMarkdownString(
   markdown: string,
   transformers?: Array<Transformer>,
-  options: EnhancedImportOptions = {}
+  node?: ElementNode,
+  preserveNewLines: boolean = true,
+  extractFrontmatter: boolean = true
 ): EnhancedImportResult {
-  const {
-    preserveNewLines = true,
-    extractFrontmatter = true
-  } = options;
-
   let content = markdown;
   let frontmatter: FrontmatterData | null = null;
   let originalContent: string | undefined;
@@ -71,7 +71,7 @@ export function $convertFromEnhancedMarkdownString(
   }
 
   // Import the content using standard Lexical markdown import
-  $convertFromMarkdownString(content, transformers, undefined, preserveNewLines);
+  $convertFromMarkdownString(content, transformers, node, preserveNewLines);
 
   return {
     frontmatter,

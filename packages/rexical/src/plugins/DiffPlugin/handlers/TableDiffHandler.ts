@@ -177,7 +177,7 @@ export class TableDiffHandler implements DiffNodeHandler {
 
               // Apply the new content from the target
               if (targetCellMarkdown.trim()) {
-                $convertFromEnhancedMarkdownString(targetCellMarkdown, transformers, liveCell, { preserveNewLines: true, extractFrontmatter: false });
+                $convertFromEnhancedMarkdownString(targetCellMarkdown, transformers, liveCell, true, false);
               }
             }
           }
@@ -287,7 +287,7 @@ export class TableDiffHandler implements DiffNodeHandler {
           if (originalMarkdown.trim()) {
             // Parse the markdown back into the cell
             // Use the same transformers that were used originally
-            $convertFromEnhancedMarkdownString(originalMarkdown, MARKDOWN_TRANSFORMERS, cell, { preserveNewLines: true, extractFrontmatter: false });
+            $convertFromEnhancedMarkdownString(originalMarkdown, MARKDOWN_TRANSFORMERS, cell, true, false);
           }
 
           // Clear the diff state and original markdown

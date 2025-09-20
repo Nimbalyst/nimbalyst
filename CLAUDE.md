@@ -1,4 +1,4 @@
-# CLAUDE.md
+ # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -208,3 +208,68 @@ The Preditor app uses **PGLite** (PostgreSQL in WebAssembly) for all data storag
 - **Context menus**: Right-click files for rename, delete, open in new window
 - **File watching**: Automatic updates when files change on disk
 - **Recent files**: Quick access to recently opened files in projects
+
+## Agentic Planning System
+
+The repository uses a structured markdown-based planning system for agent-led development workstreams. Plans are stored as markdown files with YAML frontmatter metadata.
+
+### Plan Document Location
+- **Directory**: All plans are stored in the `plans/` folder at the repository root
+- **File naming**: Use descriptive kebab-case names (e.g., `agentic-markdown-planning-system.md`)
+- **Single source of truth**: Plans serve as the authoritative record for features, bugs, and development tasks
+
+### Plan Metadata Structure
+Every plan document MUST include YAML frontmatter with the following fields:
+
+```yaml
+---
+planStatus:
+  planId: plan-[unique-identifier]  # Unique identifier for the plan
+  title: [Plan Title]                # Human-readable title
+  status: [status]                   # Current status (see values below)
+  planType: [type]                   # Type of plan (see values below)
+  priority: [priority]               # Priority level: low | medium | high | critical
+  owner: [username]                  # Primary owner/assignee
+  stakeholders:                      # List of stakeholders
+    - [stakeholder1]
+    - [stakeholder2]
+  tags:                              # Relevant tags for categorization
+    - [tag1]
+    - [tag2]
+  created: "YYYY-MM-DD"             # Creation date
+  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"  # Last update timestamp
+  progress: [0-100]                  # Completion percentage
+  dueDate: "YYYY-MM-DD"              # Due date (optional)
+  startDate: "YYYY-MM-DD"            # Start date (optional)
+---
+```
+
+### Status Values
+- `draft`: Initial planning phase
+- `ready-for-development`: Approved and ready for implementation
+- `in-development`: Currently being worked on
+- `in-review`: Implementation complete, pending review
+- `completed`: Successfully completed
+- `rejected`: Plan has been rejected or cancelled
+- `blocked`: Progress blocked by dependencies
+
+### Plan Types
+- `feature`: New feature development
+- `bug-fix`: Bug fix or issue resolution
+- `refactor`: Code refactoring/improvement
+- `system-design`: Architecture/design work
+- `research`: Research/investigation task
+
+### Plan Document Structure
+After the frontmatter, plans should include:
+1. **Title** with plan status indicator comment: `<!-- plan-status -->`
+2. **Goals** section outlining objectives
+3. **System Overview** or problem description
+4. **Implementation details** as needed
+5. **Acceptance criteria** when applicable
+
+### Working with Plans
+- **Creating plans**: Always include complete frontmatter when creating new plans
+- **Updating plans**: Preserve user edits, append updates rather than overwriting
+- **Status tracking**: Update `status`, `progress`, and `updated` fields as work progresses
+- **Collaboration**: Plans support both human and agent contributors
