@@ -9,8 +9,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 import {
-  $convertFromMarkdownString,
-  $convertToMarkdownString,
   TRANSFORMERS,
 } from '@lexical/markdown';
 import {parsePatch} from 'diff';
@@ -22,6 +20,7 @@ import {
   applyParsedDiffToMarkdown,
   generateUnifiedDiff,
 } from '../../core/standardDiffFormat';
+import { $convertFromEnhancedMarkdownString } from "@/markdown";
 
 /**
  * Utility function to set up markdown diff tests.
@@ -57,12 +56,10 @@ function setupMarkdownDiffTest(
     () => {
       const root = $getRoot();
       root.clear(); // Clear is OK here as we're initializing the test
-      $convertFromMarkdownString(
+        $convertFromEnhancedMarkdownString(
         originalMarkdown,
         TRANSFORMERS,
         root,
-        true,
-        false,
       );
     },
     {discrete: true},

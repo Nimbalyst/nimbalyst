@@ -3,7 +3,16 @@ import { logger } from './utils/logger';
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
-import { StravuEditor, TOGGLE_SEARCH_COMMAND, aiChatBridge, APPROVE_DIFF_COMMAND, REJECT_DIFF_COMMAND } from 'rexical';
+import {
+  StravuEditor,
+  TOGGLE_SEARCH_COMMAND,
+  aiChatBridge,
+  APPROVE_DIFF_COMMAND,
+  REJECT_DIFF_COMMAND,
+  parseFrontmatter,
+  serializeWithFrontmatter,
+  type FrontmatterData,
+} from 'rexical';
 import type { LexicalCommand, ConfigTheme, TextReplacement } from 'rexical';
 // Import styles - handled by vite plugin for both dev and prod
 import 'rexical/styles';
@@ -29,8 +38,58 @@ import { TabManager } from './components/TabManager/TabManager';
 import { useTabPreferences } from './hooks/useTabPreferences';
 import { useTabs } from './hooks/useTabs';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
+import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
 import './WorkspaceWelcome.css';
 import './components/AIModels/AIModels.css';
+
+const PLAN_STATUS_KEYS = new Set([
+  'planId',
+  'title',
+  'status',
+  'state',
+  'planType',
+  'priority',
+  'owner',
+  'stakeholders',
+  'tags',
+  'created',
+  'updated',
+  'dueDate',
+  'startDate',
+  'progress',
+]);
+
+function mergeFrontmatterData(
+  existing: FrontmatterData | undefined,
+  updates: Partial<FrontmatterData>,
+): FrontmatterData {
+  const result: FrontmatterData = existing ? { ...existing } : {};
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === undefined) {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      result[key] = value;
+      continue;
+    }
+
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const currentValue = result[key];
+      const nestedExisting = (currentValue && typeof currentValue === 'object' && !Array.isArray(currentValue))
+        ? (currentValue as FrontmatterData)
+        : {};
+
+      result[key] = mergeFrontmatterData(nestedExisting, value as Partial<FrontmatterData>);
+      continue;
+    }
+
+    result[key] = value;
+  }
+
+  return result;
+}
 
 // Logging configuration - control which categories are logged
 const LOG_CONFIG = {
@@ -140,12 +199,13 @@ declare global {
   }
 }
 
-// Register the DocumentLinkPlugin once at module level
-// This provides the Electron-specific document service to the plugin
-let documentLinkPluginRegistered = false;
-if (!documentLinkPluginRegistered) {
+// Register plugins once at module level
+// These provide Electron-specific services to the plugins
+let pluginsRegistered = false;
+if (!pluginsRegistered) {
   registerDocumentLinkPlugin();
-  documentLinkPluginRegistered = true;
+  registerPlanStatusPlugin();
+  pluginsRegistered = true;
 }
 
 export default function App() {
@@ -327,7 +387,7 @@ export default function App() {
               }
 
               // Now save the content
-              const result = await window.electronAPI.saveFile(tab.content);
+              const result = await window.electronAPI.saveFile(tab.content, tab.filePath);
               if (result && result.success) {
                 // Mark the time we saved to ignore file change events
                 lastSaveTimeRef.current = Date.now();
@@ -405,7 +465,7 @@ export default function App() {
         if (isDirtyRef.current && getContentRef.current && currentFilePath && window.electronAPI) {
           const content = getContentRef.current();
           // Fire and forget - don't await
-          window.electronAPI.saveFile(content).then(result => {
+          window.electronAPI.saveFile(content, currentFilePath).then(result => {
             if (result && result.success) {
               // Mark the time we saved to ignore file change events
               lastSaveTimeRef.current = Date.now();
@@ -427,7 +487,7 @@ export default function App() {
       // Final save attempt on unmount
       if (isDirtyRef.current && getContentRef.current && currentFilePath && window.electronAPI) {
         const content = getContentRef.current();
-        window.electronAPI.saveFile(content).catch(error => {
+        window.electronAPI.saveFile(content, currentFilePath).catch(error => {
           console.error('[UNMOUNT] Failed to save:', error);
         });
       }
@@ -727,8 +787,8 @@ export default function App() {
     }
 
     try {
-      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Calling electronAPI.saveFile');
-      const result = await window.electronAPI.saveFile(content);
+      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Calling electronAPI.saveFile with path:', filePath);
+      const result = await window.electronAPI.saveFile(content, filePath);
       if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Save result:', result);
       if (result) {
         // Mark the time we saved to ignore file change events
@@ -1828,7 +1888,7 @@ export default function App() {
             if (isDirtyRef.current) {
               const content = getContentRef.current();
               if (LOG_CONFIG.THEME) console.log('[THEME] Dirty before theme switch. Saving to disk...');
-              const result = await window.electronAPI?.saveFile(content);
+              const result = await window.electronAPI?.saveFile(content, currentFilePath);
               if (result?.success) {
                 lastSaveTimeRef.current = Date.now();
                 isDirtyRef.current = false;
@@ -2079,6 +2139,147 @@ export default function App() {
         console.log('MCP navigateTo request:', { line, column });
         // TODO: Implement navigation to specific line/column in editor
         // This would require adding a navigation command to the editor
+      }));
+    }
+
+    // AI Tool handlers for document manipulation
+    if (window.electronAPI.onAIApplyDiff) {
+      cleanupFns.push(window.electronAPI.onAIApplyDiff(async ({ replacements, resultChannel }) => {
+        console.log('AI applyDiff request:', replacements);
+        try {
+          const result = await aiChatBridge.applyReplacements(replacements);
+          const finalResult = result || { success: false, error: 'No result returned from diff application' };
+
+          if (window.electronAPI.sendAIApplyDiffResult) {
+            const resultToSend = {
+              success: finalResult.success ?? false
+            };
+            if (finalResult.error) {
+              (resultToSend as any).error = finalResult.error;
+            }
+            window.electronAPI.sendAIApplyDiffResult(resultChannel, resultToSend);
+          }
+        } catch (error) {
+          console.error('AI applyDiff error:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+          if (window.electronAPI.sendAIApplyDiffResult) {
+            window.electronAPI.sendAIApplyDiffResult(resultChannel, {
+              success: false,
+              error: errorMessage || 'Unknown error'
+            });
+          }
+        }
+      }));
+    }
+
+    if (window.electronAPI.onAIGetDocumentContent) {
+      cleanupFns.push(window.electronAPI.onAIGetDocumentContent(async ({ resultChannel }) => {
+        console.log('AI getDocumentContent request');
+        try {
+          // Get content from the editor using the ref
+          let content = '';
+          if (getContentRef.current) {
+            content = getContentRef.current();
+          }
+
+          if (window.electronAPI.sendAIGetDocumentContentResult) {
+            window.electronAPI.sendAIGetDocumentContentResult(resultChannel, {
+              content: content || ''
+            });
+          }
+        } catch (error) {
+          console.error('AI getDocumentContent error:', error);
+
+          if (window.electronAPI.sendAIGetDocumentContentResult) {
+            window.electronAPI.sendAIGetDocumentContentResult(resultChannel, {
+              content: ''
+            });
+          }
+        }
+      }));
+    }
+
+    if (window.electronAPI.onAIUpdateFrontmatter) {
+      cleanupFns.push(window.electronAPI.onAIUpdateFrontmatter(async ({ updates, resultChannel }) => {
+        console.log('AI updateFrontmatter request:', updates);
+        try {
+          const currentContent = aiChatBridge.getContent();
+          const { data: existingData } = parseFrontmatter(currentContent);
+
+          const normalizedUpdates: Record<string, unknown> = { ...updates };
+          const planStatusUpdate: Record<string, unknown> = {};
+
+          for (const key of Object.keys(normalizedUpdates)) {
+            if (PLAN_STATUS_KEYS.has(key)) {
+              planStatusUpdate[key] = normalizedUpdates[key];
+              delete normalizedUpdates[key];
+            }
+          }
+
+          if (Object.keys(planStatusUpdate).length > 0) {
+            const existingPlanStatus = existingData?.planStatus;
+            const existingPlanStatusObject =
+              existingPlanStatus && typeof existingPlanStatus === 'object' && !Array.isArray(existingPlanStatus)
+                ? (existingPlanStatus as FrontmatterData)
+                : {};
+
+            normalizedUpdates.planStatus = mergeFrontmatterData(
+              existingPlanStatusObject,
+              planStatusUpdate as Partial<FrontmatterData>,
+            );
+          }
+
+          const mergedData = mergeFrontmatterData(existingData ?? {}, normalizedUpdates as Partial<FrontmatterData>);
+
+          const frontmatterMatch = currentContent.match(/^---\n([\s\S]*?)\n---\n?/);
+          const newFrontmatterBlockBase = serializeWithFrontmatter('', mergedData);
+
+          let replacements: Array<{ oldText: string; newText: string }>;
+
+          if (frontmatterMatch) {
+            const originalFrontmatterBlock = frontmatterMatch[0];
+            const trailingNewlines = originalFrontmatterBlock.match(/\n*$/)?.[0] ?? '';
+            const trimmedBase = newFrontmatterBlockBase.replace(/\s*$/, '');
+            const newFrontmatterBlock = `${trimmedBase}${trailingNewlines || '\n'}`;
+
+            replacements = [{
+              oldText: originalFrontmatterBlock,
+              newText: newFrontmatterBlock,
+            }];
+          } else {
+            const trimmedBase = newFrontmatterBlockBase.replace(/\s*$/, '');
+            const newFrontmatterBlock = `${trimmedBase}\n\n`;
+            replacements = [{
+              oldText: currentContent,
+              newText: `${newFrontmatterBlock}${currentContent}`,
+            }];
+          }
+
+          // Apply the replacement
+          const result = await aiChatBridge.applyReplacements(replacements);
+          const finalResult = result || { success: false, error: 'Failed to update frontmatter' };
+
+          if (window.electronAPI.sendAIUpdateFrontmatterResult) {
+            const resultToSend = {
+              success: finalResult.success ?? false
+            };
+            if (finalResult.error) {
+              (resultToSend as any).error = finalResult.error;
+            }
+            window.electronAPI.sendAIUpdateFrontmatterResult(resultChannel, resultToSend);
+          }
+        } catch (error) {
+          console.error('AI updateFrontmatter error:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+          if (window.electronAPI.sendAIUpdateFrontmatterResult) {
+            window.electronAPI.sendAIUpdateFrontmatterResult(resultChannel, {
+              success: false,
+              error: errorMessage || 'Unknown error'
+            });
+          }
+        }
       }));
     }
 

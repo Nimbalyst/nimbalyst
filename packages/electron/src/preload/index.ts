@@ -148,7 +148,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // File operations
   openFile: () => ipcRenderer.invoke('open-file'),
-  saveFile: (content: string, filePath: string) => ipcRenderer.invoke('save-file', content, filePath),
+  saveFile: (content: string, filePath: string) => {
+    if (!filePath) {
+      throw new Error('saveFile requires a filePath parameter. Use saveFileAs for save dialogs.');
+    }
+    return ipcRenderer.invoke('save-file', content, filePath);
+  },
   saveFileAs: (content: string) => ipcRenderer.invoke('save-file-as', content),
   showErrorDialog: (title: string, message: string) => ipcRenderer.invoke('show-error-dialog', title, message),
 
@@ -320,6 +325,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('ai:performanceMetrics', handler);
     return () => ipcRenderer.removeListener('ai:performanceMetrics', handler);
+  },
+  onAIGetDocumentContent: (callback: (data: { resultChannel: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('ai:getDocumentContent', handler);
+    return () => ipcRenderer.removeListener('ai:getDocumentContent', handler);
+  },
+  onAIUpdateFrontmatter: (callback: (data: { updates: Record<string, any>, resultChannel: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('ai:updateFrontmatter', handler);
+    return () => ipcRenderer.removeListener('ai:updateFrontmatter', handler);
   },
 
   // Additional AI operations that weren't in the first block

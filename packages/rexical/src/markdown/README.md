@@ -33,8 +33,8 @@ Currently, all transformers are loaded together:
 import { STRAVU_TRANSFORMERS } from '@/markdown';
 
 // Use in markdown conversion
-$convertFromMarkdownString(content, STRAVU_TRANSFORMERS);
-$convertToMarkdownString(STRAVU_TRANSFORMERS);
+$convertFromEnhancedMarkdownString(content, STRAVU_TRANSFORMERS);
+$convertToEnhancedMarkdownString(STRAVU_TRANSFORMERS);
 ```
 
 ## Future Plugin-Based Architecture

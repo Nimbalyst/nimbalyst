@@ -41,6 +41,14 @@ export function endStreamingEdit(streamId: string) {
   } catch {}
 }
 
+export function getDocumentContent(): string {
+  const bridge = getBridge();
+  if (typeof bridge.getContent !== 'function') {
+    throw new Error('Editor bridge cannot get content');
+  }
+  return bridge.getContent();
+}
+
 export async function applyReplacements(replacements: TextReplacement[]) {
   const bridge = getBridge();
   if (typeof bridge.applyReplacements !== 'function') {

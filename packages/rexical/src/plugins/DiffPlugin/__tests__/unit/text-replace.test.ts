@@ -12,6 +12,13 @@ import type {Transformer} from '@lexical/markdown';
 
 import {TRANSFORMERS} from '@lexical/markdown';
 import {createTestEditor} from '../utils';
+import {
+  $convertFromEnhancedMarkdownString,
+  $convertToEnhancedMarkdownString,
+} from '../../../../markdown';
+import {parseFrontmatter} from '../../../../markdown/FrontmatterUtils';
+import {MARKDOWN_TEST_TRANSFORMERS} from '../utils/testConfig';
+import {$getRoot} from 'lexical';
 
 import {applyMarkdownReplace, type TextReplacement} from '../../core/diffUtils';
 import {
@@ -196,5 +203,70 @@ describe('Text Replacement Changes', () => {
     );
     assertApproveProducesTarget(result);
     assertRejectProducesOriginal(result);
+  });
+
+  test('updates plan status field in frontmatter', () => {
+    const originalMarkdown = `---\nplanStatus:\n  planType: bug-fix\n---\n\n# statustest\n\nContent before marker.\n\n---\nNot frontmatter block\n`;
+
+    const editor = createTestEditor();
+
+    editor.update(
+      () => {
+        const root = $getRoot();
+        root.clear();
+        $convertFromEnhancedMarkdownString(
+          originalMarkdown,
+          MARKDOWN_TEST_TRANSFORMERS,
+          root,
+          {preserveNewLines: true, extractFrontmatter: false},
+        );
+      },
+      {discrete: true},
+    );
+
+    const actualOriginalMarkdown = editor.getEditorState().read(() =>
+      $convertToEnhancedMarkdownString(MARKDOWN_TEST_TRANSFORMERS, {
+        includeFrontmatter: true,
+        shouldPreserveNewLines: true,
+      }),
+    );
+
+    const frontmatterMatch = actualOriginalMarkdown.match(/^---\n[\s\S]*?\n---\n?/);
+    expect(frontmatterMatch).not.toBeNull();
+    const originalFrontmatter = frontmatterMatch![0];
+    const updatedFrontmatter = originalFrontmatter.replace(
+      'planType: bug-fix',
+      'planType: documentation',
+    );
+
+    const replacements: TextReplacement[] = [
+      {oldText: originalFrontmatter, newText: updatedFrontmatter},
+    ];
+
+    applyMarkdownReplace(
+      editor,
+      actualOriginalMarkdown,
+      replacements,
+      MARKDOWN_TEST_TRANSFORMERS,
+    );
+
+    const resultingMarkdown = editor.getEditorState().read(() =>
+      $convertToEnhancedMarkdownString(MARKDOWN_TEST_TRANSFORMERS, {
+        includeFrontmatter: true,
+        shouldPreserveNewLines: true,
+      }),
+    );
+
+    const expectedMarkdown = actualOriginalMarkdown.replace(
+      originalFrontmatter,
+      updatedFrontmatter,
+    );
+
+    expect(resultingMarkdown).toBe(expectedMarkdown);
+
+    const {content: resultingBody, data: resultingData} = parseFrontmatter(resultingMarkdown);
+    expect(resultingData?.planStatus?.planType).toBe('documentation');
+    expect(resultingBody).toContain('# statustest');
+    expect(resultingBody).toContain('Not frontmatter block');
   });
 });

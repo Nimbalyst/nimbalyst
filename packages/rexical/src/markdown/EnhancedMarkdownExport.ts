@@ -64,7 +64,26 @@ export function $convertToEnhancedMarkdownString(
 
   // Add frontmatter if requested and available
   if (includeFrontmatter) {
-    const frontmatter = $getFrontmatter();
+    let frontmatter = $getFrontmatter() || {};
+
+    // Check if there's a PlanStatusNode and merge its config into frontmatter
+    const root = $getRoot();
+    const children = root.getChildren();
+    for (const child of children) {
+      // Check if this is a PlanStatusNode (by type check, since we can't import it here)
+      if (child.getType() === 'plan-status') {
+        // Use exportJSON to get the node's config
+        const exported = (child as any).exportJSON();
+        if (exported && exported.config) {
+          frontmatter = {
+            ...frontmatter,
+            planStatus: exported.config
+          };
+        }
+        break; // Only process first PlanStatusNode
+      }
+    }
+
     return serializeWithFrontmatter(markdownContent, frontmatter);
   }
 

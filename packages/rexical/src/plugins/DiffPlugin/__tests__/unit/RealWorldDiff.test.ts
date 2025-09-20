@@ -7,14 +7,13 @@
  */
 
 import {
-  $convertFromMarkdownString,
-  $convertToMarkdownString,
   TRANSFORMERS,
 } from '@lexical/markdown';
 import {createHeadlessEditor} from '@lexical/headless';
 import {$getRoot} from 'lexical';
 import type {SerializedLexicalNode} from 'lexical';
 import {createTestEditor} from '../utils';
+import { $convertFromEnhancedMarkdownString } from "@/markdown";
 
 // The original content
 const ORIGINAL_MARKDOWN = `# Initial Header
@@ -69,7 +68,7 @@ describe('Real World Diff Analysis', () => {
       () => {
         const root = $getRoot();
         root.clear();
-        $convertFromMarkdownString(markdown, TRANSFORMERS, root, true, false);
+          $convertFromEnhancedMarkdownString(markdown, TRANSFORMERS, root);
       },
       {discrete: true},
     );
@@ -116,12 +115,10 @@ describe('Real World Diff Analysis', () => {
         console.log('Root after clear:', root.getChildrenSize());
 
         try {
-          $convertFromMarkdownString(
+            $convertFromEnhancedMarkdownString(
             simpleMarkdown,
             TRANSFORMERS,
-            root,
-            true,
-            false,
+            root
           );
           console.log('Root after conversion:', root.getChildrenSize());
           console.log(

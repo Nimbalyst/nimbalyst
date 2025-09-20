@@ -150,6 +150,7 @@ import {
   DiffError,
 } from './DiffError';
 import {createWindowedTreeMatcher, NodeDiff} from './TreeMatcher';
+import { applyFrontmatterUpdateIfNeeded } from './diffFrontmatter';
 
 // Initialize a simple registry (in future this could be external)
 let _handlersInitialized = false;
@@ -179,7 +180,46 @@ function escapeRegExp(string: string): string {
 export type TextReplacement = {
   oldText: string;
   newText: string;
+} & Record<string, unknown>;
+
+export type ReplacementLike = {
+  oldText?: string;
+  newText?: string;
+  search?: string;
+  replace?: string;
+  [key: string]: unknown;
 };
+
+export function resolveReplacementTexts(replacement: ReplacementLike): {
+  oldText: string;
+  newText: string;
+} {
+  let oldText = typeof (replacement as any).oldText === 'string'
+    ? (replacement as any).oldText as string
+    : undefined;
+  let newText = typeof (replacement as any).newText === 'string'
+    ? (replacement as any).newText as string
+    : undefined;
+
+  if (oldText === undefined && typeof (replacement as any).search === 'string') {
+    oldText = (replacement as any).search as string;
+    (replacement as any).oldText = oldText;
+  }
+
+  if (newText === undefined && typeof (replacement as any).replace === 'string') {
+    newText = (replacement as any).replace as string;
+    (replacement as any).newText = newText;
+  }
+
+  if (typeof oldText !== 'string' || typeof newText !== 'string') {
+    throw createInvalidDiffError('Invalid replacement received: missing oldText/newText', {
+      replacement,
+    });
+  }
+
+  return {oldText, newText};
+}
+
 
 /**
  * Normalize whitespace for more flexible matching
@@ -210,9 +250,10 @@ function _applyMarkdownEdits(
   let newMarkdown = originalMarkdown;
 
   for (const replacement of replacements) {
+    const {oldText, newText} = resolveReplacementTexts(replacement);
     // Normalize whitespace for matching
     const normalizedOriginal = normalizeWhitespace(originalMarkdown);
-    const normalizedOldText = normalizeWhitespace(replacement.oldText);
+    const normalizedOldText = normalizeWhitespace(oldText);
 
     // Debug: Replacement attempt details
     // console.log('\n🔍 Attempting replacement:');
@@ -222,12 +263,12 @@ function _applyMarkdownEdits(
     // console.log('  Normalized match found:', normalizedOriginal.includes(normalizedOldText));
 
     // Try exact match first
-    if (originalMarkdown.includes(replacement.oldText)) {
+    if (originalMarkdown.includes(oldText)) {
       // console.log('  ✅ Using exact match replacement');
       // Apply the replacement - replace all occurrences
       newMarkdown = newMarkdown.replace(
-        new RegExp(escapeRegExp(replacement.oldText), 'g'),
-        replacement.newText,
+        new RegExp(escapeRegExp(oldText), 'g'),
+        newText,
       );
     }
     // Try normalized match if exact match fails
@@ -268,7 +309,7 @@ function _applyMarkdownEdits(
           }
 
           const afterReplacement = originalMarkdown.substring(endPos);
-          newMarkdown = beforeReplacement + replacement.newText + afterReplacement;
+          newMarkdown = beforeReplacement + newText + afterReplacement;
           found = true;
           break;
         }
@@ -278,7 +319,11 @@ function _applyMarkdownEdits(
 
       if (!found) {
         console.log('  ❌ Normalized replacement position not found');
-        throw createTextReplacementError(originalMarkdown, replacement);
+        throw createTextReplacementError(originalMarkdown, {
+          ...replacement,
+          oldText,
+          newText,
+        });
       }
     } else {
       console.log('  ❌ Text not found in document');
@@ -286,7 +331,7 @@ function _applyMarkdownEdits(
       console.log('  Document preview (last 500 chars):', originalMarkdown.substring(Math.max(0, originalMarkdown.length - 500)));
 
       // Try to find similar text for debugging
-      const searchText = replacement.oldText.substring(0, 50);
+      const searchText = oldText.substring(0, 50);
       const similarIndex = originalMarkdown.indexOf(searchText);
       if (similarIndex >= 0) {
         const contextStart = Math.max(0, similarIndex - 20);
@@ -295,7 +340,11 @@ function _applyMarkdownEdits(
         console.log('  Context:', JSON.stringify(originalMarkdown.substring(contextStart, contextEnd)));
       }
 
-      throw createTextReplacementError(originalMarkdown, replacement);
+      throw createTextReplacementError(originalMarkdown, {
+        ...replacement,
+        oldText,
+        newText,
+      });
     }
   }
   return newMarkdown;
@@ -312,6 +361,15 @@ export function applyMarkdownReplace(
   replacements: TextReplacement[],
   transformers: Transformer[],
 ): void {
+  const normalizedReplacements = replacements.map((replacement) => {
+    const {oldText, newText} = resolveReplacementTexts(replacement);
+    return {
+      ...(replacement as any),
+      oldText,
+      newText,
+    } as TextReplacement;
+  });
+
   // Debug: Starting markdown replace
   // console.log('\n🔧 STARTING MARKDOWN REPLACE...');
   // console.log('Replacements:', JSON.stringify(replacements, null, 2));
@@ -321,7 +379,7 @@ export function applyMarkdownReplace(
 
   try {
     // Try to apply text replacements to get the target markdown
-    newMarkdown = _applyMarkdownEdits(originalMarkdown, replacements);
+    newMarkdown = _applyMarkdownEdits(originalMarkdown, normalizedReplacements);
     // console.log('📝 Text replacements applied successfully');
   } catch (error) {
     // Text replacement failed - construct the new markdown from the replacements
@@ -333,11 +391,11 @@ export function applyMarkdownReplace(
     // Build the new markdown by applying replacements in a best-effort manner
     // For now, we'll use the first replacement's newText as a hint
     // The TreeMatcher will handle the actual structural diff
-    if (replacements.length > 0 && replacements[0].newText) {
+    if (normalizedReplacements.length > 0 && normalizedReplacements[0].newText) {
       // Try to construct a reasonable target markdown
       // This is a fallback - TreeMatcher will do the real work
-      const oldText = replacements[0].oldText;
-      const newText = replacements[0].newText;
+      const oldText = normalizedReplacements[0].oldText;
+      const newText = normalizedReplacements[0].newText;
 
       // For list replacements, try to identify and replace the list
       if (oldText.startsWith('- ') && newText.startsWith('- ')) {
@@ -402,8 +460,17 @@ export function applyMarkdownReplace(
     }
   }
 
+  let {frontmatterUpdated, bodyChanged} = applyFrontmatterUpdateIfNeeded(editor, originalMarkdown, newMarkdown);
+
+  if (!bodyChanged && frontmatterUpdated) {
+    return;
+  }
+
   if (originalMarkdown === newMarkdown) {
-    throw new Error('No changes detected after applying replacements');
+    if (textReplacementError) {
+      throw textReplacementError;
+    }
+    return;
   }
 
   // Debug: Markdown diff info
@@ -440,7 +507,7 @@ export function applyMarkdownReplace(
     if (error instanceof DiffError) {
       error.context.additionalInfo = {
         ...error.context.additionalInfo,
-        replacements,
+      replacements: normalizedReplacements,
       };
       throw error;
     } else {
@@ -1197,7 +1264,7 @@ export function $applyChildNodeDiff(
 
       if (handler) {
         const result = handler.handleUpdate(context);
-        
+
         // If the handler says not to skip children, we need to recurse
         if (result.handled && result.skipChildren === false && sourceEditor && targetEditor) {
           console.log(`Handler for ${liveNode.getType()} requests recursion into children`);

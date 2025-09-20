@@ -818,10 +818,13 @@ export function AIChat({
     } : undefined;
 
     console.log('[AIChat] Sending document context:', {
-      hasSelection: !!freshDocumentContext.selection,
-      selectionLength: freshDocumentContext.selection?.length,
-      hasCursorPosition: !!freshDocumentContext.cursorPosition,
-      cursorPosition: freshDocumentContext.cursorPosition
+      hasSelection: !!freshDocumentContext?.selection,
+      selectionLength: freshDocumentContext?.selection?.length,
+      hasCursorPosition: !!freshDocumentContext?.cursorPosition,
+      cursorPosition: freshDocumentContext?.cursorPosition,
+      hasContent: !!freshDocumentContext?.content,
+      contentLength: freshDocumentContext?.content?.length,
+      contentPreview: freshDocumentContext?.content?.substring(0, 100)
     });
 
     // If we don't have a session, we can't send a message

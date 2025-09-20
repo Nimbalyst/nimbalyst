@@ -295,12 +295,43 @@ export class AIService {
       }
       
       console.log(`[AIService] Loaded session ${sessionId} with provider: ${session.provider}, model: ${session.model} (took ${perfLog.sessionLoadTime}ms)`);
-      
+
       // Verify we got the right session
       if (session.id !== sessionId) {
         console.error(`[AIService] CRITICAL ERROR: Requested session ${sessionId} but got session ${session.id}!`);
         throw new Error(`Session mismatch: requested ${sessionId} but got ${session.id}`);
       }
+
+      // Comprehensive logging of what we're sending to Claude
+      console.group('🤖 [AIService] Sending message to AI provider');
+      console.log('📝 User Message:', message);
+      console.log('🏢 Provider:', session.provider);
+      console.log('🤖 Model:', session.model || 'default');
+      console.log('📄 Document Context:', {
+        hasDocument: !!documentContext,
+        filePath: documentContext?.filePath || 'none',
+        fileType: documentContext?.fileType || 'none',
+        contentLength: documentContext?.content?.length || 0,
+      });
+
+      if (documentContext?.content) {
+        console.log('📋 Document Content Preview (first 500 chars):',
+          documentContext.content.substring(0, 500) +
+          (documentContext.content.length > 500 ? '...' : ''));
+
+        // Check for frontmatter
+        const frontmatterMatch = documentContext.content.match(/^---\n([\s\S]*?)\n---/);
+        if (frontmatterMatch) {
+          console.log('🏷️ Document Frontmatter:', frontmatterMatch[1]);
+        } else {
+          console.log('⚠️ No frontmatter found in document');
+        }
+      }
+
+      // Show available tools
+      const tools = toolRegistry.getAll();
+      console.log('🔧 Available Tools:', tools.map(t => t.name));
+      console.groupEnd();
 
       perfLog.provider = session.provider;
       perfLog.model = session.model || 'default';
@@ -439,14 +470,15 @@ export class AIService {
         });
 
         // Stream the response
+        console.log('🚀 [AIService] Starting to stream response from provider...');
         for await (const chunk of provider.sendMessage(message, documentContext, session.id, sessionMessages)) {
           chunkCount++;
-          
+
           if (!firstChunkTime) {
             firstChunkTime = Date.now();
             perfLog.timeToFirstChunk = firstChunkTime - startTime;
             console.log(`[AIService] First chunk received after ${perfLog.timeToFirstChunk}ms`);
-            
+
             // Send first chunk metrics
             event.sender.send('ai:performanceMetrics', {
               phase: 'firstChunk',
@@ -470,7 +502,12 @@ export class AIService {
               if (chunk.toolCall) {
                 toolCallCount++;
                 toolCalls.push(chunk.toolCall);
+                console.group('🔨 [AIService] Tool call received from AI');
+                console.log('Tool name:', chunk.toolCall.name);
+                console.log('Tool arguments:', chunk.toolCall.arguments);
+                console.groupEnd();
                 console.log(`[AIService] Tool call #${toolCallCount}: ${chunk.toolCall.name}`);
+                console.log(`[AIService] Tool arguments:`, JSON.stringify(chunk.toolCall.arguments, null, 2));
 
                 const toolName = chunk.toolCall.name;
                 const toolArgs = chunk.toolCall.arguments as Record<string, unknown> | undefined;

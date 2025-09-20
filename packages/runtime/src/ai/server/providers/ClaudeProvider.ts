@@ -65,7 +65,7 @@ export class ClaudeProvider extends BaseAIProvider {
 
     // Build messages array for Anthropic API
     const apiMessages: any[] = [];
-    
+
     // Add existing messages if provided
     if (messages && messages.length > 0) {
       // Convert our message format to Anthropic's format
@@ -75,19 +75,34 @@ export class ClaudeProvider extends BaseAIProvider {
           console.warn('Skipping message with empty content:', msg);
           continue;
         }
-        
+
         apiMessages.push({
           role: msg.role === 'user' ? 'user' : 'assistant',
           content: msg.content
         });
       }
     }
-    
+
     // Add the new user message (ensure it's not empty)
     if (!message || message.trim() === '') {
       throw new Error('Cannot send empty message to Claude API');
     }
     apiMessages.push({ role: 'user', content: message });
+
+    // Comprehensive logging of what we're sending to Claude
+    console.group('🤖 [ClaudeProvider] Preparing API Request to Claude');
+    console.log('📝 System Prompt (first 1000 chars):',
+      systemPrompt.substring(0, 1000) + (systemPrompt.length > 1000 ? '...' : ''));
+    console.log('💬 Messages:', apiMessages.map(m => ({
+      role: m.role,
+      contentPreview: m.content?.substring(0, 100) + (m.content?.length > 100 ? '...' : '')
+    })));
+    console.log('📄 Document Context:', {
+      hasDocument: !!documentContext,
+      filePath: documentContext?.filePath || 'none',
+      contentLength: documentContext?.content?.length || 0
+    });
+    console.groupEnd();
 
     try {
       // Only define tools if we have a document open
@@ -95,30 +110,50 @@ export class ClaudeProvider extends BaseAIProvider {
       // Use the centralized tool system
       const tools = hasDocument ? this.getToolsInAnthropicFormat() : [];
 
+      console.group('🔧 [ClaudeProvider] Tools Configuration');
+      console.log('Has document open:', hasDocument);
+      console.log('Tools available:', tools.map(t => t.name));
+      if (tools.length > 0) {
+        console.log('Tool definitions:', tools);
+      }
+      console.groupEnd();
+
       // Create the message with full conversation history
       if (!this.config.model) {
         throw new Error('No model specified for Claude provider');
       }
-      
+
       // Remove provider prefix from model ID for API call
       const modelId = this.config.model.replace('claude:', '');
       console.log('[ClaudeProvider] sendMessage - model conversion:', {
         original: this.config.model,
         stripped: modelId
       });
-      
+
       console.log('[ClaudeProvider] About to call Anthropic API with model:', modelId);
       console.log('[ClaudeProvider] Stack trace:', new Error().stack);
       
       // Use the stream helper for better usage data support
-      const stream = this.anthropic.messages.stream({
+      const apiRequest = {
         model: modelId,
         max_tokens: this.config.maxTokens || 4000,
         temperature: this.config.temperature || 0,
         system: systemPrompt,
         messages: apiMessages,
         ...(tools.length > 0 ? { tools } : {}),
-      });
+      };
+
+      console.group('🚀 [ClaudeProvider] Final API Request');
+      console.log('Model:', apiRequest.model);
+      console.log('Max tokens:', apiRequest.max_tokens);
+      console.log('Temperature:', apiRequest.temperature);
+      console.log('Has tools:', !!apiRequest.tools);
+      console.log('Number of tools:', apiRequest.tools?.length || 0);
+      console.log('System prompt length:', apiRequest.system.length);
+      console.log('Number of messages:', apiRequest.messages.length);
+      console.groupEnd();
+
+      const stream = this.anthropic.messages.stream(apiRequest);
 
       // Set the abort signal
       if (this.abortController.signal) {
@@ -291,30 +326,41 @@ export class ClaudeProvider extends BaseAIProvider {
               // Prepare optional execution result for tools that run immediately
               let executionResult: any = undefined;
 
-              if (currentToolUse.name === 'applyDiff') {
-                const replacements = (currentToolUse.input as any)?.replacements;
-                if (!Array.isArray(replacements) || replacements.length === 0) {
-                  try {
-                    console.warn('[ClaudeProvider] applyDiff tool call missing replacements', {
-                      inputKeys: currentToolUse.input ? Object.keys(currentToolUse.input) : []
-                    });
-                  } catch {}
-                } else {
-                  try {
-                    console.info('[ClaudeProvider] applyDiff replacements received', {
-                      count: replacements.length
-                    });
-                  } catch {}
-                }
+              // Execute ALL tools through the centralized tool handler
+              if (this.toolHandler && currentToolUse.name !== 'streamContent') {
+                console.log(`[ClaudeProvider] Executing tool: ${currentToolUse.name}`, currentToolUse.input);
+                console.log('[ClaudeProvider] Tool handler available:', !!this.toolHandler);
+                console.log('[ClaudeProvider] Tool handler.executeTool available:', !!(this.toolHandler as any).executeTool);
 
-                if (this.toolHandler) {
-                  executionResult = await this.toolHandler.applyDiff(currentToolUse.input);
-                  try {
-                    console.info('[ClaudeProvider] applyDiff execution result', executionResult);
-                  } catch {}
+                try {
+                  // Use the centralized tool executor if available
+                  if (this.toolHandler.executeTool) {
+                    executionResult = await this.toolHandler.executeTool(currentToolUse.name, currentToolUse.input);
+                  } else {
+                    // Fallback to specific tool methods
+                    switch (currentToolUse.name) {
+                      case 'applyDiff':
+                        executionResult = await this.toolHandler.applyDiff(currentToolUse.input);
+                        break;
+                      case 'getDocumentContent':
+                        if (this.toolHandler.getDocumentContent) {
+                          executionResult = await this.toolHandler.getDocumentContent(currentToolUse.input);
+                        }
+                        break;
+                      case 'updateFrontmatter':
+                        if (this.toolHandler.updateFrontmatter) {
+                          executionResult = await this.toolHandler.updateFrontmatter(currentToolUse.input);
+                        }
+                        break;
+                      default:
+                        console.warn(`[ClaudeProvider] Unknown tool: ${currentToolUse.name}`);
+                    }
+                  }
 
-                  if (!executionResult?.success) {
-                    const errorMessage = executionResult?.error || 'applyDiff execution failed';
+                  console.log(`[ClaudeProvider] Tool execution result for ${currentToolUse.name}:`, executionResult);
+
+                  if (executionResult && !executionResult.success) {
+                    const errorMessage = executionResult.error || `${currentToolUse.name} execution failed`;
                     yield {
                       type: 'tool_error',
                       toolError: {
@@ -325,6 +371,17 @@ export class ClaudeProvider extends BaseAIProvider {
                       }
                     };
                   }
+                } catch (error) {
+                  console.error(`[ClaudeProvider] Error executing tool ${currentToolUse.name}:`, error);
+                  yield {
+                    type: 'tool_error',
+                    toolError: {
+                      name: currentToolUse.name,
+                      arguments: currentToolUse.input,
+                      error: error instanceof Error ? error.message : 'Tool execution failed',
+                      result: { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+                    }
+                  };
                 }
               }
 

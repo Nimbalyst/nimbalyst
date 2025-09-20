@@ -6,8 +6,7 @@
  * - Preserve frontmatter data during editor operations
  */
 
-import { $convertFromMarkdownString } from '@lexical/markdown';
-import type { Transformer } from '@lexical/markdown';
+import { $convertFromMarkdownString, Transformer } from '@lexical/markdown';
 
 import {
   $setFrontmatter,

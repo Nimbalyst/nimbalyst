@@ -62,6 +62,8 @@ import { DiffPlugin } from './plugins/DiffPlugin';
 import { AIChatIntegrationPlugin } from './plugins/AIChatIntegrationPlugin';
 import ContentEditable from './ui/ContentEditable';
 import { AnchorProvider } from './context/AnchorContext';
+import { FrontmatterProvider } from './context/FrontmatterContext';
+import { $getFrontmatter, $setFrontmatter } from './markdown/FrontmatterUtils';
 import { useRuntimeSettings } from './context/RuntimeSettingsContext';
 import { PluginManager } from './plugins/PluginManager';
 // Use standard Prism-based code highlighting for now
@@ -130,6 +132,18 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     () => config.markdownTransformers ?? getEditorTransformers(),
     [config.markdownTransformers],
   );
+
+  // Create frontmatter utility functions that use the editor instance
+  const frontmatterUtils = useMemo(() => ({
+    $getFrontmatter: () => {
+      // This will be called from within editor.update() in the plugin
+      return $getFrontmatter();
+    },
+    $setFrontmatter: (data: any) => {
+      // This will be called from within editor.update() in the plugin
+      $setFrontmatter(data);
+    }
+  }), []);
 
   // Expose markdown content getter
   useEffect(() => {
@@ -285,10 +299,12 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             <AIChatIntegrationPlugin />
             <KanbanBoardPlugin />
             {/* Render any custom plugins including DocumentLinkPlugin when registered */}
-            {/* Provide floating anchor element to dynamic plugins */}
-            <AnchorProvider value={floatingAnchorElem}>
-              <PluginManager />
-            </AnchorProvider>
+            {/* Provide floating anchor element and frontmatter utilities to dynamic plugins */}
+            <FrontmatterProvider value={frontmatterUtils}>
+              <AnchorProvider value={floatingAnchorElem}>
+                <PluginManager />
+              </AnchorProvider>
+            </FrontmatterProvider>
 
             {floatingAnchorElem && (
               <>

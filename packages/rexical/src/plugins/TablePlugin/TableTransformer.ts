@@ -165,7 +165,13 @@ export const TABLE_TRANSFORMER: ElementTransformer = {
       previousSibling.append(...table.getChildren());
       parentNode.remove();
     } else {
-      parentNode.replace(table);
+        try {
+            parentNode.replace(table);
+        } catch (e) {
+
+            console.error('Error replacing node with table:', match, e);
+            throw e;
+        }
     }
   },
   type: 'element',

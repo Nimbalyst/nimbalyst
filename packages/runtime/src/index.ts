@@ -15,3 +15,5 @@ export * from './storage/repositories/AISessionsRepository';
 // Plugins
 export { DocumentLinkPlugin } from './plugins/DocumentLinkPlugin';
 export { DocumentReferenceNode, DocumentReferenceTransformer, $createDocumentReferenceNode, $isDocumentReferenceNode } from './plugins/DocumentLinkPlugin/DocumentLinkNode';
+export { planStatusPluginPackage, PlanStatusNode, $createPlanStatusNode, $isPlanStatusNode, PLAN_STATUS_TRANSFORMER, INSERT_PLAN_STATUS_COMMAND } from './plugins/PlanStatusPlugin';
+export type { PlanStatusPluginProps } from './plugins/PlanStatusPlugin';

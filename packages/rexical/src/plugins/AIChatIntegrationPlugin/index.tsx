@@ -49,6 +49,24 @@ class AIChatIntegrationBridge extends EventTarget {
     return AIChatIntegrationBridge.instance;
   }
 
+  getContent(): string {
+    // Dispatch an event to get content
+    const event = new CustomEvent('aiChatGetContent');
+    let content = '';
+
+    // Create a synchronous handler
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent<{ content: string }>;
+      content = customEvent.detail?.content || '';
+    };
+
+    // This will be handled synchronously by the plugin
+    this.addEventListener('aiChatContentResult', handler, { once: true });
+    this.dispatchEvent(event);
+
+    return content;
+  }
+
   applyReplacements(replacements: TextReplacement[]): Promise<{ success: boolean; error?: string }> {
     return new Promise((resolve) => {
       // Create a one-time listener for the result
@@ -354,10 +372,23 @@ export function AIChatIntegrationPlugin(): null {
       }
     };
 
+    // Add handler for getting content
+    const handleGetContent = () => {
+      editor.getEditorState().read(() => {
+        const transformers = getEditorTransformers();
+        const markdown = $convertToEnhancedMarkdownString(transformers, { includeFrontmatter: true });
+        bridge.dispatchEvent(new CustomEvent('aiChatContentResult', {
+          detail: { content: markdown }
+        }));
+      });
+    };
+
     bridge.addEventListener('aiChatEvent', handleAIChatEvent);
+    bridge.addEventListener('aiChatGetContent', handleGetContent);
 
     return () => {
       bridge.removeEventListener('aiChatEvent', handleAIChatEvent);
+      bridge.removeEventListener('aiChatGetContent', handleGetContent);
       // Clean up any active stream processors
       streamProcessorsRef.current.clear();
     };

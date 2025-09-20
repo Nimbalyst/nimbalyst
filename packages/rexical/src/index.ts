@@ -62,14 +62,31 @@ export { pluginRegistry } from './plugins/PluginRegistry';
 export { PluginManager } from './plugins/PluginManager';
 
 // Markdown utilities
-export { 
-  MarkdownStreamProcessor, 
-  createHeadlessEditorFromEditor, 
+export {
+  MarkdownStreamProcessor,
+  createHeadlessEditorFromEditor,
   markdownToJSONSync,
   type InsertMode,
   MARKDOWN_TRANSFORMERS,
   getEditorTransformers
 } from './markdown';
+
+// Frontmatter utilities
+export {
+  $getFrontmatter,
+  $setFrontmatter,
+  parseFrontmatter,
+  serializeWithFrontmatter,
+  hasFrontmatter,
+  isValidFrontmatter,
+  type FrontmatterData
+} from './markdown/FrontmatterUtils';
+
+// Additional frontmatter utilities from EnhancedMarkdownImport
+export {
+  $mergeFrontmatter,
+  $updateFrontmatter
+} from './markdown/EnhancedMarkdownImport';
 
 // Diff plugin and hook
 export { DiffPlugin, useDiffCommands, APPLY_MARKDOWN_REPLACE_COMMAND } from './plugins/DiffPlugin';
@@ -90,6 +107,9 @@ export { aiChatBridge } from './plugins/AIChatIntegrationPlugin';
 
 // Anchor context for floating UI consumers
 export { AnchorProvider, AnchorContext, useAnchorElem } from './context/AnchorContext';
+
+// Frontmatter context for plugins that need frontmatter access
+export { FrontmatterProvider, useFrontmatterUtils, type FrontmatterUtils } from './context/FrontmatterContext';
 
 // Typeahead components
 export { TypeaheadMenuPlugin } from './plugins/TypeaheadPlugin/TypeaheadMenuPlugin';

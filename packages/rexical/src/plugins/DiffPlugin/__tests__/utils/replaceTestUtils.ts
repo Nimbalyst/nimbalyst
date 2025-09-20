@@ -87,14 +87,14 @@ export function setupMarkdownReplaceTest(
     // Use negative lookbehind to avoid matching spaces that are part of escape sequences
     const pattern = escaped.replace(/(?<!\\)[ \u00A0]/g, '[ \u00A0]');
     const regex = new RegExp(pattern, 'g');
-    
+
     // Check if the text exists in the markdown
     if (!regex.test(targetMarkdown)) {
       throw new Error(
         `Text replacement failed: Old text "${replacement.oldText}" not found in original markdown`,
       );
     }
-    
+
     targetMarkdown = targetMarkdown.replace(regex, replacement.newText);
   }
 
@@ -131,12 +131,9 @@ export function setupMarkdownReplaceTest(
     () => {
       const root = $getRoot();
       root.clear();
-      $convertFromMarkdownString(
+      $convertFromEnhancedMarkdownString(
         actualOriginalMarkdown,
-        transformers,
-        root,
-        true,
-        false,
+        transformers
       );
     },
     {discrete: true},
@@ -149,9 +146,7 @@ export function setupMarkdownReplaceTest(
       root.clear();
       $convertFromEnhancedMarkdownString(
         targetMarkdown,
-        transformers,
-        root,
-        { preserveNewLines: true, extractFrontmatter: false }
+        transformers
       );
     },
     {discrete: true},
@@ -183,12 +178,9 @@ export function setupMarkdownReplaceTest(
     () => {
       const root = $getRoot();
       root.clear();
-      $convertFromMarkdownString(
+        $convertFromEnhancedMarkdownString(
         actualOriginalMarkdown,
-        transformers,
-        root,
-        true,
-        false,
+        transformers
       );
     },
     {discrete: true},
@@ -205,12 +197,9 @@ export function setupMarkdownReplaceTest(
     () => {
       const root = $getRoot();
       root.clear();
-      $convertFromMarkdownString(
+      $convertFromEnhancedMarkdownString(
         actualOriginalMarkdown,
-        transformers,
-        root,
-        true,
-        false,
+        transformers
       );
     },
     {discrete: true},

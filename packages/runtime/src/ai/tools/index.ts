@@ -1,6 +1,7 @@
 import type { StreamingConfig } from '../types';
-import { applyReplacements, endStreamingEdit, startStreamingEdit, streamContent } from '../editorBridge';
+import { applyReplacements, endStreamingEdit, startStreamingEdit, streamContent, getDocumentContent } from '../editorBridge';
 import { FILE_TOOLS } from './fileTools';
+import { DOCUMENT_TOOLS } from './documentTools';
 
 export type ToolSource = 'runtime' | 'renderer' | 'main';
 
@@ -79,6 +80,8 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     },
     source: 'runtime',
   },
+  // Add document tools
+  ...DOCUMENT_TOOLS,
   // Add file operation tools
   ...FILE_TOOLS,
 ];
@@ -251,6 +254,10 @@ export class RuntimeToolExecutor {
         return await this.executeApplyDiff(args);
       case 'streamContent':
         return await this.executeStreamContent(args);
+      case 'getDocumentContent':
+        return await this.executeGetDocumentContent(args);
+      case 'updateFrontmatter':
+        return await this.executeUpdateFrontmatter(args);
       default:
         throw new Error(`Tool ${tool.name} has no handler`);
     }
@@ -307,6 +314,105 @@ export class RuntimeToolExecutor {
 
     endStreamingEdit(streamId);
     return { success: true };
+  }
+
+  private async executeGetDocumentContent(args: any): Promise<{ content: string }> {
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[runtime][tool] getDocumentContent called');
+      const content = getDocumentContent();
+      // eslint-disable-next-line no-console
+      console.log('[runtime][tool] Got content, length:', content?.length);
+      return { content };
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[runtime][tool] getDocumentContent error:', error);
+      throw error;
+    }
+  }
+
+  private async executeUpdateFrontmatter(args: {
+    updates: Record<string, any>;
+  }): Promise<any> {
+    // eslint-disable-next-line no-console
+    console.log('[runtime][tool] updateFrontmatter called with updates:', args?.updates);
+
+    if (!args || !args.updates) {
+      throw new Error('updateFrontmatter requires updates object');
+    }
+
+    try {
+      // Get current document content
+      const content = getDocumentContent();
+
+      // Find frontmatter
+      const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+      if (!frontmatterMatch) {
+        // If no frontmatter exists, create one at the beginning
+        const newFrontmatter = `---\n${Object.entries(args.updates)
+          .map(([key, value]) => `${key}: "${value}"`)
+          .join('\n')}\n---\n\n`;
+
+        // Use streamContent to add frontmatter at the beginning
+        const streamId = `frontmatter_${Date.now()}`;
+        startStreamingEdit({
+          id: streamId,
+          position: 'cursor',
+          mode: 'insert',
+        });
+        streamContent(streamId, newFrontmatter);
+        endStreamingEdit(streamId);
+
+        const result = { success: true };
+
+        // eslint-disable-next-line no-console
+        console.log('[runtime][tool] Created new frontmatter, result:', result);
+        return result;
+      }
+
+      const originalFrontmatter = frontmatterMatch[0];
+      let frontmatterContent = frontmatterMatch[1];
+
+      // Update each field in the frontmatter
+      for (const [key, value] of Object.entries(args.updates)) {
+        const fieldRegex = new RegExp(`^${key}:\\s*(.*)$`, 'm');
+        const match = frontmatterContent.match(fieldRegex);
+
+        if (match) {
+          // Replace existing field
+          frontmatterContent = frontmatterContent.replace(
+            fieldRegex,
+            `${key}: "${value}"`
+          );
+        } else {
+          // Add new field
+          frontmatterContent += `\n${key}: "${value}"`;
+        }
+      }
+
+      const newFrontmatter = `---\n${frontmatterContent}\n---`;
+
+      // Apply the replacement
+      const result = await applyReplacements([{
+        oldText: originalFrontmatter,
+        newText: newFrontmatter
+      }]);
+
+      // eslint-disable-next-line no-console
+      console.log('[runtime][tool] updateFrontmatter result:', result);
+
+      if (!result?.success) {
+        const error = new Error(result?.error || 'updateFrontmatter failed');
+        (error as any).toolResult = result;
+        throw error;
+      }
+
+      return result;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('[runtime][tool] updateFrontmatter error:', error);
+      throw error;
+    }
   }
 
   private createCorrelationId(name: string): string {

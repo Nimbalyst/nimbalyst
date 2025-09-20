@@ -1,0 +1,480 @@
+/* Plan Status Component - Compact Design */
+.plan-status-decorator-container {
+  margin: 16px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.plan-status-container {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: visible;
+  transition: box-shadow 0.2s ease;
+}
+
+.plan-status-container:hover {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Main header bar with status */
+.plan-status-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  min-height: 40px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  gap: 12px;
+}
+
+.plan-status-header:hover {
+  background: #fafafa;
+}
+
+/* Plan ID field */
+.plan-status-id {
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  font-size: 13px;
+  color: #6b7280;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: white;
+  transition: all 0.2s;
+  cursor: text;
+}
+
+.plan-status-id:hover {
+  border-color: #3b82f6;
+}
+
+.plan-status-id.editing {
+  border-color: #3b82f6;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+/* Title field */
+.plan-status-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Status badge */
+.plan-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  margin-left: auto;
+  position: relative;
+}
+
+.plan-status-badge:hover {
+  opacity: 0.8;
+}
+
+.plan-status-badge.draft {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.plan-status-badge.planned {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.plan-status-badge.in-progress {
+  background: #fed7aa;
+  color: #c2410c;
+}
+
+.plan-status-badge.review {
+  background: #e9d5ff;
+  color: #7c3aed;
+}
+
+.plan-status-badge.completed {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.plan-status-badge.cancelled {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* Expand/collapse icon */
+.plan-status-expand-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  transition: transform 0.2s;
+  color: #9ca3af;
+  font-size: 10px;
+}
+
+.plan-status-expand-icon.expanded {
+  transform: rotate(90deg);
+}
+
+/* Summary row - always visible */
+.plan-status-summary {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #6b7280;
+  border-top: 1px solid #f3f4f6;
+}
+
+.plan-status-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-status-summary-label {
+  font-weight: 400;
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.plan-status-priority {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  position: relative;
+}
+
+.plan-status-priority.low {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.plan-status-priority.medium {
+  background: #fed7aa;
+  color: #c2410c;
+}
+
+.plan-status-priority.high {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.plan-status-priority.critical {
+  background: #dc2626;
+  color: white;
+}
+
+.plan-status-progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  max-width: 300px;
+}
+
+.plan-status-progress-track {
+  flex: 1;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.plan-status-progress-fill {
+  height: 100%;
+  background: #3b82f6;
+  transition: width 0.3s ease;
+}
+
+.plan-status-progress-text {
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 35px;
+  text-align: right;
+  color: #6b7280;
+}
+
+/* Tags row */
+.plan-status-tags-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid #f3f4f6;
+  flex-wrap: wrap;
+}
+
+.plan-status-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: #eff6ff;
+  color: #2563eb;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: default;
+}
+
+/* Expanded content */
+.plan-status-expanded {
+  padding: 12px;
+  border-top: 1px solid #e5e7eb;
+  background: #fafafa;
+}
+
+.plan-status-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.plan-status-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plan-status-detail-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #9ca3af;
+}
+
+.plan-status-detail-value {
+  font-size: 13px;
+  color: #374151;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  transition: all 0.2s;
+  cursor: text;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.plan-status-detail-value:hover {
+  border-color: #9ca3af;
+}
+
+/* Read-only fields */
+.plan-status-detail-value.plan-status-readonly {
+  cursor: default;
+  background: #f9fafb;
+  color: #6b7280;
+  border-color: transparent;
+}
+
+.plan-status-detail-value.plan-status-readonly:hover {
+  border-color: transparent;
+  background: #f9fafb;
+}
+
+.plan-status-detail-value.editing {
+  border-color: #3b82f6;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+/* Inline editable input */
+.plan-status-inline-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  font-size: 13px;
+}
+
+.plan-status-id .plan-status-inline-input {
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  font-size: 13px;
+}
+
+/* Dropdown select */
+.plan-status-select {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 150px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.plan-status-badge .plan-status-select {
+  right: 0;
+  left: auto;
+}
+
+.plan-status-select-option {
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.plan-status-select-option:hover {
+  background: #f3f4f6;
+}
+
+.plan-status-select-option.selected {
+  background: #eff6ff;
+  font-weight: 500;
+}
+
+.plan-status-select-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* Progress slider styling */
+.plan-status-detail-value input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #e5e7eb;
+  outline: none;
+  padding: 0;
+  margin: 0;
+}
+
+.plan-status-detail-value input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3b82f6;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.plan-status-detail-value input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3b82f6;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .plan-status-container {
+    background: #1a1a1a;
+    border-color: #3a3a3a;
+  }
+
+  .plan-status-header {
+    border-bottom-color: #3a3a3a;
+  }
+
+  .plan-status-header:hover {
+    background: #2d2d2d;
+  }
+
+  .plan-status-id {
+    background: #2d2d2d;
+    border-color: #3a3a3a;
+    color: #9ca3af;
+  }
+
+  .plan-status-id:hover {
+    border-color: #3b82f6;
+  }
+
+  .plan-status-title {
+    color: #e5e7eb;
+  }
+
+  .plan-status-summary {
+    color: #9ca3af;
+    border-top-color: #3a3a3a;
+  }
+
+  .plan-status-expanded {
+    background: #0f0f0f;
+    border-top-color: #3a3a3a;
+  }
+
+  .plan-status-detail-value {
+    background: #1a1a1a;
+    color: #e5e7eb;
+    border-color: #3a3a3a;
+  }
+
+  .plan-status-detail-value:hover {
+    border-color: #4a4a4a;
+  }
+
+  /* Read-only fields in dark mode */
+  .plan-status-detail-value.plan-status-readonly {
+    background: #0a0a0a;
+    color: #6b7280;
+    border-color: transparent;
+  }
+
+  .plan-status-detail-value.plan-status-readonly:hover {
+    border-color: transparent;
+    background: #0a0a0a;
+  }
+
+  .plan-status-progress-track {
+    background: #3a3a3a;
+  }
+
+  .plan-status-select {
+    background: #2d2d2d;
+    border-color: #3a3a3a;
+  }
+
+  .plan-status-select-option:hover {
+    background: #3a3a3a;
+  }
+
+  .plan-status-tags-row {
+    border-top-color: #3a3a3a;
+  }
+}

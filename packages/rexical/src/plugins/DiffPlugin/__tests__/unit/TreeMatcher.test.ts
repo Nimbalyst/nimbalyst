@@ -17,7 +17,7 @@
  * - This dramatically reduces visual noise in diffs and fixes the "middle insertion problem"
  */
 
-import {$convertFromMarkdownString, TRANSFORMERS} from '@lexical/markdown';
+import { TRANSFORMERS} from '@lexical/markdown';
 import {$getRoot, $isElementNode} from 'lexical';
 import {createTestEditor} from '../utils';
 
@@ -25,6 +25,7 @@ import {
   createWindowedTreeMatcher,
   WindowedMatchResult,
 } from '../../core/TreeMatcher';
+import { $convertFromEnhancedMarkdownString } from "@/markdown";
 
 // Helper function to create an editor with markdown content
 function createEditorWithMarkdown(markdown: string) {
@@ -32,12 +33,9 @@ function createEditorWithMarkdown(markdown: string) {
 
   editor.update(
     () => {
-      $convertFromMarkdownString(
+      $convertFromEnhancedMarkdownString(
         markdown,
-        TRANSFORMERS,
-        undefined,
-        true,
-        false,
+        TRANSFORMERS
       );
     },
     {discrete: true},

@@ -106,7 +106,70 @@ export class ToolExecutor extends EventEmitter {
     // End streaming
     this.webContents.send('ai:streamEditEnd', { id: streamId });
   }
-  
+
+  /**
+   * Execute getDocumentContent tool
+   */
+  async getDocumentContent(args: any): Promise<{ content: string }> {
+    const resultChannel = `getDocumentContent-result-${Date.now()}`;
+    logger.ai.info('[ToolExecutor] getDocumentContent invoked');
+
+    return new Promise((resolve, reject) => {
+      // Set up timeout
+      const timeout = setTimeout(() => {
+        ipcMain.removeAllListeners(resultChannel);
+        logger.ai.error('[ToolExecutor] getDocumentContent timed out');
+        reject(new Error('getDocumentContent execution timed out'));
+      }, 5000);
+
+      // Set up one-time listener for result
+      ipcMain.once(resultChannel, (event, result: { content: string }) => {
+        clearTimeout(timeout);
+        logger.ai.info('[ToolExecutor] getDocumentContent result received', {
+          contentLength: result?.content?.length || 0
+        });
+        resolve(result);
+      });
+
+      // Send to renderer
+      this.webContents.send('ai:getDocumentContent', {
+        resultChannel
+      });
+    });
+  }
+
+  /**
+   * Execute updateFrontmatter tool
+   */
+  async updateFrontmatter(args: { updates: Record<string, any> }): Promise<DiffResult> {
+    const resultChannel = `updateFrontmatter-result-${Date.now()}`;
+    logger.ai.info('[ToolExecutor] updateFrontmatter invoked', {
+      updates: args?.updates
+    });
+
+    return new Promise((resolve, reject) => {
+      // Set up timeout
+      const timeout = setTimeout(() => {
+        ipcMain.removeAllListeners(resultChannel);
+        logger.ai.error('[ToolExecutor] updateFrontmatter timed out');
+        reject(new Error('updateFrontmatter execution timed out'));
+      }, 30000);
+
+      // Set up one-time listener for result
+      ipcMain.once(resultChannel, (event, result: DiffResult) => {
+        clearTimeout(timeout);
+        logger.ai.info('[ToolExecutor] updateFrontmatter result received', result);
+        resolve(result);
+      });
+
+      // Send to renderer
+      this.webContents.send('ai:updateFrontmatter', {
+        updates: args.updates,
+        resultChannel
+      });
+    });
+  }
+
   /**
    * Execute any registered tool
    */
@@ -122,6 +185,10 @@ export class ToolExecutor extends EventEmitter {
         return await this.applyDiff(args);
       case 'streamContent':
         return await this.streamContent(args);
+      case 'getDocumentContent':
+        return await this.getDocumentContent(args);
+      case 'updateFrontmatter':
+        return await this.updateFrontmatter(args);
       default:
         // Check if tool has a handler (e.g., file tools)
         if (typeof tool.handler === 'function') {

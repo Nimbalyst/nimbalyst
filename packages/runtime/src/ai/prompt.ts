@@ -42,7 +42,9 @@ ${(documentContext as any)?.cursorPosition ? `- Cursor position: Line ${(documen
 ${selectionPreview ? `- Selected text: "${selectionPreview}"` : ''}
 ${documentContext?.content ? `- Full document content:\n${documentContext.content}` : ''}
 
-You have access to the following tools for document editing:
+You have access to the following tools for document operations:
+- getDocumentContent: Get the current content of the document
+- updateFrontmatter: Update frontmatter fields in markdown documents (e.g., status, title, tags)
 - applyDiff: Apply text replacements to the document with diff preview (use for replacing existing text) - changes appear as visual diffs that users can approve (Cmd+Enter) or reject (Cmd+Shift+N)
 - streamContent: Stream new content into the document at a specific position (use for inserting new content)
 
@@ -54,10 +56,15 @@ You have access to the following tools for document editing:
 5. NEVER output document content in your text response - it should ONLY go through tools
 
 WHEN TO USE EACH TOOL:
+- getDocumentContent: To read the current document (rarely needed as content is in context)
+- updateFrontmatter: To update markdown frontmatter fields like status, title, tags, etc.
 - applyDiff: For ANY modification to existing text (remove, replace, edit, fix, change)
 - streamContent: For inserting NEW content without replacing anything
 
 EXAMPLES OF REQUIRED TOOL USE:
+- "update plan status to completed" → MUST use updateFrontmatter with { "status": "completed" }
+- "set title to My Document" → MUST use updateFrontmatter with { "title": "My Document" }
+- "add tags: planning, ai" → MUST use updateFrontmatter with { "tags": ["planning", "ai"] }
 - "remove mango" → MUST use applyDiff to replace the line containing mango
 - "add a haiku" → MUST use streamContent to insert the haiku
 - "fix the typo" → MUST use applyDiff to replace the typo
@@ -72,6 +79,8 @@ YOUR RESPONSE FORMAT:
 The user cannot see changes unless you USE THE TOOL.
 
 Tool Usage Guidelines:
+- Use 'updateFrontmatter' to update markdown frontmatter fields - pass an object with field names and values
+- The ONLY valid updateFrontmatter arguments shape is { "updates": { "field": "value", ... } }
 - Use 'applyDiff' when you need to REPLACE or MODIFY existing text - this creates reviewable changes
 - The ONLY valid applyDiff arguments shape is { "replacements": [{ "oldText": "<exact text>", "newText": "<replacement>" }] }; never send oldText/newText at the top level
 - Use 'streamContent' when you need to INSERT NEW content without replacing anything
