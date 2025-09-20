@@ -2,8 +2,15 @@ import { ipcMain, BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } fr
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
-import { Document, DocumentService, DocumentOpenOptions } from '@stravu/runtime';
+import {
+  Document,
+  DocumentService,
+  DocumentOpenOptions,
+  DocumentMetadataEntry,
+  MetadataChangeEvent
+} from '@stravu/runtime';
 import crypto from 'crypto';
+import { extractFrontmatter, extractCommonFields } from '../utils/frontmatterReader';
 
 export class ElectronDocumentService implements DocumentService {
   private workspacePath: string;
@@ -11,21 +18,138 @@ export class ElectronDocumentService implements DocumentService {
   private watchers: Map<string, (documents: Document[]) => void> = new Map();
   private watchInterval: NodeJS.Timeout | null = null;
 
+  // Metadata cache
+  private metadataCache: Map<string, DocumentMetadataEntry> = new Map();
+  private metadataByPath: Map<string, DocumentMetadataEntry> = new Map();
+  private metadataWatchers: Map<string, (change: MetadataChangeEvent) => void> = new Map();
+  private fileStateCache: Map<string, { mtime: number; size: number; hash?: string }> = new Map();
+  private initializationPromise: Promise<void> | null = null;
+
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
-    // Initial load
-    this.refreshDocuments();
 
-    // Start polling for changes every 2 seconds
-    this.watchInterval = setInterval(() => {
-      this.refreshDocuments();
-    }, 2000);
+    // Start async initial load (non-blocking)
+    this.initializationPromise = this.initializeAsync();
+
+    // Start polling for changes every 2 seconds after a short delay
+    // This ensures the initial scan doesn't conflict with the first poll
+    setTimeout(() => {
+      this.watchInterval = setInterval(() => {
+        this.refreshDocuments();
+      }, 2000);
+    }, 500);
+  }
+
+  private async initializeAsync(): Promise<void> {
+    try {
+      // Perform initial document scan and metadata extraction
+      await this.refreshDocuments();
+      console.log(`[DocumentService] Initial metadata cache loaded: ${this.metadataCache.size} documents`);
+    } catch (error) {
+      console.error('[DocumentService] Failed to initialize metadata cache:', error);
+    }
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
   }
 
   private async refreshDocuments() {
+    const oldDocuments = this.documents;
     this.documents = await this.scanDocuments();
+
+    // Update metadata cache
+    await this.updateMetadataCache(oldDocuments, this.documents);
+
     // Notify all watchers
     this.watchers.forEach(callback => callback(this.documents));
+  }
+
+  private async updateMetadataCache(oldDocs: Document[], newDocs: Document[]) {
+    const added: DocumentMetadataEntry[] = [];
+    const updated: DocumentMetadataEntry[] = [];
+    const removed: string[] = [];
+
+    // Create maps for easier lookup
+    const oldDocsMap = new Map(oldDocs.map(d => [d.id, d]));
+    const newDocsMap = new Map(newDocs.map(d => [d.id, d]));
+
+    // Check for removed documents
+    for (const oldDoc of oldDocs) {
+      if (!newDocsMap.has(oldDoc.id)) {
+        removed.push(oldDoc.id);
+        this.metadataCache.delete(oldDoc.id);
+        this.metadataByPath.delete(oldDoc.path);
+        this.fileStateCache.delete(oldDoc.path);
+      }
+    }
+
+    // Check for added or updated documents
+    for (const newDoc of newDocs) {
+      const oldDoc = oldDocsMap.get(newDoc.id);
+      const fullPath = path.join(this.workspacePath, newDoc.path);
+
+      // Get current file state
+      const stats = newDoc.lastModified ? { mtime: newDoc.lastModified.getTime(), size: 0 } : null;
+
+      if (!stats) continue;
+
+      const cachedState = this.fileStateCache.get(newDoc.path);
+      const needsUpdate = !oldDoc || !cachedState ||
+                         cachedState.mtime !== stats.mtime;
+
+      if (needsUpdate) {
+        // Extract frontmatter
+        const { data, hash, parseErrors } = await extractFrontmatter(fullPath);
+
+        // Check if frontmatter actually changed
+        if (!cachedState || cachedState.hash !== hash) {
+          const commonFields = data ? extractCommonFields(data) : {};
+
+          const metadata: DocumentMetadataEntry = {
+            id: newDoc.id,
+            path: newDoc.path,
+            workspace: newDoc.workspace,
+            frontmatter: data || {},
+            summary: commonFields.summary,
+            tags: commonFields.tags,
+            lastModified: newDoc.lastModified || new Date(),
+            lastIndexed: new Date(),
+            hash: hash || undefined,
+            parseErrors
+          };
+
+          // Update caches
+          this.metadataCache.set(newDoc.id, metadata);
+          this.metadataByPath.set(newDoc.path, metadata);
+          this.fileStateCache.set(newDoc.path, {
+            mtime: stats.mtime,
+            size: stats.size || 0,
+            hash: hash || undefined
+          });
+
+          if (!oldDoc) {
+            added.push(metadata);
+          } else {
+            updated.push(metadata);
+          }
+        }
+      }
+    }
+
+    // Notify metadata watchers if there are changes
+    if (added.length > 0 || updated.length > 0 || removed.length > 0) {
+      const changeEvent: MetadataChangeEvent = {
+        added,
+        updated,
+        removed,
+        timestamp: new Date()
+      };
+
+      this.metadataWatchers.forEach(callback => callback(changeEvent));
+    }
   }
 
   private scanDirectory(dirPath: string, basePath: string = ''): Document[] {
@@ -161,12 +285,87 @@ export class ElectronDocumentService implements DocumentService {
     }
   }
 
+  // Metadata API methods
+  async getDocumentMetadata(id: string): Promise<DocumentMetadataEntry | null> {
+    await this.ensureInitialized();
+    return this.metadataCache.get(id) || null;
+  }
+
+  async getDocumentMetadataByPath(path: string): Promise<DocumentMetadataEntry | null> {
+    await this.ensureInitialized();
+    return this.metadataByPath.get(path) || null;
+  }
+
+  async listDocumentMetadata(): Promise<DocumentMetadataEntry[]> {
+    await this.ensureInitialized();
+    return Array.from(this.metadataCache.values());
+  }
+
+  watchDocumentMetadata(listener: (change: MetadataChangeEvent) => void): () => void {
+    const id = Date.now().toString();
+    this.metadataWatchers.set(id, listener);
+
+    // Return unsubscribe function
+    return () => {
+      this.metadataWatchers.delete(id);
+    };
+  }
+
+  notifyFrontmatterChanged(path: string, frontmatter: Record<string, unknown>): void {
+    const metadata = this.metadataByPath.get(path);
+    if (!metadata) return;
+
+    // Generate new hash
+    const dataString = JSON.stringify(frontmatter, Object.keys(frontmatter).sort());
+    const hash = crypto.createHash('sha256').update(dataString).digest('hex');
+
+    // Check if frontmatter actually changed
+    if (metadata.hash === hash) return;
+
+    // Extract common fields
+    const commonFields = extractCommonFields(frontmatter);
+
+    // Update metadata
+    const updatedMetadata: DocumentMetadataEntry = {
+      ...metadata,
+      frontmatter,
+      summary: commonFields.summary,
+      tags: commonFields.tags,
+      lastIndexed: new Date(),
+      hash
+    };
+
+    // Update caches
+    this.metadataCache.set(metadata.id, updatedMetadata);
+    this.metadataByPath.set(path, updatedMetadata);
+
+    // Update file state cache
+    const cachedState = this.fileStateCache.get(path);
+    if (cachedState) {
+      cachedState.hash = hash;
+    }
+
+    // Notify watchers
+    const changeEvent: MetadataChangeEvent = {
+      added: [],
+      updated: [updatedMetadata],
+      removed: [],
+      timestamp: new Date()
+    };
+
+    this.metadataWatchers.forEach(callback => callback(changeEvent));
+  }
+
   destroy() {
     if (this.watchInterval) {
       clearInterval(this.watchInterval);
       this.watchInterval = null;
     }
     this.watchers.clear();
+    this.metadataWatchers.clear();
+    this.metadataCache.clear();
+    this.metadataByPath.clear();
+    this.fileStateCache.clear();
   }
 }
 
@@ -252,6 +451,63 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     } catch (error) {
       console.error('[DocumentService] watch failed to start:', error);
       event.sender.send('document-service:documents-changed', []);
+    }
+
+    if (unsubscribe) {
+      // Clean up when renderer is destroyed
+      event.sender.once('destroyed', unsubscribe);
+    }
+  });
+
+  // Metadata IPC handlers
+  ipcMain.handle('document-service:metadata-get', async (event, id: string) => {
+    try {
+      return await requireDocumentService(event).getDocumentMetadata(id);
+    } catch (error) {
+      console.error('[DocumentService] metadata-get failed:', error);
+      return null;
+    }
+  });
+
+  ipcMain.handle('document-service:metadata-get-by-path', async (event, path: string) => {
+    try {
+      return await requireDocumentService(event).getDocumentMetadataByPath(path);
+    } catch (error) {
+      console.error('[DocumentService] metadata-get-by-path failed:', error);
+      return null;
+    }
+  });
+
+  ipcMain.handle('document-service:metadata-list', async (event) => {
+    try {
+      return await requireDocumentService(event).listDocumentMetadata();
+    } catch (error) {
+      console.error('[DocumentService] metadata-list failed:', error);
+      return [];
+    }
+  });
+
+  ipcMain.handle('document-service:notify-frontmatter-changed', async (event, payload: { path: string; frontmatter: Record<string, unknown> }) => {
+    try {
+      const { path, frontmatter } = payload;
+      requireDocumentService(event).notifyFrontmatterChanged(path, frontmatter);
+      return { success: true };
+    } catch (error) {
+      console.error('[DocumentService] notify-frontmatter-changed failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Handle metadata watch subscriptions
+  ipcMain.on('document-service:metadata-watch', (event) => {
+    let unsubscribe: (() => void) | undefined;
+    try {
+      const service = requireDocumentService(event);
+      unsubscribe = service.watchDocumentMetadata((change) => {
+        event.sender.send('document-service:metadata-changed', change);
+      });
+    } catch (error) {
+      console.error('[DocumentService] metadata-watch failed to start:', error);
     }
 
     if (unsubscribe) {

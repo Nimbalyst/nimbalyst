@@ -17,6 +17,32 @@ export interface DocumentOpenOptions {
   name?: string;
 }
 
+/**
+ * Metadata entry for a document's frontmatter and derived attributes
+ */
+export interface DocumentMetadataEntry {
+  id: string;           // matches Document.id
+  path: string;         // relative path within workspace
+  workspace?: string;
+  frontmatter: Record<string, unknown>;
+  summary?: string;     // AI generated summary (if present in frontmatter)
+  tags?: string[];      // convenience extraction for common fields
+  lastModified: Date;   // from filesystem mtime
+  lastIndexed: Date;    // when cache parsed frontmatter
+  hash?: string;        // frontmatter sha hash
+  parseErrors?: string[]; // warnings captured during parsing
+}
+
+/**
+ * Event emitted when metadata changes
+ */
+export interface MetadataChangeEvent {
+  added: DocumentMetadataEntry[];
+  updated: DocumentMetadataEntry[];
+  removed: string[];    // Just IDs for removed entries
+  timestamp: Date;
+}
+
 export interface DocumentService {
   /**
    * List all documents in the current workspace
@@ -47,6 +73,33 @@ export interface DocumentService {
    * Open a document (platform-specific implementation)
    */
   openDocument(documentId: string, fallback?: DocumentOpenOptions): Promise<void>;
+
+  /**
+   * Get metadata for a specific document by ID
+   */
+  getDocumentMetadata?(id: string): Promise<DocumentMetadataEntry | null>;
+
+  /**
+   * Get metadata for a specific document by path
+   */
+  getDocumentMetadataByPath?(path: string): Promise<DocumentMetadataEntry | null>;
+
+  /**
+   * List metadata for all documents
+   */
+  listDocumentMetadata?(): Promise<DocumentMetadataEntry[]>;
+
+  /**
+   * Watch for metadata changes
+   */
+  watchDocumentMetadata?(
+    listener: (change: MetadataChangeEvent) => void
+  ): () => void;
+
+  /**
+   * Notify that a document's frontmatter has changed (e.g., from AI summary generation)
+   */
+  notifyFrontmatterChanged?(path: string, frontmatter: Record<string, unknown>): void;
 }
 
 /**
