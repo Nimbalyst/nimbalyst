@@ -1,0 +1,314 @@
+/**
+ * PlanTable Component Styles
+ * A table view for displaying all plan documents with their metadata
+ */
+
+.plan-table-wrapper {
+  margin: 2rem 0;
+  background: var(--color-background-secondary);
+  border-radius: 12px;
+  padding: 1.5rem;
+  border: 1px solid var(--color-border);
+  transition: all 0.2s ease;
+}
+
+.plan-table-wrapper.selected {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.plan-table-wrapper:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Table Styles */
+.plan-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.plan-table-header {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.plan-table-header.project {
+  width: 35%;
+}
+
+.plan-table-header.status {
+  width: 15%;
+}
+
+.plan-table-header.owner {
+  width: 20%;
+}
+
+.plan-table-header.priority {
+  width: 15%;
+}
+
+.plan-table-header.progress {
+  width: 15%;
+}
+
+/* Table Rows */
+.plan-table-row {
+  border-bottom: 1px solid var(--color-border-light);
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.plan-table-row:hover {
+  background: var(--color-background-hover);
+}
+
+.plan-table-row:last-child {
+  border-bottom: none;
+}
+
+.plan-table-cell {
+  padding: 1rem;
+  vertical-align: middle;
+}
+
+/* Project Cell */
+.project-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.project-title {
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+.project-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-tertiary);
+}
+
+.project-id {
+  color: var(--color-text-secondary);
+}
+
+.separator {
+  opacity: 0.5;
+}
+
+/* Status Badge */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+/* Priority Badge */
+.priority-badge {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+/* Progress Bar */
+.progress-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--color-background-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 80px;
+}
+
+.progress-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+  border-radius: 4px;
+}
+
+.progress-text {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  min-width: 35px;
+  text-align: right;
+}
+
+/* Loading State */
+.plan-table-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 3rem;
+  color: var(--color-text-secondary);
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Empty State */
+.plan-table-empty {
+  text-align: center;
+  padding: 3rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.875rem;
+}
+
+/* Error State */
+.plan-table-error {
+  text-align: center;
+  padding: 2rem;
+  color: var(--color-error);
+  font-size: 0.875rem;
+}
+
+/* Dark Theme Support */
+[data-theme="dark"] .plan-table-wrapper,
+.dark .plan-table-wrapper {
+  background: #1a1a1a;
+  border-color: #333;
+}
+
+[data-theme="dark"] .plan-table-header,
+.dark .plan-table-header {
+  color: #9ca3af;
+  border-bottom-color: #333;
+}
+
+[data-theme="dark"] .plan-table-row,
+.dark .plan-table-row {
+  border-bottom-color: #2a2a2a;
+}
+
+[data-theme="dark"] .plan-table-row:hover,
+.dark .plan-table-row:hover {
+  background: #242424;
+}
+
+[data-theme="dark"] .project-title,
+.dark .project-title {
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .project-meta,
+.dark .project-meta {
+  color: #6b7280;
+}
+
+[data-theme="dark"] .progress-bar,
+.dark .progress-bar {
+  background: #2a2a2a;
+}
+
+/* Crystal Dark Theme Support */
+[data-theme="crystal-dark"] .plan-table-wrapper,
+.crystal-dark .plan-table-wrapper {
+  background: #0f172a;
+  border-color: #1e293b;
+}
+
+[data-theme="crystal-dark"] .plan-table-header,
+.crystal-dark .plan-table-header {
+  color: #94a3b8;
+  border-bottom-color: #1e293b;
+}
+
+[data-theme="crystal-dark"] .plan-table-row,
+.crystal-dark .plan-table-row {
+  border-bottom-color: #1e293b;
+}
+
+[data-theme="crystal-dark"] .plan-table-row:hover,
+.crystal-dark .plan-table-row:hover {
+  background: #1e293b;
+}
+
+[data-theme="crystal-dark"] .project-title,
+.crystal-dark .project-title {
+  color: #f1f5f9;
+}
+
+[data-theme="crystal-dark"] .project-meta,
+.crystal-dark .project-meta {
+  color: #64748b;
+}
+
+[data-theme="crystal-dark"] .progress-bar,
+.crystal-dark .progress-bar {
+  background: #1e293b;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .plan-table-wrapper {
+    padding: 1rem;
+    overflow-x: auto;
+  }
+
+  .plan-table {
+    min-width: 600px;
+  }
+
+  .plan-table-header,
+  .plan-table-cell {
+    padding: 0.5rem;
+  }
+
+  .project-title {
+    font-size: 0.875rem;
+  }
+
+  .project-meta {
+    font-size: 0.75rem;
+  }
+
+  .progress-container {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+
+  .progress-bar {
+    width: 100%;
+  }
+
+  .progress-text {
+    text-align: left;
+  }
+}

@@ -126,6 +126,27 @@ The Electron app includes comprehensive window state persistence:
 - **Draft input persistence**: Unsent messages in the chat input are saved with the session
 - **Session continuity**: Chat sessions persist across app restarts
 
+## IPC Communication
+
+The Electron app uses IPC (Inter-Process Communication) between main and renderer processes:
+
+### Preload API
+- **Location**: `/packages/electron/src/preload/index.ts`
+- **Exposed as**: `window.electronAPI` (NOT `window.api` - this is important!)
+- **Generic IPC methods**: The electronAPI includes generic `invoke`, `send`, `on`, and `off` methods for flexible service communication
+- **Service pattern**: Renderer services use these generic methods to communicate with main process services
+
+### Document Service
+- **Main process**: `ElectronDocumentService` handles file scanning, metadata extraction, and caching
+- **Renderer process**: `RendererDocumentService` acts as a facade, using IPC via `window.electronAPI` to communicate with main process
+- **Metadata API**: Supports frontmatter extraction and caching for all markdown documents with bounded file reads (4KB)
+- **IPC channels**: `document-service:*` for all document-related operations including metadata
+
+### Common IPC Issues
+- **window.api undefined**: The preload exposes `window.electronAPI`, not `window.api`. Ensure renderer services use the correct reference.
+- **Empty responses**: If IPC calls return empty data, check that the window state is properly set to workspace mode with a valid workspace path.
+- **Service resolution**: The main process resolves services based on the window's workspace path. No workspace = no service.
+
 ## AI Features
 
 ### AI Providers

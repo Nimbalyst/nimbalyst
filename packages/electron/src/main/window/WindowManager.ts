@@ -27,17 +27,26 @@ const fileSystemServices = new Map<string, ElectronFileSystemService>();
 function resolveDocumentServiceForEvent(event: IpcMainEvent | IpcMainInvokeEvent): ElectronDocumentService | null {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     if (!browserWindow) {
+        console.log('[DocumentService] No browser window from event');
         return null;
     }
     const windowId = getWindowId(browserWindow);
     if (windowId === null) {
+        console.log('[DocumentService] No window ID');
         return null;
     }
     const state = windowStates.get(windowId);
     if (!state || state.mode !== 'workspace' || !state.workspacePath) {
+        console.log('[DocumentService] Window not in workspace mode or no path:', {
+            hasState: !!state,
+            mode: state?.mode,
+            hasPath: !!state?.workspacePath
+        });
         return null;
     }
-    return documentServices.get(state.workspacePath) ?? null;
+    const service = documentServices.get(state.workspacePath);
+    console.log('[DocumentService] Resolved service for path:', state.workspacePath, '-> found:', !!service);
+    return service ?? null;
 }
 
 let windowIdCounter = 0;

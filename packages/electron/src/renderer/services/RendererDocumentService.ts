@@ -14,31 +14,38 @@ export class RendererDocumentService implements DocumentService {
   private metadataChangeListeners: Map<string, (change: MetadataChangeEvent) => void> = new Map();
 
   constructor() {
-    // Listen for document change events from main process
-    window.api.on('document-service:documents-changed', (documents: Document[]) => {
-      this.changeListeners.forEach(callback => callback(documents));
-    });
+    // Only set up listeners if window.electronAPI is available
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      // Listen for document change events from main process
+      window.electronAPI.on('document-service:documents-changed', (documents: Document[]) => {
+        this.changeListeners.forEach(callback => callback(documents));
+      });
 
-    // Listen for metadata change events from main process
-    window.api.on('document-service:metadata-changed', (change: MetadataChangeEvent) => {
-      this.metadataChangeListeners.forEach(callback => callback(change));
-    });
+      // Listen for metadata change events from main process
+      window.electronAPI.on('document-service:metadata-changed', (change: MetadataChangeEvent) => {
+        this.metadataChangeListeners.forEach(callback => callback(change));
+      });
+    }
   }
 
   async listDocuments(): Promise<Document[]> {
-    return window.api.invoke('document-service:list');
+    if (!window.electronAPI) return [];
+    return window.electronAPI.invoke('document-service:list');
   }
 
   async searchDocuments(query: string): Promise<Document[]> {
-    return window.api.invoke('document-service:search', query);
+    if (!window.electronAPI) return [];
+    return window.electronAPI.invoke('document-service:search', query);
   }
 
   async getDocument(id: string): Promise<Document | null> {
-    return window.api.invoke('document-service:get', id);
+    if (!window.electronAPI) return null;
+    return window.electronAPI.invoke('document-service:get', id);
   }
 
   async getDocumentByPath(path: string): Promise<Document | null> {
-    return window.api.invoke('document-service:get-by-path', path);
+    if (!window.electronAPI) return null;
+    return window.electronAPI.invoke('document-service:get-by-path', path);
   }
 
   watchDocuments(callback: (documents: Document[]) => void): () => void {
@@ -46,8 +53,8 @@ export class RendererDocumentService implements DocumentService {
     this.changeListeners.set(id, callback);
 
     // Start watching if this is the first listener
-    if (this.changeListeners.size === 1) {
-      window.api.send('document-service:watch');
+    if (this.changeListeners.size === 1 && window.electronAPI) {
+      window.electronAPI.send('document-service:watch');
     }
 
     // Return unsubscribe function
@@ -57,20 +64,24 @@ export class RendererDocumentService implements DocumentService {
   }
 
   async openDocument(documentId: string, fallback?: DocumentOpenOptions): Promise<void> {
-    return window.api.invoke('document-service:open', { documentId, fallback });
+    if (!window.electronAPI) return;
+    return window.electronAPI.invoke('document-service:open', { documentId, fallback });
   }
 
   // Metadata API methods
   async getDocumentMetadata(id: string): Promise<DocumentMetadataEntry | null> {
-    return window.api.invoke('document-service:metadata-get', id);
+    if (!window.electronAPI) return null;
+    return window.electronAPI.invoke('document-service:metadata-get', id);
   }
 
   async getDocumentMetadataByPath(path: string): Promise<DocumentMetadataEntry | null> {
-    return window.api.invoke('document-service:metadata-get-by-path', path);
+    if (!window.electronAPI) return null;
+    return window.electronAPI.invoke('document-service:metadata-get-by-path', path);
   }
 
   async listDocumentMetadata(): Promise<DocumentMetadataEntry[]> {
-    return window.api.invoke('document-service:metadata-list');
+    if (!window.electronAPI) return [];
+    return window.electronAPI.invoke('document-service:metadata-list');
   }
 
   watchDocumentMetadata(listener: (change: MetadataChangeEvent) => void): () => void {
@@ -78,8 +89,8 @@ export class RendererDocumentService implements DocumentService {
     this.metadataChangeListeners.set(id, listener);
 
     // Start watching if this is the first listener
-    if (this.metadataChangeListeners.size === 1) {
-      window.api.send('document-service:metadata-watch');
+    if (this.metadataChangeListeners.size === 1 && window.electronAPI) {
+      window.electronAPI.send('document-service:metadata-watch');
     }
 
     // Return unsubscribe function
@@ -89,7 +100,8 @@ export class RendererDocumentService implements DocumentService {
   }
 
   async notifyFrontmatterChanged(path: string, frontmatter: Record<string, unknown>): Promise<void> {
-    const result = await window.api.invoke('document-service:notify-frontmatter-changed', { path, frontmatter });
+    if (!window.electronAPI) return;
+    const result = await window.electronAPI.invoke('document-service:notify-frontmatter-changed', { path, frontmatter });
     if (!result.success) {
       throw new Error(result.error || 'Failed to notify frontmatter change');
     }

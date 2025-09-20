@@ -431,5 +431,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openAIModels: () => ipcRenderer.invoke('window:open-ai-models'),
 
   // Open external links
-  openExternal: (url: string) => ipcRenderer.invoke('open-external', url)
+  openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+
+  // Generic IPC methods for services that need them
+  invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
+  send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
+  on: (channel: string, callback: (...args: any[]) => void) => {
+    const handler = (_event: any, ...args: any[]) => callback(...args);
+    ipcRenderer.on(channel, handler);
+    return () => ipcRenderer.removeListener(channel, handler);
+  },
+  off: (channel: string, callback: (...args: any[]) => void) => {
+    ipcRenderer.removeListener(channel, callback);
+  }
 });
