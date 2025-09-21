@@ -46,7 +46,7 @@ function resolveDocumentServiceForEvent(event: IpcMainEvent | IpcMainInvokeEvent
         return null;
     }
     const service = documentServices.get(state.workspacePath);
-    console.log('[DocumentService] Resolved service for path:', state.workspacePath, '-> found:', !!service);
+    // console.log('[DocumentService] Resolved service for path:', state.workspacePath, '-> found:', !!service);
     return service ?? null;
 }
 

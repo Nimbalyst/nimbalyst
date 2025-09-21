@@ -45,11 +45,11 @@ export class ElectronDocumentService implements DocumentService {
       // Perform initial document scan and metadata extraction
       await this.refreshDocuments();
       console.log(`[DocumentService] Initial metadata cache loaded: ${this.metadataCache.size} documents`);
-      console.log('[DocumentService] Sample metadata:', Array.from(this.metadataCache.values()).slice(0, 3).map(m => ({
-        path: m.path,
-        hasFrontmatter: Object.keys(m.frontmatter).length > 0,
-        frontmatterKeys: Object.keys(m.frontmatter)
-      })));
+      // console.log('[DocumentService] Sample metadata:', Array.from(this.metadataCache.values()).slice(0, 3).map(m => ({
+      //   path: m.path,
+      //   hasFrontmatter: Object.keys(m.frontmatter).length > 0,
+      //   frontmatterKeys: Object.keys(m.frontmatter)
+      // })));
     } catch (error) {
       console.error('[DocumentService] Failed to initialize metadata cache:', error);
     }
@@ -108,7 +108,7 @@ export class ElectronDocumentService implements DocumentService {
       if (needsUpdate) {
         try {
           // Extract frontmatter
-          console.log(`[DocumentService] Extracting frontmatter from: ${fullPath}`);
+          // console.log(`[DocumentService] Extracting frontmatter from: ${fullPath}`);
           const { data, hash, parseErrors } = await extractFrontmatter(fullPath);
 
           if (parseErrors) {
@@ -117,9 +117,9 @@ export class ElectronDocumentService implements DocumentService {
 
           // Debug: Log what we extracted for plan files
           if (newDoc.path.includes('plan')) {
-            console.log(`[DocumentService] Extracted data for ${newDoc.path}:`, data ? Object.keys(data) : 'null');
+            // console.log(`[DocumentService] Extracted data for ${newDoc.path}:`, data ? Object.keys(data) : 'null');
             if (data && data.planStatus) {
-              console.log(`[DocumentService] Found planStatus:`, data.planStatus);
+              // console.log(`[DocumentService] Found planStatus:`, data.planStatus);
             }
           }
 

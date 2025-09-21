@@ -88,15 +88,15 @@ export async function extractFrontmatter(filePath: string): Promise<{
   parseErrors?: string[];
 }> {
   try {
-    console.log(`[FrontmatterReader] Reading frontmatter from: ${filePath}`);
+    // console.log(`[FrontmatterReader] Reading frontmatter from: ${filePath}`);
     const frontmatterContent = await readFrontmatterOnly(filePath);
 
     if (!frontmatterContent) {
-      console.log(`[FrontmatterReader] No frontmatter found in: ${filePath}`);
+      // console.log(`[FrontmatterReader] No frontmatter found in: ${filePath}`);
       return { data: null, hash: null };
     }
 
-    console.log(`[FrontmatterReader] Found frontmatter content (${frontmatterContent.length} chars) in: ${filePath}`);
+    // console.log(`[FrontmatterReader] Found frontmatter content (${frontmatterContent.length} chars) in: ${filePath}`);
 
     // Extract the YAML content between the --- markers
     const yamlMatch = frontmatterContent.match(/^---\s*\n([\s\S]*?)\n---/);

@@ -43,7 +43,7 @@ export class AIService {
     console.log('[AIService] Registering built-in tools...');
     for (const tool of BUILT_IN_TOOLS) {
       toolRegistry.register(tool);
-      console.log(`[AIService] Registered tool: ${tool.name}`);
+      // console.log(`[AIService] Registered tool: ${tool.name}`);
     }
 
     // Delay initialization until first use
@@ -158,7 +158,7 @@ export class AIService {
         hasDocumentContext: !!documentContext,
         workspacePath
       });
-      
+
       // Get API key based on provider
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
       let apiKey: string | undefined;
@@ -285,15 +285,15 @@ export class AIService {
       if (!sessionId) {
         throw new Error('No session ID provided - cannot send message');
       }
-      
+
       const loadStartTime = Date.now();
       const session = await this.sessionManager.loadSession(sessionId, workspacePath);
       perfLog.sessionLoadTime = Date.now() - loadStartTime;
-      
+
       if (!session) {
         throw new Error(`Session ${sessionId} not found`);
       }
-      
+
       console.log(`[AIService] Loaded session ${sessionId} with provider: ${session.provider}, model: ${session.model} (took ${perfLog.sessionLoadTime}ms)`);
 
       // Verify we got the right session
@@ -416,7 +416,7 @@ export class AIService {
             fullModel,
             provider: session.provider
           });
-          
+
           // Strip provider prefix if present (e.g., "claude:claude-sonnet-4" -> "claude-sonnet-4")
           if (fullModel && fullModel.includes(':')) {
             reinitConfig.model = fullModel.split(':').slice(1).join(':');
@@ -459,7 +459,7 @@ export class AIService {
 
         console.log(`[AIService] Starting message stream (${sessionMessages.length} context messages)`);
         const streamStartTime = Date.now();
-        
+
         // Send performance metrics to renderer
         event.sender.send('ai:performanceMetrics', {
           phase: 'start',
@@ -644,7 +644,7 @@ export class AIService {
 
               // Capture token usage if available
               const tokenUsage = chunk.usage;
-              
+
               console.log('[AIService] Stream complete - Performance metrics:', perfLog);
               if (tokenUsage) {
                 console.log('[AIService] Token usage:', tokenUsage);
@@ -667,7 +667,7 @@ export class AIService {
                   replacementCounts: edits.map(edit => Array.isArray(edit.replacements) ? edit.replacements.length : 0)
                 });
               }
-              
+
               // Send completion metrics with token usage if available
               event.sender.send('ai:performanceMetrics', {
                 phase: 'complete',
@@ -679,7 +679,7 @@ export class AIService {
                 responseLength: fullResponse.length,
                 ...(tokenUsage && { tokenUsage })
               });
-              
+
               // Only add assistant message if there's actual content or edits
               if (fullResponse && fullResponse.trim() !== '') {
                 const assistantMessage: Message = {
@@ -748,7 +748,7 @@ export class AIService {
       } catch (error) {
         const errorTime = Date.now() - startTime;
         console.error(`[AIService] Error after ${errorTime}ms:`, error);
-        
+
         // Send error metrics
         event.sender.send('ai:performanceMetrics', {
           phase: 'error',
@@ -940,7 +940,7 @@ export class AIService {
         // For Claude providers, use the existing test
         if (provider === 'claude' || provider === 'claude-code') {
           console.log('[AIService] testConnection - Testing provider:', provider);
-          
+
           const testProvider = provider === 'claude'
             ? new (await import('@stravu/runtime/ai/server/providers/ClaudeProvider')).ClaudeProvider()
             : new (await import('@stravu/runtime/ai/server/providers/ClaudeCodeProvider')).ClaudeCodeProvider();
@@ -953,7 +953,7 @@ export class AIService {
             console.log('[AIService] testConnection - Got default model:', defaultModel);
             config.model = defaultModel;
           }
-          
+
           console.log('[AIService] testConnection - Initializing with config:', config);
           await testProvider.initialize(config);
 
@@ -987,13 +987,13 @@ export class AIService {
     // Get ALL available models for configuration UI
     ipcMain.handle('ai:getAllModels', async () => {
       console.log('[AIService] ai:getAllModels called');
-      
+
       // Clear cache to get fresh models
       ModelRegistry.clearCache();
 
       const providerSettings = this.getSettingsStore().get('providerSettings', {}) as Record<AIProviderType, any>;
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
-      
+
       console.log('[AIService] ai:getAllModels - API keys available:', {
         anthropic: !!apiKeys['anthropic'],
         openai: !!apiKeys['openai'],
@@ -1105,7 +1105,7 @@ export class AIService {
 
   private createToolHandler(webContents: Electron.WebContents): ToolHandler {
     const executor = new ToolExecutor(webContents);
-    
+
     return {
       applyDiff: async (args: DiffArgs): Promise<DiffResult> => {
         return executor.applyDiff(args);
@@ -1142,7 +1142,7 @@ export class AIService {
       console.error('[AIService] Error destroying providers:', error);
       // Continue destruction even if providers fail
     }
-    
+
     // Clear any remaining references
     try {
       this.sessionManager = null as any;
