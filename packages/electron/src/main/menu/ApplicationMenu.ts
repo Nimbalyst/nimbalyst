@@ -492,6 +492,27 @@ export async function createApplicationMenu() {
             label: 'View',
             submenu: [
                 {
+                    label: 'Navigate Back',
+                    accelerator: process.platform === 'darwin' ? 'Cmd+Alt+Left' : 'Ctrl+Alt+Left',
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('navigation:go-back');
+                        }
+                    }
+                },
+                {
+                    label: 'Navigate Forward',
+                    accelerator: process.platform === 'darwin' ? 'Cmd+Alt+Right' : 'Ctrl+Alt+Right',
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('navigation:go-forward');
+                        }
+                    }
+                },
+                { type: 'separator' },
+                {
                     label: 'Toggle Developer Tools',
                     accelerator: 'CmdOrCtrl+Shift+I',
                     click: async () => {

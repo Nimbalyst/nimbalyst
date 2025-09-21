@@ -224,7 +224,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRecentWorkspaceFiles: () => ipcRenderer.invoke('get-recent-workspace-files'),
   addToWorkspaceRecentFiles: (filePath: string) => ipcRenderer.send('add-to-workspace-recent-files', filePath),
 
-  // Tab state operations
+  // Tab state operations (includes navigation history)
   getWorkspaceTabState: () => ipcRenderer.invoke('get-workspace-tab-state'),
   saveWorkspaceTabState: (tabState: any) => ipcRenderer.send('save-workspace-tab-state', tabState),
   clearWorkspaceTabState: () => ipcRenderer.send('clear-workspace-tab-state'),

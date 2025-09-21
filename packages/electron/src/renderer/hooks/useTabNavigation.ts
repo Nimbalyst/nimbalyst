@@ -1,0 +1,182 @@
+import { useEffect, useCallback, useRef } from 'react';
+
+interface NavigationEntry {
+  tabId: string;
+  timestamp: number;
+}
+
+interface UseTabNavigationOptions {
+  enabled?: boolean;
+  tabs: any[];
+  activeTabId: string | null;
+  switchTab: (tabId: string, fromNavigation?: boolean) => void;
+}
+
+const MAX_HISTORY_SIZE = 50;
+
+export function useTabNavigation(options: UseTabNavigationOptions) {
+  const { enabled = true, tabs, activeTabId, switchTab } = options;
+
+  // Navigation history stored in the renderer
+  const historyRef = useRef<NavigationEntry[]>([]);
+  const currentIndexRef = useRef<number>(-1);
+  const isNavigatingRef = useRef<boolean>(false);
+  const hasRestoredRef = useRef<boolean>(false);
+
+  // Record navigation when active tab changes
+  useEffect(() => {
+    if (!enabled || !activeTabId || isNavigatingRef.current) return;
+
+    const history = historyRef.current;
+    const currentIndex = currentIndexRef.current;
+
+    // If we're navigating from the middle of history, truncate forward history
+    if (currentIndex < history.length - 1) {
+      historyRef.current = history.slice(0, currentIndex + 1);
+    }
+
+    // Don't add duplicate consecutive entries
+    if (history.length > 0 && history[history.length - 1].tabId === activeTabId) {
+      return;
+    }
+
+    // Add new entry
+    const entry: NavigationEntry = {
+      tabId: activeTabId,
+      timestamp: Date.now()
+    };
+
+    historyRef.current.push(entry);
+
+    // Enforce max history size
+    if (historyRef.current.length > MAX_HISTORY_SIZE) {
+      historyRef.current = historyRef.current.slice(-MAX_HISTORY_SIZE);
+    }
+
+    currentIndexRef.current = historyRef.current.length - 1;
+  }, [enabled, activeTabId]);
+
+  const goBack = useCallback(() => {
+    const history = historyRef.current;
+    const currentIndex = currentIndexRef.current;
+
+    if (currentIndex <= 0) {
+      return;
+    }
+
+    isNavigatingRef.current = true;
+    currentIndexRef.current = currentIndex - 1;
+    const entry = history[currentIndexRef.current];
+    switchTab(entry.tabId, true);
+
+    // Reset navigation flag after a brief delay
+    setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 100);
+  }, [switchTab]);
+
+  const goForward = useCallback(() => {
+    const history = historyRef.current;
+    const currentIndex = currentIndexRef.current;
+
+    if (currentIndex >= history.length - 1) {
+      return;
+    }
+
+    isNavigatingRef.current = true;
+    currentIndexRef.current = currentIndex + 1;
+    const entry = history[currentIndexRef.current];
+    switchTab(entry.tabId, true);
+
+    // Reset navigation flag after a brief delay
+    setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 100);
+  }, [switchTab]);
+
+  // Listen for navigation commands from menu
+  useEffect(() => {
+    if (!enabled || !window.electronAPI) return;
+
+    const handleGoBack = () => {
+      goBack();
+    };
+
+    const handleGoForward = () => {
+      goForward();
+    };
+
+    // Listen for menu commands
+    const unsubscribeBack = window.electronAPI.on('navigation:go-back', handleGoBack);
+    const unsubscribeForward = window.electronAPI.on('navigation:go-forward', handleGoForward);
+
+    return () => {
+      unsubscribeBack();
+      unsubscribeForward();
+    };
+  }, [enabled, goBack, goForward]);
+
+  // Listen for keyboard shortcuts
+  useEffect(() => {
+    if (!enabled) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for navigation shortcuts
+      const isMac = navigator.platform.toLowerCase().includes('mac');
+      const isBack = isMac
+        ? e.metaKey && e.altKey && e.key === 'ArrowLeft'
+        : e.ctrlKey && e.altKey && e.key === 'ArrowLeft';
+      const isForward = isMac
+        ? e.metaKey && e.altKey && e.key === 'ArrowRight'
+        : e.ctrlKey && e.altKey && e.key === 'ArrowRight';
+
+      if (isBack) {
+        e.preventDefault();
+        goBack();
+      } else if (isForward) {
+        e.preventDefault();
+        goForward();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [enabled, goBack, goForward]);
+
+  // Export current navigation state for external saving
+  const getNavigationState = useCallback(() => {
+    return {
+      history: historyRef.current,
+      currentIndex: currentIndexRef.current
+    };
+  }, []);
+
+  // Import navigation state from external source
+  const setNavigationState = useCallback((state: { history: NavigationEntry[], currentIndex: number } | undefined) => {
+    if (state && state.history && state.history.length > 0) {
+      historyRef.current = state.history;
+      currentIndexRef.current = state.currentIndex ?? state.history.length - 1;
+
+      // Validate that current index is within bounds
+      if (currentIndexRef.current >= historyRef.current.length) {
+        currentIndexRef.current = historyRef.current.length - 1;
+      }
+      if (currentIndexRef.current < 0) {
+        currentIndexRef.current = 0;
+      }
+    }
+    hasRestoredRef.current = true;
+  }, []);
+
+  return {
+    goBack,
+    goForward,
+    canGoBack: () => currentIndexRef.current > 0,
+    canGoForward: () => currentIndexRef.current < historyRef.current.length - 1,
+    getNavigationState,
+    setNavigationState
+  };
+}

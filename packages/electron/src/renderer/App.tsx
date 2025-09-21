@@ -37,6 +37,7 @@ import { NewFileDialog } from './components/NewFileDialog';
 import { TabManager } from './components/TabManager/TabManager';
 import { useTabPreferences } from './hooks/useTabPreferences';
 import { useTabs } from './hooks/useTabs';
+import { useTabNavigation } from './hooks/useTabNavigation';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
 import './WorkspaceWelcome.css';
@@ -307,10 +308,15 @@ export default function App() {
 
   // Tab management state
   const tabPreferences = useTabPreferences();
+
+  // Create a ref to hold navigation state getter
+  const getNavigationStateRef = useRef<(() => any) | undefined>();
+
   // console.log('[APP] Creating useTabs hook, workspaceMode:', workspaceMode, 'workspacePath:', workspacePath);
   const tabs = useTabs({
     maxTabs: tabPreferences.preferences.maxTabs,
     enabled: tabPreferences.preferences.enabled,
+    getNavigationState: () => getNavigationStateRef.current?.(),
     onTabChange: async (tab) => {
       // console.log('[APP] onTabChange called for tab:', tab.id, tab.filePath);
 
@@ -415,6 +421,39 @@ export default function App() {
   useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
+
+  // Initialize tab navigation for back/forward functionality
+  const navigation = useTabNavigation({
+    enabled: tabPreferences.preferences.enabled && workspaceMode,
+    tabs: tabs.tabs,
+    activeTabId: tabs.activeTabId,
+    switchTab: tabs.switchTab
+  });
+
+  // Store navigation state getter in ref for tabs to use
+  useEffect(() => {
+    getNavigationStateRef.current = navigation.getNavigationState;
+  }, [navigation.getNavigationState]);
+
+  // Restore navigation state when tabs are restored
+  useEffect(() => {
+    if (!window.electronAPI?.getWorkspaceTabState) return;
+
+    const restoreNavigationState = async () => {
+      try {
+        const savedState = await window.electronAPI.getWorkspaceTabState();
+        if (savedState?.navigationHistory) {
+          navigation.setNavigationState(savedState.navigationHistory);
+        }
+      } catch (error) {
+        console.error('Failed to restore navigation state:', error);
+      }
+    };
+
+    // Delay to ensure tabs are loaded first
+    const timer = setTimeout(restoreNavigationState, 600);
+    return () => clearTimeout(timer);
+  }, [workspaceMode, navigation.setNavigationState]);
 
   const getContentRef = useRef<(() => string) | null>(null);
   const initialContentRef = useRef<string>('');

@@ -3,7 +3,7 @@ import { join, basename } from 'path';
 import { existsSync } from 'fs';
 import { WindowState, FileTreeItem } from '../types';
 import { WINDOW_CASCADE_OFFSET } from '../utils/constants';
-import { getTheme, saveWorkspaceWindowState } from '../utils/store';
+import { getTheme, saveWorkspaceWindowState, getWorkspaceNavigationHistory, saveWorkspaceNavigationHistory } from '../utils/store';
 import { stopFileWatcher } from '../file/FileWatcher';
 import { stopWorkspaceWatcher, startWorkspaceWatcher } from '../file/WorkspaceWatcher.ts';
 import { getFolderContents } from '../utils/FileTree';
@@ -11,6 +11,7 @@ import { getTitleBarColors } from '../theme/ThemeManager';
 import { ElectronDocumentService, setupDocumentServiceHandlers } from '../services/ElectronDocumentService';
 import { ElectronFileSystemService } from '../services/ElectronFileSystemService';
 import { setFileSystemService, clearFileSystemService } from '@stravu/runtime';
+import { navigationHistoryService } from '../services/NavigationHistoryService';
 
 // Window management
 export const windows = new Map<number, BrowserWindow>();
@@ -197,6 +198,13 @@ export function createWindow(
                 setFileSystemService(fileSystemService);
                 console.log('[MAIN] Created FileSystemService for workspace:', workspacePath);
             }
+
+            // Restore navigation history for this workspace
+            const navHistory = getWorkspaceNavigationHistory(workspacePath);
+            if (navHistory) {
+                navigationHistoryService.restoreNavigationState(windowId, navHistory);
+                console.log('[MAIN] Restored navigation history for workspace:', workspacePath);
+            }
         }
         windowFocusOrder.set(windowId, ++focusOrderCounter); // Track initial focus order
 
@@ -279,6 +287,12 @@ export function createWindow(
                     focusOrder,
                     devToolsOpen
                 });
+
+                // Save navigation history
+                const navHistory = navigationHistoryService.saveNavigationState(windowId);
+                if (navHistory) {
+                    saveWorkspaceNavigationHistory(state.workspacePath, navHistory);
+                }
             }
         });
 
@@ -291,6 +305,9 @@ export function createWindow(
             windowDevToolsState.delete(windowId);
             stopFileWatcher(windowId);
             stopWorkspaceWatcher(windowId);
+
+            // Clean up navigation history for this window
+            navigationHistoryService.removeWindow(windowId);
 
             // Clean up document service if this was the last window for the workspace
             if (state?.mode === 'workspace' && state.workspacePath) {

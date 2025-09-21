@@ -53,12 +53,13 @@ function simpleHash(str: string): string {
   return hash.toString(16);
 }
 
-export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
+export function useTabs(options: UseTabsOptions & { getNavigationState?: () => any } = {}): UseTabsResult {
   const {
     maxTabs = 10,
     enabled = true,
     onTabChange,
-    onTabClose
+    onTabClose,
+    getNavigationState
   } = options;
 
   const [tabs, setTabs] = useState<Map<string, TabData>>(new Map());
@@ -161,7 +162,7 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
   }, [tabs, tabOrder, activeTabId, onTabClose, onTabChange]);
 
   // Switch to a different tab
-  const switchTab = useCallback((tabId: string): void => {
+  const switchTab = useCallback((tabId: string, fromNavigation: boolean = false): void => {
     const tab = tabs.get(tabId);
     if (!tab) return;
 
@@ -234,11 +235,16 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
         // Don't save content or editor state
       }));
 
-      const tabState = {
+      const tabState: any = {
         tabs: tabsArray,
         activeTabId,
         tabOrder
       };
+
+      // Include navigation state if available
+      if (getNavigationState) {
+        tabState.navigationHistory = getNavigationState();
+      }
 
       // Only save if state has actually changed
       const stateString = JSON.stringify(tabState);
@@ -260,13 +266,14 @@ export function useTabs(options: UseTabsOptions = {}): UseTabsResult {
     return () => {
       clearInterval(interval);
     };
-  }, [enabled, tabs.size, activeTabId, tabOrder.length]); // Use primitive values instead of objects
+  }, [enabled, tabs.size, activeTabId, tabOrder.length, getNavigationState]); // Use primitive values instead of objects
 
   // Store onTabChange in a ref to avoid re-running effect
   const onTabChangeRef = useRef(onTabChange);
   useEffect(() => {
     onTabChangeRef.current = onTabChange;
   }, [onTabChange]);
+
 
   // Restore state from Electron store on mount (with delay for workspace to load)
   useEffect(() => {

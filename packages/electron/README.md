@@ -69,6 +69,39 @@ npm run build:mac:local
 - **File operations**: Right-click context menus for rename, delete, new window
 - **Smart file handling**: Automatic unique naming for copied files
 
+### Tab Navigation
+- **Back/Forward Navigation**: Navigate through recently opened tabs (max 50 history depth)
+- **Per-window history**: Each window maintains its own navigation stack
+- **Persistent history**: Navigation history persists across app restarts for workspaces
+
+## Keyboard Shortcuts
+
+### General
+- `Cmd+N` / `Ctrl+N`: New file
+- `Cmd+O` / `Ctrl+O`: Open file
+- `Cmd+S` / `Ctrl+S`: Save file
+- `Cmd+Shift+S` / `Ctrl+Shift+S`: Save as
+- `Cmd+W` / `Ctrl+W`: Close window
+- `Cmd+Q` / `Ctrl+Q`: Quit app
+
+### Tab Navigation
+- `Cmd+Alt+Left` / `Ctrl+Alt+Left`: Navigate back through tab history
+- `Cmd+Alt+Right` / `Ctrl+Alt+Right`: Navigate forward through tab history
+
+### AI Features
+- `Cmd+Shift+A` / `Ctrl+Shift+A`: Toggle AI chat panel
+- `Cmd+Alt+S` / `Ctrl+Alt+S`: Open session manager
+- `Cmd+,` / `Ctrl+,`: Open preferences
+
+### Search
+- `Cmd+F` / `Ctrl+F`: Find in document
+- `Cmd+Shift+F` / `Ctrl+Shift+F`: Find and replace
+
+### Developer
+- `Cmd+Shift+I` / `Ctrl+Shift+I`: Toggle developer tools
+- `Cmd+R` / `Ctrl+R`: Reload window
+- `Cmd+Shift+R` / `Ctrl+Shift+R`: Force reload
+
 ## Architecture
 
 - `src/main/` - Main process code

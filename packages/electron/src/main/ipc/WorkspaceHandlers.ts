@@ -9,7 +9,14 @@ import { windowStates, getWindowId, createWindow } from '../window/WindowManager
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { getFolderContents } from '../utils/FileTree';
-import { getWorkspaceRecentFiles, addWorkspaceRecentFile, store, getWorkspaceTabState, saveWorkspaceTabState, clearWorkspaceTabState } from '../utils/store';
+import {
+    getWorkspaceRecentFiles,
+    addWorkspaceRecentFile,
+    store,
+    getWorkspaceTabState,
+    saveWorkspaceTabState,
+    clearWorkspaceTabState
+} from '../utils/store';
 import { loadFileIntoWindow } from '../file/FileOperations';
 
 export function registerWorkspaceHandlers() {

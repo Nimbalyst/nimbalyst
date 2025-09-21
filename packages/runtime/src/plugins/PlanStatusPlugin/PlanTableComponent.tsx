@@ -80,8 +80,8 @@ export default function PlanTableComponent({ nodeKey }: PlanTableComponentProps)
       try {
         // Get document service from window context
         const documentService = (window as any).documentService;
-        console.log('[PlanTable] window.api available:', !!(window as any).api);
-        console.log('[PlanTable] window.documentService available:', !!documentService);
+        // console.log('[PlanTable] window.api available:', !!(window as any).api);
+        // console.log('[PlanTable] window.documentService available:', !!documentService);
 
         if (!documentService) {
           console.log('[PlanTable] Document service not available yet');
@@ -97,19 +97,19 @@ export default function PlanTableComponent({ nodeKey }: PlanTableComponentProps)
         }
 
         // Load initial metadata
-        console.log('[PlanTable] About to call listDocumentMetadata');
+        // console.log('[PlanTable] About to call listDocumentMetadata');
         const metadata = await documentService.listDocumentMetadata();
-        console.log('[PlanTable] Loaded metadata:', metadata?.length || 0, 'entries');
-        console.log('[PlanTable] First metadata item:', metadata && metadata[0]);
+        // console.log('[PlanTable] Loaded metadata:', metadata?.length || 0, 'entries');
+        // console.log('[PlanTable] First metadata item:', metadata && metadata[0]);
 
         if (metadata && metadata.length > 0) {
           // Debug: Show what we got
           const sample = metadata[0];
-          console.log('[PlanTable] Sample metadata:', {
-            path: sample.path,
-            hasFrontmatter: Object.keys(sample.frontmatter || {}).length > 0,
-            frontmatter: sample.frontmatter
-          });
+          // console.log('[PlanTable] Sample metadata:', {
+          //   path: sample.path,
+          //   hasFrontmatter: Object.keys(sample.frontmatter || {}).length > 0,
+          //   frontmatter: sample.frontmatter
+          // });
         }
 
         const planDocs = extractPlanData(metadata || []);
@@ -143,14 +143,14 @@ export default function PlanTableComponent({ nodeKey }: PlanTableComponentProps)
   }, []);
 
   function extractPlanData(metadata: DocumentMetadataEntry[]): PlanData[] {
-    console.log('[PlanTable] Total metadata entries:', metadata.length);
-    console.log('[PlanTable] Sample paths:', metadata.slice(0, 5).map(d => d.path));
-    console.log('[PlanTable] Sample frontmatter:', metadata.slice(0, 3).map(d => ({
-      path: d.path,
-      frontmatter: d.frontmatter,
-      hasPlanStatus: !!d.frontmatter?.planStatus,
-      frontmatterKeys: Object.keys(d.frontmatter || {})
-    })));
+    // console.log('[PlanTable] Total metadata entries:', metadata.length);
+    // console.log('[PlanTable] Sample paths:', metadata.slice(0, 5).map(d => d.path));
+    // console.log('[PlanTable] Sample frontmatter:', metadata.slice(0, 3).map(d => ({
+    //   path: d.path,
+    //   frontmatter: d.frontmatter,
+    //   hasPlanStatus: !!d.frontmatter?.planStatus,
+    //   frontmatterKeys: Object.keys(d.frontmatter || {})
+    // })));
 
     return metadata
       .filter(doc => {
@@ -165,15 +165,15 @@ export default function PlanTableComponent({ nodeKey }: PlanTableComponentProps)
 
         const shouldInclude = hasPlanStatus || (isInPlansFolder && hasStatusField) || hasPlanInName;
 
-        if (shouldInclude) {
-          console.log('[PlanTable] Including document as plan:', doc.path, {
-            isInPlansFolder,
-            hasPlanStatus,
-            hasPlanInName,
-            hasStatusField,
-            frontmatter: doc.frontmatter
-          });
-        }
+        // if (shouldInclude) {
+          // console.log('[PlanTable] Including document as plan:', doc.path, {
+          //   isInPlansFolder,
+          //   hasPlanStatus,
+          //   hasPlanInName,
+          //   hasStatusField,
+          //   frontmatter: doc.frontmatter
+          // });
+        // }
 
         return shouldInclude;
       })

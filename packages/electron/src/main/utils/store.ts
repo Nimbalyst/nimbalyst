@@ -37,6 +37,11 @@ export interface WorkspaceAIPanelState {
   draftInput?: string;
 }
 
+export interface NavigationHistoryState {
+  history: Array<{ tabId: string; timestamp: number }>;
+  currentIndex: number;
+}
+
 export interface WorkspaceState {
   workspacePath: string;
   windowState?: SessionWindow;
@@ -44,6 +49,7 @@ export interface WorkspaceState {
   recentDocuments: string[];
   tabs: TabManagerState;
   aiPanel: WorkspaceAIPanelState;
+  navigationHistory?: NavigationHistoryState;
   lastUpdated: number;
 }
 
@@ -94,6 +100,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       recentDocuments: [],
       tabs: { ...DEFAULT_TAB_MANAGER_STATE },
       aiPanel: { ...DEFAULT_AI_PANEL_STATE },
+      navigationHistory: undefined,
       lastUpdated: Date.now(),
     };
   }
@@ -106,6 +113,15 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       : [];
 
   const aiPanelRaw = raw?.aiPanel ?? raw?.ai_chat ?? {};
+
+  // Parse navigation history if present
+  let navigationHistory: NavigationHistoryState | undefined;
+  if (raw.navigationHistory) {
+    navigationHistory = {
+      history: Array.isArray(raw.navigationHistory.history) ? raw.navigationHistory.history : [],
+      currentIndex: raw.navigationHistory.currentIndex ?? -1
+    };
+  }
 
   return {
     workspacePath: raw.workspacePath ?? raw.workspace_path ?? path,
@@ -131,6 +147,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       currentSessionId: aiPanelRaw.currentSessionId ?? aiPanelRaw.sessionId ?? undefined,
       draftInput: aiPanelRaw.draftInput ?? undefined,
     },
+    navigationHistory,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),
   };
 }
@@ -147,6 +164,10 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
       tabOrder: [...state.tabs.tabOrder],
     },
     aiPanel: { ...state.aiPanel },
+    navigationHistory: state.navigationHistory ? {
+      history: [...state.navigationHistory.history],
+      currentIndex: state.navigationHistory.currentIndex
+    } : undefined,
     lastUpdated: state.lastUpdated,
   };
 }
@@ -253,28 +274,46 @@ export function addWorkspaceRecentFile(workspacePath: string, filePath: string):
   });
 }
 
-export function getWorkspaceTabState(workspacePath: string): TabManagerState {
-  const tabs = getWorkspaceState(workspacePath).tabs;
+export function getWorkspaceTabState(workspacePath: string): TabManagerState & { navigationHistory?: any } {
+  const workspace = getWorkspaceState(workspacePath);
+  const tabs = workspace.tabs;
   return {
     tabs: tabs.tabs.map(tab => ({ ...tab })),
     activeTabId: tabs.activeTabId,
     tabOrder: [...tabs.tabOrder],
+    navigationHistory: workspace.navigationHistory
   };
 }
 
-export function saveWorkspaceTabState(workspacePath: string, state: TabManagerState): void {
+export function saveWorkspaceTabState(workspacePath: string, state: TabManagerState & { navigationHistory?: any }): void {
   updateWorkspaceState(workspacePath, workspace => {
     workspace.tabs = {
       tabs: state.tabs.map(tab => ({ ...tab })),
       activeTabId: state.activeTabId,
       tabOrder: [...state.tabOrder],
     };
+    // Save navigation history if provided
+    if ('navigationHistory' in state) {
+      workspace.navigationHistory = state.navigationHistory;
+    }
   });
 }
 
 export function clearWorkspaceTabState(workspacePath: string): void {
   updateWorkspaceState(workspacePath, workspace => {
     workspace.tabs = { ...DEFAULT_TAB_MANAGER_STATE };
+    // Also clear navigation history when clearing tabs
+    delete workspace.navigationHistory;
+  });
+}
+
+export function getWorkspaceNavigationHistory(workspacePath: string): NavigationHistoryState | undefined {
+  return getWorkspaceState(workspacePath).navigationHistory;
+}
+
+export function saveWorkspaceNavigationHistory(workspacePath: string, navigationHistory: NavigationHistoryState): void {
+  updateWorkspaceState(workspacePath, workspace => {
+    workspace.navigationHistory = navigationHistory;
   });
 }
 

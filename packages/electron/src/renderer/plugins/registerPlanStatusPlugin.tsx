@@ -21,11 +21,11 @@ export function registerPlanStatusPlugin(): void {
   // Make it available globally for the PlanTableComponent
   if (typeof window !== 'undefined') {
     window.documentService = documentService;
-    console.log('[registerPlanStatusPlugin] Document service exposed to window:', documentService);
-    console.log('[registerPlanStatusPlugin] Has listDocumentMetadata method:', !!documentService.listDocumentMetadata);
+    // console.log('[registerPlanStatusPlugin] Document service exposed to window:', documentService);
+    // console.log('[registerPlanStatusPlugin] Has listDocumentMetadata method:', !!documentService.listDocumentMetadata);
   }
 
   // Register the plugin
   pluginRegistry.register(planStatusPluginPackage);
-  console.log('[registerPlanStatusPlugin] Plugin registered');
+  // console.log('[registerPlanStatusPlugin] Plugin registered');
 }
