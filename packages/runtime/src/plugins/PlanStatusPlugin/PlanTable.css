@@ -4,12 +4,13 @@
  */
 
 .plan-table-wrapper {
-  margin: 2rem 0;
+  /*margin: 2rem 0;*/
   background: var(--color-background-secondary);
   border-radius: 12px;
-  padding: 1.5rem;
-  border: 1px solid var(--color-border);
+  /*padding: 1.5rem;*/
+  border: 2px solid #e5e7eb;
   transition: all 0.2s ease;
+  overflow: hidden;
 }
 
 .plan-table-wrapper.selected {
@@ -24,50 +25,88 @@
 /* Table Styles */
 .plan-table {
   width: 100%;
+    border-radius: 12px;
   border-collapse: collapse;
   font-size: 0.875rem;
 }
 
+.plan-table thead tr {
+  background: rgba(0, 0, 0, 0.03);
+}
+
 .plan-table-header {
   text-align: left;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 1rem;
   font-weight: 600;
   color: var(--color-text-secondary);
   font-size: 0.75rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  background: inherit;
+}
+
+.plan-table-header.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease;
+  position: relative;
+}
+
+.plan-table-header.sortable:hover {
+  background: var(--color-background-hover);
+  opacity: 0.9;
+}
+
+.plan-table-header span {
+  display: inline-block;
+  margin-right: 0.5rem;
+}
+
+.sort-indicator {
+  display: inline-block;
+  opacity: 0.3;
+  font-size: 0.875rem;
+  transition: opacity 0.15s ease;
+  vertical-align: middle;
+}
+
+.sort-indicator.active {
+  opacity: 1;
+  color: var(--color-primary);
 }
 
 .plan-table-header.project {
-  width: 35%;
+  width: 40%;
 }
 
 .plan-table-header.status {
   width: 15%;
 }
 
-.plan-table-header.owner {
+.plan-table-header.priority {
+  width: 12%;
+}
+
+.plan-table-header.updated {
   width: 20%;
 }
 
-.plan-table-header.priority {
-  width: 15%;
-}
-
 .plan-table-header.progress {
-  width: 15%;
+  width: 13%;
 }
 
 /* Table Rows */
 .plan-table-row {
   border-bottom: 1px solid var(--color-border-light);
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease;
   cursor: pointer;
+  position: relative;
 }
 
 .plan-table-row:hover {
-  background: var(--color-background-hover);
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .plan-table-row:last-child {
@@ -75,7 +114,7 @@
 }
 
 .plan-table-cell {
-  padding: 1rem;
+  padding: 0.75rem 1rem;
   vertical-align: middle;
 }
 
@@ -93,27 +132,12 @@
   line-height: 1.4;
 }
 
-.project-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  color: var(--color-text-tertiary);
-}
-
-.project-id {
-  color: var(--color-text-secondary);
-}
-
-.separator {
-  opacity: 0.5;
-}
 
 /* Status Badge */
 .status-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.25rem 0.75rem;
+  padding: 0.15rem 0.5rem;
   border-radius: 20px;
   font-size: 0.8125rem;
   font-weight: 500;
@@ -127,34 +151,44 @@
   font-size: 0.875rem;
 }
 
-/* Progress Bar */
-.progress-container {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+/* Updated Text */
+.updated-text {
+  font-size: 0.8125rem;
+  color: var(--color-text-tertiary);
 }
 
-.progress-bar {
-  flex: 1;
-  height: 8px;
-  background: var(--color-background-tertiary);
+/* Compact Progress Field */
+.progress-compact {
+  display: block;
+  width: 100%;
+  max-width: 100px;
+}
+
+.progress-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  mix-blend-mode: normal;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 24px;
+  background: #f3f4f6;
   border-radius: 4px;
   overflow: hidden;
-  min-width: 80px;
+  position: relative;
 }
 
-.progress-fill {
+.progress-bar-fill {
   height: 100%;
   transition: width 0.3s ease;
   border-radius: 4px;
-}
-
-.progress-text {
-  font-size: 0.8125rem;
-  color: var(--color-text-secondary);
-  font-weight: 500;
-  min-width: 35px;
-  text-align: right;
 }
 
 /* Loading State */
@@ -202,7 +236,17 @@
 [data-theme="dark"] .plan-table-wrapper,
 .dark .plan-table-wrapper {
   background: #1a1a1a;
-  border-color: #333;
+  border-color: #374151;
+}
+
+[data-theme="dark"] .plan-table thead tr,
+.dark .plan-table thead tr {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .progress-bar-container,
+.dark .progress-bar-container {
+  background: #374151;
 }
 
 [data-theme="dark"] .plan-table-header,
@@ -218,7 +262,7 @@
 
 [data-theme="dark"] .plan-table-row:hover,
 .dark .plan-table-row:hover {
-  background: #242424;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 [data-theme="dark"] .project-title,
@@ -240,7 +284,17 @@
 [data-theme="crystal-dark"] .plan-table-wrapper,
 .crystal-dark .plan-table-wrapper {
   background: #0f172a;
-  border-color: #1e293b;
+  border-color: #334155;
+}
+
+[data-theme="crystal-dark"] .plan-table thead tr,
+.crystal-dark .plan-table thead tr {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="crystal-dark"] .progress-bar-container,
+.crystal-dark .progress-bar-container {
+  background: #334155;
 }
 
 [data-theme="crystal-dark"] .plan-table-header,
@@ -256,7 +310,7 @@
 
 [data-theme="crystal-dark"] .plan-table-row:hover,
 .crystal-dark .plan-table-row:hover {
-  background: #1e293b;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 [data-theme="crystal-dark"] .project-title,
@@ -298,17 +352,11 @@
     font-size: 0.75rem;
   }
 
-  .progress-container {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.25rem;
+  .updated-text {
+    font-size: 0.75rem;
   }
 
-  .progress-bar {
-    width: 100%;
-  }
-
-  .progress-text {
-    text-align: left;
+  .sort-indicator {
+    font-size: 0.75rem;
   }
 }

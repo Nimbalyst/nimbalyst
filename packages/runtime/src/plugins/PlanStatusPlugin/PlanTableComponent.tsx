@@ -2,16 +2,20 @@
  * PlanTableComponent - Displays all plan documents in a table format
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
-import { NodeKey } from 'lexical';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { NodeKey, $getNodeByKey } from 'lexical';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
-import { $getNodeByKey } from 'lexical';
 import type { DocumentMetadataEntry, MetadataChangeEvent } from '../../core/DocumentService';
+import type { SortColumn, SortDirection } from './PlanTableNode';
+import { $getPlanStatusNode } from './PlanStatusDecoratorNode';
+import { PlanTableNode } from './PlanTableNode';
 import './PlanTable.css';
 
 interface PlanTableComponentProps {
   nodeKey: NodeKey;
+  sortBy?: SortColumn;
+  sortDirection?: SortDirection;
 }
 
 interface PlanData {
@@ -66,12 +70,18 @@ function formatDate(date: Date): string {
   return date.toLocaleDateString();
 }
 
-export default function PlanTableComponent({ nodeKey }: PlanTableComponentProps): JSX.Element {
+export default function PlanTableComponent({
+  nodeKey,
+  sortBy = 'lastUpdated',
+  sortDirection = 'desc'
+}: PlanTableComponentProps): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const [isSelected] = useLexicalNodeSelection(nodeKey);
   const [plans, setPlans] = useState<PlanData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentSortBy, setCurrentSortBy] = useState<SortColumn>(sortBy);
+  const [currentSortDirection, setCurrentSortDirection] = useState<SortDirection>(sortDirection);
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
@@ -142,17 +152,41 @@ export default function PlanTableComponent({ nodeKey }: PlanTableComponentProps)
     };
   }, []);
 
-  function extractPlanData(metadata: DocumentMetadataEntry[]): PlanData[] {
-    // console.log('[PlanTable] Total metadata entries:', metadata.length);
-    // console.log('[PlanTable] Sample paths:', metadata.slice(0, 5).map(d => d.path));
-    // console.log('[PlanTable] Sample frontmatter:', metadata.slice(0, 3).map(d => ({
-    //   path: d.path,
-    //   frontmatter: d.frontmatter,
-    //   hasPlanStatus: !!d.frontmatter?.planStatus,
-    //   frontmatterKeys: Object.keys(d.frontmatter || {})
-    // })));
+  const sortPlans = useCallback((plansToSort: PlanData[], sortColumn: SortColumn, sortDir: SortDirection) => {
+    const sorted = [...plansToSort].sort((a, b) => {
+      let compareValue = 0;
 
-    return metadata
+      switch (sortColumn) {
+        case 'title':
+          compareValue = a.title.localeCompare(b.title);
+          break;
+        case 'status':
+          compareValue = a.status.localeCompare(b.status);
+          break;
+        case 'progress':
+          compareValue = a.progress - b.progress;
+          break;
+        case 'priority': {
+          const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+          const aPriority = priorityOrder[a.priority.toLowerCase() as keyof typeof priorityOrder] ?? 4;
+          const bPriority = priorityOrder[b.priority.toLowerCase() as keyof typeof priorityOrder] ?? 4;
+          compareValue = aPriority - bPriority;
+          break;
+        }
+        case 'lastUpdated':
+        default:
+          compareValue = a.lastUpdated.getTime() - b.lastUpdated.getTime();
+          break;
+      }
+
+      return sortDir === 'asc' ? compareValue : -compareValue;
+    });
+
+    return sorted;
+  }, []);
+
+  function extractPlanData(metadata: DocumentMetadataEntry[]): PlanData[] {
+    const filteredData = metadata
       .filter(doc => {
         // More flexible checking for plan documents
         const pathLower = doc.path.toLowerCase();
@@ -164,16 +198,6 @@ export default function PlanTableComponent({ nodeKey }: PlanTableComponentProps)
         const hasStatusField = doc.frontmatter && ('status' in doc.frontmatter || 'planStatus' in doc.frontmatter);
 
         const shouldInclude = hasPlanStatus || (isInPlansFolder && hasStatusField) || hasPlanInName;
-
-        // if (shouldInclude) {
-          // console.log('[PlanTable] Including document as plan:', doc.path, {
-          //   isInPlansFolder,
-          //   hasPlanStatus,
-          //   hasPlanInName,
-          //   hasStatusField,
-          //   frontmatter: doc.frontmatter
-          // });
-        // }
 
         return shouldInclude;
       })
@@ -192,19 +216,9 @@ export default function PlanTableComponent({ nodeKey }: PlanTableComponentProps)
           lastUpdated: doc.lastModified,
           tags: planStatus.tags || frontmatter.tags,
         } as PlanData;
-      })
-      .sort((a, b) => {
-        // Sort by priority first, then by last updated
-        const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
-        const aPriority = priorityOrder[a.priority.toLowerCase() as keyof typeof priorityOrder] ?? 4;
-        const bPriority = priorityOrder[b.priority.toLowerCase() as keyof typeof priorityOrder] ?? 4;
-
-        if (aPriority !== bPriority) {
-          return aPriority - bPriority;
-        }
-
-        return b.lastUpdated.getTime() - a.lastUpdated.getTime();
       });
+
+    return sortPlans(filteredData, currentSortBy, currentSortDirection);
   }
 
   const handleRowClick = (plan: PlanData) => {
@@ -217,6 +231,29 @@ export default function PlanTableComponent({ nodeKey }: PlanTableComponentProps)
         }
       });
     }
+  };
+
+  const handleColumnClick = (column: SortColumn) => {
+    editor.update(() => {
+      const node = $getNodeByKey(nodeKey) as PlanTableNode | null;
+      if (node) {
+        const newDirection = currentSortBy === column && currentSortDirection === 'desc' ? 'asc' : 'desc';
+        node.setSorting(column, newDirection);
+        setCurrentSortBy(column);
+        setCurrentSortDirection(newDirection);
+        // Re-sort existing plans immediately
+        setPlans(prevPlans => sortPlans(prevPlans, column, newDirection));
+      }
+    });
+  };
+
+  const getSortIndicator = (column: SortColumn) => {
+    if (currentSortBy !== column) {
+      return <span className="sort-indicator">⇅</span>;
+    }
+    return currentSortDirection === 'desc'
+      ? <span className="sort-indicator active">↓</span>
+      : <span className="sort-indicator active">↑</span>;
   };
 
   if (loading) {
@@ -249,11 +286,41 @@ export default function PlanTableComponent({ nodeKey }: PlanTableComponentProps)
       <table className="plan-table">
         <thead>
           <tr>
-            <th className="plan-table-header project">PROJECT</th>
-            <th className="plan-table-header status">STATUS</th>
-            <th className="plan-table-header owner">OWNER</th>
-            <th className="plan-table-header priority">PRIORITY</th>
-            <th className="plan-table-header progress">PROGRESS</th>
+            <th
+              className="plan-table-header project sortable"
+              onClick={() => handleColumnClick('title')}
+            >
+              <span>PROJECT</span>
+              {getSortIndicator('title')}
+            </th>
+            <th
+              className="plan-table-header status sortable"
+              onClick={() => handleColumnClick('status')}
+            >
+              <span>STATUS</span>
+              {getSortIndicator('status')}
+            </th>
+            <th
+              className="plan-table-header priority sortable"
+              onClick={() => handleColumnClick('priority')}
+            >
+              <span>PRIORITY</span>
+              {getSortIndicator('priority')}
+            </th>
+            <th
+              className="plan-table-header updated sortable"
+              onClick={() => handleColumnClick('lastUpdated')}
+            >
+              <span>LAST UPDATED</span>
+              {getSortIndicator('lastUpdated')}
+            </th>
+            <th
+              className="plan-table-header progress sortable"
+              onClick={() => handleColumnClick('progress')}
+            >
+              <span>PROGRESS</span>
+              {getSortIndicator('progress')}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -266,11 +333,6 @@ export default function PlanTableComponent({ nodeKey }: PlanTableComponentProps)
               <td className="plan-table-cell project">
                 <div className="project-info">
                   <div className="project-title">{plan.title}</div>
-                  <div className="project-meta">
-                    <span className="project-id">{plan.id}</span>
-                    <span className="separator">•</span>
-                    <span className="project-updated">{formatDate(plan.lastUpdated)}</span>
-                  </div>
                 </div>
               </td>
               <td className="plan-table-cell status">
@@ -285,9 +347,6 @@ export default function PlanTableComponent({ nodeKey }: PlanTableComponentProps)
                   {plan.status.charAt(0).toUpperCase() + plan.status.slice(1).replace('-', ' ')}
                 </span>
               </td>
-              <td className="plan-table-cell owner">
-                {plan.owner}
-              </td>
               <td className="plan-table-cell priority">
                 <span
                   className="priority-badge"
@@ -296,18 +355,21 @@ export default function PlanTableComponent({ nodeKey }: PlanTableComponentProps)
                   {plan.priority.charAt(0).toUpperCase() + plan.priority.slice(1)}
                 </span>
               </td>
+              <td className="plan-table-cell updated">
+                <span className="updated-text">{formatDate(plan.lastUpdated)}</span>
+              </td>
               <td className="plan-table-cell progress">
-                <div className="progress-container">
-                  <div className="progress-bar">
+                <div className="progress-compact">
+                  <div className="progress-bar-container">
                     <div
-                      className="progress-fill"
+                      className="progress-bar-fill"
                       style={{
                         width: `${plan.progress}%`,
-                        backgroundColor: plan.progress === 100 ? '#22c55e' : '#3b82f6'
+                        backgroundColor: plan.progress === 100 ? '#22c55e' : plan.progress > 0 ? '#60a5fa' : 'transparent'
                       }}
                     />
+                    <span className="progress-value">{plan.progress}%</span>
                   </div>
-                  <span className="progress-text">{plan.progress}%</span>
                 </div>
               </td>
             </tr>

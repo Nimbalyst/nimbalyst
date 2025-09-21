@@ -14,29 +14,48 @@ import {
 } from 'lexical';
 import PlanTableComponent from './PlanTableComponent';
 
+export type SortDirection = 'asc' | 'desc';
+export type SortColumn = 'title' | 'status' | 'priority' | 'lastUpdated' | 'progress';
+
 export type SerializedPlanTableNode = Spread<
   {
     type: 'plan-table';
     version: 1;
+    sortBy?: SortColumn;
+    sortDirection?: SortDirection;
   },
   SerializedLexicalNode
 >;
 
 export class PlanTableNode extends DecoratorNode<JSX.Element> {
+  __sortBy: SortColumn;
+  __sortDirection: SortDirection;
+
   static getType(): string {
     return 'plan-table';
   }
 
   static clone(node: PlanTableNode): PlanTableNode {
-    return new PlanTableNode(node.__key);
+    return new PlanTableNode(
+      node.__sortBy,
+      node.__sortDirection,
+      node.__key
+    );
   }
 
-  constructor(key?: NodeKey) {
+  constructor(
+    sortBy: SortColumn = 'lastUpdated',
+    sortDirection: SortDirection = 'desc',
+    key?: NodeKey
+  ) {
     super(key);
+    this.__sortBy = sortBy;
+    this.__sortDirection = sortDirection;
   }
 
   static importJSON(serializedNode: SerializedPlanTableNode): PlanTableNode {
-    const node = $createPlanTableNode();
+    const { sortBy = 'lastUpdated', sortDirection = 'desc' } = serializedNode;
+    const node = $createPlanTableNode(sortBy, sortDirection);
     return node;
   }
 
@@ -44,7 +63,23 @@ export class PlanTableNode extends DecoratorNode<JSX.Element> {
     return {
       type: 'plan-table',
       version: 1,
+      sortBy: this.__sortBy,
+      sortDirection: this.__sortDirection,
     };
+  }
+
+  getSortBy(): SortColumn {
+    return this.__sortBy;
+  }
+
+  getSortDirection(): SortDirection {
+    return this.__sortDirection;
+  }
+
+  setSorting(sortBy: SortColumn, sortDirection: SortDirection): void {
+    const writable = this.getWritable();
+    writable.__sortBy = sortBy;
+    writable.__sortDirection = sortDirection;
   }
 
   createDOM(config: EditorConfig): HTMLElement {
@@ -58,7 +93,13 @@ export class PlanTableNode extends DecoratorNode<JSX.Element> {
   }
 
   decorate(): JSX.Element {
-    return <PlanTableComponent nodeKey={this.getKey()} />;
+    return (
+      <PlanTableComponent
+        nodeKey={this.getKey()}
+        sortBy={this.__sortBy}
+        sortDirection={this.__sortDirection}
+      />
+    );
   }
 
   isTopLevel(): boolean {
@@ -70,8 +111,11 @@ export class PlanTableNode extends DecoratorNode<JSX.Element> {
   }
 }
 
-export function $createPlanTableNode(): PlanTableNode {
-  return $applyNodeReplacement(new PlanTableNode());
+export function $createPlanTableNode(
+  sortBy: SortColumn = 'lastUpdated',
+  sortDirection: SortDirection = 'desc'
+): PlanTableNode {
+  return $applyNodeReplacement(new PlanTableNode(sortBy, sortDirection));
 }
 
 export function $isPlanTableNode(
