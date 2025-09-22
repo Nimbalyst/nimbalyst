@@ -16,7 +16,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.9",
     "openai": "^4.56.0",
-    "rexical": "workspace:*",
+    "rexical": "file:../rexical",
     "yjs": ">=13.5.42",
     "y-websocket": "^1.5.4"
   },
