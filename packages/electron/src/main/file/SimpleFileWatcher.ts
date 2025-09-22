@@ -9,6 +9,46 @@ export class SimpleFileWatcher {
     private filePaths = new Map<number, string>();
     private lastMtimes = new Map<number, number>();  // Track last modification times
 
+    private emitFileChanged(window: BrowserWindow, filePath: string) {
+        try {
+            if (!window || window.isDestroyed()) {
+                console.log(`[FileWatcher] Window destroyed, skipping event for: ${filePath}`);
+                return;
+            }
+
+            const contents = window.webContents;
+            if (!contents || contents.isDestroyed()) {
+                console.log(`[FileWatcher] webContents destroyed, skipping event for: ${filePath}`);
+                return;
+            }
+
+            logger.fileWatcher.info(`File changed: ${filePath}`);
+            console.log(`[FileWatcher] Sending file-changed-on-disk event for: ${filePath}`);
+            contents.send('file-changed-on-disk', { path: filePath });
+        } catch (error) {
+            console.error(`[FileWatcher] Error sending event:`, error);
+        }
+    }
+
+    private restartWatcher(window: BrowserWindow, windowId: number, filePath: string) {
+        // Restart asynchronously so we exit the fs.watch callback first
+        const timer = setTimeout(() => {
+            if (!window || window.isDestroyed()) {
+                return;
+            }
+
+            // Only restart if this window is still interested in the same file
+            const trackedPath = this.filePaths.get(windowId);
+            if (trackedPath && trackedPath !== filePath) {
+                return;
+            }
+
+            // start() will stop any existing watcher for this windowId
+            this.start(window, filePath);
+        }, 10);
+        try { (timer as any).unref?.(); } catch (_) {}
+    }
+
     start(window: BrowserWindow, filePath: string) {
         const windowId = getWindowId(window);
         if (windowId === null) {
@@ -37,8 +77,8 @@ export class SimpleFileWatcher {
                 console.error(`[FileWatcher] Could not get initial mtime for ${filePath}:`, err);
             }
 
-            const watcher = watch(filePath, { persistent: true }, (eventType, filename) => {
-                // console.log(`[FileWatcher] Raw event detected: ${eventType} for ${filePath} (filename: ${filename})`);
+            const watcher = watch(filePath, { persistent: true }, (eventType) => {
+                // console.log(`[FileWatcher] Raw event detected: ${eventType} for ${filePath}`);
                 if (eventType === 'change') {
                     // Check if the file actually changed by comparing mtime
                     try {
@@ -52,24 +92,30 @@ export class SimpleFileWatcher {
                         }
 
                         this.lastMtimes.set(windowId, stats.mtimeMs);
+                        this.emitFileChanged(window, filePath);
                     } catch (err) {
                         console.error(`[FileWatcher] Could not check mtime:`, err);
                     }
-
-                    logger.fileWatcher.info(`File changed: ${filePath}`);
-                    console.log(`[FileWatcher] Sending file-changed-on-disk event for: ${filePath}`);
-                    try {
-                        if (window && !window.isDestroyed() && window.webContents && !window.webContents.isDestroyed()) {
-                            window.webContents.send('file-changed-on-disk', { path: filePath });
-                            // console.log(`[FileWatcher] Event sent successfully`);
-                        } else {
-                            console.log(`[FileWatcher] Window or webContents is destroyed, cannot send event`);
-                        }
-                    } catch (error) {
-                        console.error(`[FileWatcher] Error sending event:`, error);
-                    }
                 } else if (eventType === 'rename') {
                     // console.log(`[FileWatcher] File renamed: ${filePath}`);
+                    try {
+                        const stats = statSync(filePath);
+                        const lastMtime = this.lastMtimes.get(windowId) || 0;
+
+                        if (stats.mtimeMs !== lastMtime) {
+                            this.lastMtimes.set(windowId, stats.mtimeMs);
+                        }
+
+                        this.emitFileChanged(window, filePath);
+                        this.restartWatcher(window, windowId, filePath);
+                    } catch (error: any) {
+                        if (error && error.code === 'ENOENT') {
+                            console.log(`[FileWatcher] File missing after rename event: ${filePath}`);
+                            this.stop(windowId);
+                        } else {
+                            console.error(`[FileWatcher] Error handling rename event for ${filePath}:`, error);
+                        }
+                    }
                 }
             });
 

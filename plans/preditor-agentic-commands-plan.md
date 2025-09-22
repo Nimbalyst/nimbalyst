@@ -115,11 +115,11 @@ Leveraging existing infrastructure to minimize new code:
 - `packages/runtime/src/agents/types.ts` - Shared interfaces
 
 #### Reuse Existing Services
-- **File Operations**: Use existing `FileSystemService` for all agent file I/O
-- **Metadata Cache**: Extend `DocumentMetadataCache` to cache agent frontmatter
-- **File Watching**: Register `agents/` with existing workspace file watcher
-- **AI Sessions**: Inject agent instructions into existing `AIService` sessions
-- **Tool Execution**: Use existing `ToolExecutor` with agent-specified constraints
+- **__File Operations__**: Use existing `FileSystemService` for all agent file I/O
+- **__Metadata Cache__**: Extend `DocumentMetadataCache` to cache agent frontmatter
+- **__File Watching__**: Register `agents/` with existing workspace file watcher
+- **__AI Sessions__**: Inject agent instructions into existing `AIService` sessions
+- **__Tool Execution__**: Use existing `ToolExecutor` with agent-specified constraints
 
 ### UI Integration (Minimal Changes)
 

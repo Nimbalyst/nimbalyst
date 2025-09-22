@@ -324,13 +324,34 @@ export default function App() {
 
       // Save current tab's content before switching
       const previousTabId = tabs.activeTabId;
+      const previousTab = previousTabId ? tabs.getTabState(previousTabId) : undefined;
+      const wasDirty = isDirtyRef.current;
+      let previousContent: string | null = null;
+
       if (previousTabId && getContentRef.current) {
-        const currentContent = getContentRef.current();
+        previousContent = getContentRef.current();
         tabs.updateTab(previousTabId, {
-          content: currentContent,
-          isDirty: isDirtyRef.current
+          content: previousContent,
+          isDirty: wasDirty
         });
         // console.log('[TABS] Saved content for previous tab:', previousTabId);
+      }
+
+      if (
+        wasDirty &&
+        previousTab &&
+        previousTab.filePath &&
+        previousTab.filePath !== tab.filePath &&
+        previousTabId &&
+        previousContent !== null
+      ) {
+        await autoSaveBeforeNavigation({
+          tabId: previousTabId,
+          filePath: previousTab.filePath,
+          content: previousContent,
+          force: true,
+          reason: 'Autosave before tab switch'
+        });
       }
 
       // When switching tabs, restore the tab's saved state
@@ -369,14 +390,29 @@ export default function App() {
       // Save current tab's content if it's the active tab being closed
       if (tab.id === tabs.activeTabId && getContentRef.current) {
         const currentContent = getContentRef.current();
+        const wasDirty = isDirtyRef.current;
+
         tabs.updateTab(tab.id, {
           content: currentContent,
-          isDirty: isDirtyRef.current
+          isDirty: wasDirty
         });
 
         // Update the actual tab object with latest content
         tab.content = currentContent;
-        tab.isDirty = isDirtyRef.current;
+        tab.isDirty = wasDirty;
+
+        if (wasDirty && tab.filePath) {
+          autoSaveBeforeNavigation({
+            tabId: tab.id,
+            filePath: tab.filePath,
+            content: currentContent,
+            force: true,
+            reason: 'Autosave before closing tab'
+          }).catch(error => {
+            console.error('[TAB CLOSE] Autosave failed:', error);
+          });
+          return;
+        }
       }
 
       // Handle tab close - save if dirty
@@ -385,35 +421,21 @@ export default function App() {
 
         // Try to save the file
         if (tab.content) {
-          // Save the specific tab's content
-          const saveTab = async () => {
-            try {
-              // Set the current file first (may or may not return a promise)
-              const setFileResult = window.electronAPI.setCurrentFile(tab.filePath);
-              if (setFileResult && typeof setFileResult.then === 'function') {
-                await setFileResult;
-              }
-
-              // Now save the content
-              const result = await window.electronAPI.saveFile(tab.content, tab.filePath);
-              if (result && result.success) {
-                // Mark the time we saved to ignore file change events
-                lastSaveTimeRef.current = Date.now();
-                console.log('[TAB CLOSE] Saved successfully:', tab.fileName);
-              }
-            } catch (error) {
-              console.error('[TAB CLOSE] Failed to save:', tab.fileName, error);
-              // Could show an error dialog here
-              if (window.electronAPI.showErrorDialog) {
-                window.electronAPI.showErrorDialog(
-                  'Failed to Save',
-                  `Failed to save ${tab.fileName} before closing.\n\nYour changes may be lost.`
-                );
-              }
+          autoSaveBeforeNavigation({
+            tabId: tab.id,
+            filePath: tab.filePath,
+            content: tab.content,
+            force: true,
+            reason: 'Autosave before closing tab'
+          }).catch(error => {
+            console.error('[TAB CLOSE] Autosave failed:', error);
+            if (window.electronAPI.showErrorDialog) {
+              window.electronAPI.showErrorDialog(
+                'Failed to Save',
+                `Failed to save ${tab.fileName} before closing.\n\nYour changes may be lost.`
+              );
             }
-          };
-
-          saveTab();
+          });
         }
       }
     }
@@ -891,6 +913,99 @@ export default function App() {
     window.close();
   }, [isDirty, handleSave]);
 
+  interface AutoSaveOptions {
+    filePath?: string | null;
+    tabId?: string | null;
+    content?: string;
+    force?: boolean;
+    reason?: string;
+  }
+
+  const autoSaveBeforeNavigation = useCallback(async (options: AutoSaveOptions = {}) => {
+    if (!window.electronAPI) {
+      return false;
+    }
+
+    const {
+      filePath: overridePath,
+      tabId: overrideTabId,
+      content: overrideContent,
+      force = false,
+      reason
+    } = options;
+
+    const activeTabId = tabPreferences.preferences.enabled ? tabs.activeTabId : null;
+    const activeTab = tabPreferences.preferences.enabled ? tabs.activeTab : null;
+
+    const targetTabId = overrideTabId ?? (activeTabId ?? null);
+    const targetFilePath = overridePath ?? (activeTab?.filePath ?? currentFilePath);
+
+    if (!targetFilePath) {
+      return false;
+    }
+
+    const content =
+      overrideContent !== undefined
+        ? overrideContent
+        : getContentRef.current
+          ? getContentRef.current()
+          : contentRef.current;
+
+    if (content === undefined || content === null) {
+      return false;
+    }
+
+    const shouldSave = force || isDirtyRef.current;
+    if (!shouldSave) {
+      return false;
+    }
+
+    try {
+      const result = await window.electronAPI.saveFile(content, targetFilePath);
+      if (!result || !result.success) {
+        return false;
+      }
+
+      lastSaveTimeRef.current = Date.now();
+
+      const isActiveTab = !tabPreferences.preferences.enabled || (targetTabId !== null && targetTabId === tabs.activeTabId);
+
+      if (tabPreferences.preferences.enabled && targetTabId) {
+        tabs.updateTab(targetTabId, {
+          content,
+          isDirty: false,
+          lastSaved: new Date()
+        });
+      }
+
+      if (isActiveTab) {
+        isDirtyRef.current = false;
+        setIsDirty(false);
+        initialContentRef.current = content;
+        setCurrentFilePath(result.filePath);
+        setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
+      }
+
+      if (reason && window.electronAPI.history) {
+        try {
+          await window.electronAPI.history.createSnapshot(
+            targetFilePath,
+            content,
+            'auto',
+            reason
+          );
+        } catch (snapshotError) {
+          console.warn('[AUTOSAVE] Failed to record snapshot:', snapshotError);
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error('[AUTOSAVE] Failed to save document automatically:', error);
+      return false;
+    }
+  }, [currentFilePath, tabPreferences, tabs, setIsDirty, setCurrentFileName, setCurrentFilePath]);
+
   // Handle file selection in workspace
   const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
     // Cancel any pending autosave for the previous file
@@ -904,8 +1019,35 @@ export default function App() {
 
     if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Selecting file:', filePath);
 
-    // If tabs are enabled, check if file is already open in a tab
-    console.log('[TABS] Tab preferences:', tabPreferences.preferences);
+    const activeTabId = tabPreferences.preferences.enabled ? tabs.activeTabId : null;
+    const activeFilePath = tabPreferences.preferences.enabled && tabs.activeTab
+      ? tabs.activeTab.filePath
+      : currentFilePath;
+
+    if (activeFilePath === filePath) {
+      if (tabPreferences.preferences.enabled) {
+        const existingTab = tabs.findTabByPath(filePath);
+        if (existingTab) {
+          if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already active, ensuring tab focus');
+          tabs.switchTab(existingTab.id);
+        }
+      }
+      return;
+    }
+
+    const wasDirty = isDirtyRef.current;
+
+    if (activeFilePath && activeFilePath !== filePath && wasDirty) {
+      if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Auto-saving current file before switching');
+      await autoSaveBeforeNavigation({
+        tabId: activeTabId,
+        filePath: activeFilePath,
+        force: true,
+        reason: 'Autosave before switching file'
+      });
+    }
+
+    // If tabs are enabled, check if file is already open in a tab after autosave
     if (tabPreferences.preferences.enabled) {
       const existingTab = tabs.findTabByPath(filePath);
       if (existingTab) {
@@ -913,12 +1055,6 @@ export default function App() {
         tabs.switchTab(existingTab.id);
         return;
       }
-    }
-
-    // Auto-save current file if dirty (no prompt needed with autosave)
-    if (isDirty && getContentRef.current && currentFilePath && currentFilePath !== filePath) {
-      if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Auto-saving current file before switching');
-      await handleSave();
     }
 
     try {
@@ -1012,7 +1148,7 @@ export default function App() {
     } catch (error) {
       console.error('Failed to switch workspace file:', error);
     }
-  }, [isDirty, currentFilePath, handleSave, tabs, tabPreferences]);
+  }, [currentFilePath, tabs, tabPreferences, autoSaveBeforeNavigation]);
 
   // Update window title and dirty state
   useEffect(() => {

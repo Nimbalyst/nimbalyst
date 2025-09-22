@@ -216,11 +216,14 @@ app.whenReady().then(async () => {
 
     if (pendingWorkspacePath) {
         // Handle workspace path from CLI
-        const window = createWindow(true);
+        const workspacePath = pendingWorkspacePath;
+        pendingWorkspacePath = null;
+
+        const window = createWindow(false, true, workspacePath);
         window.once('ready-to-show', () => {
-            // Send workspace open event to renderer
-            window.webContents.send('open-workspace-from-cli', pendingWorkspacePath);
-            pendingWorkspacePath = null;
+            window.show();
+            // Notify renderer to ensure workspace UI syncs with the selected path
+            window.webContents.send('open-workspace-from-cli', workspacePath);
         });
     } else if (!sessionRestored && !pendingFilePath) {
         // No session to restore and no file to open, show Workspace Manager

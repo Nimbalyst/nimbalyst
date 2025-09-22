@@ -335,7 +335,9 @@ packages/
 
 ### Testing
 
-The project's test infrastructure is under active development. Future updates will include comprehensive testing with vitest and Playwright.
+- `npm run test:unit`: Vitest unit suite (JSDOM)
+- `npm run test:e2e`: Playwright e2e projects
+- `npm run test:e2e -- --project=electron`: Electron autosave-on-navigation regression test (requires `npm run build --workspace @preditor/electron`; see `docs/PLAYWRIGHT.md`)
 
 ### Key Commands
 

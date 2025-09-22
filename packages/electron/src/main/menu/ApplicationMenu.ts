@@ -618,6 +618,15 @@ export async function createApplicationMenu() {
                                             await installBuiltinAgent(focused, 'security-quick-scan.md');
                                         }
                                     }
+                                },
+                                {
+                                    label: 'User Documentation Writer',
+                                    click: async () => {
+                                        const focused = BrowserWindow.getFocusedWindow();
+                                        if (focused) {
+                                            await installBuiltinAgent(focused, 'documentation-writer.md');
+                                        }
+                                    }
                                 }
                             ]
                         }
