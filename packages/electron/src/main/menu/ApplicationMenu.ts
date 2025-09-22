@@ -1,6 +1,6 @@
 import { Menu, BrowserWindow, app, dialog } from 'electron';
-import { basename } from 'path';
-import { existsSync } from 'fs';
+import { basename, join } from 'path';
+import { existsSync, copyFileSync, mkdirSync } from 'fs';
 import { windows, windowStates, createWindow, findWindowByFilePath, getWindowId } from '../window/WindowManager';
 import { createAboutWindow } from '../window/AboutWindow';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
@@ -264,6 +264,78 @@ async function createRecentSubmenu(): any[] {
     return submenu;
 }
 
+// Install a built-in agent to the workspace
+async function installBuiltinAgent(window: BrowserWindow, agentFileName: string) {
+    const windowState = windowStates.get(window.id);
+    if (!windowState || windowState.mode !== 'workspace' || !windowState.workspacePath) {
+        dialog.showMessageBox(window, {
+            type: 'warning',
+            title: 'No Workspace',
+            message: 'Please open a workspace before installing agents.',
+            buttons: ['OK']
+        });
+        return;
+    }
+
+    const workspacePath = windowState.workspacePath;
+    const agentsDir = join(workspacePath, 'agents');
+    const targetPath = join(agentsDir, agentFileName);
+
+    // Check if agent already exists
+    if (existsSync(targetPath)) {
+        const result = await dialog.showMessageBox(window, {
+            type: 'question',
+            title: 'Agent Exists',
+            message: `The agent "${agentFileName}" already exists in your workspace. Do you want to overwrite it?`,
+            buttons: ['Overwrite', 'Cancel'],
+            defaultId: 1,
+            cancelId: 1
+        });
+
+        if (result.response === 1) {
+            return; // User cancelled
+        }
+    }
+
+    try {
+        // Create agents directory if it doesn't exist
+        if (!existsSync(agentsDir)) {
+            mkdirSync(agentsDir, { recursive: true });
+        }
+
+        // Copy the built-in agent file
+        const sourcePath = join(__dirname, '..', '..', 'resources', 'builtin-agents', agentFileName);
+
+        // In development, the path might be different
+        const devSourcePath = join(__dirname, '..', '..', '..', 'resources', 'builtin-agents', agentFileName);
+        const actualSourcePath = existsSync(sourcePath) ? sourcePath : devSourcePath;
+
+        if (!existsSync(actualSourcePath)) {
+            throw new Error(`Built-in agent file not found: ${agentFileName}`);
+        }
+
+        copyFileSync(actualSourcePath, targetPath);
+
+        dialog.showMessageBox(window, {
+            type: 'info',
+            title: 'Agent Installed',
+            message: `The agent "${agentFileName}" has been successfully installed to your workspace.`,
+            detail: `You can now use it by pressing Cmd+K to open the Agent Command Palette.`,
+            buttons: ['OK']
+        });
+
+        // Trigger agent reload
+        window.webContents.send('agents:updated', workspacePath);
+    } catch (error) {
+        dialog.showMessageBox(window, {
+            type: 'error',
+            title: 'Installation Failed',
+            message: `Failed to install agent: ${error instanceof Error ? error.message : String(error)}`,
+            buttons: ['OK']
+        });
+    }
+}
+
 // Create application menu
 export async function createApplicationMenu() {
     // Get current theme from store
@@ -510,6 +582,46 @@ export async function createApplicationMenu() {
                             focused.webContents.send('navigation:go-forward');
                         }
                     }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Agents',
+                    submenu: [
+                        {
+                            label: 'Open Agent Command Palette',
+                            accelerator: 'CmdOrCtrl+K',
+                            click: async () => {
+                                const focused = BrowserWindow.getFocusedWindow();
+                                if (focused) {
+                                    focused.webContents.send('toggle-agent-palette');
+                                }
+                            }
+                        },
+                        { type: 'separator' },
+                        {
+                            label: 'Install Built-in Agents',
+                            submenu: [
+                                {
+                                    label: 'Plan Document Manager',
+                                    click: async () => {
+                                        const focused = BrowserWindow.getFocusedWindow();
+                                        if (focused) {
+                                            await installBuiltinAgent(focused, 'plan-document-manager.md');
+                                        }
+                                    }
+                                },
+                                {
+                                    label: 'Security Quick Scan',
+                                    click: async () => {
+                                        const focused = BrowserWindow.getFocusedWindow();
+                                        if (focused) {
+                                            await installBuiltinAgent(focused, 'security-quick-scan.md');
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    ]
                 },
                 { type: 'separator' },
                 {

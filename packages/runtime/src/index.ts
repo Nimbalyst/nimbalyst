@@ -12,6 +12,8 @@ export * from './ai/sessionManager';
 export * from './ai/modelConstants';
 export * from './ai/adapters/sessionStore';
 export * from './storage/repositories/AISessionsRepository';
+// Agents
+export * from './agents';
 // Plugins
 export { DocumentLinkPlugin } from './plugins/DocumentLinkPlugin';
 export { DocumentReferenceNode, DocumentReferenceTransformer, $createDocumentReferenceNode, $isDocumentReferenceNode } from './plugins/DocumentLinkPlugin/DocumentLinkNode';

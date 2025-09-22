@@ -8,6 +8,7 @@
   --background-secondary: #f9fafb;
   --background-tertiary: #f3f4f6;
   --background-hover: rgba(0, 0, 0, 0.05);
+  --background-selected: rgba(59, 130, 246, 0.1); /* Primary color at 10% */
   --border-color: #e5e7eb;
   --text-primary: #111827;
   --text-secondary: #6b7280;
@@ -22,6 +23,7 @@
   --background-secondary: #1a1a1a;
   --background-tertiary: #3a3a3a;
   --background-hover: rgba(255, 255, 255, 0.05);
+  --background-selected: rgba(96, 165, 250, 0.15); /* Primary color at 15% */
   --border-color: #4a4a4a;
   --text-primary: #ffffff;
   --text-secondary: #b3b3b3;
@@ -36,6 +38,7 @@
   --background-secondary: #020617;
   --background-tertiary: #1e293b;
   --background-hover: rgba(255, 255, 255, 0.05);
+  --background-selected: rgba(56, 189, 248, 0.15); /* Primary color at 15% */
   --border-color: #1e293b;
   --text-primary: #f8fafc;
   --text-secondary: #cbd5e1;

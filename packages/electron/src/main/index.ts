@@ -18,6 +18,7 @@ import { registerHistoryHandlers } from './ipc/HistoryHandlers';
 import { registerSessionHandlers } from './ipc/SessionHandlers';
 import { getTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
+import { AgentService } from './services/agents/AgentService';
 import { startMcpHttpServer, updateDocumentState, cleanupMcpServer, shutdownHttpServer } from './mcp/httpServer';
 import { logger } from './utils/logger';
 import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
@@ -47,6 +48,7 @@ const appStartTime = Date.now();
 
 // AI service instance
 let aiService: AIService | null = null;
+let agentService: AgentService | null = null;
 let runtimeSessionStore: SessionStore | null = null;
 let mcpHttpServer: any = null;
 
@@ -191,6 +193,9 @@ app.whenReady().then(async () => {
         throw new Error('AI session store unavailable after database initialization');
     }
     aiService = new AIService(runtimeSessionStore);
+
+    // Initialize Agent service
+    agentService = new AgentService(aiService);
 
     // Start MCP SSE server
     try {

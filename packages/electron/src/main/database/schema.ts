@@ -115,7 +115,9 @@ async function createAISessionsTable(db: PGlite): Promise<void> {
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS token_usage JSONB DEFAULT '{}'",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS total_tokens JSONB DEFAULT '{\"input\": 0, \"output\": 0, \"total\": 0}'",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-    "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+    "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+    "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS agent_id TEXT",
+    "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS agent_metadata JSONB"
   ];
 
   for (const statement of alterStatements) {

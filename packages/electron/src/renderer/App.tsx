@@ -26,6 +26,7 @@ if (typeof window !== 'undefined' && !window.aiChatBridge) {
 import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx';
 import { WorkspaceWelcome } from './components/WorkspaceWelcome.tsx';
 import { QuickOpen } from './components/QuickOpen';
+import { AgentCommandPalette } from './components/AgentCommandPalette';
 import { AIChat } from './components/AIChat';
 import { HistoryDialog } from './components/HistoryDialog';
 import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
@@ -269,6 +270,7 @@ export default function App() {
   });
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
+  const [isAgentPaletteVisible, setIsAgentPaletteVisible] = useState(false);
   const [recentWorkspaceFiles, setRecentWorkspaceFiles] = useState<string[]>([]);
   const [isNewFileDialogOpen, setIsNewFileDialogOpen] = useState(false);
   const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
@@ -1034,9 +1036,18 @@ export default function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd+K (Mac) or Ctrl+K (Windows/Linux) for Quick Open
-      // This takes priority over Lexical's link plugin
+      // Cmd+K (Mac) or Ctrl+K (Windows/Linux) for Agent Command Palette
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        if (workspaceMode) {
+          setIsAgentPaletteVisible(true);
+        }
+        return false;
+      }
+      // Cmd+O (Mac) or Ctrl+O (Windows/Linux) for Quick Open
+      if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -2616,6 +2627,15 @@ export default function App() {
             currentFilePath={currentFilePath}
             recentFiles={recentWorkspaceFiles}
             onFileSelect={handleQuickOpenFileSelect}
+          />
+          <AgentCommandPalette
+            isOpen={isAgentPaletteVisible}
+            onClose={() => setIsAgentPaletteVisible(false)}
+            workspacePath={workspacePath}
+            documentContext={{
+              content: getContentRef.current ? getContentRef.current() : contentRef.current,
+              filePath: currentFilePath || undefined
+            }}
           />
           <NewFileDialog
             isOpen={isNewFileDialogOpen}

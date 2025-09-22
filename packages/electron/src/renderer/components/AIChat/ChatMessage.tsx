@@ -29,7 +29,7 @@ interface ChatMessageProps {
   provider?: string;  // Provider for showing appropriate icon
 }
 
-export function ChatMessage({
+const ChatMessageComponent = ({
   role,
   content,
   edits,
@@ -40,7 +40,7 @@ export function ChatMessage({
   onApplyEdit,
   onReapply,
   provider
-}: ChatMessageProps) {
+}: ChatMessageProps) => {
   const [expandedEdits, setExpandedEdits] = useState(false);
   const [appliedEdits, setAppliedEdits] = useState<Set<number>>(new Set());
   const [editStatus, setEditStatus] = useState<{ [key: number]: { status: 'applied' | 'failed' | 'pending'; error?: string } }>({});
@@ -301,3 +301,5 @@ export function ChatMessage({
     </div>
   );
 }
+
+export const ChatMessage = React.memo(ChatMessageComponent);

@@ -188,18 +188,15 @@ export default function PlanTableComponent({
   function extractPlanData(metadata: DocumentMetadataEntry[]): PlanData[] {
     const filteredData = metadata
       .filter(doc => {
-        // More flexible checking for plan documents
-        const pathLower = doc.path.toLowerCase();
-        const isInPlansFolder = pathLower.includes('plan') || pathLower.includes('plans/');
+        // Only include documents that have planStatus in their frontmatter
+        // This is the definitive marker of a planning document
         const hasPlanStatus = !!(doc.frontmatter && doc.frontmatter.planStatus);
-        const hasPlanInName = pathLower.endsWith('-plan.md') || pathLower.includes('plan-');
 
-        // Also check if the document looks like a plan based on frontmatter
-        const hasStatusField = doc.frontmatter && ('status' in doc.frontmatter || 'planStatus' in doc.frontmatter);
+        // Exclude agent files even if they match other criteria
+        const pathLower = doc.path.toLowerCase();
+        const isAgentFile = pathLower.includes('/agents/') || pathLower.includes('\\agents\\');
 
-        const shouldInclude = hasPlanStatus || (isInPlansFolder && hasStatusField) || hasPlanInName;
-
-        return shouldInclude;
+        return hasPlanStatus && !isAgentFile;
       })
       .map(doc => {
         const planStatus = doc.frontmatter.planStatus as any || {};
