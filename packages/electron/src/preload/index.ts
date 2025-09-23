@@ -96,6 +96,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('toggle-search-replace', callback);
     return () => ipcRenderer.removeListener('toggle-search-replace', callback);
   },
+  onToggleAgentPalette: (callback: () => void) => {
+    ipcRenderer.on('toggle-agent-palette', callback);
+    return () => ipcRenderer.removeListener('toggle-agent-palette', callback);
+  },
   onFileDeleted: (callback: (data: { filePath: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('file-deleted', handler);

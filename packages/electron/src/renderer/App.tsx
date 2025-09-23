@@ -2520,6 +2520,18 @@ export default function App() {
       }));
     }
 
+    // Handle toggle agent palette from menu
+    if (window.electronAPI.onToggleAgentPalette) {
+      cleanupFns.push(window.electronAPI.onToggleAgentPalette(() => {
+        console.log('Toggle agent palette command received from menu');
+        if (workspaceMode) {
+          setIsAgentPaletteVisible(true);
+        } else {
+          console.log('Not in workspace mode, agent palette not available');
+        }
+      }));
+    }
+
     // Update MCP document state whenever content or selection changes
     const updateDocumentState = () => {
       if (window.electronAPI?.updateMcpDocumentState && getContentRef.current) {
