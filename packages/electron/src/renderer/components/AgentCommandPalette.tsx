@@ -28,6 +28,16 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const resultsListRef = useRef<HTMLUListElement>(null);
 
+  // Use refs to store latest values without causing re-renders
+  const documentContextRef = useRef(documentContext);
+  const workspacePathRef = useRef(workspacePath);
+
+  // Update refs when props change
+  useEffect(() => {
+    documentContextRef.current = documentContext;
+    workspacePathRef.current = workspacePath;
+  }, [documentContext, workspacePath]);
+
   // Load agents when component opens
   useEffect(() => {
     if (isOpen) {
@@ -35,12 +45,9 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
     }
   }, [isOpen, workspacePath]);
 
-  // Load agents initially and listen for updates
+  // Load agents initially and listen for updates - only set up listener once
   useEffect(() => {
-    // Load agents immediately on mount
-    if (workspacePath) {
-      loadAgents();
-    }
+    if (!window.electronAPI) return;
 
     const handleAgentsUpdated = () => {
       console.log('Agents updated, reloading...');
@@ -48,17 +55,24 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
     };
 
     // Listen for updates from main process
-    window.electronAPI?.on('agents:updated', handleAgentsUpdated);
+    window.electronAPI.on('agents:updated', handleAgentsUpdated);
 
     return () => {
-      window.electronAPI?.off('agents:updated', handleAgentsUpdated);
+      window.electronAPI.off('agents:updated', handleAgentsUpdated);
     };
+  }, []); // Empty dependency array - only set up once
+
+  // Load agents when workspacePath changes
+  useEffect(() => {
+    if (workspacePath) {
+      loadAgents();
+    }
   }, [workspacePath]);
 
   const loadAgents = async () => {
     setIsLoading(true);
     try {
-      const loadedAgents = await agentApi.getAllAgents(workspacePath);
+      const loadedAgents = await agentApi.getAllAgents(workspacePathRef.current);
       setAgents(loadedAgents);
       setFilteredAgents(loadedAgents);
     } catch (error) {
@@ -100,30 +114,32 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
     }
   }, [isOpen]);
 
-  // Listen for agent messages from main process
+  // Listen for agent messages from main process - only set up once
   useEffect(() => {
+    if (!window.electronAPI) return;
+
     const handleAgentMessage = async (data: any) => {
       console.log('Received agent message:', data);
 
-      // Send the message to the AI chat
+      // Send the message to the AI chat using ref values
       if (data.sessionId && data.message) {
         await aiApi.sendMessage(
           data.message,
-          documentContext,
+          documentContextRef.current,
           data.sessionId,
-          workspacePath
+          workspacePathRef.current
         );
       }
     };
 
     // Set up listener
-    window.electronAPI?.on('agent:message', handleAgentMessage);
+    window.electronAPI.on('agent:message', handleAgentMessage);
 
-    // Cleanup
+    // Cleanup - must use the exact same function reference
     return () => {
-      window.electronAPI?.off('agent:message', handleAgentMessage);
+      window.electronAPI.off('agent:message', handleAgentMessage);
     };
-  }, [documentContext, workspacePath]);
+  }, []); // Empty dependency array - only set up once
 
   // Scroll selected item into view
   useEffect(() => {
@@ -200,14 +216,14 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
 
     setIsExecuting(true);
     try {
-      // Create or get current AI session
-      const sessions = await aiApi.getSessions(workspacePath);
+      // Create or get current AI session using ref values
+      const sessions = await aiApi.getSessions(workspacePathRef.current);
       let currentSession = sessions?.[0];
 
       if (!currentSession) {
         // Create a new session if none exists
-        await aiApi.createNewSession(workspacePath);
-        const updatedSessions = await aiApi.getSessions(workspacePath);
+        await aiApi.createNewSession(workspacePathRef.current);
+        const updatedSessions = await aiApi.getSessions(workspacePathRef.current);
         currentSession = updatedSessions?.[0];
       }
 
@@ -215,13 +231,13 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
         throw new Error('Failed to create AI session');
       }
 
-      // Execute the agent
+      // Execute the agent using ref values
       const result = await agentApi.executeAgent({
         agentId: selectedAgent.id,
         parameters,
-        documentContext: documentContext?.content,
+        documentContext: documentContextRef.current?.content,
         sessionId: currentSession.id,
-        workspacePath,
+        workspacePath: workspacePathRef.current,
       });
 
       if (result.success) {
