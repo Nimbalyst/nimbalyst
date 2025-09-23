@@ -2469,6 +2469,57 @@ export default function App() {
       }));
     }
 
+    // Handle AI create document requests from main process
+    if (window.electronAPI.onAICreateDocument) {
+      cleanupFns.push(window.electronAPI.onAICreateDocument(async ({ filePath, initialContent, switchToFile, resultChannel }) => {
+        console.log('AI createDocument request from main:', { filePath, switchToFile });
+        try {
+          // Create the document via IPC
+          const result = await window.electronAPI.invoke('create-document', filePath, initialContent);
+
+          if (result.success) {
+            // Switch to the new file if requested
+            if (switchToFile && result.filePath) {
+              console.log('Switching to new file:', result.filePath);
+              await handleWorkspaceFileSelect(result.filePath);
+            }
+
+            // Send success response back to main process
+            if (window.electronAPI.sendAICreateDocumentResult) {
+              window.electronAPI.sendAICreateDocumentResult(resultChannel, {
+                success: true,
+                filePath: result.filePath
+              });
+            } else {
+              // Fallback to generic IPC send
+              window.electronAPI.send(resultChannel, {
+                success: true,
+                filePath: result.filePath
+              });
+            }
+          } else {
+            throw new Error(result.error || 'Failed to create document');
+          }
+        } catch (error) {
+          console.error('AI createDocument error:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+          if (window.electronAPI.sendAICreateDocumentResult) {
+            window.electronAPI.sendAICreateDocumentResult(resultChannel, {
+              success: false,
+              error: errorMessage
+            });
+          } else {
+            // Fallback to generic IPC send
+            window.electronAPI.send(resultChannel, {
+              success: false,
+              error: errorMessage
+            });
+          }
+        }
+      }));
+    }
+
     // Update MCP document state whenever content or selection changes
     const updateDocumentState = () => {
       if (window.electronAPI?.updateMcpDocumentState && getContentRef.current) {
@@ -2496,6 +2547,61 @@ export default function App() {
       cleanupFns.forEach(cleanup => cleanup());
     };
   }, [handleNew, handleOpen, handleSave, handleSaveAs, handleWorkspaceFileSelect, currentFilePath, isDirty, workspaceMode]);
+
+  // Handle AI tool createDocument requests
+  useEffect(() => {
+    const handleCreateDocument = async (event: CustomEvent) => {
+      const { correlationId, filePath, initialContent, switchToFile } = event.detail;
+      console.log('[AI Tool] createDocument request received:', { correlationId, filePath, switchToFile });
+
+      try {
+        if (!window.electronAPI) {
+          throw new Error('Electron API not available');
+        }
+
+        // Create the document via IPC
+        console.log('[AI Tool] Invoking IPC create-document with:', filePath);
+        const result = await window.electronAPI.invoke('create-document', filePath, initialContent);
+        console.log('[AI Tool] IPC result:', result);
+
+        if (result.success) {
+          // Switch to the new file if requested
+          if (switchToFile && result.filePath) {
+            console.log('[AI Tool] Switching to new file:', result.filePath);
+            await handleWorkspaceFileSelect(result.filePath);
+          }
+
+          // Send success response
+          console.log('[AI Tool] Sending success response');
+          window.dispatchEvent(new CustomEvent('aiToolResponse:createDocument', {
+            detail: {
+              correlationId,
+              success: true,
+              filePath: result.filePath
+            }
+          }));
+        } else {
+          throw new Error(result.error || 'Failed to create document');
+        }
+      } catch (error) {
+        console.error('[AI Tool] Error creating document:', error);
+        // Send error response
+        window.dispatchEvent(new CustomEvent('aiToolResponse:createDocument', {
+          detail: {
+            correlationId,
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }
+        }));
+      }
+    };
+
+    window.addEventListener('aiToolRequest:createDocument', handleCreateDocument as EventListener);
+
+    return () => {
+      window.removeEventListener('aiToolRequest:createDocument', handleCreateDocument as EventListener);
+    };
+  }, [handleWorkspaceFileSelect]);
 
   logger.ui.info('Rendering App with config:', {
     contentLength: contentRef.current.length,

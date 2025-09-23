@@ -336,6 +336,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('ai:updateFrontmatter', handler);
     return () => ipcRenderer.removeListener('ai:updateFrontmatter', handler);
   },
+  onAICreateDocument: (callback: (data: { filePath: string; initialContent?: string; switchToFile?: boolean; resultChannel: string }) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('ai:createDocument', handler);
+    return () => ipcRenderer.removeListener('ai:createDocument', handler);
+  },
+
+  // AI result senders
+  sendAIApplyDiffResult: (resultChannel: string, result: any) => {
+    ipcRenderer.send(resultChannel, result);
+  },
+  sendAIGetDocumentContentResult: (resultChannel: string, result: any) => {
+    ipcRenderer.send(resultChannel, result);
+  },
+  sendAIUpdateFrontmatterResult: (resultChannel: string, result: any) => {
+    ipcRenderer.send(resultChannel, result);
+  },
+  sendAICreateDocumentResult: (resultChannel: string, result: any) => {
+    ipcRenderer.send(resultChannel, result);
+  },
 
   // Additional AI operations that weren't in the first block
   aiCancelRequest: () => ipcRenderer.invoke('ai:cancelRequest'),

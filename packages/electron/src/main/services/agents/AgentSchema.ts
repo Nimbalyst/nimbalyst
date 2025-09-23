@@ -3,7 +3,7 @@ import * as yaml from 'js-yaml';
 import type { Agent, AgentMetadata } from '@stravu/runtime/agents';
 
 const AgentParameterSchema = z.object({
-  type: z.enum(['text', 'select', 'number', 'boolean']),
+  type: z.enum(['text', 'string', 'select', 'number', 'boolean']),
   description: z.string().optional(),
   default: z.any().optional(),
   required: z.boolean().optional(),
@@ -91,6 +91,7 @@ export class AgentValidator {
       // Validate type
       switch (param.type) {
         case 'text':
+        case 'string':
           if (typeof value !== 'string') {
             throw new Error(`Parameter ${key} must be a string`);
           }

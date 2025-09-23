@@ -2,7 +2,7 @@
 planStatus:
   planId: plan-preditor-agentic-commands
   title: Preditor Agentic Commands
-  status: ready-for-development
+  status: in-review
   planType: feature
   priority: high
   owner: ghinkle
@@ -17,8 +17,8 @@ planStatus:
     - commands
     - automation
   created: "2025-09-21"
-  updated: "2025-09-21T18:45:00Z"
-  progress: 15
+  updated: "2025-09-22T17:59:50.526Z"
+  progress: 81
   dueDate: ""
   startDate: ""
 ---

@@ -304,13 +304,28 @@ async function installBuiltinAgent(window: BrowserWindow, agentFileName: string)
         }
 
         // Copy the built-in agent file
-        const sourcePath = join(__dirname, '..', '..', 'resources', 'builtin-agents', agentFileName);
+        // In packaged app, resources are in app.asar or Resources folder
+        let actualSourcePath: string;
 
-        // In development, the path might be different
-        const devSourcePath = join(__dirname, '..', '..', '..', 'resources', 'builtin-agents', agentFileName);
-        const actualSourcePath = existsSync(sourcePath) ? sourcePath : devSourcePath;
+        if (app.isPackaged) {
+            // In packaged app, try multiple possible locations
+            const possiblePaths = [
+                // Resources folder next to app.asar
+                join(process.resourcesPath, 'builtin-agents', agentFileName),
+                // Inside app.asar (will work with asar support)
+                join(__dirname, '..', '..', 'resources', 'builtin-agents', agentFileName),
+                // macOS specific location
+                join(process.resourcesPath, '..', 'Resources', 'builtin-agents', agentFileName),
+            ];
 
-        if (!existsSync(actualSourcePath)) {
+            actualSourcePath = possiblePaths.find(p => existsSync(p)) || '';
+        } else {
+            // In development
+            const devSourcePath = join(__dirname, '..', '..', '..', 'resources', 'builtin-agents', agentFileName);
+            actualSourcePath = devSourcePath;
+        }
+
+        if (!actualSourcePath || !existsSync(actualSourcePath)) {
             throw new Error(`Built-in agent file not found: ${agentFileName}`);
         }
 
@@ -625,6 +640,16 @@ export async function createApplicationMenu() {
                                         const focused = BrowserWindow.getFocusedWindow();
                                         if (focused) {
                                             await installBuiltinAgent(focused, 'documentation-writer.md');
+                                        }
+                                    }
+                                },
+                                { type: 'separator' },
+                                {
+                                    label: '[TEST] Document Creator',
+                                    click: async () => {
+                                        const focused = BrowserWindow.getFocusedWindow();
+                                        if (focused) {
+                                            await installBuiltinAgent(focused, 'test-document-creator.md');
                                         }
                                     }
                                 }

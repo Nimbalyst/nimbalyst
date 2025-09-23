@@ -1,6 +1,6 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
-import { readFileSync, existsSync } from 'fs';
-import { basename } from 'path';
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
+import { basename, join, dirname } from 'path';
  import { windowStates, savingWindows, findWindowByFilePath, createWindow, getWindowId, windows } from '../window/WindowManager';
 import { loadFileIntoWindow, saveFile } from '../file/FileOperations';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
@@ -254,5 +254,70 @@ export function registerFileHandlers() {
         });
 
         return { success: true };
+    });
+
+    // Create document for AI tools
+    ipcMain.handle('create-document', async (event, relativePath: string, initialContent: string) => {
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) {
+            console.error('[CREATE_DOC] No window found for event sender');
+            return { success: false, error: 'No window found' };
+        }
+
+        const windowId = getWindowId(window);
+        if (windowId === null) {
+            console.error('[CREATE_DOC] Failed to find custom window ID');
+            return { success: false, error: 'Window ID not found' };
+        }
+
+        const state = windowStates.get(windowId);
+        if (!state || !state.workspacePath) {
+            console.error('[CREATE_DOC] No workspace path in window state');
+            return { success: false, error: 'No workspace open' };
+        }
+
+        try {
+            // Build the absolute path
+            const absolutePath = join(state.workspacePath, relativePath);
+            const directory = dirname(absolutePath);
+
+            console.log('[CREATE_DOC] Creating document:', absolutePath);
+
+            // Ensure the directory exists
+            if (!existsSync(directory)) {
+                mkdirSync(directory, { recursive: true });
+                console.log('[CREATE_DOC] Created directory:', directory);
+            }
+
+            // Check if file already exists
+            if (existsSync(absolutePath)) {
+                console.log('[CREATE_DOC] File already exists:', absolutePath);
+                return {
+                    success: false,
+                    error: 'File already exists',
+                    filePath: absolutePath
+                };
+            }
+
+            // Write the initial content
+            writeFileSync(absolutePath, initialContent || '', 'utf-8');
+            console.log('[CREATE_DOC] File created successfully');
+
+            // Add to recent files
+            if (state.workspacePath) {
+                addWorkspaceRecentFile(state.workspacePath, absolutePath);
+            }
+
+            return {
+                success: true,
+                filePath: absolutePath
+            };
+        } catch (error) {
+            console.error('[CREATE_DOC] Error creating document:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            };
+        }
     });
 }

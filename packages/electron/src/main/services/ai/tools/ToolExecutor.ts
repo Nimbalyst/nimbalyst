@@ -171,6 +171,42 @@ export class ToolExecutor extends EventEmitter {
   }
 
   /**
+   * Execute createDocument tool
+   */
+  async createDocument(args: { filePath: string; initialContent?: string; switchToFile?: boolean }): Promise<any> {
+    const resultChannel = `createDocument-result-${Date.now()}`;
+    logger.ai.info('[ToolExecutor] createDocument invoked', {
+      filePath: args?.filePath,
+      hasContent: !!args?.initialContent,
+      switchToFile: args?.switchToFile !== false
+    });
+
+    return new Promise((resolve, reject) => {
+      // Set up timeout
+      const timeout = setTimeout(() => {
+        ipcMain.removeAllListeners(resultChannel);
+        logger.ai.error('[ToolExecutor] createDocument timed out');
+        reject(new Error('Tool createDocument execution timed out'));
+      }, 10000);
+
+      // Set up one-time listener for result
+      ipcMain.once(resultChannel, (event, result: any) => {
+        clearTimeout(timeout);
+        logger.ai.info('[ToolExecutor] createDocument result received', result);
+        resolve(result);
+      });
+
+      // Send to renderer
+      this.webContents.send('ai:createDocument', {
+        filePath: args.filePath,
+        initialContent: args.initialContent,
+        switchToFile: args.switchToFile !== false,
+        resultChannel
+      });
+    });
+  }
+
+  /**
    * Execute any registered tool
    */
   async executeTool(name: string, args: any): Promise<any> {
@@ -189,6 +225,8 @@ export class ToolExecutor extends EventEmitter {
         return await this.getDocumentContent(args);
       case 'updateFrontmatter':
         return await this.updateFrontmatter(args);
+      case 'createDocument':
+        return await this.createDocument(args);
       default:
         // Check if tool has a handler (e.g., file tools)
         if (typeof tool.handler === 'function') {

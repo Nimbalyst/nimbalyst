@@ -1,5 +1,5 @@
 export interface AgentParameter {
-  type: 'text' | 'select' | 'number' | 'boolean';
+  type: 'text' | 'string' | 'select' | 'number' | 'boolean';
   description?: string;
   default?: any;
   required?: boolean;

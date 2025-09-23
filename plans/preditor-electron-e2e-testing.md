@@ -111,4 +111,4 @@ planStatus:
 
 ## Status Updates
 
-- **2025-09-22**: Added `playwright.config.ts`, documented the workflow in `docs/PLAYWRIGHT.md`, referenced commands in `README.md`, and built the `packages/electron/tests/e2e/autosave-navigation.spec.cjs` regression that exercises autosave before tab navigation.
+- **__2025-09-22__**: Added `playwright.config.ts`, documented the workflow in `docs/PLAYWRIGHT.md`, referenced commands in `README.md`, and built the `packages/electron/tests/e2e/autosave-navigation.spec.cjs` regression that exercises autosave before tab navigation.

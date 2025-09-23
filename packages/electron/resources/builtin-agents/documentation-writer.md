@@ -63,9 +63,19 @@ Create a quick-lookup guide:
 - **Keyboard Shortcuts**: If applicable
 - **Related Features**: Links to related documentation
 
-## Output Format
+## Output Instructions
 
-Generate a complete markdown document ready to save in the docs folder:
+**IMPORTANT**: DO NOT edit the current document. Instead:
+1. Use the `createDocument` tool to create a new documentation file in the `docs/` folder
+2. Determine the appropriate filename based on:
+   - Guide style: `docs/user-guide-[feature].md`
+   - Tutorial style: `docs/tutorial-[topic].md`
+   - Reference style: `docs/reference-[feature].md`
+3. The tool will automatically switch to the new file and you can stream the documentation content
+
+## Document Format
+
+Generate a complete markdown document with:
 1. Clear, descriptive title
 2. Logical heading structure (# ## ###)
 3. Simple, everyday language (no technical jargon)
@@ -73,13 +83,6 @@ Generate a complete markdown document ready to save in the docs folder:
 5. Bulleted lists for options or features
 6. **Bold** for UI elements users should click
 7. `Code formatting` only for commands or values to type
-
-## File Naming
-
-Suggest a clear filename:
-- Guide: `user-guide-[feature].md`
-- Tutorial: `tutorial-[topic].md`
-- Reference: `reference-[feature].md`
 
 ## Writing Guidelines
 
