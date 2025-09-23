@@ -65,7 +65,8 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
   const [priority, setPriority] = useState('medium');
   const [owner, setOwner] = useState('');
   const [stakeholders, setStakeholders] = useState('');
-  const [tags, setTags] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
   const [created, setCreated] = useState(DEFAULT_CREATED_DATE);
   const [updated, setUpdated] = useState('');
   const [progress, setProgress] = useState(0);
@@ -99,8 +100,10 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
         const tagsValue = config?.tags;
         setTags(
           Array.isArray(tagsValue)
-            ? tagsValue.join(', ')
-            : (tagsValue as string | undefined) ?? ''
+            ? tagsValue
+            : typeof tagsValue === 'string' && tagsValue
+            ? tagsValue.split(',').map(t => t.trim()).filter(Boolean)
+            : []
         );
 
         setCreated(config?.created ?? DEFAULT_CREATED_DATE);
@@ -182,12 +185,6 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
           stakeholders: value.split(',').map(s => s.trim()).filter(s => s)
         });
         break;
-      case 'tags':
-        setTags(value);
-        updateNodeState({
-          tags: value.split(',').map(t => t.trim()).filter(t => t)
-        });
-        break;
     }
   };
 
@@ -201,6 +198,34 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
   const handleProgressChange = (value: number) => {
     setProgress(value);
     updateNodeState({ progress: value });
+  };
+
+  const handleAddTag = (tag: string) => {
+    const trimmedTag = tag.trim();
+    if (trimmedTag && !tags.includes(trimmedTag)) {
+      const newTags = [...tags, trimmedTag];
+      setTags(newTags);
+      updateNodeState({ tags: newTags });
+    }
+    setTagInput('');
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    const newTags = tags.filter(tag => tag !== tagToRemove);
+    setTags(newTags);
+    updateNodeState({ tags: newTags });
+  };
+
+  const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      if (tagInput.trim()) {
+        handleAddTag(tagInput);
+      }
+    } else if (e.key === 'Backspace' && !tagInput && tags.length > 0) {
+      // Remove last tag when backspace is pressed on empty input
+      handleRemoveTag(tags[tags.length - 1]);
+    }
   };
 
   const formatDate = (dateStr: string) => {
@@ -359,32 +384,148 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
 
           <div className="plan-status-summary-item">
             <span className="plan-status-summary-label">Owner:</span>
-            <span>{owner || 'Unassigned'}</span>
+            <span
+              className={`plan-status-owner ${editingField === 'owner' ? 'editing' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingField('owner');
+              }}
+            >
+              {editingField === 'owner' ? (
+                <input
+                  className="plan-status-inline-input"
+                  value={owner}
+                  onChange={(e) => handleFieldEdit('owner', e.target.value)}
+                  onBlur={() => setEditingField(null)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === 'Tab') {
+                      e.preventDefault();
+                      setEditingField(null);
+                    }
+                  }}
+                  autoFocus
+                  placeholder="Unassigned"
+                />
+              ) : (
+                owner || 'Unassigned'
+              )}
+            </span>
           </div>
 
           <div className="plan-status-summary-item plan-status-progress-bar">
             <span className="plan-status-summary-label">Progress:</span>
-            <div className="plan-status-progress-track">
-              <div
-                className="plan-status-progress-fill"
-                style={{ width: `${progress}%` }}
-              />
+            <div
+              className={`plan-status-progress-wrapper ${editingField === 'progress' ? 'editing' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingField('progress');
+              }}
+            >
+              {editingField === 'progress' ? (
+                <>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={progress}
+                    onChange={(e) => handleProgressChange(Number(e.target.value))}
+                    onBlur={() => setEditingField(null)}
+                    className="plan-status-progress-slider"
+                    autoFocus
+                  />
+                  <span className="plan-status-progress-text">{progress}%</span>
+                </>
+              ) : (
+                <>
+                  <div className="plan-status-progress-track">
+                    <div
+                      className="plan-status-progress-fill"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <span className="plan-status-progress-text">{progress}%</span>
+                </>
+              )}
             </div>
-            <span className="plan-status-progress-text">{progress}%</span>
           </div>
 
         </div>
 
         {/* Tags row - if tags exist */}
-        {tags && (
+        {tags.length > 0 && (
           <div className="plan-status-tags-row">
-            {tags.split(',').map((tag, index) => (
-              tag.trim() && (
-                <span key={index} className="plan-status-tag">
-                  {tag.trim()}
+            {tags.map((tag, index) => (
+              <span key={index} className="plan-status-tag">
+                {tag}
+                <span
+                  className="plan-status-tag-remove"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveTag(tag);
+                  }}
+                >
+                  ×
                 </span>
-              )
+              </span>
             ))}
+            {editingField === 'tags' && (
+              <input
+                className="plan-status-tag-input"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={handleTagInputKeyDown}
+                onBlur={() => {
+                  if (tagInput.trim()) {
+                    handleAddTag(tagInput);
+                  }
+                  setEditingField(null);
+                }}
+                placeholder="Add tag..."
+                autoFocus
+              />
+            )}
+            {editingField !== 'tags' && (
+              <span
+                className="plan-status-tag plan-status-tag-add"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingField('tags');
+                }}
+              >
+                + Add tag
+              </span>
+            )}
+          </div>
+        )}
+        {tags.length === 0 && editingField !== 'tags' && (
+          <div className="plan-status-tags-row">
+            <span
+              className="plan-status-tag plan-status-tag-add"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingField('tags');
+              }}
+            >
+              + Add tag
+            </span>
+          </div>
+        )}
+        {tags.length === 0 && editingField === 'tags' && (
+          <div className="plan-status-tags-row">
+            <input
+              className="plan-status-tag-input"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={handleTagInputKeyDown}
+              onBlur={() => {
+                if (tagInput.trim()) {
+                  handleAddTag(tagInput);
+                }
+                setEditingField(null);
+              }}
+              placeholder="Add tag..."
+              autoFocus
+            />
           </div>
         )}
 
@@ -466,48 +607,6 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
                 </div>
               </div>
 
-              {/* Progress slider in expanded view */}
-              <div className="plan-status-detail-item" style={{ gridColumn: 'span 2' }}>
-                <div className="plan-status-detail-label">Progress: {progress}%</div>
-                <div className="plan-status-detail-value" style={{ padding: '8px' }}>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={progress}
-                    onChange={(e) => handleProgressChange(Number(e.target.value))}
-                    style={{ width: '100%' }}
-                  />
-                </div>
-              </div>
-
-              {/* Tags editor in expanded view */}
-              <div className="plan-status-detail-item" style={{ gridColumn: 'span 2' }}>
-                <div className="plan-status-detail-label">Tags</div>
-                <div
-                  className={`plan-status-detail-value ${editingField === 'tags' ? 'editing' : ''}`}
-                  onClick={() => setEditingField('tags')}
-                >
-                  {editingField === 'tags' ? (
-                    <input
-                      className="plan-status-inline-input"
-                      value={tags}
-                      onChange={(e) => handleFieldEdit('tags', e.target.value)}
-                      onBlur={() => setEditingField(null)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === 'Tab') {
-                          e.preventDefault();
-                          setEditingField(null);
-                        }
-                      }}
-                      autoFocus
-                      placeholder="tag1, tag2, tag3"
-                    />
-                  ) : (
-                    tags || 'No tags'
-                  )}
-                </div>
-              </div>
             </div>
           </div>
         )}

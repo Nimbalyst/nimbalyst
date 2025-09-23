@@ -214,6 +214,32 @@
   color: white;
 }
 
+/* Owner field in summary */
+.plan-status-owner {
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: text;
+  transition: all 0.2s;
+  min-width: 80px;
+  display: inline-block;
+}
+
+.plan-status-owner:hover {
+  background: #f3f4f6;
+}
+
+.plan-status-owner.editing {
+  background: white;
+  border: 1px solid #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  padding: 1px 5px;
+}
+
+.plan-status-owner .plan-status-inline-input {
+  font-size: 13px;
+  min-width: 60px;
+}
+
 .plan-status-progress-bar {
   display: flex;
   align-items: center;
@@ -221,6 +247,28 @@
   flex: 1 1 200px;
   min-width: 150px;
   max-width: 300px;
+}
+
+.plan-status-progress-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.plan-status-progress-wrapper:hover {
+  background: #f3f4f6;
+}
+
+.plan-status-progress-wrapper.editing {
+  background: white;
+  border: 1px solid #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  padding: 4px 8px;
 }
 
 .plan-status-progress-track {
@@ -245,6 +293,41 @@
   color: #6b7280;
 }
 
+.plan-status-progress-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #e5e7eb;
+  outline: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.plan-status-progress-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3b82f6;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.plan-status-progress-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3b82f6;
+  cursor: pointer;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
 /* Tags row */
 .plan-status-tags-row {
   display: flex;
@@ -258,6 +341,7 @@
 .plan-status-tag {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   padding: 2px 8px;
   background: #eff6ff;
   color: #2563eb;
@@ -265,6 +349,68 @@
   font-size: 11px;
   font-weight: 500;
   cursor: default;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.plan-status-tag:hover {
+  background: #dbeafe;
+}
+
+.plan-status-tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 2px;
+  margin-right: -4px;
+  background: #3b82f6;
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  transition: all 0.2s;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.plan-status-tag:hover .plan-status-tag-remove {
+  opacity: 1;
+  visibility: visible;
+}
+
+.plan-status-tag-remove:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+.plan-status-tag-add {
+  background: transparent;
+  border: 1px dashed #9ca3af;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 2px 8px;
+}
+
+.plan-status-tag-add:hover {
+  background: #f3f4f6;
+  border-color: #6b7280;
+  color: #374151;
+}
+
+.plan-status-tag-input {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid #3b82f6;
+  border-radius: 4px;
+  font-size: 11px;
+  outline: none;
+  background: white;
+  color: #111827;
+  min-width: 80px;
+  max-width: 150px;
 }
 
 /* Expanded content */
