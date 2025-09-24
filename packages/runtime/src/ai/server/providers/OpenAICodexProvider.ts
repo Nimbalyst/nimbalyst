@@ -1,21 +1,20 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as os from 'os';
-import { EventEmitter } from 'events';
-import { AIProvider, AIMessage, AIStreamResponse, AIStreamChunk, AIToolCall, AIToolResult } from '../../types';
+import { BaseAIProvider } from '../AIProvider';
+import { AIMessage, AIStreamResponse, AIStreamChunk, AIToolCall, AIToolResult } from '../../types';
 import {
   ProviderConfig,
-  ToolHandler,
   DocumentContext,
   StreamChunk,
   Message,
   ProviderCapabilities
 } from '../types';
 
-export class OpenAICodexProvider extends EventEmitter implements AIProvider {
+export class OpenAICodexProvider extends BaseAIProvider {
   private apiKey: string;
-  private config?: ProviderConfig;
-  private toolHandler?: ToolHandler;
+  private abortController: AbortController | null = null;
+  private activeProcess: ChildProcess | null = null;
   static readonly DEFAULT_MODEL = 'gpt-5';
 
   constructor(config?: { apiKey?: string }) {
@@ -30,14 +29,12 @@ export class OpenAICodexProvider extends EventEmitter implements AIProvider {
     }
     console.log('[OpenAICodexProvider] Initialized with config:', {
       hasApiKey: !!this.apiKey,
-      model: config.model
+      model: config.model,
+      hasToolHandler: !!this.toolHandler
     });
   }
 
-  registerToolHandler(handler: ToolHandler): void {
-    this.toolHandler = handler;
-    console.log('[OpenAICodexProvider] Tool handler registered');
-  }
+  // registerToolHandler is now inherited from BaseAIProvider
 
   static getModels() {
     return [{
@@ -114,9 +111,19 @@ export class OpenAICodexProvider extends EventEmitter implements AIProvider {
         throw new Error('Codex CLI not found. Please install @openai/codex');
       }
 
+      // Add configuration options if tools are enabled
+      const configArgs = [];
+      if (this.toolHandler && this.config?.tools !== false) {
+        // Enable sandbox mode for safer execution when tools are available
+        configArgs.push('-c', 'sandbox="basic"');
+        // You can add more configuration here as needed
+        console.log('[OpenAICodexProvider] Tools enabled, adding config:', configArgs.join(' '));
+      }
+
       // Spawn codex process
-      console.log('[OpenAICodexProvider] Spawning codex process:', codexPath, args.join(' '));
-      const codexProcess = spawn(codexPath, args, {
+      const fullArgs = [...args, ...configArgs];
+      console.log('[OpenAICodexProvider] Spawning codex process:', codexPath, fullArgs.join(' '));
+      const codexProcess = spawn(codexPath, fullArgs, {
         cwd: workingDir,
         env: {
           ...process.env,
@@ -124,6 +131,12 @@ export class OpenAICodexProvider extends EventEmitter implements AIProvider {
         },
         stdio: ['pipe', 'pipe', 'pipe']
       });
+
+      // Track the active process so we can abort it if needed
+      this.activeProcess = codexProcess;
+
+      // Set up abort controller for this request
+      this.abortController = new AbortController();
 
       console.log('[OpenAICodexProvider] Writing prompt to stdin:', prompt.substring(0, 200));
       // Write prompt to stdin and close it
@@ -180,6 +193,12 @@ export class OpenAICodexProvider extends EventEmitter implements AIProvider {
 
       try {
         while (!processExited) {
+          // Check for abort signal
+          if (this.abortController?.signal.aborted) {
+            console.log('[OpenAICodexProvider] Processing aborted by user');
+            throw new Error('Operation cancelled');
+          }
+
           await new Promise(resolve => setTimeout(resolve, 50)); // Poll every 50ms
 
           // Process any buffered data
@@ -295,6 +314,10 @@ export class OpenAICodexProvider extends EventEmitter implements AIProvider {
           error: error instanceof Error ? error.message : String(error)
         };
         yield errorChunk;
+      } finally {
+        // Clean up process tracking
+        this.activeProcess = null;
+        this.abortController = null;
       }
     } catch (error) {
       console.error('[OpenAICodexProvider] Error:', error);
@@ -302,6 +325,10 @@ export class OpenAICodexProvider extends EventEmitter implements AIProvider {
         type: 'error',
         error: error instanceof Error ? error.message : String(error)
       };
+    } finally {
+      // Ensure cleanup in case of outer errors
+      this.activeProcess = null;
+      this.abortController = null;
     }
   }
 
@@ -363,8 +390,8 @@ export class OpenAICodexProvider extends EventEmitter implements AIProvider {
   }
 
   async cancelStream(sessionId?: string): Promise<void> {
-    // Codex exec commands are not long-running sessions
     console.log('[OpenAICodexProvider] Cancel requested');
+    this.abort();
   }
 
   async *sendMessage(
@@ -503,8 +530,20 @@ ${documentContext.content}
   }
 
   abort(): void {
-    // Codex exec commands complete quickly
-    this.cancelStream();
+    console.log('[OpenAICodexProvider] Aborting current operation');
+
+    // Kill the active process if any
+    if (this.activeProcess) {
+      console.log('[OpenAICodexProvider] Killing active codex process');
+      this.activeProcess.kill('SIGTERM');
+      this.activeProcess = null;
+    }
+
+    // Signal abort via controller
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
   }
 
   getCapabilities(): ProviderCapabilities {
@@ -516,10 +555,8 @@ ${documentContext.content}
   }
 
   destroy(): void {
-    this.dispose();
-  }
-
-  dispose(): void {
-    // Clean up if needed
+    console.log('[OpenAICodexProvider] Destroying provider');
+    this.abort();
+    this.removeAllListeners();
   }
 }
