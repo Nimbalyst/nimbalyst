@@ -1,6 +1,7 @@
 import { BrowserWindow, nativeTheme } from 'electron';
 import { getTheme } from '../utils/store';
 import { updateAboutWindowTheme } from '../window/AboutWindow';
+import { updateAIModelsWindowTheme } from '../window/AIModelsWindow';
 
 // Function to update native theme
 export function updateNativeTheme() {
@@ -58,6 +59,9 @@ export function updateWindowTitleBars() {
 
     // Update About window if it exists
     updateAboutWindowTheme();
+
+    // Update AI Models window if it exists
+    updateAIModelsWindowTheme();
 }
 
 // Get title bar colors for current theme

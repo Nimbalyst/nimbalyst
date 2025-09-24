@@ -294,6 +294,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   aiGetAllModels: () => ipcRenderer.invoke('ai:getAllModels'),
   aiClearModelCache: () => ipcRenderer.invoke('ai:clearModelCache'),
 
+  // CLI management
+  cliCheckInstallation: (tool: string) => ipcRenderer.invoke('cli:checkInstallation', tool),
+  cliInstall: (tool: string, options: any) => ipcRenderer.invoke('cli:install', tool, options),
+  cliUninstall: (tool: string) => ipcRenderer.invoke('cli:uninstall', tool),
+  cliUpgrade: (tool: string) => ipcRenderer.invoke('cli:upgrade', tool),
+  cliCheckNpmAvailable: () => ipcRenderer.invoke('cli:checkNpmAvailable'),
+  cliInstallNodeJs: () => ipcRenderer.invoke('cli:installNodeJs'),
+
   // AI event listeners (new)
   onAIStreamResponse: (callback: (data: any) => void) => {
     const handler = (_event: any, data: any) => callback(data);

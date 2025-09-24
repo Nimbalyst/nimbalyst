@@ -92,6 +92,7 @@ export const getProviderIcon = (provider: string, props?: IconProps) => {
     case 'claude-code':
       return <ClaudeIcon {...props} />;
     case 'openai':
+    case 'openai-codex':
       return <OpenAIIcon {...props} />;
     case 'lmstudio':
       return <LMStudioIcon {...props} />;

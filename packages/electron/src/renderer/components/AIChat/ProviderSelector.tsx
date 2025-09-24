@@ -3,8 +3,8 @@ import { MaterialSymbol } from '../MaterialSymbol';
 import './ProviderSelector.css';
 
 interface ProviderSelectorProps {
-  currentProvider: 'claude' | 'claude-code';
-  onProviderChange: (provider: 'claude' | 'claude-code') => void;
+  currentProvider: 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio';
+  onProviderChange: (provider: 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio') => void;
   disabled?: boolean;
 }
 
@@ -40,12 +40,30 @@ export function ProviderSelector({
       name: 'Claude SDK',
       description: 'Direct API',
       icon: 'api'
+    },
+    {
+      id: 'openai-codex' as const,
+      name: 'OpenAI Codex',
+      description: 'CLI Agent',
+      icon: 'terminal'
+    },
+    {
+      id: 'openai' as const,
+      name: 'OpenAI',
+      description: 'GPT Models',
+      icon: 'smart_toy'
+    },
+    {
+      id: 'lmstudio' as const,
+      name: 'LM Studio',
+      description: 'Local Models',
+      icon: 'computer'
     }
   ];
 
   const currentProviderInfo = providers.find(p => p.id === currentProvider);
 
-  const handleProviderSelect = (provider: 'claude' | 'claude-code') => {
+  const handleProviderSelect = (provider: 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio') => {
     onProviderChange(provider);
     setIsOpen(false);
   };

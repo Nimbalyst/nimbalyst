@@ -31,7 +31,7 @@ import { AIChat } from './components/AIChat';
 import { HistoryDialog } from './components/HistoryDialog';
 import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import { ApiKeyDialog } from './components/ApiKeyDialog';
-import { AIModels } from './components/AIModels/AIModels';
+import { AIModelsRedesigned as AIModels } from './components/AIModels/AIModelsRedesigned';
 import { SessionManager } from './components/SessionManager/SessionManager';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { NewFileDialog } from './components/NewFileDialog';
@@ -42,7 +42,7 @@ import { useTabNavigation } from './hooks/useTabNavigation';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
 import './WorkspaceWelcome.css';
-import './components/AIModels/AIModels.css';
+import './components/AIModels/AIModelsRedesigned.css';
 
 const PLAN_STATUS_KEYS = new Set([
   'planId',

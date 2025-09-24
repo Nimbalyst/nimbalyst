@@ -19,6 +19,7 @@ import type {
   AIProviderType,
   AIModel,
 } from '@stravu/runtime/ai/server/types';
+import type { AIMessage } from '@stravu/runtime/ai/types';
 import { updateDocumentState } from '../../mcp/httpServer';
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 import { logger } from '../../utils/logger';
@@ -172,6 +173,7 @@ export class AIService {
           }
           break;
         case 'openai':
+        case 'openai-codex':
           apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
           if (!apiKey) {
             throw new Error('OpenAI API key not configured');
@@ -236,8 +238,8 @@ export class AIService {
         temperature: session.providerConfig?.temperature
       };
 
-      // Only add model if it exists and provider isn't claude-code
-      if (session.providerConfig?.model && provider !== 'claude-code') {
+      // Only add model if it exists and provider isn't claude-code or openai-codex
+      if (session.providerConfig?.model && provider !== 'claude-code' && provider !== 'openai-codex') {
         initConfig.model = session.providerConfig.model;
       }
 
@@ -378,6 +380,7 @@ export class AIService {
             errorMessage = 'Anthropic API key not configured';
             break;
           case 'openai':
+          case 'openai-codex':
             apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
             errorMessage = 'OpenAI API key not configured';
             break;
@@ -917,6 +920,7 @@ export class AIService {
           }
           break;
         case 'openai':
+        case 'openai-codex':
           apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
           if (!apiKey) {
             return { success: false, error: 'OpenAI API key not configured' };
@@ -937,23 +941,25 @@ export class AIService {
           return { success: models.length > 0, provider };
         }
 
-        // For Claude providers, use the existing test
-        if (provider === 'claude' || provider === 'claude-code') {
+        // For OpenAI Codex, just check if API key is present (CLI will validate on use)
+        if (provider === 'openai-codex') {
+          // We already checked for API key above, so just return success
+          return { success: true, provider };
+        }
+
+        // For Claude providers, test the API connection
+        if (provider === 'claude') {
           console.log('[AIService] testConnection - Testing provider:', provider);
 
-          const testProvider = provider === 'claude'
-            ? new (await import('@stravu/runtime/ai/server/providers/ClaudeProvider')).ClaudeProvider()
-            : new (await import('@stravu/runtime/ai/server/providers/ClaudeCodeProvider')).ClaudeCodeProvider();
-
-          // Initialize with a default model for testing
+          // Create provider with appropriate config
           const config: any = { apiKey };
-          if (provider === 'claude') {
-            // Use the provider's default model for testing (already includes prefix)
-            const defaultModel = await ModelRegistry.getDefaultModel('claude');
-            console.log('[AIService] testConnection - Got default model:', defaultModel);
-            config.model = defaultModel;
-          }
 
+          const testProvider = new (await import('@stravu/runtime/ai/server/providers/ClaudeProvider')).ClaudeProvider();
+
+          // Use the provider's default model for testing (already includes prefix)
+          const defaultModel = await ModelRegistry.getDefaultModel('claude');
+          console.log('[AIService] testConnection - Got default model:', defaultModel);
+          config.model = defaultModel;
           console.log('[AIService] testConnection - Initializing with config:', config);
           await testProvider.initialize(config);
 
@@ -965,7 +971,33 @@ export class AIService {
               throw new Error(chunk.error);
             }
           }
+          testProvider.destroy();
+        }
 
+        // For Claude Code, just verify the API key works with the regular Claude API
+        if (provider === 'claude-code') {
+          console.log('[AIService] testConnection - Testing Claude Code provider');
+
+          // Test using the regular Claude API to verify the key
+          const testProvider = new (await import('@stravu/runtime/ai/server/providers/ClaudeProvider')).ClaudeProvider();
+          const config: any = {
+            apiKey,
+            model: 'claude-3-5-sonnet-20241022'
+          };
+
+          await testProvider.initialize(config);
+
+          // Quick test message
+          const response = testProvider.sendMessage('Say "Hello" in one word');
+          for await (const chunk of response) {
+            if (chunk.type === 'error') {
+              throw new Error(chunk.error);
+            }
+            // Exit after first response
+            if (chunk.type === 'text') {
+              break;
+            }
+          }
           testProvider.destroy();
         }
 
@@ -1055,6 +1087,10 @@ export class AIService {
         'openai': {
           enabled: providerSettings['openai']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY),
           models: providerSettings['openai']?.models
+        },
+        'openai-codex': {
+          enabled: providerSettings['openai-codex']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY),
+          models: providerSettings['openai-codex']?.models
         },
         'lmstudio': {
           enabled: providerSettings['lmstudio']?.enabled === true,

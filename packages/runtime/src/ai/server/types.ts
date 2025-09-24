@@ -46,7 +46,7 @@ export interface Message {
   };
 }
 
-export type AIProviderType = 'claude' | 'claude-code' | 'openai' | 'lmstudio';
+export type AIProviderType = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio';
 
 export interface AIModel {
   id: string;           // e.g., 'gpt-4', 'claude-3-5-sonnet-20241022'

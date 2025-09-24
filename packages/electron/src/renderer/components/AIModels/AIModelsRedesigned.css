@@ -1,0 +1,703 @@
+.ai-models-redesigned {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding-top: 38px; /* Space for macOS title bar */
+}
+
+/* macOS draggable area */
+.ai-models-redesigned::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 38px;
+  -webkit-app-region: drag;
+  z-index: 1000;
+}
+
+.ai-models-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  -webkit-app-region: no-drag;
+}
+
+.ai-models-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* Main body with nav and content */
+.ai-models-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Left navigation */
+.ai-models-nav {
+  width: 220px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.nav-section {
+  padding: 12px 0;
+}
+
+.nav-section-bottom {
+  margin-top: auto;
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+
+.nav-section-title {
+  padding: 8px 16px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  text-align: left;
+  color: var(--text-primary);
+  position: relative;
+}
+
+.nav-item:hover {
+  background: var(--hover-bg);
+}
+
+.nav-item.active {
+  background: var(--accent-bg);
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent-color);
+}
+
+.nav-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.nav-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.nav-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.nav-item-subtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.8;
+  line-height: 1.3;
+}
+
+.nav-item-status {
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+
+.nav-item-status.active {
+  color: #22c55e;
+}
+
+.nav-item-status.configured {
+  color: var(--accent-color);
+}
+
+.nav-item-status.warning {
+  color: #f59e0b;
+}
+
+.nav-item-status.inactive {
+  color: var(--text-secondary);
+  opacity: 0.3;
+}
+
+.nav-action-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+  transition: background-color 0.15s ease;
+  text-align: left;
+}
+
+.nav-action-button:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+/* Main content area */
+.ai-models-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+/* Footer */
+.ai-models-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.button-cancel,
+.button-save {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.button-cancel {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.button-cancel:hover {
+  background: var(--hover-bg);
+}
+
+.button-save {
+  background: var(--accent-color);
+  color: white;
+  border: none;
+}
+
+.button-save:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.button-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Panel styles - shared by all provider panels */
+.provider-panel {
+  max-width: 800px;
+}
+
+.provider-panel-header {
+  margin-bottom: 24px;
+}
+
+.provider-panel-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.provider-panel-description {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.provider-panel-section {
+  margin-bottom: 32px;
+}
+
+.provider-panel-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+/* Enable toggle */
+.provider-enable {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.provider-enable-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.provider-toggle {
+  position: relative;
+  width: 48px;
+  height: 24px;
+}
+
+.provider-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.provider-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  border: 1px solid #999;
+  transition: .4s;
+  border-radius: 24px;
+}
+
+/* Dark mode override */
+.dark-theme .provider-toggle-slider,
+.crystal-dark-theme .provider-toggle-slider {
+  background-color: #4a4a4a;
+  border-color: #666;
+}
+
+.provider-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+.provider-toggle input:checked + .provider-toggle-slider {
+  background-color: #4a90e2;
+  border-color: #4a90e2;
+}
+
+.provider-toggle input:checked + .provider-toggle-slider:before {
+  transform: translateX(24px);
+}
+
+/* Dark mode checked state */
+.dark-theme .provider-toggle input:checked + .provider-toggle-slider,
+.crystal-dark-theme .provider-toggle input:checked + .provider-toggle-slider {
+  background-color: #5a9ff2;
+  border-color: #5a9ff2;
+}
+
+/* Installation status */
+.installation-status {
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.installation-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.installation-status-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.installation-status-value {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.installation-status.not-installed {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.installation-status.installed {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.installation-status.installing {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.installation-status.error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* Installation buttons */
+.installation-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.button-install,
+.button-update,
+.button-uninstall {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+
+.button-install {
+  background: var(--accent-color);
+  color: white;
+}
+
+.button-update {
+  background: #3b82f6;
+  color: white;
+}
+
+.button-uninstall {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+/* API key input */
+.api-key-section {
+  margin-bottom: 24px;
+}
+
+.api-key-row {
+  display: flex;
+  gap: 12px;
+}
+
+.api-key-input {
+  flex: 1;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+}
+
+.api-key-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.test-button {
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.test-button:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.test-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.test-button.testing {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.test-button.success {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+.test-button.error {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.test-error {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 4px;
+  color: #ef4444;
+  font-size: 13px;
+}
+
+/* Models section */
+.models-section {
+  margin-top: 24px;
+}
+
+.models-loading {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.models-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.models-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.models-action-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.models-action-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.models-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.model-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.model-checkbox:hover {
+  background: var(--hover-bg);
+}
+
+.model-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.model-checkbox span {
+  font-size: 13px;
+}
+
+/* CLI configuration */
+.cli-config-section {
+  margin-top: 24px;
+}
+
+.cli-config-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cli-config-label {
+  width: 140px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.cli-config-select {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.cli-config-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+/* Progress modal */
+.installation-progress-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.installation-progress-content {
+  width: 500px;
+  background: var(--bg-primary, #ffffff);
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.installation-progress-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color, #e5e5e5);
+}
+
+.installation-progress-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary, #333333);
+}
+
+.installation-progress-body {
+  padding: 20px;
+  background: var(--bg-primary, #ffffff);
+}
+
+.installation-progress-status {
+  font-size: 14px;
+  color: var(--text-secondary, #666666);
+  margin-bottom: 16px;
+}
+
+.installation-progress-bar {
+  height: 8px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.installation-progress-fill {
+  height: 100%;
+  background: var(--accent-color, #007acc);
+  width: 0;
+  transition: width 0.3s ease;
+}
+
+.installation-progress-log {
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 12px;
+  color: var(--text-secondary, #666666);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.installation-progress-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color, #e5e5e5);
+  display: flex;
+  justify-content: flex-end;
+  background: var(--bg-primary, #ffffff);
+}
+
+.installation-progress-cancel {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--bg-secondary, #f5f5f5);
+  color: var(--text-primary, #333333);
+  border: 1px solid var(--border-color, #e5e5e5);
+}
+
+.installation-progress-cancel:hover {
+  background: var(--hover-bg, #eeeeee);
+}

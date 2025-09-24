@@ -1,5 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { join } from 'path';
+import { getTheme } from '../utils/store';
+import { getBackgroundColor } from '../theme/ThemeManager';
 
 let aiModelsWindow: BrowserWindow | null = null;
 
@@ -25,7 +27,7 @@ export function createAIModelsWindow() {
         titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
         trafficLightPosition: { x: 10, y: 10 },
         vibrancy: 'sidebar',
-        backgroundColor: '#1e1e1e'
+        backgroundColor: getBackgroundColor()
     });
 
     // Load the main app with a query parameter to indicate AI Models mode
@@ -36,6 +38,16 @@ export function createAIModelsWindow() {
             query: { mode: 'ai-models' }
         });
     }
+
+    // Inject theme before showing window
+    aiModelsWindow.webContents.once('dom-ready', () => {
+        const currentTheme = getTheme();
+        // Inject the theme into localStorage before the React app loads
+        aiModelsWindow?.webContents.executeJavaScript(`
+            localStorage.setItem('theme', '${currentTheme}');
+            console.log('[AIModelsWindow] Injected theme:', '${currentTheme}');
+        `);
+    });
 
     // Show window when ready
     aiModelsWindow.once('ready-to-show', () => {
@@ -48,6 +60,31 @@ export function createAIModelsWindow() {
     });
 
     return aiModelsWindow;
+}
+
+// Update AI Models window theme
+export function updateAIModelsWindowTheme() {
+    if (aiModelsWindow && !aiModelsWindow.isDestroyed()) {
+        const currentTheme = getTheme();
+        const backgroundColor = getBackgroundColor();
+
+        // Update background color
+        aiModelsWindow.setBackgroundColor(backgroundColor);
+
+        // Inject theme into localStorage and trigger React update
+        aiModelsWindow.webContents.executeJavaScript(`
+            localStorage.setItem('theme', '${currentTheme}');
+            // Dispatch storage event to trigger React component update
+            window.dispatchEvent(new StorageEvent('storage', {
+                key: 'theme',
+                newValue: '${currentTheme}',
+                url: window.location.href
+            }));
+            console.log('[AIModelsWindow] Updated theme to:', '${currentTheme}');
+        `).catch(err => {
+            console.error('Failed to update AI Models window theme:', err);
+        });
+    }
 }
 
 // Handle IPC events for AI Models

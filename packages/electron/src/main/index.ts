@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeTheme, nativeImage, ipcMain } from 'electron';
+import { app, BrowserWindow, nativeTheme, nativeImage, ipcMain, globalShortcut } from 'electron';
 import type { SessionStore } from '@stravu/runtime';
 import { join } from 'path';
 import { existsSync, writeFileSync, appendFileSync } from 'fs';
@@ -6,6 +6,7 @@ import { existsSync, writeFileSync, appendFileSync } from 'fs';
 import { createWindow, windows, windowStates, findWindowByFilePath } from './window/WindowManager';
 import { loadFileIntoWindow } from './file/FileOperations';
 import { createApplicationMenu, updateApplicationMenu } from './menu/ApplicationMenu';
+import { createAIModelsWindow } from './window/AIModelsWindow';
 import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
 import { saveSessionState, restoreSessionState } from './session/SessionState';
 import { createWorkspaceManagerWindow, setupWorkspaceManagerHandlers } from './window/WorkspaceManagerWindow.ts';
@@ -19,6 +20,7 @@ import { registerSessionHandlers } from './ipc/SessionHandlers';
 import { getTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
 import { AgentService } from './services/agents/AgentService';
+import { cliManager } from './services/CLIManager';
 import { startMcpHttpServer, updateDocumentState, cleanupMcpServer, shutdownHttpServer } from './mcp/httpServer';
 import { logger } from './utils/logger';
 import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
@@ -239,6 +241,12 @@ app.whenReady().then(async () => {
 
     // Create application menu
     await createApplicationMenu();
+
+    // Register global shortcuts
+    globalShortcut.register('CommandOrControl+,', () => {
+        // Open AI Models window (preferences)
+        createAIModelsWindow();
+    });
 
     // Set initial native theme
     updateNativeTheme();
@@ -475,6 +483,9 @@ app.on('before-quit', async (event) => {
         await Promise.race([shutdownPromise, timeoutPromise]);
 
         mcpHttpServer = null;
+
+        // Clean up CLI manager
+        cliManager.cleanup();
 
         if (canWriteLogs && debugLog) {
             try {

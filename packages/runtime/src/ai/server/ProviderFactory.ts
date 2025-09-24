@@ -6,6 +6,7 @@ import { AIProvider } from './AIProvider';
 import { ClaudeProvider } from './providers/ClaudeProvider';
 import { ClaudeCodeProvider } from './providers/ClaudeCodeProvider';
 import { OpenAIProvider } from './providers/OpenAIProvider';
+import { OpenAICodexProvider } from './providers/OpenAICodexProvider';
 import { LMStudioProvider } from './providers/LMStudioProvider';
 import { ProviderConfig, AIProviderType } from './types';
 
@@ -45,10 +46,14 @@ export class ProviderFactory {
         provider = new ClaudeProvider();
         break;
       case 'claude-code':
+        // Use SDK version with dynamic loading
         provider = new ClaudeCodeProvider();
         break;
       case 'openai':
         provider = new OpenAIProvider();
+        break;
+      case 'openai-codex':
+        provider = new OpenAICodexProvider();
         break;
       case 'lmstudio':
         provider = new LMStudioProvider();

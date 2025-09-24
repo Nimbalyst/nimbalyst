@@ -19,8 +19,10 @@ export const LMStudioIcon = ({ size=20, className='' }: { size?: number; classNa
   </svg>
 );
 
-export function ProviderBadge({ provider, label }: { provider: 'anthropic'|'openai'|'lmstudio'; label?: string }) {
-  const Icon = provider === 'anthropic' ? ClaudeIcon : provider === 'openai' ? OpenAIIcon : LMStudioIcon;
+export function ProviderBadge({ provider, label }: { provider: 'anthropic'|'claude-code'|'openai'|'openai-codex'|'lmstudio'; label?: string }) {
+  const Icon = (provider === 'anthropic' || provider === 'claude-code') ? ClaudeIcon :
+               (provider === 'openai' || provider === 'openai-codex') ? OpenAIIcon :
+               LMStudioIcon;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', border: '1px solid #e5e7eb', borderRadius: 8 }}>
       <Icon size={16} />

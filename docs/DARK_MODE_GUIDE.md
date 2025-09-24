@@ -10,6 +10,63 @@ Stravu Editor supports two dark themes:
 
 Dark mode is implemented using CSS custom properties (CSS variables) that change based on the `data-theme` attribute.
 
+## Important: Separate Electron Windows
+
+**localStorage is NOT shared between Electron windows!** Each BrowserWindow has its own isolated localStorage. This means:
+
+- The main app window's theme setting won't automatically apply to new windows (AI Models, About, etc.)
+- New windows need the theme explicitly injected when they're created
+- Theme changes need to be synchronized across all open windows
+
+### For Separate Window Components
+
+If you're creating a new Electron window (like AI Models, Session Manager, etc.), you must:
+
+1. **Inject the theme on window creation** (in main process):
+```javascript
+// In your window creation file
+import { getTheme } from '../utils/store';
+import { getBackgroundColor } from '../theme/ThemeManager';
+
+// Set initial background color
+const window = new BrowserWindow({
+    backgroundColor: getBackgroundColor(),
+    // ... other options
+});
+
+// Inject theme into localStorage before React loads
+window.webContents.once('dom-ready', () => {
+    const currentTheme = getTheme();
+    window.webContents.executeJavaScript(`
+        localStorage.setItem('theme', '${currentTheme}');
+    `);
+});
+```
+
+2. **Add theme sync function** (in main process):
+```javascript
+export function updateMyWindowTheme() {
+    if (myWindow && !myWindow.isDestroyed()) {
+        const currentTheme = getTheme();
+        myWindow.webContents.executeJavaScript(`
+            localStorage.setItem('theme', '${currentTheme}');
+            window.dispatchEvent(new StorageEvent('storage', {
+                key: 'theme',
+                newValue: '${currentTheme}'
+            }));
+        `);
+    }
+}
+```
+
+3. **Register with ThemeManager** to receive theme updates:
+```javascript
+// In ThemeManager.ts, add your update function to updateWindowTitleBars()
+import { updateMyWindowTheme } from '../window/MyWindow';
+// ... in updateWindowTitleBars():
+updateMyWindowTheme();
+```
+
 ## CSS Variable System
 
 Both themes define a comprehensive set of CSS variables in their respective theme files:

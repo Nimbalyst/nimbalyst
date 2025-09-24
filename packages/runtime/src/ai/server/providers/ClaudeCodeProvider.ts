@@ -1,8 +1,9 @@
 /**
  * Claude Code provider using claude-code SDK with MCP support
+ * Dynamically loads SDK from user's installation to avoid bundling
  */
 
-import { query } from '@anthropic-ai/claude-code';
+import type { query as QueryType } from '@anthropic-ai/claude-code';
 import { BaseAIProvider } from '../AIProvider';
 import {
   DocumentContext,
@@ -14,22 +15,98 @@ import {
 } from '../types';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { app } from 'electron';
 
 export class ClaudeCodeProvider extends BaseAIProvider {
   private abortController: AbortController | null = null;
   private claudeSessionIds: Map<string, string> = new Map(); // Our session ID -> Claude session ID
-  
+  private claudeCodeModule?: typeof import('@anthropic-ai/claude-code'); // Dynamically loaded module with type safety
+  private queryFunction?: typeof QueryType; // The query function from the SDK with proper types
+
   static readonly DEFAULT_MODEL = 'claude-code';
+
+  /**
+   * Dynamically load the Claude Code SDK from user's installation
+   */
+  private async loadClaudeCodeSDK(): Promise<void> {
+    if (this.claudeCodeModule) {
+      return; // Already loaded
+    }
+
+    // Get global npm root dynamically
+    let globalNpmRoot: string | null = null;
+    try {
+      const { execSync } = require('child_process');
+      globalNpmRoot = execSync('npm root -g', { encoding: 'utf8' }).trim();
+      console.log(`[ClaudeCodeProvider] Global npm root: ${globalNpmRoot}`);
+    } catch (error) {
+      console.log(`[ClaudeCodeProvider] Could not get npm root:`, error);
+    }
+
+    // Try to find Claude Code SDK in common locations
+    const possiblePaths = [
+      // User's local Claude installation (primary)
+      path.join(os.homedir(), '.claude', 'local', 'node_modules', '@anthropic-ai', 'claude-code'),
+      // Dynamic global npm path
+      ...(globalNpmRoot ? [path.join(globalNpmRoot, '@anthropic-ai', 'claude-code')] : []),
+      // Common global npm locations
+      path.join(os.homedir(), '.npm-global', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'),
+      // NVM installations
+      path.join(os.homedir(), '.nvm', 'versions', 'node', '*', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'),
+      // Yarn global installation
+      path.join(os.homedir(), '.config', 'yarn', 'global', 'node_modules', '@anthropic-ai', 'claude-code'),
+      // Local development (if available)
+      path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code')
+    ];
+
+    for (const sdkPath of possiblePaths) {
+      try {
+        // Check if path exists and has sdk.mjs
+        const sdkFile = path.join(sdkPath, 'sdk.mjs');
+        console.log(`[ClaudeCodeProvider] Checking for SDK at: ${sdkFile}`);
+
+        if (fs.existsSync(sdkFile)) {
+          console.log(`[ClaudeCodeProvider] Found SDK file, attempting to load from: ${sdkFile}`);
+
+          // Use file:// protocol for ESM imports in Electron
+          const fileUrl = `file://${sdkFile}`;
+          console.log(`[ClaudeCodeProvider] Loading SDK from URL: ${fileUrl}`);
+
+          // For ESM modules, we need to use dynamic import with file:// protocol
+          this.claudeCodeModule = await import(fileUrl);
+          console.log(`[ClaudeCodeProvider] SDK module loaded, checking for query function...`);
+
+          this.queryFunction = this.claudeCodeModule.query || this.claudeCodeModule.default?.query;
+          if (!this.queryFunction) {
+            console.warn(`[ClaudeCodeProvider] No query function found in module at ${sdkPath}`);
+            continue;
+          }
+
+          console.log(`[ClaudeCodeProvider] Successfully loaded SDK with query function from: ${sdkPath}`);
+          return;
+        }
+      } catch (error: any) {
+        console.error(`[ClaudeCodeProvider] Failed to load from ${sdkPath}:`, error.message || error);
+      }
+    }
+
+    throw new Error(
+      'Claude Code SDK not found. Please install it via AI Models settings or run: npm install -g @anthropic-ai/claude-code'
+    );
+  }
 
   async initialize(config: ProviderConfig): Promise<void> {
     this.config = config;
-    
+
     if (!config.apiKey) {
       throw new Error('API key required for Claude Code provider');
     }
 
-    // Set API key in environment for the CLI
+    // Load the SDK dynamically
+    await this.loadClaudeCodeSDK();
+
+    // Set API key in environment for the SDK
     process.env.ANTHROPIC_API_KEY = config.apiKey;
   }
 
@@ -49,14 +126,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     this.abortController = new AbortController();
 
     try {
-      // In production, ensure we have node in PATH
-      this.ensureNodeInPath();
-      
-      // Find the claude-code CLI executable
-      const cliPathStart = Date.now();
-      const cliPath = await this.findCliPath();
-      console.log(`[ClaudeCodeProvider] CLI path resolution took ${Date.now() - cliPathStart}ms`);
-      
       // Build system prompt with document context
       const promptBuildStart = Date.now();
       const systemPrompt = this.buildSystemPrompt(documentContext);
@@ -65,9 +134,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Get workspace path from document context
       const workspacePath = documentContext?.filePath?.split('/').slice(0, -1).join('/') || process.cwd();
 
-      // Build options for claude-code
+      // Build options for claude-code SDK
       const options: any = {
-        pathToClaudeCodeExecutable: cliPath,
+        // The SDK might internally need the CLI path
+        pathToClaudeCodeExecutable: await this.findCliPath().catch(() => undefined),
         customSystemPrompt: systemPrompt,
         mcpServers: this.getMcpServersConfig(),
         allowedTools: ['*'],
@@ -111,7 +181,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       });
       
       const queryStartTime = Date.now();
-      const queryIterator = query({
+
+      // Ensure we have the query function
+      if (!this.queryFunction) {
+        throw new Error('Claude Code SDK not loaded properly');
+      }
+
+      const queryIterator = this.queryFunction({
         prompt: message,
         options
       }) as AsyncIterable<any>;
@@ -311,15 +387,27 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   private async findCliPath(): Promise<string> {
-    // Try to find the CLI in various locations
+    // Get global npm root dynamically
+    let globalNpmRoot: string | null = null;
+    try {
+      const { execSync } = require('child_process');
+      globalNpmRoot = execSync('npm root -g', { encoding: 'utf8' }).trim();
+    } catch (error) {
+      console.log(`[ClaudeCodeProvider] Could not get npm root for CLI:`, error);
+    }
+
+    // Since we're dynamically loading the SDK, look for CLI in user's installation
     const possiblePaths = [
-      path.join(__dirname, '../../../../node_modules/@anthropic-ai/claude-code/cli.js'),
-      path.join(__dirname, '../../../../../node_modules/@anthropic-ai/claude-code/cli.js'),
-      path.join(__dirname, '../../node_modules/@anthropic-ai/claude-code/cli.js'),
-      path.join(__dirname, '../node_modules/@anthropic-ai/claude-code/cli.js'),
-      path.join(process.cwd(), 'node_modules/@anthropic-ai/claude-code/cli.js'),
-      path.join(process.cwd(), '../node_modules/@anthropic-ai/claude-code/cli.js'),
-      path.join(process.cwd(), '../../node_modules/@anthropic-ai/claude-code/cli.js'),
+      // User's local Claude installation (primary)
+      path.join(os.homedir(), '.claude', 'local', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+      // Dynamic global npm path
+      ...(globalNpmRoot ? [path.join(globalNpmRoot, '@anthropic-ai', 'claude-code', 'cli.js')] : []),
+      // Common global npm locations
+      path.join(os.homedir(), '.npm-global', 'lib', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+      // Yarn global installation
+      path.join(os.homedir(), '.config', 'yarn', 'global', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+      // Development paths (for local testing)
+      path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
     ];
 
     // Find the first path that exists

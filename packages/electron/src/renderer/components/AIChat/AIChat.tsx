@@ -1308,6 +1308,7 @@ export function AIChat({
       ref={panelRef}
       className="ai-chat"
       style={{ width }}
+      data-testid="ai-chat-panel"
     >
       <div
         className="ai-chat-resize-handle"

@@ -7,17 +7,19 @@ export interface ProviderConfigSettings {
 }
 
 export interface AISettings {
-  provider?: 'anthropic' | 'openai' | 'lmstudio';
+  provider?: 'anthropic' | 'openai' | 'openai-codex' | 'lmstudio' | 'claude-code';
   model?: string;
   endpoint?: string;
   baseUrl?: string;
   apiKey?: string;
   providers?: {
     anthropic?: ProviderConfigSettings;
+    'claude-code'?: ProviderConfigSettings;
     openai?: ProviderConfigSettings;
+    'openai-codex'?: ProviderConfigSettings;
     lmstudio?: ProviderConfigSettings;
   };
-  defaultProvider?: 'anthropic' | 'openai' | 'lmstudio';
+  defaultProvider?: 'anthropic' | 'openai' | 'openai-codex' | 'lmstudio' | 'claude-code';
   lastSessionId?: string;
 }
 
@@ -87,7 +89,9 @@ function mergeProviders(
     ...(base || {}),
     ...(patch || {}),
     anthropic: { ...(base?.anthropic || {}), ...(patch?.anthropic || {}) },
+    'claude-code': { ...(base?.['claude-code'] || {}), ...(patch?.['claude-code'] || {}) },
     openai: { ...(base?.openai || {}), ...(patch?.openai || {}) },
+    'openai-codex': { ...(base?.['openai-codex'] || {}), ...(patch?.['openai-codex'] || {}) },
     lmstudio: { ...(base?.lmstudio || {}), ...(patch?.lmstudio || {}) },
   };
 }

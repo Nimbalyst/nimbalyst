@@ -42,12 +42,17 @@ export class ModelRegistry {
           console.log('[ModelRegistry] Claude models:', models);
           break;
         case 'claude-code':
+          // Use SDK version with dynamic loading
           const { ClaudeCodeProvider } = await import('./providers/ClaudeCodeProvider');
           models = ClaudeCodeProvider.getModels();
           break;
         case 'openai':
           const { OpenAIProvider } = await import('./providers/OpenAIProvider');
           models = await OpenAIProvider.getModels(apiKey);
+          break;
+        case 'openai-codex':
+          const { OpenAICodexProvider } = await import('./providers/OpenAICodexProvider');
+          models = OpenAICodexProvider.getModels();
           break;
         case 'lmstudio':
           // Try to fetch models from LMStudio
@@ -81,6 +86,7 @@ export class ModelRegistry {
       this.getModelsForProvider('claude', apiKeys['anthropic']),
       this.getModelsForProvider('claude-code', apiKeys['anthropic']),
       this.getModelsForProvider('openai', apiKeys['openai']),
+      this.getModelsForProvider('openai-codex', apiKeys['openai']),
       this.getModelsForProvider('lmstudio', undefined, apiKeys['lmstudio_url'])
     ];
 
@@ -109,6 +115,11 @@ export class ModelRegistry {
       case 'claude-code':
         const { ClaudeCodeProvider } = await import('./providers/ClaudeCodeProvider');
         return ClaudeCodeProvider.getDefaultModel();
+        // const { ClaudeCodeCLIProvider } = await import('./providers/ClaudeCodeCLIProvider');
+        // return ClaudeCodeCLIProvider.getDefaultModel();
+      case 'openai-codex':
+        const { OpenAICodexProvider } = await import('./providers/OpenAICodexProvider');
+        return OpenAICodexProvider.getDefaultModel();
       case 'lmstudio':
         const { LMStudioProvider } = await import('./providers/LMStudioProvider');
         return LMStudioProvider.getDefaultModel();

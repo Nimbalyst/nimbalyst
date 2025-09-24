@@ -6,9 +6,9 @@ import { OpenAIIcon, ClaudeIcon, LMStudioIcon } from './ProviderIcons';
 interface Props {
   open: boolean;
   onClose: () => void;
-  currentProvider: 'anthropic' | 'openai' | 'lmstudio';
+  currentProvider: 'anthropic' | 'openai' | 'openai-codex' | 'lmstudio' | 'claude-code';
   currentModel: string;
-  onSelect: (provider: 'anthropic'|'openai'|'lmstudio', model: string) => void;
+  onSelect: (provider: 'anthropic'|'openai'|'openai-codex'|'lmstudio'|'claude-code', model: string) => void;
   onConfigure: () => void;
 }
 
@@ -28,24 +28,51 @@ export function ModelPicker({ open, onClose, currentProvider, currentModel, onSe
 
   const p = ai.providers || {} as NonNullable<AISettings['providers']>;
 
-  const section = (label: string, providerKey: 'anthropic'|'openai'|'lmstudio') => {
+  const section = (label: string, providerKey: 'anthropic'|'openai'|'openai-codex'|'lmstudio'|'claude-code') => {
     const prov = p[providerKey];
     const enabled = prov?.enabled !== false; // default true
-    const models = prov?.selectedModels || [];
+    let models = prov?.selectedModels || [];
+
+    // Default models for each provider when none are configured
+    if (models.length === 0) {
+      switch (providerKey) {
+        case 'openai-codex':
+          models = ['openai-codex:openai-codex-cli'];
+          break;
+        case 'claude-code':
+          models = ['claude-code:claude-code-cli'];
+          break;
+        case 'anthropic':
+          // No default - user must configure
+          break;
+        case 'openai':
+          // No default - user must configure
+          break;
+        case 'lmstudio':
+          // No default - user must configure
+          break;
+      }
+    }
+
     return (
       <div style={{ padding: '8px 0', opacity: enabled ? 1 : 0.6 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', margin: '4px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
-          {providerKey === 'anthropic' ? <ClaudeIcon size={16} /> : providerKey === 'openai' ? <OpenAIIcon size={16} /> : <LMStudioIcon size={16} />}
+          {providerKey === 'anthropic' || providerKey === 'claude-code' ? <ClaudeIcon size={16} /> : providerKey === 'openai' || providerKey === 'openai-codex' ? <OpenAIIcon size={16} /> : <LMStudioIcon size={16} />}
           {label}
         </div>
         <div style={{ display: 'grid', gap: 6 }}>
-          {models.length === 0 ? (
-            <div className="muted">No models selected</div>
-          ) : models.map(id => {
+          {models.map(id => {
             const isCurrent = currentProvider === providerKey && currentModel === id;
+            // Display a nicer name for the model
+            let displayName = id;
+            if (id === 'openai-codex:openai-codex-cli') {
+              displayName = 'OpenAI Codex CLI';
+            } else if (id === 'claude-code:claude-code-cli') {
+              displayName = 'Claude Code CLI';
+            }
             return (
               <button key={id} className="btn" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { onSelect(providerKey, id); onClose(); }}>
-                <span className="truncate">{id}</span>
+                <span className="truncate">{displayName}</span>
                 <span className="flex items-center gap-2">
                   {isCurrent && <span className="material-symbols-rounded" style={{ fontSize: 18, color: '#16a34a' }}>check</span>}
                   <span className="material-symbols-rounded" style={{ fontSize: 18 }}>arrow_right_alt</span>
@@ -70,7 +97,9 @@ export function ModelPicker({ open, onClose, currentProvider, currentModel, onSe
           <span className="material-symbols-rounded mr-2">add</span> New conversation
         </button>
         {section('CLAUDE (Anthropic)', 'anthropic')}
+        {section('CLAUDE CODE (MCP)', 'claude-code')}
         {section('OPENAI', 'openai')}
+        {section('OPENAI CODEX', 'openai-codex')}
         {section('LM STUDIO', 'lmstudio')}
         <div style={{ borderTop: '1px solid var(--stravu-editor-border, #e5e7eb)', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
           <button className="btn" onClick={onConfigure}>Configure Models</button>
