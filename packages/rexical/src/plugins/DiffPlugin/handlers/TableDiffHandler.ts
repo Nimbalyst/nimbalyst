@@ -64,7 +64,7 @@ export class TableDiffHandler implements DiffNodeHandler {
       // Rather than replacing it entirely (which creates duplicates)
       if (sourceRowCount !== targetRowCount || sourceColCount !== targetColCount) {
         // Store the original markdown for potential revert
-        const originalMarkdown = $convertNodeToMarkdownString(transformers, liveNode);
+        const originalMarkdown = $convertNodeToEnhancedMarkdownString(transformers, liveNode);
         $setOriginalMarkdown(liveNode, originalMarkdown);
 
         // Clear the existing table content
@@ -151,7 +151,7 @@ export class TableDiffHandler implements DiffNodeHandler {
             let targetCellMarkdown = '';
 
             // Get the live cell markdown (current state)
-            const liveCellMarkdown = $convertNodeToMarkdownString(transformers, liveCell);
+            const liveCellMarkdown = $convertNodeToEnhancedMarkdownString(transformers, liveCell);
 
             // We need to create temporary nodes to get markdown from serialized data
             // Create nodes from serialized data and export their markdown
@@ -159,11 +159,11 @@ export class TableDiffHandler implements DiffNodeHandler {
             const tempTargetCell = createNodeFromSerialized(targetCell);
 
             if ($isTableCellNode(tempSourceCell)) {
-              sourceCellMarkdown = $convertNodeToMarkdownString(transformers, tempSourceCell);
+              sourceCellMarkdown = $convertNodeToEnhancedMarkdownString(transformers, tempSourceCell);
             }
 
             if ($isTableCellNode(tempTargetCell)) {
-              targetCellMarkdown = $convertNodeToMarkdownString(transformers, tempTargetCell);
+              targetCellMarkdown = $convertNodeToEnhancedMarkdownString(transformers, tempTargetCell);
             }
 
             // Compare the markdown content

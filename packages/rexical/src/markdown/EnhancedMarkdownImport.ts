@@ -6,8 +6,9 @@
  * - Preserve frontmatter data during editor operations
  */
 
-import { $convertFromMarkdownString, Transformer } from '@lexical/markdown';
+import { Transformer } from '@lexical/markdown';
 import { ElementNode } from 'lexical';
+import { $convertFromMarkdownStringRexical } from './LexicalMarkdownImport';
 
 import {
   $setFrontmatter,
@@ -16,12 +17,18 @@ import {
   type FrontmatterData
 } from './FrontmatterUtils';
 
+import {
+  normalizeMarkdown,
+  type NormalizerConfig
+} from './MarkdownNormalizer';
+
 /**
  * Options for enhanced markdown import.
  */
 export interface EnhancedImportOptions {
   preserveNewLines?: boolean;
   extractFrontmatter?: boolean;
+  normalize?: boolean | NormalizerConfig;
 }
 
 /**
@@ -51,7 +58,8 @@ export function $convertFromEnhancedMarkdownString(
   transformers?: Array<Transformer>,
   node?: ElementNode,
   preserveNewLines: boolean = true,
-  extractFrontmatter: boolean = true
+  extractFrontmatter: boolean = true,
+  normalize: boolean | NormalizerConfig = true
 ): EnhancedImportResult {
   let content = markdown;
   let frontmatter: FrontmatterData | null = null;
@@ -70,8 +78,16 @@ export function $convertFromEnhancedMarkdownString(
     }
   }
 
-  // Import the content using standard Lexical markdown import
-  $convertFromMarkdownString(content, transformers, node, preserveNewLines);
+  // Normalize the markdown if requested
+  if (normalize) {
+    const normalizerConfig = typeof normalize === 'boolean'
+      ? { targetIndentSize: 2 } // Normalize to 2-space indents - our standard!
+      : normalize;
+    content = normalizeMarkdown(content, normalizerConfig);
+  }
+
+  // Import the content using OUR FORKED markdown import that handles 2-space indents
+  $convertFromMarkdownStringRexical(content, transformers, node, preserveNewLines);
 
   return {
     frontmatter,

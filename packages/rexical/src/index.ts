@@ -62,6 +62,9 @@ export { pluginRegistry } from './plugins/PluginRegistry';
 export { PluginManager } from './plugins/PluginManager';
 
 // Markdown utilities
+// WARNING: NEVER use $convertFromMarkdownString from @lexical/markdown!
+// Use our $convertFromEnhancedMarkdownString instead - it handles 2-space indents.
+// See src/markdown/FORKED_MARKDOWN_IMPORT.md for details.
 export {
   MarkdownStreamProcessor,
   createHeadlessEditorFromEditor,
@@ -70,6 +73,14 @@ export {
   MARKDOWN_TRANSFORMERS,
   getEditorTransformers
 } from './markdown';
+
+// Markdown normalization utilities
+export {
+  detectMarkdownIndentSize,
+  normalizeMarkdown,
+  normalizeMarkdownLists,
+  type NormalizerConfig
+} from './markdown/MarkdownNormalizer';
 
 // Frontmatter utilities
 export {
@@ -85,8 +96,12 @@ export {
 // Additional frontmatter utilities from EnhancedMarkdownImport
 export {
   $mergeFrontmatter,
-  $updateFrontmatter
+  $updateFrontmatter,
+  $convertFromEnhancedMarkdownString // This is the main function to use!
 } from './markdown/EnhancedMarkdownImport';
+
+// Export our forked markdown import (prefer $convertFromEnhancedMarkdownString instead)
+export { $convertFromMarkdownStringRexical } from './markdown/LexicalMarkdownImport';
 
 // Diff plugin and hook
 export { DiffPlugin, useDiffCommands, APPLY_MARKDOWN_REPLACE_COMMAND } from './plugins/DiffPlugin';

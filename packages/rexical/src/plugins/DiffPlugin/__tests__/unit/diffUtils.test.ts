@@ -9,7 +9,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 import {
-  TRANSFORMERS,
+    $convertToMarkdownString,
+    TRANSFORMERS,
 } from '@lexical/markdown';
 import {parsePatch} from 'diff';
 import {$getRoot, $isElementNode, LexicalEditor, LexicalNode} from 'lexical';
@@ -20,7 +21,7 @@ import {
   applyParsedDiffToMarkdown,
   generateUnifiedDiff,
 } from '../../core/standardDiffFormat';
-import { $convertFromEnhancedMarkdownString } from "@/markdown";
+import { $convertFromEnhancedMarkdownString, $convertToEnhancedMarkdownString } from "@/markdown";
 
 /**
  * Utility function to set up markdown diff tests.
@@ -125,7 +126,7 @@ describe('Markdown Diff', () => {
 
     // Compare final editor output to expected markdown
     const resultingMarkdown = testEditor.getEditorState().read(() => {
-      return $convertToMarkdownString(TRANSFORMERS, undefined, true);
+      return $convertToEnhancedMarkdownString(TRANSFORMERS);
     });
     expect(resultingMarkdown.trim()).toEqual(expectedMarkdown.trim());
   });
@@ -163,7 +164,7 @@ This is a paragraph.`;
     );
 
     const updatedMarkdown = testEditor.getEditorState().read(() => {
-      return $convertToMarkdownString(TRANSFORMERS, undefined, true);
+      return $convertToEnhancedMarkdownString(TRANSFORMERS);
     });
 
     // Compare final editor output to expected markdown
@@ -275,7 +276,7 @@ This is a paragraph.`;
     });
 
     const resultingMarkdown = testEditor.getEditorState().read(() => {
-      return $convertToMarkdownString(TRANSFORMERS, undefined, true);
+      return $convertToEnhancedMarkdownString(TRANSFORMERS);
     });
     expect(resultingMarkdown.trim()).toEqual(expectedMarkdown.trim());
   });
@@ -355,7 +356,7 @@ This is a paragraph.`;
 
     // Compare final editor output to expected markdown
     const resultingMarkdown = testEditor.getEditorState().read(() => {
-      return $convertToMarkdownString(TRANSFORMERS, undefined, true);
+      return $convertToEnhancedMarkdownString(TRANSFORMERS);
     });
 
     expect(resultingMarkdown.trim()).toEqual(expectedMarkdown.trim());
@@ -439,7 +440,7 @@ This is a paragraph that will also be updated.`;
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     const updatedMarkdown = testEditor.getEditorState().read(() => {
-      return $convertToMarkdownString(TRANSFORMERS, undefined, true);
+      return $convertToEnhancedMarkdownString(TRANSFORMERS);
     });
 
     // Compare final editor output to expected markdown
@@ -555,7 +556,7 @@ This is a paragraph that will also be updated.`;
 
     // Verify the final markdown matches expected
     const resultingMarkdown = testEditor.getEditorState().read(() => {
-      return $convertToMarkdownString(TRANSFORMERS, undefined, true);
+      return $convertToEnhancedMarkdownString(TRANSFORMERS);
     });
     expect(resultingMarkdown.trim()).toEqual(expectedMarkdown.trim());
   });
@@ -670,7 +671,7 @@ This concluding section provides an enhanced summary of the key points discussed
 
     // Compare final editor output to expected markdown
     const resultingMarkdown = testEditor.getEditorState().read(() => {
-      return $convertToMarkdownString(TRANSFORMERS, undefined, true);
+      return $convertToEnhancedMarkdownString(TRANSFORMERS);
     });
     expect(resultingMarkdown.trim()).toEqual(expectedMarkdown.trim());
   });

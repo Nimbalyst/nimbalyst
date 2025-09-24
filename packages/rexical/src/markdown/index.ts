@@ -121,3 +121,29 @@ export {
   type FrontmatterData,
 } from './FrontmatterUtils';
 
+// Export markdown configuration functions
+export {
+  setMarkdownConfig,
+  getMarkdownConfig,
+  type MarkdownConfig,
+} from './MarkdownTransformers';
+
+// Export list-specific configuration functions
+export {
+  setListConfig,
+  getListConfig,
+  resetDetectedIndent,
+  type ListConfig,
+} from './ListTransformers';
+
+// Export markdown normalization functions
+export {
+  normalizeMarkdown,
+  normalizeMarkdownLists,
+  detectMarkdownIndentSize,
+  type NormalizerConfig,
+} from './MarkdownNormalizer';
+
+// Export OUR FORKED markdown import function - never use Lexical's!
+export { $convertFromMarkdownStringRexical } from './LexicalMarkdownImport';
+
