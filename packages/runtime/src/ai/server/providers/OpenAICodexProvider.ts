@@ -2,7 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as os from 'os';
 import { EventEmitter } from 'events';
-import { AIProvider, AIMessage, AIStreamResponse, AIToolCall, AIToolResult } from '../../types';
+import { AIProvider, AIMessage, AIStreamResponse, AIStreamChunk, AIToolCall, AIToolResult } from '../../types';
 import {
   ProviderConfig,
   ToolHandler,
@@ -41,16 +41,10 @@ export class OpenAICodexProvider extends EventEmitter implements AIProvider {
 
   static getModels() {
     return [{
-      id: 'openai-codex:gpt-5',
-      name: 'GPT-5 (Codex)',
+      id: 'openai-codex:openai-codex-cli',
+      name: 'OpenAI Codex CLI',
       provider: 'openai-codex',
-      contextWindow: 128000,
-      maxTokens: 16384
-    }, {
-      id: 'openai-codex:gpt-4o',
-      name: 'GPT-4o (Codex)',
-      provider: 'openai-codex',
-      contextWindow: 128000,
+      contextWindow: 272000,
       maxTokens: 16384
     }];
   }
@@ -82,6 +76,13 @@ export class OpenAICodexProvider extends EventEmitter implements AIProvider {
       workingDirectory?: string;
     }
   ): AIStreamResponse {
+    console.log('[OpenAICodexProvider] streamChat called with:', {
+      messageCount: messages.length,
+      workingDir: options?.workingDirectory,
+      model: options?.model,
+      sessionId: options?.sessionId,
+      hasApiKey: !!this.apiKey
+    });
     const workingDir = options?.workingDirectory || process.cwd();
     const model = options?.model || 'gpt-5';
 
@@ -114,6 +115,7 @@ export class OpenAICodexProvider extends EventEmitter implements AIProvider {
       }
 
       // Spawn codex process
+      console.log('[OpenAICodexProvider] Spawning codex process:', codexPath, args.join(' '));
       const codexProcess = spawn(codexPath, args, {
         cwd: workingDir,
         env: {
@@ -123,42 +125,36 @@ export class OpenAICodexProvider extends EventEmitter implements AIProvider {
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
+      console.log('[OpenAICodexProvider] Writing prompt to stdin:', prompt.substring(0, 200));
       // Write prompt to stdin and close it
       codexProcess.stdin.write(prompt);
       codexProcess.stdin.end();
+      console.log('[OpenAICodexProvider] Prompt sent, waiting for response...');
 
       let buffer = '';
       let hasError = false;
+      let fullText = '';
+      let processExited = false;
+      let exitCode: number | null = null;
 
-      // Handle stdout (JSON messages)
-      codexProcess.stdout.on('data', (data: Buffer) => {
-        buffer += data.toString();
-
-        // Try to parse complete JSON messages
-        const lines = buffer.split('\n');
-        buffer = lines[lines.length - 1]; // Keep incomplete line in buffer
-
-        for (let i = 0; i < lines.length - 1; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-
-          try {
-            const jsonMessage = JSON.parse(line);
-            // Process JSON message and yield appropriate chunks
-            if (jsonMessage.type === 'message' || jsonMessage.content) {
-              // Yield text content
-              const text = jsonMessage.content || jsonMessage.message || '';
-              if (text) {
-                // Don't yield in generator, store for later
-              }
-            }
-          } catch (e) {
-            // Not JSON, treat as plain text
-            if (line && !hasError) {
-              // Store plain text for later
-            }
+      // Set up process exit handler
+      const processExitPromise = new Promise<void>((resolve, reject) => {
+        codexProcess.on('exit', (code) => {
+          console.log('[OpenAICodexProvider] Codex process exited with code:', code);
+          processExited = true;
+          exitCode = code;
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`Codex process exited with code ${code}`));
           }
-        }
+        });
+
+        codexProcess.on('error', (error) => {
+          console.error('[OpenAICodexProvider] Codex process error:', error);
+          hasError = true;
+          reject(error);
+        });
       });
 
       // Handle stderr (codex outputs informational messages here)
@@ -171,85 +167,134 @@ export class OpenAICodexProvider extends EventEmitter implements AIProvider {
         }
       });
 
-      // Create a promise to handle process completion
-      const processComplete = new Promise<string>((resolve, reject) => {
-        let fullResponse = '';
-
-        codexProcess.stdout.on('data', (data: Buffer) => {
-          fullResponse += data.toString();
-        });
-
-        codexProcess.on('exit', (code) => {
-          if (code === 0) {
-            resolve(fullResponse);
-          } else {
-            reject(new Error(`Codex process exited with code ${code}`));
-          }
-        });
-
-        codexProcess.on('error', (error) => {
-          reject(error);
-        });
+      // Handle stdout (JSON messages) and yield chunks as they arrive
+      codexProcess.stdout.on('data', (data: Buffer) => {
+        const chunk = data.toString();
+        console.log('[OpenAICodexProvider] Got stdout chunk:', chunk.substring(0, 200));
+        buffer += chunk;
       });
 
-      // Wait for the process to complete and get full response
+      // Poll for messages and yield them as they arrive
+      let chunksYielded = 0;
+      let lastYieldTime = Date.now();
+
       try {
-        const fullResponse = await processComplete;
+        while (!processExited) {
+          await new Promise(resolve => setTimeout(resolve, 50)); // Poll every 50ms
 
-        // Parse and yield the response
-        const lines = fullResponse.split('\n');
-        let combinedText = '';
+          // Process any buffered data
+          if (buffer.length > 0) {
+            const lines = buffer.split('\n');
+            buffer = lines[lines.length - 1]; // Keep incomplete line in buffer
 
-        for (const line of lines) {
-          if (!line.trim()) continue;
+            for (let i = 0; i < lines.length - 1; i++) {
+              const line = lines[i].trim();
+              if (!line) continue;
 
+              try {
+                const jsonMessage = JSON.parse(line);
+                console.log('[OpenAICodexProvider] Parsed JSON message type:', jsonMessage.msg?.type || jsonMessage.type);
+
+                let messageText = '';
+
+                if (jsonMessage.msg) {
+                  const msg = jsonMessage.msg;
+                  if (msg.type === 'agent_message' && msg.message) {
+                    messageText = msg.message;
+                    console.log('[OpenAICodexProvider] Got agent message:', messageText.substring(0, 100));
+                  } else if (msg.type === 'exec_command_end' && msg.formatted_output) {
+                    messageText = msg.formatted_output;
+                    console.log('[OpenAICodexProvider] Got command output:', messageText.substring(0, 100));
+                  }
+                } else if (jsonMessage.message) {
+                  messageText = jsonMessage.message;
+                  console.log('[OpenAICodexProvider] Got direct message:', messageText.substring(0, 100));
+                }
+
+                if (messageText) {
+                  fullText += messageText + '\n';
+                  console.log('[OpenAICodexProvider] Yielding text chunk #' + (++chunksYielded) + ':', messageText.substring(0, 100));
+                  const timeSinceLastYield = Date.now() - lastYieldTime;
+                  console.log('[OpenAICodexProvider] Time since last yield:', timeSinceLastYield, 'ms');
+                  lastYieldTime = Date.now();
+
+                  // Yield text chunk immediately
+                  const chunk: AIStreamChunk = {
+                    type: 'text',
+                    content: messageText
+                  };
+                  console.log('[OpenAICodexProvider] Yielding chunk object:', JSON.stringify(chunk));
+                  yield chunk;
+                }
+              } catch (e) {
+                // Not JSON, skip
+                console.log('[OpenAICodexProvider] Could not parse as JSON:', line.substring(0, 100));
+              }
+            }
+          }
+        }
+
+        console.log('[OpenAICodexProvider] Process has exited, waiting for clean exit...');
+        // Wait for process to exit cleanly (in case there's an error)
+        await processExitPromise.catch(err => {
+          console.error('[OpenAICodexProvider] Process exit error:', err);
+          throw err;
+        });
+
+        // Process any remaining buffer
+        if (buffer.trim()) {
           try {
-            const jsonMessage = JSON.parse(line);
+            const jsonMessage = JSON.parse(buffer.trim());
+            let messageText = '';
 
-            // Extract message text from different types of codex messages
             if (jsonMessage.msg) {
               const msg = jsonMessage.msg;
-
-              // Handle agent messages (the actual AI responses)
               if (msg.type === 'agent_message' && msg.message) {
-                combinedText += msg.message + '\n';
+                messageText = msg.message;
+              } else if (msg.type === 'exec_command_end' && msg.formatted_output) {
+                messageText = msg.formatted_output;
               }
-              // Handle command output
-              else if (msg.type === 'exec_command_end' && msg.formatted_output) {
-                combinedText += msg.formatted_output;
-              }
+            } else if (jsonMessage.message) {
+              messageText = jsonMessage.message;
             }
-            // Also check for direct message field
-            else if (jsonMessage.message) {
-              combinedText += jsonMessage.message + '\n';
+
+            if (messageText) {
+              fullText += messageText;
+              yield {
+                type: 'text',
+                content: messageText  // Changed from 'text' to 'content'
+              };
             }
-          } catch {
+          } catch (e) {
             // Not JSON, skip
           }
         }
 
-        if (combinedText) {
-          yield {
-            type: 'text',
-            text: combinedText
-          };
-        }
+        // Send complete chunk
+        console.log('[OpenAICodexProvider] Sending complete chunk with full text:', fullText.substring(0, 100));
+        console.log('[OpenAICodexProvider] Total chunks yielded:', chunksYielded);
 
-        yield {
-          type: 'finish',
-          text: combinedText,
+        const completeChunk: AIStreamChunk = {
+          type: 'complete',
+          content: fullText,
+          isComplete: true,
           usage: {
             promptTokens: 0,
             completionTokens: 0,
             totalTokens: 0
           }
         };
+        console.log('[OpenAICodexProvider] Yielding complete chunk:', JSON.stringify(completeChunk));
+        yield completeChunk;
+        console.log('[OpenAICodexProvider] Complete chunk yielded successfully');
       } catch (error) {
         console.error('[OpenAICodexProvider] Process error:', error);
-        yield {
+        console.error('[OpenAICodexProvider] Error stack:', error instanceof Error ? error.stack : 'No stack');
+        const errorChunk: AIStreamChunk = {
           type: 'error',
           error: error instanceof Error ? error.message : String(error)
         };
+        yield errorChunk;
       }
     } catch (error) {
       console.error('[OpenAICodexProvider] Error:', error);
@@ -328,28 +373,37 @@ export class OpenAICodexProvider extends EventEmitter implements AIProvider {
     sessionId?: string,
     messages?: Message[]
   ): AsyncIterableIterator<StreamChunk> {
-    // Convert to the format expected by streamChat
-    const aiMessages: AIMessage[] = [];
-
-    // Add previous messages if provided
-    if (messages && messages.length > 0) {
-      for (const msg of messages) {
-        aiMessages.push({
-          role: msg.role as 'user' | 'assistant' | 'system',
-          content: msg.content
-        });
-      }
-    }
-
-    // Add the current message
-    aiMessages.push({
-      role: 'user',
-      content: message
+    console.log('[OpenAICodexProvider] ========== sendMessage START ==========');
+    console.log('[OpenAICodexProvider] sendMessage called:', {
+      message: message.substring(0, 100),
+      hasDocumentContext: !!documentContext,
+      sessionId,
+      previousMessageCount: messages?.length || 0
     });
 
-    // Add document context if provided
-    if (documentContext) {
-      const contextMessage = `Current document context:
+    try {
+      // Convert to the format expected by streamChat
+      const aiMessages: AIMessage[] = [];
+
+      // Add previous messages if provided
+      if (messages && messages.length > 0) {
+        for (const msg of messages) {
+          aiMessages.push({
+            role: msg.role as 'user' | 'assistant' | 'system',
+            content: msg.content
+          });
+        }
+      }
+
+      // Add the current message
+      aiMessages.push({
+        role: 'user',
+        content: message
+      });
+
+      // Add document context if provided
+      if (documentContext) {
+        const contextMessage = `Current document context:
 File: ${documentContext.fileName || 'untitled'}
 Language: ${documentContext.language || 'unknown'}
 Content:
@@ -357,34 +411,94 @@ Content:
 ${documentContext.content}
 \`\`\``;
 
-      aiMessages.unshift({
-        role: 'system',
-        content: contextMessage
+        aiMessages.unshift({
+          role: 'system',
+          content: contextMessage
+        });
+      }
+
+      // Use streamChat to handle the actual streaming
+      console.log('[OpenAICodexProvider] Calling streamChat with', aiMessages.length, 'messages');
+      const streamResponse = this.streamChat(aiMessages, {
+        sessionId,
+        workingDirectory: documentContext?.workingDirectory
       });
-    }
 
-    // Use streamChat to handle the actual streaming
-    const streamResponse = this.streamChat(aiMessages, {
-      sessionId,
-      workingDirectory: documentContext?.workingDirectory
-    });
+      // Convert the stream response to StreamChunk format
+      console.log('[OpenAICodexProvider] sendMessage: Starting to process stream chunks...');
+      let chunkCount = 0;
+      let totalContent = '';
+      let hasError = false;
+      let hasCompleted = false;
 
-    // Convert the stream response to StreamChunk format
-    for await (const chunk of streamResponse) {
-      if (chunk.type === 'text') {
-        yield {
-          type: 'content',
-          content: chunk.text || ''
-        };
-      } else if (chunk.type === 'error') {
+      for await (const chunk of streamResponse) {
+        chunkCount++;
+        console.log(`[OpenAICodexProvider] sendMessage: Received chunk #${chunkCount}`);
+        console.log(`[OpenAICodexProvider] sendMessage: Chunk details:`, JSON.stringify(chunk));
+
+        if (chunk.type === 'text') {
+          const content = chunk.content || '';
+          totalContent += content;
+          console.log(`[OpenAICodexProvider] sendMessage: Yielding content chunk #${chunkCount} with ${content.length} chars`);
+
+          const yieldChunk: StreamChunk = {
+            type: 'text',  // AIService expects 'text' not 'content'!
+            content: content
+          };
+          console.log(`[OpenAICodexProvider] sendMessage: About to yield:`, JSON.stringify(yieldChunk));
+          yield yieldChunk;
+          console.log(`[OpenAICodexProvider] sendMessage: Successfully yielded content chunk #${chunkCount}`);
+        } else if (chunk.type === 'error') {
+          hasError = true;
+          console.error(`[OpenAICodexProvider] sendMessage: ERROR in chunk #${chunkCount}: ${chunk.error}`);
+          yield {
+            type: 'error',
+            error: chunk.error || 'Unknown error'
+          };
+        } else if (chunk.type === 'complete') {
+          hasCompleted = true;
+          console.log(`[OpenAICodexProvider] sendMessage: Stream complete at chunk #${chunkCount}`);
+          console.log(`[OpenAICodexProvider] sendMessage: Total content received: ${totalContent.length} chars`);
+          console.log(`[OpenAICodexProvider] sendMessage: Yielding complete chunk to AIService`);
+
+          // MUST yield the complete chunk so AIService knows to stop the spinner!
+          yield {
+            type: 'complete',
+            content: chunk.content || totalContent,
+            isComplete: true,
+            usage: chunk.usage
+          };
+          console.log(`[OpenAICodexProvider] sendMessage: Successfully yielded complete chunk`);
+        } else {
+          console.warn(`[OpenAICodexProvider] sendMessage: Unknown chunk type '${chunk.type}' at chunk #${chunkCount}`);
+        }
+      }
+
+      console.log(`[OpenAICodexProvider] sendMessage: Iterator complete. Processed ${chunkCount} chunks, total content: ${totalContent.length} chars`);
+      console.log(`[OpenAICodexProvider] sendMessage: hasError: ${hasError}, hasCompleted: ${hasCompleted}`);
+
+      if (!hasError && chunkCount === 0) {
+        console.error('[OpenAICodexProvider] sendMessage: WARNING - No chunks received from streamChat!');
         yield {
           type: 'error',
-          error: chunk.error || 'Unknown error'
+          error: 'No response received from Codex'
         };
-      } else if (chunk.type === 'finish') {
-        // Stream is complete
-        break;
+      } else if (!hasError && !hasCompleted && totalContent.length === 0) {
+        console.error('[OpenAICodexProvider] sendMessage: WARNING - No content received despite chunks!');
+        yield {
+          type: 'error',
+          error: 'Empty response from Codex'
+        };
       }
+    } catch (error) {
+      console.error('[OpenAICodexProvider] sendMessage: FATAL ERROR:', error);
+      console.error('[OpenAICodexProvider] sendMessage: Error stack:', error instanceof Error ? error.stack : 'No stack');
+      yield {
+        type: 'error',
+        error: error instanceof Error ? error.message : String(error)
+      };
+    } finally {
+      console.log('[OpenAICodexProvider] ========== sendMessage END ==========');
     }
   }
 

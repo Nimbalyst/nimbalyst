@@ -106,6 +106,7 @@ export function NewSessionButton({
       case 'claude': return 'Claude SDK';
       case 'claude-code': return 'Claude Code (MCP)';
       case 'openai': return 'OpenAI';
+      case 'openai-codex': return 'OpenAI Codex';
       case 'lmstudio': return 'LMStudio';
       default: return provider;
     }

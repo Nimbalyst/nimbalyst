@@ -239,6 +239,7 @@ export class AIService {
       };
 
       // Only add model if it exists and provider isn't claude-code or openai-codex
+      // Both claude-code and openai-codex manage their own model selection
       if (session.providerConfig?.model && provider !== 'claude-code' && provider !== 'openai-codex') {
         initConfig.model = session.providerConfig.model;
       }
@@ -638,6 +639,7 @@ export class AIService {
               break;
 
             case 'complete':
+              console.log('[AIService] COMPLETE CHUNK RECEIVED! Sending completion signal to UI');
               perfLog.totalTime = Date.now() - startTime;
               perfLog.streamTime = Date.now() - streamStartTime;
               perfLog.chunkCount = chunkCount;
@@ -739,10 +741,12 @@ export class AIService {
               }
 
               // Send complete response
+              console.log('[AIService] Sending FINAL ai:streamResponse with isComplete=true, content length:', fullResponse.length);
               event.sender.send('ai:streamResponse', {
                 content: fullResponse,
                 isComplete: true
               });
+              console.log('[AIService] COMPLETION SIGNAL SENT TO UI!');
               break;
           }
         }
@@ -1101,6 +1105,13 @@ export class AIService {
       // Filter to only enabled models
       const enabledModels = allModels.filter(model => {
         const provider = enabledProviders[model.provider as AIProviderType];
+        if (model.provider === 'openai-codex') {
+          console.log('[AIService] Filtering openai-codex model:', {
+            modelId: model.id,
+            providerEnabled: provider?.enabled,
+            selectedModels: provider?.models
+          });
+        }
         if (!provider?.enabled) return false;
         // If specific models are selected, filter to those
         if (provider.models && provider.models.length > 0) {

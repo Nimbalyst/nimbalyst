@@ -154,21 +154,21 @@ export function PerformanceMetrics({ show }: PerformanceMetricsProps) {
           <span className="metric-value">{metrics.contextMessages || 0} msgs</span>
         </div>
 
-        {metrics.tokenUsage && (
+        {metrics.tokenUsage && (metrics.tokenUsage.input_tokens !== undefined || metrics.tokenUsage.output_tokens !== undefined) && (
           <>
             <div className="metric-item">
               <span className="metric-label">Input Tokens</span>
-              <span className="metric-value">{metrics.tokenUsage.input_tokens.toLocaleString()}</span>
+              <span className="metric-value">{(metrics.tokenUsage.input_tokens || 0).toLocaleString()}</span>
             </div>
 
             <div className="metric-item">
               <span className="metric-label">Output Tokens</span>
-              <span className="metric-value">{metrics.tokenUsage.output_tokens.toLocaleString()}</span>
+              <span className="metric-value">{(metrics.tokenUsage.output_tokens || 0).toLocaleString()}</span>
             </div>
 
             <div className="metric-item">
               <span className="metric-label">Total Tokens</span>
-              <span className="metric-value">{metrics.tokenUsage.total_tokens.toLocaleString()}</span>
+              <span className="metric-value">{(metrics.tokenUsage.total_tokens || 0).toLocaleString()}</span>
             </div>
           </>
         )}

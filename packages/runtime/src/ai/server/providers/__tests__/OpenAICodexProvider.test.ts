@@ -76,8 +76,9 @@ describe('OpenAICodexProvider', () => {
         apiKey: process.env.OPENAI_API_KEY || 'test-key'
       });
 
+      // Ask a question that requires actual AI processing, not just echoing
       const messages: AIMessage[] = [
-        { role: 'user', content: 'Say exactly "Hello from codex" and nothing else' }
+        { role: 'user', content: 'What is 2 + 2? Reply with just the number.' }
       ];
 
       // Try to execute a simple command
@@ -89,6 +90,7 @@ describe('OpenAICodexProvider', () => {
       let hasError = false;
       let errorMessage = '';
       let chunkCount = 0;
+      let gotValidResponse = false;
 
       try {
         for await (const chunk of responseStream) {
@@ -96,12 +98,19 @@ describe('OpenAICodexProvider', () => {
           if (chunk.type === 'text') {
             response += chunk.text || '';
             console.log('[TEST] Got text chunk:', chunk.text);
+            // Check if we're getting actual codex responses
+            if (chunk.text && chunk.text.length > 0) {
+              gotValidResponse = true;
+            }
           } else if (chunk.type === 'error') {
             hasError = true;
             errorMessage = chunk.error || '';
             console.log('[TEST] Got error:', errorMessage);
           } else if (chunk.type === 'finish') {
             console.log('[TEST] Got finish chunk with text:', chunk.text);
+            if (chunk.text) {
+              response += chunk.text;
+            }
             break;
           }
         }
@@ -113,28 +122,35 @@ describe('OpenAICodexProvider', () => {
 
       console.log('[TEST] Final response:', response);
       console.log('[TEST] Total chunks:', chunkCount);
+      console.log('[TEST] Has error:', hasError);
+      console.log('[TEST] Got valid response:', gotValidResponse);
 
-      // If codex is not installed, we expect an error
-      // If codex is installed, we expect a proper response
+      // This test should FAIL if codex is not properly connected
+      // We should NOT accept just any response - we need to verify actual communication
+
       if (hasError) {
-        // Should be a meaningful error about codex not being found
-        expect(errorMessage).toMatch(/Codex CLI not found|Codex process exited|Device not configured/);
-      } else {
-        // Should have received some chunks
-        expect(chunkCount).toBeGreaterThan(0);
+        // If we have an error, it should be a specific codex-related error
+        console.error('[TEST] Codex connection failed with error:', errorMessage);
+        expect(errorMessage).toMatch(/Codex CLI not found|codex: command not found|spawn codex ENOENT|Cannot find module.*codex/);
 
-        // Response should not be empty
+        // IMPORTANT: If we get here, the test should FAIL because Codex is not working
+        throw new Error(`Codex is not properly connected: ${errorMessage}`);
+      } else {
+        // We should have gotten a real response from codex
+        expect(gotValidResponse).toBe(true);
+        expect(chunkCount).toBeGreaterThan(0);
         expect(response).toBeTruthy();
         expect(response.length).toBeGreaterThan(0);
 
-        // Response should contain expected text (codex will say something about "Hello from codex")
-        // It should contain "Hello from codex" somewhere in the response
-        expect(response.toLowerCase()).toContain('hello from codex');
+        // The response should actually contain what we asked for
+        // But more importantly, we should verify that codex actually processed our request
+        console.log('[TEST] Verifying codex actually responded with:', response);
 
-        // Response should NOT contain raw JSON
-        expect(response).not.toContain('"type":');
-        expect(response).not.toContain('"msg":');
-        expect(response).not.toContain('"agent_message"');
+        // Check that we got a proper AI response
+        // For "What is 2 + 2?" we should get "4" or something containing "4"
+        if (!response.includes('4')) {
+          throw new Error(`Codex did not provide correct answer. Expected '4', got: ${response}`);
+        }
       }
     }, 30000); // 30 second timeout for API call
   });

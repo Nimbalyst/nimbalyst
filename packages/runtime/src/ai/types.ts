@@ -1,3 +1,16 @@
+// AI Stream Response types - MUST match what UI expects!
+export type AIStreamChunk =
+  | { type: 'text'; content: string }  // Text content - MUST use 'content' not 'text'!
+  | { type: 'complete'; content: string; isComplete: true; usage?: any }  // Completion
+  | { type: 'error'; error: string }  // Error
+  | { type: 'tool_call'; toolCall: any }  // Tool call
+  | { type: 'tool_error'; toolError: any }  // Tool error
+  | { type: 'stream_edit_start'; config: any }  // Stream edit start
+  | { type: 'stream_edit_content'; content: string }  // Stream edit content
+  | { type: 'stream_edit_end'; error?: string };  // Stream edit end
+
+export type AIStreamResponse = AsyncIterableIterator<AIStreamChunk>;
+
 export interface DocumentContext {
   filePath?: string;
   fileType?: string;

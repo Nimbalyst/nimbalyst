@@ -37,7 +37,7 @@ export function ModelPicker({ open, onClose, currentProvider, currentModel, onSe
     if (models.length === 0) {
       switch (providerKey) {
         case 'openai-codex':
-          models = ['openai-codex:openai-codex-cli'];
+          models = ['openai-codex'];
           break;
         case 'claude-code':
           models = ['claude-code:claude-code-cli'];
@@ -65,10 +65,15 @@ export function ModelPicker({ open, onClose, currentProvider, currentModel, onSe
             const isCurrent = currentProvider === providerKey && currentModel === id;
             // Display a nicer name for the model
             let displayName = id;
-            if (id === 'openai-codex:openai-codex-cli') {
-              displayName = 'OpenAI Codex CLI';
+            if (id === 'openai-codex:gpt-5') {
+              displayName = 'GPT-5 (Codex)';
+            } else if (id === 'openai-codex:gpt-4o') {
+              displayName = 'GPT-4o (Codex)';
             } else if (id === 'claude-code:claude-code-cli') {
               displayName = 'Claude Code CLI';
+            } else if (id.includes(':')) {
+              // For other models, just show the part after the colon
+              displayName = id.split(':')[1];
             }
             return (
               <button key={id} className="btn" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { onSelect(providerKey, id); onClose(); }}>
