@@ -3,7 +3,7 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary);
+  background: var(--background-primary);
   color: var(--text-primary);
   padding-top: 38px; /* Space for macOS title bar */
 }
@@ -45,7 +45,7 @@
 /* Left navigation */
 .ai-models-nav {
   width: 220px;
-  background: var(--bg-secondary);
+  background: var(--background-secondary);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -192,7 +192,7 @@
   gap: 12px;
   padding: 16px 20px;
   border-top: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  background: var(--background-primary);
 }
 
 .button-cancel,
@@ -206,7 +206,7 @@
 }
 
 .button-cancel {
-  background: var(--bg-secondary);
+  background: var(--background-secondary);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
 }
@@ -273,7 +273,7 @@
   align-items: center;
   gap: 12px;
   padding: 16px;
-  background: var(--bg-secondary);
+  background: var(--background-secondary);
   border-radius: 8px;
   margin-bottom: 24px;
 }
@@ -346,7 +346,7 @@
 /* Installation status */
 .installation-status {
   padding: 16px;
-  background: var(--bg-secondary);
+  background: var(--background-secondary);
   border-radius: 8px;
   margin-bottom: 16px;
 }
@@ -436,7 +436,7 @@
 .api-key-input {
   flex: 1;
   padding: 10px 12px;
-  background: var(--bg-secondary);
+  background: var(--background-secondary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   color: var(--text-primary);
@@ -456,7 +456,7 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
-  background: var(--bg-secondary);
+  background: var(--background-secondary);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
 }
@@ -525,7 +525,7 @@
 .models-action-btn {
   padding: 4px 8px;
   font-size: 12px;
-  background: var(--bg-secondary);
+  background: var(--background-secondary);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
@@ -543,7 +543,7 @@
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 8px;
   padding: 12px;
-  background: var(--bg-secondary);
+  background: var(--background-secondary);
   border-radius: 8px;
 }
 
@@ -592,7 +592,7 @@
 .cli-config-select {
   flex: 1;
   padding: 8px 12px;
-  background: var(--bg-secondary);
+  background: var(--background-secondary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   color: var(--text-primary);
@@ -622,7 +622,7 @@
 
 .installation-progress-content {
   width: 500px;
-  background: var(--bg-primary, #ffffff);
+  background: var(--background-primary, #ffffff);
   border-radius: 12px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   overflow: hidden;
@@ -642,7 +642,7 @@
 
 .installation-progress-body {
   padding: 20px;
-  background: var(--bg-primary, #ffffff);
+  background: var(--background-primary, #ffffff);
 }
 
 .installation-progress-status {
@@ -653,7 +653,7 @@
 
 .installation-progress-bar {
   height: 8px;
-  background: var(--bg-secondary, #f5f5f5);
+  background: var(--background-secondary, #f5f5f5);
   border-radius: 4px;
   overflow: hidden;
   margin-bottom: 16px;
@@ -669,7 +669,7 @@
 .installation-progress-log {
   max-height: 200px;
   overflow-y: auto;
-  background: var(--bg-secondary, #f5f5f5);
+  background: var(--background-secondary, #f5f5f5);
   border-radius: 6px;
   padding: 12px;
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
@@ -684,7 +684,7 @@
   border-top: 1px solid var(--border-color, #e5e5e5);
   display: flex;
   justify-content: flex-end;
-  background: var(--bg-primary, #ffffff);
+  background: var(--background-primary, #ffffff);
 }
 
 .installation-progress-cancel {
@@ -693,7 +693,7 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  background: var(--bg-secondary, #f5f5f5);
+  background: var(--background-secondary, #f5f5f5);
   color: var(--text-primary, #333333);
   border: 1px solid var(--border-color, #e5e5e5);
 }

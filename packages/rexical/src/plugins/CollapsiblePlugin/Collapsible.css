@@ -58,7 +58,7 @@
 
 /* Dark mode support */
 [data-theme="dark"] .Collapsible__container {
-  background: var(--bg-secondary);
+  background: var(--background-secondary);
   border: 1px solid var(--editor-border);
 }
 

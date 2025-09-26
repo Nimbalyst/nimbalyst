@@ -3,7 +3,7 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary);
+  background: var(--background-primary);
   color: var(--text-primary);
   padding-top: 38px; /* Space for macOS title bar */
 }
@@ -263,7 +263,7 @@
 }
 
 .models-action-btn:hover {
-  background: var(--bg-secondary);
+  background: var(--background-secondary);
   color: var(--text-primary);
   border-color: var(--border-color-hover);
 }
@@ -345,7 +345,7 @@
 /* Theme variables are now defined in index.css - use those globals */
 /* Map local aliases to global variables */
 :root {
-  --bg-primary: var(--background-primary);
+  --background-primary: var(--background-primary);
   --bg-secondary: var(--background-secondary);
   --bg-tertiary: var(--background-tertiary);
   --background-hover: var(--background-tertiary);
