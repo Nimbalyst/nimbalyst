@@ -1,12 +1,16 @@
 /**
  * Stravu Editor - Main library entry point
- * 
+ *
  * A rich text editor built with Meta's Lexical framework, featuring markdown support,
  * tables, and comprehensive editing capabilities.
  */
 
 // Import main CSS styles
 import './index.css';
+
+// Register built-in plugins (must be done before any editor initialization)
+import { registerBuiltinPlugins } from './plugins/registerBuiltinPlugins';
+registerBuiltinPlugins();
 
 // Main editor components
 export { StravuEditor, type StravuEditorProps } from './StravuEditor';

@@ -321,17 +321,17 @@ export class ElectronDocumentService implements DocumentService {
   async listDocumentMetadata(): Promise<DocumentMetadataEntry[]> {
     await this.ensureInitialized();
     const metadata = Array.from(this.metadataCache.values());
-    console.log(`[DocumentService] listDocumentMetadata returning ${metadata.length} entries`);
+    // console.log(`[DocumentService] listDocumentMetadata returning ${metadata.length} entries`);
     if (metadata.length > 0) {
       const planDocs = metadata.filter(m => m.path.includes('plan'));
-      console.log(`[DocumentService] Found ${planDocs.length} plan documents`);
+      // console.log(`[DocumentService] Found ${planDocs.length} plan documents`);
       if (planDocs.length > 0) {
-        console.log('[DocumentService] Sample plan doc:', {
-          path: planDocs[0].path,
-          hasFrontmatter: !!planDocs[0].frontmatter,
-          frontmatterKeys: Object.keys(planDocs[0].frontmatter || {}),
-          hasPlanStatus: !!(planDocs[0].frontmatter && planDocs[0].frontmatter.planStatus)
-        });
+        // console.log('[DocumentService] Sample plan doc:', {
+        //   path: planDocs[0].path,
+        //   hasFrontmatter: !!planDocs[0].frontmatter,
+        //   frontmatterKeys: Object.keys(planDocs[0].frontmatter || {}),
+        //   hasPlanStatus: !!(planDocs[0].frontmatter && planDocs[0].frontmatter.planStatus)
+        // });
       }
     }
     return metadata;
@@ -516,11 +516,11 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
 
   ipcMain.handle('document-service:metadata-list', async (event) => {
     try {
-      console.log('[DocumentService] metadata-list IPC handler called');
+      // console.log('[DocumentService] metadata-list IPC handler called');
       const service = requireDocumentService(event);
-      console.log('[DocumentService] Got service:', !!service);
+      // console.log('[DocumentService] Got service:', !!service);
       const result = await service.listDocumentMetadata();
-      console.log('[DocumentService] Returning metadata:', result.length);
+      // console.log('[DocumentService] Returning metadata:', result.length);
       return result;
     } catch (error) {
       console.error('[DocumentService] metadata-list failed:', error);

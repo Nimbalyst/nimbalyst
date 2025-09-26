@@ -31,6 +31,7 @@ import type {
   TextMatchTransformer,
   MultilineElementTransformer,
 } from '@lexical/markdown';
+import { importTextTransformers } from './importTextTransformers';
 
 function isEmptyParagraph(node: LexicalNode): boolean {
   if (!$isParagraphNode(node)) {
@@ -64,7 +65,7 @@ function transformersByType(transformers: Array<Transformer>): TransformersByTyp
       byType.textFormat.push(transformer as TextFormatTransformer);
     } else if (type === 'text-match') {
       byType.textMatch.push(transformer as TextMatchTransformer);
-    } else if (type === 'multilineElement') {
+    } else if (type === 'multiline-element') {
       byType.multilineElement.push(transformer as MultilineElementTransformer);
     }
   }
@@ -72,7 +73,7 @@ function transformersByType(transformers: Array<Transformer>): TransformersByTyp
   return byType;
 }
 
-interface TextFormatTransformersIndex {
+export interface TextFormatTransformersIndex {
   fullMatchRegExpByTag: { [tag: string]: RegExp };
   openTagsRegExp: RegExp;
   transformersByTag: { [tag: string]: TextFormatTransformer };
@@ -112,15 +113,7 @@ function createTextFormatTransformersIndex(
   };
 }
 
-function importTextTransformers(
-  textNode: TextNode,
-  textFormatTransformersIndex: TextFormatTransformersIndex,
-  textMatchTransformers: Array<TextMatchTransformer>
-): void {
-  // This is a placeholder - the actual implementation is complex
-  // For now, we'll skip text formatting within markdown import
-  // as our main concern is list indentation
-}
+// importTextTransformers is now imported from './importTextTransformers'
 
 function $importMultiline(
   lines: string[],
