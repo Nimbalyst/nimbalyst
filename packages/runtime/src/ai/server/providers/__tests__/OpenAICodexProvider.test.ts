@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { OpenAICodexProvider } from '../OpenAICodexProvider';
-import { AIMessage } from '../../../types';
+import { Message } from '../../types';
 
 describe('OpenAICodexProvider', () => {
   let provider: OpenAICodexProvider;
@@ -22,19 +22,12 @@ describe('OpenAICodexProvider', () => {
 
     it('should return available models', () => {
       const models = OpenAICodexProvider.getModels();
-      expect(models).toHaveLength(2);
+      expect(models).toHaveLength(1);
       expect(models[0]).toEqual({
-        id: 'openai-codex:gpt-5',
-        name: 'GPT-5 (Codex)',
+        id: 'openai-codex:openai-codex-cli',
+        name: 'OpenAI Codex CLI',
         provider: 'openai-codex',
-        contextWindow: 128000,
-        maxTokens: 16384
-      });
-      expect(models[1]).toEqual({
-        id: 'openai-codex:gpt-4o',
-        name: 'GPT-4o (Codex)',
-        provider: 'openai-codex',
-        contextWindow: 128000,
+        contextWindow: 272000,
         maxTokens: 16384
       });
     });
@@ -77,14 +70,18 @@ describe('OpenAICodexProvider', () => {
       });
 
       // Ask a question that requires actual AI processing, not just echoing
-      const messages: AIMessage[] = [
-        { role: 'user', content: 'What is 2 + 2? Reply with just the number.' }
-      ];
+      const message = 'What is 2 + 2? Reply with just the number.';
+      const documentContext = undefined;
+      const sessionId = 'test-session';
+      const messages: Message[] = [];
 
-      // Try to execute a simple command
-      const responseStream = provider.streamChat(messages, {
-        workingDirectory: '/tmp'
-      });
+      // Try to execute a simple command using sendMessage
+      const responseStream = provider.sendMessage(
+        message,
+        documentContext,
+        sessionId,
+        messages
+      );
 
       let response = '';
       let hasError = false;
@@ -96,10 +93,10 @@ describe('OpenAICodexProvider', () => {
         for await (const chunk of responseStream) {
           chunkCount++;
           if (chunk.type === 'text') {
-            response += chunk.text || '';
-            console.log('[TEST] Got text chunk:', chunk.text);
+            response += chunk.content || '';
+            console.log('[TEST] Got text chunk:', chunk.content);
             // Check if we're getting actual codex responses
-            if (chunk.text && chunk.text.length > 0) {
+            if (chunk.content && chunk.content.length > 0) {
               gotValidResponse = true;
             }
           } else if (chunk.type === 'error') {
@@ -177,8 +174,8 @@ describe('OpenAICodexProvider', () => {
       const capabilities = provider.getCapabilities();
 
       expect(capabilities.streaming).toBe(true);
-      expect(capabilities.tools).toBe(false);
-      expect(capabilities.mcpSupport).toBe(false);
+      expect(capabilities.tools).toBe(true);
+      expect(capabilities.mcpSupport).toBe(true);
     });
   });
 });

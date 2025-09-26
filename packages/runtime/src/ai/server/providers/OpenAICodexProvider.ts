@@ -2,7 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as os from 'os';
 import { BaseAIProvider } from '../AIProvider';
-import { AIMessage, AIStreamResponse, AIStreamChunk, AIToolCall, AIToolResult } from '../../types';
+import { AIStreamChunk } from '../../types';
 import {
   ProviderConfig,
   DocumentContext,
@@ -62,8 +62,8 @@ export class OpenAICodexProvider extends BaseAIProvider {
     return 'OpenAI Codex CLI for advanced code generation';
   }
 
-  async *streamChat(
-    messages: AIMessage[],
+  private async *executeCodex(
+    prompt: string,
     options?: {
       model?: string;
       temperature?: number;
@@ -71,34 +71,27 @@ export class OpenAICodexProvider extends BaseAIProvider {
       tools?: any[];
       sessionId?: string;
       workingDirectory?: string;
+      mcpServerUrl?: string;
     }
-  ): AIStreamResponse {
-    console.log('[OpenAICodexProvider] streamChat called with:', {
-      messageCount: messages.length,
+  ): AsyncIterableIterator<AIStreamChunk> {
+    console.log('[OpenAICodexProvider] executeCodex called with:', {
+      promptLength: prompt.length,
       workingDir: options?.workingDirectory,
       model: options?.model,
       sessionId: options?.sessionId,
+      mcpServerUrl: options?.mcpServerUrl,
       hasApiKey: !!this.apiKey
     });
     const workingDir = options?.workingDirectory || process.cwd();
     const model = options?.model || 'gpt-5';
-
-    // Build the prompt from messages
-    const prompt = messages
-      .map(msg => {
-        if (msg.role === 'system') return `System: ${msg.content}`;
-        if (msg.role === 'user') return `User: ${msg.content}`;
-        if (msg.role === 'assistant') return `Assistant: ${msg.content}`;
-        return msg.content;
-      })
-      .join('\n\n');
 
     // Build codex command arguments
     const args = ['exec', '--json', '--skip-git-repo-check'];
 
     // Add model if specified
     if (model && model !== 'auto') {
-      args.push('-m', model);
+        // todo its currently pushing made up models
+      // args.push('-m', model);
     }
 
     console.log('[OpenAICodexProvider] Executing codex command:', 'codex', args.join(' '));
@@ -111,13 +104,50 @@ export class OpenAICodexProvider extends BaseAIProvider {
         throw new Error('Codex CLI not found. Please install @openai/codex');
       }
 
-      // Add configuration options if tools are enabled
+      // Add configuration arguments
       const configArgs = [];
-      if (this.toolHandler && this.config?.tools !== false) {
-        // Enable sandbox mode for safer execution when tools are available
-        configArgs.push('-c', 'sandbox="basic"');
-        // You can add more configuration here as needed
-        console.log('[OpenAICodexProvider] Tools enabled, adding config:', configArgs.join(' '));
+
+      // Disable sandbox mode - it causes issues on macOS with /bin/false
+      // and we need file system access for MCP tools anyway
+      configArgs.push('-c', 'sandbox="off"');
+      console.log('[OpenAICodexProvider] Sandbox mode disabled for MCP tool access');
+
+      // Configure MCP stdio server for tool support
+      // Resolve the path relative to this file's actual location in the source tree
+      // In dev: packages/runtime/src/ai/server/providers/
+      // In prod: packages/electron/out/main/ (after bundling)
+      let mcpServerPath: string;
+
+      // Check if we're in development or production
+      if (process.env.NODE_ENV === 'development' || __dirname.includes('src/ai/server/providers')) {
+        // Development: Use the source path
+        mcpServerPath = path.resolve(__dirname, './mcp-stdio-server.js');
+      } else {
+        // Production: Look for the bundled version
+        // Try to resolve from the runtime package first
+        const runtimePath = path.resolve(__dirname, '../../../../runtime/src/ai/server/providers/mcp-stdio-server.js');
+        const electronPath = path.resolve(__dirname, './mcp-stdio-server.js');
+
+        // Check which one exists
+        if (require('fs').existsSync(runtimePath)) {
+          mcpServerPath = runtimePath;
+        } else {
+          mcpServerPath = electronPath;
+        }
+      }
+
+      console.log('[OpenAICodexProvider] MCP server path resolved to:', mcpServerPath);
+
+      // Configure Codex to use our native stdio MCP server
+      configArgs.push('-c', `mcp_servers.preditor.command="node"`);
+      configArgs.push('-c', `mcp_servers.preditor.args=["${mcpServerPath}"]`);
+      configArgs.push('-c', 'mcp_servers.preditor.name="Preditor Editor"');
+      configArgs.push('-c', 'mcp_servers.preditor.description="Preditor MCP tools for file operations"');
+
+      // Enable debug logging if needed
+      if (process.env.DEBUG_MCP || options?.mcpServerUrl) {
+        process.env.DEBUG_MCP_STDIO = 'true';
+        console.log('[OpenAICodexProvider] MCP stdio server configured:', mcpServerPath);
       }
 
       // Spawn codex process
@@ -215,6 +245,7 @@ export class OpenAICodexProvider extends BaseAIProvider {
                 console.log('[OpenAICodexProvider] Parsed JSON message type:', jsonMessage.msg?.type || jsonMessage.type);
 
                 let messageText = '';
+                let toolCall = null;
 
                 if (jsonMessage.msg) {
                   const msg = jsonMessage.msg;
@@ -224,10 +255,24 @@ export class OpenAICodexProvider extends BaseAIProvider {
                   } else if (msg.type === 'exec_command_end' && msg.formatted_output) {
                     messageText = msg.formatted_output;
                     console.log('[OpenAICodexProvider] Got command output:', messageText.substring(0, 100));
+                  } else if (msg.type === 'tool_use' || msg.type === 'mcp_tool_use') {
+                    // Handle tool calls from Codex via MCP
+                    toolCall = {
+                      name: msg.tool_name || msg.name,
+                      arguments: msg.arguments || msg.input
+                    };
+                    console.log('[OpenAICodexProvider] Got tool call:', toolCall.name);
                   }
                 } else if (jsonMessage.message) {
                   messageText = jsonMessage.message;
                   console.log('[OpenAICodexProvider] Got direct message:', messageText.substring(0, 100));
+                } else if (jsonMessage.tool_use) {
+                  // Alternative tool call format
+                  toolCall = {
+                    name: jsonMessage.tool_use.name,
+                    arguments: jsonMessage.tool_use.arguments
+                  };
+                  console.log('[OpenAICodexProvider] Got tool call (alt format):', toolCall.name);
                 }
 
                 if (messageText) {
@@ -243,6 +288,14 @@ export class OpenAICodexProvider extends BaseAIProvider {
                     content: messageText
                   };
                   console.log('[OpenAICodexProvider] Yielding chunk object:', JSON.stringify(chunk));
+                  yield chunk;
+                } else if (toolCall) {
+                  // Yield tool call chunk
+                  console.log('[OpenAICodexProvider] Yielding tool call chunk:', toolCall.name);
+                  const chunk: AIStreamChunk = {
+                    type: 'tool_call',
+                    toolCall: toolCall
+                  };
                   yield chunk;
                 }
               } catch (e) {
@@ -409,46 +462,40 @@ export class OpenAICodexProvider extends BaseAIProvider {
     });
 
     try {
-      // Convert to the format expected by streamChat
-      const aiMessages: AIMessage[] = [];
+      // Build system prompt with tool descriptions
+      const systemPrompt = this.buildSystemPrompt(documentContext);
+      console.log('[OpenAICodexProvider] System prompt generated:', systemPrompt.substring(0, 300));
+
+      // Build the full prompt for Codex
+      let fullPrompt = '';
+
+      // Add system prompt first
+      fullPrompt += `System: ${systemPrompt}\n\n`;
 
       // Add previous messages if provided
       if (messages && messages.length > 0) {
         for (const msg of messages) {
-          aiMessages.push({
-            role: msg.role as 'user' | 'assistant' | 'system',
-            content: msg.content
-          });
+          if (msg.role === 'user') {
+            fullPrompt += `User: ${msg.content}\n\n`;
+          } else if (msg.role === 'assistant') {
+            fullPrompt += `Assistant: ${msg.content}\n\n`;
+          }
         }
       }
 
       // Add the current message
-      aiMessages.push({
-        role: 'user',
-        content: message
-      });
+      fullPrompt += `User: ${message}\n\nAssistant:`;
 
-      // Add document context if provided
-      if (documentContext) {
-        const contextMessage = `Current document context:
-File: ${documentContext.fileName || 'untitled'}
-Language: ${documentContext.language || 'unknown'}
-Content:
-\`\`\`${documentContext.language || ''}
-${documentContext.content}
-\`\`\``;
+      // Get MCP server URL - hardcoded for now, should be passed from main process
+      const mcpServerUrl = 'http://127.0.0.1:3456/mcp';
 
-        aiMessages.unshift({
-          role: 'system',
-          content: contextMessage
-        });
-      }
-
-      // Use streamChat to handle the actual streaming
-      console.log('[OpenAICodexProvider] Calling streamChat with', aiMessages.length, 'messages');
-      const streamResponse = this.streamChat(aiMessages, {
+      // Use executeCodex to handle the actual streaming
+      console.log('[OpenAICodexProvider] Calling executeCodex with MCP server:', mcpServerUrl);
+      const streamResponse = this.executeCodex(fullPrompt, {
         sessionId,
-        workingDirectory: documentContext?.workingDirectory
+        workingDirectory: documentContext?.workingDirectory,
+        mcpServerUrl,
+        model: this.config?.model
       });
 
       // Convert the stream response to StreamChunk format
@@ -475,6 +522,13 @@ ${documentContext.content}
           console.log(`[OpenAICodexProvider] sendMessage: About to yield:`, JSON.stringify(yieldChunk));
           yield yieldChunk;
           console.log(`[OpenAICodexProvider] sendMessage: Successfully yielded content chunk #${chunkCount}`);
+        } else if (chunk.type === 'tool_call') {
+          // Forward tool calls from Codex MCP
+          console.log(`[OpenAICodexProvider] sendMessage: Tool call chunk #${chunkCount}:`, chunk.toolCall);
+          yield {
+            type: 'tool_call',
+            toolCall: chunk.toolCall
+          };
         } else if (chunk.type === 'error') {
           hasError = true;
           console.error(`[OpenAICodexProvider] sendMessage: ERROR in chunk #${chunkCount}: ${chunk.error}`);
@@ -549,8 +603,8 @@ ${documentContext.content}
   getCapabilities(): ProviderCapabilities {
     return {
       streaming: true,
-      tools: false,
-      mcpSupport: false
+      tools: true,  // Via MCP bridge script
+      mcpSupport: true  // Using stdio-to-HTTP bridge for MCP
     };
   }
 
