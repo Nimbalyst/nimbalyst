@@ -145,3 +145,6 @@ bundle-analysis.json
 
 # Temporary test files
 **/temptests/
+
+# Git worktrees
+worktrees/
