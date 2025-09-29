@@ -367,33 +367,25 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             console.log(`[CLAUDE-CODE] Result chunk received, is_error: ${chunk.is_error}`);
             if (chunk.is_error) {
               console.error('[CLAUDE-CODE] Result error:', chunk);
-              
+
               // Extract error message and display it
-              const errorMessage = chunk.error || chunk.message || chunk.error_message || 
+              const errorMessage = chunk.error || chunk.message || chunk.error_message ||
                                  JSON.stringify(chunk, null, 2);
-              
+
               // Yield error to UI
               yield {
                 type: 'error',
                 error: `Claude Code Error: ${errorMessage}`
               };
-              
+
               // Also yield as text to ensure visibility
               yield {
                 type: 'text',
                 content: `❌ Claude Code encountered an error:\n${errorMessage}`
               };
-            } else if (chunk.result || chunk.output || chunk.message) {
-              // Non-error result with content - display it
-              const resultContent = chunk.result || chunk.output || chunk.message || '';
-              if (resultContent) {
-                console.log('[CLAUDE-CODE] Result contains content:', resultContent.substring(0, 200));
-                yield {
-                  type: 'text',
-                  content: resultContent
-                };
-              }
             }
+            // Don't yield result content as text - it's already been sent in the assistant message
+            // Only errors need to be displayed from result chunks
           } else if (chunk.type === 'system') {
             // Handle system messages from Claude Code (initialization, etc.)
             console.log(`[CLAUDE-CODE] System chunk received:`, chunk);
