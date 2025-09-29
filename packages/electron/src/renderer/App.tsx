@@ -2264,35 +2264,7 @@ export default function App() {
     }
 
     // AI Tool handlers for document manipulation
-    if (window.electronAPI.onAIApplyDiff) {
-      cleanupFns.push(window.electronAPI.onAIApplyDiff(async ({ replacements, resultChannel }) => {
-        console.log('AI applyDiff request:', replacements);
-        try {
-          const result = await aiChatBridge.applyReplacements(replacements);
-          const finalResult = result || { success: false, error: 'No result returned from diff application' };
-
-          if (window.electronAPI.sendAIApplyDiffResult) {
-            const resultToSend = {
-              success: finalResult.success ?? false
-            };
-            if (finalResult.error) {
-              (resultToSend as any).error = finalResult.error;
-            }
-            window.electronAPI.sendAIApplyDiffResult(resultChannel, resultToSend);
-          }
-        } catch (error) {
-          console.error('AI applyDiff error:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-          if (window.electronAPI.sendAIApplyDiffResult) {
-            window.electronAPI.sendAIApplyDiffResult(resultChannel, {
-              success: false,
-              error: errorMessage || 'Unknown error'
-            });
-          }
-        }
-      }));
-    }
+    // Note: onAIApplyDiff is handled by aiApi.ts to avoid duplicate applications
 
     if (window.electronAPI.onAIGetDocumentContent) {
       cleanupFns.push(window.electronAPI.onAIGetDocumentContent(async ({ resultChannel }) => {
