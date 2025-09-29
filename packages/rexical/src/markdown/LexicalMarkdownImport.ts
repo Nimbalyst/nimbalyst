@@ -214,6 +214,8 @@ function $importBlocks(
       textNode.setTextContent(lineText.slice(match[0].length));
       if (replace(elementNode, [textNode], match, true) !== false) {
         // Successfully processed by a transformer
+        // Apply text format transformers to the text node after element transformation
+        importTextTransformers(textNode, textFormatTransformersIndex, textMatchTransformers);
         // Make sure the temporary paragraph is removed
         if (elementNode.isAttached()) {
           elementNode.remove();

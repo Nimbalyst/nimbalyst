@@ -12,11 +12,11 @@ While heavily leveraging the Lexical playground environment, this editor works t
 
 ## Packages
 
-- **__`packages/rexical`__** - The core editor library
-- **__`packages/playground`__** - Demo and testing playground web app
-- **__`packages/electron`__** - Desktop application (Electron)
-- **__`packages/capacitor`__** - Mobile application (Capacitor)
-- **__`packages/tauri`__** - Desktop application (Tauri)
+- **`packages/rexical`** - The core editor library
+- **`packages/playground`** - Demo and testing playground web app
+- **`packages/electron`** - Desktop application (Electron)
+- **`packages/capacitor`** - Mobile application (Capacitor)
+- **`packages/tauri`** - Desktop application (Tauri)
 
 ## Getting Started
 
@@ -41,20 +41,20 @@ cd packages/electron && npm run build:mac:local
 ## Features
 
 ### 🔥 Core Editor Features
-- **__Rich Text Editing__**: Full-featured WYSIWYG editor with support for bold, italic, underline, strikethrough, and more
-- **__Markdown Support__**: Toggle between rich text and markdown source view with the markdown button in the toolbar
-- **__Tables__**: Create, edit, and manage tables with cell merging, background colors, and horizontal scrolling
-- **__Code Blocks__**: Syntax highlighting with support for multiple languages via Prism.js
-- **__Lists__**: Ordered and unordered lists with nested indentation and checkboxes
-- **__Images__**: Inline and block images with drag-and-drop support
-- **__Excalidraw__**: Embedded drawing support
+- **Rich Text Editing**: Full-featured WYSIWYG editor with support for bold, italic, underline, strikethrough, and more
+- **Markdown Support**: Toggle between rich text and markdown source view with the markdown button in the toolbar
+- **Tables**: Create, edit, and manage tables with cell merging, background colors, and horizontal scrolling
+- **Code Blocks**: Syntax highlighting with support for multiple languages via Prism.js
+- **Lists**: Ordered and unordered lists with nested indentation and checkboxes
+- **Images**: Inline and block images with drag-and-drop support
+- **Excalidraw**: Embedded drawing support
 
 ### 📁 File Management
-- **__Hybrid File System__**: Supports web File System Access API, Origin Private File System (OPFS), and Electron
-- **__Auto-save__**: Automatic saving with configurable intervals (default 2000ms)
-- **__Manual Save__**: Cmd+S (Mac) / Ctrl+S (Windows) keyboard shortcuts
-- **__File Operations__**: New File, Open File, Load File, and Save File operations
-- **__URL Integration__**: File names are reflected in the URL for bookmarking and sharing
+- **Hybrid File System**: Supports web File System Access API, Origin Private File System (OPFS), and Electron
+- **Auto-save**: Automatic saving with configurable intervals (default 2000ms)
+- **Manual Save**: Cmd+S (Mac) / Ctrl+S (Windows) keyboard shortcuts
+- **File Operations**: New File, Open File, Load File, and Save File operations
+- **URL Integration**: File names are reflected in the URL for bookmarking and sharing
 
 ## Development
 
@@ -85,21 +85,21 @@ npm run dist
 ```
 
 The Electron app features:
-- **__Modern Electron version__** for improved performance and security
-- **__PGLite database system__** - PostgreSQL in WebAssembly for robust data storage
-- **__Native About window__** that respects the current theme
-- **__Dark mode support__** with automatic title bar theming
-- **__Code highlighting__** using Prism.js with full dark theme support
-- **__Auto-save__** functionality every 2 seconds
-- **__File watching__** for external changes with auto-reload
-- **__Project mode__** for working with entire folders
-- **__Recent files__** tracking in the application menu
-- **__Window state persistence__** - remembers window position, size, and dev tools state
-- **__Per-project window state__** - each project remembers its own window configuration
-- **__Document history tracking__** - compressed binary storage with automatic migration
-- **__AI Chat integration__** - Built-in Claude AI assistant with context-aware editing
-- **__Session Manager__** - Global view of all AI chat sessions across projects
-- **__Drag and drop__** file operations in the project sidebar with copy/move support
+- **Modern Electron version** for improved performance and security
+- **PGLite database system** - PostgreSQL in WebAssembly for robust data storage
+- **Native About window** that respects the current theme
+- **Dark mode support** with automatic title bar theming
+- **Code highlighting** using Prism.js with full dark theme support
+- **Auto-save** functionality every 2 seconds
+- **File watching** for external changes with auto-reload
+- **Project mode** for working with entire folders
+- **Recent files** tracking in the application menu
+- **Window state persistence** - remembers window position, size, and dev tools state
+- **Per-project window state** - each project remembers its own window configuration
+- **Document history tracking** - compressed binary storage with automatic migration
+- **AI Chat integration** - Built-in Claude AI assistant with context-aware editing
+- **Session Manager** - Global view of all AI chat sessions across projects
+- **Drag and drop** file operations in the project sidebar with copy/move support
 
 ### Playground Development
 
@@ -174,37 +174,37 @@ function MyApp() {
 
 ### ✅ No CSS Import Required!
 
-**__Good news__**: The CSS is automatically included when you import the component. No separate CSS import is needed!
+**Good news**: The CSS is automatically included when you import the component. No separate CSS import is needed!
 
 ## AI Features (Electron App)
 
 The Electron app includes powerful AI integration powered by Claude:
 
 ### AI Chat Panel
-- **__Context-aware assistance__**: Claude understands your current document and project
-- **__Real-time editing__**: Stream code changes directly to the editor
-- **__Session persistence__**: Chat history is saved and restored across app restarts
-- **__Draft persistence__**: Unsent messages are saved automatically
-- **__Keyboard shortcut__**: Cmd+Shift+A to toggle the AI panel
+- **Context-aware assistance**: Claude understands your current document and project
+- **Real-time editing**: Stream code changes directly to the editor
+- **Session persistence**: Chat history is saved and restored across app restarts
+- **Draft persistence**: Unsent messages are saved automatically
+- **Keyboard shortcut**: Cmd+Shift+A to toggle the AI panel
 
 ### Session Manager
-- **__Global session view__**: Access all AI sessions across all projects (Cmd+Alt+S)
-- **__Search functionality__**: Find sessions by content, project, or date
-- **__Full conversation history__**: View and reopen any past conversation
-- **__Export sessions__**: Save conversations for documentation or sharing
-- **__Clean interface__**: Left navigation with session list, detailed view on the right
+- **Global session view**: Access all AI sessions across all projects (Cmd+Alt+S)
+- **Search functionality**: Find sessions by content, project, or date
+- **Full conversation history**: View and reopen any past conversation
+- **Export sessions**: Save conversations for documentation or sharing
+- **Clean interface**: Left navigation with session list, detailed view on the right
 
 ### Window State Management
-- **__Smart persistence__**: Every window remembers its position, size, and dev tools state
-- **__Per-project memory__**: Each project maintains its own window configuration
-- **__Session restoration__**: Reopening the app restores all windows exactly as they were
-- **__Focus order preservation__**: Windows are restored in the correct stacking order
+- **Smart persistence**: Every window remembers its position, size, and dev tools state
+- **Per-project memory**: Each project maintains its own window configuration
+- **Session restoration**: Reopening the app restores all windows exactly as they were
+- **Focus order preservation**: Windows are restored in the correct stacking order
 
 ### Enhanced File Operations
-- **__Drag and drop__**: Move files and folders in the project sidebar
-- **__Copy on drag__**: Hold Option/Alt while dragging to copy instead of move
-- **__Visual feedback__**: Clear indicators show valid drop targets
-- **__Smart renaming__**: Copied files automatically get unique names
+- **Drag and drop**: Move files and folders in the project sidebar
+- **Copy on drag**: Hold Option/Alt while dragging to copy instead of move
+- **Visual feedback**: Clear indicators show valid drop targets
+- **Smart renaming**: Copied files automatically get unique names
 
 ## Configuration
 
@@ -270,13 +270,13 @@ interface EditorConfig {
 
 ### Key Configuration Options
 
-**__Theme Control__**: Set `theme: 'light'`, `theme: 'dark'`, or `theme: 'auto'` to control the editor's appearance. Auto mode follows the system theme preference.
+**Theme Control**: Set `theme: 'light'`, `theme: 'dark'`, or `theme: 'auto'` to control the editor's appearance. Auto mode follows the system theme preference.
 
-**__Markdown-Only Mode__**: Set `markdownOnly: true` to hide rich text formatting options (font styling, colors, advanced formatting) while preserving markdown-native features like images, tables, excalidraw drawings, and collapsible containers.
+**Markdown-Only Mode**: Set `markdownOnly: true` to hide rich text formatting options (font styling, colors, advanced formatting) while preserving markdown-native features like images, tables, excalidraw drawings, and collapsible containers.
 
-**__File Operations__**: Configure auto-save behavior, provide custom file service implementations, and set up callbacks for content and file name changes.
+**File Operations**: Configure auto-save behavior, provide custom file service implementations, and set up callbacks for content and file name changes.
 
-**__Feature Toggles__**: Enable/disable specific features like autocomplete, code highlighting, collaboration, and table functionalities.
+**Feature Toggles**: Enable/disable specific features like autocomplete, code highlighting, collaboration, and table functionalities.
 
 ## File Services
 
@@ -300,27 +300,27 @@ The editor supports three file service implementations:
 ## Architecture
 
 ### Core Components
-- **__App.tsx__**: Main application with development mode and file management
-- **__Editor.tsx__**: Core editor component with plugin orchestration
-- **__EditorConfig.ts__**: Configuration interface and defaults
-- **__FileService.ts__**: File system abstraction layer
+- **App.tsx**: Main application with development mode and file management
+- **Editor.tsx**: Core editor component with plugin orchestration
+- **EditorConfig.ts**: Configuration interface and defaults
+- **FileService.ts**: File system abstraction layer
 
 ### Plugin System
 The editor uses a modular plugin architecture:
-- **__ToolbarPlugin__**: Main editing toolbar with markdown toggle
-- **__FloatingTextFormatToolbarPlugin__**: Context-sensitive formatting
-- **__TablePlugin__**: Table creation and management
-- **__ImagesPlugin__**: Image handling and upload
-- **__AutoLinkPlugin__**: Automatic link detection
-- **__MarkdownShortcutPlugin__**: Markdown syntax shortcuts
+- **ToolbarPlugin**: Main editing toolbar with markdown toggle
+- **FloatingTextFormatToolbarPlugin**: Context-sensitive formatting
+- **TablePlugin**: Table creation and management
+- **ImagesPlugin**: Image handling and upload
+- **AutoLinkPlugin**: Automatic link detection
+- **MarkdownShortcutPlugin**: Markdown syntax shortcuts
 - And 20+ other specialized plugins
 
 ### Node System
 Custom Lexical nodes extend base functionality:
-- **__ImageNode/InlineImageNode__**: Image handling
-- **__EmojiNode, MentionNode, KeywordNode__**: Special text elements
-- **__ExcalidrawNode__**: Drawing integration
-- **__Layout nodes__**: Column layouts
+- **ImageNode/InlineImageNode**: Image handling
+- **EmojiNode, MentionNode, KeywordNode**: Special text elements
+- **ExcalidrawNode**: Drawing integration
+- **Layout nodes**: Column layouts
 
 ## Development
 
@@ -342,17 +342,17 @@ packages/
 
 ### Key Commands
 
-- **__Markdown Toggle__**: Click the markdown button (leftmost in toolbar) to switch between rich text and markdown source view
-- **__Save__**: Cmd+S (Mac) / Ctrl+S (Windows) for manual save
-- **__Auto-save__**: Automatic saving on content changes and tab blur
-- **__File Management__**: Use toolbar buttons for file operations
+- **Markdown Toggle**: Click the markdown button (leftmost in toolbar) to switch between rich text and markdown source view
+- **Save**: Cmd+S (Mac) / Ctrl+S (Windows) for manual save
+- **Auto-save**: Automatic saving on content changes and tab blur
+- **File Management**: Use toolbar buttons for file operations
 
 ## Troubleshooting
 
 ### LexicalComposerContext Error
-**__Problem__**: Getting "LexicalComposerContext.useLexicalComposerContext: cannot find a LexicalComposerContext" error.
+**Problem**: Getting "LexicalComposerContext.useLexicalComposerContext: cannot find a LexicalComposerContext" error.
 
-**__Solution__**: This is typically caused by Vite module caching issues. Clear the cache:
+**Solution**: This is typically caused by Vite module caching issues. Clear the cache:
 ```bash
 # Quick cache clean
 npm run clean
@@ -362,35 +362,35 @@ npm run clean:full
 ```
 
 ### Editor appears unstyled/broken
-**__Problem__**: The editor shows up but looks completely unstyled or broken.
+**Problem**: The editor shows up but looks completely unstyled or broken.
 
-**__Solution__**: This should not happen as CSS is automatically included. If you still see issues:
+**Solution**: This should not happen as CSS is automatically included. If you still see issues:
 1. Make sure you're importing from the correct package
 2. Check that your bundler supports CSS imports
 3. Try clearing your node_modules and reinstalling
 
 ### Missing Lexical dependencies
-**__Problem__**: Build errors about missing `@lexical/*` packages.
+**Problem**: Build errors about missing `@lexical/*` packages.
 
-**__Solution__**: Install the required peer dependencies:
+**Solution**: Install the required peer dependencies:
 ```bash
 npm install lexical @lexical/react @lexical/rich-text @lexical/plain-text @lexical/code @lexical/code-shiki @lexical/list @lexical/link @lexical/table @lexical/utils @lexical/selection @lexical/markdown @lexical/clipboard @lexical/file @lexical/hashtag @lexical/mark @lexical/overflow @lexical/yjs
 ```
 
 ### TypeScript errors
-**__Problem__**: TypeScript complains about missing type definitions.
+**Problem**: TypeScript complains about missing type definitions.
 
-**__Solution__**: The library includes TypeScript definitions. Make sure you're importing from the correct path:
+**Solution**: The library includes TypeScript definitions. Make sure you're importing from the correct path:
 ```tsx
 import { Preditor, type EditorConfig } from 'preditor';
 ```
 
 ## Browser Support
 
-- **__Modern browsers__** with ES2020+ support
-- **__File System Access API__**: Chrome 86+, Edge 86+
-- **__Origin Private File System__**: Chrome 86+, Firefox with flag
-- **__Electron__**: All supported Electron versions
+- **Modern browsers** with ES2020+ support
+- **File System Access API**: Chrome 86+, Edge 86+
+- **Origin Private File System**: Chrome 86+, Firefox with flag
+- **Electron**: All supported Electron versions
 
 ## Contributing
 

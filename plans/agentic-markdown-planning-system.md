@@ -36,7 +36,7 @@ planStatus:
 - A frontmatter control block captures plan metadata; optional inline control nodes allow richer states.
 
 ## Plan Document Structure
-- **__Frontmatter (YAML)__**: core metadata for quick parsing by agents and tooling.
+- **Frontmatter (YAML)**: core metadata for quick parsing by agents and tooling.
 ```yaml
   ---
   planStatus:

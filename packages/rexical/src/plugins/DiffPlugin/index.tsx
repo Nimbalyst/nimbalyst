@@ -37,7 +37,7 @@ import {
   LexicalNode,
 } from 'lexical';
 import React, { useEffect, useCallback } from 'react';
-import { MARKDOWN_TRANSFORMERS } from '../../markdown';
+import { pluginRegistry } from '../PluginRegistry';
 import { DiffToolbar } from './DiffToolbar';
 
 import { createCommand } from 'lexical';
@@ -169,9 +169,12 @@ export function DiffPlugin(): JSX.Element | null {
         }
 
         try {
+          // Get transformers from plugin registry
+          const transformers = pluginRegistry.getAllTransformers();
+
           // Get current markdown content
           const currentMarkdown = editor.getEditorState().read(() => {
-            return $convertToEnhancedMarkdownString(MARKDOWN_TRANSFORMERS);
+            return $convertToEnhancedMarkdownString(transformers);
           });
 
           console.log('Applying diff with replacements:', replacements);
@@ -182,7 +185,7 @@ export function DiffPlugin(): JSX.Element | null {
               editor,
               currentMarkdown,
               replacements,
-              MARKDOWN_TRANSFORMERS
+              transformers
             );
           }, { discrete: true });
 
@@ -290,7 +293,8 @@ export function useDiffCommands() {
 
   const getCurrentMarkdown = useCallback(() => {
     return editor.getEditorState().read(() => {
-      return $convertToEnhancedMarkdownString(MARKDOWN_TRANSFORMERS, { shouldPreserveNewLines: true });
+      const transformers = pluginRegistry.getAllTransformers();
+      return $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true });
     });
   }, [editor]);
 
