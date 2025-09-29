@@ -427,6 +427,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               console.log('[CLAUDE-CODE] Other system message:', chunk.subtype);
             }
             // Don't yield system messages to UI - they're internal
+          } else if (chunk.type === 'user') {
+            // Handle user messages (including tool results) - don't display to user
+            console.log(`[CLAUDE-CODE] User chunk received (tool results, etc.):`, {
+              role: chunk.role,
+              contentBlocks: Array.isArray(chunk.content) ? chunk.content.length : 'not array'
+            });
+            // These are internal messages going back to Claude - don't display to user
           } else if (chunk.type === 'summary') {
             // Handle summary messages from Claude Code
             console.log(`[CLAUDE-CODE] Summary chunk received:`, chunk);
