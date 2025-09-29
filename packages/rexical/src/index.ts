@@ -74,8 +74,7 @@ export {
   createHeadlessEditorFromEditor,
   markdownToJSONSync,
   type InsertMode,
-  MARKDOWN_TRANSFORMERS,
-  getEditorTransformers
+  getEditorTransformers // Gets complete set of transformers (core + plugin)
 } from './markdown';
 
 // Markdown normalization utilities

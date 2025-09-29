@@ -25,7 +25,7 @@ import {
 } from './core/exports';
 
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $convertToEnhancedMarkdownString } from '../../markdown';
+import { $convertToEnhancedMarkdownString, getEditorTransformers } from '../../markdown';
 import { $isTableNode, $isTableRowNode, $isTableCellNode } from '@lexical/table';
 import {
   $createTextNode,
@@ -37,7 +37,6 @@ import {
   LexicalNode,
 } from 'lexical';
 import React, { useEffect, useCallback } from 'react';
-import { pluginRegistry } from '../PluginRegistry';
 import { DiffToolbar } from './DiffToolbar';
 
 import { createCommand } from 'lexical';
@@ -169,8 +168,8 @@ export function DiffPlugin(): JSX.Element | null {
         }
 
         try {
-          // Get transformers from plugin registry
-          const transformers = pluginRegistry.getAllTransformers();
+          // Get transformers including both core and plugin transformers
+          const transformers = getEditorTransformers();
 
           // Get current markdown content
           const currentMarkdown = editor.getEditorState().read(() => {
@@ -293,7 +292,7 @@ export function useDiffCommands() {
 
   const getCurrentMarkdown = useCallback(() => {
     return editor.getEditorState().read(() => {
-      const transformers = pluginRegistry.getAllTransformers();
+      const transformers = getEditorTransformers();
       return $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true });
     });
   }, [editor]);

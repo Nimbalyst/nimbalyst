@@ -7,11 +7,13 @@
  */
 
 import type {JSX} from 'react';
+import { useMemo } from 'react';
 
 import {MarkdownShortcutPlugin} from '@lexical/react/LexicalMarkdownShortcutPlugin';
 
-import {MARKDOWN_TRANSFORMERS} from '../../markdown';
+import {getEditorTransformers} from '../../markdown';
 
 export default function MarkdownPlugin(): JSX.Element {
-  return <MarkdownShortcutPlugin transformers={MARKDOWN_TRANSFORMERS} />;
+  const transformers = useMemo(() => getEditorTransformers(), []);
+  return <MarkdownShortcutPlugin transformers={transformers} />;
 }

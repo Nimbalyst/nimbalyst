@@ -9,13 +9,14 @@ import {createHeadlessEditor} from '@lexical/headless';
 import EditorNodes from '../../../../nodes/EditorNodes';
 
 // Import transformers from the project
-import {MARKDOWN_TRANSFORMERS} from '../../../../markdown';
+import { CORE_TRANSFORMERS } from '../../../../markdown/core-transformers';
 
 /**
  * Test transformers for diff plugin testing.
- * Uses the same transformers as the main editor for consistency.
+ * Uses core transformers for testing.
+ * Note: In production code, use getEditorTransformers() to get both core and plugin transformers.
  */
-export const MARKDOWN_TEST_TRANSFORMERS: Transformer[] = MARKDOWN_TRANSFORMERS;
+export const MARKDOWN_TEST_TRANSFORMERS: Transformer[] = CORE_TRANSFORMERS;
 
 /**
  * Test nodes for diff plugin testing.

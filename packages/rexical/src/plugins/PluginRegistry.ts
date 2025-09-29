@@ -1,5 +1,9 @@
 /**
  * Simple Plugin Registry - if it's registered, it's enabled
+ *
+ * IMPORTANT: This registry only tracks PLUGIN-specific resources.
+ * For transformers, use getEditorTransformers() from markdown/index.ts
+ * which includes both plugin AND core transformers (lists, bold, italic, etc.)
  */
 
 import type { Klass, LexicalNode } from 'lexical';
@@ -42,16 +46,30 @@ class PluginRegistryImpl {
     return nodes;
   }
 
-  getAllTransformers(): Array<Transformer> {
+  /**
+   * Get transformers from registered plugins only.
+   * IMPORTANT: This does NOT include core transformers (lists, bold, italic, etc.)
+   * Use getEditorTransformers() from markdown/index.ts for the complete set.
+   *
+   * @deprecated Prefer using getEditorTransformers() which includes both plugin and core transformers
+   */
+  getPluginTransformers(): Array<Transformer> {
     const transformers: Array<Transformer> = [];
-    
+
     for (const plugin of this.plugins.values()) {
       if (plugin.transformers) {
         transformers.push(...plugin.transformers);
       }
     }
-    
+
     return transformers;
+  }
+
+  /**
+   * @deprecated Use getPluginTransformers() for clarity, or better yet use getEditorTransformers()
+   */
+  getAllTransformers(): Array<Transformer> {
+    return this.getPluginTransformers();
   }
 
   getAllUserCommands(): Array<UserCommand> {

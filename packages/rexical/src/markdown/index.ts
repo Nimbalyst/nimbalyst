@@ -22,22 +22,16 @@ import { pluginRegistry } from '../plugins/PluginRegistry';
  * Order matters - more specific transformers should come before general ones.
  * Plugin transformers are loaded first so they can override core behavior.
  *
- * @returns Complete transformer array based on enabled plugins
+ * @returns Complete transformer array including both plugin and core transformers
  */
 export function getEditorTransformers(): Transformer[] {
   return [
     // Plugin transformers come first (more specific)
-    ...pluginRegistry.getAllTransformers(),
+    ...pluginRegistry.getPluginTransformers(),
     // Core transformers come last (more general)
     ...CORE_TRANSFORMERS,
   ];
 }
-
-/**
- * Legacy export for backwards compatibility.
- * @deprecated Use getEditorTransformers() instead
- */
-export const MARKDOWN_TRANSFORMERS: Array<Transformer> = CORE_TRANSFORMERS;
 
 /**
  * Function to create a transformer set with specific plugins.

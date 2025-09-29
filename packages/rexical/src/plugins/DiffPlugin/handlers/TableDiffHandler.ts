@@ -18,9 +18,9 @@ import {
 } from '../core/DiffState';
 import {
     $convertNodeToEnhancedMarkdownString,
-    $convertFromEnhancedMarkdownString
+    $convertFromEnhancedMarkdownString,
+    getEditorTransformers
 } from "../../../markdown";
-import { MARKDOWN_TRANSFORMERS } from '../../../markdown';
 
 export class TableDiffHandler implements DiffNodeHandler {
   readonly nodeType = 'table';
@@ -286,8 +286,8 @@ export class TableDiffHandler implements DiffNodeHandler {
           // Restore from original markdown
           if (originalMarkdown.trim()) {
             // Parse the markdown back into the cell
-            // Use the same transformers that were used originally
-            $convertFromEnhancedMarkdownString(originalMarkdown, MARKDOWN_TRANSFORMERS, cell, true, false);
+            // Use complete set of transformers (core + plugin)
+            $convertFromEnhancedMarkdownString(originalMarkdown, getEditorTransformers(), cell, true, false);
           }
 
           // Clear the diff state and original markdown

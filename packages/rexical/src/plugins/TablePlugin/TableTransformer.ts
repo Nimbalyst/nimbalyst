@@ -25,12 +25,12 @@ import {
   LexicalNode,
 } from 'lexical';
 
-// Import transformers directly
-import { MARKDOWN_TRANSFORMERS } from '../../markdown';
+// Import transformers from editor
+import { getEditorTransformers } from '../../markdown';
 
-// TODO: THis is just wrong, we need to use the transformers of the editor
+// Get the complete set of transformers including core and plugin transformers
 const getTransformers = () => {
-  return MARKDOWN_TRANSFORMERS;
+  return getEditorTransformers();
 };
 
 // Very primitive table setup
