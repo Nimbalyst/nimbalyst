@@ -153,21 +153,34 @@ export class ClaudeProvider extends BaseAIProvider {
       console.log('Number of messages:', apiRequest.messages.length);
       console.groupEnd();
 
-      const stream = this.anthropic.messages.stream(apiRequest);
+      // Tool execution loop - continue conversation until no more tool calls
+      let continuationMessages = [...apiMessages];
+      let totalUsageData: any = null;
+      let conversationComplete = false;
 
-      // Note: Cannot directly set abort controller on stream due to protected access
-      // The stream will be aborted through the provider's abort() method if needed
+      while (!conversationComplete) {
+        const currentRequest = {
+          ...apiRequest,
+          messages: continuationMessages
+        };
 
-      let fullContent = '';
-      let currentToolUse: any = null;
-      let toolInputBuffer = '';
-      let isStreamingContent = false;
-      let streamContentBuffer = '';
-      let streamConfig: any = null;
-      let usageData: any = null;
+        const stream = this.anthropic.messages.stream(currentRequest);
 
-      // Stream the response
-      for await (const rawChunk of stream as AsyncIterable<any>) {
+        // Note: Cannot directly set abort controller on stream due to protected access
+        // The stream will be aborted through the provider's abort() method if needed
+
+        let fullContent = '';
+        let currentToolUse: any = null;
+        let toolInputBuffer = '';
+        let isStreamingContent = false;
+        let streamContentBuffer = '';
+        let streamConfig: any = null;
+        let usageData: any = null;
+        let assistantContent: any[] = [];
+        let toolUses: any[] = [];
+
+        // Stream the response
+        for await (const rawChunk of stream as AsyncIterable<any>) {
         const chunk = rawChunk as any;
         console.log('[ClaudeProvider] Chunk received:', {
           type: chunk.type,
@@ -177,7 +190,13 @@ export class ClaudeProvider extends BaseAIProvider {
         });
 
         if (chunk.type === 'content_block_start') {
-          if (chunk.content_block.type === 'tool_use') {
+          if (chunk.content_block.type === 'text') {
+            // Text content block
+            assistantContent.push({
+              type: 'text',
+              text: ''
+            });
+          } else if (chunk.content_block.type === 'tool_use') {
             // Tool use started
             currentToolUse = {
               id: chunk.content_block.id,
@@ -197,6 +216,10 @@ export class ClaudeProvider extends BaseAIProvider {
           if (chunk.delta.type === 'text_delta') {
             // Text chunk
             fullContent += chunk.delta.text;
+            // Update the last text content block
+            if (assistantContent.length > 0 && assistantContent[assistantContent.length - 1].type === 'text') {
+              assistantContent[assistantContent.length - 1].text += chunk.delta.text;
+            }
             yield {
               type: 'text',
               content: chunk.delta.text
@@ -321,6 +344,17 @@ export class ClaudeProvider extends BaseAIProvider {
 
               currentToolUse.input = JSON.parse(toolInputBuffer);
 
+              // Add tool_use to assistant content for conversation continuation
+              assistantContent.push({
+                type: 'tool_use',
+                id: currentToolUse.id,
+                name: currentToolUse.name,
+                input: currentToolUse.input
+              });
+
+              // Store tool use for later execution
+              toolUses.push(currentToolUse);
+
               // Prepare optional execution result for tools that run immediately
               let executionResult: any = undefined;
 
@@ -359,6 +393,9 @@ export class ClaudeProvider extends BaseAIProvider {
 
                   console.log(`[ClaudeProvider] Tool execution result for ${currentToolUse.name}:`, executionResult);
 
+                  // Store result on tool use for continuation
+                  currentToolUse.result = executionResult;
+
                   if (executionResult && !executionResult.success) {
                     const errorMessage = executionResult.error || `${currentToolUse.name} execution failed`;
                     yield {
@@ -373,13 +410,15 @@ export class ClaudeProvider extends BaseAIProvider {
                   }
                 } catch (error) {
                   console.error(`[ClaudeProvider] Error executing tool ${currentToolUse.name}:`, error);
+                  const errorResult = { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+                  currentToolUse.result = errorResult;
                   yield {
                     type: 'tool_error',
                     toolError: {
                       name: currentToolUse.name,
                       arguments: currentToolUse.input,
                       error: error instanceof Error ? error.message : 'Tool execution failed',
-                      result: { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+                      result: errorResult
                     }
                   };
                 }
@@ -429,43 +468,109 @@ export class ClaudeProvider extends BaseAIProvider {
             console.log('[ClaudeProvider] Usage data from message_stop:', usageData);
           }
         }
-      }
-
-      // After streaming completes, try to get usage data from finalMessage
-      try {
-        const finalMessage = await stream.finalMessage();
-        if (finalMessage?.usage) {
-          usageData = finalMessage.usage;
-          console.log('[ClaudeProvider] Usage data from finalMessage:', usageData);
         }
-      } catch (e) {
-        console.error('[ClaudeProvider] Failed to get final message:', e);
-      }
 
-      // Log assistant response
-      if (fullContent) {
+        // After streaming completes, try to get usage data from finalMessage
         try {
-          console.info('[ClaudeProvider] Assistant response', {
-            length: fullContent.length,
-            preview: previewForLog(fullContent),
-            usage: usageData
-          });
-        } catch {}
-      }
-
-      // Yield the complete chunk with usage data if available
-      yield {
-        type: 'complete',
-        content: fullContent,
-        isComplete: true,
-        ...(usageData ? {
-          usage: {
-            input_tokens: usageData.input_tokens || 0,
-            output_tokens: usageData.output_tokens || 0,
-            total_tokens: (usageData.input_tokens || 0) + (usageData.output_tokens || 0)
+          const finalMessage = await stream.finalMessage();
+          if (finalMessage?.usage) {
+            usageData = finalMessage.usage;
+            console.log('[ClaudeProvider] Usage data from finalMessage:', usageData);
           }
-        } : {})
-      };
+        } catch (e) {
+          console.error('[ClaudeProvider] Failed to get final message:', e);
+        }
+
+        // Accumulate usage data
+        if (usageData) {
+          if (!totalUsageData) {
+            totalUsageData = { ...usageData };
+          } else {
+            totalUsageData.input_tokens = (totalUsageData.input_tokens || 0) + (usageData.input_tokens || 0);
+            totalUsageData.output_tokens = (totalUsageData.output_tokens || 0) + (usageData.output_tokens || 0);
+          }
+        }
+
+        // Log assistant response
+        if (fullContent) {
+          try {
+            console.info('[ClaudeProvider] Assistant response', {
+              length: fullContent.length,
+              preview: previewForLog(fullContent),
+              usage: usageData
+            });
+          } catch {}
+        }
+
+        // Check if we need to continue the conversation with tool results
+        if (toolUses.length > 0) {
+          console.log(`[ClaudeProvider] Got ${toolUses.length} tool uses, continuing conversation...`);
+
+          // Add assistant message with tool uses to conversation
+          continuationMessages.push({
+            role: 'assistant',
+            content: assistantContent
+          });
+
+          // Build tool results message
+          const toolResults = toolUses.map(toolUse => {
+            const result = toolUse.result || { success: true, message: 'Tool executed successfully' };
+
+            // Format the result as a string for Claude
+            let resultContent: string;
+            if (typeof result === 'string') {
+              resultContent = result;
+            } else if (result.content) {
+              resultContent = result.content;
+            } else if (result.message) {
+              resultContent = result.message;
+            } else {
+              resultContent = JSON.stringify(result, null, 2);
+            }
+
+            return {
+              type: 'tool_result',
+              tool_use_id: toolUse.id,
+              content: resultContent,
+              ...(result.success === false ? { is_error: true } : {})
+            };
+          });
+
+          // Add tool results as user message
+          continuationMessages.push({
+            role: 'user',
+            content: toolResults
+          });
+
+          console.log('[ClaudeProvider] Continuing with tool results:', JSON.stringify(toolResults, null, 2));
+
+          // Yield a continuation marker so the UI knows we're continuing
+          // This helps with debugging and understanding the conversation flow
+          yield {
+            type: 'text',
+            content: '' // Empty content, just marks continuation
+          };
+
+          // Continue the loop - don't mark as complete yet
+        } else {
+          // No tool uses, conversation is complete
+          conversationComplete = true;
+
+          // Yield the complete chunk with usage data if available
+          yield {
+            type: 'complete',
+            content: fullContent,
+            isComplete: true,
+            ...(totalUsageData ? {
+              usage: {
+                input_tokens: totalUsageData.input_tokens || 0,
+                output_tokens: totalUsageData.output_tokens || 0,
+                total_tokens: (totalUsageData.input_tokens || 0) + (totalUsageData.output_tokens || 0)
+              }
+            } : {})
+          };
+        }
+      }
 
     } catch (error: any) {
       if (error.name === 'AbortError') {
