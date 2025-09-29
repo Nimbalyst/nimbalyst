@@ -321,9 +321,9 @@ export default function PlanTableComponent({
           </tr>
         </thead>
         <tbody>
-          {plans.map(plan => (
+          {plans.map((plan, index) => (
             <tr
-              key={plan.id}
+              key={index}
               className="plan-table-row"
               onClick={() => handleRowClick(plan)}
             >
