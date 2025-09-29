@@ -107,99 +107,7 @@ const LOG_CONFIG = {
   WORKSPACE_OPS: false,  // Workspace open/close operations
 };
 
-// File tree interface
-interface FileTreeItem {
-  name: string;
-  path: string;
-  type: 'file' | 'directory';
-  children?: FileTreeItem[];
-}
-
-// Electron API interface
-interface ElectronAPI {
-  onFileNew: (callback: () => void) => () => void;
-  onFileNewInWorkspace?: (callback: () => void) => () => void;
-  onFileOpen: (callback: () => void) => () => void;
-  onWorkspaceOpened: (callback: (data: { workspacePath: string; workspaceName: string; fileTree: FileTreeItem[] }) => void) => () => void;
-  onOpenWorkspaceFile?: (callback: (filePath: string) => void) => () => void;
-  onOpenDocument?: (callback: (data: { path: string }) => void) => () => void;
-  onOpenWorkspaceFromCLI?: (callback: (workspacePath: string) => void) => () => void;
-  onFileSave: (callback: () => void) => () => void;
-  onFileSaveAs: (callback: () => void) => () => void;
-  onFileOpenedFromOS: (callback: (data: { filePath: string; content: string }) => void) => () => void;
-  onNewUntitledDocument: (callback: (data: { untitledName: string }) => void) => () => void;
-  onToggleSearch: (callback: () => void) => () => void;
-  onToggleSearchReplace: (callback: () => void) => () => void;
-  onFileDeleted: (callback: (data: { filePath: string }) => void) => () => void;
-  onFileRenamed: (callback: (data: { oldPath: string; newPath: string }) => void) => () => void;
-  onFileMoved: (callback: (data: { sourcePath: string; destinationPath: string }) => void) => () => void;
-  onWorkspaceFileTreeUpdated: (callback: (data: { fileTree: FileTreeItem[]; addedPath?: string; removedPath?: string }) => void) => () => void;
-  onFileChangedOnDisk?: (callback: (data: { path: string }) => void) => () => void;
-  onThemeChange: (callback: (theme: string) => void) => () => void;
-  onShowAbout: (callback: () => void) => () => void;
-  onViewHistory?: (callback: () => void) => () => void;
-  onNextTab?: (callback: () => void) => () => void;
-  onPreviousTab?: (callback: () => void) => () => void;
-  onLoadSessionFromManager?: (callback: (data: { sessionId: string; workspacePath?: string }) => void) => () => void;
-  onShowPreferences?: (callback: () => void) => () => void;
-  openFile: () => Promise<{ filePath: string; content: string } | null>;
-  saveFile: (content: string, filePath: string) => Promise<{ success: boolean; filePath: string } | null>;
-  saveFileAs: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
-  setDocumentEdited: (edited: boolean) => void;
-  setTitle: (title: string) => void;
-  setCurrentFile: (filePath: string | null) => void;
-  // Get initial window state
-  getInitialState?: () => Promise<{ mode: string; workspacePath?: string; workspaceName?: string; fileTree?: FileTreeItem[] } | null>;
-  // Workspace operations
-  getFolderContents: (dirPath: string) => Promise<FileTreeItem[]>;
-  switchWorkspaceFile: (filePath: string) => Promise<{ filePath: string; content: string } | null>;
-  readFileContent?: (filePath: string) => Promise<{ content: string } | null>;
-  // Settings
-  getSidebarWidth: (workspacePath: string) => Promise<number>;
-  setSidebarWidth: (workspacePath: string, width: number) => void;
-  getAIChatState: (workspacePath: string) => Promise<{ collapsed: boolean; width: number; currentSessionId?: string; draftInput?: string } | null>;
-  setAIChatState: (state: { workspacePath: string; collapsed: boolean; width: number; currentSessionId?: string; draftInput?: string }) => void;
-  getRecentWorkspaceFiles?: () => Promise<string[]>;
-  addToWorkspaceRecentFiles?: (filePath: string) => void;
-  searchWorkspaceFileNames?: (workspacePath: string, query: string) => Promise<any[]>;
-  searchWorkspaceFileContent?: (workspacePath: string, query: string) => Promise<any[]>;
-  // Tab state operations
-  getWorkspaceTabState?: () => Promise<any>;
-  saveWorkspaceTabState?: (tabState: any) => void;
-  clearWorkspaceTabState?: () => void;
-  // History operations
-  history?: {
-    createSnapshot: (filePath: string, state: string, type: string, description?: string) => Promise<void>;
-    listSnapshots: (filePath: string) => Promise<any[]>;
-    loadSnapshot: (filePath: string, timestamp: string) => Promise<string>;
-    deleteSnapshot: (filePath: string, timestamp: string) => Promise<void>;
-  };
-  // Session operations
-  session?: {
-    create: (filePath: string, type: string, source?: any) => Promise<any>;
-    load: (sessionId: string) => Promise<any>;
-    save: (session: any) => Promise<void>;
-    delete: (sessionId: string) => Promise<void>;
-    getActive: (filePath: string) => Promise<any>;
-    setActive: (filePath: string, sessionId: string, type: string) => Promise<void>;
-    checkConflicts: (session: any, currentMarkdownHash: string) => Promise<any>;
-    resolveConflict: (session: any, resolution: string, newBaseHash?: string) => Promise<void>;
-    createCheckpoint: (sessionId: string, state: string) => Promise<void>;
-  };
-  // MCP Server operations
-  onMcpApplyDiff?: (callback: (data: { replacements: any[], resultChannel: string }) => void) => () => void;
-  onMcpStreamContent?: (callback: (data: { streamId: string, content: string, position: string, insertAfter?: string, mode?: string }) => void) => () => void;
-  onMcpNavigateTo?: (callback: (data: { line: number, column: number }) => void) => () => void;
-  sendMcpApplyDiffResult?: (resultChannel: string, result: any) => void;
-  updateMcpDocumentState?: (state: any) => Promise<void>;
-  clearMcpDocumentState?: () => Promise<void>;
-}
-
-declare global {
-  interface Window {
-    electronAPI?: ElectronAPI;
-  }
-}
+// Note: FileTreeItem and ElectronAPI interfaces are defined in electron.d.ts
 
 // Register plugins once at module level
 // These provide Electron-specific services to the plugins
@@ -356,8 +264,8 @@ export default function App() {
 
       // When switching tabs, restore the tab's saved state
       if (tab.filePath) {
-        // If tab has no content, load it from file
-        if (!tab.content && window.electronAPI) {
+        // Always reload from disk to get latest autosaved content
+        if (window.electronAPI) {
           try {
             const result = await window.electronAPI.switchWorkspaceFile(tab.filePath);
             if (result) {
@@ -578,15 +486,48 @@ export default function App() {
           if (state.filePath) {
             setCurrentFilePath(state.filePath);
             setCurrentFileName(state.fileName);
-            contentRef.current = state.content || '';
-            initialContentRef.current = state.content || '';
-            contentVersionRef.current += 1;
-            setContentVersion(v => v + 1);
-      setContentVersion(v => v + 1);
-        setContentVersion(v => v + 1);
-    setContentVersion(v => v + 1);
-          setContentVersion(v => v + 1);
+
+            // Reset local content so we can hydrate from disk
+            contentRef.current = '';
+            initialContentRef.current = '';
             isInitializedRef.current = false;
+            isDirtyRef.current = false;
+            setIsDirty(false);
+
+            const hydrateFromDisk = async () => {
+              if (!window.electronAPI) {
+                return;
+              }
+
+              try {
+                const targetPath = state.filePath as string;
+                const shouldSwitchWorkspace = Boolean(state.workspaceMode && window.electronAPI.switchWorkspaceFile);
+
+                let result: { filePath: string; content: string } | null = null;
+
+                if (shouldSwitchWorkspace && window.electronAPI.switchWorkspaceFile) {
+                  result = await window.electronAPI.switchWorkspaceFile(targetPath);
+                } else if (window.electronAPI.readFileContent) {
+                  const res = await window.electronAPI.readFileContent(targetPath);
+                  result = res && typeof res.content === 'string'
+                    ? { filePath: targetPath, content: res.content }
+                    : null;
+                }
+
+                if (result && typeof result.content === 'string') {
+                  contentRef.current = result.content;
+                  initialContentRef.current = result.content;
+                  contentVersionRef.current += 1;
+                  setContentVersion(v => v + 1);
+                } else if (LOG_CONFIG.HMR) {
+                  console.warn('[HMR] No disk content returned while restoring dev state for', targetPath);
+                }
+              } catch (error) {
+                console.error('[HMR] Failed to load latest file content during dev restore:', error);
+              }
+            };
+
+            hydrateFromDisk();
 
             // Update the main process about the current file
             if (window.electronAPI) {
@@ -596,10 +537,6 @@ export default function App() {
 
           if (state.sidebarWidth) {
             setSidebarWidth(state.sidebarWidth);
-          }
-
-          if (state.isDirty !== undefined) {
-            setIsDirty(state.isDirty);
           }
 
           if (state.theme) {
@@ -626,9 +563,7 @@ export default function App() {
           fileTree,
           filePath: currentFilePath,
           fileName: currentFileName,
-          content: getContentRef.current ? getContentRef.current() : contentRef.current,
           sidebarWidth: sidebarWidth,
-          isDirty: isDirty,
           theme: theme
         };
         if (LOG_CONFIG.HMR) console.log('[HMR] Saving dev state:', state);
@@ -642,7 +577,7 @@ export default function App() {
         window.removeEventListener('beforeunload', saveDevState);
       };
     }
-  }, [workspaceMode, workspacePath, workspaceName, fileTree, currentFilePath, currentFileName, sidebarWidth, isDirty, theme]);
+  }, [workspaceMode, workspacePath, workspaceName, fileTree, currentFilePath, currentFileName, sidebarWidth, theme]);
 
   // Prepare AI chat state loading
   useEffect(() => {
