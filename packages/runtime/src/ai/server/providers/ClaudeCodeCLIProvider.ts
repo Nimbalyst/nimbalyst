@@ -164,17 +164,29 @@ When you need to use a tool, use the following format:
 
     console.log(`[ClaudeCodeCLI] Starting Claude CLI at ${claudePath}`);
     console.log(`[ClaudeCodeCLI] Working directory: ${cwd}`);
-
-    // Spawn claude CLI directly without shell, similar to Crystal's approach
-    const claudeProcess = spawn(claudePath, [], {
+    
+    // Log the exact command being executed
+    const spawnOptions = {
       cwd,
       env: {
         ...process.env,
         ANTHROPIC_API_KEY: this.apiKey,
         PATH: this.getEnhancedPath()
       },
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
+      stdio: ['pipe', 'pipe', 'pipe'] as const
+    };
+    
+    console.log(`[ClaudeCodeCLI] === CLAUDE CLI COMMAND DETAILS ===`);
+    console.log(`[ClaudeCodeCLI] Executable: ${claudePath}`);
+    console.log(`[ClaudeCodeCLI] Arguments: []`);
+    console.log(`[ClaudeCodeCLI] Working Dir: ${spawnOptions.cwd}`);
+    console.log(`[ClaudeCodeCLI] API Key: ${this.apiKey ? `${this.apiKey.slice(0, 8)}...` : 'Not set'}`);
+    console.log(`[ClaudeCodeCLI] Enhanced PATH: ${spawnOptions.env.PATH}`);
+    console.log(`[ClaudeCodeCLI] Full spawn command: spawn('${claudePath}', [], { cwd: '${cwd}', ... })`);
+    console.log(`[ClaudeCodeCLI] === END COMMAND DETAILS ===`);
+
+    // Spawn claude CLI directly without shell, similar to Crystal's approach
+    const claudeProcess = spawn(claudePath, [], spawnOptions);
 
     const session: ClaudeCodeSession = {
       id: sessionId,
@@ -224,28 +236,37 @@ When you need to use a tool, use the following format:
       path.join(os.homedir(), '.yarn', 'bin', 'claude')
     ];
 
+    console.log(`[ClaudeCodeCLI] Searching for Claude CLI executable...`);
+    console.log(`[ClaudeCodeCLI] Checking the following paths:`);
+    
     for (const claudePath of possiblePaths) {
       try {
         fs.accessSync(claudePath, fs.constants.X_OK);
-        console.log(`[ClaudeCodeCLI] Found claude CLI at: ${claudePath}`);
+        console.log(`[ClaudeCodeCLI] ✓ Found claude CLI at: ${claudePath}`);
+        console.log(`[ClaudeCodeCLI] Command to run: ${claudePath}`);
         return claudePath;
       } catch (e) {
+        console.log(`[ClaudeCodeCLI] ✗ Not found at: ${claudePath}`);
         // Continue checking other paths
       }
     }
 
     // Try to find in PATH
     const { execSync } = require('child_process');
+    console.log(`[ClaudeCodeCLI] Checking PATH using 'which claude'...`);
     try {
       const result = execSync('which claude', { encoding: 'utf8' }).trim();
       if (result) {
-        console.log(`[ClaudeCodeCLI] Found claude CLI in PATH: ${result}`);
+        console.log(`[ClaudeCodeCLI] ✓ Found claude CLI in PATH: ${result}`);
+        console.log(`[ClaudeCodeCLI] Command to run: ${result}`);
         return result;
       }
     } catch (e) {
+      console.log(`[ClaudeCodeCLI] ✗ 'which claude' failed - not in PATH`);
       // Not found in PATH
     }
 
+    console.log(`[ClaudeCodeCLI] ✗ Claude CLI not found anywhere!`);
     return null;
   }
 
@@ -296,6 +317,17 @@ When you need to use a tool, use the following format:
   ): AIStreamResponse {
     // Clear buffer before sending new prompt
     session.buffer = '';
+
+    // Log the prompt being sent to Claude CLI
+    console.log(`[ClaudeCodeCLI] === SENDING PROMPT TO CLAUDE CLI ===`);
+    console.log(`[ClaudeCodeCLI] Session ID: ${session.id}`);
+    console.log(`[ClaudeCodeCLI] Prompt length: ${prompt.length} characters`);
+    console.log(`[ClaudeCodeCLI] Prompt preview (first 500 chars):`);
+    console.log(prompt.substring(0, 500));
+    if (prompt.length > 500) {
+      console.log(`[ClaudeCodeCLI] ... (${prompt.length - 500} more characters)`);
+    }
+    console.log(`[ClaudeCodeCLI] === END PROMPT ===`);
 
     // Send the prompt to the CLI process
     session.process.stdin?.write(prompt + '\n\n');
@@ -522,6 +554,9 @@ When you need to use a tool, use the following format:
       }
 
       // Try to spawn the CLI and check if it's available
+      console.log(`[ClaudeCodeCLI] Testing Claude CLI connection...`);
+      console.log(`[ClaudeCodeCLI] Running: ${claudePath} --version`);
+      
       const testProcess = spawn(claudePath, ['--version'], {
         env: {
           ...process.env,
@@ -628,13 +663,27 @@ When you need to use a tool, use the following format:
       // Add current message
       fullPrompt += `User: ${message}\n\nPlease respond:`;
 
-      console.log(`[ClaudeCodeCLI] Sending prompt to session ${actualSessionId}:`, fullPrompt.substring(0, 200) + '...');
+      console.log(`[ClaudeCodeCLI] === SENDING MESSAGE TO CLAUDE CLI ===`);
+      console.log(`[ClaudeCodeCLI] Session ID: ${actualSessionId}`);
+      console.log(`[ClaudeCodeCLI] Message: ${message}`);
+      console.log(`[ClaudeCodeCLI] Has document context: ${!!documentContext}`);
+      if (documentContext) {
+        console.log(`[ClaudeCodeCLI] Document: ${documentContext.fileName || 'untitled'} (${documentContext.language || 'unknown'})`);
+      }
+      console.log(`[ClaudeCodeCLI] Full prompt length: ${fullPrompt.length} characters`);
+      console.log(`[ClaudeCodeCLI] Prompt preview (first 500 chars):`);
+      console.log(fullPrompt.substring(0, 500));
+      if (fullPrompt.length > 500) {
+        console.log(`[ClaudeCodeCLI] ... (${fullPrompt.length - 500} more characters)`);
+      }
+      console.log(`[ClaudeCodeCLI] === END MESSAGE ===`);
 
       // Clear buffer before sending
       session.buffer = '';
 
       // Send the prompt
       if (session.process.stdin && !session.process.stdin.destroyed) {
+        console.log(`[ClaudeCodeCLI] Writing to stdin: fullPrompt + '\\n'`);
         session.process.stdin.write(fullPrompt + '\n');
       } else {
         throw new Error('Session process stdin is not available');
