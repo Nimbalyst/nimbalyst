@@ -26,6 +26,13 @@ export const CLAUDE_MODELS: ModelDefinition[] = [
     contextWindow: 200000,
   },
   {
+    id: 'claude-sonnet-4-5-20250929',
+    displayName: 'Claude Sonnet 4.5',
+    shortName: 'Sonnet 4.5',
+    maxTokens: 8192,
+    contextWindow: 200000,
+  },
+  {
     id: 'claude-sonnet-4-20250514',
     displayName: 'Claude Sonnet 4',
     shortName: 'Sonnet 4',
@@ -73,7 +80,7 @@ export const OPENAI_MODELS: ModelDefinition[] = [
 ];
 
 export const DEFAULT_MODELS = {
-  claude: 'claude:claude-sonnet-4-20250514',
+  claude: 'claude:claude-sonnet-4-5-20250929',
   openai: 'openai:gpt-5',
   'claude-code': 'claude-code',
   lmstudio: 'lmstudio:local-model',
