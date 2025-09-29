@@ -10,6 +10,7 @@ import {
 import { $createDocumentReferenceNode } from './DocumentLinkNode';
 import { DocumentService } from '../../core/DocumentService';
 import documentLinkStyles from './DocumentLinkPlugin.css?inline';
+import { TypeaheadMenuOption } from "rexical/dist/plugins/TypeaheadPlugin/TypeaheadMenu";
 
 const DOCUMENT_REFERENCE_STYLE_ID = 'document-reference-styles';
 
@@ -174,7 +175,7 @@ export function DocumentLinkPlugin({
   }, []);
 
   const handleSelectOption = useCallback((
-    option: any,
+    option: TypeaheadMenuOption,
     _textNode: TextNode | null,
     closeMenu: () => void,
     _matchingString: string

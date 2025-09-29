@@ -221,7 +221,16 @@ function exportTopLevelElements(
       elementTransformers,
     );
   } else if ($isDecoratorNode(node)) {
-    return node.getTextContent();
+    // Check element transformers for decorator nodes (like MermaidNode)
+    for (const transformer of elementTransformers) {
+      const result = transformer.export?.(node, () => node.getTextContent());
+      if (result != null) {
+        return result;
+      }
+    }
+    // If no transformer handles this decorator node, throw an error
+    console.error(`No transformer found for decorator node type: ${node.getType()}`);
+    throw new Error(`Cannot export decorator node of type "${node.getType()}" - no transformer registered`);
   } else {
     return null;
   }
@@ -275,7 +284,6 @@ function exportChildren(
             }
             const result = transformer.export(
               child,
-              textContentForTransform,
               (_node: ElementNode, textContent?: string) =>
                 exportChildren(
                   _node,
@@ -286,6 +294,7 @@ function exportChildren(
                   shouldPreserveNewLines,
                   elementTransformers,
                 ),
+              (node: TextNode, textContent: string) => textContent,
             );
 
             if (result != null) {
@@ -319,6 +328,7 @@ function exportChildren(
               shouldPreserveNewLines,
               elementTransformers,
             ),
+          (node: TextNode, textContent: string) => textContent,
         );
 
         if (result != null) {
@@ -342,7 +352,23 @@ function exportChildren(
         }
       }
     } else if ($isDecoratorNode(child)) {
-      output.push(child.getTextContent());
+      // Check element transformers for decorator nodes (like MermaidNode)
+      let handled = false;
+      if (elementTransformers) {
+        for (const transformer of elementTransformers) {
+          const result = transformer.export?.(child, () => '');
+          if (result != null) {
+            output.push(result);
+            handled = true;
+            break;
+          }
+        }
+      }
+      if (!handled) {
+        // If no transformer handles this decorator node, throw an error
+        console.error(`No transformer found for decorator node type: ${child.getType()}`);
+        throw new Error(`Cannot export decorator node of type "${child.getType()}" - no transformer registered`);
+      }
     }
   }
 

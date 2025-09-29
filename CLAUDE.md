@@ -1,4 +1,4 @@
- # CLAUDE.md
+# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -9,21 +9,21 @@ This is Preditor - a rich text editor built with Meta's Lexical framework. Origi
 ## Development Commands
 
 ### Electron App
-- **Start dev server**: `cd packages/electron && npm run dev` - Runs Electron app with hot reload
-- **Build for Mac**: \`cd packages/electron && npm run build:mac:local\` - Creates local Mac build
-- **Build for Mac (notarized)**: \`cd packages/electron && npm run build:mac:notarized\` - Creates notarized Mac build
+- **__Start dev server__**: `cd packages/electron && npm run dev` - Runs Electron app with hot reload
+- **__Build for Mac__**: `cd packages/electron && npm run build:mac:local` - Creates local Mac build
+- **__Build for Mac (notarized)__**: `cd packages/electron && npm run build:mac:notarized` - Creates notarized Mac build
 
 ### Monorepo Setup
-- **Install dependencies**: `npm install --legacy-peer-deps` - Install all dependencies 
-- **Package management**: Uses npm workspaces (not pnpm)
+- **__Install dependencies__**: `npm install --legacy-peer-deps` - Install all dependencies 
+- **__Package management__**: Uses npm workspaces (not pnpm)
 
 ## Testing
 
 The project uses multiple testing approaches:
 
-- **Unit tests**: Located in `__tests__/unit/` using vitest
-- **E2E tests**: Located in `__tests__/e2e/` using Playwright 
-- **Regression tests**: Located in `__tests__/regression/` using Playwright
+- **__Unit tests__**: Located in `__tests__/unit/` using vitest
+- **__E2E tests__**: Located in `__tests__/e2e/` using Playwright 
+- **__Regression tests__**: Located in `__tests__/regression/` using Playwright
 
 The tests are organized by functionality (CopyAndPaste, Headings, etc.) and include both behavior testing and regression testing for specific issues.
 
@@ -38,10 +38,10 @@ The tests are organized by functionality (CopyAndPaste, Headings, etc.) and incl
 - `src/ui/` - Reusable UI components
 
 ### Key Components
-- **PlaygroundNodes.ts**: Registers all custom node types
-- **Editor.tsx**: Orchestrates all plugins and editor functionality
-- **Context providers**: Settings, History, Toolbar, and FlashMessage contexts
-- **Plugin system**: Modular features like AutoComplete, DragDrop, FloatingToolbar
+- **__PlaygroundNodes.ts__**: Registers all custom node types
+- **__Editor.tsx__**: Orchestrates all plugins and editor functionality
+- **__Context providers__**: Settings, History, Toolbar, and FlashMessage contexts
+- **__Plugin system__**: Modular features like AutoComplete, DragDrop, FloatingToolbar
 
 ### Plugin Architecture
 The editor uses a comprehensive plugin system where each feature is implemented as a separate plugin in `src/plugins/`. Plugins handle everything from basic functionality (AutoLink, CodeHighlight) to complex features (Tables, Collaboration, DragDrop).
@@ -68,176 +68,176 @@ Custom nodes extend Lexical's base functionality:
 
 ## Dependencies
 
-Built with modern React, TypeScript, and Vite. Uses extensive Lexical packages (@lexical/\*) for editor functionality, plus supporting libraries like KaTeX for equations, Prettier for code formatting, and Excalidraw for drawings.
+Built with modern React, TypeScript, and Vite. Uses extensive Lexical packages (@lexical/*) for editor functionality, plus supporting libraries like KaTeX for equations, Prettier for code formatting, and Excalidraw for drawings.
 
 ## macOS Code Signing & Notarization
 
 The Electron app supports notarized distribution for macOS:
 
-- **Signing configuration**: Uses Developer ID Application certificate
-- **Build scripts**: \`npm run build:mac:notarized`&#32;for notarized build, `build:mac:local` for local testing
-- **Binary handling**: Properly signs ripgrep and other bundled tools
-- **JAR exclusion**: Automatically removes JAR files that can't be notarized
-- **Entitlements**: Configured for hardened runtime with necessary exceptions
+- **__Signing configuration__**: Uses Developer ID Application certificate
+- **__Build scripts__**: `npm run build:mac:notarized`&#32;for notarized build, `build:mac:local` for local testing
+- **__Binary handling__**: Properly signs ripgrep and other bundled tools
+- **__JAR exclusion__**: Automatically removes JAR files that can't be notarized
+- **__Entitlements__**: Configured for hardened runtime with necessary exceptions
 
 ## Electron App Debug Logging
 
 The Electron app (`packages/electron/`) includes a debug logging feature that captures all browser console messages in development mode. This is useful for debugging renderer-side issues and browser load problems.
 
-- **Log file location**: `~/Library/Application Support/@preditor/electron/preditor-debug.log` (macOS)
-- **What's logged**: All browser console messages, main process logs, timestamps, source locations, and log levels
-- **When active**: Only in development mode (`NODE_ENV !== 'production'`)
-- **Implementation**: See `packages/electron/src/main/index.ts` - uses `webContents.on('console-message')` event
+- **__Log file location__**: `~/Library/Application Support/@preditor/electron/preditor-debug.log` (macOS)
+- **__What's logged__**: All browser console messages, main process logs, timestamps, source locations, and log levels
+- **__When active__**: Only in development mode (`NODE_ENV !== 'production'`)
+- **__Implementation__**: See `packages/electron/src/main/index.ts` - uses `webContents.on('console-message')` event
 
 ## Theme Support
 
 The editor supports multiple themes:
-- **Light**: Clean, bright theme for daytime use
-- **Dark**: Standard dark theme with warm gray colors (#2d2d2d, #1a1a1a, #3a3a3a)
-- **Crystal Dark**: A premium dark theme with Tailwind gray scale colors (#0f172a, #020617, #1e293b)
-- **Auto**: Follows system preference
+- **__Light__**: Clean, bright theme for daytime use
+- **__Dark__**: Standard dark theme with warm gray colors (#2d2d2d, #1a1a1a, #3a3a3a)
+- **__Crystal Dark__**: A premium dark theme with Tailwind gray scale colors (#0f172a, #020617, #1e293b)
+- **__Auto__**: Follows system preference
 
 The Electron app includes a Window > Theme menu to switch between all themes. The selected theme is persisted and applied to all windows.
 
 ### CRITICAL THEMING RULES
-- **NEVER hardcode colors in CSS files** - Always use CSS variables
-- **Single source of truth**: `/packages/electron/src/renderer/index.css` is the ONLY place where theme colors are defined
-- **Always set both**: When applying themes, set both `data-theme` attribute AND CSS class on root element
-- **See THEMING.md**: Comprehensive theming documentation at `/packages/electron/THEMING.md`
+- **__NEVER hardcode colors in CSS files__** - Always use CSS variables
+- **__Single source of truth__**: `/packages/electron/src/renderer/index.css` is the ONLY place where theme colors are defined
+- **__Always set both__**: When applying themes, set both `data-theme` attribute AND CSS class on root element
+- **__See THEMING.md__**: Comprehensive theming documentation at `/packages/electron/THEMING.md`
 
 ## Window State Persistence
 
 The Electron app includes comprehensive window state persistence:
 
 ### Session State
-- **Global session state**: Restores all windows when the app restarts
-- **Window position and size**: Each window's bounds are saved and restored
-- **Focus order**: Windows are restored in the correct stacking order
-- **Developer tools state**: Dev tools are reopened if they were open when the window was closed
+- **__Global session state__**: Restores all windows when the app restarts
+- **__Window position and size__**: Each window's bounds are saved and restored
+- **__Focus order__**: Windows are restored in the correct stacking order
+- **__Developer tools state__**: Dev tools are reopened if they were open when the window was closed
 
 ### Project-Specific State
-- **Per-project window state**: Each project remembers its own window configuration
-- **Persistent across sessions**: Opening a project restores its last window position, size, and dev tools state
-- **File state**: Remembers which file was open in each project window
+- **__Per-project window state__**: Each project remembers its own window configuration
+- **__Persistent across sessions__**: Opening a project restores its last window position, size, and dev tools state
+- **__File state__**: Remembers which file was open in each project window
 
 ### AI Chat Integration
-- **Panel width persistence**: The AI Chat panel width is saved per-window
-- **Collapsed state**: Whether the AI Chat panel is visible or hidden is remembered
-- **Draft input persistence**: Unsent messages in the chat input are saved with the session
-- **Session continuity**: Chat sessions persist across app restarts
+- **__Panel width persistence__**: The AI Chat panel width is saved per-window
+- **__Collapsed state__**: Whether the AI Chat panel is visible or hidden is remembered
+- **__Draft input persistence__**: Unsent messages in the chat input are saved with the session
+- **__Session continuity__**: Chat sessions persist across app restarts
 
 ## IPC Communication
 
 The Electron app uses IPC (Inter-Process Communication) between main and renderer processes:
 
 ### Preload API
-- **Location**: `/packages/electron/src/preload/index.ts`
-- **Exposed as**: `window.electronAPI` (NOT `window.api` - this is important!)
-- **Generic IPC methods**: The electronAPI includes generic `invoke`, `send`, `on`, and `off` methods for flexible service communication
-- **Service pattern**: Renderer services use these generic methods to communicate with main process services
+- **__Location__**: `/packages/electron/src/preload/index.ts`
+- **__Exposed as__**: `window.electronAPI` (NOT `window.api` - this is important!)
+- **__Generic IPC methods__**: The electronAPI includes generic `invoke`, `send`, `on`, and `off` methods for flexible service communication
+- **__Service pattern__**: Renderer services use these generic methods to communicate with main process services
 
 ### Document Service
-- **Main process**: `ElectronDocumentService` handles file scanning, metadata extraction, and caching
-- **Renderer process**: `RendererDocumentService` acts as a facade, using IPC via `window.electronAPI` to communicate with main process
-- **Metadata API**: Supports frontmatter extraction and caching for all markdown documents with bounded file reads (4KB)
-- **IPC channels**: `document-service:*` for all document-related operations including metadata
+- **__Main process__**: `ElectronDocumentService` handles file scanning, metadata extraction, and caching
+- **__Renderer process__**: `RendererDocumentService` acts as a facade, using IPC via `window.electronAPI` to communicate with main process
+- **__Metadata API__**: Supports frontmatter extraction and caching for all markdown documents with bounded file reads (4KB)
+- **__IPC channels__**: `document-service:*` for all document-related operations including metadata
 
 ### Common IPC Issues
-- **window.api undefined**: The preload exposes `window.electronAPI`, not `window.api`. Ensure renderer services use the correct reference.
-- **Empty responses**: If IPC calls return empty data, check that the window state is properly set to workspace mode with a valid workspace path.
-- **Service resolution**: The main process resolves services based on the window's workspace path. No workspace = no service.
+- **__window.api undefined__**: The preload exposes `window.electronAPI`, not `window.api`. Ensure renderer services use the correct reference.
+- **__Empty responses__**: If IPC calls return empty data, check that the window state is properly set to workspace mode with a valid workspace path.
+- **__Service resolution__**: The main process resolves services based on the window's workspace path. No workspace = no service.
 
 ## AI Features
 
 ### AI Providers
-- **Claude**: Direct Claude API integration with streaming support and tool use
-- **Claude Code**: MCP (Model Context Protocol) integration for advanced code editing capabilities
+- **__Claude__**: Direct Claude API integration with streaming support and tool use
+- **__Claude Code__**: MCP (Model Context Protocol) integration for advanced code editing capabilities
 - Handles its own model selection internally - do not pass model IDs
 - Provides enhanced code-aware features through MCP
-- **OpenAI**: GPT-4 and GPT-3.5 models via OpenAI API
-- **LM Studio**: Local model support for privacy-focused usage
-- **Multiple provider support**: Extensible architecture for adding new AI providers
+- **__OpenAI__**: GPT-4 and GPT-3.5 models via OpenAI API
+- **__LM Studio__**: Local model support for privacy-focused usage
+- **__Multiple provider support__**: Extensible architecture for adding new AI providers
 
 ### AI Chat Panel
-- **Multi-provider support**: Works with Claude, OpenAI, LM Studio, and Claude Code
-- **Document-aware**: Sends current document context with messages when a document is open
-- **No-document handling**: Clear messaging when no document is open, prevents edit attempts
-- **Session management**: Multiple chat sessions per project
-- **Edit streaming**: Real-time streaming of code edits directly to the editor
-- **Dynamic UI**: Provider-specific icons and names throughout the interface
-- **Keyboard shortcut**: Cmd+Shift+A to toggle the AI Chat panel
+- **__Multi-provider support__**: Works with Claude, OpenAI, LM Studio, and Claude Code
+- **__Document-aware__**: Sends current document context with messages when a document is open
+- **__No-document handling__**: Clear messaging when no document is open, prevents edit attempts
+- **__Session management__**: Multiple chat sessions per project
+- **__Edit streaming__**: Real-time streaming of code edits directly to the editor
+- **__Dynamic UI__**: Provider-specific icons and names throughout the interface
+- **__Keyboard shortcut__**: Cmd+Shift+A to toggle the AI Chat panel
 
 ### Session Manager
-- **Global session view**: Access all AI chat sessions across all projects (Cmd+Alt+S)
-- **Session search**: Filter sessions by content, project, or date
-- **Session details**: View full conversation history for any session
-- **Session actions**: Open, export, or delete sessions
-- **Left navigation design**: Clean interface with session list on left, details on right
+- **__Global session view__**: Access all AI chat sessions across all projects (Cmd+Alt+S)
+- **__Session search__**: Filter sessions by content, project, or date
+- **__Session details__**: View full conversation history for any session
+- **__Session actions__**: Open, export, or delete sessions
+- **__Left navigation design__**: Clean interface with session list on left, details on right
 
 ### AI Model Configuration
-- **Dynamic model selection**: Models are fetched from provider APIs when available
-- **No hardcoded models**: Providers manage their own model defaults
-- **Claude Code specifics**: Never pass model IDs to claude-code provider - it manages its own model selection
-- **LM Studio detection**: Automatically detects local models running in LM Studio
-- **Model management**: Select/deselect all buttons for bulk model configuration
-- **Smart defaults**: Doesn't auto-select all models when enabling a provider
+- **__Dynamic model selection__**: Models are fetched from provider APIs when available
+- **__No hardcoded models__**: Providers manage their own model defaults
+- **__Claude Code specifics__**: Never pass model IDs to claude-code provider - it manages its own model selection
+- **__LM Studio detection__**: Automatically detects local models running in LM Studio
+- **__Model management__**: Select/deselect all buttons for bulk model configuration
+- **__Smart defaults__**: Doesn't auto-select all models when enabling a provider
 
 ## Data Persistence
 
-The Preditor app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage, providing a robust database system that works both in development and packaged builds.
+The Preditor app uses **__PGLite__** (PostgreSQL in WebAssembly) for all data storage, providing a robust database system that works both in development and packaged builds.
 
 ### Database System
-- **Technology**: PGLite (PostgreSQL in WebAssembly) running in Node.js worker thread
-- **Storage**: Persistent file-based database with ACID compliance
-- **Worker architecture**: Isolated worker thread prevents module conflicts
-- **Bundling**: PGLite is fully bundled in packaged apps for reliable distribution
+- **__Technology__**: PGLite (PostgreSQL in WebAssembly) running in Node.js worker thread
+- **__Storage__**: Persistent file-based database with ACID compliance
+- **__Worker architecture__**: Isolated worker thread prevents module conflicts
+- **__Bundling__**: PGLite is fully bundled in packaged apps for reliable distribution
 
 ### Database Tables
-- **ai\_sessions**: AI chat conversations with full message history, document context, and provider configurations
-- **app\_settings**: Global application settings (theme, providers, shortcuts, etc.)
-- **project\_state**: Per-project state including window bounds, UI layout, open tabs, file tree, and editor settings
-- **session\_state**: Global session restoration data for windows and focus order
-- **document\_history**: Compressed document edit history with binary content storage
+- **__ai\_sessions__**: AI chat conversations with full message history, document context, and provider configurations
+- **__app\_settings__**: Global application settings (theme, providers, shortcuts, etc.)
+- **__project\_state__**: Per-project state including window bounds, UI layout, open tabs, file tree, and editor settings
+- **__session\_state__**: Global session restoration data for windows and focus order
+- **__document\_history__**: Compressed document edit history with binary content storage
 
 ### Data Locations
-- **Database**: `~/Library/Application Support/@preditor/electron/pglite-db/` (macOS)
-- **Logs**: `~/Library/Application Support/@preditor/electron/logs/` - Application logs
-- **Debug log**: `~/Library/Application Support/@preditor/electron/preditor-debug.log` - Debug console output
-- **Legacy files**: `~/Library/Application Support/@preditor/electron/history/` - Preserved file-based history (migrated to database)
+- **__Database__**: `~/Library/Application Support/@preditor/electron/pglite-db/` (macOS)
+- **__Logs__**: `~/Library/Application Support/@preditor/electron/logs/` - Application logs
+- **__Debug log__**: `~/Library/Application Support/@preditor/electron/preditor-debug.log` - Debug console output
+- **__Legacy files__**: `~/Library/Application Support/@preditor/electron/history/` - Preserved file-based history (migrated to database)
 
 ### Migration System
-- **Automatic migration**: File-based data automatically migrates to database on first startup
-- **History preservation**: Original history files preserved after migration (not deleted)
-- **Legacy app migration**: Automatically migrates from old Stravu Editor data paths
-- **Version tracking**: Database includes migration timestamps and version information
+- **__Automatic migration__**: File-based data automatically migrates to database on first startup
+- **__History preservation__**: Original history files preserved after migration (not deleted)
+- **__Legacy app migration__**: Automatically migrates from old Stravu Editor data paths
+- **__Version tracking__**: Database includes migration timestamps and version information
 
 ### Database Features
-- **Compression**: Document history stored as compressed binary data (BYTEA)
-- **JSON support**: Rich JSON fields for complex data structures (JSONB columns)
-- **Indexing**: Optimized indexes for fast queries on projects, timestamps, and file paths
-- **Protocol server**: Optional PostgreSQL protocol server for external database access
+- **__Compression__**: Document history stored as compressed binary data (BYTEA)
+- **__JSON support__**: Rich JSON fields for complex data structures (JSONB columns)
+- **__Indexing__**: Optimized indexes for fast queries on projects, timestamps, and file paths
+- **__Protocol server__**: Optional PostgreSQL protocol server for external database access
 
 ## File Operations
 
 ### Project Sidebar
-- **Drag and drop**: Move files and folders via drag and drop
-- **Copy on drag**: Hold Option/Alt while dragging to copy instead of move
-- **Visual feedback**: Drop targets are highlighted during drag operations
-- **Automatic renaming**: Copied files get unique names to avoid conflicts
+- **__Drag and drop__**: Move files and folders via drag and drop
+- **__Copy on drag__**: Hold Option/Alt while dragging to copy instead of move
+- **__Visual feedback__**: Drop targets are highlighted during drag operations
+- **__Automatic renaming__**: Copied files get unique names to avoid conflicts
 
 ### File Tree Features
-- **Context menus**: Right-click files for rename, delete, open in new window
-- **File watching**: Automatic updates when files change on disk
-- **Recent files**: Quick access to recently opened files in projects
+- **__Context menus__**: Right-click files for rename, delete, open in new window
+- **__File watching__**: Automatic updates when files change on disk
+- **__Recent files__**: Quick access to recently opened files in projects
 
 ## Agentic Planning System
 
 The repository uses a structured markdown-based planning system for agent-led development workstreams. Plans are stored as markdown files with YAML frontmatter metadata.
 
 ### Plan Document Location
-- **Directory**: All plans are stored in the `plans/` folder at the repository root
-- **File naming**: Use descriptive kebab-case names (e.g., `agentic-markdown-planning-system.md`)
-- **Single source of truth**: Plans serve as the authoritative record for features, bugs, and development tasks
+- **__Directory__**: All plans are stored in the `plans/` folder at the repository root
+- **__File naming__**: Use descriptive kebab-case names (e.g., `agentic-markdown-planning-system.md`)
+- **__Single source of truth__**: Plans serve as the authoritative record for features, bugs, and development tasks
 
 ### Plan Metadata Structure
 Every plan document MUST include YAML frontmatter with the following fields:
@@ -283,14 +283,14 @@ planStatus:
 
 ### Plan Document Structure
 After the frontmatter, plans should include:
-1. **Title** with plan status indicator comment: `<!-- plan-status -->`
-2. **Goals** section outlining objectives
-3. **System Overview** or problem description
-4. **Implementation details** as needed
-5. **Acceptance criteria** when applicable
+1. **__Title__** with plan status indicator comment: `<!-- plan-status -->`
+2. **__Goals__** section outlining objectives
+3. **__System Overview__** or problem description
+4. **__Implementation details__** as needed
+5. **__Acceptance criteria__** when applicable
 
 ### Working with Plans
-- **Creating plans**: Always include complete frontmatter when creating new plans
-- **Updating plans**: Preserve user edits, append updates rather than overwriting
-- **Status tracking**: Update `status`, `progress`, and `updated` fields as work progresses
-- **Collaboration**: Plans support both human and agent contributors
+- **__Creating plans__**: Always include complete frontmatter when creating new plans
+- **__Updating plans__**: Preserve user edits, append updates rather than overwriting
+- **__Status tracking__**: Update `status`, `progress`, and `updated` fields as work progresses
+- **__Collaboration__**: Plans support both human and agent contributors

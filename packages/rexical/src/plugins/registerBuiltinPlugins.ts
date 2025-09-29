@@ -13,6 +13,9 @@ import { EMOJI_TRANSFORMER } from './EmojisPlugin/EmojiTransformer';
 import { COLLAPSIBLE_TRANSFORMER } from './CollapsiblePlugin/CollapsibleTransformer';
 import { BOARD_TABLE_TRANSFORMER } from './KanbanBoardPlugin/BoardTableTransformer';
 import { ExcalidrawTransform } from './ExcalidrawPlugin/ExcalidrawNode/excalidrawTransform';
+import { MERMAID_TRANSFORMER } from './MermaidPlugin/MermaidTransformer';
+import MermaidPlugin, { INSERT_MERMAID_COMMAND } from './MermaidPlugin';
+import { MermaidNode } from './MermaidPlugin/MermaidNode';
 
 // Note: Nodes are already registered via EditorNodes.ts,
 // so we don't need to import them here.
@@ -76,4 +79,23 @@ export function registerBuiltinPlugins(): void {
     enabledByDefault: true,
   };
   pluginRegistry.register(excalidrawPlugin);
+
+  // Mermaid Plugin
+  const mermaidPlugin: PluginPackage = {
+    name: 'MermaidPlugin',
+    Component: MermaidPlugin,
+    nodes: [MermaidNode],
+    transformers: [MERMAID_TRANSFORMER],
+    userCommands: [
+      {
+        title: 'Mermaid Diagram',
+        description: 'Insert a Mermaid diagram for flowcharts, sequence diagrams, and more',
+        icon: '',
+        keywords: ['mermaid', 'diagram', 'flowchart', 'sequence', 'chart', 'graph', 'uml'],
+        command: INSERT_MERMAID_COMMAND,
+      },
+    ],
+    enabledByDefault: true,
+  };
+  pluginRegistry.register(mermaidPlugin);
 }
