@@ -128,6 +128,15 @@ export function NewSessionButton({
     return modelParts.join(':') || currentModel;
   };
 
+  // Group providers by type (agents vs models)
+  const groupedProviders = Object.entries(models).reduce((acc, [provider, providerModels]) => {
+    const isAgent = provider === 'claude-code' || provider === 'openai-codex';
+    const type = isAgent ? 'agents' : 'models';
+    if (!acc[type]) acc[type] = {};
+    acc[type][provider] = providerModels;
+    return acc;
+  }, {} as Record<'agents' | 'models', Record<string, Model[]>>);
+
   return (
     <div className="new-session-button" ref={dropdownRef}>
       <button
@@ -157,7 +166,7 @@ export function NewSessionButton({
             <div className="new-session-empty">
               <p>No models available</p>
               {onOpenSettings && (
-                <button 
+                <button
                   className="new-session-configure-inline"
                   onClick={() => {
                     onOpenSettings();
@@ -169,42 +178,90 @@ export function NewSessionButton({
               )}
             </div>
           ) : (
-            Object.entries(models).map(([provider, providerModels]) => (
-              <div key={provider} className="new-session-provider-group">
-                <div className="new-session-provider-header">
-                  {getProviderIcon(provider, { size: 14 })}
-                  {getProviderLabel(provider)}
-                </div>
-                {providerModels.map(model => {
-                  const isCurrent = model.id === currentModel;
-                  return (
-                    <button
-                      key={model.id}
-                      className={`new-session-option ${isCurrent ? 'selected' : ''}`}
-                      onClick={() => handleModelSelect(model.id)}
-                      title={isCurrent ? 'Start new conversation' : `Switch to ${model.name}`}
-                    >
-                      <div className="new-session-option-info">
-                        <div className="new-session-option-name">
-                          {model.name}
-                          {isCurrent && (
-                            <span className="new-session-option-current"> (current)</span>
-                          )}
-                        </div>
-                        <div className="new-session-option-action">
-                          {isCurrent ? 'New conversation' : 'Switch model'}
-                        </div>
+            <>
+              {/* Agents Section */}
+              {groupedProviders.agents && Object.keys(groupedProviders.agents).length > 0 && (
+                <>
+                  <div className="new-session-section-header">Agents</div>
+                  {Object.entries(groupedProviders.agents).map(([provider, providerModels]) => (
+                    <div key={provider} className="new-session-provider-group">
+                      <div className="new-session-provider-header">
+                        {getProviderIcon(provider, { size: 14 })}
+                        {getProviderLabel(provider)}
                       </div>
-                      {isCurrent ? (
-                        <MaterialSymbol icon="refresh" size={16} className="new-session-option-icon" />
-                      ) : (
-                        <MaterialSymbol icon="swap_horiz" size={16} className="new-session-option-icon" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            ))
+                      {providerModels.map(model => {
+                        const isCurrent = model.id === currentModel;
+                        return (
+                          <button
+                            key={model.id}
+                            className={`new-session-option ${isCurrent ? 'selected' : ''}`}
+                            onClick={() => handleModelSelect(model.id)}
+                            title={isCurrent ? 'Start new conversation' : `Switch to ${model.name}`}
+                          >
+                            <div className="new-session-option-info">
+                              <div className="new-session-option-name">
+                                {model.name}
+                                {isCurrent && (
+                                  <span className="new-session-option-current"> (current)</span>
+                                )}
+                              </div>
+                            </div>
+                            {isCurrent ? (
+                              <MaterialSymbol icon="refresh" size={16} className="new-session-option-icon" />
+                            ) : (
+                              <MaterialSymbol icon="swap_horiz" size={16} className="new-session-option-icon" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* Models Section */}
+              {groupedProviders.models && Object.keys(groupedProviders.models).length > 0 && (
+                <>
+                  {groupedProviders.agents && Object.keys(groupedProviders.agents).length > 0 && (
+                    <div className="new-session-divider" />
+                  )}
+                  <div className="new-session-section-header">Models</div>
+                  {Object.entries(groupedProviders.models).map(([provider, providerModels]) => (
+                    <div key={provider} className="new-session-provider-group">
+                      <div className="new-session-provider-header">
+                        {getProviderIcon(provider, { size: 14 })}
+                        {getProviderLabel(provider)}
+                      </div>
+                      {providerModels.map(model => {
+                        const isCurrent = model.id === currentModel;
+                        return (
+                          <button
+                            key={model.id}
+                            className={`new-session-option ${isCurrent ? 'selected' : ''}`}
+                            onClick={() => handleModelSelect(model.id)}
+                            title={isCurrent ? 'Start new conversation' : `Switch to ${model.name}`}
+                          >
+                            <div className="new-session-option-info">
+                              <div className="new-session-option-name">
+                                {model.name}
+                                {isCurrent && (
+                                  <span className="new-session-option-current"> (current)</span>
+                                )}
+                              </div>
+                            </div>
+                            {isCurrent ? (
+                              <MaterialSymbol icon="refresh" size={16} className="new-session-option-icon" />
+                            ) : (
+                              <MaterialSymbol icon="swap_horiz" size={16} className="new-session-option-icon" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </>
+              )}
+            </>
           )}
           {onOpenSettings && (
             <>
