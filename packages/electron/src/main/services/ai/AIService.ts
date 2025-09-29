@@ -23,6 +23,7 @@ import type { AIMessage } from '@stravu/runtime/ai/types';
 import { updateDocumentState } from '../../mcp/httpServer';
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 import { logger } from '../../utils/logger';
+import { windowStates } from '../../window/WindowManager';
 
 const LOG_PREVIEW_LENGTH = 400;
 
@@ -293,6 +294,18 @@ export class AIService {
         throw new Error('No session ID provided - cannot send message');
       }
 
+      // Get workspace path from window state if not provided
+      if (!workspacePath) {
+        const windowState = windowStates.get(event.sender.id);
+        workspacePath = windowState?.workspacePath || undefined;
+        console.log(`[AIService] Got workspace path from window ${event.sender.id}:`, workspacePath);
+      }
+
+      // Require workspace path for AI operations
+      if (!workspacePath) {
+        throw new Error('No workspace path available - AI operations require an open workspace');
+      }
+
       const loadStartTime = Date.now();
       const session = await this.sessionManager.loadSession(sessionId, workspacePath);
       perfLog.sessionLoadTime = Date.now() - loadStartTime;
@@ -519,11 +532,12 @@ export class AIService {
             messageLength: message.length,
             hasContext: !!documentContext,
             sessionId: session.id,
-            sessionMessages: sessionMessages.length
+            sessionMessages: sessionMessages.length,
+            workspacePath
           });
         }
-        
-        for await (const chunk of provider.sendMessage(message, documentContext, session.id, sessionMessages)) {
+
+        for await (const chunk of provider.sendMessage(message, documentContext, session.id, sessionMessages, workspacePath)) {
           chunkCount++;
 
           if (!firstChunkTime) {

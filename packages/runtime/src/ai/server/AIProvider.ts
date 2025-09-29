@@ -29,7 +29,8 @@ export interface AIProvider extends EventEmitter {
     message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
-    messages?: Message[]
+    messages?: Message[],
+    workspacePath?: string
   ): AsyncIterableIterator<StreamChunk>;
 
   /**
@@ -76,7 +77,8 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
-    messages?: Message[]
+    messages?: Message[],
+    workspacePath?: string
   ): AsyncIterableIterator<StreamChunk>;
   abstract abort(): void;
   abstract getCapabilities(): ProviderCapabilities;

@@ -52,10 +52,11 @@ export class OpenAIProvider extends BaseAIProvider {
   }
 
   async *sendMessage(
-    message: string, 
+    message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
-    messages?: Message[]
+    messages?: Message[],
+    workspacePath?: string
   ): AsyncIterableIterator<StreamChunk> {
     const startTime = Date.now();
     console.log(`[OpenAIProvider] Starting sendMessage - message length: ${message.length}, hasContext: ${!!documentContext}, contextMessages: ${messages?.length || 0}`);

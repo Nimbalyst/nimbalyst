@@ -12,6 +12,7 @@ import {
   StreamChunk,
   AIModel,
   DiffArgs,
+  Message,
 } from '../types';
 import path from 'path';
 import fs from 'fs';
@@ -120,15 +121,18 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   async *sendMessage(
-    message: string, 
+    message: string,
     documentContext?: DocumentContext,
-    sessionId?: string
+    sessionId?: string,
+    messages?: Message[],
+    workspacePath?: string
   ): AsyncIterableIterator<StreamChunk> {
     const startTime = Date.now();
     console.log(`[CLAUDE-CODE] ========== START sendMessage ==========`);
     console.log(`[CLAUDE-CODE] Message length: ${message.length}`);
     console.log(`[CLAUDE-CODE] Has document context: ${!!documentContext}`);
     console.log(`[CLAUDE-CODE] Session ID: ${sessionId || 'new session'}`);
+    console.log(`[CLAUDE-CODE] Workspace path: ${workspacePath}`);
     console.log(`[CLAUDE-CODE] First 200 chars of message:`, message.substring(0, 200));
 
     // Create abort controller for this request
@@ -141,9 +145,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       console.log(`[CLAUDE-CODE] System prompt build took ${Date.now() - promptBuildStart}ms, length: ${systemPrompt.length}`);
       console.log(`[CLAUDE-CODE] System prompt first 300 chars:`, systemPrompt.substring(0, 300));
 
-      // Get workspace path from document context
-      const workspacePath = documentContext?.filePath?.split('/').slice(0, -1).join('/') || process.cwd();
-      console.log(`[CLAUDE-CODE] Workspace path: ${workspacePath}`);
+      // Require workspace path
+      if (!workspacePath) {
+        throw new Error('[CLAUDE-CODE] workspacePath is required but was not provided');
+      }
+      console.log(`[CLAUDE-CODE] Working directory (cwd): ${workspacePath}`);
 
       // Build options for claude-code SDK
       console.log('[CLAUDE-CODE] Building SDK options...');

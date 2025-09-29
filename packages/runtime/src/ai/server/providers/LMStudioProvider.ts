@@ -43,10 +43,11 @@ export class LMStudioProvider extends BaseAIProvider {
   }
 
   async *sendMessage(
-    message: string, 
+    message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
-    messages?: Message[]
+    messages?: Message[],
+    workspacePath?: string
   ): AsyncIterableIterator<StreamChunk> {
     // Build system prompt with document context
     const systemPrompt = this.buildSystemPrompt(documentContext);

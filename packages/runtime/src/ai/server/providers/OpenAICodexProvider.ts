@@ -452,14 +452,16 @@ export class OpenAICodexProvider extends BaseAIProvider {
     message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
-    messages?: Message[]
+    messages?: Message[],
+    workspacePath?: string
   ): AsyncIterableIterator<StreamChunk> {
     console.log('[OpenAICodexProvider] ========== sendMessage START ==========');
     console.log('[OpenAICodexProvider] sendMessage called:', {
       message: message.substring(0, 100),
       hasDocumentContext: !!documentContext,
       sessionId,
-      previousMessageCount: messages?.length || 0
+      previousMessageCount: messages?.length || 0,
+      workspacePath
     });
 
     try {
@@ -487,6 +489,13 @@ export class OpenAICodexProvider extends BaseAIProvider {
       // Add the current message
       fullPrompt += `User: ${message}\n\nAssistant:`;
 
+      // Use workspace path as working directory
+      if (!workspacePath) {
+        throw new Error('[OpenAICodexProvider] workspacePath is required but was not provided');
+      }
+
+      console.log('[OpenAICodexProvider] Working directory:', workspacePath);
+
       // Get MCP server URL - hardcoded for now, should be passed from main process
       const mcpServerUrl = 'http://127.0.0.1:3456/mcp';
 
@@ -494,7 +503,7 @@ export class OpenAICodexProvider extends BaseAIProvider {
       console.log('[OpenAICodexProvider] Calling executeCodex with MCP server:', mcpServerUrl);
       const streamResponse = this.executeCodex(fullPrompt, {
         sessionId,
-        workingDirectory: undefined,
+        workingDirectory: workspacePath,
         mcpServerUrl,
         model: this.config?.model
       });

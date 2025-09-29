@@ -51,7 +51,8 @@ export class ClaudeProvider extends BaseAIProvider {
     message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
-    messages?: any[]
+    messages?: any[],
+    workspacePath?: string
   ): AsyncIterableIterator<StreamChunk> {
     if (!this.anthropic) {
       throw new Error('Claude provider not initialized');
