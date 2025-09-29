@@ -52,7 +52,7 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-code": "^1.0.77",
+    "@anthropic-ai/claude-code": "^2.0.0",
     "@electric-sql/pglite-socket": "^0.0.13",
     "@electron/notarize": "^2.3.2",
     "@playwright/test": "^1.55.1",
