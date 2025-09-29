@@ -351,8 +351,17 @@ export class ElectronDocumentService implements DocumentService {
     const metadata = this.metadataByPath.get(path);
     if (!metadata) return;
 
-    // Generate new hash
-    const dataString = JSON.stringify(frontmatter, Object.keys(frontmatter).sort());
+    // Generate new hash - sort keys recursively for consistent hashing
+    const sortedData = JSON.parse(JSON.stringify(frontmatter, (key, value) => {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return Object.keys(value).sort().reduce((sorted, key) => {
+          sorted[key] = value[key];
+          return sorted;
+        }, {} as Record<string, any>);
+      }
+      return value;
+    }));
+    const dataString = JSON.stringify(sortedData);
     const hash = crypto.createHash('sha256').update(dataString).digest('hex');
 
     // Check if frontmatter actually changed
@@ -390,6 +399,74 @@ export class ElectronDocumentService implements DocumentService {
     };
 
     this.metadataWatchers.forEach(callback => callback(changeEvent));
+  }
+
+  async refreshFileMetadata(filePath: string): Promise<void> {
+    await this.ensureInitialized();
+
+    // Convert to relative path if absolute
+    const relativePath = filePath.startsWith(this.workspacePath)
+      ? filePath.substring(this.workspacePath.length + 1)
+      : filePath;
+
+    const fullPath = path.join(this.workspacePath, relativePath);
+
+    try {
+      const stats = await fs.stat(fullPath);
+      const { data, hash, parseErrors } = await extractFrontmatter(fullPath);
+
+      if (parseErrors) {
+        console.warn(`[DocumentService] Parse errors for ${relativePath}:`, parseErrors);
+      }
+
+      const cachedState = this.fileStateCache.get(relativePath);
+
+      // Always update if hash changed or no cache exists
+      if (!cachedState || cachedState.hash !== hash) {
+        const commonFields = data ? extractCommonFields(data) : {};
+
+        // Find the document entry
+        const doc = this.documents.find(d => d.path === relativePath);
+        if (!doc) {
+          console.warn(`[DocumentService] Document not found for path: ${relativePath}`);
+          return;
+        }
+
+        const metadata: DocumentMetadataEntry = {
+          id: doc.id,
+          path: relativePath,
+          workspace: doc.workspace,
+          frontmatter: data || {},
+          summary: commonFields.summary,
+          tags: commonFields.tags,
+          lastModified: new Date(stats.mtime),
+          lastIndexed: new Date(),
+          hash: hash || undefined,
+          parseErrors
+        };
+
+        // Update caches
+        this.metadataCache.set(doc.id, metadata);
+        this.metadataByPath.set(relativePath, metadata);
+        this.fileStateCache.set(relativePath, {
+          mtime: stats.mtimeMs,
+          size: stats.size,
+          hash: hash || undefined
+        });
+
+        // Notify watchers
+        const changeEvent: MetadataChangeEvent = {
+          added: [],
+          updated: [metadata],
+          removed: [],
+          timestamp: new Date()
+        };
+
+        this.metadataWatchers.forEach(callback => callback(changeEvent));
+      }
+    } catch (error) {
+      console.error(`[DocumentService] Failed to refresh metadata for ${relativePath}:`, error);
+    }
   }
 
   destroy() {
@@ -535,6 +612,16 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
       return { success: true };
     } catch (error) {
       console.error('[DocumentService] notify-frontmatter-changed failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  ipcMain.handle('document-service:refresh-file-metadata', async (event, filePath: string) => {
+    try {
+      await requireDocumentService(event).refreshFileMetadata(filePath);
+      return { success: true };
+    } catch (error) {
+      console.error('[DocumentService] refresh-file-metadata failed:', error);
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   });

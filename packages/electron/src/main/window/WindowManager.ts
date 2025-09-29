@@ -21,7 +21,7 @@ export const windowFocusOrder = new Map<number, number>(); // Track focus order 
 export const windowDevToolsState = new Map<number, boolean>(); // Track dev tools state for each window
 
 // Store document services for each workspace
-const documentServices = new Map<string, ElectronDocumentService>();
+export const documentServices = new Map<string, ElectronDocumentService>();
 // Store file system services for each workspace
 const fileSystemServices = new Map<string, ElectronFileSystemService>();
 

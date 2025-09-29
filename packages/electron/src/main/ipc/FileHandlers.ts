@@ -1,7 +1,7 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { basename, join, dirname } from 'path';
- import { windowStates, savingWindows, findWindowByFilePath, createWindow, getWindowId, windows } from '../window/WindowManager';
+ import { windowStates, savingWindows, findWindowByFilePath, createWindow, getWindowId, windows, documentServices } from '../window/WindowManager';
 import { loadFileIntoWindow, saveFile } from '../file/FileOperations';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { AUTOSAVE_DELAY } from '../utils/constants';
@@ -102,6 +102,19 @@ export function registerFileHandlers() {
             if (state) {
                 state.documentEdited = false; // Reset dirty state after save
                 // console.log('[SAVE] ✓ Reset documentEdited flag');
+            }
+
+            // Refresh metadata cache immediately after save if in workspace mode
+            if (state?.workspacePath) {
+                const documentService = documentServices.get(state.workspacePath);
+                if (documentService) {
+                    // Add a small delay to ensure file is fully written before reading frontmatter
+                    setTimeout(() => {
+                        documentService.refreshFileMetadata(filePath).catch(err => {
+                            console.error('[SAVE] Failed to refresh metadata:', err);
+                        });
+                    }, 50);
+                }
             }
 
             // Clear the saving flag after a delay to ensure the file watcher doesn't react

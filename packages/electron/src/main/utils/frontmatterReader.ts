@@ -110,7 +110,17 @@ export async function extractFrontmatter(filePath: string): Promise<{
 
       if (data && typeof data === 'object' && !Array.isArray(data)) {
         // Generate hash of the frontmatter data
-        const dataString = JSON.stringify(data, Object.keys(data).sort());
+        // Sort keys recursively for consistent hashing
+        const sortedData = JSON.parse(JSON.stringify(data, (key, value) => {
+          if (value && typeof value === 'object' && !Array.isArray(value)) {
+            return Object.keys(value).sort().reduce((sorted, key) => {
+              sorted[key] = value[key];
+              return sorted;
+            }, {} as Record<string, any>);
+          }
+          return value;
+        }));
+        const dataString = JSON.stringify(sortedData);
         const hash = crypto.createHash('sha256').update(dataString).digest('hex');
 
         return {
