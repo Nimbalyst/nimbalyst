@@ -17,7 +17,8 @@ import {
   $isTextNode,
   ElementNode,
   LexicalNode,
-  TextNode
+  TextNode,
+  TextFormatType
 } from 'lexical';
 
 import type {
@@ -397,6 +398,7 @@ function exportTextFormat(
 
   // Collect applicable transformers
   const applied: string[] = [];
+  const appliedFormats = new Set<TextFormatType>();
 
   for (const transformer of textTransformers) {
     // Only use single-format transformers for export
@@ -405,7 +407,9 @@ function exportTextFormat(
     }
 
     const format = transformer.format[0];
-    if (node.hasFormat(format)) {
+    // Only apply one transformer per format (e.g., either ** or __ for bold, not both)
+    if (node.hasFormat(format) && !appliedFormats.has(format)) {
+      appliedFormats.add(format);
       applied.push(transformer.tag);
     }
   }
