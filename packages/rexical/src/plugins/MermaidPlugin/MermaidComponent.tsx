@@ -32,7 +32,6 @@ function loadMermaid(isDarkTheme: boolean) {
         theme: theme,
         securityLevel: 'antiscript',
         fontFamily: 'monospace',
-        suppressErrorRendering: true,
       });
       currentTheme = theme;
       return mermaid;

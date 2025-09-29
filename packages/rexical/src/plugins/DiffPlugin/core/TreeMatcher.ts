@@ -309,7 +309,7 @@ export class WindowedTreeMatcher {
               );
               console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
               if (tableTransformer) {
-                console.log('  Transformer export function exists:', !!tableTransformer.export);
+                console.log('  Transformer export function exists:', !!('export' in tableTransformer && tableTransformer.export));
               }
             }
             // Debug: check if transformers include TABLE_TRANSFORMER
@@ -381,7 +381,7 @@ export class WindowedTreeMatcher {
               );
               console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
               if (tableTransformer) {
-                console.log('  Transformer export function exists:', !!tableTransformer.export);
+                console.log('  Transformer export function exists:', !!('export' in tableTransformer && tableTransformer.export));
               }
             }
             // Debug: check if transformers include TABLE_TRANSFORMER

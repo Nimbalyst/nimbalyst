@@ -27,7 +27,7 @@ try {
   console.log('🎉 All basic imports work correctly!');
 
 } catch (error) {
-  console.error('❌ Import test failed:', error.message);
+  console.error('❌ Import test failed:', error instanceof Error ? error.message : String(error));
   console.error('Full error:', error);
   process.exit(1);
 }

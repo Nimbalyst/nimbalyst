@@ -42,7 +42,7 @@ import {INSERT_COLLAPSIBLE_COMMAND} from '../CollapsiblePlugin';
 import {INSERT_EXCALIDRAW_COMMAND} from '../ExcalidrawPlugin/ExcalidrawCommands';
 import InsertLayoutDialog from '../LayoutPlugin/InsertLayoutDialog';
 import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
-import {InsertTableDialog} from '../TablePlugin';
+import {InsertTableDialog} from '../TablePlugin/TablePlugin.tsx';
 import {pluginRegistry} from '../PluginRegistry';
 import {INSERT_BOARD_COMMAND} from '../KanbanBoardPlugin/BoardCommands';
 

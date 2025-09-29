@@ -29,6 +29,7 @@ export function registerBuiltinPlugins(): void {
   // Table Plugin
   const tablePlugin: PluginPackage = {
     name: 'TablePlugin',
+    Component: () => null, // Table plugin is handled by TablePlugin component
     // Nodes are registered via EditorNodes.ts
     transformers: [TABLE_TRANSFORMER],
     enabledByDefault: true,
@@ -38,6 +39,7 @@ export function registerBuiltinPlugins(): void {
   // Images Plugin
   const imagesPlugin: PluginPackage = {
     name: 'ImagesPlugin',
+    Component: () => null, // Images plugin is handled by ImagesPlugin component
     // Nodes are registered via EditorNodes.ts
     transformers: [IMAGE_TRANSFORMER],
     enabledByDefault: true,

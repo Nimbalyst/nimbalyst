@@ -133,7 +133,7 @@ And some text after.`;
       const root = $getRoot();
       
       // Find the code node
-      let codeNode = null;
+      let codeNode: any = null;
       function findCodeNode(node: any): void {
         if ($isCodeNode(node)) {
           codeNode = node;
@@ -199,7 +199,7 @@ Updated text after.`;
       const root = $getRoot();
       
       // Find the code node
-      let codeNode = null;
+      let codeNode: any = null;
       function findCodeNode(node: any): void {
         if ($isCodeNode(node)) {
           codeNode = node;

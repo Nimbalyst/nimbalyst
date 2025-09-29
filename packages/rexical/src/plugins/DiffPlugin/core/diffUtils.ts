@@ -212,9 +212,10 @@ export function resolveReplacementTexts(replacement: ReplacementLike): {
   }
 
   if (typeof oldText !== 'string' || typeof newText !== 'string') {
-    throw createInvalidDiffError('Invalid replacement received: missing oldText/newText', {
-      replacement,
-    });
+    throw createInvalidDiffError(
+      JSON.stringify({ replacement }),
+      'Invalid replacement received: missing oldText/newText'
+    );
   }
 
   return {oldText, newText};

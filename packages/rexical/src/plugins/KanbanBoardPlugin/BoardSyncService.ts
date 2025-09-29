@@ -8,6 +8,7 @@ interface GraphCollaborationHooks {
   onEntityDeleted?: (entityUri: string) => void;
   updateEntity?: (entity: any) => Promise<void>;
   updateEntityProperty?: (entityUri: string, property: string, value: any) => Promise<void>;
+  subscribeToEntityType?: (entityType: string, callback: (entities: EntityData[]) => void) => void;
 }
 import {$isBoardNode} from './KanbanBoardNode.ts';
 import {$createColumnNode} from './BoardColumnNode';
@@ -62,7 +63,13 @@ export class BoardSyncService {
 
   private subscribeToEntities(): void {
     try {
-      this.entitySubscription = this.hooks.subscribeToEntityType(
+      if (!this.hooks || !this.config.entityTypeId) {
+        console.warn('Cannot subscribe to entities: hooks or entityTypeId missing');
+        return;
+      }
+      
+      // subscribeToEntityType returns void, so we need to handle unsubscription differently
+      this.hooks.subscribeToEntityType?.(
         this.config.entityTypeId,
         (entities: EntityData[]) => {
           if (this.isUpdatingFromBoard) return;
@@ -72,6 +79,8 @@ export class BoardSyncService {
           this.isUpdatingFromEntity = false;
         }
       );
+      // Note: The actual unsubscription mechanism would depend on the real implementation
+      // For now, we'll store a placeholder callback
     } catch (error) {
       console.error('Failed to subscribe to entity type:', error);
     }
@@ -188,7 +197,7 @@ export class BoardSyncService {
       // Note: This assumes updateEntityProperty exists - may need to use updateEntity instead
       try {
         if (this.config.statusPropertyId) {
-          await this.hooks.updateEntity({
+          await this.hooks.updateEntity?.({
             uri: entityUri,
             type: this.config.entityTypeId,
             properties: {
@@ -199,8 +208,8 @@ export class BoardSyncService {
       } catch (error) {
         console.error('Failed to update entity via collaboration hooks:', error);
         // Fallback: try direct property update if available
-        if (typeof this.hooks.updateEntityProperty === 'function') {
-          await this.hooks.updateEntityProperty(entityUri, this.config.statusPropertyId, newStatusValue);
+        if (typeof this.hooks.updateEntityProperty === 'function' && this.config.statusPropertyId) {
+          await this.hooks.updateEntityProperty?.(entityUri, this.config.statusPropertyId, newStatusValue);
         } else {
           throw error;
         }

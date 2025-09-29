@@ -290,7 +290,7 @@ export function useDiffCommands() {
 
   const getCurrentMarkdown = useCallback(() => {
     return editor.getEditorState().read(() => {
-      return $convertToEnhancedMarkdownString(MARKDOWN_TRANSFORMERS, undefined, true);
+      return $convertToEnhancedMarkdownString(MARKDOWN_TRANSFORMERS, { shouldPreserveNewLines: true });
     });
   }, [editor]);
 

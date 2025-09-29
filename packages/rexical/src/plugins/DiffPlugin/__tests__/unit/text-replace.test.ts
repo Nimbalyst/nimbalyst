@@ -218,7 +218,8 @@ describe('Text Replacement Changes', () => {
           originalMarkdown,
           MARKDOWN_TEST_TRANSFORMERS,
           root,
-          {preserveNewLines: true, extractFrontmatter: false},
+          true,
+          true,
         );
       },
       {discrete: true},

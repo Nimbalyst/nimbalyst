@@ -10,7 +10,7 @@ import { useEffect, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { logger } from '../../utils/logger';
 import { $setDiffState } from '../DiffPlugin/core/DiffState';
-import { $getSelection, $isRangeSelection, $getRoot, LexicalNode } from 'lexical';
+import { $getSelection, $isRangeSelection, $getRoot, $isElementNode, LexicalNode } from 'lexical';
 import { APPLY_MARKDOWN_REPLACE_COMMAND } from '../DiffPlugin';
 import type { TextReplacement } from '../DiffPlugin/core/exports';
 import { MarkdownStreamProcessor } from '../../markdown/MarkdownStreamProcessor';
@@ -217,7 +217,9 @@ function findInsertionPoint(
     let currentPos = 0;
     for (let i = 0; i < children.length; i++) {
       const child = children[i];
-      const nodeMarkdown = $convertNodeToEnhancedMarkdownString(transformers, child, true);
+      const nodeMarkdown = $isElementNode(child)
+        ? $convertNodeToEnhancedMarkdownString(transformers, child, true)
+        : child.getTextContent();
       const nodeLength = nodeMarkdown.length;
 
       if (currentPos <= searchIndex && searchIndex < currentPos + nodeLength) {

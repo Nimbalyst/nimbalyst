@@ -6,14 +6,14 @@
  *
  */
 
-import type {DiffHandler, DiffHandlerContext, DiffHandlerResult} from '../types';
+import type {DiffNodeHandler, DiffHandlerContext, DiffHandlerResult} from './DiffNodeHandler';
+import type {NodeStructureValidator} from '../core/NodeStructureValidator';
 import type {ElementNode, LexicalNode} from 'lexical';
 import type {SerializedLexicalNode} from 'lexical';
 import {$isElementNode} from 'lexical';
 import {$isCodeNode} from '@lexical/code';
 import {$setDiffState, $clearDiffState, $getDiffState} from '../core/DiffState';
 import {createNodeFromSerialized} from '../core/createNodeFromSerialized';
-import {NodeStructureValidator} from '../core/NodeStructureValidator';
 
 /**
  * Handler for code block diffs.
@@ -21,7 +21,9 @@ import {NodeStructureValidator} from '../core/NodeStructureValidator';
  * we show the whole block as removed and add a new one.
  * This avoids complexity with syntax highlighting nodes.
  */
-export class CodeBlockDiffHandler implements DiffHandler {
+export class CodeBlockDiffHandler implements DiffNodeHandler {
+  readonly nodeType = 'code';
+
   canHandle(context: DiffHandlerContext): boolean {
     return $isCodeNode(context.liveNode);
   }

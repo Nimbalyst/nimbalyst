@@ -13,7 +13,7 @@ import {
   $isCodeNode,
 } from '@lexical/code';
 // Code language support - now using custom implementation
-const CODE_LANGUAGE_OPTIONS = [
+const CODE_LANGUAGE_OPTIONS: [string, string][] = [
   ['javascript', 'JavaScript'],
   ['typescript', 'TypeScript'],
   ['jsx', 'JSX'],
@@ -118,7 +118,7 @@ import InsertLayoutDialog from '../LayoutPlugin/InsertLayoutDialog';
 import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
 import {SHORTCUTS} from '../ShortcutsPlugin/shortcuts';
 import { getEditorTransformers } from '../../markdown';
-import {InsertTableDialog} from '../TablePlugin';
+import {InsertTableDialog} from '../TablePlugin/TablePlugin.tsx';
 import TableOfContentsDropdownPlugin from '../TableOfContentsPlugin';
 import FontSize from './fontSize';
 import {

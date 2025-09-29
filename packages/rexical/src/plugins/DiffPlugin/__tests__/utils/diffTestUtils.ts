@@ -197,7 +197,8 @@ export function setupMarkdownDiffTest(
         originalMarkdown,
         transformers,
         root,
-        { preserveNewLines: true, extractFrontmatter: false }
+        true,
+        false
       );
     },
     {discrete: true},
@@ -228,7 +229,8 @@ export function setupMarkdownDiffTest(
         actualOriginalMarkdown,
         transformers,
         root,
-        { preserveNewLines: true, extractFrontmatter: false }
+        true,
+        false
       );
     },
     {discrete: true},
@@ -243,7 +245,8 @@ export function setupMarkdownDiffTest(
         targetMarkdown,
         transformers,
         root,
-        { preserveNewLines: true, extractFrontmatter: false }
+        true,
+        false
       );
     },
     {discrete: true},
@@ -278,7 +281,8 @@ export function setupMarkdownDiffTest(
         actualOriginalMarkdown,
         transformers,
         root,
-        { preserveNewLines: true, extractFrontmatter: false }
+        true,
+        false
       );
     },
     {discrete: true},
@@ -294,7 +298,8 @@ export function setupMarkdownDiffTest(
         actualOriginalMarkdown,
         transformers,
         root,
-        { preserveNewLines: true, extractFrontmatter: false }
+        true,
+        false
       );
     },
     {discrete: true},
@@ -331,7 +336,7 @@ export function setupMarkdownDiffTest(
     $approveDiffs(approveEditor);
 
     return approveEditor.getEditorState().read(() => {
-      let markdown = $convertToMarkdownString(transformers, undefined, true);
+      let markdown = $convertToEnhancedMarkdownString(transformers, { shouldPreserveNewLines: true, includeFrontmatter: false });
 
       // Fix escaped asterisks that should represent nested formatting
       markdown = fixNestedFormattingEscaping(markdown);

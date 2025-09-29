@@ -101,7 +101,7 @@ describe('Markdown Diff - Links', () => {
       assertRejectProducesOriginalReplace(result);
       console.log('✅ Approve/reject works correctly for modified links');
     } catch (error) {
-      console.log('❌ Approve/reject failed:', error.message);
+      console.log('❌ Approve/reject failed:', error instanceof Error ? error.message : String(error));
     }
 
     // This test is just for debugging

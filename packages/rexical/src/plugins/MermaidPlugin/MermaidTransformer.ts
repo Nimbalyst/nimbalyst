@@ -20,12 +20,12 @@ export const MERMAID_TRANSFORMER: MultilineElementTransformer = {
   },
   regExpStart: MERMAID_START_REGEX,
   regExpEnd: {
-    optional: false,
+    optional: true,
     regExp: MERMAID_END_REGEX,
   },
   replace: (rootNode, children, startMatch, endMatch, linesInBetween) => {
     // Join all the lines between the start and end markers
-    const content = linesInBetween.join('\n').trim();
+    const content = linesInBetween ? linesInBetween.join('\n').trim() : '';
     const mermaidNode = $createMermaidNode({ content });
     rootNode.append(mermaidNode);
   },

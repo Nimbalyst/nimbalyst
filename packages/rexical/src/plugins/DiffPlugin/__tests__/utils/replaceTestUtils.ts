@@ -110,7 +110,8 @@ export function setupMarkdownReplaceTest(
         originalMarkdown,
         transformers,
         root,
-        { preserveNewLines: true, extractFrontmatter: false }
+        true,
+        false
       );
     },
     {discrete: true},

@@ -20,7 +20,7 @@ import {
 
 import { DEFAULT_EDITOR_CONFIG, type EditorConfig } from './EditorConfig';
 import { SharedHistoryContext } from './context/SharedHistoryContext';
-import { TableContext } from './plugins/TablePlugin';
+import { TableContext } from './plugins/TablePlugin/TablePlugin.tsx';
 import { ToolbarContext } from './context/ToolbarContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { RuntimeSettingsProvider } from './context/RuntimeSettingsContext';

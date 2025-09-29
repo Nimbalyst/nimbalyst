@@ -54,21 +54,23 @@ function runSimpleTest() {
       assertApproveProducesTarget(result);
       console.log('✅ Approve produces target correctly');
     } catch (error) {
-      console.log('ℹ️ Approve test:', error.message);
+      console.log('ℹ️ Approve test:', error instanceof Error ? error.message : String(error));
     }
 
     try {
       assertRejectProducesOriginal(result);
       console.log('✅ Reject produces original correctly');
     } catch (error) {
-      console.log('ℹ️ Reject test:', error.message);
+      console.log('ℹ️ Reject test:', error instanceof Error ? error.message : String(error));
     }
 
     console.log('🎉 Simple diff test completed successfully!');
 
   } catch (error) {
-    console.error('❌ Simple test failed:', error.message);
-    console.error('Stack:', error.stack);
+    console.error('❌ Simple test failed:', error instanceof Error ? error.message : String(error));
+    if (error instanceof Error) {
+      console.error('Stack:', error.stack);
+    }
     throw error;
   }
 }

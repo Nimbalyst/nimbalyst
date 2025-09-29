@@ -72,7 +72,7 @@ export const COLLAPSIBLE_TRANSFORMER: MultilineElementTransformer = {
 
         try {
             // Convert each child to markdown
-            bodyMarkdown =  $convertNodeToEnhancedMarkdownString(CORE_TRANSFORMERS, contentNode, { shouldPreserveNewLines: true })
+            bodyMarkdown =  $convertNodeToEnhancedMarkdownString(CORE_TRANSFORMERS, contentNode, true)
         } catch (error) {
             console.warn('Failed to process content children:', error);
             return null;

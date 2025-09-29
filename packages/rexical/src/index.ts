@@ -27,7 +27,7 @@ export { useModal } from './hooks/useModal';
 export { ThemeProvider, useTheme, type Theme, type ThemeConfig } from './context/ThemeContext';
 export { FlashMessageContext } from './context/FlashMessageContext';
 export { SharedHistoryContext } from './context/SharedHistoryContext';
-export { TableContext } from './plugins/TablePlugin';
+export { TableContext } from './plugins/TablePlugin/TablePlugin.tsx';
 export { ToolbarContext } from './context/ToolbarContext';
 
 // Themes

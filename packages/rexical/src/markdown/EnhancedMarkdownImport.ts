@@ -87,7 +87,7 @@ export function $convertFromEnhancedMarkdownString(
   }
 
   // Import the content using OUR FORKED markdown import that handles 2-space indents
-  $convertFromMarkdownStringRexical(content, transformers, node, preserveNewLines);
+  $convertFromMarkdownStringRexical(content, transformers || [], node, preserveNewLines);
 
   return {
     frontmatter,

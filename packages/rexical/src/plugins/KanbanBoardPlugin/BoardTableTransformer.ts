@@ -281,7 +281,7 @@ export const BOARD_TABLE_TRANSFORMER: MultilineElementTransformer = {
         title,
         owner: owner !== '-' ? owner : undefined,
         dueDate: dueDate !== '-' ? dueDate : undefined,
-        priority: priority !== '-' && priority ? priority : undefined,
+        priority: priority && (priority as string) !== '-' ? priority : undefined,
         description: description !== '-' ? description : undefined,
         data: cells
       });

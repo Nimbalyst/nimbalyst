@@ -52,8 +52,8 @@ export class TableDiffHandler implements DiffNodeHandler {
 
     try {
       // Check if table structure (rows/cols) changed
-      const sourceRows = ('children' in sourceNode && sourceNode.children) || [];
-      const targetRows = ('children' in targetNode && targetNode.children) || [];
+      const sourceRows = ('children' in sourceNode && Array.isArray(sourceNode.children) ? sourceNode.children : []);
+      const targetRows = ('children' in targetNode && Array.isArray(targetNode.children) ? targetNode.children : []);
 
       const sourceRowCount = sourceRows.length;
       const targetRowCount = targetRows.length;
@@ -64,7 +64,7 @@ export class TableDiffHandler implements DiffNodeHandler {
       // Rather than replacing it entirely (which creates duplicates)
       if (sourceRowCount !== targetRowCount || sourceColCount !== targetColCount) {
         // Store the original markdown for potential revert
-        const originalMarkdown = $convertNodeToEnhancedMarkdownString(transformers, liveNode);
+        const originalMarkdown = $convertNodeToEnhancedMarkdownString(transformers || [], liveNode);
         $setOriginalMarkdown(liveNode, originalMarkdown);
 
         // Clear the existing table content
@@ -151,7 +151,7 @@ export class TableDiffHandler implements DiffNodeHandler {
             let targetCellMarkdown = '';
 
             // Get the live cell markdown (current state)
-            const liveCellMarkdown = $convertNodeToEnhancedMarkdownString(transformers, liveCell);
+            const liveCellMarkdown = $convertNodeToEnhancedMarkdownString(transformers || [], liveCell);
 
             // We need to create temporary nodes to get markdown from serialized data
             // Create nodes from serialized data and export their markdown
@@ -159,11 +159,11 @@ export class TableDiffHandler implements DiffNodeHandler {
             const tempTargetCell = createNodeFromSerialized(targetCell);
 
             if ($isTableCellNode(tempSourceCell)) {
-              sourceCellMarkdown = $convertNodeToEnhancedMarkdownString(transformers, tempSourceCell);
+              sourceCellMarkdown = $convertNodeToEnhancedMarkdownString(transformers || [], tempSourceCell);
             }
 
             if ($isTableCellNode(tempTargetCell)) {
-              targetCellMarkdown = $convertNodeToEnhancedMarkdownString(transformers, tempTargetCell);
+              targetCellMarkdown = $convertNodeToEnhancedMarkdownString(transformers || [], tempTargetCell);
             }
 
             // Compare the markdown content
@@ -349,7 +349,7 @@ export class TableDiffHandler implements DiffNodeHandler {
     }
 
     // Navigate through table structure: table -> tbody/thead -> tr -> td/th
-    const rows = tableNode.children || [];
+    const rows = Array.isArray(tableNode.children) ? tableNode.children : [];
 
     rows.forEach((row: any, rowIndex: number) => {
       if (row && 'children' in row) {

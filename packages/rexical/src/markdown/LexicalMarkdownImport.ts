@@ -9,27 +9,25 @@
  */
 
 import {
-  $createParagraphNode,
-  $createTextNode,
-  $getRoot,
-  $getSelection,
-  $isParagraphNode,
-  $isRootOrShadowRoot,
-  ElementNode,
-  LexicalNode,
-  RootNode,
-  TextNode,
+    $createLineBreakNode,
+    $createParagraphNode,
+    $createTextNode,
+    $getRoot,
+    $getSelection,
+    $isParagraphNode,
+    ElementNode,
+    LexicalNode,
+    ParagraphNode,
 } from 'lexical';
-import { $isListNode, $isListItemNode } from '@lexical/list';
-import { $isQuoteNode } from '@lexical/rich-text';
+import { $isListItemNode, $isListNode, ListItemNode, ListNode } from '@lexical/list';
+import { $isQuoteNode, QuoteNode } from '@lexical/rich-text';
 import { $findMatchingParent } from '@lexical/utils';
-import { $createLineBreakNode } from 'lexical';
 import type {
-  Transformer,
-  ElementTransformer,
-  TextFormatTransformer,
-  TextMatchTransformer,
-  MultilineElementTransformer,
+    ElementTransformer,
+    MultilineElementTransformer,
+    TextFormatTransformer,
+    TextMatchTransformer,
+    Transformer,
 } from '@lexical/markdown';
 import { importTextTransformers } from './importTextTransformers';
 
@@ -242,7 +240,7 @@ function $importBlocks(
     if (!shouldPreserveNewLines &&
         ($isParagraphNode(previousNode) || $isQuoteNode(previousNode) || $isListNode(previousNode))) {
 
-      let targetNode = previousNode;
+      let targetNode: ListNode | ParagraphNode | QuoteNode | ListItemNode | null = previousNode;
       if ($isListNode(previousNode)) {
         const lastDescendant = previousNode.getLastDescendant();
         if (lastDescendant == null) {

@@ -26,26 +26,19 @@ export function BoardToolbar(): JSX.Element {
   return (
     <>
       <div className="kanban-toolbar flex gap-2">
-        <Button
+        <button
           onClick={insertKanbanBoard}
-          severity="secondary"
-          outlined
-          size="small"
-          className="flex align-items-center gap-2"
+          className="flex align-items-center gap-2 p-button-secondary p-button-outlined p-button-sm"
         >
-          <FontAwesomeIcon icon={faColumns} />
           Insert Basic Board
-        </Button>
+        </button>
         
-        <Button
+        <button
           onClick={insertEntityBoard}
-          severity="primary"
-          size="small"
-          className="flex align-items-center gap-2"
+          className="flex align-items-center gap-2 p-button-primary p-button-sm"
         >
-          <FontAwesomeIcon icon={faCog} />
           Insert Entity Board
-        </Button>
+        </button>
       </div>
 
       <BoardConfigDialog

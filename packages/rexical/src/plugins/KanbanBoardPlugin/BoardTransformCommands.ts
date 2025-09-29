@@ -175,7 +175,9 @@ export function $transformTableToBoard(tableNode: TableNode): KanbanBoardNode | 
       title: cells[columnIndices.title]?.getTextContent() || '',
       owner: columnIndices.owner !== undefined ? cells[columnIndices.owner]?.getTextContent() || '' : '',
       dueDate: columnIndices.dueDate !== undefined ? cells[columnIndices.dueDate]?.getTextContent() || '' : '',
-      priority: columnIndices.priority !== undefined ? cells[columnIndices.priority]?.getTextContent() || '' : '',
+      priority: columnIndices.priority !== undefined
+        ? (cells[columnIndices.priority]?.getTextContent() || '') as 'low' | 'medium' | 'high' | undefined
+        : undefined,
       description: columnIndices.description !== undefined ? cells[columnIndices.description]?.getTextContent() || '' : '',
     };
 

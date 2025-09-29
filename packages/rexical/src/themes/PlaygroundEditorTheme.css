@@ -708,8 +708,8 @@
 
 [data-theme="dark"] .PlaygroundEditorTheme__diffModify,
 [data-theme="crystal-dark"] .PlaygroundEditorTheme__diffModify {
-  background-color: rgba(249, 199, 79, 0.15); /* Dark yellow background */
-  outline: 1px solid rgba(249, 199, 79, 0.4);
+  /*background-color: rgba(249, 199, 79, 0.15); !* Dark yellow background *!*/
+  /*outline: 1px solid rgba(249, 199, 79, 0.4);*/
 }
 
 /* Dark mode styles for code block gutters only */

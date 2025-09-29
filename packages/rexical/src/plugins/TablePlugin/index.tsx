@@ -2,5 +2,5 @@
  * TablePlugin exports - component and transformer
  */
 
-export { default } from '../TablePlugin';
+export { TablePlugin as default } from './TablePlugin.tsx';
 export { TABLE_TRANSFORMER } from './TableTransformer';

@@ -94,7 +94,8 @@ describe('List Normalization Integration', () => {
         console.log(`Child ${i}: type=${child.getType()}, text="${child.getTextContent()}"`);
 
         if (child.getType() === 'list') {
-          const listItems = child.getChildren() as ListItemNode[];
+          const listNode = child as ListNode;
+          const listItems = listNode.getChildren() as ListItemNode[];
           console.log(`  List has ${listItems.length} items`);
           items = listItems.map(item => {
             const result = {
