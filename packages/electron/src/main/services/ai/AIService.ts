@@ -233,10 +233,14 @@ export class AIService {
 
       // Build config based on provider type
       const initConfig: any = {
-        apiKey,
         maxTokens: session.providerConfig?.maxTokens,
         temperature: session.providerConfig?.temperature
       };
+
+      // Claude Code manages its own authentication - do not pass API key
+      if (provider !== 'claude-code') {
+        initConfig.apiKey = apiKey;
+      }
 
       // Only add model if it exists and provider isn't claude-code or openai-codex
       // Both claude-code and openai-codex manage their own model selection
@@ -361,12 +365,21 @@ export class AIService {
 
       // Get or create provider for this session
       const providerStartTime = Date.now();
+      const isProviderClaudeCode = session.provider === 'claude-code';
+      
+      if (isProviderClaudeCode) {
+        console.log('[CLAUDE-CODE-SERVICE] Getting provider for claude-code, session:', session.id);
+      }
+      
       console.log(`[AIService] Getting provider for: ${session.provider}, sessionId: ${session.id}`);
       let provider = ProviderFactory.getProvider(session.provider, session.id);
       perfLog.getProviderTime = Date.now() - providerStartTime;
 
       // If provider doesn't exist, create and initialize it
       if (!provider) {
+        if (isProviderClaudeCode) {
+          console.log('[CLAUDE-CODE-SERVICE] Provider not found, creating new claude-code provider');
+        }
         console.log(`[AIService] Provider not found, creating new ${session.provider} provider`);
         const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
@@ -398,7 +411,14 @@ export class AIService {
         }
 
         // Create the provider
+        if (isProviderClaudeCode) {
+          console.log('[CLAUDE-CODE-SERVICE] Creating claude-code provider instance');
+        }
         provider = ProviderFactory.createProvider(session.provider, session.id);
+        
+        if (isProviderClaudeCode) {
+          console.log('[CLAUDE-CODE-SERVICE] Provider instance created, preparing config');
+        }
 
         const reinitConfig: any = {
           apiKey,
@@ -433,11 +453,27 @@ export class AIService {
           }
         }
 
+        if (isProviderClaudeCode) {
+          console.log('[CLAUDE-CODE-SERVICE] About to initialize claude-code provider with config:', reinitConfig);
+        }
         console.log('[AIService] About to initialize provider with config:', reinitConfig);
         const initStartTime = Date.now();
-        await provider.initialize(reinitConfig);
-        perfLog.providerInitTime = Date.now() - initStartTime;
-        console.log(`[AIService] Provider initialization took ${perfLog.providerInitTime}ms`);
+        
+        try {
+          await provider.initialize(reinitConfig);
+          perfLog.providerInitTime = Date.now() - initStartTime;
+          
+          if (isProviderClaudeCode) {
+            console.log(`[CLAUDE-CODE-SERVICE] Provider initialization completed in ${perfLog.providerInitTime}ms`);
+          }
+          console.log(`[AIService] Provider initialization took ${perfLog.providerInitTime}ms`);
+        } catch (initError) {
+          if (isProviderClaudeCode) {
+            console.error('[CLAUDE-CODE-SERVICE] Failed to initialize provider:', initError);
+            console.error('[CLAUDE-CODE-SERVICE] Init config was:', reinitConfig);
+          }
+          throw initError;
+        }
 
         // Register tool handler
         const toolHandler = this.createToolHandler(event.sender);
@@ -474,14 +510,26 @@ export class AIService {
         });
 
         // Stream the response
-        console.log('🚀 [AIService] Starting to stream response from provider...');
+        const isClaudeCode = session.provider === 'claude-code';
+        const logPrefix = isClaudeCode ? '[CLAUDE-CODE-SERVICE]' : '[AIService]';
+        console.log(`🚀 ${logPrefix} Starting to stream response from provider: ${session.provider}`);
+        
+        if (isClaudeCode) {
+          console.log(`[CLAUDE-CODE-SERVICE] Calling sendMessage with:`, {
+            messageLength: message.length,
+            hasContext: !!documentContext,
+            sessionId: session.id,
+            sessionMessages: sessionMessages.length
+          });
+        }
+        
         for await (const chunk of provider.sendMessage(message, documentContext, session.id, sessionMessages)) {
           chunkCount++;
 
           if (!firstChunkTime) {
             firstChunkTime = Date.now();
             perfLog.timeToFirstChunk = firstChunkTime - startTime;
-            console.log(`[AIService] First chunk received after ${perfLog.timeToFirstChunk}ms`);
+            console.log(`${logPrefix} First chunk received after ${perfLog.timeToFirstChunk}ms`);
 
             // Send first chunk metrics
             event.sender.send('ai:performanceMetrics', {
@@ -494,7 +542,10 @@ export class AIService {
               textChunks++;
               const chunkContent = chunk.content || '';
               fullResponse += chunkContent;
-              console.log(`[AIService] Forwarding text chunk #${textChunks}: ${chunkContent.length} chars, total: ${fullResponse.length}`);
+              if (isClaudeCode && textChunks <= 5) {
+                console.log(`[CLAUDE-CODE-SERVICE] Text chunk #${textChunks}: ${chunkContent.length} chars, first 100:`, chunkContent.substring(0, 100));
+              }
+              console.log(`${logPrefix} Forwarding text chunk #${textChunks}: ${chunkContent.length} chars, total: ${fullResponse.length}`);
               // Send ACCUMULATED response to renderer (not just the chunk)
               event.sender.send('ai:streamResponse', {
                 partial: fullResponse,  // Send the full accumulated text
@@ -632,14 +683,27 @@ export class AIService {
               break;
 
             case 'error':
-              console.error('Provider error:', chunk.error);
+              if (isClaudeCode) {
+                console.error('[CLAUDE-CODE-SERVICE] ERROR FROM PROVIDER:', chunk.error);
+                console.error('[CLAUDE-CODE-SERVICE] Error context:', {
+                  chunksSoFar: chunkCount,
+                  textChunksSoFar: textChunks,
+                  responseLengthSoFar: fullResponse.length,
+                  timeElapsed: Date.now() - startTime
+                });
+              }
+              console.error(`${logPrefix} Provider error:`, chunk.error);
               event.sender.send('ai:error', {
                 message: chunk.error || 'Unknown error occurred'
               });
               break;
 
             case 'complete':
-              console.log('[AIService] COMPLETE CHUNK RECEIVED! Sending completion signal to UI');
+              if (isClaudeCode) {
+                console.log('[CLAUDE-CODE-SERVICE] COMPLETE CHUNK RECEIVED!');
+                console.log('[CLAUDE-CODE-SERVICE] Final response length:', fullResponse.length);
+              }
+              console.log(`${logPrefix} COMPLETE CHUNK RECEIVED! Sending completion signal to UI`);
               perfLog.totalTime = Date.now() - startTime;
               perfLog.streamTime = Date.now() - streamStartTime;
               perfLog.chunkCount = chunkCount;
@@ -754,7 +818,22 @@ export class AIService {
         return { content: fullResponse };
       } catch (error) {
         const errorTime = Date.now() - startTime;
-        console.error(`[AIService] Error after ${errorTime}ms:`, error);
+        
+        if (isClaudeCode) {
+          console.error('[CLAUDE-CODE-SERVICE] ========== CRITICAL ERROR ==========');
+          console.error('[CLAUDE-CODE-SERVICE] Error caught in stream handler:', error);
+          console.error('[CLAUDE-CODE-SERVICE] Error type:', error instanceof Error ? error.constructor.name : typeof error);
+          console.error('[CLAUDE-CODE-SERVICE] Error message:', error instanceof Error ? error.message : String(error));
+          console.error('[CLAUDE-CODE-SERVICE] Error stack:', error instanceof Error ? error.stack : 'No stack');
+          console.error('[CLAUDE-CODE-SERVICE] Context:', {
+            errorTime,
+            chunksReceived: chunkCount,
+            textChunks: textChunks,
+            responseLength: fullResponse.length
+          });
+        }
+        
+        console.error(`${logPrefix} Error after ${errorTime}ms:`, error);
 
         // Send error metrics
         event.sender.send('ai:performanceMetrics', {

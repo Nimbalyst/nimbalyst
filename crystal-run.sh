@@ -14,7 +14,7 @@ cd packages/electron
 
 # Build the app
 echo "Building Preditor..."
-npm run build:mac:local
+#npm run build
 
 # Run the built app
 echo "Starting Preditor..."
