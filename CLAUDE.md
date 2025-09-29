@@ -150,10 +150,36 @@ The Electron app uses IPC (Inter-Process Communication) between main and rendere
 ## AI Features
 
 ### AI Providers
-- **__Claude__**: Direct Claude API integration with streaming support and tool use
-- **__Claude Code__**: MCP (Model Context Protocol) integration for advanced code editing capabilities
-- Handles its own model selection internally - do not pass model IDs
-- Provides enhanced code-aware features through MCP
+
+The application supports multiple AI providers, including two distinct ways to access Claude:
+
+#### Claude (Anthropic API)
+- **__Direct API integration__**: Uses the official Anthropic SDK (`@anthropic-ai/sdk`)
+- **__Provider ID__**: `claude`
+- **__Location__**: `packages/runtime/src/ai/server/providers/ClaudeProvider.ts`
+- **__Features__**: 
+  - Standard Claude models (Opus 4.1, Opus 4, Sonnet 4, Sonnet 3.7)
+  - Streaming responses with tool use support
+  - Direct API key authentication
+  - Full control over model selection
+- **__When to use__**: For standard AI chat and code assistance using Claude models directly
+
+#### Claude Code (MCP Integration)
+- **__MCP Protocol__**: Uses Model Context Protocol for enhanced code-aware features
+- **__Provider ID__**: `claude-code`
+- **__Implementation__**: `packages/runtime/src/ai/server/providers/ClaudeCodeProvider.ts`
+  - Dynamically loads `@anthropic-ai/claude-code` SDK from user's installation
+  - Requires local installation via npm
+  - Provides MCP features through SDK
+- **__Features__**:
+  - Enhanced code understanding through MCP
+  - File system awareness and manipulation
+  - Advanced code editing capabilities
+  - Manages its own model selection internally (do not pass model IDs)
+- **__Installation__**: Requires `npm install -g @anthropic-ai/claude-code` or local installation
+- **__When to use__**: For advanced code editing tasks that benefit from MCP's context protocol
+
+#### Other Providers
 - **__OpenAI__**: GPT-4 and GPT-3.5 models via OpenAI API
 - **__LM Studio__**: Local model support for privacy-focused usage
 - **__Multiple provider support__**: Extensible architecture for adding new AI providers
@@ -181,6 +207,28 @@ The Electron app uses IPC (Inter-Process Communication) between main and rendere
 - **__LM Studio detection__**: Automatically detects local models running in LM Studio
 - **__Model management__**: Select/deselect all buttons for bulk model configuration
 - **__Smart defaults__**: Doesn't auto-select all models when enabling a provider
+
+### Provider Implementation Details
+
+#### Key Files for Claude Providers
+- **Claude API Provider**:
+  - Main implementation: `packages/runtime/src/ai/server/providers/ClaudeProvider.ts`
+  - UI panel: `packages/electron/src/renderer/components/AIModels/panels/ClaudePanel.tsx`
+  - Uses Anthropic SDK directly with API key authentication
+  - Supports model selection from predefined list in `packages/runtime/src/ai/modelConstants.ts`
+
+- **Claude Code Provider**:
+  - Implementation: `packages/runtime/src/ai/server/providers/ClaudeCodeProvider.ts`
+  - UI panel: `packages/electron/src/renderer/components/AIModels/panels/ClaudeCodePanel.tsx`
+  - Installation manager: `packages/electron/src/renderer/components/AIModels/services/CLIInstaller.ts`
+  - Requires separate installation of `@anthropic-ai/claude-code` package
+  - Dynamically loads SDK from user's installation
+
+#### Provider Factory
+- Location: `packages/runtime/src/ai/server/ProviderFactory.ts`
+- Creates and manages provider instances based on type
+- Provider types: `claude`, `claude-code`, `openai`, `openai-codex`, `lmstudio`
+- Each provider is cached per session for efficiency
 
 ## Data Persistence
 

@@ -4,7 +4,6 @@ export * from './ProviderFactory';
 export * from './ModelRegistry';
 export * from './SessionManager';
 export * from './providers/ClaudeProvider';
-export * from './providers/ClaudeCodeCLIProvider';
 export * from './providers/OpenAIProvider';
 export * from './providers/OpenAICodexProvider';
 export * from './providers/LMStudioProvider';

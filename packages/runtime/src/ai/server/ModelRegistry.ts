@@ -115,8 +115,6 @@ export class ModelRegistry {
       case 'claude-code':
         const { ClaudeCodeProvider } = await import('./providers/ClaudeCodeProvider');
         return ClaudeCodeProvider.getDefaultModel();
-        // const { ClaudeCodeCLIProvider } = await import('./providers/ClaudeCodeCLIProvider');
-        // return ClaudeCodeCLIProvider.getDefaultModel();
       case 'openai-codex':
         const { OpenAICodexProvider } = await import('./providers/OpenAICodexProvider');
         return OpenAICodexProvider.getDefaultModel();
