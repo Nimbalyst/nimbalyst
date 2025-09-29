@@ -509,7 +509,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               if (rawContent) {
                 hadTextContent = true;
                 // Wrap extracted text with context
-                extractedContent = `\n\n⚠️ **Unhandled message from Claude Code** (type: \`${chunk.type || 'unknown'}\`):\n\n${rawContent}\n\n`;
+                // Serialize objects to JSON, keep strings as-is
+                const contentToDisplay = typeof rawContent === 'string'
+                  ? rawContent
+                  : JSON.stringify(rawContent, null, 2);
+                extractedContent = `\n\n⚠️ **Unhandled message from Claude Code** (type: \`${chunk.type || 'unknown'}\`):\n\n${contentToDisplay}\n\n`;
               }
 
               // If still no content, check for nested message content
