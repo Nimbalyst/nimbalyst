@@ -69,6 +69,15 @@
   flex-shrink: 0;
 }
 
+.tab.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.tab.drag-over {
+  border-left: 2px solid var(--primary-color, #3b82f6);
+}
+
 .tab:hover {
   background: var(--tab-hover-bg, #f9fafb);
 }

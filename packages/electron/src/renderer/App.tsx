@@ -2615,12 +2615,8 @@ export default function App() {
               // Open file dialog or create untitled tab
               setIsNewFileDialogOpen(true);
             }}
-            onTogglePin={(tabId) => {
-              const tab = tabs.getTabState(tabId);
-              if (tab) {
-                tabs.updateTab(tabId, { isPinned: !tab.isPinned });
-              }
-            }}
+            onTogglePin={tabs.togglePin}
+            onTabReorder={tabs.reorderTabs}
             onViewHistory={(tabId) => {
               const tab = tabs.getTabState(tabId);
               if (tab && tab.filePath) {

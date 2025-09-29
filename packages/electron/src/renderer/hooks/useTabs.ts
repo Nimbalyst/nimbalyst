@@ -35,6 +35,8 @@ interface UseTabsResult {
   removeTab: (tabId: string) => void;
   switchTab: (tabId: string) => void;
   updateTab: (tabId: string, updates: Partial<TabData>) => void;
+  togglePin: (tabId: string) => void;
+  reorderTabs: (fromIndex: number, toIndex: number) => void;
   findTabByPath: (filePath: string) => TabData | undefined;
   saveTabState: (tabId: string, state: Partial<TabData>) => void;
   getTabState: (tabId: string) => TabData | undefined;
@@ -211,6 +213,67 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
       .forEach(tab => removeTab(tab.id));
   }, [tabs, removeTab]);
 
+  // Toggle pin status and move tab to appropriate position
+  const togglePin = useCallback((tabId: string): void => {
+    const tab = tabs.get(tabId);
+    if (!tab) return;
+
+    const newIsPinned = !tab.isPinned;
+
+    // Update the tab's pinned status
+    setTabs(prev => {
+      const newTabs = new Map(prev);
+      newTabs.set(tabId, { ...tab, isPinned: newIsPinned });
+      return newTabs;
+    });
+
+    // Reorder tabs based on pin status
+    setTabOrder(prev => {
+      const currentIndex = prev.indexOf(tabId);
+      if (currentIndex === -1) return prev;
+
+      const newOrder = [...prev];
+      newOrder.splice(currentIndex, 1); // Remove from current position
+
+      if (newIsPinned) {
+        // When pinning: find the last pinned tab and insert after it
+        let insertIndex = 0;
+        for (let i = 0; i < newOrder.length; i++) {
+          const t = tabs.get(newOrder[i]);
+          if (t?.isPinned) {
+            insertIndex = i + 1;
+          } else {
+            break; // Stop when we hit the first unpinned tab
+          }
+        }
+        newOrder.splice(insertIndex, 0, tabId);
+      } else {
+        // When unpinning: find the first unpinned tab and insert there
+        let insertIndex = newOrder.length;
+        for (let i = 0; i < newOrder.length; i++) {
+          const t = tabs.get(newOrder[i]);
+          if (!t?.isPinned) {
+            insertIndex = i;
+            break;
+          }
+        }
+        newOrder.splice(insertIndex, 0, tabId);
+      }
+
+      return newOrder;
+    });
+  }, [tabs]);
+
+  // Reorder tabs
+  const reorderTabs = useCallback((fromIndex: number, toIndex: number): void => {
+    setTabOrder(prev => {
+      const newOrder = [...prev];
+      const [removed] = newOrder.splice(fromIndex, 1);
+      newOrder.splice(toIndex, 0, removed);
+      return newOrder;
+    });
+  }, []);
+
   // Track if we've restored tabs (to avoid saving empty state on mount)
   const hasRestoredRef = useRef(false);
   const lastSavedStateRef = useRef<string>('');
@@ -333,19 +396,21 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
   }, [enabled]); // Only run once on mount when enabled
 
   const result = {
-    tabs: Array.from(tabs.values()),
+    tabs: tabOrder.map(id => tabs.get(id)!).filter(Boolean),
     activeTab,
     activeTabId,
     addTab,
     removeTab,
     switchTab,
     updateTab,
+    togglePin,
+    reorderTabs,
     findTabByPath,
     saveTabState,
     getTabState,
     closeAllTabs,
     closeSavedTabs
   };
-  
+
   return result;
 }

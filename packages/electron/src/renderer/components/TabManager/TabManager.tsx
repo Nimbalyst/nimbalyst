@@ -18,6 +18,7 @@ interface TabManagerProps {
   onTabSelect: (tabId: string) => void;
   onTabClose: (tabId: string) => void;
   onTogglePin: (tabId: string) => void;
+  onTabReorder: (fromIndex: number, toIndex: number) => void;
   onNewTab: () => void;
   onViewHistory?: (tabId: string) => void;
   children: React.ReactNode;
@@ -29,6 +30,7 @@ export const TabManager: React.FC<TabManagerProps> = ({
   onTabSelect,
   onTabClose,
   onTogglePin,
+  onTabReorder,
   onNewTab,
   onViewHistory,
   children
@@ -43,6 +45,7 @@ export const TabManager: React.FC<TabManagerProps> = ({
           onTabClose={onTabClose}
           onNewTab={onNewTab}
           onTogglePin={onTogglePin}
+          onTabReorder={onTabReorder}
           onViewHistory={onViewHistory}
         />
       )}

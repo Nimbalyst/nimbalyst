@@ -8,6 +8,7 @@ interface TabBarProps {
   onTabClose: (tabId: string) => void;
   onNewTab: () => void;
   onTogglePin: (tabId: string) => void;
+  onTabReorder: (fromIndex: number, toIndex: number) => void;
   onViewHistory?: (tabId: string) => void;
 }
 
@@ -18,31 +19,40 @@ export const TabBar: React.FC<TabBarProps> = ({
   onTabClose,
   onNewTab,
   onTogglePin,
+  onTabReorder,
   onViewHistory
 }) => {
   const [contextMenuTab, setContextMenuTab] = useState<string | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [showTabMenu, setShowTabMenu] = useState(false);
   const [menuSelectedIndex, setMenuSelectedIndex] = useState<number>(-1);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const isDraggingRef = useRef(false);
   const tabBarRef = useRef<HTMLDivElement>(null);
   const tabMenuRef = useRef<HTMLDivElement>(null);
 
   // Handle tab click
   const handleTabClick = useCallback((e: React.MouseEvent, tabId: string) => {
+    // Don't handle clicks if we're dragging
+    if (isDraggingRef.current) {
+      return;
+    }
+
     e.preventDefault();
     e.stopPropagation();
-    
+
     // Middle click to close
     if (e.button === 1) {
       onTabClose(tabId);
       return;
     }
-    
-    // Left click to select
-    if (e.button === 0) {
+
+    // Left click to select - only if not already active
+    if (e.button === 0 && tabId !== activeTabId) {
       onTabSelect(tabId);
     }
-  }, [onTabSelect, onTabClose]);
+  }, [onTabSelect, onTabClose, activeTabId]);
 
   // Handle close button click
   const handleCloseClick = useCallback((e: React.MouseEvent, tabId: string) => {
@@ -103,6 +113,53 @@ export const TabBar: React.FC<TabBarProps> = ({
     }
     closeContextMenu();
   }, [contextMenuTab, onViewHistory, closeContextMenu]);
+
+  // Drag and drop handlers
+  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
+    isDraggingRef.current = true;
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    if (draggedIndex !== null && draggedIndex !== index) {
+      setDragOverIndex(index);
+    }
+  }, [draggedIndex]);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverIndex(null);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+
+    if (draggedIndex !== null && draggedIndex !== dropIndex) {
+      onTabReorder(draggedIndex, dropIndex);
+    }
+
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+
+    // Reset drag flag after a short delay to prevent click from firing
+    setTimeout(() => {
+      isDraggingRef.current = false;
+    }, 100);
+  }, [draggedIndex, onTabReorder]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+
+    // Reset drag flag after a short delay to prevent click from firing
+    setTimeout(() => {
+      isDraggingRef.current = false;
+    }, 100);
+  }, []);
 
   // Toggle tab menu
   const toggleTabMenu = useCallback(() => {
@@ -264,8 +321,25 @@ export const TabBar: React.FC<TabBarProps> = ({
           {tabs.map((tab, index) => (
             <div
               key={tab.id}
-              className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isDirty ? 'dirty' : ''} ${tab.isPinned ? 'pinned' : ''}`}
-              onMouseDown={(e) => handleTabClick(e, tab.id)}
+              className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isDirty ? 'dirty' : ''} ${tab.isPinned ? 'pinned' : ''} ${draggedIndex === index ? 'dragging' : ''} ${dragOverIndex === index ? 'drag-over' : ''}`}
+              draggable={true}
+              onDragStart={(e) => handleDragStart(e, index)}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, index)}
+              onDragEnd={handleDragEnd}
+              onClick={(e) => {
+                // Only handle left clicks
+                if (e.button === 0) {
+                  handleTabClick(e, tab.id);
+                }
+              }}
+              onMouseDown={(e) => {
+                // Handle middle mouse button for close
+                if (e.button === 1) {
+                  handleTabClick(e, tab.id);
+                }
+              }}
               onContextMenu={(e) => handleContextMenu(e, tab.id)}
               title={tab.filePath}
             >
