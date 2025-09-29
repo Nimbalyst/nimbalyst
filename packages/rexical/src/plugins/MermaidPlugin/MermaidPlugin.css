@@ -4,9 +4,9 @@
 
 .mermaid-block {
   margin: 1rem 0;
-  border: 1px solid var(--editor-border, #e2e8f0);
+  border: 1px solid var(--stravu-editor-border, #e2e8f0);
   border-radius: 8px;
-  background: var(--editor-background, #ffffff);
+  background: var(--stravu-bg-primary, #ffffff);
   overflow: hidden;
 }
 
@@ -15,13 +15,13 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 1rem;
-  background: var(--editor-header-bg, #f8fafc);
-  border-bottom: 1px solid var(--editor-border, #e2e8f0);
+  background: var(--stravu-bg-secondary, #f8fafc);
+  border-bottom: 1px solid var(--stravu-editor-border, #e2e8f0);
 }
 
 .mermaid-label {
   font-weight: 500;
-  color: var(--editor-text, #1a202c);
+  color: var(--stravu-text-primary, #1a202c);
   font-size: 0.875rem;
   display: flex;
   align-items: center;
@@ -32,26 +32,26 @@
 .mermaid-edit-button {
   padding: 0.25rem 0.75rem;
   font-size: 0.75rem;
-  border: 1px solid var(--editor-border, #e2e8f0);
+  border: 1px solid var(--stravu-editor-border, #e2e8f0);
   border-radius: 4px;
-  background: var(--editor-button-bg, #ffffff);
-  color: var(--editor-text, #1a202c);
+  background: var(--stravu-bg-primary, #ffffff);
+  color: var(--stravu-text-primary, #1a202c);
   cursor: pointer;
   transition: background-color 0.2s, border-color 0.2s;
 }
 
 .mermaid-edit-button:hover:not(:disabled) {
-  background: var(--editor-hover-bg, #f1f5f9);
+  background: var(--stravu-hover-bg, #f1f5f9);
 }
 
 .mermaid-edit-button-active {
-  background: var(--editor-primary, #3b82f6);
+  background: var(--stravu-focus-border, #3b82f6);
   color: white;
-  border-color: var(--editor-primary, #3b82f6);
+  border-color: var(--stravu-focus-border, #3b82f6);
 }
 
 .mermaid-edit-button-active:hover {
-  background: var(--editor-primary-hover, #2563eb);
+  background: var(--stravu-active-bg, #2563eb);
 }
 
 .mermaid-edit-button:disabled {
@@ -74,19 +74,19 @@
 }
 
 .mermaid-loading {
-  color: var(--editor-muted, #64748b);
+  color: var(--stravu-text-muted, #64748b);
   font-size: 0.875rem;
   padding: 2rem;
   text-align: center;
 }
 
 .mermaid-error {
-  background: var(--editor-error-bg, #fee2e2);
-  border: 1px solid var(--editor-error-border, #fecaca);
+  background: #fee2e2;
+  border: 1px solid #fecaca;
   border-radius: 4px;
   padding: 1rem;
   margin: 1rem;
-  color: var(--editor-error-text, #991b1b);
+  color: #991b1b;
 }
 
 .mermaid-error strong {
@@ -111,39 +111,27 @@
   width: 100%;
   min-height: 80px;
   padding: 0.75rem;
-  border: 1px solid var(--editor-border, #e2e8f0);
+  border: 1px solid var(--stravu-editor-border, #e2e8f0);
   border-radius: 4px;
   font-family: monospace;
   font-size: 0.875rem;
   resize: none;
   overflow: hidden;
-  background: var(--editor-code-bg, #f8fafc);
-  color: var(--editor-text, #1a202c);
+  background: var(--stravu-code-bg, #f8fafc);
+  color: var(--stravu-text-primary, #1a202c);
   line-height: 1.5;
 }
 
 .mermaid-textarea:focus {
   outline: none;
-  border-color: var(--editor-focus, #3b82f6);
-  box-shadow: 0 0 0 3px var(--editor-focus-shadow, rgba(59, 130, 246, 0.1));
+  border-color: var(--stravu-focus-border, #3b82f6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-/* Dark theme support */
-[data-theme="dark"] .mermaid-block,
-.dark-theme .mermaid-block {
-  background: var(--editor-background, #1a1a1a);
-  border-color: var(--editor-border, #333333);
-}
-
-[data-theme="dark"] .mermaid-header,
-.dark-theme .mermaid-header {
-  background: var(--editor-header-bg, #2d2d2d);
-  border-color: var(--editor-border, #333333);
-}
-
-[data-theme="dark"] .mermaid-textarea,
-.dark-theme .mermaid-textarea {
-  background: var(--editor-code-bg, #2d2d2d);
-  color: var(--editor-text, #e5e5e5);
-  border-color: var(--editor-border, #333333);
+/* Dark theme error styles */
+.stravu-editor[data-theme="dark"] .mermaid-error,
+.stravu-editor[data-theme="crystal-dark"] .mermaid-error {
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  color: #fca5a5;
 }

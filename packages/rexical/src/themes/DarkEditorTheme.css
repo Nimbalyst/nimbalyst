@@ -16,49 +16,49 @@
   --stravu-text-primary: #ffffff;
   --stravu-text-secondary: #b3b3b3;
   --stravu-text-muted: #8a8a8a;
-  
+
   /* Editor specific colors */
   --stravu-editor-bg: #2d2d2d;
   --stravu-editor-text: #ffffff;
   --stravu-editor-border: #4a4a4a;
-  
+
   /* Code colors */
   --stravu-code-bg: #1e1e1e;
   --stravu-code-gutter-bg: #2a2a2a;
   --stravu-code-border: #4a4a4a;
   --stravu-code-text: #d4d4d4;
-  
+
   /* Table colors */
   --stravu-table-border: #4a4a4a;
   --stravu-table-header-bg: #3a3a3a;
   --stravu-table-cell-bg: #2d2d2d;
   --stravu-table-stripe-bg: #363636;
   --stravu-table-frozen-bg: #2d2d2d;
-  
+
   /* Interactive colors */
   --stravu-hover-bg: #3a3a3a;
   --stravu-active-bg: #4a4a4a;
   --stravu-selection-bg: #4a5568;
   --stravu-focus-border: #60a5fa;
-  
+
   /* Toolbar colors */
   --stravu-toolbar-bg: #2d2d2d;
   --stravu-toolbar-border: #4a4a4a;
   --stravu-toolbar-button-hover: #3a3a3a;
   --stravu-toolbar-button-active: rgba(96, 165, 250, 0.2);
-  
+
   /* Link colors */
   --stravu-link-color: #60a5fa;
   --stravu-link-hover: #93c5fd;
-  
+
   /* Highlight colors */
   --stravu-highlight-bg: rgba(255, 212, 0, 0.2);
   --stravu-highlight-border: rgba(255, 212, 0, 0.4);
-  
+
   /* Quote colors */
   --stravu-quote-text: #b3b3b3;
   --stravu-quote-border: #4a4a4a;
-  
+
   /* Heading colors */
   --stravu-h1-color: #ffffff;
   --stravu-h2-color: #e5e5e5;

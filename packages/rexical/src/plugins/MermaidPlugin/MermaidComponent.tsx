@@ -7,6 +7,7 @@ import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext
 import { $getNodeByKey, NodeKey } from 'lexical';
 import { $isMermaidNode } from './MermaidNode';
 import { ErrorBoundary } from 'react-error-boundary';
+import { useTheme } from '../../context/ThemeContext';
 import './MermaidPlugin.css';
 
 interface MermaidComponentProps {
@@ -17,18 +18,23 @@ interface MermaidComponentProps {
 
 // Dynamic import to avoid bundling mermaid when not needed
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
+let currentTheme: string | null = null;
 
-function loadMermaid() {
-  if (!mermaidPromise) {
+function loadMermaid(isDarkTheme: boolean) {
+  const theme = isDarkTheme ? 'dark' : 'default';
+
+  // Re-initialize if theme changed
+  if (!mermaidPromise || currentTheme !== theme) {
     mermaidPromise = import('mermaid').then((module) => {
       const mermaid = module.default;
       mermaid.initialize({
         startOnLoad: false,
-        theme: 'default',
+        theme: theme,
         securityLevel: 'antiscript',
         fontFamily: 'monospace',
         suppressErrorRendering: true,
       });
+      currentTheme = theme;
       return mermaid;
     });
   }
@@ -40,6 +46,8 @@ function MermaidDiagram({ content, id }: { content: string; id: string }) {
   const [loading, setLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const renderTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { theme } = useTheme();
+  const isDarkTheme = theme === 'dark' || theme === 'crystal-dark';
 
   useEffect(() => {
     let mounted = true;
@@ -52,7 +60,7 @@ function MermaidDiagram({ content, id }: { content: string; id: string }) {
     // Debounce the render by 500ms
     renderTimeoutRef.current = setTimeout(async () => {
       try {
-        const mermaid = await loadMermaid();
+        const mermaid = await loadMermaid(isDarkTheme);
 
         if (!mounted) return;
 
@@ -94,7 +102,7 @@ function MermaidDiagram({ content, id }: { content: string; id: string }) {
         clearTimeout(renderTimeoutRef.current);
       }
     };
-  }, [content, id]);
+  }, [content, id, isDarkTheme]);
 
   return (
     <div className="mermaid-diagram">
