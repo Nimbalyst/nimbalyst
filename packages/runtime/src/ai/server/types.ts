@@ -58,16 +58,22 @@ export interface AIModel {
 
 export interface SessionData {
   id: string;  // Our session ID
-  provider: AIProviderType;  // Provider type, locked per session
+  provider: AIProviderType | string;  // Provider type
   model?: string;  // Specific model used (e.g., 'gpt-4', 'claude-3-5-sonnet')
-  timestamp: number;
   messages: Message[];
   documentContext?: DocumentContext;
   workspacePath?: string;
   name?: string;
   title?: string;
   draftInput?: string;
-  
+
+  // Time tracking
+  createdAt: number;  // Creation timestamp
+  updatedAt: number;  // Last update timestamp
+
+  // Additional metadata
+  metadata?: Record<string, unknown>;
+
   // Provider-specific data
   providerSessionId?: string;  // For Claude Code's internal session ID
   providerConfig?: {
@@ -81,6 +87,7 @@ export interface ProviderConfig {
   model?: string;
   maxTokens?: number;
   temperature?: number;
+  baseUrl?: string;
 }
 
 export interface ProviderCapabilities {
@@ -138,7 +145,25 @@ export interface DiffResult {
 }
 
 export interface ToolHandler {
-  applyDiff(args: DiffArgs): Promise<DiffResult>;
-  // Dynamic tool execution
+  // All methods are optional - handlers can implement any subset
+  applyDiff?(args: DiffArgs): Promise<DiffResult>;
+  // Stream content tool for real-time streaming
+  streamContent?(args: any): Promise<any>;
+  // File search tool
+  searchFiles?(args: any): Promise<any>;
+  // List files tool
+  listFiles?(args: any): Promise<any>;
+  // Read file tool
+  readFile?(args: any): Promise<any>;
+  // Write file tool
+  writeFile?(args: any): Promise<any>;
+  // Get document content
+  getDocumentContent?(args: any): Promise<any>;
+  // Update frontmatter
+  updateFrontmatter?(args: any): Promise<any>;
+  // Dynamic tool execution - for any other tool
+  // Note: executeTool has different signature (name, args) so we handle it separately
   executeTool?(name: string, args: any): Promise<any>;
+  // Dynamic property access for other tools
+  [key: string]: ((args: any) => Promise<any>) | ((name: string, args: any) => Promise<any>) | undefined;
 }

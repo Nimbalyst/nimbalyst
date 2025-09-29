@@ -139,7 +139,11 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
           // Fallback to built-in handlers
           switch (name) {
             case 'applyDiff':
-              result = await this.toolHandler.applyDiff(args);
+              if (this.toolHandler.applyDiff) {
+                result = await this.toolHandler.applyDiff(args);
+              } else {
+                throw new Error('applyDiff not implemented in handler');
+              }
               break;
             default:
               throw new Error(`Tool ${name} not implemented in handler`);

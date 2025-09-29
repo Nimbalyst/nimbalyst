@@ -133,19 +133,19 @@ root.render(<App />);`
     // Register tool handlers to capture tool calls
     const toolCalls: any[] = [];
     provider.registerToolHandler({
-      searchFiles: async (args) => {
+      searchFiles: async (args: any) => {
         toolCalls.push({ tool: 'searchFiles', args });
         const result = await mockFileSystemService.searchFiles(args.query, args);
         console.log('searchFiles result:', result);
         return result;
       },
-      listFiles: async (args) => {
+      listFiles: async (args: any) => {
         toolCalls.push({ tool: 'listFiles', args });
         const result = await mockFileSystemService.listFiles(args);
         console.log('listFiles result:', result);
         return result;
       },
-      readFile: async (args) => {
+      readFile: async (args: any) => {
         toolCalls.push({ tool: 'readFile', args });
         const result = await mockFileSystemService.readFile(args.path, args);
         console.log('readFile result:', result);
@@ -196,19 +196,19 @@ root.render(<App />);`
     // Register tool handlers
     const toolCalls: any[] = [];
     provider.registerToolHandler({
-      searchFiles: async (args) => {
+      searchFiles: async (args: any) => {
         toolCalls.push({ tool: 'searchFiles', args });
         const result = await mockFileSystemService.searchFiles(args.query, args);
         console.log('searchFiles result:', result);
         return result;
       },
-      listFiles: async (args) => {
+      listFiles: async (args: any) => {
         toolCalls.push({ tool: 'listFiles', args });
         const result = await mockFileSystemService.listFiles(args);
         console.log('listFiles result:', result);
         return result;
       },
-      readFile: async (args) => {
+      readFile: async (args: any) => {
         toolCalls.push({ tool: 'readFile', args });
         const result = await mockFileSystemService.readFile(args.path, args);
         console.log('readFile result:', result);

@@ -52,7 +52,7 @@ describe('OpenAICodexProvider', () => {
 
     it('should register tool handler', () => {
       const mockHandler = {
-        applyDiff: () => {},
+        applyDiff: () => Promise.resolve({ success: true }),
         executeTool: () => Promise.resolve({ result: 'test' })
       };
 
@@ -103,10 +103,10 @@ describe('OpenAICodexProvider', () => {
             hasError = true;
             errorMessage = chunk.error || '';
             console.log('[TEST] Got error:', errorMessage);
-          } else if (chunk.type === 'finish') {
-            console.log('[TEST] Got finish chunk with text:', chunk.text);
-            if (chunk.text) {
-              response += chunk.text;
+          } else if (chunk.type === 'complete') {
+            console.log('[TEST] Got complete chunk with content:', chunk.content);
+            if (chunk.content) {
+              response += chunk.content;
             }
             break;
           }
@@ -164,7 +164,7 @@ describe('OpenAICodexProvider', () => {
         workingDirectory: '/tmp'
       });
 
-      expect(result.isError).toBe(true);
+      expect(result.error).toBeTruthy();
       expect(result.result).toContain('not supported');
     });
   });

@@ -10,7 +10,7 @@ import {
 import { $createDocumentReferenceNode } from './DocumentLinkNode';
 import { DocumentService } from '../../core/DocumentService';
 import documentLinkStyles from './DocumentLinkPlugin.css?inline';
-import { TypeaheadMenuOption } from "rexical/dist/plugins/TypeaheadPlugin/TypeaheadMenu";
+import { TypeaheadMenuOption } from "rexical";
 
 const DOCUMENT_REFERENCE_STYLE_ID = 'document-reference-styles';
 

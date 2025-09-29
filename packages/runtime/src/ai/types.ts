@@ -1,3 +1,21 @@
+// Import and re-export types from server types to avoid duplication
+import type { Message, DocumentContext, SessionData } from './server/types';
+export type { Message, DocumentContext, SessionData };
+
+// Core AI types
+export interface AIToolCall {
+  id?: string;
+  name: string;
+  arguments?: any;
+  result?: any;
+}
+
+export interface AIToolResult {
+  success: boolean;
+  result?: any;
+  error?: string;
+}
+
 // AI Stream Response types - MUST match what UI expects!
 export type AIStreamChunk =
   | { type: 'text'; content: string }  // Text content - MUST use 'content' not 'text'!
@@ -11,11 +29,6 @@ export type AIStreamChunk =
 
 export type AIStreamResponse = AsyncIterableIterator<AIStreamChunk>;
 
-export interface DocumentContext {
-  filePath?: string;
-  fileType?: string;
-  content: string;
-}
 
 export type StreamingMode = 'extend' | 'after' | 'append' | 'replace' | 'insert';
 
@@ -35,41 +48,17 @@ export interface ProviderRequest {
   headers?: Record<string, string>;
 }
 
-export interface ChatToolCall {
+// ChatMessage removed - use Message directly from server/types
+
+// ChatToolCall is the same structure as the toolCall field in Message
+export type ChatToolCall = {
   id?: string;
   name: string;
   arguments?: any;
   result?: any;
-}
+};
 
-export interface ChatMessage {
-  role: 'user' | 'assistant' | 'tool';
-  content: string;
-  timestamp: number;
-  edits?: any[];
-  toolCall?: ChatToolCall;
-  isStreamingStatus?: boolean;
-  streamingData?: {
-    position: string;
-    mode: string;
-    content: string;
-    isActive: boolean;
-  };
-  isError?: boolean;
-  errorMessage?: string;
-}
-
-export interface ChatSession {
-  id: string;
-  provider: string;
-  model?: string;
-  title?: string;
-  draftInput?: string;
-  messages: ChatMessage[];
-  createdAt: number;
-  updatedAt: number;
-  metadata?: Record<string, unknown>;
-}
+// ChatSession removed - use SessionData directly from server/types
 
 export type StreamEvent =
   | { type: 'start'; config: StreamingConfig }

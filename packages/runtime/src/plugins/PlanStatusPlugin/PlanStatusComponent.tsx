@@ -9,7 +9,7 @@ import {
   type FrontmatterData,
 } from 'rexical';
 import './PlanStatus.css';
-import { PlanStatusConfig } from './PlanStatusDecoratorNode';
+import { PlanStatusConfig, PlanStatus, PlanPriority } from './PlanStatusDecoratorNode';
 
 interface PlanStatusComponentProps {
   nodeKey: NodeKey;
@@ -102,7 +102,7 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
           Array.isArray(tagsValue)
             ? tagsValue
             : typeof tagsValue === 'string' && tagsValue
-            ? tagsValue.split(',').map(t => t.trim()).filter(Boolean)
+            ? (tagsValue as string).split(',').map(t => t.trim()).filter(Boolean)
             : []
         );
 
@@ -324,7 +324,7 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
                     onClick={(e) => {
                       e.stopPropagation();
                       setStatus(option.value);
-                      updateNodeState({ status: option.value });
+                      updateNodeState({ status: option.value as PlanStatus });
                       setShowStatusDropdown(false);
                     }}
                   >
@@ -366,7 +366,7 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
                       onClick={(e) => {
                         e.stopPropagation();
                         setPriority(option.value);
-                        updateNodeState({ priority: option.value });
+                        updateNodeState({ priority: option.value as PlanPriority });
                         setShowPriorityDropdown(false);
                       }}
                     >

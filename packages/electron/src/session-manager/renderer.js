@@ -123,7 +123,7 @@ function renderSessionsList() {
   container.innerHTML = filteredSessions.map(session => {
     const title = getSessionTitle(session);
     const workspaceName = getWorkspaceName(session.workspacePath);
-    const date = formatDate(session.timestamp);
+    const date = formatDate(session.createdAt);
     const messageCount = session.messages ? session.messages.length : 0;
     const isSelected = selectedSession && selectedSession.id === session.id;
     const provider = session.provider || 'claude-code';
@@ -179,7 +179,7 @@ function renderSessionContent(session) {
   
   const title = getSessionTitle(session);
   const workspaceName = getWorkspaceName(session.workspacePath);
-  const date = formatDate(session.timestamp);
+  const date = formatDate(session.createdAt);
   const messageCount = session.messages ? session.messages.length : 0;
   const provider = session.provider || 'claude-code';
   const providerLabel = provider === 'claude' ? 'Claude SDK' : 'Claude Code';

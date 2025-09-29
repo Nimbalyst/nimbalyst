@@ -339,7 +339,7 @@ export class OpenAIProvider extends BaseAIProvider {
                 };
                 
                 // Execute applyDiff if handler is available
-                if (toolCall.function.name === 'applyDiff' && this.toolHandler) {
+                if (toolCall.function.name === 'applyDiff' && this.toolHandler && this.toolHandler.applyDiff) {
                   console.log(`[OpenAIProvider] Executing applyDiff with args:`, JSON.stringify(args, null, 2));
                   const toolStartTime = Date.now();
                   const result = await this.toolHandler.applyDiff(args);

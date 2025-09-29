@@ -1,21 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MaterialSymbol } from '../MaterialSymbol';
 import { parseModelInfo, getProviderLabel } from '../../utils/modelUtils';
+import type { SessionData } from '@stravu/runtime/ai/server/types';
 import './SessionDropdown.css';
 
-interface Session {
-  id: string;
-  timestamp: number;
-  name?: string;
-  title?: string;
+// SessionDropdownItem extends SessionData with message count for display
+type SessionDropdownItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' | 'provider' | 'model'> & {
   messageCount?: number;
-  provider?: string;
-  model?: string;
-}
+};
 
 interface SessionDropdownProps {
   currentSessionId: string | null;
-  sessions: Session[];
+  sessions: SessionDropdownItem[];
   onSessionSelect: (sessionId: string) => void;
   onNewSession: () => void;
   onDeleteSession: (sessionId: string) => void;
@@ -56,16 +52,16 @@ export function SessionDropdown({
     if (session?.title) return session.title;
     if (session?.name) return session.name;
     if (session) {
-      const date = new Date(session.timestamp);
+      const date = new Date(session.createdAt);
       return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
     return 'Current Session';
   };
 
-  const formatSessionName = (session: Session) => {
+  const formatSessionName = (session: SessionDropdownItem) => {
     if (session.title) return session.title;
     if (session.name) return session.name;
-    const date = new Date(session.timestamp);
+    const date = new Date(session.createdAt);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 

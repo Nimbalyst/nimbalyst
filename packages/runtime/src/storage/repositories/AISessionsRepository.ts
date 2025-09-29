@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatSession } from '../../ai/types';
+import type { Message, SessionData } from '../../ai/server/types';
 import {
   type CreateSessionPayload,
   type SessionListItem,
@@ -41,11 +41,11 @@ export const AISessionsRepository = {
     await requireStore().create(payload);
   },
 
-  async appendMessage(sessionId: string, message: ChatMessage): Promise<void> {
+  async appendMessage(sessionId: string, message: Message): Promise<void> {
     await requireStore().appendMessage(sessionId, message);
   },
 
-  async replaceMessages(sessionId: string, messages: ChatMessage[]): Promise<void> {
+  async replaceMessages(sessionId: string, messages: Message[]): Promise<void> {
     await requireStore().replaceMessages(sessionId, messages);
   },
 
@@ -53,7 +53,7 @@ export const AISessionsRepository = {
     await requireStore().updateMetadata(sessionId, metadata);
   },
 
-  async get(sessionId: string): Promise<ChatSession | null> {
+  async get(sessionId: string): Promise<SessionData | null> {
     return await requireStore().get(sessionId);
   },
 

@@ -383,7 +383,7 @@ export class LMStudioProvider extends BaseAIProvider {
                         };
                         
                         // Execute tool if handler available
-                        if (currentToolCall.function.name === 'applyDiff' && this.toolHandler) {
+                        if (currentToolCall.function.name === 'applyDiff' && this.toolHandler && this.toolHandler.applyDiff) {
                           await this.toolHandler.applyDiff(args);
                         }
                         

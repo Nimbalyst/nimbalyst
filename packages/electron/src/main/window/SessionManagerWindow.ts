@@ -163,7 +163,7 @@ export function registerSessionManagerHandlers() {
       }
     }
 
-    allSessions.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+    allSessions.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
 
     return allSessions;
   });

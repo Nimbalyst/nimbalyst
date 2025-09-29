@@ -132,3 +132,4 @@ export { FrontmatterProvider, useFrontmatterUtils, type FrontmatterUtils } from 
 
 // Typeahead components
 export { TypeaheadMenuPlugin } from './plugins/TypeaheadPlugin/TypeaheadMenuPlugin';
+export type { TypeaheadMenuOption } from './plugins/TypeaheadPlugin/TypeaheadMenu';

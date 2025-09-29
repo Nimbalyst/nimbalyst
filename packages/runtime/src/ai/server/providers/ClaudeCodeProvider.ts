@@ -77,7 +77,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           this.claudeCodeModule = await import(fileUrl);
           console.log(`[ClaudeCodeProvider] SDK module loaded, checking for query function...`);
 
-          this.queryFunction = this.claudeCodeModule.query || this.claudeCodeModule.default?.query;
+          this.queryFunction = this.claudeCodeModule?.query;
           if (!this.queryFunction) {
             console.warn(`[ClaudeCodeProvider] No query function found in module at ${sdkPath}`);
             continue;
@@ -249,7 +249,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   // If it's an applyDiff tool (including MCP variant), execute it
                   // Note: For MCP tools, Claude Code handles the execution internally
                   // We only execute non-MCP applyDiff calls here
-                  if (block.name === 'applyDiff' && this.toolHandler) {
+                  if (block.name === 'applyDiff' && this.toolHandler && this.toolHandler.applyDiff) {
                     console.log(`[ClaudeCodeProvider] Executing non-MCP applyDiff tool`);
                     try {
                       const result = await this.toolHandler.applyDiff(block.input as DiffArgs);
@@ -287,7 +287,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
             // Handle applyDiff - only non-MCP versions
             // MCP tools are handled by the MCP server directly
-            if (toolChunk.name === 'applyDiff' && toolChunk.input && this.toolHandler) {
+            if (toolChunk.name === 'applyDiff' && toolChunk.input && this.toolHandler && this.toolHandler.applyDiff) {
               console.log(`[ClaudeCodeProvider] Executing non-MCP applyDiff tool (standalone)`);
               try {
                 const result = await this.toolHandler.applyDiff(toolChunk.input as DiffArgs);

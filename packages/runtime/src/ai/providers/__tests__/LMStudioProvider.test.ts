@@ -75,7 +75,7 @@ describe('LMStudio Provider - Tool Usage', () => {
     
     // Register tool handler that captures the edit requests
     provider.registerToolHandler({
-      applyDiff: async (args) => {
+      applyDiff: async (args: any) => {
         console.log('📝 applyDiff called with:', JSON.stringify(args, null, 2));
         editsReceived.push(args);
         return { success: true, message: 'Edit applied' };
@@ -99,11 +99,11 @@ describe('LMStudio Provider - Tool Usage', () => {
       chunks.push(chunk);
       
       // LMStudio sends tool calls differently - log everything
-      if (chunk.type === 'tool_call') {
+      if (chunk.type === 'tool_call' && chunk.toolCall) {
         toolCallStarted = true;
         console.log(`🔧 Tool called: ${chunk.toolCall.name}`);
         console.log('Tool args:', JSON.stringify(chunk.toolCall.arguments, null, 2));
-        
+
         // Tool call completed
         editsReceived.push(chunk.toolCall.arguments);
       }
@@ -123,7 +123,7 @@ describe('LMStudio Provider - Tool Usage', () => {
     
     if (toolCallChunks.length > 0) {
       // Verify the tool was called
-      expect(toolCallChunks[0].toolCall.name).toBe('applyDiff');
+      expect(toolCallChunks[0].toolCall?.name).toBe('applyDiff');
       
       // Verify we received edit instructions
       expect(editsReceived.length).toBeGreaterThan(0);
@@ -180,7 +180,7 @@ describe('LMStudio Provider - Tool Usage', () => {
     
     // Register tool handler
     provider.registerToolHandler({
-      streamContent: async (args) => {
+      streamContent: async (args: any) => {
         console.log('📝 streamContent called with:', JSON.stringify(args, null, 2));
         streamedContent.push(args.content);
         return { success: true };
@@ -203,7 +203,7 @@ describe('LMStudio Provider - Tool Usage', () => {
         console.log('🚀 Stream started');
       }
       
-      if (chunk.type === 'stream_edit_content') {
+      if (chunk.type === 'stream_edit_content' && chunk.content !== undefined) {
         streamedContent.push(chunk.content);
         console.log('📝 Streaming:', chunk.content);
       }
@@ -213,7 +213,7 @@ describe('LMStudio Provider - Tool Usage', () => {
         console.log('✅ Stream ended');
       }
       
-      if (chunk.type === 'tool_call' && chunk.toolCall.name === 'streamContent') {
+      if (chunk.type === 'tool_call' && chunk.toolCall?.name === 'streamContent') {
         console.log('🔧 streamContent tool called');
       }
       

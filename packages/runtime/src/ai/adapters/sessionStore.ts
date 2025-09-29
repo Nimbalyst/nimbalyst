@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatSession } from '../types';
+import type { Message, SessionData } from '../server/types';
 
 export interface SessionListItem {
   id: string;
@@ -28,10 +28,10 @@ export interface UpdateSessionMetadataPayload extends Partial<CreateSessionPaylo
 export interface SessionStore {
   ensureReady(): Promise<void>;
   create(payload: CreateSessionPayload): Promise<void>;
-  appendMessage(sessionId: string, message: ChatMessage): Promise<void>;
-  replaceMessages(sessionId: string, messages: ChatMessage[]): Promise<void>;
+  appendMessage(sessionId: string, message: Message): Promise<void>;
+  replaceMessages(sessionId: string, messages: Message[]): Promise<void>;
   updateMetadata(sessionId: string, metadata: UpdateSessionMetadataPayload): Promise<void>;
-  get(sessionId: string): Promise<ChatSession | null>;
+  get(sessionId: string): Promise<SessionData | null>;
   list(workspaceId: string): Promise<SessionListItem[]>;
   delete(sessionId: string): Promise<void>;
 }

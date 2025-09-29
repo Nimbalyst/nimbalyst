@@ -118,14 +118,14 @@ export const planStatusPluginPackage: PluginPackage<PlanStatusPluginProps> = {
     {
       title: 'Insert Plan Status',
       description: 'Add a plan status block to track project progress',
-      icon: <i className="icon checklist" />,
+      icon: 'checklist',
       keywords: ['plan', 'status', 'project', 'tracking'],
       command: INSERT_PLAN_STATUS_COMMAND,
     },
     {
       title: 'Insert Plan Table',
       description: 'Add a table showing all plan documents',
-      icon: <i className="icon table" />,
+      icon: 'table',
       keywords: ['plan', 'table', 'list', 'overview', 'dashboard'],
       command: INSERT_PLAN_TABLE_COMMAND,
     },

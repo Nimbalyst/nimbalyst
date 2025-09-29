@@ -69,14 +69,14 @@ describe('FileSystemService Mock Implementation', () => {
           {
             path: 'src/index.ts',
             name: 'index.ts',
-            type: 'file',
+            type: 'file' as const,
             size: 1234,
             modified: '2024-01-01T00:00:00Z',
           },
           {
             path: 'src/components',
             name: 'components',
-            type: 'directory',
+            type: 'directory' as const,
             size: 0,
             modified: '2024-01-01T00:00:00Z',
           },

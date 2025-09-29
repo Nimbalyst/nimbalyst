@@ -1,23 +1,23 @@
-import { ChatMessage, ChatSession } from './types';
+import { Message, SessionData } from './server/types';
 
 export interface SessionStorageAdapter {
-  loadSessions(): Promise<Record<string, ChatSession>>;
-  saveSessions(data: Record<string, ChatSession>): Promise<void>;
+  loadSessions(): Promise<Record<string, SessionData>>;
+  saveSessions(data: Record<string, SessionData>): Promise<void>;
 }
 
 class MemoryStorageAdapter implements SessionStorageAdapter {
-  private cache: Record<string, ChatSession> = {};
-  async loadSessions(): Promise<Record<string, ChatSession>> {
+  private cache: Record<string, SessionData> = {};
+  async loadSessions(): Promise<Record<string, SessionData>> {
     return { ...this.cache };
   }
-  async saveSessions(data: Record<string, ChatSession>): Promise<void> {
+  async saveSessions(data: Record<string, SessionData>): Promise<void> {
     this.cache = { ...data };
   }
 }
 
 class LocalStorageAdapter implements SessionStorageAdapter {
   private key = 'stravu-runtime-ai-sessions-v1';
-  async loadSessions(): Promise<Record<string, ChatSession>> {
+  async loadSessions(): Promise<Record<string, SessionData>> {
     if (typeof window === 'undefined' || !window.localStorage) {
       return {};
     }
@@ -26,14 +26,14 @@ class LocalStorageAdapter implements SessionStorageAdapter {
       if (!raw) return {};
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
-        return parsed as Record<string, ChatSession>;
+        return parsed as Record<string, SessionData>;
       }
     } catch (error) {
       console.warn('[runtime][SessionManager] Failed to load sessions from localStorage', error);
     }
     return {};
   }
-  async saveSessions(data: Record<string, ChatSession>): Promise<void> {
+  async saveSessions(data: Record<string, SessionData>): Promise<void> {
     if (typeof window === 'undefined' || !window.localStorage) {
       return;
     }
@@ -61,7 +61,7 @@ export interface CreateSessionOptions {
 }
 
 export class SessionManager {
-  private sessions: Record<string, ChatSession> = {};
+  private sessions: Record<string, SessionData> = {};
   private adapter: SessionStorageAdapter;
   private initialized = false;
 
@@ -75,18 +75,18 @@ export class SessionManager {
     this.initialized = true;
   }
 
-  list(): ChatSession[] {
-    return Object.values(this.sessions).sort((a, b) => b.updatedAt - a.updatedAt);
+  list(): SessionData[] {
+    return Object.values(this.sessions).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }
 
-  get(sessionId: string | null | undefined): ChatSession | null {
+  get(sessionId: string | null | undefined): SessionData | null {
     if (!sessionId) return null;
     return this.sessions[sessionId] || null;
   }
 
-  async create(options: CreateSessionOptions): Promise<ChatSession> {
+  async create(options: CreateSessionOptions): Promise<SessionData> {
     const now = Date.now();
-    const session: ChatSession = {
+    const session: SessionData = {
       id: options.id || `session-${now}-${Math.random().toString(36).slice(2, 8)}`,
       provider: options.provider,
       model: options.model,
@@ -124,7 +124,7 @@ export class SessionManager {
     await this.persist();
   }
 
-  async addMessage(sessionId: string, message: ChatMessage): Promise<void> {
+  async addMessage(sessionId: string, message: Message): Promise<void> {
     const session = this.sessions[sessionId];
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
@@ -134,7 +134,7 @@ export class SessionManager {
     await this.persist();
   }
 
-  async replaceMessages(sessionId: string, messages: ChatMessage[]): Promise<void> {
+  async replaceMessages(sessionId: string, messages: Message[]): Promise<void> {
     const session = this.sessions[sessionId];
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);

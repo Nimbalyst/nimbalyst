@@ -1,26 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { ChatMessage } from './ChatMessage';
 import { StreamingStatus } from './StreamingStatus';
+import type { Message } from '@stravu/runtime/ai/server/types';
 
-interface Message {
-  role: 'user' | 'assistant' | 'tool';
-  content: string;
-  edits?: any[];
-  toolCall?: {
-    name: string;
-    arguments?: any;
-    result?: any;
-  };
-  isStreamingStatus?: boolean;
-  streamingData?: {
-    position: string;
-    mode: string;
-    content: string;
-    isActive: boolean;
-  };
-  isError?: boolean;
-  errorMessage?: string;
-}
+// Message type is now imported from runtime package
 
 interface ChatMessagesProps {
   messages: Message[];

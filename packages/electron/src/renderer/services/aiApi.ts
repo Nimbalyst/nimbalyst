@@ -1,5 +1,6 @@
 import { detectStreamingIntent, parseStreamingChunk, StreamingEditRequest } from './aiStreamProtocol';
 import { logger } from '../utils/logger';
+import type { DocumentContext, Message, SessionData } from '@stravu/runtime/ai/server/types';
 
 const LOG_PREVIEW_LENGTH = 400;
 
@@ -8,13 +9,7 @@ const previewForLog = (value?: string, max: number = LOG_PREVIEW_LENGTH): string
   return value.length > max ? `${value.slice(0, max)}…` : value;
 };
 
-interface DocumentContext {
-  filePath: string;
-  fileType: string;
-  content: string;
-  cursorPosition?: { line: number; column: number };
-  selection?: { start: { line: number; column: number }; end: { line: number; column: number } };
-}
+// DocumentContext is now imported from runtime package
 
 interface EditRequest {
   type: 'edit' | 'insert' | 'delete' | 'replace' | 'stream';
@@ -27,22 +22,8 @@ interface EditRequest {
   preview: boolean;
 }
 
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: number;
-  edits?: EditRequest[];
-}
-
-interface Session {
-  id: string;
-  timestamp: number;
-  messages: Message[];
-  documentContext?: DocumentContext;
-  provider?: 'claude' | 'claude-code' | 'openai';
-  model?: string;
-  providerConfig?: any;
-}
+// Message type is now imported from runtime package
+// Using SessionData directly from runtime package
 
 class AIApi {
   private listeners: Map<string, Set<Function>> = new Map();
@@ -308,7 +289,7 @@ class AIApi {
     workspacePath?: string,
     provider?: 'claude' | 'claude-code' | 'openai' | 'lmstudio',
     modelId?: string
-  ): Promise<Session> {
+  ): Promise<SessionData> {
     // Provider must be explicitly specified, no default
     if (!provider) {
       throw new Error('Provider must be specified when creating a session');
@@ -322,7 +303,7 @@ class AIApi {
     documentContext?: DocumentContext,
     workspacePath?: string,
     modelId?: string
-  ): Promise<Session> {
+  ): Promise<SessionData> {
     return window.electronAPI.aiCreateSession(provider, documentContext, workspacePath, modelId);
   }
 
@@ -335,11 +316,11 @@ class AIApi {
     return window.electronAPI.aiSendMessage(message, documentContext, sessionId, workspacePath);
   }
 
-  async getSessions(workspacePath?: string): Promise<Session[]> {
+  async getSessions(workspacePath?: string): Promise<SessionData[]> {
     return window.electronAPI.aiGetSessions(workspacePath);
   }
 
-  async loadSession(sessionId: string, workspacePath?: string): Promise<Session> {
+  async loadSession(sessionId: string, workspacePath?: string): Promise<SessionData> {
     return window.electronAPI.aiLoadSession(sessionId, workspacePath);
   }
 

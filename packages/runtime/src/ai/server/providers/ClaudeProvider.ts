@@ -4,12 +4,12 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { BaseAIProvider } from '../AIProvider';
-import { 
-  DocumentContext, 
-  ProviderConfig, 
-  ProviderCapabilities, 
+import {
+  DocumentContext,
+  ProviderConfig,
+  ProviderCapabilities,
   StreamChunk,
-  AIModel 
+  AIModel
 } from '../types';
 import { CLAUDE_MODELS, DEFAULT_MODELS } from '../../modelConstants';
 
@@ -32,9 +32,9 @@ export class ClaudeProvider extends BaseAIProvider {
       model: config.model,
       maxTokens: config.maxTokens
     });
-    
+
     this.config = config;
-    
+
     if (!config.apiKey) {
       throw new Error('API key required for Claude provider');
     }
@@ -48,7 +48,7 @@ export class ClaudeProvider extends BaseAIProvider {
   }
 
   async *sendMessage(
-    message: string, 
+    message: string,
     documentContext?: DocumentContext,
     sessionId?: string,
     messages?: any[]
@@ -132,7 +132,7 @@ export class ClaudeProvider extends BaseAIProvider {
 
       console.log('[ClaudeProvider] About to call Anthropic API with model:', modelId);
       console.log('[ClaudeProvider] Stack trace:', new Error().stack);
-      
+
       // Use the stream helper for better usage data support
       const apiRequest = {
         model: modelId,
@@ -155,10 +155,8 @@ export class ClaudeProvider extends BaseAIProvider {
 
       const stream = this.anthropic.messages.stream(apiRequest);
 
-      // Set the abort signal
-      if (this.abortController.signal) {
-        stream._run.controller = this.abortController;
-      }
+      // Note: Cannot directly set abort controller on stream due to protected access
+      // The stream will be aborted through the provider's abort() method if needed
 
       let fullContent = '';
       let currentToolUse: any = null;
@@ -177,7 +175,7 @@ export class ClaudeProvider extends BaseAIProvider {
           deltaType: chunk.delta?.type,
           partialJsonLength: chunk.delta?.partial_json?.length
         });
-        
+
         if (chunk.type === 'content_block_start') {
           if (chunk.content_block.type === 'tool_use') {
             // Tool use started
@@ -188,7 +186,7 @@ export class ClaudeProvider extends BaseAIProvider {
             };
             toolInputBuffer = '';
             console.log('[ClaudeProvider] Tool use started:', chunk.content_block.name);
-            
+
             // Check if this is streamContent tool
             if (chunk.content_block.name === 'streamContent') {
               isStreamingContent = true;
@@ -206,14 +204,14 @@ export class ClaudeProvider extends BaseAIProvider {
           } else if (chunk.delta.type === 'input_json_delta') {
             // Accumulate tool input JSON
             toolInputBuffer += (chunk.delta as any)?.partial_json ?? '';
-            
+
             console.log('[ClaudeProvider] input_json_delta received:', {
               toolName: currentToolUse?.name,
               isStreamingContent,
               bufferLength: toolInputBuffer.length,
               partialJson: (chunk.delta as any)?.partial_json?.substring(0, 100)
             });
-            
+
             // Special handling for streamContent tool - stream the content as it arrives
             if (isStreamingContent && currentToolUse?.name === 'streamContent') {
               const partialJson = (chunk.delta as any)?.partial_json;
@@ -222,51 +220,51 @@ export class ClaudeProvider extends BaseAIProvider {
                 preview: partialJson?.substring(0, 50),
                 bufferSoFar: toolInputBuffer.substring(0, 100)
               });
-              
+
               // Wait until we have the opening structure before starting
               if (!streamConfig && toolInputBuffer.includes('"content"')) {
                 // Extract position if available
                 const positionMatch = toolInputBuffer.match(/"position"\s*:\s*"([^"]+)"/);
                 const insertAfterMatch = toolInputBuffer.match(/"insertAfter"\s*:\s*"([^"]+)"/);
-                
+
                 const position = positionMatch ? positionMatch[1] : 'cursor';
-                
+
                 streamConfig = {
                   position: position,
                   insertAfter: insertAfterMatch ? insertAfterMatch[1] : undefined,
                   insertAtEnd: position === 'end',
                   mode: 'after'
                 };
-                
+
                 console.log('[ClaudeProvider] 🚀 Emitting stream_edit_start with config:', JSON.stringify(streamConfig, null, 2));
-                
+
                 yield {
                   type: 'stream_edit_start',
                   config: streamConfig
                 };
-                
+
                 // Track how much of the content we've already streamed
                 streamContentBuffer = '';
               }
-              
+
               // Extract and stream content incrementally
               if (streamConfig) {
                 // Try to extract the content value from the accumulated buffer
                 // We're looking for the pattern: "content": "...actual content..."
                 // The content value starts after "content": " and ends before the next "
-                
+
                 // Find where content starts in the buffer
                 const contentStartMarker = '"content": "';
                 const contentStartIndex = toolInputBuffer.indexOf(contentStartMarker);
-                
+
                 if (contentStartIndex !== -1) {
                   // Calculate where the actual content starts
                   const actualContentStart = contentStartIndex + contentStartMarker.length;
-                  
+
                   // Find where content might end (look for ", " which would indicate next field)
                   // But we need to be careful about escaped quotes
                   let contentEndIndex = toolInputBuffer.length; // Default to end of buffer
-                  
+
                   // Look for the end of the content field
                   // This is tricky because we need to handle escaped quotes
                   for (let i = actualContentStart; i < toolInputBuffer.length - 1; i++) {
@@ -278,14 +276,14 @@ export class ClaudeProvider extends BaseAIProvider {
                       }
                     }
                   }
-                  
+
                   // Extract the content portion (might be incomplete)
                   const rawContent = toolInputBuffer.substring(actualContentStart, contentEndIndex);
-                  
+
                   // Only process if we have new content beyond what we've already sent
                   if (rawContent.length > streamContentBuffer.length) {
                     const newRawContent = rawContent.substring(streamContentBuffer.length);
-                    
+
                     // Unescape the new content
                     const unescapedContent = newRawContent
                       .replace(/\\n/g, '\n')
@@ -293,15 +291,15 @@ export class ClaudeProvider extends BaseAIProvider {
                       .replace(/\\t/g, '\t')
                       .replace(/\\"/g, '"')
                       .replace(/\\\\/g, '\\');
-                    
+
                     if (unescapedContent.length > 0) {
                       console.log('[ClaudeProvider] 📝 Streaming content:', unescapedContent.substring(0, 30));
-                      
+
                       yield {
                         type: 'stream_edit_content',
                         content: unescapedContent
                       };
-                      
+
                       // Update how much we've sent
                       streamContentBuffer = rawContent;
                     }
@@ -340,7 +338,9 @@ export class ClaudeProvider extends BaseAIProvider {
                     // Fallback to specific tool methods
                     switch (currentToolUse.name) {
                       case 'applyDiff':
-                        executionResult = await this.toolHandler.applyDiff(currentToolUse.input);
+                        if (this.toolHandler.applyDiff) {
+                          executionResult = await this.toolHandler.applyDiff(currentToolUse.input);
+                        }
                         break;
                       case 'getDocumentContent':
                         if (this.toolHandler.getDocumentContent) {
@@ -406,7 +406,7 @@ export class ClaudeProvider extends BaseAIProvider {
               }
             } catch (error) {
               console.error('Error parsing tool input:', error);
-              
+
               // If we were streaming, end with error
               if (isStreamingContent) {
                 yield {
@@ -418,7 +418,7 @@ export class ClaudeProvider extends BaseAIProvider {
                 streamConfig = null;
               }
             }
-            
+
             currentToolUse = null;
             toolInputBuffer = '';
           }

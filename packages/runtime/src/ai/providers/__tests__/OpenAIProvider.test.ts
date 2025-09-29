@@ -36,7 +36,7 @@ describe('OpenAI Provider - Tool Usage', () => {
     
     // Register tool handler that captures the edit requests
     provider.registerToolHandler({
-      applyDiff: async (args) => {
+      applyDiff: async (args: any) => {
         console.log('📝 applyDiff called with:', JSON.stringify(args, null, 2));
         editsReceived.push(args);
         return { success: true, message: 'Edit applied' };
@@ -53,7 +53,7 @@ describe('OpenAI Provider - Tool Usage', () => {
     // Collect all chunks
     for await (const chunk of stream) {
       chunks.push(chunk);
-      if (chunk.type === 'tool_call') {
+      if (chunk.type === 'tool_call' && chunk.toolCall) {
         console.log(`🔧 Tool called: ${chunk.toolCall.name}`);
       }
     }
@@ -61,7 +61,7 @@ describe('OpenAI Provider - Tool Usage', () => {
     // Verify the tool was called
     const toolCallChunks = chunks.filter(c => c.type === 'tool_call');
     expect(toolCallChunks.length).toBeGreaterThan(0);
-    expect(toolCallChunks[0].toolCall.name).toBe('applyDiff');
+    expect(toolCallChunks[0].toolCall?.name).toBe('applyDiff');
     
     // Verify we received edit instructions
     expect(editsReceived.length).toBeGreaterThan(0);
@@ -100,7 +100,7 @@ describe('OpenAI Provider - Tool Usage', () => {
     console.log(`Initialization took: ${Date.now() - initStart}ms`);
 
     provider.registerToolHandler({
-      applyDiff: async (args) => ({ success: true })
+      applyDiff: async (args: any) => ({ success: true })
     });
 
     const messageStart = Date.now();
@@ -152,7 +152,7 @@ describe('OpenAI Provider - Tool Usage', () => {
     
     // Register tool handler (streamContent might use real-time streaming)
     provider.registerToolHandler({
-      streamContent: async (args) => {
+      streamContent: async (args: any) => {
         console.log('📝 streamContent handler called with:', JSON.stringify(args, null, 2));
         streamedContent.push(args.content);
         return { success: true };
@@ -176,7 +176,7 @@ describe('OpenAI Provider - Tool Usage', () => {
         console.log('🚀 Stream started with config:', chunk.config);
       }
       
-      if (chunk.type === 'stream_edit_content') {
+      if (chunk.type === 'stream_edit_content' && chunk.content !== undefined) {
         streamedContent.push(chunk.content);
         console.log('📝 Streaming content:', chunk.content);
       }
@@ -185,15 +185,15 @@ describe('OpenAI Provider - Tool Usage', () => {
         streamEnded = true;
         console.log('✅ Stream ended');
       }
-      
-      if (chunk.type === 'tool_call') {
+
+      if (chunk.type === 'tool_call' && chunk.toolCall) {
         console.log(`🔧 Tool called: ${chunk.toolCall.name}`);
       }
     }
     
     // OpenAI might use either streaming or tool calls
     const hasStreamEdit = streamStarted && streamEnded;
-    const hasToolCall = chunks.some(c => c.type === 'tool_call' && c.toolCall.name === 'streamContent');
+    const hasToolCall = chunks.some(c => c.type === 'tool_call' && c.toolCall?.name === 'streamContent');
     
     // Should use one approach or the other
     expect(hasStreamEdit || hasToolCall).toBe(true);

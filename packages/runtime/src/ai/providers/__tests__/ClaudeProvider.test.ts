@@ -36,7 +36,7 @@ describe('Claude SDK Provider - Tool Usage', () => {
     
     // Register tool handler that captures the edit requests
     provider.registerToolHandler({
-      applyDiff: async (args) => {
+      applyDiff: async (args: any) => {
         console.log('📝 applyDiff called with:', JSON.stringify(args, null, 2));
         editsReceived.push(args);
         return { success: true, message: 'Edit applied' };
@@ -53,7 +53,7 @@ describe('Claude SDK Provider - Tool Usage', () => {
     // Collect all chunks
     for await (const chunk of stream) {
       chunks.push(chunk);
-      if (chunk.type === 'tool_call') {
+      if (chunk.type === 'tool_call' && chunk.toolCall) {
         console.log(`🔧 Tool called: ${chunk.toolCall.name}`);
       }
     }
@@ -61,7 +61,7 @@ describe('Claude SDK Provider - Tool Usage', () => {
     // Verify the tool was called
     const toolCallChunks = chunks.filter(c => c.type === 'tool_call');
     expect(toolCallChunks.length).toBeGreaterThan(0);
-    expect(toolCallChunks[0].toolCall.name).toBe('applyDiff');
+    expect(toolCallChunks[0].toolCall?.name).toBe('applyDiff');
     
     // Verify we received edit instructions
     expect(editsReceived.length).toBeGreaterThan(0);
@@ -105,7 +105,7 @@ describe('Claude SDK Provider - Tool Usage', () => {
     
     // Register tool handler (streamContent uses real-time streaming, not this handler)
     provider.registerToolHandler({
-      streamContent: async (args) => {
+      streamContent: async (args: any) => {
         console.log('📝 streamContent handler called (unexpected)');
         return { success: true };
       }
@@ -128,7 +128,7 @@ describe('Claude SDK Provider - Tool Usage', () => {
         console.log('🚀 Stream started with config:', chunk.config);
       }
       
-      if (chunk.type === 'stream_edit_content') {
+      if (chunk.type === 'stream_edit_content' && chunk.content !== undefined) {
         streamedContent.push(chunk.content);
         console.log('📝 Streaming content:', chunk.content);
       }

@@ -94,7 +94,7 @@ describe('File Tools Integration with Tool Registry', () => {
   beforeEach(() => {
     // Initialize tool registry and executor
     toolRegistry = new ToolRegistry();
-    toolExecutor = new RuntimeToolExecutor();
+    toolExecutor = new RuntimeToolExecutor(toolRegistry);
     vi.clearAllMocks();
   });
 

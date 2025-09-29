@@ -2,7 +2,8 @@ import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as os from 'os';
 import { EventEmitter } from 'events';
-import { AIProvider, AIMessage, AIStreamResponse, AIToolCall, AIToolResult } from '../../types';
+import { AIStreamResponse, AIStreamChunk, AIToolCall, AIToolResult } from '../../types';
+import { AIProvider } from '../AIProvider';
 import {
   ProviderConfig,
   ToolHandler,
@@ -23,6 +24,7 @@ interface ClaudeCodeSession {
 }
 
 export class ClaudeCodeCLIProvider extends EventEmitter implements AIProvider {
+  public readonly id: string = 'claude-code-cli';
   private sessions = new Map<string, ClaudeCodeSession>();
   private apiKey: string;
   private config?: ProviderConfig;
@@ -78,7 +80,7 @@ export class ClaudeCodeCLIProvider extends EventEmitter implements AIProvider {
   }
 
   async *streamChat(
-    messages: AIMessage[],
+    messages: Message[],
     options?: {
       model?: string;
       temperature?: number;
@@ -114,7 +116,7 @@ export class ClaudeCodeCLIProvider extends EventEmitter implements AIProvider {
     return toAnthropicTools(tools);
   }
 
-  private formatMessagesWithTools(messages: AIMessage[], tools: any[]): string {
+  private formatMessagesWithTools(messages: Message[], tools: any[]): string {
     let prompt = this.formatMessagesForCLI(messages);
 
     // If we have tools, append them to the system prompt
@@ -294,15 +296,15 @@ When you need to use a tool, use the following format:
     });
   }
 
-  private formatMessagesForCLI(messages: AIMessage[]): string {
+  private formatMessagesForCLI(messages: Message[]): string {
     // Format messages into a single prompt for the CLI
     const formattedMessages = messages.map(msg => {
-      if (msg.role === 'system') {
-        return `System: ${msg.content}`;
-      } else if (msg.role === 'user') {
+      if (msg.role === 'user') {
         return `User: ${msg.content}`;
       } else if (msg.role === 'assistant') {
         return `Assistant: ${msg.content}`;
+      } else if (msg.role === 'tool') {
+        return `Tool: ${msg.content}`;
       }
       return '';
     }).filter(Boolean);
@@ -377,10 +379,11 @@ When you need to use a tool, use the following format:
             }
           } else {
             // Regular content
-            yield {
-              type: 'content',
+            const chunk: AIStreamChunk = {
+              type: 'text',
               content: cleanOutput
             };
+            yield chunk;
           }
         }
       } else {
@@ -400,14 +403,12 @@ When you need to use a tool, use the following format:
     }
 
     // Send completion event
-    yield {
-      type: 'end',
-      usage: {
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0
-      }
+    const completeChunk: AIStreamChunk = {
+      type: 'complete',
+      content: '',
+      isComplete: true
     };
+    yield completeChunk;
   }
 
   private extractNewOutput(session: ClaudeCodeSession, fromIndex: number): string {
@@ -489,11 +490,8 @@ When you need to use a tool, use the following format:
   async executeToolCall(toolCall: AIToolCall): Promise<AIToolResult> {
     if (!this.toolHandler) {
       return {
-        toolCallId: toolCall.id,
-        result: {
-          success: false,
-          output: 'No tool handler registered'
-        }
+        success: false,
+        result: 'No tool handler registered'
       };
     }
 
@@ -517,20 +515,14 @@ When you need to use a tool, use the following format:
       }
 
       return {
-        toolCallId: toolCall.id,
-        result: {
-          success: true,
-          output: result
-        }
+        success: true,
+        result: result
       };
     } catch (error) {
       console.error('[ClaudeCodeCLI] Tool execution error:', error);
       return {
-        toolCallId: toolCall.id,
-        result: {
-          success: false,
-          output: error instanceof Error ? error.message : 'Tool execution failed'
-        }
+        success: false,
+        error: error instanceof Error ? error.message : 'Tool execution failed'
       };
     }
   }
@@ -633,19 +625,21 @@ When you need to use a tool, use the following format:
     documentContext?: DocumentContext,
     sessionId?: string,
     messages?: Message[]
-  ): AsyncIterableIterator<StreamChunk> {
+  ): AIStreamResponse {
     const actualSessionId = sessionId || this.generateSessionId();
 
     try {
       // Get or create session
-      const session = await this.getOrCreateSession(actualSessionId, documentContext?.workingDirectory);
+      const session = await this.getOrCreateSession(actualSessionId, undefined);
 
       // Build the complete prompt including context and previous messages
       let fullPrompt = '';
 
       // Add document context if provided
       if (documentContext) {
-        fullPrompt += `Current document context:\nFile: ${documentContext.fileName || 'untitled'}\nLanguage: ${documentContext.language || 'unknown'}\nContent:\n\`\`\`${documentContext.language || ''}\n${documentContext.content}\n\`\`\`\n\n`;
+        const fileName = documentContext.filePath?.split('/').pop() || 'untitled';
+        const language = documentContext.fileType || 'unknown';
+        fullPrompt += `Current document context:\nFile: ${fileName}\nLanguage: ${language}\nContent:\n\`\`\`${language}\n${documentContext.content}\n\`\`\`\n\n`;
       }
 
       // Add conversation history
@@ -761,6 +755,8 @@ When you need to use a tool, use the following format:
       // Send completion
       yield {
         type: 'complete',
+        content: '',
+        isComplete: true,
         usage: {
           inputTokens: 0,
           outputTokens: 0,
@@ -798,7 +794,9 @@ When you need to use a tool, use the following format:
     return {
       streaming: true,
       tools: true,
-      mcpSupport: true
+      mcpSupport: true,
+      edits: true,
+      resumeSession: true
     };
   }
 

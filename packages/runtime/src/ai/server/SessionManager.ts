@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { AISessionsRepository } from '../../storage/repositories/AISessionsRepository';
 import { getSessionStore, hasSessionStore, setSessionStore, type SessionStore } from '../adapters/sessionStore';
 import { SessionData, Message, DocumentContext, AIProviderType } from './types';
-import type { ChatSession } from '../types';
+import type { SessionData as ChatSession } from './types';
 
 function toTimestampMillis(value: unknown): number {
   if (!value) return Date.now();
@@ -41,7 +41,8 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     id: session.id,
     provider: session.provider as AIProviderType,
     model: session.model ?? undefined,
-    timestamp: toTimestampMillis(session.updatedAt),
+    createdAt: toTimestampMillis(session.createdAt),
+    updatedAt: toTimestampMillis(session.updatedAt),
     messages: session.messages.map(chatMessageFromServerMessage),
     documentContext,
     workspacePath: workspaceId,
@@ -135,11 +136,13 @@ export class SessionManager {
       documentContext: documentContext ? { ...documentContext } : undefined,
     });
 
+    const now = Date.now();
     const session: SessionData = {
       id: sessionId,
       provider,
       model,
-      timestamp: Date.now(),
+      createdAt: now,
+      updatedAt: now,
       messages: [],
       documentContext,
       workspacePath: workspace,
@@ -205,7 +208,7 @@ export class SessionManager {
       this.currentSession = {
         ...this.currentSession,
         messages: [...(this.currentSession.messages || []), chatMessageFromServerMessage(message)],
-        timestamp: Date.now(),
+        updatedAt: Date.now(),
       };
     }
   }
@@ -216,7 +219,7 @@ export class SessionManager {
       this.currentSession = {
         ...this.currentSession,
         messages: messages.map(chatMessageFromServerMessage),
-        timestamp: Date.now(),
+        updatedAt: Date.now(),
       };
     }
     return true;

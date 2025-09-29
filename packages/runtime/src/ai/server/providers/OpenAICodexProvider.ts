@@ -2,13 +2,14 @@ import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as os from 'os';
 import { BaseAIProvider } from '../AIProvider';
-import { AIStreamChunk } from '../../types';
+import { AIStreamChunk, AIToolCall, AIToolResult } from '../../types';
 import {
   ProviderConfig,
   DocumentContext,
   StreamChunk,
   Message,
-  ProviderCapabilities
+  ProviderCapabilities,
+  AIProviderType
 } from '../types';
 
 export class OpenAICodexProvider extends BaseAIProvider {
@@ -40,7 +41,7 @@ export class OpenAICodexProvider extends BaseAIProvider {
     return [{
       id: 'openai-codex:openai-codex-cli',
       name: 'OpenAI Codex CLI',
-      provider: 'openai-codex',
+      provider: 'openai-codex' as AIProviderType,
       contextWindow: 272000,
       maxTokens: 16384
     }];
@@ -436,9 +437,9 @@ export class OpenAICodexProvider extends BaseAIProvider {
     console.log('[OpenAICodexProvider] Tool calls not yet implemented for Codex CLI');
 
     return {
-      toolCallId: toolCall.id,
+      success: false,
       result: 'Tool calls not supported in Codex CLI mode',
-      isError: true
+      error: 'Tool calls not supported in Codex CLI mode'
     };
   }
 
@@ -493,7 +494,7 @@ export class OpenAICodexProvider extends BaseAIProvider {
       console.log('[OpenAICodexProvider] Calling executeCodex with MCP server:', mcpServerUrl);
       const streamResponse = this.executeCodex(fullPrompt, {
         sessionId,
-        workingDirectory: documentContext?.workingDirectory,
+        workingDirectory: undefined,
         mcpServerUrl,
         model: this.config?.model
       });
@@ -604,7 +605,9 @@ export class OpenAICodexProvider extends BaseAIProvider {
     return {
       streaming: true,
       tools: true,  // Via MCP bridge script
-      mcpSupport: true  // Using stdio-to-HTTP bridge for MCP
+      mcpSupport: true,  // Using stdio-to-HTTP bridge for MCP
+      edits: true,
+      resumeSession: false
     };
   }
 

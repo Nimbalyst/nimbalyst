@@ -6,10 +6,10 @@ import type {
   SessionListItem,
   UpdateSessionMetadataPayload,
 } from '../../adapters/sessionStore';
-import type { ChatMessage, ChatSession } from '../../types';
+import type { Message, SessionData } from '../types';
 
 class InMemorySessionStore implements SessionStore {
-  private sessions = new Map<string, ChatSession>();
+  private sessions = new Map<string, SessionData>();
 
   async ensureReady(): Promise<void> {}
 
@@ -34,14 +34,14 @@ class InMemorySessionStore implements SessionStore {
     });
   }
 
-  async appendMessage(sessionId: string, message: ChatMessage): Promise<void> {
+  async appendMessage(sessionId: string, message: Message): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error('Session not found');
     session.messages.push(message);
     session.updatedAt = Date.now();
   }
 
-  async replaceMessages(sessionId: string, messages: ChatMessage[]): Promise<void> {
+  async replaceMessages(sessionId: string, messages: Message[]): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error('Session not found');
     session.messages = [...messages];
@@ -54,14 +54,14 @@ class InMemorySessionStore implements SessionStore {
     session.metadata = {
       ...(session.metadata ?? {}),
       ...metadata,
-    } as ChatSession['metadata'];
+    } as SessionData['metadata'];
     if (metadata.draftInput !== undefined) {
       session.draftInput = metadata.draftInput;
     }
     session.updatedAt = Date.now();
   }
 
-  async get(sessionId: string): Promise<ChatSession | null> {
+  async get(sessionId: string): Promise<SessionData | null> {
     return this.sessions.get(sessionId) ?? null;
   }
 
@@ -74,9 +74,9 @@ class InMemorySessionStore implements SessionStore {
         model: session.model,
         title: session.title,
         workspaceId: (session.metadata as any)?.workspaceId,
-        updatedAt: session.updatedAt,
+        updatedAt: session.updatedAt || 0,
       }))
-      .sort((a, b) => b.updatedAt - a.updatedAt);
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }
 
   async delete(sessionId: string): Promise<void> {

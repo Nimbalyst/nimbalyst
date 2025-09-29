@@ -5,16 +5,9 @@ import { ProviderIcon } from '../icons/ProviderIcons';
 import { parseModelInfo } from '../../utils/modelUtils';
 import { SessionDropdown } from './SessionDropdown';
 import { NewSessionButton } from './NewSessionButton';
+import type { SessionData } from '@stravu/runtime/ai/server/types';
 
-interface Session {
-  id: string;
-  timestamp: number;
-  name?: string;
-  title?: string;
-  messages?: any[];
-  provider?: string;
-  model?: string;
-}
+// Using SessionData directly from runtime package
 
 interface ChatHeaderProps {
   // Header actions
@@ -25,7 +18,7 @@ interface ChatHeaderProps {
 
   // Session management
   currentSessionId: string | null;
-  sessions: Session[];
+  sessions: SessionData[];
   currentModel: string | null;  // Full provider:model ID
   isLoading: boolean;
   hasUnsavedInput: boolean;

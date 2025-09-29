@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import type { SessionData } from '@stravu/runtime/ai/server/types';
 import { ProviderIcon } from '../icons/ProviderIcons';
 import './SessionManager.css';
 
@@ -58,23 +59,14 @@ if (typeof window !== 'undefined') {
   }
 }
 
-interface Session {
-  id: string;
-  timestamp: number;
-  provider: string;
-  model: string;
-  messages: any[];
-  workspacePath?: string | null;
-  title?: string;
-}
 
 interface SessionManagerProps {
   filterWorkspace?: string;
 }
 
 export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace }) => {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [sessions, setSessions] = useState<SessionData[]>([]);
+  const [selectedSession, setSelectedSession] = useState<SessionData | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -241,7 +233,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
                       {getWorkspaceName(session.workspacePath)}
                     </span>
                     <span className="session-item-date">
-                      {formatDate(session.timestamp)}
+                      {formatDate(session.createdAt)}
                     </span>
                   </div>
                 </div>
@@ -260,10 +252,10 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
               </div>
               <div className="content-meta">
                 <span className={`provider-badge ${getProviderClass(selectedSession.provider)}`}>
-                  {selectedSession.provider} / {selectedSession.model}
+                  {selectedSession.provider} / {selectedSession.model || 'Unknown'}
                 </span>
                 <span>{selectedSession.messages.length} messages</span>
-                <span>{formatDate(selectedSession.timestamp)}</span>
+                <span>{formatDate(selectedSession.createdAt)}</span>
               </div>
             </div>
 
