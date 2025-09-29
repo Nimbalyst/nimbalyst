@@ -429,8 +429,33 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
       <div className="ai-models-body">
         <nav className="ai-models-nav">
           <div className="nav-section">
-            <div className="nav-section-title">Providers</div>
-            {PROVIDERS.map(provider => {
+            <div className="nav-section-title">Agents</div>
+            {PROVIDERS.filter(p => p.type === 'cli').map(provider => {
+              const status = getProviderStatus(provider.id);
+              return (
+                <button
+                  key={provider.id}
+                  className={`nav-item ${selectedProvider === provider.id ? 'active' : ''}`}
+                  onClick={() => setSelectedProvider(provider.id)}
+                >
+                  <span className="nav-item-icon">{provider.icon}</span>
+                  <div className="nav-item-content">
+                    <div className="nav-item-title">{provider.name}</div>
+                    <div className="nav-item-subtitle">{provider.subtitle}</div>
+                  </div>
+                  <span className={`nav-item-status ${status}`}>
+                    {status === 'active' && '●'}
+                    {status === 'configured' && '●'}
+                    {status === 'warning' && '⚠'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="nav-section">
+            <div className="nav-section-title">Models</div>
+            {PROVIDERS.filter(p => p.type === 'api' || p.type === 'local').map(provider => {
               const status = getProviderStatus(provider.id);
               return (
                 <button
