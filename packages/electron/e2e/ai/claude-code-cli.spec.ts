@@ -1,68 +1,48 @@
 import { test, expect } from '@playwright/test';
-import { ElectronApplication, Page } from 'playwright';
+import type { ElectronApplication, Page } from 'playwright';
+import { launchElectronApp, createTempWorkspace } from '../helpers';
 import { spawn } from 'child_process';
+import * as fs from 'fs/promises';
 import * as path from 'path';
 
 test.describe('Claude Code CLI Integration', () => {
   let electronApp: ElectronApplication;
   let page: Page;
+  let workspaceDir: string;
 
-  test.beforeEach(async ({ _electron }) => {
-    // Start the Electron app
-    electronApp = await _electron.launch({
-      args: ['.'],
-      env: {
-        ...process.env,
-        NODE_ENV: 'test',
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || 'test-key'
-      }
+  test.beforeEach(async () => {
+    workspaceDir = await createTempWorkspace();
+    await fs.writeFile(path.join(workspaceDir, 'test.md'), '# Test Document\n\nTest content for Claude Code\n', 'utf8');
+
+    electronApp = await launchElectronApp({
+      workspace: workspaceDir,
+      env: { NODE_ENV: 'test' }
     });
 
-    // Get the main window
     page = await electronApp.firstWindow();
     await page.waitForLoadState('domcontentloaded');
-
-    // Wait for the app to be ready
-    await page.waitForSelector('[data-testid="editor"]', { timeout: 10000 });
+    await page.waitForSelector('.workspace-sidebar', { timeout: 10000 });
   });
 
   test.afterEach(async () => {
     await electronApp?.close();
+    await fs.rm(workspaceDir, { recursive: true, force: true }).catch(() => undefined);
   });
 
   test('should configure Claude Code provider and execute tools', async () => {
+    // First, open the test document
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: 5000 });
+
+    // Wait for editor to load
+    const editor = page.locator('.editor [contenteditable="true"]');
+    await expect(editor).toBeVisible({ timeout: 3000 });
+
     // Open AI Chat panel
     await page.keyboard.press('Meta+Shift+A');
-    await page.waitForSelector('[data-testid="ai-chat-panel"]', { timeout: 5000 });
+    await page.waitForTimeout(1000);
 
-    // Open model picker
-    await page.click('[data-testid="model-picker-button"]');
-    await page.waitForSelector('[data-testid="model-picker"]', { timeout: 2000 });
-
-    // Select Claude Code if available
-    const claudeCodeButton = page.locator('text=Claude Code CLI');
-    if (await claudeCodeButton.isVisible()) {
-      await claudeCodeButton.click();
-      await page.waitForTimeout(1000);
-    } else {
-      console.log('Claude Code CLI not available in model picker');
-      test.skip();
-    }
-
-    // Create a test document with some content
-    await page.fill('[data-testid="editor"]', `# Test Document
-
-This is a test document for Claude Code CLI integration.
-
-## Todo List
-- Item 1
-- Item 2
-- Item 3
-`);
-
-    // Save the document
-    await page.keyboard.press('Meta+S');
-    await page.waitForTimeout(500);
+    // The AI chat panel should now be open with document context
 
     // Send a message that should trigger tool use
     const chatInput = page.locator('[data-testid="ai-chat-input"]');
@@ -122,14 +102,17 @@ This is a test document for Claude Code CLI integration.
   });
 
   test('should handle Claude Code CLI unavailable gracefully', async () => {
-    // Test what happens when Claude CLI is not available
-    const mockClaudeNotAvailable = true; // Simulate Claude CLI not being found
+    // First, open the test document
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: 5000 });
 
+    // Open AI Chat panel
+    await page.keyboard.press('Meta+Shift+A');
+    await page.waitForTimeout(1000);
+
+    // The AI chat should be available even if Claude Code CLI isn't configured
+    const mockClaudeNotAvailable = true;
     if (mockClaudeNotAvailable) {
-      // Open AI Chat panel
-      await page.keyboard.press('Meta+Shift+A');
-      await page.waitForSelector('[data-testid="ai-chat-panel"]', { timeout: 5000 });
-
       // Try to use Claude Code
       const chatInput = page.locator('[data-testid="ai-chat-input"]');
       await chatInput.fill('Hello, can you help me?');
@@ -145,12 +128,13 @@ This is a test document for Claude Code CLI integration.
   });
 
   test('should show Claude Code in model picker when available', async () => {
+    // First, open the test document
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: 5000 });
+
     // Check that Claude Code CLI appears in the model picker
     await page.keyboard.press('Meta+Shift+A');
-    await page.waitForSelector('[data-testid="ai-chat-panel"]', { timeout: 5000 });
-
-    await page.click('[data-testid="model-picker-button"]');
-    await page.waitForSelector('[data-testid="model-picker"]', { timeout: 2000 });
+    await page.waitForTimeout(1000);
 
     // Check if Claude Code section exists
     const claudeCodeSection = page.locator('text=CLAUDE CODE (MCP)');

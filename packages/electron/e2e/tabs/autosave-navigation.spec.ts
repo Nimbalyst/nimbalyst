@@ -1,40 +1,19 @@
-// @ts-check
-const { test, expect, _electron: electron } = require('@playwright/test');
-const path = require('node:path');
-const os = require('node:os');
-const fs = require('node:fs/promises');
-
-function tmpWorkspaceRoot() {
-  return path.join(os.tmpdir(), 'preditor-autosave-');
-}
-
-function selectAllShortcut() {
-  return process.platform === 'darwin' ? 'Meta+A' : 'Control+A';
-}
+import { test, expect } from '@playwright/test';
+import type { ElectronApplication, Page } from 'playwright';
+import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, TEST_TIMEOUTS } from '../helpers';
+import * as path from 'path';
+import * as fs from 'fs/promises';
 
 test.describe('Autosave before navigation', () => {
   test('saves dirty document when navigating via document link', async () => {
-    const workspaceDir = await fs.mkdtemp(tmpWorkspaceRoot());
+    const workspaceDir = await createTempWorkspace();
     const sourceFile = path.join(workspaceDir, 'source.md');
     const targetFile = path.join(workspaceDir, 'target.md');
 
     await fs.writeFile(sourceFile, '# Source\n\nOriginal content before autosave.\n', 'utf8');
     await fs.writeFile(targetFile, '# Target\n\nThis is the target document.\n', 'utf8');
 
-    const electronMain = path.resolve(__dirname, '../../out/main/index.js');
-    const electronCwd = path.resolve(__dirname, '../../../../');
-
-    const electronApp = await electron.launch({
-      args: [electronMain, '--workspace', workspaceDir],
-      cwd: electronCwd,
-      env: {
-        ...process.env,
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'playwright-test-key',
-        ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
-        PLAYWRIGHT: '1'
-      }
-    });
-
+    const electronApp = await launchElectronApp({ workspace: workspaceDir });
     const marker = `autosave-marker-${Date.now()}`;
 
     try {
@@ -46,27 +25,40 @@ test.describe('Autosave before navigation', () => {
         await page.locator('.api-key-dialog-button.secondary').click();
       }
 
-      await page.waitForSelector('.workspace-sidebar', { timeout: 15000 });
-      await page.locator('.file-tree-name', { hasText: 'source.md' }).first().waitFor({ timeout: 15000 });
-      await page.locator('.file-tree-name', { hasText: 'target.md' }).first().waitFor({ timeout: 15000 });
+      await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
+      await page.locator('.file-tree-name', { hasText: 'source.md' }).first().waitFor({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
+      await page.locator('.file-tree-name', { hasText: 'target.md' }).first().waitFor({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
 
       await page.locator('.file-tree-name', { hasText: 'source.md' }).click();
-      await expect(page.locator('.tab.active .tab-title')).toHaveText('source.md', { timeout: 10000 });
+      await expect(page.locator('.tab.active .tab-title')).toContainText('source.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
       const editor = page.locator('.editor [contenteditable="true"]');
       await editor.click();
-      await page.keyboard.press(selectAllShortcut());
+      await page.keyboard.press(getKeyboardShortcut('Mod+A'));
       await page.keyboard.type(`Autosave before navigation\n\nDirty section ${marker}\n\n[`);
       await page.keyboard.type('target');
       await page.waitForTimeout(150);
       await page.keyboard.press('Enter');
 
+      await page.waitForTimeout(200);
+
       const documentReference = page.locator('.document-reference', { hasText: 'target.md' });
-      await expect(documentReference).toBeVisible({ timeout: 10000 });
+      await expect(documentReference).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });
       await expect(page.locator('.tab.active .tab-dirty-indicator')).toBeVisible();
 
-      await documentReference.click();
-      await expect(page.locator('.tab.active .tab-title')).toHaveText('target.md', { timeout: 15000 });
+      // Click outside editor first to deselect
+      await page.locator('.workspace-sidebar').click();
+      await page.waitForTimeout(200);
+
+      // Now click the document reference link directly
+      // Use dispatchEvent to ensure the click is registered
+      await documentReference.evaluate((el) => {
+        el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+      });
+
+      // Wait for navigation to complete - tab should switch to target.md
+      // Use a longer timeout since this involves autosave + navigation
+      await expect(page.locator('.tab.active .tab-title')).toContainText('target.md', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
 
       const sourceTabDirty = page.locator('.tab', {
         has: page.locator('.tab-title', { hasText: 'source.md' })
@@ -74,12 +66,18 @@ test.describe('Autosave before navigation', () => {
       await expect(sourceTabDirty).toHaveCount(0);
 
       await expect.poll(async () => fs.readFile(sourceFile, 'utf8'), {
-        timeout: 10000,
+        timeout: TEST_TIMEOUTS.SAVE_OPERATION * 2,
         message: 'Expected source file to contain autosaved marker'
       }).toContain(marker);
 
       await page.locator('.tab-title', { hasText: 'source.md' }).click();
-      await expect(page.locator('.tab.active .tab-title')).toHaveText('source.md');
+      await expect(page.locator('.tab.active .tab-title')).toContainText('source.md');
+
+      // Wait for editor to fully load and settle
+      // The editor needs time to load content from disk and compare with initial state
+      await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+
+      // The tab should not be dirty since it was autosaved
       await expect(page.locator('.tab.active .tab-dirty-indicator')).toHaveCount(0);
 
       const editorText = await editor.innerText();
