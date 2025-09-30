@@ -309,15 +309,20 @@ export class OpenAIProvider extends BaseAIProvider {
               
               // Handle streamContent specially
               if (toolCall.function.name === 'streamContent') {
+                const position = args.position || 'cursor';
+                const insertAtEnd = position === 'end' || position === 'end of document';
+
                 yield {
                   type: 'stream_edit_start',
                   config: {
-                    position: args.position || 'cursor',
+                    position,
                     insertAfter: args.insertAfter,
-                    mode: 'after'
+                    insertAtEnd,
+                    // Don't set mode - let the editor plugin decide based on insertAtEnd
+                    mode: undefined
                   }
                 };
-                
+
                 // Stream the content
                 if (args.content) {
                   yield {
@@ -325,7 +330,7 @@ export class OpenAIProvider extends BaseAIProvider {
                     content: args.content
                   };
                 }
-                
+
                 yield {
                   type: 'stream_edit_end'
                 };

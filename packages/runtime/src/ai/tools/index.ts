@@ -306,7 +306,7 @@ export class RuntimeToolExecutor {
     startStreamingEdit({
       id: streamId,
       position: args?.position ?? (args?.insertAfter ? 'cursor' : 'cursor'),
-      mode: args?.mode ?? 'append',
+      mode: args?.mode, // Don't default - let the plugin decide based on context
       insertAfter: args?.insertAfter,
     });
 

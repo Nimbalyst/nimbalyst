@@ -94,6 +94,7 @@ class AIChatIntegrationBridge extends EventTarget {
   }
 
   startStreamingEdit(config: { id: string; position?: string; mode?: string; insertAfter?: string; insertAtEnd?: boolean; [key: string]: any }): void {
+    console.log('[BRIDGE] startStreamingEdit received config:', { mode: config.mode, insertAtEnd: config.insertAtEnd, position: config.position });
     this.dispatchEvent(new CustomEvent<AIChatEvent>('aiChatEvent', {
       detail: {
         type: 'startStreaming',

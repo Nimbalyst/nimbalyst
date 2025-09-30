@@ -833,7 +833,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         aiChatBridge.startStreamingEdit({
           id: streamId,
           position: position || 'cursor',
-          mode: mode || 'after',
+          mode, // Don't default - let the plugin choose based on context (insertAtEnd, etc)
           insertAfter,
           // Handle both 'end' (from schema) and 'end of document' (AI sometimes ignores enum)
           insertAtEnd: position === 'end' || position === 'end of document'
