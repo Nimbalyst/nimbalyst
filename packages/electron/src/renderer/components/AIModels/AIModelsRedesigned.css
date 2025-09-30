@@ -701,3 +701,92 @@
 .installation-progress-cancel:hover {
   background: var(--hover-bg, #eeeeee);
 }
+
+/* Tool selection */
+.tools-selection {
+  background: var(--background-secondary);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.tools-header {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tools-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tool-category {
+  background: var(--background-primary);
+  border-radius: 6px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.tool-category-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tool-category-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.tool-category-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: 28px;
+  opacity: 0.8;
+}
+
+.tool-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 8px;
+  margin-left: 16px;
+}
+
+.tool-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.tool-checkbox:hover {
+  background: var(--hover-bg);
+}
+
+.tool-checkbox input[type="checkbox"] {
+  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tool-checkbox .tool-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.tool-checkbox .tool-description {
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.8;
+  margin-left: 4px;
+}

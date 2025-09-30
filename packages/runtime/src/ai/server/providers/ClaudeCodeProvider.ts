@@ -190,12 +190,27 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // Build options for claude-code SDK
       console.log('[CLAUDE-CODE] Building SDK options...');
+
+      // Get allowed tools from config, default to a safe subset
+      // Default tools: Read, Search & Navigation (all), Web Access (all), Task Management (all), ExitPlanMode
+      const defaultTools = [
+        'Read',
+        'Glob', 'Grep', 'LS',
+        'WebFetch', 'WebSearch',
+        'TodoRead', 'TodoWrite', 'Task',
+        'ExitPlanMode'
+      ];
+      const allowedTools = this.config.allowedTools && this.config.allowedTools.length > 0
+        ? this.config.allowedTools
+        : defaultTools;
+      console.log('[CLAUDE-CODE] Allowed tools:', allowedTools);
+
       const options: any = {
         // The SDK might internally need the CLI path
         pathToClaudeCodeExecutable: await this.findCliPath().catch(() => undefined),
         customSystemPrompt: systemPrompt,
         mcpServers: this.getMcpServersConfig(),
-        allowedTools: ['*'],
+        allowedTools,
         cwd: workspacePath,
         abortController: this.abortController,
         model: this.config.model || 'claude-3-5-sonnet-20241022',

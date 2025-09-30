@@ -89,6 +89,7 @@ export interface ProviderConfig {
   maxTokens?: number;
   temperature?: number;
   baseUrl?: string;
+  allowedTools?: string[];  // List of allowed tool names, ['*'] for all tools
 }
 
 export interface ProviderCapabilities {

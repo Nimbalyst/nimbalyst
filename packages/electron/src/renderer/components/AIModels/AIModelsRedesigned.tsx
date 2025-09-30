@@ -83,6 +83,10 @@ export interface ProviderConfig {
   version?: string;
   updateAvailable?: boolean;
   installStatus?: 'not-installed' | 'installing' | 'installed' | 'error';
+  // Claude Code specific
+  allowedTools?: string[];  // List of allowed tool names, ['*'] for all tools
+  mcpEnabled?: boolean;
+  permissionMode?: string;
 }
 
 export interface Model {
