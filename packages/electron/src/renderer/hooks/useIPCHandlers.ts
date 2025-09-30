@@ -448,9 +448,35 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }
     }));
     cleanupFns.push(window.electronAPI.onFileDeleted((data) => {
-      console.log('File deleted:', data.filePath);
-      if (stateRef.current.currentFilePath === data.filePath) {
-        // Current file was deleted, mark as dirty and clear the file path
+      console.log('[FILE_DELETED] File deleted event received:', data.filePath);
+      // console.log('[FILE_DELETED] Tab preferences enabled:', stateRef.current.tabPreferences.preferences.enabled);
+      // console.log('[FILE_DELETED] Tabs object:', stateRef.current.tabs);
+
+      // If tabs are enabled, find and close the tab for this file
+      if (stateRef.current.tabPreferences.preferences.enabled) {
+        const tabToClose = stateRef.current.tabs.findTabByPath(data.filePath);
+        // console.log('[FILE_DELETED] Tab to close:', tabToClose);
+        if (tabToClose) {
+          // console.log('[FILE_DELETED] Closing tab for deleted file:', data.filePath, 'tab id:', tabToClose.id);
+
+          // If this is the active tab, we need to immediately clear state to prevent autosave
+          if (stateRef.current.tabs.activeTabId === tabToClose.id) {
+            // console.log('[FILE_DELETED] This is the active tab, clearing file path immediately');
+            // Clear the file path immediately to prevent autosave from recreating the file
+            handlersRef.current.setCurrentFilePath(null);
+            isDirtyRef.current = false;
+            handlersRef.current.setIsDirty(false);
+            contentRef.current = '';
+          }
+
+          stateRef.current.tabs.removeTab(tabToClose.id);
+          // console.log('[FILE_DELETED] Tab removed');
+        } else {
+          // console.log('[FILE_DELETED] No tab found for path:', data.filePath);
+        }
+      } else if (stateRef.current.currentFilePath === data.filePath) {
+        // console.log('[FILE_DELETED] Single-file mode, current file deleted');
+        // In single-file mode, current file was deleted, mark as dirty and clear the file path
         handlersRef.current.setCurrentFilePath(null);
         isDirtyRef.current = true;
         handlersRef.current.setIsDirty(true);

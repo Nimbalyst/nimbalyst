@@ -577,7 +577,11 @@ export function registerWorkspaceHandlers() {
             }
 
             // Notify all windows about the file deletion
-            BrowserWindow.getAllWindows().forEach(window => {
+            console.log('[MAIN] Sending file-deleted event for:', filePath);
+            const windows = BrowserWindow.getAllWindows();
+            console.log('[MAIN] Number of windows to notify:', windows.length);
+            windows.forEach((window, index) => {
+                console.log(`[MAIN] Sending file-deleted to window ${index}`);
                 window.webContents.send('file-deleted', { filePath });
             });
 
