@@ -1,5 +1,5 @@
 import type { StreamingConfig } from '../types';
-import { applyReplacements, endStreamingEdit, startStreamingEdit, streamContent, getDocumentContent } from '../editorBridge';
+import { applyReplacements, endStreamingEdit, startStreamingEdit, streamContent, getDocumentContent, createDocument } from '../editorBridge';
 import { FILE_TOOLS } from './fileTools';
 import { DOCUMENT_TOOLS } from './documentTools';
 
@@ -423,65 +423,16 @@ export class RuntimeToolExecutor {
     switchToFile?: boolean;
   }): Promise<any> {
     // eslint-disable-next-line no-console
-    console.log('[runtime][tool] createDocument called with:', args);
+    console.log('[runtime][tool] createDocument called:', args);
 
-    if (!args || !args.filePath) {
+    if (!args?.filePath) {
       throw new Error('createDocument requires filePath');
     }
 
-    // Dispatch event to renderer to handle document creation
-    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-      return new Promise((resolve, reject) => {
-        const correlationId = this.createCorrelationId('createDocument');
-
-        // eslint-disable-next-line no-console
-        console.log('[runtime][tool] Setting up response listener with correlationId:', correlationId);
-
-        // Set up listener for response
-        const handleResponse = (event: any) => {
-          // eslint-disable-next-line no-console
-          console.log('[runtime][tool] Received response event:', event.detail);
-          if (event.detail?.correlationId === correlationId) {
-            window.removeEventListener('aiToolResponse:createDocument', handleResponse);
-
-            if (event.detail.success) {
-              resolve(event.detail);
-            } else {
-              reject(new Error(event.detail.error || 'Failed to create document'));
-            }
-          }
-        };
-
-        window.addEventListener('aiToolResponse:createDocument', handleResponse);
-
-        // Dispatch request
-        // eslint-disable-next-line no-console
-        console.log('[runtime][tool] Dispatching createDocument request with:', {
-          correlationId,
-          filePath: args.filePath,
-          initialContent: args.initialContent ? `${args.initialContent.substring(0, 100)}...` : '',
-          switchToFile: args.switchToFile !== false
-        });
-
-        window.dispatchEvent(new CustomEvent('aiToolRequest:createDocument', {
-          detail: {
-            correlationId,
-            filePath: args.filePath,
-            initialContent: args.initialContent || '',
-            switchToFile: args.switchToFile !== false // Default to true
-          }
-        }));
-
-        // Timeout after 10 seconds
-        setTimeout(() => {
-          window.removeEventListener('aiToolResponse:createDocument', handleResponse);
-          reject(new Error('createDocument timed out'));
-        }, 10000);
-      });
-    } else {
-      throw new Error('createDocument can only be called in browser context');
-    }
+    // Use the editor bridge (same pattern as applyReplacements)
+    return await createDocument(args);
   }
+
 
   private createCorrelationId(name: string): string {
     return `${name}-${Date.now()}-${++this.correlationCounter}`;

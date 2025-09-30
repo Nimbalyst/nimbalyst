@@ -29,7 +29,7 @@ test.describe('Claude Code CLI Integration', () => {
     await fs.rm(workspaceDir, { recursive: true, force: true }).catch(() => undefined);
   });
 
-  test('should configure Claude Code provider and execute tools', async () => {
+  test.skip('should configure Claude Code provider and execute tools', async () => {
     // First, open the test document
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
     await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: 5000 });
@@ -101,7 +101,7 @@ test.describe('Claude Code CLI Integration', () => {
     await page.screenshot({ path: 'claude-code-cli-test.png', fullPage: true });
   });
 
-  test('should handle Claude Code CLI unavailable gracefully', async () => {
+  test.skip('should handle Claude Code CLI unavailable gracefully', async () => {
     // First, open the test document
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
     await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: 5000 });

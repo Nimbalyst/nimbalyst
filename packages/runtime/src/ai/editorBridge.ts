@@ -66,3 +66,24 @@ export async function applyReplacements(replacements: TextReplacement[]) {
   } catch {}
   return result;
 }
+
+export async function createDocument(args: {
+  filePath: string;
+  initialContent?: string;
+  switchToFile?: boolean;
+}): Promise<{ success: boolean; filePath?: string; error?: string }> {
+  const bridge = getBridge();
+  if (typeof bridge.createDocument !== 'function') {
+    throw new Error('Editor bridge cannot create documents');
+  }
+  try {
+    // eslint-disable-next-line no-console
+    console.info('[runtime][bridge] createDocument invoked', { filePath: args.filePath });
+  } catch {}
+  const result = await bridge.createDocument(args);
+  try {
+    // eslint-disable-next-line no-console
+    console.info('[runtime][bridge] createDocument result', result);
+  } catch {}
+  return result;
+}

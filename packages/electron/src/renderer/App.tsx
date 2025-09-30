@@ -18,6 +18,14 @@ import type { LexicalCommand, ConfigTheme, TextReplacement } from 'rexical';
 import 'rexical/styles';
 logger.ui.info('StravuEditor imported');
 
+// Import refactored hooks and utilities
+import { useIPCHandlers } from './hooks/useIPCHandlers';
+import { useWindowLifecycle } from './hooks/useWindowLifecycle';
+import { useHMRStateRestoration } from './hooks/useHMRStateRestoration';
+import { autoSaveBeforeNavigation as autoSaveUtil, type AutoSaveOptions } from './utils/autosave';
+import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from './utils/workspaceFileOperations';
+import { aiToolService } from './services/AIToolService';
+
 // Ensure aiChatBridge is available globally
 if (typeof window !== 'undefined' && !window.aiChatBridge) {
   (window as any).aiChatBridge = aiChatBridge;
@@ -211,6 +219,11 @@ export default function App() {
       .catch(error => {
         console.error('[THEME] Failed to load theme from main process:', error);
       });
+  }, []);
+
+  // Register aiToolService methods on aiChatBridge for runtime to use
+  useEffect(() => {
+    aiToolService.registerBridgeMethods();
   }, []);
 
   // Track when we last saved to ignore file change events shortly after
@@ -414,179 +427,42 @@ export default function App() {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isResizingRef = useRef<boolean>(false);
 
-  // Log mount/unmount and handle window close
-  useEffect(() => {
-    logger.ui.info('App component mounted');
+  // Window lifecycle hook - handles mount/unmount and beforeunload
+  useWindowLifecycle({
+    tabsRef,
+    getContentRef,
+    isDirtyRef,
+    currentFilePath,
+    lastSaveTimeRef,
+  });
 
-    // Save on window close/reload
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Save current tab content first
-      if (tabsRef.current && tabsRef.current.activeTabId && getContentRef.current) {
-        const currentContent = getContentRef.current();
-        tabsRef.current.updateTab(tabsRef.current.activeTabId, {
-          content: currentContent,
-          isDirty: isDirtyRef.current
-        });
-      }
-
-      // Check if any tabs are dirty
-      let hasDirtyTabs = isDirtyRef.current;
-      if (tabsRef.current && tabsRef.current.tabs) {
-        hasDirtyTabs = hasDirtyTabs || tabsRef.current.tabs.some((tab: any) => tab.isDirty);
-      }
-
-      if (hasDirtyTabs) {
-        console.log('[WINDOW CLOSE] Has unsaved changes');
-        // This will show a dialog in Electron
-        e.preventDefault();
-        e.returnValue = 'You have unsaved changes. Are you sure you want to quit?';
-
-        // Try to save current file quickly
-        if (isDirtyRef.current && getContentRef.current && currentFilePath && window.electronAPI) {
-          const content = getContentRef.current();
-          // Fire and forget - don't await
-          window.electronAPI.saveFile(content, currentFilePath).then(result => {
-            if (result && result.success) {
-              // Mark the time we saved to ignore file change events
-              lastSaveTimeRef.current = Date.now();
-              console.log('[WINDOW CLOSE] Saved current file');
-            }
-          }).catch(error => {
-            console.error('[WINDOW CLOSE] Failed to save:', error);
-          });
-        }
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      logger.ui.info('App component unmounting');
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-
-      // Final save attempt on unmount
-      if (isDirtyRef.current && getContentRef.current && currentFilePath && window.electronAPI) {
-        const content = getContentRef.current();
-        window.electronAPI.saveFile(content, currentFilePath).catch(error => {
-          console.error('[UNMOUNT] Failed to save:', error);
-        });
-      }
-    };
-  }, [currentFilePath]);
-
-  // Restore state during development HMR (only on mount)
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      // Restore state from session storage on mount
-      const savedState = sessionStorage.getItem('rexical-dev-state');
-      if (savedState) {
-        try {
-          const state = JSON.parse(savedState);
-          if (LOG_CONFIG.HMR) console.log('[HMR] Restoring dev state:', state);
-
-          // Restore the state
-          if (state.workspaceMode) {
-            setWorkspaceMode(true);
-            setWorkspacePath(state.workspacePath);
-            setWorkspaceName(state.workspaceName);
-            setFileTree(state.fileTree || []);
-          }
-
-          if (state.filePath) {
-            setCurrentFilePath(state.filePath);
-            setCurrentFileName(state.fileName);
-
-            // Reset local content so we can hydrate from disk
-            contentRef.current = '';
-            initialContentRef.current = '';
-            isInitializedRef.current = false;
-            isDirtyRef.current = false;
-            setIsDirty(false);
-
-            const hydrateFromDisk = async () => {
-              if (!window.electronAPI) {
-                return;
-              }
-
-              try {
-                const targetPath = state.filePath as string;
-                const shouldSwitchWorkspace = Boolean(state.workspaceMode && window.electronAPI.switchWorkspaceFile);
-
-                let result: { filePath: string; content: string } | null = null;
-
-                if (shouldSwitchWorkspace && window.electronAPI.switchWorkspaceFile) {
-                  result = await window.electronAPI.switchWorkspaceFile(targetPath);
-                } else if (window.electronAPI.readFileContent) {
-                  const res = await window.electronAPI.readFileContent(targetPath);
-                  result = res && typeof res.content === 'string'
-                    ? { filePath: targetPath, content: res.content }
-                    : null;
-                }
-
-                if (result && typeof result.content === 'string') {
-                  contentRef.current = result.content;
-                  initialContentRef.current = result.content;
-                  contentVersionRef.current += 1;
-                  setContentVersion(v => v + 1);
-                } else if (LOG_CONFIG.HMR) {
-                  console.warn('[HMR] No disk content returned while restoring dev state for', targetPath);
-                }
-              } catch (error) {
-                console.error('[HMR] Failed to load latest file content during dev restore:', error);
-              }
-            };
-
-            hydrateFromDisk();
-
-            // Update the main process about the current file
-            if (window.electronAPI) {
-              window.electronAPI.setCurrentFile(state.filePath);
-            }
-          }
-
-          if (state.sidebarWidth) {
-            setSidebarWidth(state.sidebarWidth);
-          }
-
-          if (state.theme) {
-            setTheme(state.theme);
-          }
-
-          // Clear the saved state
-          sessionStorage.removeItem('rexical-dev-state');
-        } catch (error) {
-          if (LOG_CONFIG.HMR) console.error('[HMR] Failed to restore dev state:', error);
-        }
-      }
-    }
-  }, []); // Empty dependency array - only run on mount
-
-  // Save state before HMR in development
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      const saveDevState = () => {
-        const state = {
-          workspaceMode,
-          workspacePath,
-          workspaceName,
-          fileTree,
-          filePath: currentFilePath,
-          fileName: currentFileName,
-          sidebarWidth: sidebarWidth,
-          theme: theme
-        };
-        if (LOG_CONFIG.HMR) console.log('[HMR] Saving dev state:', state);
-        sessionStorage.setItem('rexical-dev-state', JSON.stringify(state));
-      };
-
-      // Save state on beforeunload (catches HMR)
-      window.addEventListener('beforeunload', saveDevState);
-
-      return () => {
-        window.removeEventListener('beforeunload', saveDevState);
-      };
-    }
-  }, [workspaceMode, workspacePath, workspaceName, fileTree, currentFilePath, currentFileName, sidebarWidth, theme]);
+  // HMR state restoration hook - saves and restores state during hot reloads
+  useHMRStateRestoration({
+    setWorkspaceMode,
+    setWorkspacePath,
+    setWorkspaceName,
+    setFileTree,
+    setCurrentFilePath,
+    setCurrentFileName,
+    setIsDirty,
+    setContentVersion,
+    setSidebarWidth,
+    setTheme,
+    contentRef,
+    initialContentRef,
+    isInitializedRef,
+    isDirtyRef,
+    contentVersionRef,
+    workspaceMode,
+    workspacePath,
+    workspaceName,
+    fileTree,
+    currentFilePath,
+    currentFileName,
+    sidebarWidth,
+    theme,
+    LOG_CONFIG,
+  });
 
   // Prepare AI chat state loading
   useEffect(() => {
@@ -857,242 +733,49 @@ export default function App() {
     window.close();
   }, [isDirty, handleSave]);
 
-  interface AutoSaveOptions {
-    filePath?: string | null;
-    tabId?: string | null;
-    content?: string;
-    force?: boolean;
-    reason?: string;
-  }
-
+  // Wrapper for autosave utility with component-specific context
   const autoSaveBeforeNavigation = useCallback(async (options: AutoSaveOptions = {}) => {
-    if (!window.electronAPI) {
-      return false;
-    }
-
-    const {
-      filePath: overridePath,
-      tabId: overrideTabId,
-      content: overrideContent,
-      force = false,
-      reason
-    } = options;
-
-    const activeTabId = tabPreferences.preferences.enabled ? tabs.activeTabId : null;
-    const activeTab = tabPreferences.preferences.enabled ? tabs.activeTab : null;
-
-    const targetTabId = overrideTabId ?? (activeTabId ?? null);
-    const targetFilePath = overridePath ?? (activeTab?.filePath ?? currentFilePath);
-
-    if (!targetFilePath) {
-      return false;
-    }
-
-    const content =
-      overrideContent !== undefined
-        ? overrideContent
-        : getContentRef.current
-          ? getContentRef.current()
-          : contentRef.current;
-
-    if (content === undefined || content === null) {
-      return false;
-    }
-
-    const shouldSave = force || isDirtyRef.current;
-    if (!shouldSave) {
-      return false;
-    }
-
-    try {
-      const result = await window.electronAPI.saveFile(content, targetFilePath);
-      if (!result || !result.success) {
-        return false;
-      }
-
-      lastSaveTimeRef.current = Date.now();
-
-      const isActiveTab = !tabPreferences.preferences.enabled || (targetTabId !== null && targetTabId === tabs.activeTabId);
-
-      if (tabPreferences.preferences.enabled && targetTabId) {
-        tabs.updateTab(targetTabId, {
-          content,
-          isDirty: false,
-          lastSaved: new Date()
-        });
-      }
-
-      if (isActiveTab) {
-        isDirtyRef.current = false;
-        setIsDirty(false);
-        initialContentRef.current = content;
-        setCurrentFilePath(result.filePath);
-        setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
-      }
-
-      if (reason && window.electronAPI.history) {
-        try {
-          await window.electronAPI.history.createSnapshot(
-            targetFilePath,
-            content,
-            'auto',
-            reason
-          );
-        } catch (snapshotError) {
-          console.warn('[AUTOSAVE] Failed to record snapshot:', snapshotError);
-        }
-      }
-
-      return true;
-    } catch (error) {
-      console.error('[AUTOSAVE] Failed to save document automatically:', error);
-      return false;
-    }
+    return autoSaveUtil(options, {
+      currentFilePath,
+      tabPreferences,
+      tabs,
+      isDirtyRef,
+      getContentRef,
+      contentRef,
+      initialContentRef,
+      lastSaveTimeRef,
+      setIsDirty,
+      setCurrentFilePath,
+      setCurrentFileName,
+    });
   }, [currentFilePath, tabPreferences, tabs, setIsDirty, setCurrentFileName, setCurrentFilePath]);
 
-  // Handle file selection in workspace
+  // Wrapper for workspace file selection utility with component-specific context
   const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
-    // Cancel any pending autosave for the previous file
-    if (autoSaveCancellationRef.current) {
-      console.log('[FILE_SELECT] Cancelling pending autosave');
-      autoSaveCancellationRef.current.abort();
-      autoSaveCancellationRef.current = null;
-    }
+    return handleWorkspaceFileSelectUtil({
+      filePath,
+      currentFilePath,
+      isDirtyRef,
+      tabPreferences,
+      tabs,
+      autoSaveBeforeNavigation,
+      autoSaveCancellationRef,
+      contentVersionRef,
+      isInitializedRef,
+      contentRef,
+      initialContentRef,
+      setCurrentFilePath,
+      setCurrentFileName,
+      setIsDirty,
+      setContentVersion,
+      setCurrentDirectory,
+    });
+  }, [currentFilePath, tabs, tabPreferences, autoSaveBeforeNavigation, setIsDirty, setCurrentFileName, setCurrentFilePath, setContentVersion, setCurrentDirectory]);
 
-    if (!window.electronAPI) return;
-
-    if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Selecting file:', filePath);
-
-    const activeTabId = tabPreferences.preferences.enabled ? tabs.activeTabId : null;
-    const activeFilePath = tabPreferences.preferences.enabled && tabs.activeTab
-      ? tabs.activeTab.filePath
-      : currentFilePath;
-
-    if (activeFilePath === filePath) {
-      if (tabPreferences.preferences.enabled) {
-        const existingTab = tabs.findTabByPath(filePath);
-        if (existingTab) {
-          if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already active, ensuring tab focus');
-          tabs.switchTab(existingTab.id);
-        }
-      }
-      return;
-    }
-
-    const wasDirty = isDirtyRef.current;
-
-    if (activeFilePath && activeFilePath !== filePath && wasDirty) {
-      if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Auto-saving current file before switching');
-      await autoSaveBeforeNavigation({
-        tabId: activeTabId,
-        filePath: activeFilePath,
-        force: true,
-        reason: 'Autosave before switching file'
-      });
-    }
-
-    // If tabs are enabled, check if file is already open in a tab after autosave
-    if (tabPreferences.preferences.enabled) {
-      const existingTab = tabs.findTabByPath(filePath);
-      if (existingTab) {
-        if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already open in tab, switching');
-        tabs.switchTab(existingTab.id);
-        return;
-      }
-    }
-
-    try {
-      const result = await window.electronAPI.switchWorkspaceFile(filePath);
-      if (result) {
-        if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File loaded successfully');
-
-        // If tabs are enabled, add a new tab
-        if (tabPreferences.preferences.enabled) {
-          console.log('[TABS] Adding tab for file:', result.filePath);
-          console.log('[TABS] Current tabs before add:', tabs.tabs);
-          const tabId = tabs.addTab(result.filePath, result.content);
-          if (!tabId) {
-            console.warn('Failed to add tab - max tabs reached');
-            // Could show a dialog here
-          } else {
-            console.log('[TABS] Added tab with ID:', tabId);
-            console.log('[TABS] Current tabs after add:', tabs.tabs);
-            // Set initialContentRef for the new tab
-            initialContentRef.current = result.content;
-            setCurrentFilePath(result.filePath);
-            setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
-            contentRef.current = result.content;
-            isDirtyRef.current = false;
-            setIsDirty(false);
-          }
-        } else {
-          // Original non-tab behavior
-          contentVersionRef.current += 1;
-          setContentVersion(v => v + 1);
-          isInitializedRef.current = false;
-          contentRef.current = result.content;
-          setCurrentFilePath(result.filePath);
-          setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
-          isDirtyRef.current = false;
-    setIsDirty(false);
-          initialContentRef.current = result.content;
-        }
-
-        // Update current directory based on the file path
-        const dirPath = result.filePath.substring(0, result.filePath.lastIndexOf('/'));
-        setCurrentDirectory(dirPath);
-
-        // Add to recent files
-        if (window.electronAPI?.addToWorkspaceRecentFiles) {
-          window.electronAPI.addToWorkspaceRecentFiles(filePath);
-        }
-
-        // Explicitly update the current file in main process (redundant but safe)
-        if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Ensuring backend has correct file path');
-        const syncResult = window.electronAPI.setCurrentFile(filePath);
-        if (syncResult && typeof syncResult.then === 'function') {
-          await syncResult;
-        }
-
-        // Create automatic snapshot when switching to file
-        if (window.electronAPI.history) {
-          try {
-            // Check if we have previous snapshots
-            const snapshots = await window.electronAPI.history.listSnapshots(result.filePath);
-            if (snapshots.length === 0) {
-              // First time opening this file, create initial snapshot
-              await window.electronAPI.history.createSnapshot(
-                result.filePath,
-                result.content,
-                'auto',
-                'Initial file open'
-              );
-            } else {
-              // Check if content changed since last snapshot
-              const latestSnapshot = snapshots[0]; // Assuming sorted by timestamp desc
-              const lastContent = await window.electronAPI.history.loadSnapshot(
-                result.filePath,
-                latestSnapshot.timestamp
-              );
-              if (lastContent !== result.content) {
-                // Content actually changed, create snapshot
-                await window.electronAPI.history.createSnapshot(
-                  result.filePath,
-                  result.content,
-                  'auto',
-                  'File changed externally'
-                );
-              }
-            }
-          } catch (error) {
-            console.error('Failed to create automatic snapshot:', error);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Failed to switch workspace file:', error);
-    }
-  }, [currentFilePath, tabs, tabPreferences, autoSaveBeforeNavigation]);
+  // Configure aiToolService with handleWorkspaceFileSelect
+  useEffect(() => {
+    aiToolService.setHandleWorkspaceFileSelectFunction(handleWorkspaceFileSelect);
+  }, [handleWorkspaceFileSelect]);
 
   // Open the welcome tab - virtual document
   const openWelcomeTab = useCallback(async () => {
@@ -1763,815 +1446,61 @@ export default function App() {
   }, []);
 
   // Set up IPC listeners
-  useEffect(() => {
-    if (!window.electronAPI) return;
-
-    if (LOG_CONFIG.IPC_LISTENERS) console.log('[IPC] Setting up IPC listeners, currentFilePath:', currentFilePath);
-
-    // Check for first launch (no API key configured)
-    const checkFirstLaunch = async () => {
-      try {
-        const hasApiKey = await window.electronAPI.aiHasApiKey();
-        if (!hasApiKey) {
-          // Show API key dialog on first launch
-          setIsApiKeyDialogOpen(true);
-        }
-      } catch (error) {
-        console.error('Failed to check for API key:', error);
-      }
-    };
-
-    // Only check on initial mount (when currentFilePath is null)
-    if (!currentFilePath && !sessionToLoad) {
-      checkFirstLaunch();
-    }
-
-    // Set up listeners and store cleanup functions
-    const cleanupFns: Array<() => void> = [];
-
-    cleanupFns.push(window.electronAPI.onFileNew(handleNew));
-
-    // Handle new file in workspace mode
-    if (window.electronAPI.onFileNewInWorkspace) {
-      cleanupFns.push(window.electronAPI.onFileNewInWorkspace(() => {
-        if (workspaceMode) {
-          // Use current directory or workspace root
-          if (!currentDirectory && workspacePath) {
-            setCurrentDirectory(workspacePath);
-          }
-          setIsNewFileDialogOpen(true);
-        }
-      }));
-    }
-    cleanupFns.push(window.electronAPI.onFileOpen(handleOpen));
-    cleanupFns.push(window.electronAPI.onFileSave(handleSave));
-    cleanupFns.push(window.electronAPI.onFileSaveAs(handleSaveAs));
-    cleanupFns.push(window.electronAPI.onWorkspaceOpened(async (data) => {
-      if (LOG_CONFIG.WORKSPACE_OPS) console.log('[WORKSPACE] Workspace opened:', data);
-      setWorkspaceMode(true);
-      setWorkspacePath(data.workspacePath);
-      setWorkspaceName(data.workspaceName);
-      setFileTree(data.fileTree);
-      // Set current directory to workspace root
-      setCurrentDirectory(data.workspacePath);
-      // Clear current document
-      contentRef.current = '';
-      setCurrentFilePath(null);
-      setCurrentFileName(null);
-      isDirtyRef.current = false;
-    setIsDirty(false);
-      contentVersionRef.current += 1;
-      setContentVersion(v => v + 1);
-    setContentVersion(v => v + 1);
-      isInitializedRef.current = false;
-
-      // Restore AI Chat state when opening a workspace
-      try {
-        const aiChatState = await window.electronAPI.getAIChatState(data.workspacePath);
-        console.log('Restoring AI Chat state for workspace:', aiChatState);
-        if (aiChatState) {
-          setIsAIChatCollapsed(aiChatState.collapsed);
-          setAIChatWidth(aiChatState.width);
-          if (aiChatState.currentSessionId) {
-            setSessionToLoad({ sessionId: aiChatState.currentSessionId, workspacePath: data.workspacePath });
-          }
-        }
-        setIsAIChatStateLoaded(true);
-      } catch (error) {
-        console.error('Failed to restore AI Chat state:', error);
-        setIsAIChatStateLoaded(true);
-      }
-
-      // Open welcome tab if no tabs are open
-      if (tabPreferences.preferences.enabled && tabs.tabs.length === 0) {
-        console.log('[WORKSPACE] No tabs open, opening welcome tab');
-        // Delay slightly to ensure workspace state is fully set
-        setTimeout(() => openWelcomeTab(), 100);
-      }
-    }));
-
-    // Handle opening a specific file in a workspace (used when restoring workspace state)
-    if (window.electronAPI.onOpenWorkspaceFile) {
-      cleanupFns.push(window.electronAPI.onOpenWorkspaceFile(async (filePath) => {
-        console.log('Opening workspace file from saved state:', filePath);
-        // Use the existing file selection handler
-        await handleWorkspaceFileSelect(filePath);
-      }));
-    }
-
-    if (window.electronAPI.onOpenDocument) {
-      cleanupFns.push(window.electronAPI.onOpenDocument(async ({ path }) => {
-        console.log('[DOCUMENT_LINK] Renderer received open-document for path:', path);
-        try {
-          await handleWorkspaceFileSelect(path);
-        } catch (error) {
-          console.error('[DOCUMENT_LINK] Failed to open document reference:', error);
-        }
-      }));
-    }
-
-    // Handle workspace open from CLI
-    if (window.electronAPI.onOpenWorkspaceFromCLI) {
-      cleanupFns.push(window.electronAPI.onOpenWorkspaceFromCLI(async (workspacePath) => {
-        console.log('Opening workspace from CLI:', workspacePath);
-        // Open the workspace using the existing openWorkspace API
-        if (window.electronAPI.openWorkspace) {
-          await window.electronAPI.openWorkspace(workspacePath);
-        }
-      }));
-    }
-
-    cleanupFns.push(window.electronAPI.onFileOpenedFromOS(async (data) => {
-      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] File opened from OS:', data.filePath);
-      contentVersionRef.current += 1;
-      setContentVersion(v => v + 1);
-    setContentVersion(v => v + 1);
-      isInitializedRef.current = false;
-      contentRef.current = data.content;
-      setCurrentFilePath(data.filePath);
-      setCurrentFileName(data.filePath.split('/').pop() || data.filePath);
-      isDirtyRef.current = false;
-    setIsDirty(false);
-      initialContentRef.current = data.content;
-
-      // Create automatic snapshot when file is opened from OS
-      if (window.electronAPI.history) {
-        try {
-          // Check if we have previous snapshots
-          const snapshots = await window.electronAPI.history.listSnapshots(data.filePath);
-          if (snapshots.length === 0) {
-            // First time opening this file, create initial snapshot
-            await window.electronAPI.history.createSnapshot(
-              data.filePath,
-              data.content,
-              'auto',
-              'Initial file open'
-            );
-          } else {
-            // Check if content changed since last snapshot
-            const latestSnapshot = snapshots[0]; // Assuming sorted by timestamp desc
-            const lastContent = await window.electronAPI.history.loadSnapshot(
-              data.filePath,
-              latestSnapshot.timestamp
-            );
-            if (lastContent !== data.content) {
-              // Content actually changed, create snapshot
-              await window.electronAPI.history.createSnapshot(
-                data.filePath,
-                data.content,
-                'auto',
-                'File changed externally'
-              );
-            }
-          }
-        } catch (error) {
-          console.error('Failed to create automatic snapshot:', error);
-        }
-      }
-    }));
-    cleanupFns.push(window.electronAPI.onNewUntitledDocument((data) => {
-      logger.file.log('Received new-untitled-document event:', data.untitledName);
-      contentRef.current = '';
-      setCurrentFilePath(null);
-      setCurrentFileName(data.untitledName);
-      // setIsDirty(true); // New documents start as dirty
-      initialContentRef.current = '';
-      // Update the window title immediately
-      if (window.electronAPI) {
-        window.electronAPI.setTitle(`${data.untitledName} • - Preditor`);
-        window.electronAPI.setDocumentEdited(true);
-      }
-    }));
-    cleanupFns.push(window.electronAPI.onToggleSearch(() => {
-      console.log('Toggle search command received');
-      if (editorRef.current && searchCommandRef.current) {
-        editorRef.current.dispatchCommand(searchCommandRef.current, undefined);
-      }
-    }));
-    cleanupFns.push(window.electronAPI.onToggleSearchReplace(() => {
-      console.log('Toggle search replace command received');
-      if (editorRef.current && searchCommandRef.current) {
-        editorRef.current.dispatchCommand(searchCommandRef.current, undefined);
-      }
-    }));
-    cleanupFns.push(window.electronAPI.onFileDeleted((data) => {
-      console.log('File deleted:', data.filePath);
-      if (currentFilePath === data.filePath) {
-        // Current file was deleted, mark as dirty and clear the file path
-        setCurrentFilePath(null);
-        isDirtyRef.current = true;
-    setIsDirty(true);
-        // Optionally show a notification to the user
-        alert('The file has been deleted from disk.');
-      }
-    }));
-
-    // Handle file changes on disk
-    if (window.electronAPI.onFileChangedOnDisk) {
-      cleanupFns.push(window.electronAPI.onFileChangedOnDisk(async (data) => {
-        // console.log('[FILE_WATCH] File changed on disk event received:', data.path);
-
-        // CRITICAL: Check if we're in tab mode and if this is the active tab's file
-        let shouldReload = false;
-        let fileToCheck = currentFilePath;
-
-        if (tabPreferences.preferences.enabled && tabs.activeTab) {
-          // In tab mode, only reload if it's the active tab's file
-          fileToCheck = tabs.activeTab.filePath;
-          shouldReload = (fileToCheck === data.path);
-          console.log('[FILE_WATCH] Tab mode check:', {
-            activeTabPath: fileToCheck,
-            changedPath: data.path,
-            shouldReload
-          });
-        } else {
-          // In single-file mode, check against current file
-          shouldReload = (currentFilePath === data.path);
-          console.log('[FILE_WATCH] Single-file mode check:', {
-            currentPath: currentFilePath,
-            changedPath: data.path,
-            shouldReload
-          });
-        }
-
-        if (shouldReload) {
-          // Check if this change is from our own save (within 2 seconds)
-          const timeSinceLastSave = Date.now() - lastSaveTimeRef.current;
-          if (timeSinceLastSave < 2000) {
-            console.log('[FILE_WATCH] Ignoring file change, was just saved', timeSinceLastSave, 'ms ago');
-            return;
-          }
-
-          // The current file was changed on disk
-          try {
-            // Read the file content without touching the watcher
-            const result = window.electronAPI.readFileContent
-              ? await window.electronAPI.readFileContent(data.path)
-              : await window.electronAPI.switchWorkspaceFile(data.path);
-            if (result && result.content !== undefined) {
-              // Get current content from the editor
-              const currentContent = getContentRef.current ? getContentRef.current() : contentRef.current;
-
-              console.log('[FILE CHANGE] Content comparison:', {
-                diskLength: result.content.length,
-                currentLength: currentContent.length,
-                diskFirst100: result.content.substring(0, 100),
-                currentFirst100: currentContent.substring(0, 100),
-                areEqual: result.content === currentContent
-              });
-
-              // Compare the content
-              if (result.content === currentContent) {
-                // Content is the same, ignore the change (likely from our own save)
-                // console.log('File changed on disk but content is identical, ignoring');
-                return;
-              }
-
-              // Content is different, handle based on dirty state
-              if (!isDirtyRef.current) {
-                // File is not dirty, reload it automatically
-                console.log('[FILE_WATCH] File is not dirty, reloading from disk');
-                console.log('[FILE_WATCH] Loading content for path:', data.path, 'first 100 chars:', result.content.substring(0, 100));
-                contentRef.current = result.content;
-                initialContentRef.current = result.content;
-                contentVersionRef.current += 1;
-                setContentVersion(v => v + 1);  // Trigger re-render and remount editor
-                // Reset the getContentRef since editor will remount
-                getContentRef.current = null;
-                // Ensure editor is not marked as dirty
-                isDirtyRef.current = false;
-                setIsDirty(false);
-                // IMPORTANT: Update the tab's content so it doesn't reload and restart the watcher
-                if (tabs.activeTab && tabs.activeTab.filePath === data.path) {
-                  tabs.updateTab(tabs.activeTab.id, { content: result.content });
-                }
-              } else {
-                // File is dirty, we have a conflict
-                console.log('[FILE_WATCH] File changed on disk but local changes exist');
-                const choice = confirm(
-                  'The file has been changed on disk but you have unsaved changes.\n\n' +
-                  'Do you want to reload the file from disk and lose your changes?\n\n' +
-                  'Click OK to reload from disk, or Cancel to keep your changes.'
-                );
-
-                if (choice) {
-                  // User chose to reload from disk
-                  contentRef.current = result.content;
-                  initialContentRef.current = result.content;
-                  contentVersionRef.current += 1;
-                  setContentVersion(v => v + 1);  // Trigger re-render and remount editor
-                  // Reset the getContentRef since editor will remount
-                  getContentRef.current = null;
-                  isDirtyRef.current = false;
-                  setIsDirty(false);
-                }
-                // If user chose Cancel, we just keep the current changes
-              }
-            }
-          } catch (error) {
-            console.error('[FILE_WATCH] Failed to check file changes:', error);
-          }
-        } else {
-          console.log('[FILE_WATCH] Ignoring file change for non-active file:', data.path);
-        }
-      }));
-    }
-    cleanupFns.push(window.electronAPI.onFileMoved(async (data) => {
-      console.log('File moved:', data);
-      if (currentFilePath === data.sourcePath) {
-        // The current file was moved, update the path and reload it
-        console.log('Current file was moved, updating to new path:', data.destinationPath);
-
-        // Update the current file path
-        setCurrentFilePath(data.destinationPath);
-        setCurrentFileName(data.destinationPath.split('/').pop() || data.destinationPath);
-
-        // Update the file in main process
-        if (window.electronAPI.setCurrentFile) {
-          window.electronAPI.setCurrentFile(data.destinationPath);
-        }
-
-        // If we're dirty, just update the path but keep the current content
-        // If not dirty, we could optionally reload from the new location
-        // but since it's the same content, we don't need to
-      }
-    }));
-    cleanupFns.push(window.electronAPI.onThemeChange((newTheme) => {
-      if (LOG_CONFIG.THEME) console.log('[THEME] Theme changed to:', newTheme);
-      const editorTheme = newTheme === 'system' ? 'auto' : newTheme;
-
-      // Flush unsaved changes to disk before visual reset, when possible
-      const flushAndReload = async () => {
-        try {
-          if (currentFilePath && getContentRef.current) {
-            if (isDirtyRef.current) {
-              const content = getContentRef.current();
-              if (LOG_CONFIG.THEME) console.log('[THEME] Dirty before theme switch. Saving to disk...');
-              const result = await window.electronAPI?.saveFile(content, currentFilePath);
-              if (result?.success) {
-                lastSaveTimeRef.current = Date.now();
-                isDirtyRef.current = false;
-                setIsDirty(false);
-                initialContentRef.current = content;
-                // Reflect clean state in active tab UI
-                if (tabPreferences.preferences.enabled && tabs.activeTabId) {
-                  tabs.updateTab(tabs.activeTabId, { isDirty: false });
-                }
-                if (LOG_CONFIG.THEME) console.log('[THEME] Saved successfully before theme switch');
-              } else if (LOG_CONFIG.THEME) {
-                console.warn('[THEME] Save before theme switch did not succeed:', result);
-              }
-            }
-
-            // Reload from disk to ensure we rehydrate with canonical content
-            if (window.electronAPI?.readFileContent) {
-              const res = await window.electronAPI.readFileContent(currentFilePath);
-              if (res?.content !== undefined) {
-                contentRef.current = res.content;
-                initialContentRef.current = res.content;
-                contentVersionRef.current += 1;
-                setContentVersion(v => v + 1);
-                // Keep tab content in sync
-                if (tabPreferences.preferences.enabled && tabs.activeTabId) {
-                  tabs.updateTab(tabs.activeTabId, { content: res.content });
-                }
-              }
-            } else if (window.electronAPI?.switchWorkspaceFile) {
-              const res = await window.electronAPI.switchWorkspaceFile(currentFilePath);
-              if (res?.content !== undefined) {
-                contentRef.current = res.content;
-                initialContentRef.current = res.content;
-                contentVersionRef.current += 1;
-                setContentVersion(v => v + 1);
-                if (tabPreferences.preferences.enabled && tabs.activeTabId) {
-                  tabs.updateTab(tabs.activeTabId, { content: res.content });
-                }
-              }
-            }
-          }
-        } catch (err) {
-          console.error('[THEME] Error flushing/reloading content on theme change:', err);
-        } finally {
-          // Apply theme after content rehydration
-          if (theme !== (editorTheme as ConfigTheme)) {
-            setTheme(editorTheme as ConfigTheme);
-            if (LOG_CONFIG.THEME) console.log('[THEME] Editor theme set to:', editorTheme);
-          }
-        }
-      };
-
-      // Kick off the async workflow without blocking
-      flushAndReload();
-    }));
-
-    // Listen for show preferences event
-    cleanupFns.push(window.electronAPI.onFileRenamed((data) => {
-      console.log('File renamed:', data);
-
-      // Update file tree with the renamed file
-      const updateFileTree = (items: FileTreeItem[]): FileTreeItem[] => {
-        return items.map(item => {
-          if (item.path === data.oldPath) {
-            // Update the renamed item
-            const newFileName = data.newPath.split('/').pop() || data.newPath;
-            return { ...item, path: data.newPath, name: newFileName };
-          } else if (item.children) {
-            // Recursively update children
-            return { ...item, children: updateFileTree(item.children) };
-          }
-          return item;
-        });
-      };
-
-      setFileTree(prevTree => updateFileTree(prevTree));
-
-      // Update current file path if it was renamed
-      if (currentFilePath === data.oldPath) {
-        setCurrentFilePath(data.newPath);
-        setCurrentFileName(data.newPath.split('/').pop() || data.newPath);
-      }
-    }));
-    cleanupFns.push(window.electronAPI.onWorkspaceFileTreeUpdated((data) => {
-      // console.log('Workspace file tree updated:', data);
-      setFileTree(data.fileTree);
-    }));
-
-    // Load session from Session Manager
-    if (window.electronAPI.onLoadSessionFromManager) {
-      cleanupFns.push(window.electronAPI.onLoadSessionFromManager(async (data: { sessionId: string; workspacePath?: string }) => {
-        console.log('Loading session from manager:', data);
-
-        // If there's a workspace path and we're not in workspace mode, open the workspace first
-        if (data.workspacePath && !workspaceMode) {
-          // Open the workspace
-          const workspaceName = data.workspacePath.split('/').pop() || 'Workspace';
-          const fileTree = await window.electronAPI.getFolderContents(data.workspacePath);
-          setWorkspaceMode(true);
-          setWorkspacePath(data.workspacePath);
-          setWorkspaceName(workspaceName);
-          setFileTree(fileTree);
-        }
-
-        // Set the session to load - AIChat will pick this up
-        setSessionToLoad(data);
-
-        // Make sure AI Chat is visible
-        setIsAIChatCollapsed(false);
-      }));
-    }
-
-    // View history menu handler
-    if (window.electronAPI.onViewHistory) {
-      cleanupFns.push(window.electronAPI.onViewHistory(() => {
-        console.log('View history menu triggered');
-        // Save current state as manual snapshot before opening history (only if dirty)
-        if (isDirty && currentFilePath && getContentRef.current && window.electronAPI?.history) {
-          const content = getContentRef.current();
-          window.electronAPI.history.createSnapshot(
-            currentFilePath,
-            content,
-            'manual',
-            'Before viewing history'
-          );
-        }
-        setIsHistoryDialogOpen(true);
-      }));
-    }
-
-    // Tab navigation handlers
-    if (window.electronAPI.onNextTab) {
-      cleanupFns.push(window.electronAPI.onNextTab(() => {
-        if (tabPreferences.preferences.enabled && tabs.tabs.length > 1) {
-          const currentIndex = tabs.tabs.findIndex(tab => tab.id === tabs.activeTabId);
-          const nextIndex = (currentIndex + 1) % tabs.tabs.length;
-          const nextTab = tabs.tabs[nextIndex];
-          if (nextTab) {
-            tabs.switchTab(nextTab.id);
-          }
-        }
-      }));
-    }
-
-    if (window.electronAPI.onPreviousTab) {
-      cleanupFns.push(window.electronAPI.onPreviousTab(() => {
-        if (tabPreferences.preferences.enabled && tabs.tabs.length > 1) {
-          const currentIndex = tabs.tabs.findIndex(tab => tab.id === tabs.activeTabId);
-          const prevIndex = currentIndex <= 0 ? tabs.tabs.length - 1 : currentIndex - 1;
-          const prevTab = tabs.tabs[prevIndex];
-          if (prevTab) {
-            tabs.switchTab(prevTab.id);
-          }
-        }
-      }));
-    }
-
-    // Approve/Reject action handlers
-    if (window.electronAPI.onApproveAction) {
-      cleanupFns.push(window.electronAPI.onApproveAction(() => {
-        console.log('Approve action triggered');
-        // Trigger approve action in the editor
-        const editor = editorRef.current;
-        if (editor) {
-          editor.dispatchCommand(APPROVE_DIFF_COMMAND, undefined);
-        }
-      }));
-    }
-
-    if (window.electronAPI.onRejectAction) {
-      cleanupFns.push(window.electronAPI.onRejectAction(() => {
-        console.log('Reject action triggered');
-        // Trigger reject action in the editor
-        const editor = editorRef.current;
-        if (editor) {
-          editor.dispatchCommand(REJECT_DIFF_COMMAND, undefined);
-        }
-      }));
-    }
-
-    // MCP Server handlers
-    if (window.electronAPI.onMcpApplyDiff) {
-      cleanupFns.push(window.electronAPI.onMcpApplyDiff(async ({ replacements, resultChannel }) => {
-        console.log('MCP applyDiff request:', replacements);
-        try {
-          // Use the AI chat bridge to apply replacements
-          const result = await aiChatBridge.applyReplacements(replacements);
-
-          // Ensure result is defined and has the expected shape
-          const finalResult = result || { success: false, error: 'No result returned from diff application' };
-
-          if (window.electronAPI.sendMcpApplyDiffResult) {
-            // Make sure we have all required properties and no undefined values
-            const resultToSend = {
-              success: finalResult.success ?? false
-            };
-            // Only add error if it exists (IPC can't handle undefined values)
-            if (finalResult.error) {
-              (resultToSend as any).error = finalResult.error;
-            }
-            window.electronAPI.sendMcpApplyDiffResult(resultChannel, resultToSend);
-          }
-
-          // Show error in UI if the diff failed
-          if (!finalResult.success) {
-            console.error('Diff application failed:', finalResult.error);
-            // You could also show a toast or notification here
-            // For now, we'll just make sure it's visible in the console
-          }
-        } catch (error) {
-          console.error('MCP applyDiff error:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-          if (window.electronAPI.sendMcpApplyDiffResult) {
-            // Ensure we're sending a clean object without undefined values
-            window.electronAPI.sendMcpApplyDiffResult(resultChannel, {
-              success: false,
-              error: errorMessage || 'Unknown error'
-            });
-          }
-
-          // Could show error notification here
-          // alert(`Failed to apply edit: ${errorMessage}`);
-        }
-      }));
-    }
-
-    if (window.electronAPI.onMcpStreamContent) {
-      cleanupFns.push(window.electronAPI.onMcpStreamContent(({ streamId, content, position, insertAfter, mode }) => {
-        console.log('MCP streamContent request:', { streamId, position, mode });
-        // Start streaming
-        aiChatBridge.startStreamingEdit({
-          id: streamId,
-          position: position || 'cursor',
-          mode: mode || 'after',
-          insertAfter,
-          insertAtEnd: position === 'end'
-        });
-        // Stream the content
-        aiChatBridge.streamContent(streamId, content);
-        // End streaming
-        aiChatBridge.endStreamingEdit(streamId);
-      }));
-    }
-
-    if (window.electronAPI.onMcpNavigateTo) {
-      cleanupFns.push(window.electronAPI.onMcpNavigateTo(({ line, column }) => {
-        console.log('MCP navigateTo request:', { line, column });
-        // TODO: Implement navigation to specific line/column in editor
-        // This would require adding a navigation command to the editor
-      }));
-    }
-
-    // AI Tool handlers for document manipulation
-    // Note: onAIApplyDiff is handled by aiApi.ts to avoid duplicate applications
-
-    if (window.electronAPI.onAIGetDocumentContent) {
-      cleanupFns.push(window.electronAPI.onAIGetDocumentContent(async ({ resultChannel }) => {
-        console.log('AI getDocumentContent request');
-        try {
-          // Get content from the editor using the ref
-          let content = '';
-          if (getContentRef.current) {
-            content = getContentRef.current();
-          }
-
-          if (window.electronAPI.sendAIGetDocumentContentResult) {
-            window.electronAPI.sendAIGetDocumentContentResult(resultChannel, {
-              content: content || ''
-            });
-          }
-        } catch (error) {
-          console.error('AI getDocumentContent error:', error);
-
-          if (window.electronAPI.sendAIGetDocumentContentResult) {
-            window.electronAPI.sendAIGetDocumentContentResult(resultChannel, {
-              content: ''
-            });
-          }
-        }
-      }));
-    }
-
-    if (window.electronAPI.onAIUpdateFrontmatter) {
-      cleanupFns.push(window.electronAPI.onAIUpdateFrontmatter(async ({ updates, resultChannel }) => {
-        console.log('AI updateFrontmatter request:', updates);
-        try {
-          const currentContent = aiChatBridge.getContent();
-          const { data: existingData } = parseFrontmatter(currentContent);
-
-          const normalizedUpdates: Record<string, unknown> = { ...updates };
-          const planStatusUpdate: Record<string, unknown> = {};
-
-          for (const key of Object.keys(normalizedUpdates)) {
-            if (PLAN_STATUS_KEYS.has(key)) {
-              planStatusUpdate[key] = normalizedUpdates[key];
-              delete normalizedUpdates[key];
-            }
-          }
-
-          if (Object.keys(planStatusUpdate).length > 0) {
-            const existingPlanStatus = existingData?.planStatus;
-            const existingPlanStatusObject =
-              existingPlanStatus && typeof existingPlanStatus === 'object' && !Array.isArray(existingPlanStatus)
-                ? (existingPlanStatus as FrontmatterData)
-                : {};
-
-            normalizedUpdates.planStatus = mergeFrontmatterData(
-              existingPlanStatusObject,
-              planStatusUpdate as Partial<FrontmatterData>,
-            );
-          }
-
-          const mergedData = mergeFrontmatterData(existingData ?? {}, normalizedUpdates as Partial<FrontmatterData>);
-
-          const frontmatterMatch = currentContent.match(/^---\n([\s\S]*?)\n---\n?/);
-          const newFrontmatterBlockBase = serializeWithFrontmatter('', mergedData);
-
-          let replacements: Array<{ oldText: string; newText: string }>;
-
-          if (frontmatterMatch) {
-            const originalFrontmatterBlock = frontmatterMatch[0];
-            const trailingNewlines = originalFrontmatterBlock.match(/\n*$/)?.[0] ?? '';
-            const trimmedBase = newFrontmatterBlockBase.replace(/\s*$/, '');
-            const newFrontmatterBlock = `${trimmedBase}${trailingNewlines || '\n'}`;
-
-            replacements = [{
-              oldText: originalFrontmatterBlock,
-              newText: newFrontmatterBlock,
-            }];
-          } else {
-            const trimmedBase = newFrontmatterBlockBase.replace(/\s*$/, '');
-            const newFrontmatterBlock = `${trimmedBase}\n\n`;
-            replacements = [{
-              oldText: currentContent,
-              newText: `${newFrontmatterBlock}${currentContent}`,
-            }];
-          }
-
-          // Apply the replacement
-          const result = await aiChatBridge.applyReplacements(replacements);
-          const finalResult = result || { success: false, error: 'Failed to update frontmatter' };
-
-          if (window.electronAPI.sendAIUpdateFrontmatterResult) {
-            const resultToSend = {
-              success: finalResult.success ?? false
-            };
-            if (finalResult.error) {
-              (resultToSend as any).error = finalResult.error;
-            }
-            window.electronAPI.sendAIUpdateFrontmatterResult(resultChannel, resultToSend);
-          }
-        } catch (error) {
-          console.error('AI updateFrontmatter error:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-          if (window.electronAPI.sendAIUpdateFrontmatterResult) {
-            window.electronAPI.sendAIUpdateFrontmatterResult(resultChannel, {
-              success: false,
-              error: errorMessage || 'Unknown error'
-            });
-          }
-        }
-      }));
-    }
-
-    // Handle AI create document requests from main process
-    if (window.electronAPI.onAICreateDocument) {
-      cleanupFns.push(window.electronAPI.onAICreateDocument(async ({ filePath, initialContent, switchToFile, resultChannel }) => {
-        console.log('AI createDocument request from main:', { filePath, switchToFile });
-        try {
-          // Create the document via IPC
-          const result = await window.electronAPI.invoke('create-document', filePath, initialContent);
-
-          if (result.success) {
-            // Switch to the new file if requested
-            if (switchToFile && result.filePath) {
-              console.log('Switching to new file:', result.filePath);
-              await handleWorkspaceFileSelect(result.filePath);
-            }
-
-            // Send success response back to main process
-            if (window.electronAPI.sendAICreateDocumentResult) {
-              window.electronAPI.sendAICreateDocumentResult(resultChannel, {
-                success: true,
-                filePath: result.filePath
-              });
-            } else {
-              // Fallback to generic IPC send
-              window.electronAPI.send(resultChannel, {
-                success: true,
-                filePath: result.filePath
-              });
-            }
-          } else {
-            throw new Error(result.error || 'Failed to create document');
-          }
-        } catch (error) {
-          console.error('AI createDocument error:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-          if (window.electronAPI.sendAICreateDocumentResult) {
-            window.electronAPI.sendAICreateDocumentResult(resultChannel, {
-              success: false,
-              error: errorMessage
-            });
-          } else {
-            // Fallback to generic IPC send
-            window.electronAPI.send(resultChannel, {
-              success: false,
-              error: errorMessage
-            });
-          }
-        }
-      }));
-    }
-
-    // Handle toggle agent palette from menu
-    if (window.electronAPI.onToggleAgentPalette) {
-      cleanupFns.push(window.electronAPI.onToggleAgentPalette(() => {
-        console.log('Toggle agent palette command received from menu');
-        if (workspaceMode) {
-          setIsAgentPaletteVisible(true);
-        } else {
-          console.log('Not in workspace mode, agent palette not available');
-        }
-      }));
-    }
-
-    // Handle open welcome tab from menu
-    if (window.electronAPI.onOpenWelcomeTab) {
-      cleanupFns.push(window.electronAPI.onOpenWelcomeTab(() => {
-        console.log('Open welcome tab command received from menu');
-        openWelcomeTab();
-      }));
-    }
-
-    // Update MCP document state whenever content or selection changes
-    const updateDocumentState = () => {
-      if (window.electronAPI?.updateMcpDocumentState && getContentRef.current) {
-        const content = getContentRef.current();
-        window.electronAPI.updateMcpDocumentState({
-          content,
-          filePath: currentFilePath || 'untitled.md',
-          fileType: 'markdown',
-          // TODO: Get actual cursor position and selection from editor
-          cursorPosition: undefined,
-          selection: undefined
-        });
-      }
-    };
-
-    // Update document state when file is opened or content changes
-    // We need to send the initial state when a file is opened, not just when it's dirty
-    if (currentFilePath || isDirty) {
-      updateDocumentState();
-    }
-
-    // Clean up listeners when dependencies change
-    return () => {
-      // console.log('Cleaning up IPC listeners');
-      cleanupFns.forEach(cleanup => cleanup());
-    };
-  }, [handleNew, handleOpen, handleSave, handleSaveAs, handleWorkspaceFileSelect, currentFilePath, isDirty, workspaceMode]);
+  // IPC handlers hook - sets up all IPC communication with main process
+  useIPCHandlers({
+    // Handlers
+    handleNew,
+    handleOpen,
+    handleSave,
+    handleSaveAs,
+    handleWorkspaceFileSelect,
+    openWelcomeTab,
+    
+    // State setters
+    setIsApiKeyDialogOpen,
+    setWorkspaceMode,
+    setWorkspacePath,
+    setWorkspaceName,
+    setFileTree,
+    setCurrentDirectory,
+    setCurrentFilePath,
+    setCurrentFileName,
+    setIsDirty,
+    setContentVersion,
+    setIsNewFileDialogOpen,
+    setIsAIChatCollapsed,
+    setAIChatWidth,
+    setIsAIChatStateLoaded,
+    setSessionToLoad,
+    setIsHistoryDialogOpen,
+    setIsAgentPaletteVisible,
+    
+    // Refs
+    contentRef,
+    initialContentRef,
+    isInitializedRef,
+    isDirtyRef,
+    contentVersionRef,
+    getContentRef,
+    editorRef,
+    searchCommandRef,
+    lastSaveTimeRef,
+    
+    // State values
+    currentFilePath,
+    currentDirectory,
+    workspaceMode,
+    workspacePath,
+    sessionToLoad,
+    isDirty,
+    
+    // Tabs
+    tabs,
+    tabPreferences,
+    
+    // Config
+    LOG_CONFIG,
+  });
 
   // Handle AI tool createDocument requests
   useEffect(() => {
@@ -2783,6 +1712,9 @@ export default function App() {
                       const loadedContent = getContentFn();
                       initialContentRef.current = loadedContent;
                     }
+
+                    // Configure aiToolService with content getter
+                    aiToolService.setGetContentFunction(getContentFn);
                   },
                   onEditorReady: (editor) => {
                     logger.ui.info('Editor ready for tab');
