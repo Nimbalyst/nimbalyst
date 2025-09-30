@@ -52,6 +52,12 @@ export async function saveSessionState() {
 
 // Restore session state
 export async function restoreSessionState(): Promise<boolean> {
+    // Skip session restoration in test mode
+    if (process.env.PLAYWRIGHT === '1') {
+        logger.session.info('Skipping session restoration in test mode');
+        return false;
+    }
+
     const sessionState = getSessionState();
 
     if (!sessionState || !sessionState.windows || sessionState.windows.length === 0) {
