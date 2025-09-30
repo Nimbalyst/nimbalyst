@@ -118,7 +118,7 @@ export const planStatusPluginPackage: PluginPackage<PlanStatusPluginProps> = {
     {
       title: 'Insert Plan Status',
       description: 'Add a plan status block to track project progress',
-      icon: 'checklist',
+      icon: 'check-list',
       keywords: ['plan', 'status', 'project', 'tracking'],
       command: INSERT_PLAN_STATUS_COMMAND,
     },

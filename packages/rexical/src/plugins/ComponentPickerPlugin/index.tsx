@@ -286,7 +286,7 @@ function getBaseOptions(editor: LexicalEditor, showModal: ShowModal) {
     ...pluginRegistry.getAllUserCommands().map(
       (userCommand) =>
         new ComponentPickerOption(userCommand.title, {
-          icon: userCommand.icon ? <span>{userCommand.icon}</span> : undefined,
+          icon: userCommand.icon ? <i className={`icon ${userCommand.icon}`} /> : undefined,
           keywords: userCommand.keywords || [],
           onSelect: () =>
             editor.dispatchCommand(userCommand.command, userCommand.payload),
