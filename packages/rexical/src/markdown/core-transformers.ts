@@ -25,6 +25,7 @@ import {
 } from './MarkdownTransformers';
 
 import { HR_TRANSFORMER } from './HorizontalRuleTransformer';
+import { PAGE_BREAK_TRANSFORMER } from '../plugins/PageBreakPlugin';
 
 // Element transformers
 const ELEMENT_TRANSFORMERS: Array<Transformer> = [
@@ -64,6 +65,7 @@ const TEXT_MATCH_TRANSFORMERS: Array<Transformer> = [
 export const CORE_TRANSFORMERS: Array<Transformer> = [
   // Core element transformers
   HR_TRANSFORMER, // Horizontal rules are core markdown
+  PAGE_BREAK_TRANSFORMER, // Page breaks for print/export
 
   // All markdown transformers from our local implementation
   CHECK_LIST,

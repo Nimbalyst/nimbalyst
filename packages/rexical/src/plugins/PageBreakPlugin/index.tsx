@@ -20,8 +20,11 @@ import {
 import {useEffect} from 'react';
 
 import {$createPageBreakNode, PageBreakNode} from './PageBreakNode';
+import {PAGE_BREAK_TRANSFORMER} from './PageBreakTransformer';
 
 export const INSERT_PAGE_BREAK: LexicalCommand<undefined> = createCommand();
+
+export {PageBreakNode, $createPageBreakNode, PAGE_BREAK_TRANSFORMER};
 
 export default function PageBreakPlugin(): JSX.Element | null {
   const [editor] = useLexicalComposerContext();
