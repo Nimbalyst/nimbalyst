@@ -233,7 +233,8 @@ export default function App() {
       // Save current tab's content before switching
       const previousTabId = tabs.activeTabId;
       const previousTab = previousTabId ? tabs.getTabState(previousTabId) : undefined;
-      const wasDirty = isDirtyRef.current;
+      // Use the tab's stored isDirty state, not isDirtyRef, to avoid overwriting autosave updates
+      const wasDirty = previousTab?.isDirty ?? isDirtyRef.current;
       let previousContent: string | null = null;
 
       if (previousTabId && getContentRef.current) {
@@ -278,14 +279,22 @@ export default function App() {
         }
 
         if (tab.content !== undefined) {
+          // CRITICAL: Update refs FIRST before any state changes that trigger re-renders
+          // The editor will load: contentRef.current || tabs.activeTab.content || ''
+          // initialContentRef will be updated in onGetContent when editor actually loads
+          const contentToLoad = tab.content;
+          contentRef.current = contentToLoad;
+          initialContentRef.current = contentToLoad;
+          // Since we always autosave before switching tabs, and we just loaded fresh content from disk,
+          // only the active tab can ever be dirty
+          isDirtyRef.current = false;
+
+          // Now trigger state updates that cause re-renders
           setCurrentFilePath(tab.filePath);
           setCurrentFileName(tab.fileName);
-          contentRef.current = tab.content;
-          initialContentRef.current = tab.content;
+          setIsDirty(false);
           contentVersionRef.current += 1;
           setContentVersion(v => v + 1);
-          isDirtyRef.current = tab.isDirty || false;
-          setIsDirty(tab.isDirty || false);
 
           // Update the main process about the current file
           if (window.electronAPI) {
@@ -2636,14 +2645,11 @@ export default function App() {
                       const currentContent = getContentRef.current();
                       // Keep the latest content in memory to prevent losing edits
                       contentRef.current = currentContent;
-                      const hasChanged = currentContent !== initialContentRef.current;
 
-                      // console.log('[TAB CONTENT CHANGE] Dirty check:', {
-                      //   hasChanged,
-                      //   currentLength: currentContent.length,
-                      //   initialLength: initialContentRef.current.length,
-                      //   isDirtyRef: isDirtyRef.current
-                      // });
+                      // Normalize content before comparing to avoid false positives from trailing whitespace
+                      const normalizedCurrent = currentContent.trimEnd();
+                      const normalizedInitial = initialContentRef.current.trimEnd();
+                      const hasChanged = normalizedCurrent !== normalizedInitial;
 
                       // Track when content last changed for debouncing
                       if (hasChanged) {
@@ -2673,6 +2679,13 @@ export default function App() {
                   onGetContent: (getContentFn) => {
                     logger.ui.info('Received getContent function for tab');
                     getContentRef.current = getContentFn;
+
+                    // Update initialContentRef to match what the editor actually loaded
+                    // This ensures onContentChange comparisons are accurate after tab switches
+                    if (getContentFn) {
+                      const loadedContent = getContentFn();
+                      initialContentRef.current = loadedContent;
+                    }
                   },
                   onEditorReady: (editor) => {
                     logger.ui.info('Editor ready for tab');
@@ -2699,7 +2712,11 @@ export default function App() {
               const currentContent = getContentRef.current();
               // Keep the latest content in memory to prevent losing edits
               contentRef.current = currentContent;
-              const hasChanged = currentContent !== initialContentRef.current;
+
+              // Normalize content before comparing to avoid false positives from trailing whitespace
+              const normalizedCurrent = currentContent.trimEnd();
+              const normalizedInitial = initialContentRef.current.trimEnd();
+              const hasChanged = normalizedCurrent !== normalizedInitial;
 
               // Track when content last changed for debouncing
               if (hasChanged) {
