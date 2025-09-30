@@ -92,7 +92,7 @@ export function registerBuiltinPlugins(): void {
       {
         title: 'Mermaid Diagram',
         description: 'Insert a Mermaid diagram for flowcharts, sequence diagrams, and more',
-        icon: '',
+        icon: 'account_tree',
         keywords: ['mermaid', 'diagram', 'flowchart', 'sequence', 'chart', 'graph', 'uml'],
         command: INSERT_MERMAID_COMMAND,
       },

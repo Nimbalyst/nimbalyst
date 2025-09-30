@@ -41,9 +41,11 @@ import {pluginRegistry} from '../PluginRegistry';
 import {INSERT_BOARD_COMMAND} from '../KanbanBoardPlugin/BoardCommands';
 import {
   TypeaheadMenuPlugin,
-  createBasicTriggerFunction,
   TypeaheadMenuOption,
 } from '../TypeaheadPlugin/TypeaheadMenuPlugin';
+import {
+  createBasicTriggerFunction,
+} from '../TypeaheadPlugin/TypeaheadMenu';
 
 // ============================================================================
 // MATERIAL SYMBOLS ICON SUPPORT
@@ -135,20 +137,20 @@ function getDynamicOptions(editor: LexicalEditor, queryString: string): Typeahea
 
 function getBaseOptions(editor: LexicalEditor, showModal: ShowModal): TypeaheadMenuOption[] {
   return [
-    {
-      id: 'paragraph',
-      label: 'Paragraph',
-      icon: <MaterialIcon name="notes" />,
-      keywords: ['normal', 'paragraph', 'p', 'text'],
-      section: 'Basic blocks',
-      onSelect: () =>
-        editor.update(() => {
-          const selection = $getSelection();
-          if ($isRangeSelection(selection)) {
-            $setBlocksType(selection, () => $createParagraphNode());
-          }
-        }),
-    },
+    // {
+    //   id: 'paragraph',
+    //   label: 'Paragraph',
+    //   icon: <MaterialIcon name="notes" />,
+    //   keywords: ['normal', 'paragraph', 'p', 'text'],
+    //   section: 'Basic blocks',
+    //   onSelect: () =>
+    //     editor.update(() => {
+    //       const selection = $getSelection();
+    //       if ($isRangeSelection(selection)) {
+    //         $setBlocksType(selection, () => $createParagraphNode());
+    //       }
+    //     }),
+    // },
     {
       id: 'heading-1',
       label: 'Heading 1',
@@ -331,42 +333,42 @@ function getBaseOptions(editor: LexicalEditor, showModal: ShowModal): TypeaheadM
       onSelect: () =>
         editor.dispatchCommand(INSERT_BOARD_COMMAND, undefined),
     },
-    {
-      id: 'align-left',
-      label: 'Align Left',
-      icon: <MaterialIcon name="format_align_left" />,
-      keywords: ['align', 'left'],
-      section: 'Alignment',
-      onSelect: () =>
-        editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'left'),
-    },
-    {
-      id: 'align-center',
-      label: 'Align Center',
-      icon: <MaterialIcon name="format_align_center" />,
-      keywords: ['align', 'center'],
-      section: 'Alignment',
-      onSelect: () =>
-        editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'center'),
-    },
-    {
-      id: 'align-right',
-      label: 'Align Right',
-      icon: <MaterialIcon name="format_align_right" />,
-      keywords: ['align', 'right'],
-      section: 'Alignment',
-      onSelect: () =>
-        editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'right'),
-    },
-    {
-      id: 'align-justify',
-      label: 'Align Justify',
-      icon: <MaterialIcon name="format_align_justify" />,
-      keywords: ['align', 'justify'],
-      section: 'Alignment',
-      onSelect: () =>
-        editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'justify'),
-    },
+    // {
+    //   id: 'align-left',
+    //   label: 'Align Left',
+    //   icon: <MaterialIcon name="format_align_left" />,
+    //   keywords: ['align', 'left'],
+    //   section: 'Alignment',
+    //   onSelect: () =>
+    //     editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'left'),
+    // },
+    // {
+    //   id: 'align-center',
+    //   label: 'Align Center',
+    //   icon: <MaterialIcon name="format_align_center" />,
+    //   keywords: ['align', 'center'],
+    //   section: 'Alignment',
+    //   onSelect: () =>
+    //     editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'center'),
+    // },
+    // {
+    //   id: 'align-right',
+    //   label: 'Align Right',
+    //   icon: <MaterialIcon name="format_align_right" />,
+    //   keywords: ['align', 'right'],
+    //   section: 'Alignment',
+    //   onSelect: () =>
+    //     editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'right'),
+    // },
+    // {
+    //   id: 'align-justify',
+    //   label: 'Align Justify',
+    //   icon: <MaterialIcon name="format_align_justify" />,
+    //   keywords: ['align', 'justify'],
+    //   section: 'Alignment',
+    //   onSelect: () =>
+    //     editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'justify'),
+    // },
     // Add user commands from plugins
     ...pluginRegistry.getAllUserCommands().map(
       (userCommand) => ({

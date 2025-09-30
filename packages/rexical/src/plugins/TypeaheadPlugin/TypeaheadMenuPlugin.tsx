@@ -78,6 +78,35 @@ export interface TypeaheadMenuProps {
     const [resolution, setResolution] = useState<TypeaheadMenuResolution | null>(null);
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
+    // Create visual order list - matches how TypeaheadMenuContent renders with sections
+    const visualOrderOptions = useMemo(() => {
+      // If no sections, return selectable options in original order
+      const hasSections = options.some(opt => opt.section);
+      if (!hasSections) {
+        return options.filter(opt => opt.type !== 'header');
+      }
+
+      // Group by section
+      const grouped: Record<string, TypeaheadMenuOption[]> = {};
+      options.forEach(opt => {
+        if (opt.type === 'header') return;
+        const section = opt.section || '_default';
+        if (!grouped[section]) grouped[section] = [];
+        grouped[section].push(opt);
+      });
+
+      // Sort sections alphabetically, with _default last
+      const sectionNames = Object.keys(grouped).filter(s => s !== '_default').sort();
+      if (grouped._default) sectionNames.push('_default');
+
+      // Flatten in visual order
+      const result: TypeaheadMenuOption[] = [];
+      sectionNames.forEach(section => {
+        result.push(...grouped[section]);
+      });
+      return result;
+    }, [options]);
+
     // Close menu
     const closeMenu = useCallback(() => {
       setResolution(null);
@@ -141,38 +170,48 @@ export interface TypeaheadMenuProps {
       });
     }, [editor, resolution, shouldSplitNodeWithQuery, onSelectOption, closeMenu]);
 
-    // Keyboard navigation
+    // Keyboard navigation - uses visual order
     useEffect(() => {
       if (!resolution) return;
 
-      // Helper function to find next selectable option
-      const findNextSelectableIndex = (currentIndex: number, direction: 'up' | 'down'): number => {
+      // Helper to find next option in visual order and map back to flat index
+      const findNextVisualIndex = (direction: 'up' | 'down'): number | null => {
+        if (visualOrderOptions.length === 0) return null;
+
+        // Find current option in visual order
+        const currentOption = selectedIndex !== null ? options[selectedIndex] : null;
+        const currentVisualIndex = currentOption
+          ? visualOrderOptions.findIndex(opt => opt.id === currentOption.id)
+          : -1;
+
+        // Navigate in visual order
         const increment = direction === 'down' ? 1 : -1;
-        let newIndex = currentIndex;
-        let attempts = 0;
+        let newVisualIndex = currentVisualIndex + increment;
 
-        do {
-          newIndex = newIndex + increment;
-          if (newIndex < 0) newIndex = options.length - 1;
-          if (newIndex >= options.length) newIndex = 0;
-          attempts++;
-        } while (options[newIndex]?.type === 'header' && attempts < options.length);
+        // Stop at boundaries instead of wrapping
+        if (newVisualIndex < 0 || newVisualIndex >= visualOrderOptions.length) {
+          return null;
+        }
 
-        return newIndex;
+        // Get the option at new visual position
+        const newOption = visualOrderOptions[newVisualIndex];
+
+        // Map back to flat array index
+        return options.findIndex(opt => opt.id === newOption.id);
       };
 
       return mergeRegister(
         editor.registerCommand(
           KEY_ARROW_DOWN_COMMAND,
           (event: KeyboardEvent) => {
-            if (options.length && selectedIndex !== null) {
-              const newIndex = findNextSelectableIndex(selectedIndex, 'down');
+            const newIndex = findNextVisualIndex('down');
+            if (newIndex !== null) {
               setSelectedIndex(newIndex);
-              event.preventDefault();
-              event.stopImmediatePropagation();
-              return true;
             }
-            return false;
+            // Always block the event to keep menu open
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return true;
           },
           commandPriority,
         ),
@@ -180,14 +219,14 @@ export interface TypeaheadMenuProps {
         editor.registerCommand(
           KEY_ARROW_UP_COMMAND,
           (event: KeyboardEvent) => {
-            if (options.length && selectedIndex !== null) {
-              const newIndex = findNextSelectableIndex(selectedIndex, 'up');
+            const newIndex = findNextVisualIndex('up');
+            if (newIndex !== null) {
               setSelectedIndex(newIndex);
-              event.preventDefault();
-              event.stopImmediatePropagation();
-              return true;
             }
-            return false;
+            // Always block the event to keep menu open
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return true;
           },
           commandPriority,
         ),
@@ -234,6 +273,7 @@ export interface TypeaheadMenuProps {
     }, [
       resolution,
       options,
+      visualOrderOptions,
       selectedIndex,
       handleSelectOption,
       closeMenu,

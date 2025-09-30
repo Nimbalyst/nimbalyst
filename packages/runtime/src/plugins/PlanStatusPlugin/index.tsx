@@ -116,14 +116,14 @@ export const planStatusPluginPackage: PluginPackage<PlanStatusPluginProps> = {
   },
   userCommands: [
     {
-      title: 'Insert Plan Status',
+      title: 'Plan Status',
       description: 'Add a plan status block to track project progress',
-      icon: 'check-list',
+      icon: 'checklist',
       keywords: ['plan', 'status', 'project', 'tracking'],
       command: INSERT_PLAN_STATUS_COMMAND,
     },
     {
-      title: 'Insert Plan Table',
+      title: 'Plan Status Table',
       description: 'Add a table showing all plan documents',
       icon: 'table',
       keywords: ['plan', 'table', 'list', 'overview', 'dashboard'],
