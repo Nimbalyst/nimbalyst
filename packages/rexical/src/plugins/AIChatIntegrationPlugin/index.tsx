@@ -335,11 +335,14 @@ export function AIChatIntegrationPlugin(): null {
         });
 
         // Create a stream processor - it handles tables just fine!
+        // Use 'extend' mode when inserting at end to append to existing structures (like lists)
+        // Use 'after' mode when inserting after specific content
+        const mode = streamConfig.insertAtEnd ? 'extend' : (streamConfig.mode || 'after');
         const processor = new MarkdownStreamProcessor(
           editor,
           getEditorTransformers(), // Use dynamic transformers from enabled plugins
           startingNodeKey,
-          streamConfig.mode || 'after',
+          mode,
           (node) => {
             // Mark the streamed node as 'added' in the diff infrastructure
             $setDiffState(node, 'added');

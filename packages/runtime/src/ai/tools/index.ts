@@ -63,7 +63,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         position: {
           type: 'string',
           enum: ['cursor', 'end', 'after-selection'],
-          description: 'Where to insert the content',
+          description: 'Where to insert content. MUST be exactly one of: "cursor" (at cursor position), "end" (at end of document), or "after-selection" (after selected text). Use "end" for appending to document.',
         },
         insertAfter: {
           type: 'string',

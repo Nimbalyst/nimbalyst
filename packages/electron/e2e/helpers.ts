@@ -58,3 +58,116 @@ export function getKeyboardShortcut(key: string): string {
   const isMac = process.platform === 'darwin';
   return key.replace('Mod', isMac ? 'Meta' : 'Control');
 }
+
+/**
+ * Helper to configure AI model via the model picker dropdown
+ * @param page The Playwright page
+ * @param provider The provider name (e.g., 'openai', 'claude')
+ * @param model The model display name (e.g., 'GPT-4 Turbo', 'Claude Sonnet 4')
+ */
+export async function configureAIModel(page: Page, provider: string, model: string): Promise<void> {
+  // Open AI Chat if not already open
+  const aiChatVisible = await page.locator('[data-testid="ai-chat-panel"]').isVisible().catch(() => false);
+  if (!aiChatVisible) {
+    await page.keyboard.press('Meta+Shift+A');
+    await page.waitForTimeout(1000);
+  }
+
+  // Click the dropdown arrow button (part of new-session-button)
+  const dropdownButton = page.locator('.new-session-button-dropdown').first();
+  await dropdownButton.waitFor({ state: 'visible', timeout: 5000 });
+  await dropdownButton.click();
+  await page.waitForTimeout(500);
+
+  // Wait for dropdown to open
+  await page.waitForSelector('.new-session-dropdown', { timeout: 5000 });
+
+  // Click on the model option (use partial text match for flexibility)
+  const modelOption = page.locator(`.new-session-option:has-text("${model}")`).first();
+  await modelOption.waitFor({ state: 'visible', timeout: 5000 });
+  await modelOption.click();
+  await page.waitForTimeout(500);
+}
+
+/**
+ * Helper to send an AI prompt and wait for the response
+ * @param page The Playwright page
+ * @param prompt The prompt to send
+ * @param options Configuration options
+ */
+export async function sendAIPrompt(page: Page, prompt: string, options?: {
+  waitForCompletion?: boolean;
+  timeout?: number;
+}): Promise<void> {
+  const {
+    waitForCompletion = true,
+    timeout = 10000
+  } = options || {};
+
+  // Always open AI Chat to make sure it's visible
+  await page.keyboard.press('Meta+Shift+A');
+  await page.waitForTimeout(1000);
+
+  // Wait for AI Chat panel to be visible
+  await page.waitForSelector('[data-testid="ai-chat-panel"]', { timeout: 5000 });
+
+  // Check if we need to start a session (look for "No session" text or + button)
+  const noSessionText = await page.locator('text="No session"').isVisible().catch(() => false);
+  if (noSessionText) {
+    // Click the + button to start a new session
+    const plusButton = page.locator('.new-session-button-main').first();
+    await plusButton.click();
+    await page.waitForTimeout(500);
+  }
+
+  // Find and click the chat input - try multiple selectors
+  const chatInput = page.locator('textarea[placeholder*="Ask"], input[placeholder*="Ask"], [data-testid="ai-chat-input"]').first();
+  await chatInput.waitFor({ state: 'visible', timeout: 5000 });
+  await chatInput.click();
+  await chatInput.fill(prompt);
+
+  // Send the message (try Enter or look for send button)
+  await page.keyboard.press('Enter');
+
+  if (waitForCompletion) {
+    // Wait for the send button to become disabled (streaming started)
+    await page.waitForTimeout(500);
+
+    // Wait for streaming to complete by watching for send button to become enabled again
+    // The button has text "Send message" and is disabled during streaming
+    const sendButton = page.locator('button:has-text("Send message")').first();
+    await sendButton.waitFor({ state: 'attached', timeout: 2000 }).catch(() => {});
+
+    // Wait for button to be enabled (streaming complete) with timeout
+    try {
+      await page.waitForFunction(
+        () => {
+          const btn = document.querySelector('button[aria-label*="Send"], button:has-text("Send message")') as HTMLButtonElement;
+          return btn && !btn.disabled;
+        },
+        { timeout }
+      );
+    } catch (e) {
+      console.log('Timeout waiting for AI response to complete');
+    }
+
+    // Give a moment for any final updates
+    await page.waitForTimeout(500);
+  }
+}
+
+/**
+ * Get the current document content from the editor
+ * @param page The Playwright page
+ */
+export async function getEditorContent(page: Page): Promise<string> {
+  return await page.evaluate(() => {
+    // Try to get content from the aiChatBridge if available
+    if ((window as any).aiChatBridge && typeof (window as any).aiChatBridge.getContent === 'function') {
+      return (window as any).aiChatBridge.getContent();
+    }
+    // Fallback: try to read from editor element
+    const editor = document.querySelector('[contenteditable="true"]');
+    return editor?.textContent || '';
+  });
+}

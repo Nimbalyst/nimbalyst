@@ -52,55 +52,6 @@ import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
 import './WorkspaceWelcome.css';
 import './components/AIModels/AIModelsRedesigned.css';
 
-const PLAN_STATUS_KEYS = new Set([
-  'planId',
-  'title',
-  'status',
-  'state',
-  'planType',
-  'priority',
-  'owner',
-  'stakeholders',
-  'tags',
-  'created',
-  'updated',
-  'dueDate',
-  'startDate',
-  'progress',
-]);
-
-function mergeFrontmatterData(
-  existing: FrontmatterData | undefined,
-  updates: Partial<FrontmatterData>,
-): FrontmatterData {
-  const result: FrontmatterData = existing ? { ...existing } : {};
-
-  for (const [key, value] of Object.entries(updates)) {
-    if (value === undefined) {
-      continue;
-    }
-
-    if (Array.isArray(value)) {
-      result[key] = value;
-      continue;
-    }
-
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      const currentValue = result[key];
-      const nestedExisting = (currentValue && typeof currentValue === 'object' && !Array.isArray(currentValue))
-        ? (currentValue as FrontmatterData)
-        : {};
-
-      result[key] = mergeFrontmatterData(nestedExisting, value as Partial<FrontmatterData>);
-      continue;
-    }
-
-    result[key] = value;
-  }
-
-  return result;
-}
-
 // Logging configuration - control which categories are logged
 const LOG_CONFIG = {
   AUTOSAVE: false,  // Set to true to enable autosave logging
@@ -1455,7 +1406,7 @@ export default function App() {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
-    
+
     // State setters
     setIsApiKeyDialogOpen,
     setWorkspaceMode,
@@ -1474,7 +1425,7 @@ export default function App() {
     setSessionToLoad,
     setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
-    
+
     // Refs
     contentRef,
     initialContentRef,
@@ -1485,7 +1436,7 @@ export default function App() {
     editorRef,
     searchCommandRef,
     lastSaveTimeRef,
-    
+
     // State values
     currentFilePath,
     currentDirectory,
@@ -1493,11 +1444,11 @@ export default function App() {
     workspacePath,
     sessionToLoad,
     isDirty,
-    
+
     // Tabs
     tabs,
     tabPreferences,
-    
+
     // Config
     LOG_CONFIG,
   });

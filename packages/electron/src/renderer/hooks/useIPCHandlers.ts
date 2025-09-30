@@ -835,7 +835,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
           position: position || 'cursor',
           mode: mode || 'after',
           insertAfter,
-          insertAtEnd: position === 'end'
+          // Handle both 'end' (from schema) and 'end of document' (AI sometimes ignores enum)
+          insertAtEnd: position === 'end' || position === 'end of document'
         });
         // Stream the content
         aiChatBridge.streamContent(streamId, content);
