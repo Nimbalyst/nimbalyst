@@ -54,15 +54,52 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       path.join(os.homedir(), '.claude', 'local', 'node_modules', '@anthropic-ai', 'claude-code'),
       // Dynamic global npm path
       ...(globalNpmRoot ? [path.join(globalNpmRoot, '@anthropic-ai', 'claude-code')] : []),
+      // System-wide npm installations
+      '/usr/local/lib/node_modules/@anthropic-ai/claude-code',
+      '/usr/lib/node_modules/@anthropic-ai/claude-code',
       // Common global npm locations
       path.join(os.homedir(), '.npm-global', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'),
-      // NVM installations
-      path.join(os.homedir(), '.nvm', 'versions', 'node', '*', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'),
       // Yarn global installation
       path.join(os.homedir(), '.config', 'yarn', 'global', 'node_modules', '@anthropic-ai', 'claude-code'),
       // Local development (if available)
       path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code')
     ];
+
+    // NVM installations - enumerate actual node versions instead of using wildcard
+    const nvmDir = path.join(os.homedir(), '.nvm', 'versions', 'node');
+    try {
+      const nodeVersions = fs.readdirSync(nvmDir);
+      for (const version of nodeVersions) {
+        possiblePaths.push(
+          path.join(nvmDir, version, 'lib', 'node_modules', '@anthropic-ai', 'claude-code')
+        );
+      }
+    } catch (e) {
+      // NVM directory doesn't exist or can't be read
+      console.log('[CLAUDE-CODE] NVM directory not found or inaccessible:', nvmDir);
+    }
+
+    // Fallback: Try to resolve from claude CLI in PATH
+    try {
+      const { execSync } = require('child_process');
+      const claudePath = execSync('which claude', { encoding: 'utf8' }).trim();
+      if (claudePath) {
+        console.log(`[CLAUDE-CODE] Found claude CLI at: ${claudePath}`);
+        // Resolve symlinks to find the real path
+        const realPath = fs.realpathSync(claudePath);
+        console.log(`[CLAUDE-CODE] Real path: ${realPath}`);
+
+        // If it ends with cli.js, the package directory is two levels up
+        if (realPath.endsWith('cli.js')) {
+          const packageDir = path.dirname(realPath);
+          possiblePaths.push(packageDir);
+          console.log(`[CLAUDE-CODE] Added package directory from CLI: ${packageDir}`);
+        }
+      }
+    } catch (e) {
+      // CLI not in PATH or error resolving - not a problem, just skip this fallback
+      console.log('[CLAUDE-CODE] Could not resolve claude CLI from PATH:', e instanceof Error ? e.message : e);
+    }
 
     for (const sdkPath of possiblePaths) {
       try {
@@ -680,6 +717,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       path.join(os.homedir(), '.claude', 'local', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
       // Dynamic global npm path
       ...(globalNpmRoot ? [path.join(globalNpmRoot, '@anthropic-ai', 'claude-code', 'cli.js')] : []),
+      // System-wide npm installations
+      '/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js',
+      '/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js',
       // Common global npm locations
       path.join(os.homedir(), '.npm-global', 'lib', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
       // Yarn global installation
@@ -687,6 +727,35 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Development paths (for local testing)
       path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
     ];
+
+    // NVM installations - enumerate actual node versions
+    const nvmDir = path.join(os.homedir(), '.nvm', 'versions', 'node');
+    try {
+      const nodeVersions = fs.readdirSync(nvmDir);
+      for (const version of nodeVersions) {
+        possiblePaths.push(
+          path.join(nvmDir, version, 'lib', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js')
+        );
+      }
+    } catch (e) {
+      // NVM directory doesn't exist
+    }
+
+    // Fallback: Try to resolve from claude CLI in PATH
+    try {
+      const { execSync } = require('child_process');
+      const claudePath = execSync('which claude', { encoding: 'utf8' }).trim();
+      if (claudePath) {
+        // Resolve symlinks to find the real path
+        const realPath = fs.realpathSync(claudePath);
+        if (realPath.endsWith('cli.js')) {
+          possiblePaths.push(realPath);
+          console.log(`[CLAUDE-CODE] Added CLI path from PATH: ${realPath}`);
+        }
+      }
+    } catch (e) {
+      // CLI not in PATH or error resolving - not a problem
+    }
 
     // Find the first path that exists
     for (const testPath of possiblePaths) {
