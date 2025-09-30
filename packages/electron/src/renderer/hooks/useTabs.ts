@@ -18,6 +18,8 @@ export interface TabData {
   contentHash?: string;
   // Track when content was last loaded from file
   contentLoadedAt?: Date;
+  // Virtual document flag
+  isVirtual?: boolean;
 }
 
 interface UseTabsOptions {

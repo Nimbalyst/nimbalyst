@@ -1089,11 +1089,39 @@ Note: Only one connection at a time is supported.`,
                 }
             ]
         });
+
+        // Add Help menu for macOS
+        template.push({
+            label: 'Help',
+            submenu: [
+                {
+                    label: 'Welcome',
+                    click: async () => {
+                        // Send message to renderer to open welcome tab
+                        const focusedWindow = BrowserWindow.getFocusedWindow();
+                        if (focusedWindow) {
+                            focusedWindow.webContents.send('open-welcome-tab');
+                        }
+                    }
+                }
+            ]
+        });
     } else {
         // Windows and Linux
         template.push({
             label: 'Help',
             submenu: [
+                {
+                    label: 'Welcome',
+                    click: async () => {
+                        // Send message to renderer to open welcome tab
+                        const focusedWindow = BrowserWindow.getFocusedWindow();
+                        if (focusedWindow) {
+                            focusedWindow.webContents.send('open-welcome-tab');
+                        }
+                    }
+                },
+                { type: 'separator' },
                 {
                     label: 'About Preditor',
                     click: async () => {

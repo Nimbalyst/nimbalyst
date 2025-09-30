@@ -10,6 +10,7 @@ export interface Tab {
   isDirty: boolean;
   isPinned: boolean;
   lastSaved?: Date;
+  isVirtual?: boolean;
 }
 
 interface TabManagerProps {

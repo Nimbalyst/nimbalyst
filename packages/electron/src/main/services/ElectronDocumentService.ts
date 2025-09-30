@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import { ipcMain, BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent, app } from 'electron';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
@@ -11,6 +11,7 @@ import {
 } from '@stravu/runtime';
 import crypto from 'crypto';
 import { extractFrontmatter, extractCommonFields } from '../utils/frontmatterReader';
+import { VIRTUAL_DOCS, isVirtualPath } from '@stravu/runtime';
 
 export class ElectronDocumentService implements DocumentService {
   private workspacePath: string;
@@ -469,6 +470,48 @@ export class ElectronDocumentService implements DocumentService {
     }
   }
 
+  /**
+   * Load a virtual document by its path
+   */
+  async loadVirtualDocument(virtualPath: string): Promise<string | null> {
+    if (!isVirtualPath(virtualPath)) {
+      return null;
+    }
+
+    // Find the virtual document descriptor
+    const virtualDoc = Object.values(VIRTUAL_DOCS).find(doc => doc.virtualPath === virtualPath);
+    if (!virtualDoc) {
+      console.error(`[DocumentService] Unknown virtual document: ${virtualPath}`);
+      return null;
+    }
+
+    try {
+      // Determine asset path - in development use source path, in production use app resources
+      let assetPath: string;
+      if (app.isPackaged) {
+        assetPath = path.join(process.resourcesPath, virtualDoc.assetPath);
+      } else {
+        // In development, __dirname is out/main or out/main/services
+        // Go up to packages/electron then add the asset path
+        // out/main -> out -> packages/electron
+        assetPath = path.join(__dirname, '../../', virtualDoc.assetPath);
+      }
+
+      console.log('[DocumentService] Loading virtual document:', {
+        virtualPath,
+        assetPath,
+        __dirname,
+        exists: await fs.access(assetPath).then(() => true).catch(() => false)
+      });
+
+      const content = await fs.readFile(assetPath, 'utf-8');
+      return content;
+    } catch (error) {
+      console.error(`[DocumentService] Failed to load virtual document ${virtualPath}:`, error);
+      return null;
+    }
+  }
+
   destroy() {
     if (this.watchInterval) {
       clearInterval(this.watchInterval);
@@ -641,6 +684,16 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     if (unsubscribe) {
       // Clean up when renderer is destroyed
       event.sender.once('destroyed', unsubscribe);
+    }
+  });
+
+  // Virtual document handler
+  ipcMain.handle('document-service:load-virtual', async (event, virtualPath: string) => {
+    try {
+      return await requireDocumentService(event).loadVirtualDocument(virtualPath);
+    } catch (error) {
+      console.error('[DocumentService] load-virtual failed:', error);
+      return null;
     }
   });
 }

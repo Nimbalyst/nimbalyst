@@ -117,6 +117,10 @@
       {
         "from": "resources/builtin-agents",
         "to": "builtin-agents"
+      },
+      {
+        "from": "assets",
+        "to": "assets"
       }
     ],
     "afterSign": "build/afterSign.js",

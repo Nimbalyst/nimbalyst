@@ -100,6 +100,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('toggle-agent-palette', callback);
     return () => ipcRenderer.removeListener('toggle-agent-palette', callback);
   },
+  onOpenWelcomeTab: (callback: () => void) => {
+    ipcRenderer.on('open-welcome-tab', callback);
+    return () => ipcRenderer.removeListener('open-welcome-tab', callback);
+  },
   onFileDeleted: (callback: (data: { filePath: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('file-deleted', handler);
@@ -456,7 +460,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const handler = (_event: any, documents: any[]) => callback(documents);
       ipcRenderer.on('document-service:documents-changed', handler);
       return () => ipcRenderer.removeListener('document-service:documents-changed', handler);
-    }
+    },
+    loadVirtual: (virtualPath: string) => ipcRenderer.invoke('document-service:load-virtual', virtualPath)
   },
   // Open AI Models window
   openAIModels: () => ipcRenderer.invoke('window:open-ai-models'),

@@ -11,6 +11,7 @@ declare global {
         open: (id: string, fallback?: DocumentOpenOptions) => Promise<void>;
         watch: () => void;
         onDocumentsChanged: (callback: (documents: Document[]) => void) => () => void;
+        loadVirtual: (virtualPath: string) => Promise<string | null>;
       };
     };
   }
@@ -33,6 +34,18 @@ export class ElectronRendererDocumentService implements DocumentService {
     return window.electronAPI.documentService.get(id);
   }
 
+  async getDocumentByPath(path: string): Promise<Document | null> {
+    // For virtual documents, we need to create a synthetic document
+    if (path.startsWith('virtual://')) {
+      return {
+        id: path,
+        name: path.split('://')[1],
+        path: path
+      };
+    }
+    return null;
+  }
+
   async openDocument(documentId: string, fallback?: DocumentOpenOptions): Promise<void> {
     return window.electronAPI.documentService.open(documentId, fallback);
   }
@@ -46,5 +59,12 @@ export class ElectronRendererDocumentService implements DocumentService {
 
     // Return unsubscribe function
     return unsubscribe;
+  }
+
+  /**
+   * Load a virtual document's content
+   */
+  async loadVirtualDocument(virtualPath: string): Promise<string | null> {
+    return window.electronAPI.documentService.loadVirtual(virtualPath);
   }
 }

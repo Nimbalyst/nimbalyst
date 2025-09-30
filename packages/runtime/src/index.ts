@@ -19,3 +19,9 @@ export { DocumentLinkPlugin } from './plugins/DocumentLinkPlugin';
 export { DocumentReferenceNode, DocumentReferenceTransformer, $createDocumentReferenceNode, $isDocumentReferenceNode } from './plugins/DocumentLinkPlugin/DocumentLinkNode';
 export { planStatusPluginPackage, PlanStatusNode, $createPlanStatusNode, $isPlanStatusNode, PLAN_STATUS_TRANSFORMER, INSERT_PLAN_STATUS_COMMAND } from './plugins/PlanStatusPlugin';
 export type { PlanStatusPluginProps } from './plugins/PlanStatusPlugin';
+// Virtual Documents
+export * from './constants/virtualDocs';
+export * from './documents/virtualDocTypes';
+export { virtualDocHandler } from './documents/VirtualDocumentHandler';
+// Components
+export { VirtualDocumentBanner } from './components/VirtualDocumentBanner';

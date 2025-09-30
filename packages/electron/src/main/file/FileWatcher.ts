@@ -5,6 +5,12 @@ import { simpleFileWatcher } from './SimpleFileWatcher';
 
 // Start watching a file for changes
 export function startFileWatcher(window: BrowserWindow, filePath: string) {
+    // Skip watching virtual documents
+    if (filePath.startsWith('virtual://')) {
+        logger.fileWatcher.debug('Skipping file watcher for virtual document:', filePath);
+        return;
+    }
+
     const windowId = getWindowId(window);
     if (windowId === null) {
         logger.fileWatcher.error('Failed to find custom window ID');

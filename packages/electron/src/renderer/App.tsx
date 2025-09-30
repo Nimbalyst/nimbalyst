@@ -1094,6 +1094,64 @@ export default function App() {
     }
   }, [currentFilePath, tabs, tabPreferences, autoSaveBeforeNavigation]);
 
+  // Open the welcome tab - virtual document
+  const openWelcomeTab = useCallback(async () => {
+    const virtualPath = 'virtual://welcome';
+
+    // Check if welcome tab is already open
+    if (tabPreferences.preferences.enabled) {
+      const existingTab = tabs.findTabByPath(virtualPath);
+      if (existingTab) {
+        tabs.switchTab(existingTab.id);
+        return;
+      }
+    }
+
+    try {
+      // Load the welcome document content from the main process
+      console.log('[WELCOME] Attempting to load virtual document:', virtualPath);
+      console.log('[WELCOME] documentService available:', !!window.electronAPI?.documentService);
+      console.log('[WELCOME] loadVirtual method available:', !!(window.electronAPI?.documentService as any)?.loadVirtual);
+
+      const content = await (window.electronAPI.documentService as any).loadVirtual(virtualPath);
+      console.log('[WELCOME] Received content, length:', content?.length);
+
+      if (!content) {
+        console.error('[WELCOME] Failed to load welcome document - content is null or undefined');
+        return;
+      }
+
+      // Add the welcome tab
+      if (tabPreferences.preferences.enabled) {
+        const tabId = tabs.addTab(virtualPath, content);
+        if (tabId) {
+          // Mark the tab as virtual
+          tabs.updateTab(tabId, { isVirtual: true });
+          // Set up state for virtual document
+          initialContentRef.current = content;
+          setCurrentFilePath(virtualPath);
+          setCurrentFileName('Welcome to Preditor');
+          contentRef.current = content;
+          isDirtyRef.current = false;
+          setIsDirty(false);
+        }
+      } else {
+        // If tabs are disabled, load it directly
+        contentVersionRef.current += 1;
+        setContentVersion(v => v + 1);
+        isInitializedRef.current = false;
+        contentRef.current = content;
+        setCurrentFilePath(virtualPath);
+        setCurrentFileName('Welcome to Preditor');
+        isDirtyRef.current = false;
+        setIsDirty(false);
+        initialContentRef.current = content;
+      }
+    } catch (error) {
+      console.error('[WELCOME] Failed to open welcome tab:', error);
+    }
+  }, [tabs, tabPreferences, setIsDirty, setCurrentFileName, setCurrentFilePath]);
+
   // Update window title and dirty state
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -1301,8 +1359,12 @@ export default function App() {
       autoSaveIntervalRef.current = null;
     }
 
+    // Check if current file is a virtual document
+    const isVirtual = currentFilePath?.startsWith('virtual://');
+
     // Set up autosave if we have a file path (check dirty state inside the interval)
-    if (currentFilePath && getContentRef.current) {
+    // Skip autosave for virtual documents
+    if (currentFilePath && getContentRef.current && !isVirtual) {
       if (LOG_CONFIG.AUTOSAVE) console.log('[AUTOSAVE] Setting up autosave for:', currentFilePath);
 
       autoSaveIntervalRef.current = setInterval(async () => {
@@ -1469,7 +1531,9 @@ export default function App() {
       autoSaveIntervalRef.current = null;
     }
 
-    if (!currentFilePath) {
+    // Skip autosave for virtual documents
+    const isVirtual = currentFilePath?.startsWith('virtual://');
+    if (!currentFilePath || isVirtual) {
       return;
     }
 
@@ -1612,30 +1676,48 @@ export default function App() {
         // Load content if needed
         if (!tabs.activeTab.content && window.electronAPI) {
           console.log('[APP] Loading content for restored active tab');
-          window.electronAPI.switchWorkspaceFile(tabs.activeTab.filePath).then(result => {
-            if (result) {
-              tabs.updateTab(tabs.activeTab.id, { content: result.content });
-              setCurrentFilePath(tabs.activeTab.filePath);
-              setCurrentFileName(tabs.activeTab.fileName);
-              contentRef.current = result.content;
-              initialContentRef.current = result.content;
-              contentVersionRef.current += 1;
-              setContentVersion(v => v + 1);
-            setContentVersion(v => v + 1);
-      setContentVersion(v => v + 1);
-        setContentVersion(v => v + 1);
-    setContentVersion(v => v + 1);
-          setContentVersion(v => v + 1);
-              setIsDirty(tabs.activeTab.isDirty);
 
-              // Update the main process
-              if (window.electronAPI) {
-                window.electronAPI.setCurrentFile(tabs.activeTab.filePath);
+          // Check if this is a virtual document
+          const isVirtual = tabs.activeTab.filePath.startsWith('virtual://');
+
+          if (isVirtual) {
+            // Load virtual document
+            (window.electronAPI.documentService as any).loadVirtual(tabs.activeTab.filePath).then((content: string | null) => {
+              if (content) {
+                tabs.updateTab(tabs.activeTab.id, { content, isVirtual: true });
+                setCurrentFilePath(tabs.activeTab.filePath);
+                setCurrentFileName(tabs.activeTab.fileName);
+                contentRef.current = content;
+                initialContentRef.current = content;
+                contentVersionRef.current += 1;
+                setContentVersion(v => v + 1);
+                setIsDirty(false);
               }
-            }
-          }).catch(error => {
-            console.error('[APP] Failed to load content for active tab:', error);
-          });
+            }).catch((error: Error) => {
+              console.error('[APP] Failed to load virtual document for active tab:', error);
+            });
+          } else {
+            // Load regular file
+            window.electronAPI.switchWorkspaceFile(tabs.activeTab.filePath).then(result => {
+              if (result) {
+                tabs.updateTab(tabs.activeTab.id, { content: result.content });
+                setCurrentFilePath(tabs.activeTab.filePath);
+                setCurrentFileName(tabs.activeTab.fileName);
+                contentRef.current = result.content;
+                initialContentRef.current = result.content;
+                contentVersionRef.current += 1;
+                setContentVersion(v => v + 1);
+                setIsDirty(tabs.activeTab.isDirty);
+
+                // Update the main process
+                if (window.electronAPI) {
+                  window.electronAPI.setCurrentFile(tabs.activeTab.filePath);
+                }
+              }
+            }).catch(error => {
+              console.error('[APP] Failed to load content for active tab:', error);
+            });
+          }
         } else if (tabs.activeTab.content !== undefined) {
           // Tab already has content, just set it
           setCurrentFilePath(tabs.activeTab.filePath);
@@ -1758,6 +1840,13 @@ export default function App() {
       } catch (error) {
         console.error('Failed to restore AI Chat state:', error);
         setIsAIChatStateLoaded(true);
+      }
+
+      // Open welcome tab if no tabs are open
+      if (tabPreferences.preferences.enabled && tabs.tabs.length === 0) {
+        console.log('[WORKSPACE] No tabs open, opening welcome tab');
+        // Delay slightly to ensure workspace state is fully set
+        setTimeout(() => openWelcomeTab(), 100);
       }
     }));
 
@@ -2445,6 +2534,14 @@ export default function App() {
         } else {
           console.log('Not in workspace mode, agent palette not available');
         }
+      }));
+    }
+
+    // Handle open welcome tab from menu
+    if (window.electronAPI.onOpenWelcomeTab) {
+      cleanupFns.push(window.electronAPI.onOpenWelcomeTab(() => {
+        console.log('Open welcome tab command received from menu');
+        openWelcomeTab();
       }));
     }
 
