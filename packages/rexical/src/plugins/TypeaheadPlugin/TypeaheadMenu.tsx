@@ -522,6 +522,9 @@ import {
       return names;
     }, [groupedOptions]);
 
+    // Get the option at the selected index
+    const selectedOption = selectedIndex !== null ? options[selectedIndex] : null;
+
     // Calculate position whenever resolution changes
     useEffect(() => {
       if (resolution && menuRef.current) {
@@ -622,24 +625,17 @@ import {
                         {sectionName}
                       </div>
                     )}
-                    {sectionOptions.map((option, optionIndex) => {
-                      // Calculate global index across all sections
-                      let globalIndex = 0;
-                      for (const prevSectionName of sectionNames) {
-                        if (prevSectionName === sectionName) {
-                          globalIndex += optionIndex;
-                          break;
-                        }
-                        globalIndex += groupedOptions[prevSectionName]?.length || 0;
-                      }
-                      
+                    {sectionOptions.map((option) => {
+                      // Find this option's index in the flat array
+                      const flatIndex = options.findIndex(opt => opt.id === option.id);
+
                       return (
                         <MenuOption
                           key={option.id}
                           option={option}
-                          isSelected={selectedIndex === globalIndex}
+                          isSelected={selectedOption?.id === option.id}
                           onClick={() => option.type !== 'header' && onSelectOption(option)}
-                          onMouseEnter={() => option.type !== 'header' && onSetSelectedIndex(globalIndex)}
+                          onMouseEnter={() => option.type !== 'header' && flatIndex >= 0 && onSetSelectedIndex(flatIndex)}
                           className={optionClassName}
                           selectedClassName={selectedOptionClassName}
                         />
@@ -744,24 +740,17 @@ import {
                       {sectionName}
                     </div>
                   )}
-                  {sectionOptions.map((option, optionIndex) => {
-                    // Calculate global index across all sections
-                    let globalIndex = 0;
-                    for (const prevSectionName of sectionNames) {
-                      if (prevSectionName === sectionName) {
-                        globalIndex += optionIndex;
-                        break;
-                      }
-                      globalIndex += groupedOptions[prevSectionName]?.length || 0;
-                    }
-                    
+                  {sectionOptions.map((option) => {
+                    // Find this option's index in the flat array
+                    const flatIndex = options.findIndex(opt => opt.id === option.id);
+
                     return (
                       <MenuOption
                         key={option.id}
                         option={option}
-                        isSelected={selectedIndex === globalIndex}
+                        isSelected={selectedOption?.id === option.id}
                         onClick={() => option.type !== 'header' && onSelectOption(option)}
-                        onMouseEnter={() => option.type !== 'header' && onSetSelectedIndex(globalIndex)}
+                        onMouseEnter={() => option.type !== 'header' && flatIndex >= 0 && onSetSelectedIndex(flatIndex)}
                         className={optionClassName}
                         selectedClassName={selectedOptionClassName}
                       />

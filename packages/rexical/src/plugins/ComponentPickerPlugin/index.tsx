@@ -7,6 +7,7 @@
  */
 
 import type {JSX} from 'react';
+import {useEffect, useMemo, useState, useCallback} from 'react';
 
 import {$createCodeNode} from '@lexical/code';
 import {
@@ -17,11 +18,6 @@ import {
 import {INSERT_EMBED_COMMAND} from '@lexical/react/LexicalAutoEmbedPlugin';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {INSERT_HORIZONTAL_RULE_COMMAND} from '@lexical/react/LexicalHorizontalRuleNode';
-import {
-  LexicalTypeaheadMenuPlugin,
-  MenuOption,
-  useBasicTypeaheadTriggerMatch,
-} from '@lexical/react/LexicalTypeaheadMenuPlugin';
 import {$createHeadingNode, $createQuoteNode} from '@lexical/rich-text';
 import {$setBlocksType} from '@lexical/selection';
 import {INSERT_TABLE_COMMAND} from '@lexical/table';
@@ -33,8 +29,6 @@ import {
   LexicalEditor,
   TextNode,
 } from 'lexical';
-import {useCallback, useMemo, useState} from 'react';
-import * as ReactDOM from 'react-dom';
 
 import useModal from '../../hooks/useModal';
 import {EmbedConfigs} from '../AutoEmbedPlugin';
@@ -45,73 +39,69 @@ import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
 import {InsertTableDialog} from '../TablePlugin/TablePlugin.tsx';
 import {pluginRegistry} from '../PluginRegistry';
 import {INSERT_BOARD_COMMAND} from '../KanbanBoardPlugin/BoardCommands';
+import {
+  TypeaheadMenuPlugin,
+  createBasicTriggerFunction,
+  TypeaheadMenuOption,
+} from '../TypeaheadPlugin/TypeaheadMenuPlugin';
 
-class ComponentPickerOption extends MenuOption {
-  // What shows up in the editor
-  title: string;
-  // Icon for display
-  icon?: JSX.Element;
-  // For extra searching.
-  keywords: Array<string>;
-  // TBD
-  keyboardShortcut?: string;
-  // What happens when you select this option?
-  onSelect: (queryString: string) => void;
+// ============================================================================
+// MATERIAL SYMBOLS ICON SUPPORT
+// ============================================================================
 
-  constructor(
-    title: string,
-    options: {
-      icon?: JSX.Element;
-      keywords?: Array<string>;
-      keyboardShortcut?: string;
-      onSelect: (queryString: string) => void;
-    },
-  ) {
-    super(title);
-    this.title = title;
-    this.keywords = options.keywords || [];
-    this.icon = options.icon;
-    this.keyboardShortcut = options.keyboardShortcut;
-    this.onSelect = options.onSelect.bind(this);
-  }
-}
-
-function ComponentPickerMenuItem({
-  index,
-  isSelected,
-  onClick,
-  onMouseEnter,
-  option,
-}: {
-  index: number;
-  isSelected: boolean;
-  onClick: () => void;
-  onMouseEnter: () => void;
-  option: ComponentPickerOption;
-}) {
-  let className = 'item';
-  if (isSelected) {
-    className += ' selected';
-  }
+/**
+ * Material Symbols icon component that loads icons by name
+ * Uses Google's Material Symbols font (Outlined variant)
+ */
+export const MaterialIcon: React.FC<{name: string; className?: string; style?: React.CSSProperties}> = ({
+  name,
+  className = '',
+  style = {},
+}) => {
   return (
-    <li
-      key={option.key}
-      tabIndex={-1}
-      className={className}
-      ref={option.setRefElement}
-      role="option"
-      aria-selected={isSelected}
-      id={'typeahead-item-' + index}
-      onMouseEnter={onMouseEnter}
-      onClick={onClick}>
-      {option.icon}
-      <span className="text">{option.title}</span>
-    </li>
+    <span
+      className={`material-symbols-outlined ${className}`}
+      style={{
+        fontSize: '18px',
+        width: '18px',
+        height: '18px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        ...style,
+      }}
+    >
+      {name}
+    </span>
   );
+};
+
+/**
+ * Load Material Symbols font if not already loaded
+ * Call this once at app initialization
+ */
+export function ensureMaterialSymbolsLoaded() {
+  // Check if already loaded
+  if (document.getElementById('material-symbols-font')) {
+    return;
+  }
+
+  // Add the font link
+  const link = document.createElement('link');
+  link.id = 'material-symbols-font';
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200';
+  document.head.appendChild(link);
 }
 
-function getDynamicOptions(editor: LexicalEditor, queryString: string) {
-  const options: Array<ComponentPickerOption> = [];
+// ============================================================================
+// COMPONENT PICKER OPTIONS
+// ============================================================================
+
+type ShowModal = ReturnType<typeof useModal>[1];
+
+function getDynamicOptions(editor: LexicalEditor, queryString: string): TypeaheadMenuOption[] {
+  const options: TypeaheadMenuOption[] = [];
 
   if (queryString == null) {
     return options;
@@ -127,13 +117,15 @@ function getDynamicOptions(editor: LexicalEditor, queryString: string) {
 
     options.push(
       ...colOptions.map(
-        (columns) =>
-          new ComponentPickerOption(`${rows}x${columns} Table`, {
-            icon: <i className="icon table" />,
-            keywords: ['table'],
-            onSelect: () =>
-              editor.dispatchCommand(INSERT_TABLE_COMMAND, {columns, rows}),
-          }),
+        (columns) => ({
+          id: `table-${rows}x${columns}`,
+          label: `${rows}x${columns} Table`,
+          icon: <MaterialIcon name="table" />,
+          keywords: ['table'],
+          section: 'Tables',
+          onSelect: () =>
+            editor.dispatchCommand(INSERT_TABLE_COMMAND, {columns, rows}),
+        }),
       ),
     );
   }
@@ -141,13 +133,14 @@ function getDynamicOptions(editor: LexicalEditor, queryString: string) {
   return options;
 }
 
-type ShowModal = ReturnType<typeof useModal>[1];
-
-function getBaseOptions(editor: LexicalEditor, showModal: ShowModal) {
+function getBaseOptions(editor: LexicalEditor, showModal: ShowModal): TypeaheadMenuOption[] {
   return [
-    new ComponentPickerOption('Paragraph', {
-      icon: <i className="icon paragraph" />,
+    {
+      id: 'paragraph',
+      label: 'Paragraph',
+      icon: <MaterialIcon name="notes" />,
       keywords: ['normal', 'paragraph', 'p', 'text'],
+      section: 'Basic blocks',
       onSelect: () =>
         editor.update(() => {
           const selection = $getSelection();
@@ -155,50 +148,93 @@ function getBaseOptions(editor: LexicalEditor, showModal: ShowModal) {
             $setBlocksType(selection, () => $createParagraphNode());
           }
         }),
-    }),
-    ...([1, 2, 3] as const).map(
-      (n) =>
-        new ComponentPickerOption(`Heading ${n}`, {
-          icon: <i className={`icon h${n}`} />,
-          keywords: ['heading', 'header', `h${n}`],
-          onSelect: () =>
-            editor.update(() => {
-              const selection = $getSelection();
-              if ($isRangeSelection(selection)) {
-                $setBlocksType(selection, () => $createHeadingNode(`h${n}`));
-              }
-            }),
+    },
+    {
+      id: 'heading-1',
+      label: 'Heading 1',
+      icon: <MaterialIcon name="title" />,
+      keywords: ['heading', 'header', 'h1'],
+      section: 'Basic blocks',
+      onSelect: () =>
+        editor.update(() => {
+          const selection = $getSelection();
+          if ($isRangeSelection(selection)) {
+            $setBlocksType(selection, () => $createHeadingNode('h1'));
+          }
         }),
-    ),
-    new ComponentPickerOption('Table', {
-      icon: <i className="icon table" />,
+    },
+    {
+      id: 'heading-2',
+      label: 'Heading 2',
+      icon: <MaterialIcon name="title" />,
+      keywords: ['heading', 'header', 'h2'],
+      section: 'Basic blocks',
+      onSelect: () =>
+        editor.update(() => {
+          const selection = $getSelection();
+          if ($isRangeSelection(selection)) {
+            $setBlocksType(selection, () => $createHeadingNode('h2'));
+          }
+        }),
+    },
+    {
+      id: 'heading-3',
+      label: 'Heading 3',
+      icon: <MaterialIcon name="title" />,
+      keywords: ['heading', 'header', 'h3'],
+      section: 'Basic blocks',
+      onSelect: () =>
+        editor.update(() => {
+          const selection = $getSelection();
+          if ($isRangeSelection(selection)) {
+            $setBlocksType(selection, () => $createHeadingNode('h3'));
+          }
+        }),
+    },
+    {
+      id: 'table',
+      label: 'Table',
+      icon: <MaterialIcon name="table" />,
       keywords: ['table', 'grid', 'spreadsheet', 'rows', 'columns'],
+      section: 'Tables',
       onSelect: () =>
         showModal('Insert Table', (onClose) => (
           <InsertTableDialog activeEditor={editor} onClose={onClose} />
         )),
-    }),
-    new ComponentPickerOption('Numbered List', {
-      icon: <i className="icon number" />,
+    },
+    {
+      id: 'numbered-list',
+      label: 'Numbered List',
+      icon: <MaterialIcon name="format_list_numbered" />,
       keywords: ['numbered list', 'ordered list', 'ol'],
+      section: 'Lists',
       onSelect: () =>
         editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined),
-    }),
-    new ComponentPickerOption('Bulleted List', {
-      icon: <i className="icon bullet" />,
+    },
+    {
+      id: 'bulleted-list',
+      label: 'Bulleted List',
+      icon: <MaterialIcon name="format_list_bulleted" />,
       keywords: ['bulleted list', 'unordered list', 'ul'],
+      section: 'Lists',
       onSelect: () =>
         editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined),
-    }),
-    new ComponentPickerOption('Check List', {
-      icon: <i className="icon check" />,
+    },
+    {
+      id: 'check-list',
+      label: 'Check List',
+      icon: <MaterialIcon name="checklist" />,
       keywords: ['check list', 'todo list'],
+      section: 'Lists',
       onSelect: () =>
         editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined),
-    }),
-    new ComponentPickerOption('Quote', {
-      icon: <i className="icon quote" />,
-      keywords: ['block quote'],
+    },
+    {
+      id: 'quote',
+      label: 'Quote',
+      icon: <MaterialIcon name="format_quote" />,
+      keywords: ['block quote', 'quotation'],
+      section: 'Basic blocks',
       onSelect: () =>
         editor.update(() => {
           const selection = $getSelection();
@@ -206,10 +242,13 @@ function getBaseOptions(editor: LexicalEditor, showModal: ShowModal) {
             $setBlocksType(selection, () => $createQuoteNode());
           }
         }),
-    }),
-    new ComponentPickerOption('Code', {
-      icon: <i className="icon code" />,
+    },
+    {
+      id: 'code',
+      label: 'Code Block',
+      icon: <MaterialIcon name="code" />,
       keywords: ['javascript', 'python', 'js', 'codeblock'],
+      section: 'Basic blocks',
       onSelect: () =>
         editor.update(() => {
           const selection = $getSelection();
@@ -218,7 +257,6 @@ function getBaseOptions(editor: LexicalEditor, showModal: ShowModal) {
             if (selection.isCollapsed()) {
               $setBlocksType(selection, () => $createCodeNode());
             } else {
-              // Will this ever happen?
               const textContent = selection.getTextContent();
               const codeNode = $createCodeNode();
               selection.insertNodes([codeNode]);
@@ -226,84 +264,137 @@ function getBaseOptions(editor: LexicalEditor, showModal: ShowModal) {
             }
           }
         }),
-    }),
-    new ComponentPickerOption('Divider', {
-      icon: <i className="icon horizontal-rule" />,
+    },
+    {
+      id: 'divider',
+      label: 'Divider',
+      icon: <MaterialIcon name="horizontal_rule" />,
       keywords: ['horizontal rule', 'divider', 'hr'],
+      section: 'Layout',
       onSelect: () =>
         editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined),
-    }),
-    new ComponentPickerOption('Page Break', {
-      icon: <i className="icon page-break" />,
+    },
+    {
+      id: 'page-break',
+      label: 'Page Break',
+      icon: <MaterialIcon name="insert_page_break" />,
       keywords: ['page break', 'divider'],
+      section: 'Layout',
       onSelect: () => editor.dispatchCommand(INSERT_PAGE_BREAK, undefined),
-    }),
-    new ComponentPickerOption('Excalidraw', {
-      icon: <i className="icon diagram-2" />,
+    },
+    {
+      id: 'excalidraw',
+      label: 'Excalidraw',
+      icon: <MaterialIcon name="draw" />,
       keywords: ['excalidraw', 'diagram', 'drawing'],
+      section: 'Media',
       onSelect: () =>
         editor.dispatchCommand(INSERT_EXCALIDRAW_COMMAND, undefined),
-    }),
+    },
     ...EmbedConfigs.map(
-      (embedConfig) =>
-        new ComponentPickerOption(`Embed ${embedConfig.contentName}`, {
-          icon: embedConfig.icon,
-          keywords: [...embedConfig.keywords, 'embed'],
-          onSelect: () =>
-            editor.dispatchCommand(INSERT_EMBED_COMMAND, embedConfig.type),
-        }),
+      (embedConfig) => ({
+        id: `embed-${embedConfig.type}`,
+        label: `Embed ${embedConfig.contentName}`,
+        icon: embedConfig.icon,
+        keywords: [...embedConfig.keywords, 'embed'],
+        section: 'Media',
+        onSelect: () =>
+          editor.dispatchCommand(INSERT_EMBED_COMMAND, embedConfig.type),
+      }),
     ),
-    new ComponentPickerOption('Collapsible', {
-      icon: <i className="icon caret-right" />,
+    {
+      id: 'collapsible',
+      label: 'Collapsible',
+      icon: <MaterialIcon name="expand_more" />,
       keywords: ['collapse', 'collapsible', 'toggle'],
+      section: 'Layout',
       onSelect: () =>
         editor.dispatchCommand(INSERT_COLLAPSIBLE_COMMAND, undefined),
-    }),
-    new ComponentPickerOption('Columns Layout', {
-      icon: <i className="icon columns" />,
+    },
+    {
+      id: 'columns-layout',
+      label: 'Columns Layout',
+      icon: <MaterialIcon name="view_column" />,
       keywords: ['columns', 'layout', 'grid'],
+      section: 'Layout',
       onSelect: () =>
         showModal('Insert Columns Layout', (onClose) => (
           <InsertLayoutDialog activeEditor={editor} onClose={onClose} />
         )),
-    }),
-    new ComponentPickerOption('Board', {
-      icon: <i className="icon columns" />,
+    },
+    {
+      id: 'board',
+      label: 'Board',
+      icon: <MaterialIcon name="view_kanban" />,
       keywords: ['board', 'kanban', 'tasks', 'cards', 'columns'],
+      section: 'Layout',
       onSelect: () =>
         editor.dispatchCommand(INSERT_BOARD_COMMAND, undefined),
-    }),
-    ...(['left', 'center', 'right', 'justify'] as const).map(
-      (alignment) =>
-        new ComponentPickerOption(`Align ${alignment}`, {
-          icon: <i className={`icon ${alignment}-align`} />,
-          keywords: ['align', 'justify', alignment],
-          onSelect: () =>
-            editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, alignment),
-        }),
-    ),
+    },
+    {
+      id: 'align-left',
+      label: 'Align Left',
+      icon: <MaterialIcon name="format_align_left" />,
+      keywords: ['align', 'left'],
+      section: 'Alignment',
+      onSelect: () =>
+        editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'left'),
+    },
+    {
+      id: 'align-center',
+      label: 'Align Center',
+      icon: <MaterialIcon name="format_align_center" />,
+      keywords: ['align', 'center'],
+      section: 'Alignment',
+      onSelect: () =>
+        editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'center'),
+    },
+    {
+      id: 'align-right',
+      label: 'Align Right',
+      icon: <MaterialIcon name="format_align_right" />,
+      keywords: ['align', 'right'],
+      section: 'Alignment',
+      onSelect: () =>
+        editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'right'),
+    },
+    {
+      id: 'align-justify',
+      label: 'Align Justify',
+      icon: <MaterialIcon name="format_align_justify" />,
+      keywords: ['align', 'justify'],
+      section: 'Alignment',
+      onSelect: () =>
+        editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'justify'),
+    },
     // Add user commands from plugins
     ...pluginRegistry.getAllUserCommands().map(
-      (userCommand) =>
-        new ComponentPickerOption(userCommand.title, {
-          icon: userCommand.icon ? <i className={`icon ${userCommand.icon}`} /> : undefined,
-          keywords: userCommand.keywords || [],
-          onSelect: () =>
-            editor.dispatchCommand(userCommand.command, userCommand.payload),
-        }),
+      (userCommand) => ({
+        id: `plugin-${userCommand.title.toLowerCase().replace(/\s+/g, '-')}`,
+        label: userCommand.title,
+        icon: userCommand.icon ? <MaterialIcon name={userCommand.icon} /> : undefined,
+        keywords: userCommand.keywords || [],
+        section: 'Plugins',
+        onSelect: () =>
+          editor.dispatchCommand(userCommand.command, userCommand.payload),
+      }),
     ),
   ];
 }
+
+// ============================================================================
+// MAIN PLUGIN
+// ============================================================================
 
 export default function ComponentPickerMenuPlugin(): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const [modal, showModal] = useModal();
   const [queryString, setQueryString] = useState<string | null>(null);
 
-  const checkForTriggerMatch = useBasicTypeaheadTriggerMatch('/', {
-    allowWhitespace: true,
-    minLength: 0,
-  });
+  // Ensure Material Symbols font is loaded
+  useEffect(() => {
+    ensureMaterialSymbolsLoaded();
+  }, []);
 
   const options = useMemo(() => {
     const baseOptions = getBaseOptions(editor, showModal);
@@ -318,65 +409,45 @@ export default function ComponentPickerMenuPlugin(): JSX.Element {
       ...getDynamicOptions(editor, queryString),
       ...baseOptions.filter(
         (option) =>
-          regex.test(option.title) ||
-          option.keywords.some((keyword) => regex.test(keyword)),
+          regex.test(option.label) ||
+          (option.keywords && option.keywords.some((keyword) => regex.test(keyword))),
       ),
     ];
   }, [editor, queryString, showModal]);
 
-  const onSelectOption = useCallback(
+  const triggerFn = useMemo(
+    () => createBasicTriggerFunction('/', {minLength: 0}),
+    [],
+  );
+
+  const handleQueryChange = useCallback((query: string | null) => {
+    setQueryString(query);
+  }, []);
+
+  const handleSelectOption = useCallback(
     (
-      selectedOption: ComponentPickerOption,
-      nodeToRemove: TextNode | null,
+      option: TypeaheadMenuOption,
+      _textNode: TextNode | null,
       closeMenu: () => void,
-      matchingString: string,
+      _matchingString: string,
     ) => {
-      editor.update(() => {
-        nodeToRemove?.remove();
-        selectedOption.onSelect(matchingString);
-        closeMenu();
-      });
+      option.onSelect();
+      closeMenu();
     },
-    [editor],
+    [],
   );
 
   return (
     <>
       {modal}
-      <LexicalTypeaheadMenuPlugin<ComponentPickerOption>
-        onQueryChange={setQueryString}
-        onSelectOption={onSelectOption}
-        triggerFn={checkForTriggerMatch}
+      <TypeaheadMenuPlugin
         options={options}
-        menuRenderFn={(
-          anchorElementRef,
-          {selectedIndex, selectOptionAndCleanUp, setHighlightedIndex},
-        ) =>
-          anchorElementRef.current && options.length
-            ? ReactDOM.createPortal(
-                <div className="typeahead-popover component-picker-menu">
-                  <ul>
-                    {options.map((option, i: number) => (
-                      <ComponentPickerMenuItem
-                        index={i}
-                        isSelected={selectedIndex === i}
-                        onClick={() => {
-                          setHighlightedIndex(i);
-                          selectOptionAndCleanUp(option);
-                        }}
-                        onMouseEnter={() => {
-                          setHighlightedIndex(i);
-                        }}
-                        key={option.key}
-                        option={option}
-                      />
-                    ))}
-                  </ul>
-                </div>,
-                anchorElementRef.current,
-              )
-            : null
-        }
+        triggerFn={triggerFn}
+        onQueryChange={handleQueryChange}
+        onSelectOption={handleSelectOption}
+        maxHeight={400}
+        minWidth={300}
+        maxWidth={400}
       />
     </>
   );
