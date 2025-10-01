@@ -467,7 +467,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
             data-active={isActive ? 'true' : 'false'}
           >
             <StravuEditor
-              key={`${tab.filePath}-v${instance.reloadVersion ?? 0}`}
+              key={`${tab.filePath}-v${instance.reloadVersion ?? 0}-theme-${theme}`}
               config={{
                 initialContent: instance.content,
                 theme,

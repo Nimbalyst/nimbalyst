@@ -27,24 +27,38 @@ interface ThemeProviderProps {
 
 export function ThemeProvider({children, initialTheme = 'auto'}: ThemeProviderProps): JSX.Element {
   const [theme, setThemeState] = useState<Theme>(() => {
-    // If a specific theme is configured, use it
-    if (initialTheme === 'light' || initialTheme === 'dark' || initialTheme === 'crystal-dark') {
+    // If a specific theme is configured, use it (this takes priority over everything)
+    if (initialTheme && (initialTheme === 'light' || initialTheme === 'dark' || initialTheme === 'crystal-dark')) {
       return initialTheme;
     }
-    
-    // Check localStorage first, then system preference (for 'auto' mode)
-    const savedTheme = localStorage.getItem('stravu-editor-theme') as Theme;
-    if (savedTheme && (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'crystal-dark')) {
-      return savedTheme;
+
+    // Only check localStorage/system if no explicit theme provided
+    if (initialTheme === 'auto' || !initialTheme) {
+      // Check localStorage first, then system preference
+      const savedTheme = localStorage.getItem('stravu-editor-theme') as Theme;
+      if (savedTheme && (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'crystal-dark')) {
+        return savedTheme;
+      }
+
+      // Check system preference
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        return 'dark';
+      }
     }
-    
-    // Check system preference
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
-    
+
     return 'light';
   });
+
+  // Update theme when initialTheme prop changes (for parent-managed themes)
+  useEffect(() => {
+    if (initialTheme === 'light' || initialTheme === 'dark' || initialTheme === 'crystal-dark') {
+      setThemeState(initialTheme);
+    } else if (initialTheme === 'auto') {
+      // In auto mode, respect system preference
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      setThemeState(systemTheme);
+    }
+  }, [initialTheme]);
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);

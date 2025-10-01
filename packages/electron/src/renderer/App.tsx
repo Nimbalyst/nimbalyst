@@ -121,6 +121,7 @@ export default function App() {
   // Initialize theme from localStorage immediately
   const [theme, setTheme] = useState<ConfigTheme>(() => {
     const savedTheme = localStorage.getItem('theme');
+    console.log('[App] Initial theme from localStorage:', savedTheme);
     return (savedTheme as ConfigTheme) || 'auto';
   });
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
@@ -806,6 +807,7 @@ export default function App() {
     setSessionToLoad,
     setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
+    setTheme,
 
     // Refs
     isInitializedRef,

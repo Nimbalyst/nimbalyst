@@ -86,6 +86,7 @@ interface UseIPCHandlersProps {
   setSessionToLoad: (session: { sessionId: string; workspacePath?: string } | null) => void;
   setIsHistoryDialogOpen: (open: boolean) => void;
   setIsAgentPaletteVisible: (visible: boolean) => void;
+  setTheme: (theme: any) => void;
 
   // Refs
   // NOTE: initialContentRef removed - EditorPool tracks initialContent per-file
@@ -150,6 +151,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setSessionToLoad,
     setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
+    setTheme,
 
     // Refs
     isInitializedRef,
@@ -235,6 +237,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setSessionToLoad,
     setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
+    setTheme,
     tabs,  // Keep tabs updated in ref
   };
 
@@ -249,9 +252,9 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
   };
 
   useEffect(() => {
-    if (!window.electronAPI) return;
-
-    if (LOG_CONFIG.IPC_LISTENERS) console.log('[IPC] Setting up IPC listeners (one-time registration)');
+    if (!window.electronAPI) {
+      return;
+    }
 
     // Check for first launch (no API key configured)
     const checkFirstLaunch = async () => {
@@ -651,8 +654,12 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }
     }));
     cleanupFns.push(window.electronAPI.onThemeChange((newTheme) => {
-      if (LOG_CONFIG.THEME) console.log('[THEME] Theme changed to:', newTheme);
       const editorTheme = newTheme === 'system' ? 'auto' : newTheme;
+
+      // Apply theme immediately for instant visual feedback
+      if (handlersRef.current.setTheme) {
+        handlersRef.current.setTheme(editorTheme);
+      }
 
       // Flush unsaved changes to disk before visual reset, when possible
       const flushAndReload = async () => {
@@ -701,10 +708,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
           }
         } catch (err) {
           console.error('[THEME] Error flushing/reloading content on theme change:', err);
-        } finally {
-          // Apply theme after content rehydration
-          // Note: This relies on theme state setter in parent component
-          // The parent will need to handle setTheme
         }
       };
 
