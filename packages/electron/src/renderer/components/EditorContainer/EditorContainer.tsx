@@ -20,11 +20,12 @@ interface EditorContainerProps {
   onGetContent?: (getContentFn: () => string) => void;
   onEditorReady?: (editor: any) => void;
   onContentChange?: (tabId: string, isDirty: boolean) => void;
-  onSaveRequest?: () => void;
-  onSaveFile?: (filePath: string, content: string) => Promise<void>;
+  onSaveComplete?: (filePath: string) => void; // Called after file is saved (for UI updates)
+  onManualSaveReady?: (saveFunction: () => Promise<void>) => void; // Provides manual save function to parent
   textReplacements?: TextReplacement[];
   autosaveInterval?: number; // milliseconds, default 2000
   autosaveDebounce?: number; // milliseconds, default 200
+  periodicSnapshotInterval?: number; // milliseconds, default 300000 (5 minutes)
 }
 
 export const EditorContainer: React.FC<EditorContainerProps> = ({
@@ -34,14 +35,89 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
   onGetContent,
   onEditorReady,
   onContentChange,
-  onSaveRequest,
-  onSaveFile,
+  onSaveComplete,
+  onManualSaveReady,
   textReplacements,
   autosaveInterval = 2000,
   autosaveDebounce = 200,
+  periodicSnapshotInterval = 300000, // 5 minutes
 }) => {
   const editorPool = getEditorPool();
   const getContentFuncs = useRef<Map<string, () => string>>(new Map());
+  const lastSnapshotContent = useRef<Map<string, string>>(new Map()); // Track last snapshot content per file
+
+  // Helper: Save file with history snapshot (encapsulates ALL per-file save logic)
+  const saveWithHistory = useCallback(async (
+    filePath: string,
+    content: string,
+    snapshotType: 'auto' | 'manual' = 'auto'
+  ) => {
+    if (!window.electronAPI) return;
+
+    try {
+      // Save to disk
+      const result = await window.electronAPI.saveFile(content, filePath);
+
+      if (result) {
+        // Create history snapshot for this file
+        if (window.electronAPI.history) {
+          try {
+            const description = snapshotType === 'manual' ? 'Manual save' : 'Auto-save';
+            await window.electronAPI.history.createSnapshot(
+              result.filePath,
+              content,
+              snapshotType,
+              description
+            );
+          } catch (error) {
+            logger.ui.error(`[EditorContainer] Failed to create history snapshot for ${filePath}:`, error);
+            // Don't fail the save if snapshot creation fails
+          }
+        }
+
+        // Notify parent that save completed
+        if (onSaveComplete) {
+          onSaveComplete(result.filePath);
+        }
+      }
+    } catch (error) {
+      logger.ui.error(`[EditorContainer] Failed to save file ${filePath}:`, error);
+      throw error;
+    }
+  }, [onSaveComplete]);
+
+  // Handle manual save request (Cmd+S or File > Save menu)
+  const handleManualSave = useCallback(async () => {
+    if (!activeTabId) return;
+
+    const activeTab = tabs.find(t => t.id === activeTabId);
+    if (!activeTab) return;
+
+    const getContentFn = getContentFuncs.current.get(activeTabId);
+    if (!getContentFn) return;
+
+    const content = getContentFn();
+    logger.ui.info(`[EditorContainer] Manual save: ${activeTab.fileName}`);
+
+    await saveWithHistory(activeTab.filePath, content, 'manual');
+
+    // Update instance to mark as clean and track save time
+    editorPool.update(activeTab.filePath, {
+      isDirty: false,
+      initialContent: content,
+      lastSaveTime: Date.now(),
+    });
+
+    // Notify parent of state change
+    onContentChange?.(activeTabId, false);
+  }, [activeTabId, tabs, editorPool, saveWithHistory, onContentChange]);
+
+  // Provide manual save function to parent
+  useEffect(() => {
+    if (onManualSaveReady) {
+      onManualSaveReady(handleManualSave);
+    }
+  }, [handleManualSave, onManualSaveReady]);
 
   // Create editor instances for all tabs
   useEffect(() => {
@@ -114,19 +190,20 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
         if (!instance) continue;
 
         // Save if dirty before hiding
-        if (instance.isDirty && onSaveFile) {
+        if (instance.isDirty) {
           const getContentFn = getContentFuncs.current.get(tab.id);
           if (getContentFn) {
             try {
               const content = getContentFn();
               logger.ui.info(`[EditorContainer] Auto-saving ${tab.fileName} before hiding`);
 
-              await onSaveFile(tab.filePath, content);
+              await saveWithHistory(tab.filePath, content);
 
-              // Update instance to mark as clean
+              // Update instance to mark as clean and track save time
               editorPool.update(tab.filePath, {
                 isDirty: false,
                 initialContent: content,
+                lastSaveTime: Date.now(),
               });
 
               // Notify parent
@@ -154,7 +231,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
     };
 
     saveAndHide();
-  }, [activeTabId, tabs, editorPool, onGetContent, onSaveFile, onContentChange]);
+  }, [activeTabId, tabs, editorPool, onGetContent, saveWithHistory, onContentChange]);
 
   // Set up file watching for all editor instances
   useEffect(() => {
@@ -169,6 +246,12 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
 
       const instance = editorPool.get(data.path);
       if (!instance) return;
+
+      // Ignore file changes shortly after we saved (prevents reload loops)
+      if (instance.lastSaveTime && Date.now() - instance.lastSaveTime < 1000) {
+        logger.ui.info(`[EditorContainer] Ignoring file change (just saved ${tab.fileName})`);
+        return;
+      }
 
       // If the editor is dirty, warn the user instead of auto-reloading
       if (instance.isDirty) {
@@ -217,8 +300,6 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
 
   // Set up autosave for all editor instances
   useEffect(() => {
-    if (!onSaveFile) return;
-
     tabs.forEach((tab) => {
       const instance = editorPool.get(tab.filePath);
       if (!instance) return;
@@ -249,12 +330,13 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
           const content = getContentFn();
           logger.ui.info(`[EditorContainer] Auto-saving: ${tab.fileName}`);
 
-          await onSaveFile(tab.filePath, content);
+          await saveWithHistory(tab.filePath, content);
 
-          // Update instance to mark as clean
+          // Update instance to mark as clean and track save time
           editorPool.update(tab.filePath, {
             isDirty: false,
             initialContent: content,
+            lastSaveTime: Date.now(),
           });
 
           // Notify parent
@@ -278,7 +360,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
         }
       });
     };
-  }, [tabs, editorPool, onSaveFile, onContentChange, autosaveInterval, autosaveDebounce]);
+  }, [tabs, editorPool, saveWithHistory, onContentChange, autosaveInterval, autosaveDebounce]);
 
   // Cleanup when tabs are closed - SAVE BEFORE DESTROYING
   useEffect(() => {
@@ -291,16 +373,8 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
       for (const [filePath, instance] of poolInstances) {
         if (!currentTabPaths.has(filePath)) {
           // Save if dirty before destroying
-          if (instance.isDirty && onSaveFile) {
+          if (instance.isDirty) {
             // Find the tab ID for this file path
-            const tabId = Array.from(getContentFuncs.current.entries())
-              .find(([_, fn]) => {
-                // This is a bit hacky, but we need to find the tab
-                // Let's just iterate through all tabs instead
-                return false;
-              })?.[0];
-
-            // Actually, let's find it from the tab-to-getContent mapping
             const tabEntry = Array.from(getContentFuncs.current.entries()).find(([id]) => {
               // We don't have a reverse mapping, so let's check all tabs
               const tab = tabs.find(t => t.id === id);
@@ -313,7 +387,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
                 const content = getContentFn();
                 logger.ui.info(`[EditorContainer] Auto-saving ${filePath.split('/').pop()} before closing`);
 
-                await onSaveFile(filePath, content);
+                await saveWithHistory(filePath, content);
               } catch (error) {
                 logger.ui.error(`[EditorContainer] Failed to save before closing:`, error);
               }
@@ -334,7 +408,40 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
     };
 
     saveAndDestroy();
-  }, [tabs, editorPool, onSaveFile]);
+  }, [tabs, editorPool, saveWithHistory]);
+
+  // Set up periodic snapshots for all tabs (every 5 minutes)
+  useEffect(() => {
+    if (!window.electronAPI?.history || periodicSnapshotInterval <= 0) return;
+
+    const timer = setInterval(async () => {
+      for (const tab of tabs) {
+        const getContentFn = getContentFuncs.current.get(tab.id);
+        if (!getContentFn) continue;
+
+        try {
+          const content = getContentFn();
+          const lastContent = lastSnapshotContent.current.get(tab.filePath);
+
+          // Only create snapshot if content changed since last periodic snapshot
+          if (content && content !== lastContent && content !== '') {
+            logger.ui.info(`[EditorContainer] Creating periodic snapshot for: ${tab.fileName}`);
+            await window.electronAPI.history.createSnapshot(
+              tab.filePath,
+              content,
+              'auto',
+              'Periodic auto-save'
+            );
+            lastSnapshotContent.current.set(tab.filePath, content);
+          }
+        } catch (error) {
+          logger.ui.error(`[EditorContainer] Failed to create periodic snapshot for ${tab.fileName}:`, error);
+        }
+      }
+    }, periodicSnapshotInterval);
+
+    return () => clearInterval(timer);
+  }, [tabs, periodicSnapshotInterval]);
 
   return (
     <div className="multi-editor-container">
@@ -398,7 +505,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
                     onEditorReady(editor);
                   }
                 },
-                onSaveRequest,
+                onSaveRequest: handleManualSave,
                 textReplacements: isActive ? textReplacements : undefined,
               }}
             />

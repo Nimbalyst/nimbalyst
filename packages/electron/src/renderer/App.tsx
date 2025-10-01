@@ -21,7 +21,6 @@ logger.ui.info('StravuEditor imported');
 // Import refactored hooks and utilities
 import { useIPCHandlers } from './hooks/useIPCHandlers';
 import { useWindowLifecycle } from './hooks/useWindowLifecycle';
-import { autoSaveBeforeNavigation as autoSaveUtil, type AutoSaveOptions } from './utils/autosave';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from './utils/workspaceFileOperations';
 import { aiToolService } from './services/AIToolService';
 
@@ -121,7 +120,7 @@ export default function App() {
   const [currentFileName, setCurrentFileName] = useState<string | null>(null);
   const isDirtyRef = useRef(false);  // Internal tracking for autosave
   const [isDirty, setIsDirty] = useState(false);  // For UI updates
-  const [contentVersion, setContentVersion] = useState(0);  // For forcing editor re-render
+  // NOTE: contentVersion removed - EditorContainer doesn't need version bumping for remounts
   const tabStatesRef = useRef<Map<string, { isDirty: boolean }>>(new Map());  // Track tab dirty states without re-renders
   const tabsRef = useRef<any>(null);  // Reference to current tabs object for use in intervals only
   const [isInitializing, setIsInitializing] = useState(true);
@@ -176,8 +175,7 @@ export default function App() {
     aiToolService.registerBridgeMethods();
   }, []);
 
-  // Track when we last saved to ignore file change events shortly after
-  const lastSaveTimeRef = useRef<number>(0);
+  // NOTE: lastSaveTime is now tracked per-file in EditorPool (see editor.ts EditorInstance.lastSaveTime)
 
   // Tab management state
   // Tabs are always enabled - removed tabPreferences
@@ -252,13 +250,12 @@ export default function App() {
   }, [workspaceMode, navigation.setNavigationState]);
 
   const getContentRef = useRef<(() => string) | null>(null);
-  const initialContentRef = useRef<string>('');
+  // NOTE: initialContentRef removed - EditorPool tracks initialContent per-file
   const editorRef = useRef<any>(null);
   const searchCommandRef = useRef<LexicalCommand<undefined> | null>(null);
-  const contentVersionRef = useRef<number>(0);
+  // NOTE: contentVersionRef removed - EditorContainer doesn't need version bumping for remounts
   const isInitializedRef = useRef<boolean>(false);
-  const autoSnapshotIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const lastSnapshotContentRef = useRef<string>('');
+  // NOTE: autoSnapshotIntervalRef removed - EditorContainer handles periodic snapshots now
 
   // NOTE: autoSaveIntervalRef and autoSaveCancellationRef removed - EditorContainer handles autosave now
   const activeSavesRef = useRef<Set<string>>(new Set());
@@ -273,7 +270,6 @@ export default function App() {
     getContentRef,
     isDirtyRef,
     currentFilePath,
-    lastSaveTimeRef,
   });
 
   // NOTE: useHMRStateRestoration removed - no longer needed now that EditorContainer/EditorPool
@@ -443,8 +439,7 @@ export default function App() {
       const result = await window.electronAPI.saveFileAs(content);
       if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Save as result:', result);
       if (result) {
-        // Mark the time we saved to ignore file change events
-        lastSaveTimeRef.current = Date.now();
+        // NOTE: lastSaveTime now tracked in EditorPool per-file
         if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Setting current file path to:', result.filePath);
         setCurrentFilePath(result.filePath);
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
@@ -456,6 +451,7 @@ export default function App() {
           editorPool.update(result.filePath, {
             isDirty: false,
             initialContent: content,
+            lastSaveTime: Date.now(),
           });
         }
 
@@ -474,154 +470,28 @@ export default function App() {
     }
   }, []);
 
-  // Handle save
-  // Simple file save function for EditorContainer autosave
-  const saveFileContent = useCallback(async (filePath: string, content: string) => {
-    if (!window.electronAPI) return;
-
-    try {
-      const result = await window.electronAPI.saveFile(content, filePath);
-      if (result) {
-        // Mark the time we saved to ignore file change events
-        lastSaveTimeRef.current = Date.now();
-
-        // Create history snapshot for autosave
-        if (window.electronAPI?.history) {
-          await window.electronAPI.history.createSnapshot(
-            result.filePath,
-            content,
-            'auto',
-            'Auto-save'
-          );
-        }
-      }
-    } catch (error) {
-      console.error('[App] Failed to save file:', filePath, error);
-      throw error;
-    }
-  }, []);
-
-  const handleSave = useCallback(async () => {
-    // Get the current file path from tabs if enabled, otherwise use state
-    const filePath = tabs.activeTab
-      ? tabs.activeTab.filePath
-      : currentFilePath;
-
-    if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] handleSave called, filePath:', filePath);
-    if (!window.electronAPI || !getContentRef.current) return;
-
-    const content = getContentRef.current();
-    if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Saving content:', { contentLength: content.length, hasFilePath: !!filePath, filePath });
-
-    if (!filePath) {
-      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] No file path, triggering save as');
-      // No file loaded, for Cmd+S we should trigger save as
-      // This matches typical editor behavior
-      await handleSaveAs();
-      return;
-    }
-
-    try {
-      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Calling electronAPI.saveFile with path:', filePath);
-      const result = await window.electronAPI.saveFile(content, filePath);
-      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Save result:', result);
-      if (result) {
-        // Mark the time we saved to ignore file change events
-        lastSaveTimeRef.current = Date.now();
-        setCurrentFilePath(result.filePath);
-        setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
-        setIsDirty(false);
-
-        // Update EditorPool state for the active tab
-        if (tabs.activeTab && filePath) {
-          const editorPool = getEditorPool();
-          editorPool.update(filePath, {
-            isDirty: false,
-            initialContent: content,
-          });
-        }
-
-        // Update tab state if tabs are enabled
-        if (tabs.activeTabId) {
-          tabs.updateTab(tabs.activeTabId, {
-            isDirty: false,
-            lastSaved: new Date()
-          });
-        }
-
-        // Create a history snapshot for manual save
-        if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Checking history API:', !!window.electronAPI?.history);
-        if (window.electronAPI?.history) {
-          try {
-            if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Creating snapshot for:', result.filePath, 'content length:', content.length);
-            await window.electronAPI.history.createSnapshot(
-              result.filePath,
-              content,
-              'manual',
-              'Manual save'
-            );
-            if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Created history snapshot for manual save');
-          } catch (error) {
-            console.error('Failed to create history snapshot:', error);
-          }
-        } else {
-          if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] History API not available');
-        }
-
-        if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] File saved successfully');
-      } else {
-        console.log('Save returned null - no current file in main process');
-      }
-    } catch (error) {
-      console.error('Failed to save file:', error);
-    }
-  }, [currentFilePath, handleSaveAs]);
+  // Manual save function provided by EditorContainer
+  const handleSaveRef = useRef<(() => Promise<void>) | null>(null);
 
   // Handle close workspace
   const handleCloseWorkspace = useCallback(async () => {
-    // Auto-save current file if dirty (no prompt needed with autosave)
-    if (isDirty && getContentRef.current) {
-      if (LOG_CONFIG.WORKSPACE_OPS) console.log('[CLOSE_WORKSPACE] Auto-saving current file before closing');
-      await handleSave();
-    }
-
+    // NOTE: EditorContainer handles saving dirty files automatically
     // Close the window
     window.close();
-  }, [isDirty, handleSave]);
-
-  // Wrapper for autosave utility with component-specific context
-  const autoSaveBeforeNavigation = useCallback(async (options: AutoSaveOptions = {}) => {
-    return autoSaveUtil(options, {
-      currentFilePath,
-      tabs,
-      isDirtyRef,
-      getContentRef,
-      initialContentRef,
-      lastSaveTimeRef,
-      setIsDirty,
-      setCurrentFilePath,
-      setCurrentFileName,
-    });
-  }, [currentFilePath, tabs, setIsDirty, setCurrentFileName, setCurrentFilePath]);
+  }, []);
 
   // Wrapper for workspace file selection utility with component-specific context
   const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
     return handleWorkspaceFileSelectUtil({
       filePath,
       currentFilePath,
-      isDirtyRef,
       tabs,
-      autoSaveBeforeNavigation,
-      contentVersionRef,
       isInitializedRef,
-      initialContentRef,
       setCurrentFilePath,
       setCurrentFileName,
-      setIsDirty,
-      setContentVersion,
       setCurrentDirectory,
     });
-  }, [currentFilePath, tabs, autoSaveBeforeNavigation, setIsDirty, setCurrentFileName, setCurrentFilePath, setContentVersion, setCurrentDirectory]);
+  }, [currentFilePath, tabs, setCurrentFileName, setCurrentFilePath, setCurrentDirectory]);
 
   // Configure aiToolService with handleWorkspaceFileSelect
   useEffect(() => {
@@ -870,49 +740,7 @@ export default function App() {
   // NOTE: EditorContainer now handles all autosave functionality with per-editor timers
   // Old autosave useEffects removed - see EditorContainer.tsx lines 218-281
 
-  // Automatic snapshot functionality
-  useEffect(() => {
-    // Clear any existing interval
-    if (autoSnapshotIntervalRef.current) {
-      clearInterval(autoSnapshotIntervalRef.current);
-      autoSnapshotIntervalRef.current = null;
-    }
-
-    // Set up auto-snapshot if we have a file path
-    if (currentFilePath && getContentRef.current && window.electronAPI?.history) {
-      // console.log('Starting auto-snapshot interval');
-      autoSnapshotIntervalRef.current = setInterval(async () => {
-        if (currentFilePath && getContentRef.current && window.electronAPI?.history) {
-          try {
-            const content = getContentRef.current();
-            // Only create snapshot if content changed since last snapshot
-            if (content !== lastSnapshotContentRef.current && content !== '') {
-              if (LOG_CONFIG.AUTO_SNAPSHOT) console.log('[AUTO-SNAPSHOT] Creating periodic snapshot');
-              await window.electronAPI.history.createSnapshot(
-                currentFilePath,
-                content,
-                'auto',
-                'Periodic auto-save'
-              );
-              lastSnapshotContentRef.current = content;
-            }
-          } catch (error) {
-            if (LOG_CONFIG.AUTO_SNAPSHOT) console.error('[AUTO-SNAPSHOT] Failed to create snapshot:', error);
-          }
-        }
-      }, 300000); // Create snapshot every 5 minutes
-    }
-
-    // Don't update last snapshot content here - let the interval handle it
-
-    // Cleanup on unmount or when dependencies change
-    return () => {
-      if (autoSnapshotIntervalRef.current) {
-        clearInterval(autoSnapshotIntervalRef.current);
-        autoSnapshotIntervalRef.current = null;
-      }
-    };
-  }, [currentFilePath]);
+  // NOTE: Periodic snapshot functionality moved to EditorContainer
 
   // NOTE: EditorContainer handles all content loading for tabs
   // This useEffect is no longer needed - removed to avoid conflicts
@@ -948,7 +776,12 @@ export default function App() {
     // Handlers
     handleNew,
     handleOpen,
-    handleSave,
+    handleSave: async () => {
+      // Delegate to EditorContainer's manual save
+      if (handleSaveRef.current) {
+        await handleSaveRef.current();
+      }
+    },
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
@@ -963,7 +796,6 @@ export default function App() {
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
-    setContentVersion,
     setIsNewFileDialogOpen,
     setIsAIChatCollapsed,
     setAIChatWidth,
@@ -973,14 +805,11 @@ export default function App() {
     setIsAgentPaletteVisible,
 
     // Refs
-    initialContentRef,
     isInitializedRef,
     isDirtyRef,
-    contentVersionRef,
     getContentRef,
     editorRef,
     searchCommandRef,
-    lastSaveTimeRef,
 
     // State values
     currentFilePath,
@@ -1175,7 +1004,24 @@ export default function App() {
                 tabs={tabs.tabs}
                 activeTabId={tabs.activeTabId}
                 theme={theme}
-                onSaveFile={saveFileContent}
+                onManualSaveReady={(saveFn) => {
+                  // Store manual save function for use by menu handlers
+                  handleSaveRef.current = saveFn;
+                }}
+                onSaveComplete={(filePath) => {
+                  // Update UI state after save completes
+                  setCurrentFilePath(filePath);
+                  setCurrentFileName(filePath.split('/').pop() || filePath);
+                  setIsDirty(false);
+
+                  // Update tab state
+                  if (tabs.activeTabId) {
+                    tabs.updateTab(tabs.activeTabId, {
+                      isDirty: false,
+                      lastSaved: new Date()
+                    });
+                  }
+                }}
                 onGetContent={(getContentFn) => {
                   logger.ui.info('Received getContent function for tab');
                   getContentRef.current = getContentFn;
@@ -1198,13 +1044,6 @@ export default function App() {
                   // For the active tab, update global UI state (for window title, menus, etc.)
                   if (changedTabId === tabs.activeTabId) {
                     setIsDirty(changedIsDirty);
-                  }
-                }}
-                onSaveRequest={() => {
-                  // Handle save request from editor
-                  if (currentFilePath && getContentRef.current) {
-                    const content = getContentRef.current();
-                    saveFileContent(currentFilePath, content);
                   }
                 }}
               />

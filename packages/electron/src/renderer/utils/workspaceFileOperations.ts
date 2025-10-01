@@ -11,16 +11,10 @@ const LOG_CONFIG = {
 interface FileSelectOptions {
   filePath: string;
   currentFilePath: string | null;
-  isDirtyRef: React.MutableRefObject<boolean>;
   tabs: any;
-  autoSaveBeforeNavigation: (options: any) => Promise<boolean>;
-  contentVersionRef: React.MutableRefObject<number>;
   isInitializedRef: React.MutableRefObject<boolean>;
-  initialContentRef: React.MutableRefObject<string>;
   setCurrentFilePath: (path: string | null) => void;
   setCurrentFileName: (name: string) => void;
-  setIsDirty: (dirty: boolean) => void;
-  setContentVersion: (fn: (v: number) => number) => void;
   setCurrentDirectory: (dir: string | null) => void;
 }
 
@@ -28,16 +22,10 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
   const {
     filePath,
     currentFilePath,
-    isDirtyRef,
     tabs,
-    autoSaveBeforeNavigation,
-    contentVersionRef,
     isInitializedRef,
-    initialContentRef,
     setCurrentFilePath,
     setCurrentFileName,
-    setIsDirty,
-    setContentVersion,
     setCurrentDirectory,
   } = options;
 
@@ -61,19 +49,11 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
     return;
   }
 
-  const wasDirty = isDirtyRef.current;
+  // NOTE: No need to manually save here - EditorContainer handles save-on-tab-switch
+  // When we call tabs.switchTab() or tabs.addTab() below, it triggers onTabChange,
+  // which triggers EditorContainer's visibility useEffect, which saves dirty tabs before hiding.
 
-  if (activeFilePath && activeFilePath !== filePath && wasDirty) {
-    if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Auto-saving current file before switching');
-    await autoSaveBeforeNavigation({
-      tabId: activeTabId,
-      filePath: activeFilePath,
-      force: true,
-      reason: 'Autosave before switching file'
-    });
-  }
-
-  // If tabs are enabled, check if file is already open in a tab after autosave
+  // If tabs are enabled, check if file is already open in a tab
   const existingTab = tabs.findTabByPath(filePath);
   if (existingTab) {
     if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already open in tab, switching');

@@ -77,7 +77,7 @@ interface UseIPCHandlersProps {
   setCurrentFilePath: (path: string | null) => void;
   setCurrentFileName: (name: string | null) => void;
   setIsDirty: (dirty: boolean) => void;
-  setContentVersion: (setter: (v: number) => number) => void;
+  // NOTE: setContentVersion removed - EditorContainer doesn't need version bumping
   setIsNewFileDialogOpen: (open: boolean) => void;
   setIsAIChatCollapsed: (collapsed: boolean) => void;
   setAIChatWidth: (width: number) => void;
@@ -87,14 +87,13 @@ interface UseIPCHandlersProps {
   setIsAgentPaletteVisible: (visible: boolean) => void;
 
   // Refs
-  initialContentRef: React.MutableRefObject<string>;
+  // NOTE: initialContentRef removed - EditorPool tracks initialContent per-file
   isInitializedRef: React.MutableRefObject<boolean>;
   isDirtyRef: React.MutableRefObject<boolean>;
-  contentVersionRef: React.MutableRefObject<number>;
+  // NOTE: contentVersionRef removed - EditorContainer doesn't need version bumping
   getContentRef: React.MutableRefObject<(() => string) | null>;
   editorRef: React.MutableRefObject<any>;
   searchCommandRef: React.MutableRefObject<LexicalCommand<undefined> | null>;
-  lastSaveTimeRef: React.MutableRefObject<number>;
 
   // State values
   currentFilePath: string | null;
@@ -143,7 +142,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
-    setContentVersion,
+    // NOTE: setContentVersion removed - not needed for EditorContainer
     setIsNewFileDialogOpen,
     setIsAIChatCollapsed,
     setAIChatWidth,
@@ -153,14 +152,12 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setIsAgentPaletteVisible,
 
     // Refs
-    initialContentRef,
     isInitializedRef,
     isDirtyRef,
-    contentVersionRef,
+    // NOTE: contentVersionRef removed - not needed for EditorContainer
     getContentRef,
     editorRef,
     searchCommandRef,
-    lastSaveTimeRef,
 
     // State values
     currentFilePath,
@@ -195,7 +192,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
-    setContentVersion,
     setIsNewFileDialogOpen,
     setIsAIChatCollapsed,
     setAIChatWidth,
@@ -233,7 +229,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
-    setContentVersion,
     setIsNewFileDialogOpen,
     setIsAIChatCollapsed,
     setAIChatWidth,
@@ -310,9 +305,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       handlersRef.current.setCurrentFileName(null);
       isDirtyRef.current = false;
       handlersRef.current.setIsDirty(false);
-      contentVersionRef.current += 1;
-      handlersRef.current.setContentVersion(v => v + 1);
-      handlersRef.current.setContentVersion(v => v + 1);
+      // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
       isInitializedRef.current = false;
 
       // Restore AI Chat state when opening a workspace
@@ -373,15 +366,13 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     cleanupFns.push(window.electronAPI.onFileOpenedFromOS(async (data) => {
       if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] File opened from OS:', data.filePath);
-      contentVersionRef.current += 1;
-      handlersRef.current.setContentVersion(v => v + 1);
-      handlersRef.current.setContentVersion(v => v + 1);
+      // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
       isInitializedRef.current = false;
       handlersRef.current.setCurrentFilePath(data.filePath);
       handlersRef.current.setCurrentFileName(data.filePath.split('/').pop() || data.filePath);
       isDirtyRef.current = false;
       handlersRef.current.setIsDirty(false);
-      initialContentRef.current = data.content;
+      // NOTE: initialContentRef removed - EditorPool tracks this per-file
 
       // Create automatic snapshot when file is opened from OS
       if (window.electronAPI.history) {
@@ -423,7 +414,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       handlersRef.current.setCurrentFilePath(null);
       handlersRef.current.setCurrentFileName(data.untitledName);
       // setIsDirty(true); // New documents start as dirty
-      initialContentRef.current = '';
+      // NOTE: initialContentRef removed - EditorPool tracks this per-file
       // Update the window title immediately
       if (window.electronAPI) {
         window.electronAPI.setTitle(`${data.untitledName} • - Preditor`);
@@ -508,12 +499,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         }
 
         if (shouldReload) {
-          // Check if this change is from our own save (within 2 seconds)
-          const timeSinceLastSave = Date.now() - lastSaveTimeRef.current;
-          if (timeSinceLastSave < 2000) {
-            console.log('[FILE_WATCH] Ignoring file change, was just saved', timeSinceLastSave, 'ms ago');
-            return;
-          }
+          // NOTE: EditorContainer now handles file watching with per-file lastSaveTime tracking
+          // This legacy handler is still here but should be removed in future cleanup
 
           // The current file was changed on disk
           try {
@@ -545,9 +532,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
                 // File is not dirty, reload it automatically
                 console.log('[FILE_WATCH] File is not dirty, reloading from disk');
                 console.log('[FILE_WATCH] Loading content for path:', data.path, 'first 100 chars:', result.content.substring(0, 100));
-                initialContentRef.current = result.content;
-                contentVersionRef.current += 1;
-                handlersRef.current.setContentVersion(v => v + 1);  // Trigger re-render and remount editor
+                // NOTE: initialContentRef removed - EditorPool tracks this per-file
+                // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
                 // Reset the getContentRef since editor will remount
                 getContentRef.current = null;
                 // Ensure editor is not marked as dirty
@@ -568,9 +554,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
                 if (choice) {
                   // User chose to reload from disk
-                  initialContentRef.current = result.content;
-                  contentVersionRef.current += 1;
-                  handlersRef.current.setContentVersion(v => v + 1);  // Trigger re-render and remount editor
+                  // NOTE: initialContentRef removed - EditorPool tracks this per-file
+                  // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
                   // Reset the getContentRef since editor will remount
                   getContentRef.current = null;
                   isDirtyRef.current = false;
@@ -620,10 +605,10 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
               if (LOG_CONFIG.THEME) console.log('[THEME] Dirty before theme switch. Saving to disk...');
               const result = await window.electronAPI?.saveFile(content, stateRef.current.currentFilePath);
               if (result?.success) {
-                lastSaveTimeRef.current = Date.now();
+                // NOTE: lastSaveTime now tracked in EditorPool per-file
                 isDirtyRef.current = false;
                 handlersRef.current.setIsDirty(false);
-                initialContentRef.current = content;
+                // NOTE: initialContentRef removed - EditorPool tracks this per-file
                 // Reflect clean state in active tab UI
                 if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.activeTabId) {
                   stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { isDirty: false });
@@ -638,9 +623,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             if (window.electronAPI?.readFileContent) {
               const res = await window.electronAPI.readFileContent(stateRef.current.currentFilePath);
               if (res?.content !== undefined) {
-                initialContentRef.current = res.content;
-                contentVersionRef.current += 1;
-                handlersRef.current.setContentVersion(v => v + 1);
+                // NOTE: initialContentRef removed - EditorPool tracks this per-file
+                // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
                 // Keep tab content in sync
                 if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.activeTabId) {
                   stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { content: res.content });
@@ -649,9 +633,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             } else if (window.electronAPI?.switchWorkspaceFile) {
               const res = await window.electronAPI.switchWorkspaceFile(stateRef.current.currentFilePath);
               if (res?.content !== undefined) {
-                initialContentRef.current = res.content;
-                contentVersionRef.current += 1;
-                handlersRef.current.setContentVersion(v => v + 1);
+                // NOTE: initialContentRef removed - EditorPool tracks this per-file
+                // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
                 if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.activeTabId) {
                   stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { content: res.content });
                 }

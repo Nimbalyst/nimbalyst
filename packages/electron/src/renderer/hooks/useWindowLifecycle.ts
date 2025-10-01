@@ -6,7 +6,6 @@ interface UseWindowLifecycleProps {
   getContentRef: React.MutableRefObject<(() => string) | null>;
   isDirtyRef: React.MutableRefObject<boolean>;
   currentFilePath: string | null;
-  lastSaveTimeRef: React.MutableRefObject<number>;
 }
 
 /**
@@ -17,8 +16,7 @@ export function useWindowLifecycle({
   tabsRef,
   getContentRef,
   isDirtyRef,
-  currentFilePath,
-  lastSaveTimeRef
+  currentFilePath
 }: UseWindowLifecycleProps) {
   useEffect(() => {
     logger.ui.info('App component mounted');
@@ -50,10 +48,9 @@ export function useWindowLifecycle({
         if (isDirtyRef.current && getContentRef.current && currentFilePath && window.electronAPI) {
           const content = getContentRef.current();
           // Fire and forget - don't await
+          // NOTE: lastSaveTime is tracked in EditorPool per-file now
           window.electronAPI.saveFile(content, currentFilePath).then(result => {
             if (result && result.success) {
-              // Mark the time we saved to ignore file change events
-              lastSaveTimeRef.current = Date.now();
               console.log('[WINDOW CLOSE] Saved current file');
             }
           }).catch(error => {
@@ -77,5 +74,5 @@ export function useWindowLifecycle({
         });
       }
     };
-  }, [currentFilePath, tabsRef, getContentRef, isDirtyRef, lastSaveTimeRef]);
+  }, [currentFilePath, tabsRef, getContentRef, isDirtyRef]);
 }

@@ -39,6 +39,9 @@ export interface EditorInstance {
   /** Last time content changed (for autosave debouncing) */
   lastChangeTime?: number;
 
+  /** Last time this file was saved (to ignore file change events shortly after) */
+  lastSaveTime?: number;
+
   /** File watcher cleanup function */
   fileWatcherCleanup?: (() => void) | null;
 }
