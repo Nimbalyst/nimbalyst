@@ -331,10 +331,10 @@ import {
           role="presentation"
           style={{
             padding: '8px 12px',
-            backgroundColor: '#f5f5f5',
+            backgroundColor: 'var(--background-tertiary, #f5f5f5)',
             fontSize: '0.75rem',
             fontWeight: 600,
-            color: '#666',
+            color: 'var(--text-secondary, #666)',
             textTransform: 'uppercase',
             letterSpacing: '0.5px',
             margin: '0',
@@ -362,10 +362,11 @@ import {
           justifyContent: 'space-between',
           opacity: option.disabled ? 0.5 : 1,
           pointerEvents: option.disabled ? 'none' : 'auto',
-          backgroundColor: isSelected ? '#f0f0f0' : 'transparent',
+          backgroundColor: isSelected ? 'var(--background-selected, #f0f0f0)' : 'transparent',
           borderRadius: '4px',
           margin: '2px 4px',
           fontSize: '0.9rem',
+          color: 'var(--text-primary, #111)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
@@ -392,7 +393,7 @@ import {
               )}
             </div>
             {option.description && (
-              <div style={{ fontSize: '0.875rem', color: '#666', marginTop: '2px' }}>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary, #666)', marginTop: '2px' }}>
                 {option.description}
               </div>
             )}
@@ -401,8 +402,8 @@ import {
         {option.shortcut && (
           <span style={{
             fontSize: '0.75rem',
-            color: '#999',
-            backgroundColor: '#f5f5f5',
+            color: 'var(--text-tertiary, #999)',
+            backgroundColor: 'var(--background-tertiary, #f5f5f5)',
             padding: '2px 6px',
             borderRadius: '3px',
             fontFamily: 'monospace'
@@ -582,8 +583,8 @@ import {
             minWidth: `${minWidth}px`,
             maxWidth: `${maxWidth}px`,
             maxHeight: `${maxHeight}px`,
-            backgroundColor: 'white',
-            border: '1px solid #ccc',
+            backgroundColor: 'var(--background-primary, white)',
+            border: '1px solid var(--border-color, #ccc)',
             borderRadius: '6px',
             display: 'flex',
             flexDirection: 'column',
@@ -592,7 +593,7 @@ import {
         >
           {header && (
             <div style={{
-              borderBottom: '1px solid #eee',
+              borderBottom: '1px solid var(--border-color, #eee)',
               padding: '8px 12px',
               flexShrink: 0,
             }}>
@@ -612,10 +613,10 @@ import {
                         className="typeahead-section-header"
                         style={{
                           padding: '8px 12px',
-                          backgroundColor: '#f5f5f5',
+                          backgroundColor: 'var(--background-tertiary, #f5f5f5)',
                           fontSize: '0.75rem',
                           fontWeight: 600,
-                          color: '#666',
+                          color: 'var(--text-secondary, #666)',
                           textTransform: 'uppercase',
                           letterSpacing: '0.5px',
                           margin: '0',
@@ -660,7 +661,7 @@ import {
           </div>
           {footer && (
             <div style={{
-              borderTop: '1px solid #eee',
+              borderTop: '1px solid var(--border-color, #eee)',
               padding: '8px 12px',
               flexShrink: 0,
             }}>
@@ -683,8 +684,8 @@ import {
           minWidth: `${minWidth}px`,
           maxWidth: `${maxWidth}px`,
           maxHeight: `${position.maxHeight}px`,
-          backgroundColor: 'white',
-          border: '1px solid #ccc',
+          backgroundColor: 'var(--background-primary, white)',
+          border: '1px solid var(--border-color, #ccc)',
           borderRadius: '6px',
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
           zIndex: 1000,
@@ -697,7 +698,7 @@ import {
       >
         {header && (
           <div style={{
-            borderBottom: '1px solid #eee',
+            borderBottom: '1px solid var(--border-color, #eee)',
             padding: '6px 10px',
             flexShrink: 0,
           }}>
@@ -727,10 +728,10 @@ import {
                       className="typeahead-section-header"
                       style={{
                         padding: '6px 10px',
-                        backgroundColor: '#f5f5f5',
+                        backgroundColor: 'var(--background-tertiary, #f5f5f5)',
                         fontSize: '0.7rem',
                         fontWeight: 600,
-                        color: '#666',
+                        color: 'var(--text-secondary, #666)',
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
                         margin: '0',
@@ -776,7 +777,7 @@ import {
             <div style={{
               padding: '16px',
               textAlign: 'center',
-              color: '#999',
+              color: 'var(--text-tertiary, #999)',
               fontStyle: 'italic'
             }}>
               No matches found
@@ -786,7 +787,7 @@ import {
 
           {footer && (
           <div style={{
-            borderTop: '1px solid #eee',
+            borderTop: '1px solid var(--border-color, #eee)',
             padding: '6px 10px',
             flexShrink: 0,
           }}>

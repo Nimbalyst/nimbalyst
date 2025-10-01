@@ -64,16 +64,23 @@ export function ThemeProvider({children, initialTheme = 'auto'}: ThemeProviderPr
   };
 
   // Apply theme on mount and when it changes (for components outside editor)
+  // ONLY if initialTheme was NOT provided (meaning we're managing global theme, not a specific editor)
   useEffect(() => {
+    // If initialTheme was explicitly provided, the parent is managing the document theme
+    // Don't interfere with document-level theme management
+    if (initialTheme && initialTheme !== 'auto') {
+      return;
+    }
+
     document.documentElement.setAttribute('data-theme', theme);
-    
+
     // Add/remove dark-theme class for shared dark styling
     if (theme === 'dark' || theme === 'crystal-dark') {
       document.documentElement.classList.add('dark-theme');
     } else {
       document.documentElement.classList.remove('dark-theme');
     }
-  }, [theme]);
+  }, [theme, initialTheme]);
 
   // Listen for system theme changes
   useEffect(() => {
