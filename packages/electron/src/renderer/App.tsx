@@ -21,7 +21,6 @@ logger.ui.info('StravuEditor imported');
 // Import refactored hooks and utilities
 import { useIPCHandlers } from './hooks/useIPCHandlers';
 import { useWindowLifecycle } from './hooks/useWindowLifecycle';
-import { useHMRStateRestoration } from './hooks/useHMRStateRestoration';
 import { autoSaveBeforeNavigation as autoSaveUtil, type AutoSaveOptions } from './utils/autosave';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from './utils/workspaceFileOperations';
 import { aiToolService } from './services/AIToolService';
@@ -278,33 +277,9 @@ export default function App() {
     lastSaveTimeRef,
   });
 
-  // HMR state restoration hook - saves and restores state during hot reloads
-  useHMRStateRestoration({
-    setWorkspaceMode,
-    setWorkspacePath,
-    setWorkspaceName,
-    setFileTree,
-    setCurrentFilePath,
-    setCurrentFileName,
-    setIsDirty,
-    setContentVersion,
-    setSidebarWidth,
-    setTheme,
-    contentRef,
-    initialContentRef,
-    isInitializedRef,
-    isDirtyRef,
-    contentVersionRef,
-    workspaceMode,
-    workspacePath,
-    workspaceName,
-    fileTree,
-    currentFilePath,
-    currentFileName,
-    sidebarWidth,
-    theme,
-    LOG_CONFIG,
-  });
+  // NOTE: useHMRStateRestoration removed - no longer needed now that EditorContainer/EditorPool
+  // manage all editor state and useTabs persists tabs to localStorage. During HMR, tabs will
+  // be restored from localStorage and editors recreated from tab content.
 
   // Prepare AI chat state loading
   useEffect(() => {
