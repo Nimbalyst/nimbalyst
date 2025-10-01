@@ -87,7 +87,6 @@ interface UseIPCHandlersProps {
   setIsAgentPaletteVisible: (visible: boolean) => void;
 
   // Refs
-  contentRef: React.MutableRefObject<string>;
   initialContentRef: React.MutableRefObject<string>;
   isInitializedRef: React.MutableRefObject<boolean>;
   isDirtyRef: React.MutableRefObject<boolean>;
@@ -154,7 +153,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setIsAgentPaletteVisible,
 
     // Refs
-    contentRef,
     initialContentRef,
     isInitializedRef,
     isDirtyRef,
@@ -307,8 +305,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       handlersRef.current.setFileTree(data.fileTree);
       // Set current directory to workspace root
       handlersRef.current.setCurrentDirectory(data.workspacePath);
-      // Clear current document
-      contentRef.current = '';
+      // Clear current document (EditorContainer manages content now)
       handlersRef.current.setCurrentFilePath(null);
       handlersRef.current.setCurrentFileName(null);
       isDirtyRef.current = false;
@@ -380,7 +377,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       handlersRef.current.setContentVersion(v => v + 1);
       handlersRef.current.setContentVersion(v => v + 1);
       isInitializedRef.current = false;
-      contentRef.current = data.content;
       handlersRef.current.setCurrentFilePath(data.filePath);
       handlersRef.current.setCurrentFileName(data.filePath.split('/').pop() || data.filePath);
       isDirtyRef.current = false;
@@ -424,7 +420,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }));
     cleanupFns.push(window.electronAPI.onNewUntitledDocument((data) => {
       console.log('Received new-untitled-document event:', data.untitledName);
-      contentRef.current = '';
       handlersRef.current.setCurrentFilePath(null);
       handlersRef.current.setCurrentFileName(data.untitledName);
       // setIsDirty(true); // New documents start as dirty
@@ -466,7 +461,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             handlersRef.current.setCurrentFilePath(null);
             isDirtyRef.current = false;
             handlersRef.current.setIsDirty(false);
-            contentRef.current = '';
           }
 
           stateRef.current.tabs.removeTab(tabToClose.id);
@@ -529,7 +523,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
               : await window.electronAPI.switchWorkspaceFile(data.path);
             if (result && result.content !== undefined) {
               // Get current content from the editor
-              const currentContent = getContentRef.current ? getContentRef.current() : contentRef.current;
+              const currentContent = getContentRef.current ? getContentRef.current() : '';
 
               console.log('[FILE CHANGE] Content comparison:', {
                 diskLength: result.content.length,
@@ -551,7 +545,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
                 // File is not dirty, reload it automatically
                 console.log('[FILE_WATCH] File is not dirty, reloading from disk');
                 console.log('[FILE_WATCH] Loading content for path:', data.path, 'first 100 chars:', result.content.substring(0, 100));
-                contentRef.current = result.content;
                 initialContentRef.current = result.content;
                 contentVersionRef.current += 1;
                 handlersRef.current.setContentVersion(v => v + 1);  // Trigger re-render and remount editor
@@ -575,7 +568,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
                 if (choice) {
                   // User chose to reload from disk
-                  contentRef.current = result.content;
                   initialContentRef.current = result.content;
                   contentVersionRef.current += 1;
                   handlersRef.current.setContentVersion(v => v + 1);  // Trigger re-render and remount editor
@@ -646,7 +638,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             if (window.electronAPI?.readFileContent) {
               const res = await window.electronAPI.readFileContent(stateRef.current.currentFilePath);
               if (res?.content !== undefined) {
-                contentRef.current = res.content;
                 initialContentRef.current = res.content;
                 contentVersionRef.current += 1;
                 handlersRef.current.setContentVersion(v => v + 1);
@@ -658,7 +649,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             } else if (window.electronAPI?.switchWorkspaceFile) {
               const res = await window.electronAPI.switchWorkspaceFile(stateRef.current.currentFilePath);
               if (res?.content !== undefined) {
-                contentRef.current = res.content;
                 initialContentRef.current = res.content;
                 contentVersionRef.current += 1;
                 handlersRef.current.setContentVersion(v => v + 1);

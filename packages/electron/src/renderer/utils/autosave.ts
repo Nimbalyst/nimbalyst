@@ -17,7 +17,6 @@ interface AutoSaveContext {
   tabs: any;
   isDirtyRef: React.MutableRefObject<boolean>;
   getContentRef: React.MutableRefObject<(() => string) | null>;
-  contentRef: React.MutableRefObject<string>;
   initialContentRef: React.MutableRefObject<string>;
   lastSaveTimeRef: React.MutableRefObject<number>;
   setIsDirty: (dirty: boolean) => void;
@@ -46,7 +45,6 @@ export async function autoSaveBeforeNavigation(
     tabs,
     isDirtyRef,
     getContentRef,
-    contentRef,
     initialContentRef,
     lastSaveTimeRef,
     setIsDirty,
@@ -64,14 +62,19 @@ export async function autoSaveBeforeNavigation(
     return false;
   }
 
-  const content =
-    overrideContent !== undefined
-      ? overrideContent
-      : getContentRef.current
-        ? getContentRef.current()
-        : contentRef.current;
+  // Get content - if we can't get it, abort the save to prevent data loss
+  let content: string;
+  if (overrideContent !== undefined) {
+    content = overrideContent;
+  } else if (getContentRef.current) {
+    content = getContentRef.current();
+  } else {
+    console.error('[AUTOSAVE] Cannot save: no content getter available');
+    return false; // CRITICAL: Never save if we can't get content - would wipe the file!
+  }
 
   if (content === undefined || content === null) {
+    console.error('[AUTOSAVE] Cannot save: content is undefined or null');
     return false;
   }
 

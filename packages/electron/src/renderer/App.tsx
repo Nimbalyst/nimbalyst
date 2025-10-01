@@ -117,7 +117,6 @@ export default function App() {
     return <WorkspaceManager />;
   }
 
-  const contentRef = useRef('');
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
   const [currentFileName, setCurrentFileName] = useState<string | null>(null);
   const isDirtyRef = useRef(false);  // Internal tracking for autosave
@@ -597,7 +596,6 @@ export default function App() {
       tabs,
       isDirtyRef,
       getContentRef,
-      contentRef,
       initialContentRef,
       lastSaveTimeRef,
       setIsDirty,
@@ -616,7 +614,6 @@ export default function App() {
       autoSaveBeforeNavigation,
       contentVersionRef,
       isInitializedRef,
-      contentRef,
       initialContentRef,
       setCurrentFilePath,
       setCurrentFileName,
@@ -976,7 +973,6 @@ export default function App() {
     setIsAgentPaletteVisible,
 
     // Refs
-    contentRef,
     initialContentRef,
     isInitializedRef,
     isDirtyRef,

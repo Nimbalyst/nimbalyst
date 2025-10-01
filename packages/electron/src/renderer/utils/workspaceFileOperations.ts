@@ -16,7 +16,6 @@ interface FileSelectOptions {
   autoSaveBeforeNavigation: (options: any) => Promise<boolean>;
   contentVersionRef: React.MutableRefObject<number>;
   isInitializedRef: React.MutableRefObject<boolean>;
-  contentRef: React.MutableRefObject<string>;
   initialContentRef: React.MutableRefObject<string>;
   setCurrentFilePath: (path: string | null) => void;
   setCurrentFileName: (name: string) => void;
@@ -34,7 +33,6 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
     autoSaveBeforeNavigation,
     contentVersionRef,
     isInitializedRef,
-    contentRef,
     initialContentRef,
     setCurrentFilePath,
     setCurrentFileName,
