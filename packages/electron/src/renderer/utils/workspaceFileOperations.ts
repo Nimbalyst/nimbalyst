@@ -12,10 +12,8 @@ interface FileSelectOptions {
   filePath: string;
   currentFilePath: string | null;
   isDirtyRef: React.MutableRefObject<boolean>;
-  tabPreferences: any;
   tabs: any;
   autoSaveBeforeNavigation: (options: any) => Promise<boolean>;
-  autoSaveCancellationRef: React.MutableRefObject<AbortController | null>;
   contentVersionRef: React.MutableRefObject<number>;
   isInitializedRef: React.MutableRefObject<boolean>;
   contentRef: React.MutableRefObject<string>;
@@ -32,10 +30,8 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
     filePath,
     currentFilePath,
     isDirtyRef,
-    tabPreferences,
     tabs,
     autoSaveBeforeNavigation,
-    autoSaveCancellationRef,
     contentVersionRef,
     isInitializedRef,
     contentRef,
@@ -47,29 +43,22 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
     setCurrentDirectory,
   } = options;
 
-  // Cancel any pending autosave for the previous file
-  if (autoSaveCancellationRef.current) {
-    console.log('[FILE_SELECT] Cancelling pending autosave');
-    autoSaveCancellationRef.current.abort();
-    autoSaveCancellationRef.current = null;
-  }
+  // NOTE: autoSaveCancellationRef removed - EditorContainer handles all autosave now
 
   if (!window.electronAPI) return;
 
   if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Selecting file:', filePath);
 
-  const activeTabId = tabPreferences.preferences.enabled ? tabs.activeTabId : null;
-  const activeFilePath = tabPreferences.preferences.enabled && tabs.activeTab
+  const activeTabId = tabs.activeTabId;
+  const activeFilePath = tabs.activeTab
     ? tabs.activeTab.filePath
     : currentFilePath;
 
   if (activeFilePath === filePath) {
-    if (tabPreferences.preferences.enabled) {
-      const existingTab = tabs.findTabByPath(filePath);
-      if (existingTab) {
-        if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already active, ensuring tab focus');
-        tabs.switchTab(existingTab.id);
-      }
+    const existingTab = tabs.findTabByPath(filePath);
+    if (existingTab) {
+      if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already active, ensuring tab focus');
+      tabs.switchTab(existingTab.id);
     }
     return;
   }
@@ -87,13 +76,11 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
   }
 
   // If tabs are enabled, check if file is already open in a tab after autosave
-  if (tabPreferences.preferences.enabled) {
-    const existingTab = tabs.findTabByPath(filePath);
-    if (existingTab) {
-      if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already open in tab, switching');
-      tabs.switchTab(existingTab.id);
-      return;
-    }
+  const existingTab = tabs.findTabByPath(filePath);
+  if (existingTab) {
+    if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File already open in tab, switching');
+    tabs.switchTab(existingTab.id);
+    return;
   }
 
   try {
@@ -101,36 +88,15 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
     if (result) {
       if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] File loaded successfully');
 
-      // If tabs are enabled, add a new tab
-      if (tabPreferences.preferences.enabled) {
-        console.log('[TABS] Adding tab for file:', result.filePath);
-        console.log('[TABS] Current tabs before add:', tabs.tabs);
-        const tabId = tabs.addTab(result.filePath, result.content);
-        if (!tabId) {
-          console.warn('Failed to add tab - max tabs reached');
-          // Could show a dialog here
-        } else {
-          console.log('[TABS] Added tab with ID:', tabId);
-          console.log('[TABS] Current tabs after add:', tabs.tabs);
-          // Set initialContentRef for the new tab
-          initialContentRef.current = result.content;
-          setCurrentFilePath(result.filePath);
-          setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
-          contentRef.current = result.content;
-          isDirtyRef.current = false;
-          setIsDirty(false);
-        }
+      // Add a new tab - onTabChange will handle all state updates
+      console.log('[TABS] Adding tab for file:', result.filePath);
+      const tabId = tabs.addTab(result.filePath, result.content);
+      if (!tabId) {
+        console.warn('Failed to add tab - max tabs reached');
+        // Could show a dialog here
       } else {
-        // Original non-tab behavior
-        contentVersionRef.current += 1;
-        setContentVersion(v => v + 1);
-        isInitializedRef.current = false;
-        contentRef.current = result.content;
-        setCurrentFilePath(result.filePath);
-        setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
-        isDirtyRef.current = false;
-        setIsDirty(false);
-        initialContentRef.current = result.content;
+        console.log('[TABS] Added tab with ID:', tabId);
+        // State updates (contentRef, currentFilePath, etc.) will be handled by onTabChange callback
       }
 
       // Update current directory based on the file path

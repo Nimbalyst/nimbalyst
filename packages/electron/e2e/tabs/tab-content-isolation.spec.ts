@@ -201,37 +201,75 @@ test.describe('Tab Content Isolation', () => {
     expect(editorText).not.toContain(markers.beta);
   });
 
-  test('should preserve dirty state correctly per tab', async () => {
+  test('should auto-save on tab switch to prevent data loss', async () => {
     const editor = page.locator('.editor [contenteditable="true"]');
 
-    // Open alpha and make it dirty
+    // Get file paths from workspace directory
+    const alphaPath = path.join(workspaceDir, 'alpha.md');
+    const betaPath = path.join(workspaceDir, 'beta.md');
+
+    // Open alpha and modify it
     await page.locator('.file-tree-name', { hasText: 'alpha.md' }).click();
     await expect(page.locator('.tab.active .tab-title')).toContainText('alpha.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+    const uniqueMarker = `modified-at-${Date.now()}`;
     await editor.click();
-    await page.keyboard.type('\nDirty alpha');
+    await page.keyboard.press(getKeyboardShortcut('Mod+End'));
+    await page.keyboard.type(`\n\n${uniqueMarker}`);
 
     // Verify alpha is dirty
     const alphaTab = page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'alpha.md' }) });
     await expect(alphaTab.locator('.tab-dirty-indicator')).toBeVisible();
 
-    // Open beta (clean)
+    // Get original file content before tab switch
+    const contentBeforeSwitch = await fs.readFile(alphaPath, 'utf-8');
+    expect(contentBeforeSwitch).not.toContain(uniqueMarker);
+
+    console.log('=== Switching to beta - should auto-save alpha ===');
+
+    // Switch to beta - this should trigger auto-save of alpha
     await page.locator('.file-tree-name', { hasText: 'beta.md' }).click();
     await expect(page.locator('.tab.active .tab-title')).toContainText('beta.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
-    // Beta should not be dirty
-    const betaTab = page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'beta.md' }) });
-    await expect(betaTab.locator('.tab-dirty-indicator')).toHaveCount(0);
+    // Wait a bit for auto-save to complete
+    await page.waitForTimeout(500);
 
-    // Alpha should still show dirty indicator
-    await expect(alphaTab.locator('.tab-dirty-indicator')).toBeVisible();
+    // Verify alpha was auto-saved to disk
+    const contentAfterSwitch = await fs.readFile(alphaPath, 'utf-8');
+    expect(contentAfterSwitch).toContain(uniqueMarker);
+    console.log('✓ Alpha was auto-saved on tab switch');
 
-    // Make beta dirty
+    // Verify alpha's dirty indicator cleared after auto-save
+    await expect(alphaTab.locator('.tab-dirty-indicator')).toHaveCount(0);
+    console.log('✓ Alpha dirty indicator cleared after auto-save');
+
+    // Now modify beta
+    const betaMarker = `beta-modified-at-${Date.now()}`;
     await editor.click();
-    await page.keyboard.type('\nDirty beta');
+    await page.keyboard.press(getKeyboardShortcut('Mod+End'));
+    await page.keyboard.type(`\n\n${betaMarker}`);
+
+    // Verify beta is dirty
+    const betaTab = page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'beta.md' }) });
     await expect(betaTab.locator('.tab-dirty-indicator')).toBeVisible();
 
-    // Both tabs should now be dirty
-    await expect(alphaTab.locator('.tab-dirty-indicator')).toBeVisible();
-    await expect(betaTab.locator('.tab-dirty-indicator')).toBeVisible();
+    // Switch back to alpha - should auto-save beta
+    await alphaTab.click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('alpha.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await page.waitForTimeout(500);
+
+    // Verify beta was auto-saved
+    const betaContentAfterSwitch = await fs.readFile(betaPath, 'utf-8');
+    expect(betaContentAfterSwitch).toContain(betaMarker);
+    console.log('✓ Beta was auto-saved on tab switch');
+
+    // Verify beta's dirty indicator cleared
+    await expect(betaTab.locator('.tab-dirty-indicator')).toHaveCount(0);
+    console.log('✓ Beta dirty indicator cleared after auto-save');
+
+    // Verify alpha content is preserved
+    const editorText = await editor.innerText();
+    expect(editorText).toContain(uniqueMarker);
+    console.log('✓ Alpha content preserved after tab switches');
   });
 });

@@ -1,0 +1,1 @@
+export { WorkspaceEditor } from './WorkspaceEditor';

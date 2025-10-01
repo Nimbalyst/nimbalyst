@@ -88,8 +88,8 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     const existingTab = Array.from(tabs.values()).find(tab => tab.filePath === filePath);
     if (existingTab) {
       // Directly set active tab instead of calling switchTab to avoid circular dependency
+      // onTabChange will be called by the useEffect when activeTabId changes
       setActiveTabId(existingTab.id);
-      onTabChange?.(existingTab);
       return existingTab.id;
     }
 
@@ -113,7 +113,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     // Create new tab
     const tabId = generateTabId();
     const fileName = filePath.split('/').pop() || 'Untitled';
-    
+
     const newTab: TabData = {
       id: tabId,
       filePath,
@@ -126,9 +126,11 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
       contentLoadedAt: new Date()
     };
 
+    console.log('[useTabs] Creating new tab:', { tabId, fileName, filePath });
     setTabs(prev => new Map(prev).set(tabId, newTab));
     setTabOrder(prev => [...prev, tabId]);
     setActiveTabId(tabId);
+    console.log('[useTabs] Set activeTabId to:', tabId);
 
     return tabId;
   }, [enabled, tabs, maxTabs, generateTabId, onTabChange]);
@@ -170,9 +172,9 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     const tab = tabs.get(tabId);
     if (!tab) return;
 
+    // onTabChange will be called by the useEffect when activeTabId changes
     setActiveTabId(tabId);
-    onTabChange?.(tab);
-  }, [tabs, onTabChange]);
+  }, [tabs]);
 
   // Update tab data
   const updateTab = useCallback((tabId: string, updates: Partial<TabData>): void => {
@@ -338,6 +340,15 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
   useEffect(() => {
     onTabChangeRef.current = onTabChange;
   }, [onTabChange]);
+
+  // Call onTabChange whenever activeTabId changes
+  useEffect(() => {
+    console.log('[useTabs] activeTabId changed:', activeTabId, 'activeTab:', activeTab?.fileName);
+    if (activeTabId && activeTab && onTabChangeRef.current) {
+      console.log('[useTabs] Calling onTabChange for:', activeTab.fileName);
+      onTabChangeRef.current(activeTab);
+    }
+  }, [activeTabId, activeTab]);
 
 
   // Restore state from Electron store on mount (with delay for workspace to load)

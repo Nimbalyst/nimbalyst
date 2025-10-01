@@ -81,7 +81,7 @@ test.describe('AI List Editing', () => {
     return await fs.readFile(testFilePath, 'utf8');
   }
 
-  test.only('should add a new item to the end of a list', async () => {
+  test('should add a new item to the end of a list', async () => {
     // Send prompt to add an item
     await sendAIPromptHelper(page, 'Add "Grapes" to the end of the shopping list', { timeout: 30000 });
 

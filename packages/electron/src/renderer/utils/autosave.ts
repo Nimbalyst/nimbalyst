@@ -14,7 +14,6 @@ export interface AutoSaveOptions {
 
 interface AutoSaveContext {
   currentFilePath: string | null;
-  tabPreferences: any;
   tabs: any;
   isDirtyRef: React.MutableRefObject<boolean>;
   getContentRef: React.MutableRefObject<(() => string) | null>;
@@ -44,7 +43,6 @@ export async function autoSaveBeforeNavigation(
 
   const {
     currentFilePath,
-    tabPreferences,
     tabs,
     isDirtyRef,
     getContentRef,
@@ -56,8 +54,8 @@ export async function autoSaveBeforeNavigation(
     setCurrentFileName,
   } = context;
 
-  const activeTabId = tabPreferences.preferences.enabled ? tabs.activeTabId : null;
-  const activeTab = tabPreferences.preferences.enabled ? tabs.activeTab : null;
+  const activeTabId = tabs.activeTabId;
+  const activeTab = tabs.activeTab;
 
   const targetTabId = overrideTabId ?? (activeTabId ?? null);
   const targetFilePath = overridePath ?? (activeTab?.filePath ?? currentFilePath);
@@ -90,9 +88,9 @@ export async function autoSaveBeforeNavigation(
 
     lastSaveTimeRef.current = Date.now();
 
-    const isActiveTab = !tabPreferences.preferences.enabled || (targetTabId !== null && targetTabId === tabs.activeTabId);
+    const isActiveTab = (targetTabId !== null && targetTabId === tabs.activeTabId);
 
-    if (tabPreferences.preferences.enabled && targetTabId) {
+    if (targetTabId) {
       tabs.updateTab(targetTabId, {
         content,
         isDirty: false,
