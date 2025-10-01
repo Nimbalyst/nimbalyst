@@ -15,7 +15,7 @@ import {
   NodeKey,
   SerializedLexicalNode,
 } from 'lexical';
-import {$getRoot, $isElementNode} from 'lexical';
+import {$getRoot, $isElementNode, $isDecoratorNode} from 'lexical';
 import {$getSerializedNode} from '../utils/getSerializedNode';
 
 // Types for windowed matching
@@ -181,14 +181,37 @@ export class WindowedTreeMatcher {
     const key = node.getKey();
 
     // Generate markdown for this node
-    let markdown: string;
+    let markdown: string = '';
     try {
+      // TODO GH: Review if this can just directly use convertNode... for all circumstances here and below
       if ($isElementNode(node)) {
         // For element nodes, convert to markdown using our custom function
         markdown = $convertNodeToEnhancedMarkdownString(
           this.config.transformers,
           node
         );
+      } else if ($isDecoratorNode(node)) {
+        // For decorator nodes, we need to use transformers to export them properly
+        // Try each transformer to see if it can export this decorator node
+        let exported = false;
+        for (const transformer of this.config.transformers) {
+          if (transformer.type === 'element' && transformer.export) {
+            try {
+              const result = transformer.export(node, () => node.getTextContent());
+              if (result != null) {
+                markdown = result;
+                exported = true;
+                break;
+              }
+            } catch {
+              // This transformer doesn't handle this node, try next
+            }
+          }
+        }
+        if (!exported) {
+          // No transformer handled this decorator node, fall back to text content
+          markdown = node.getTextContent();
+        }
       } else {
         // For text nodes, we need to preserve markdown formatting
         // Text nodes don't have markdown conversion, but their parent might contain links
@@ -315,8 +338,8 @@ export class WindowedTreeMatcher {
             // Debug: check if transformers include TABLE_TRANSFORMER
             if (child.getType() === 'table') {
               console.log('  Calling $convertNodeToMarkdownString with', this.config.transformers.length, 'transformers');
-              const hasTableTransformer = this.config.transformers.some(t => 
-                t.type === 'element' && t.dependencies?.some?.(d => 
+              const hasTableTransformer = this.config.transformers.some(t =>
+                t.type === 'element' && t.dependencies?.some?.(d =>
                   typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
                 )
               );
@@ -332,6 +355,26 @@ export class WindowedTreeMatcher {
             if (child.getType() === 'table') {
               console.log('  Result markdown before trim:', markdown);
               console.log('  Result markdown after trim:', markdown.trim());
+            }
+          } else if ($isDecoratorNode(child)) {
+            // For decorator nodes, try each transformer to see if it can export this node
+            let exported = false;
+            for (const transformer of this.config.transformers) {
+              if (transformer.type === 'element' && transformer.export) {
+                try {
+                  const result = transformer.export(child, () => child.getTextContent());
+                  if (result != null) {
+                    markdown = result;
+                    exported = true;
+                    break;
+                  }
+                } catch {
+                  // This transformer doesn't handle this node, try next
+                }
+              }
+            }
+            if (!exported) {
+              markdown = child.getTextContent();
             }
           } else {
             // For text nodes within paragraphs, we need the parent's markdown
@@ -387,8 +430,8 @@ export class WindowedTreeMatcher {
             // Debug: check if transformers include TABLE_TRANSFORMER
             if (child.getType() === 'table') {
               console.log('  Calling $convertNodeToMarkdownString with', this.config.transformers.length, 'transformers');
-              const hasTableTransformer = this.config.transformers.some(t => 
-                t.type === 'element' && t.dependencies?.some?.(d => 
+              const hasTableTransformer = this.config.transformers.some(t =>
+                t.type === 'element' && t.dependencies?.some?.(d =>
                   typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
                 )
               );
@@ -404,6 +447,26 @@ export class WindowedTreeMatcher {
             if (child.getType() === 'table') {
               console.log('  Result markdown before trim:', markdown);
               console.log('  Result markdown after trim:', markdown.trim());
+            }
+          } else if ($isDecoratorNode(child)) {
+            // For decorator nodes, try each transformer to see if it can export this node
+            let exported = false;
+            for (const transformer of this.config.transformers) {
+              if (transformer.type === 'element' && transformer.export) {
+                try {
+                  const result = transformer.export(child, () => child.getTextContent());
+                  if (result != null) {
+                    markdown = result;
+                    exported = true;
+                    break;
+                  }
+                } catch {
+                  // This transformer doesn't handle this node, try next
+                }
+              }
+            }
+            if (!exported) {
+              markdown = child.getTextContent();
             }
           } else {
             // For text nodes within paragraphs, we need the parent's markdown
