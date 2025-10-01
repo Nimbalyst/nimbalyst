@@ -9,7 +9,7 @@ import type { EditorInstance, EditorPoolConfig } from '../types/editor';
 import { logger } from '../utils/logger';
 
 const DEFAULT_CONFIG: EditorPoolConfig = {
-  maxInstances: 10,
+  maxInstances: 20, // Keep up to 20 rendered, put older ones to sleep
   preserveDirty: true,
 };
 
@@ -45,8 +45,9 @@ export class EditorPool {
    * Create a new editor instance
    */
   create(filePath: string, content: string = ''): EditorInstance {
-    // Check if we need to evict
-    if (this.instances.size >= this.config.maxInstances) {
+    // Check if we need to evict (count only awake editors)
+    const awakeCount = Array.from(this.instances.values()).filter(inst => !inst.isSleeping).length;
+    if (awakeCount >= this.config.maxInstances) {
       this.evictLRU();
     }
 
@@ -59,6 +60,7 @@ export class EditorPool {
       scrollPosition: 0,
       lastAccessed: Date.now(),
       isVisible: false,
+      isSleeping: false, // Start awake
       reloadVersion: 0,
     };
 
@@ -108,7 +110,7 @@ export class EditorPool {
   }
 
   /**
-   * Evict the least recently used editor instance
+   * Put the least recently used editor to sleep (not rendered, but state preserved)
    * Skips dirty editors if preserveDirty is true
    */
   private evictLRU(): void {
@@ -126,6 +128,11 @@ export class EditorPool {
         continue;
       }
 
+      // Skip already sleeping editors
+      if (instance.isSleeping) {
+        continue;
+      }
+
       if (!oldestInstance || instance.lastAccessed < oldestInstance.lastAccessed) {
         oldestInstance = instance;
         oldestPath = path;
@@ -133,12 +140,12 @@ export class EditorPool {
     }
 
     if (oldestPath && oldestInstance) {
-      logger.ui.info(`[EditorPool] Evicting LRU editor: ${oldestPath}`);
+      logger.ui.info(`[EditorPool] Putting LRU editor to sleep: ${oldestPath}`);
       this.config.onEvict?.(oldestInstance);
-      // Use destroy to clean up timers and watchers
-      this.destroy(oldestPath);
+      // Put to sleep instead of destroying - preserves state including undo stack
+      this.update(oldestPath, { isSleeping: true });
     } else {
-      logger.ui.warn('[EditorPool] Could not evict any editors (all dirty or visible)');
+      logger.ui.warn('[EditorPool] Could not evict any editors (all dirty, visible, or sleeping)');
     }
   }
 
@@ -166,12 +173,19 @@ export class EditorPool {
 
   /**
    * Set an editor as visible (active tab)
+   * Also wakes up sleeping editors when they become visible
    */
   setVisible(filePath: string, visible: boolean): void {
     const instance = this.instances.get(filePath);
     if (instance) {
       instance.isVisible = visible;
       instance.lastAccessed = Date.now();
+
+      // Wake up if becoming visible
+      if (visible && instance.isSleeping) {
+        instance.isSleeping = false;
+        logger.ui.info(`[EditorPool] Waking up editor: ${filePath}`);
+      }
     }
   }
 
@@ -183,12 +197,14 @@ export class EditorPool {
       total: this.instances.size,
       dirty: 0,
       visible: 0,
+      sleeping: 0,
       maxInstances: this.config.maxInstances,
     };
 
     for (const instance of this.instances.values()) {
       if (instance.isDirty) stats.dirty++;
       if (instance.isVisible) stats.visible++;
+      if (instance.isSleeping) stats.sleeping++;
     }
 
     return stats;

@@ -175,7 +175,7 @@ export default function App() {
 
   // console.log('[APP] Creating useTabs hook, workspaceMode:', workspaceMode, 'workspacePath:', workspacePath);
   const tabs = useTabs({
-    maxTabs: 10,
+    maxTabs: Infinity, // Unlimited tabs - EditorPool manages memory with sleep state (max 20 rendered)
     enabled: true,
     getNavigationState: () => getNavigationStateRef.current?.(),
     onTabChange: async (tab) => {

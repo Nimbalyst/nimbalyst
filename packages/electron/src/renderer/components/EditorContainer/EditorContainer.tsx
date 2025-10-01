@@ -455,6 +455,11 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
           return null;
         }
 
+        // Don't render sleeping editors (state is preserved, but not in DOM)
+        if (instance.isSleeping) {
+          return null;
+        }
+
         return (
           <div
             key={tab.id}

@@ -30,6 +30,9 @@ export interface EditorInstance {
   /** Whether this editor is currently visible */
   isVisible: boolean;
 
+  /** Whether this editor is sleeping (not rendered, but state preserved) */
+  isSleeping: boolean;
+
   /** Optional: Undo/redo history state */
   historyState?: any;
 

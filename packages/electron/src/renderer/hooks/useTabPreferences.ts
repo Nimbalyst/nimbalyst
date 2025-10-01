@@ -11,7 +11,7 @@ export interface TabPreferences {
 
 const DEFAULT_PREFERENCES: TabPreferences = {
   enabled: true, // Feature flag - enabled for testing
-  maxTabs: 10,
+  maxTabs: 100, // High default - EditorPool manages memory with sleep state (max 20 rendered)
   showPinButton: true,
   warnOnClose: true,
   restoreTabs: true,
@@ -74,7 +74,7 @@ export function useTabPreferences() {
 
   // Update max tabs
   const setMaxTabs = useCallback((maxTabs: number) => {
-    if (maxTabs >= 1 && maxTabs <= 50) {
+    if (maxTabs >= 1 && maxTabs <= 1000) {
       savePreferences({ maxTabs });
     }
   }, [savePreferences]);

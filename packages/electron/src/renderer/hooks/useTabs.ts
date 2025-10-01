@@ -59,7 +59,7 @@ function simpleHash(str: string): string {
 
 export function useTabs(options: UseTabsOptions & { getNavigationState?: () => any } = {}): UseTabsResult {
   const {
-    maxTabs = 10,
+    maxTabs = Infinity, // Unlimited by default - EditorPool manages memory
     enabled = true,
     onTabChange,
     onTabClose,
