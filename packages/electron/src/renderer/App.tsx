@@ -688,12 +688,25 @@ export default function App() {
       tabs.updateTab(tabs.activeTabId, { content, isDirty: true });
       console.log('[App] Updated tab content for tab:', tabs.activeTabId);
 
-      // 2. Destroy the EditorPool instance so EditorContainer recreates it with new content
+      // 2. Destroy and recreate the EditorPool instance with incremented reloadVersion
       const editorPool = getEditorPool();
       if (editorPool.has(activeTab.filePath)) {
+        const oldInstance = editorPool.get(activeTab.filePath);
+        const oldReloadVersion = oldInstance?.reloadVersion ?? 0;
+        const oldInitialContent = oldInstance?.initialContent ?? '';
+
         editorPool.destroy(activeTab.filePath);
         console.log('[App] Destroyed editor instance - will be recreated with restored content');
-        // EditorContainer will recreate the instance with the updated tab.content
+
+        // Recreate with incremented reloadVersion to force React remount
+        // Create with the restored content, but keep the old initialContent so isDirty is true
+        editorPool.create(activeTab.filePath, content);
+        editorPool.update(activeTab.filePath, {
+          reloadVersion: oldReloadVersion + 1,
+          initialContent: oldInitialContent, // Keep original initialContent so content !== initialContent
+          isDirty: true,
+        });
+        console.log('[App] Recreated editor instance with reloadVersion:', oldReloadVersion + 1);
       }
 
       // 3. Update global UI state
