@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace } from '../helpers';
+import { launchElectronApp, createTempWorkspace, ACTIVE_EDITOR_SELECTOR } from '../helpers';
 import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -35,7 +35,7 @@ test.describe('Claude Code CLI Integration', () => {
     await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: 5000 });
 
     // Wait for editor to load
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await expect(editor).toBeVisible({ timeout: 3000 });
 
     // Open AI Chat panel

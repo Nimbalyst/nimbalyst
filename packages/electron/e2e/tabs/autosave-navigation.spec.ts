@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, TEST_TIMEOUTS } from '../helpers';
+import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR } from '../helpers';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
@@ -32,7 +32,7 @@ test.describe('Autosave before navigation', () => {
       await page.locator('.file-tree-name', { hasText: 'source.md' }).click();
       await expect(page.locator('.tab.active .tab-title')).toContainText('source.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
-      const editor = page.locator('.editor [contenteditable="true"]');
+      const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
       await editor.click();
       await page.keyboard.press(getKeyboardShortcut('Mod+A'));
       await page.keyboard.type(`Autosave before navigation\n\nDirty section ${marker}\n\n[`);

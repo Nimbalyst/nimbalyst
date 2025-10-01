@@ -5,7 +5,7 @@ import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { TEST_TIMEOUTS } from '../helpers';
+import { TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR } from '../helpers';
 
 /**
  * Single-file mode tests
@@ -69,7 +69,7 @@ test.describe('Single File Mode', () => {
     await page.waitForTimeout(2000);
 
     // Wait for editor to be ready
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await expect(editor).toBeVisible({ timeout: 10000 });
 
     // Should NOT show workspace sidebar
@@ -90,7 +90,7 @@ test.describe('Single File Mode', () => {
     await expect(titleBar).not.toBeVisible();
 
     // Verify editor loaded with correct content
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });
     const editorText = await editor.innerText();
     expect(editorText).toContain('Single File Test');
@@ -99,7 +99,7 @@ test.describe('Single File Mode', () => {
   test('should allow editing in single-file mode', async () => {
     ({ electronApp, page } = await launchSingleFileMode(testFile));
 
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });
 
     // Click editor and type
@@ -118,7 +118,7 @@ test.describe('Single File Mode', () => {
   test('should save file with Cmd+S in single-file mode', async () => {
     ({ electronApp, page } = await launchSingleFileMode(testFile));
 
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });
 
     // Edit the file
@@ -144,7 +144,7 @@ test.describe('Single File Mode', () => {
   test('should autosave after changes in single-file mode', async () => {
     ({ electronApp, page } = await launchSingleFileMode(testFile));
 
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });
 
     // Edit the file
@@ -166,7 +166,7 @@ test.describe('Single File Mode', () => {
   test('should track isDirty state correctly in single-file mode', async () => {
     ({ electronApp, page } = await launchSingleFileMode(testFile));
 
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });
 
     // Make a change
@@ -189,7 +189,7 @@ test.describe('Single File Mode', () => {
     ({ electronApp, page } = await launchSingleFileMode(testFile));
 
     // Wait for editor
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });
 
     // Verify EditorContainer is present (should have the data-testid or class)
@@ -207,7 +207,7 @@ test.describe('Single File Mode', () => {
   test('should reload file when changed externally in single-file mode', async () => {
     ({ electronApp, page } = await launchSingleFileMode(testFile));
 
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });
 
     // Verify initial content

@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, waitForAppReady, getKeyboardShortcut } from '../helpers';
+import {
+    launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, waitForAppReady, getKeyboardShortcut,
+    ACTIVE_EDITOR_SELECTOR
+} from '../helpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -44,7 +47,7 @@ test.describe('Tab Content Isolation', () => {
   });
 
   test('should preserve each file content independently when switching tabs', async () => {
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
 
     // Open alpha.md
     await page.locator('.file-tree-name', { hasText: 'alpha.md' }).click();
@@ -127,7 +130,7 @@ test.describe('Tab Content Isolation', () => {
   });
 
   test('should handle rapid tab switching without content corruption', async () => {
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
 
     // Open all three files
     await page.locator('.file-tree-name', { hasText: 'alpha.md' }).click();
@@ -202,7 +205,7 @@ test.describe('Tab Content Isolation', () => {
   });
 
   test('should auto-save on tab switch to prevent data loss', async () => {
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
 
     // Get file paths from workspace directory
     const alphaPath = path.join(workspaceDir, 'alpha.md');

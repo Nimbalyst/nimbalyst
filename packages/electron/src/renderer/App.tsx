@@ -1,34 +1,14 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { logger } from './utils/logger';
-
-logger.ui.info('App.tsx loading');
-logger.ui.info('About to import StravuEditor');
-import {
-  StravuEditor,
-  TOGGLE_SEARCH_COMMAND,
-  aiChatBridge,
-  APPROVE_DIFF_COMMAND,
-  REJECT_DIFF_COMMAND,
-  parseFrontmatter,
-  serializeWithFrontmatter,
-  type FrontmatterData,
-} from 'rexical';
-import type { LexicalCommand, ConfigTheme, TextReplacement } from 'rexical';
+import type { ConfigTheme, LexicalCommand } from 'rexical';
+import { aiChatBridge, TOGGLE_SEARCH_COMMAND, } from 'rexical';
 // Import styles - handled by vite plugin for both dev and prod
 import 'rexical/styles';
-logger.ui.info('StravuEditor imported');
-
 // Import refactored hooks and utilities
 import { useIPCHandlers } from './hooks/useIPCHandlers';
 import { useWindowLifecycle } from './hooks/useWindowLifecycle';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from './utils/workspaceFileOperations';
 import { aiToolService } from './services/AIToolService';
-
-// Ensure aiChatBridge is available globally
-if (typeof window !== 'undefined' && !window.aiChatBridge) {
-  (window as any).aiChatBridge = aiChatBridge;
-  logger.ui.info('Set window.aiChatBridge manually');
-}
 import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx';
 import { WorkspaceWelcome } from './components/WorkspaceWelcome.tsx';
 import { QuickOpen } from './components/QuickOpen';
@@ -50,6 +30,16 @@ import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin
 import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
 import './WorkspaceWelcome.css';
 import './components/AIModels/AIModelsRedesigned.css';
+
+logger.ui.info('App.tsx loading');
+logger.ui.info('About to import StravuEditor');
+logger.ui.info('StravuEditor imported');
+
+// Ensure aiChatBridge is available globally
+if (typeof window !== 'undefined' && !window.aiChatBridge) {
+  (window as any).aiChatBridge = aiChatBridge;
+  logger.ui.info('Set window.aiChatBridge manually');
+}
 
 // Logging configuration - control which categories are logged
 const LOG_CONFIG = {
@@ -1037,14 +1027,18 @@ export default function App() {
                 }}
                 onContentChange={(changedTabId, changedIsDirty) => {
                   const tab = tabs.getTabState(changedTabId);
-                  console.log(`[App] onContentChange: ${tab?.fileName} isDirty=${changedIsDirty}`);
 
-                  // Update the tab's dirty state (EditorContainer has already calculated this)
-                  tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
+                  // Only update if isDirty state actually changed to avoid unnecessary re-renders
+                  if (tab && tab.isDirty !== changedIsDirty) {
+                    console.log(`[App] onContentChange: ${tab.fileName} isDirty changed ${tab.isDirty} -> ${changedIsDirty}`);
 
-                  // For the active tab, update global UI state (for window title, menus, etc.)
-                  if (changedTabId === tabs.activeTabId) {
-                    setIsDirty(changedIsDirty);
+                    // Update the tab's dirty state
+                    tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
+
+                    // For the active tab, update global UI state (for window title, menus, etc.)
+                    if (changedTabId === tabs.activeTabId) {
+                      setIsDirty(changedIsDirty);
+                    }
                   }
                 }}
               />

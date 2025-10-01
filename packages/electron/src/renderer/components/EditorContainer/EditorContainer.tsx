@@ -459,9 +459,10 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
           <div
             key={tab.id}
             className={`multi-editor-instance ${isActive ? 'active' : 'hidden'}`}
+            data-active={isActive ? 'true' : 'false'}
           >
             <StravuEditor
-              key={`${tab.filePath}-${instance.content.length}-${instance.initialContent.length}`}
+              key={`${tab.filePath}-v${instance.reloadVersion ?? 0}`}
               config={{
                 initialContent: instance.content,
                 theme,
@@ -475,21 +476,15 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
                   const currentContent = getContentFn();
                   const isDirty = currentContent !== instance.initialContent;
 
-                  console.log(`[EditorContainer] ${tab.fileName} changed:`, {
-                    currentLen: currentContent.length,
-                    initialLen: instance.initialContent.length,
-                    isDirty,
-                    tabId: tab.id
-                  });
-
                   // Update the EditorPool instance with content, dirty state, and change time
+                  // This happens on every edit but is just updating a Map, not triggering React re-renders
                   editorPool.update(tab.filePath, {
                     content: currentContent,
                     isDirty,
                     lastChangeTime: Date.now(), // Track for autosave debouncing
                   });
 
-                  // Notify parent with tab ID and dirty state
+                  // Notify parent (App.tsx will check if isDirty actually changed)
                   onContentChange?.(tab.id, isDirty);
                 },
                 onGetContent: (getContentFn) => {

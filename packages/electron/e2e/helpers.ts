@@ -15,6 +15,9 @@ export const TEST_TIMEOUTS = {
   DEFAULT_WAIT: 500,      // Standard wait between operations
 };
 
+// Selector for the active editor (accounts for multi-editor architecture)
+export const ACTIVE_EDITOR_SELECTOR = '.multi-editor-instance.active .editor [contenteditable="true"]';
+
 export async function launchElectronApp(options?: {
   workspace?: string;
   env?: Record<string, string>;
@@ -70,14 +73,13 @@ export async function configureAIModel(page: Page, provider: string, model: stri
   const aiChatVisible = await page.locator('[data-testid="ai-chat-panel"]').isVisible().catch(() => false);
   if (!aiChatVisible) {
     await page.keyboard.press('Meta+Shift+A');
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(200);
   }
 
   // Click the dropdown arrow button (part of new-session-button)
   const dropdownButton = page.locator('.new-session-button-dropdown').first();
   await dropdownButton.waitFor({ state: 'visible', timeout: 5000 });
   await dropdownButton.click();
-  await page.waitForTimeout(500);
 
   // Wait for dropdown to open
   await page.waitForSelector('.new-session-dropdown', { timeout: 5000 });
@@ -86,7 +88,6 @@ export async function configureAIModel(page: Page, provider: string, model: stri
   const modelOption = page.locator(`.new-session-option:has-text("${model}")`).first();
   await modelOption.waitFor({ state: 'visible', timeout: 5000 });
   await modelOption.click();
-  await page.waitForTimeout(500);
 }
 
 /**
@@ -104,12 +105,12 @@ export async function sendAIPrompt(page: Page, prompt: string, options?: {
     timeout = 10000
   } = options || {};
 
-  // Always open AI Chat to make sure it's visible
-  await page.keyboard.press('Meta+Shift+A');
-  await page.waitForTimeout(1000);
-
-  // Wait for AI Chat panel to be visible
-  await page.waitForSelector('[data-testid="ai-chat-panel"]', { timeout: 5000 });
+  // AI Chat should already be open from configureAIModel, so just verify
+  const aiChatVisible = await page.locator('[data-testid="ai-chat-panel"]').isVisible().catch(() => false);
+  if (!aiChatVisible) {
+    await page.keyboard.press('Meta+Shift+A');
+    await page.waitForTimeout(200);
+  }
 
   // Check if we need to start a session (look for "No session" text or + button)
   const noSessionText = await page.locator('text="No session"').isVisible().catch(() => false);
@@ -117,7 +118,7 @@ export async function sendAIPrompt(page: Page, prompt: string, options?: {
     // Click the + button to start a new session
     const plusButton = page.locator('.new-session-button-main').first();
     await plusButton.click();
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(100);
   }
 
   // Find and click the chat input - try multiple selectors
@@ -130,8 +131,8 @@ export async function sendAIPrompt(page: Page, prompt: string, options?: {
   await page.keyboard.press('Enter');
 
   if (waitForCompletion) {
-    // Wait for the send button to become disabled (streaming started)
-    await page.waitForTimeout(500);
+    // Wait briefly for streaming to start
+    await page.waitForTimeout(100);
 
     // Wait for streaming to complete by watching for send button to become enabled again
     // The button has text "Send message" and is disabled during streaming

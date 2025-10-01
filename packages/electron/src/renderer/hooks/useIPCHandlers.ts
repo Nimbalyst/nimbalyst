@@ -551,17 +551,26 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
               }
 
               // Content is different, handle based on dirty state
-              if (!isDirtyRef.current) {
+              // Check EditorPool for actual dirty state (more reliable than isDirtyRef)
+              const editorPool = getEditorPool();
+              const instance = editorPool.get(data.path);
+              const isFileDirty = instance?.isDirty ?? false;
+
+              if (!isFileDirty) {
                 // File is not dirty, reload it automatically
                 console.log('[FILE_WATCH] File is not dirty, reloading from disk');
                 console.log('[FILE_WATCH] Loading content for path:', data.path, 'first 100 chars:', result.content.substring(0, 100));
 
-                // Update EditorPool instance with new content
-                const editorPool = getEditorPool();
+                // Update EditorPool instance with new content and increment reload version
                 if (editorPool.has(data.path)) {
-                  console.log('[FILE_WATCH] Destroying and recreating EditorPool instance for:', data.path);
-                  editorPool.destroy(data.path);
-                  editorPool.create(data.path, result.content);
+                  const currentVersion = instance?.reloadVersion ?? 0;
+                  console.log('[FILE_WATCH] Incrementing reloadVersion for:', data.path, 'from', currentVersion, 'to', currentVersion + 1);
+                  editorPool.update(data.path, {
+                    content: result.content,
+                    initialContent: result.content,
+                    isDirty: false,
+                    reloadVersion: currentVersion + 1
+                  });
                 }
 
                 // Reset the getContentRef since editor will remount
@@ -586,12 +595,18 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
                   // User chose to reload from disk
                   console.log('[FILE_WATCH] User chose to reload from disk, updating EditorPool');
 
-                  // Update EditorPool instance with new content
+                  // Update EditorPool instance with new content and increment reload version
                   const editorPool = getEditorPool();
                   if (editorPool.has(data.path)) {
-                    console.log('[FILE_WATCH] Destroying and recreating EditorPool instance for:', data.path);
-                    editorPool.destroy(data.path);
-                    editorPool.create(data.path, result.content);
+                    const instance = editorPool.get(data.path);
+                    const currentVersion = instance?.reloadVersion ?? 0;
+                    console.log('[FILE_WATCH] Incrementing reloadVersion for:', data.path, 'from', currentVersion, 'to', currentVersion + 1);
+                    editorPool.update(data.path, {
+                      content: result.content,
+                      initialContent: result.content,
+                      isDirty: false,
+                      reloadVersion: currentVersion + 1
+                    });
                   }
 
                   // Reset the getContentRef since editor will remount

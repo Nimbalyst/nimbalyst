@@ -44,6 +44,9 @@ export interface EditorInstance {
 
   /** File watcher cleanup function */
   fileWatcherCleanup?: (() => void) | null;
+
+  /** Reload version - increments only on external file changes to force React remount */
+  reloadVersion?: number;
 }
 
 /**

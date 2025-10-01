@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, waitForAppReady } from '../helpers';
+import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, waitForAppReady } from '../helpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -48,7 +48,7 @@ test.describe('App Startup - Core Smoke Tests', () => {
     await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Wait for editor to load
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });
 
     // Check editor has content
@@ -62,7 +62,7 @@ test.describe('App Startup - Core Smoke Tests', () => {
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
     await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await editor.click();
     await page.keyboard.type(' - edited');
 
@@ -76,7 +76,7 @@ test.describe('App Startup - Core Smoke Tests', () => {
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
     await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await editor.click();
 
     // Move to end of document and add a newline

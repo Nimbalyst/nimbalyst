@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, waitForAppReady } from '../helpers';
+import {
+    launchElectronApp,
+    createTempWorkspace,
+    TEST_TIMEOUTS,
+    waitForAppReady,
+    ACTIVE_EDITOR_SELECTOR
+} from '../helpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -35,7 +41,7 @@ test.describe('File Watcher Updates', () => {
 
   test('should detect when file is modified on disk by external process', async () => {
     const filePath = path.join(workspaceDir, 'watched.md');
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'watched.md' }).click();
@@ -63,7 +69,7 @@ test.describe('File Watcher Updates', () => {
 
   test('should show notification when file is modified externally while editor has unsaved changes', async () => {
     const filePath = path.join(workspaceDir, 'watched.md');
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'watched.md' }).click();
@@ -78,28 +84,22 @@ test.describe('File Watcher Updates', () => {
     const tab = page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'watched.md' }) });
     await expect(tab.locator('.tab-dirty-indicator')).toBeVisible();
 
+    // Set up dialog handler to catch the confirm dialog
+    let dialogShown = false;
+    page.once('dialog', async dialog => {
+      dialogShown = true;
+      await dialog.dismiss(); // Click Cancel to keep local changes
+    });
+
     // Simulate external modification
     const externalContent = `# Watched File\n\nExternal modification that conflicts with local changes.\n`;
     await fs.writeFile(filePath, externalContent, 'utf8');
 
-    // Wait for file watcher to detect the change
+    // Wait for file watcher to detect the change and show dialog
     await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
 
-    // The app should show some indication of the conflict
-    // This could be a dialog, notification, or warning indicator
-    // (The exact UI behavior may vary, so we'll check for common patterns)
-
-    // Option 1: Check for a dialog/modal
-    const hasDialog = await page.locator('.dialog, .modal, [role="dialog"]').count() > 0;
-
-    // Option 2: Check for a notification
-    const hasNotification = await page.locator('.notification, .alert, .flash-message').count() > 0;
-
-    // Option 3: Check for a warning indicator on the tab
-    const hasWarning = await tab.locator('.tab-warning, .tab-conflict').count() > 0;
-
-    // At least one of these should be true
-    expect(hasDialog || hasNotification || hasWarning).toBe(true);
+    // The confirm dialog should have been shown
+    expect(dialogShown).toBe(true);
   });
 
   test('should reload content when switching to tab with externally modified file', async () => {
@@ -108,7 +108,7 @@ test.describe('File Watcher Updates', () => {
 
     await fs.writeFile(otherPath, '# Other File\n\nOther content.\n', 'utf8');
 
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
 
     // Open watched.md
     await page.locator('.file-tree-name', { hasText: 'watched.md' }).click();
@@ -176,7 +176,7 @@ test.describe('File Watcher Updates', () => {
 
   test('should detect rapid successive external changes', async () => {
     const filePath = path.join(workspaceDir, 'watched.md');
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'watched.md' }).click();
@@ -204,7 +204,7 @@ test.describe('File Watcher Updates', () => {
 
   test('should preserve cursor position when file is reloaded from disk (if no conflicts)', async () => {
     const filePath = path.join(workspaceDir, 'watched.md');
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'watched.md' }).click();

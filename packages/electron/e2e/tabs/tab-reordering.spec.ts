@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, waitForAppReady } from '../helpers';
+import {
+    launchElectronApp,
+    createTempWorkspace,
+    TEST_TIMEOUTS,
+    waitForAppReady,
+    ACTIVE_EDITOR_SELECTOR
+} from '../helpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -96,7 +102,7 @@ test.describe('Tab Reordering', () => {
     await page.locator('.file-tree-name', { hasText: 'file1.md' }).click();
     await expect(page.locator('.tab.active .tab-title')).toContainText('file1.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
-    const editor = page.locator('.editor [contenteditable="true"]');
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await editor.click();
 
     // Add some content

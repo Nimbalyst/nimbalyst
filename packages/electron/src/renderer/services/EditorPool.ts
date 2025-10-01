@@ -59,6 +59,7 @@ export class EditorPool {
       scrollPosition: 0,
       lastAccessed: Date.now(),
       isVisible: false,
+      reloadVersion: 0,
     };
 
     this.instances.set(filePath, instance);

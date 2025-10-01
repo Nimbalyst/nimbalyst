@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS } from '../helpers';
+import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR } from '../helpers';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
@@ -44,7 +44,7 @@ test.describe('File deletion while open', () => {
       await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
       // Make some edits to ensure autosave would trigger
-      const editor = page.locator('.editor [contenteditable="true"]');
+      const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
       await editor.click();
       await page.keyboard.type('\n\nThis is new content that should not be saved.');
 
