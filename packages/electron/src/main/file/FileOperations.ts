@@ -24,8 +24,10 @@ export function loadFileIntoWindow(window: BrowserWindow, filePath: string) {
             console.error('[LOAD_FILE] No window state found for window ID:', windowId);
         }
         
-        console.log('[LOAD_FILE] Sending file-opened-from-os event');
+        console.log('[LOAD_FILE] Sending file-opened-from-os event to window', window.id);
+        console.log('[LOAD_FILE] Event payload:', { filePath, contentLength: content.length });
         window.webContents.send('file-opened-from-os', { filePath, content });
+        console.log('[LOAD_FILE] Event sent successfully');
         
         // Set represented filename for macOS
         if (process.platform === 'darwin') {

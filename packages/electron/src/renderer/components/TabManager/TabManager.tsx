@@ -22,6 +22,7 @@ interface TabManagerProps {
   onTabReorder: (fromIndex: number, toIndex: number) => void;
   onNewTab: () => void;
   onViewHistory?: (tabId: string) => void;
+  hideTabBar?: boolean;
   children: React.ReactNode;
 }
 
@@ -34,11 +35,12 @@ export const TabManager: React.FC<TabManagerProps> = ({
   onTabReorder,
   onNewTab,
   onViewHistory,
+  hideTabBar = false,
   children
 }) => {
   return (
     <div className="tab-manager">
-      {tabs.length > 0 && (
+      {!hideTabBar && tabs.length > 0 && (
         <TabBar
           tabs={tabs}
           activeTabId={activeTabId}

@@ -42,6 +42,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
   autosaveDebounce = 200,
   periodicSnapshotInterval = 300000, // 5 minutes
 }) => {
+  console.log('[EditorContainer] RENDER - tabs:', tabs.length, 'activeTabId:', activeTabId);
   const editorPool = getEditorPool();
   const getContentFuncs = useRef<Map<string, () => string>>(new Map());
   const lastSnapshotContent = useRef<Map<string, string>>(new Map()); // Track last snapshot content per file
@@ -460,7 +461,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
             className={`multi-editor-instance ${isActive ? 'active' : 'hidden'}`}
           >
             <StravuEditor
-              key={tab.filePath}
+              key={`${tab.filePath}-${instance.content.length}-${instance.initialContent.length}`}
               config={{
                 initialContent: instance.content,
                 theme,

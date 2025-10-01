@@ -8,6 +8,7 @@ import {
   serializeWithFrontmatter,
   type FrontmatterData,
 } from 'rexical';
+import { getEditorPool } from '../services/EditorPool';
 
 const PLAN_STATUS_KEYS = new Set([
   'planId',
@@ -105,7 +106,6 @@ interface UseIPCHandlersProps {
 
   // Tabs object
   tabs: any;
-  tabPreferences: any;
 
   // Logging configuration
   LOG_CONFIG: {
@@ -169,7 +169,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     // Tabs
     tabs,
-    tabPreferences,
 
     // Config
     LOG_CONFIG
@@ -199,6 +198,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setSessionToLoad,
     setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
+    tabs,  // Add tabs so IPC handlers can create/modify tabs
   });
 
   const stateRef = useRef({
@@ -209,7 +209,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     sessionToLoad,
     isDirty,
     tabs,
-    tabPreferences,
   });
 
   // Update refs whenever values change
@@ -236,6 +235,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setSessionToLoad,
     setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
+    tabs,  // Keep tabs updated in ref
   };
 
   stateRef.current = {
@@ -246,7 +246,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     sessionToLoad,
     isDirty,
     tabs,
-    tabPreferences,
   };
 
   useEffect(() => {
@@ -326,7 +325,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }
 
       // Open welcome tab if no tabs are open
-      if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.tabs.length === 0) {
+      if (stateRef.current.tabs && stateRef.current.tabs.tabs.length === 0) {
         console.log('[WORKSPACE] No tabs open, opening welcome tab');
         // Delay slightly to ensure workspace state is fully set
         setTimeout(() => handlersRef.current.openWelcomeTab(), 100);
@@ -365,7 +364,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }
 
     cleanupFns.push(window.electronAPI.onFileOpenedFromOS(async (data) => {
-      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] File opened from OS:', data.filePath);
+      console.log('[FILE_OPS] ✓✓✓ File opened from OS event received:', data.filePath);
       // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
       isInitializedRef.current = false;
       handlersRef.current.setCurrentFilePath(data.filePath);
@@ -373,6 +372,31 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       isDirtyRef.current = false;
       handlersRef.current.setIsDirty(false);
       // NOTE: initialContentRef removed - EditorPool tracks this per-file
+
+      // Add tab for the opened file (works for both single-file and workspace modes)
+      console.log('[FILE_OPS] Checking tabs object:', !!handlersRef.current.tabs);
+      if (handlersRef.current.tabs) {
+        console.log('[FILE_OPS] Adding tab for file opened from OS:', data.filePath);
+
+        // Create EditorPool instance BEFORE creating tab
+        // EditorContainer expects the instance to exist
+        const editorPool = getEditorPool();
+
+        if (!editorPool.has(data.filePath)) {
+          console.log('[FILE_OPS] Creating EditorPool instance for:', data.filePath);
+          editorPool.create(data.filePath, data.content);
+        }
+
+        const tabId = handlersRef.current.tabs.addTab(data.filePath, data.content);
+        console.log('[FILE_OPS] addTab returned:', tabId);
+        if (tabId) {
+          console.log('[FILE_OPS] Tab added with ID:', tabId);
+        } else {
+          console.warn('[FILE_OPS] Failed to add tab - max tabs reached or addTab returned falsy');
+        }
+      } else {
+        console.error('[FILE_OPS] tabs object not available in handlersRef!');
+      }
 
       // Create automatic snapshot when file is opened from OS
       if (window.electronAPI.history) {
@@ -435,11 +459,10 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }));
     cleanupFns.push(window.electronAPI.onFileDeleted((data) => {
       console.log('[FILE_DELETED] File deleted event received:', data.filePath);
-      // console.log('[FILE_DELETED] Tab preferences enabled:', stateRef.current.tabPreferences.preferences.enabled);
       // console.log('[FILE_DELETED] Tabs object:', stateRef.current.tabs);
 
-      // If tabs are enabled, find and close the tab for this file
-      if (stateRef.current.tabPreferences.preferences.enabled) {
+      // Find and close the tab for this file
+      if (stateRef.current.tabs) {
         const tabToClose = stateRef.current.tabs.findTabByPath(data.filePath);
         // console.log('[FILE_DELETED] Tab to close:', tabToClose);
         if (tabToClose) {
@@ -473,25 +496,25 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     // Handle file changes on disk
     if (window.electronAPI.onFileChangedOnDisk) {
       cleanupFns.push(window.electronAPI.onFileChangedOnDisk(async (data) => {
-        // console.log('[FILE_WATCH] File changed on disk event received:', data.path);
+        console.log('[FILE_WATCH] File changed on disk event received:', data.path);
 
-        // CRITICAL: Check if we're in tab mode and if this is the active tab's file
+        // Check if we should reload - tabs are always enabled now
         let shouldReload = false;
         let fileToCheck = stateRef.current.currentFilePath;
 
-        if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.activeTab) {
-          // In tab mode, only reload if it's the active tab's file
+        if (stateRef.current.tabs && stateRef.current.tabs.activeTab) {
+          // Check if it's the active tab's file
           fileToCheck = stateRef.current.tabs.activeTab.filePath;
           shouldReload = (fileToCheck === data.path);
-          console.log('[FILE_WATCH] Tab mode check:', {
+          console.log('[FILE_WATCH] Active tab check:', {
             activeTabPath: fileToCheck,
             changedPath: data.path,
             shouldReload
           });
         } else {
-          // In single-file mode, check against current file
+          // Fallback: check against current file
           shouldReload = (stateRef.current.currentFilePath === data.path);
-          console.log('[FILE_WATCH] Single-file mode check:', {
+          console.log('[FILE_WATCH] Current file check:', {
             currentPath: stateRef.current.currentFilePath,
             changedPath: data.path,
             shouldReload
@@ -532,8 +555,15 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
                 // File is not dirty, reload it automatically
                 console.log('[FILE_WATCH] File is not dirty, reloading from disk');
                 console.log('[FILE_WATCH] Loading content for path:', data.path, 'first 100 chars:', result.content.substring(0, 100));
-                // NOTE: initialContentRef removed - EditorPool tracks this per-file
-                // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
+
+                // Update EditorPool instance with new content
+                const editorPool = getEditorPool();
+                if (editorPool.has(data.path)) {
+                  console.log('[FILE_WATCH] Destroying and recreating EditorPool instance for:', data.path);
+                  editorPool.destroy(data.path);
+                  editorPool.create(data.path, result.content);
+                }
+
                 // Reset the getContentRef since editor will remount
                 getContentRef.current = null;
                 // Ensure editor is not marked as dirty
@@ -554,12 +584,25 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
                 if (choice) {
                   // User chose to reload from disk
-                  // NOTE: initialContentRef removed - EditorPool tracks this per-file
-                  // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
+                  console.log('[FILE_WATCH] User chose to reload from disk, updating EditorPool');
+
+                  // Update EditorPool instance with new content
+                  const editorPool = getEditorPool();
+                  if (editorPool.has(data.path)) {
+                    console.log('[FILE_WATCH] Destroying and recreating EditorPool instance for:', data.path);
+                    editorPool.destroy(data.path);
+                    editorPool.create(data.path, result.content);
+                  }
+
                   // Reset the getContentRef since editor will remount
                   getContentRef.current = null;
                   isDirtyRef.current = false;
                   handlersRef.current.setIsDirty(false);
+
+                  // Update the tab's content
+                  if (stateRef.current.tabs.activeTab && stateRef.current.tabs.activeTab.filePath === data.path) {
+                    stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTab.id, { content: result.content });
+                  }
                 }
                 // If user chose Cancel, we just keep the current changes
               }
@@ -610,7 +653,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
                 handlersRef.current.setIsDirty(false);
                 // NOTE: initialContentRef removed - EditorPool tracks this per-file
                 // Reflect clean state in active tab UI
-                if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.activeTabId) {
+                if (stateRef.current.tabs && stateRef.current.tabs.activeTabId) {
                   stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { isDirty: false });
                 }
                 if (LOG_CONFIG.THEME) console.log('[THEME] Saved successfully before theme switch');
@@ -626,7 +669,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
                 // NOTE: initialContentRef removed - EditorPool tracks this per-file
                 // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
                 // Keep tab content in sync
-                if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.activeTabId) {
+                if (stateRef.current.tabs && stateRef.current.tabs.activeTabId) {
                   stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { content: res.content });
                 }
               }
@@ -635,7 +678,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
               if (res?.content !== undefined) {
                 // NOTE: initialContentRef removed - EditorPool tracks this per-file
                 // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
-                if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.activeTabId) {
+                if (stateRef.current.tabs && stateRef.current.tabs.activeTabId) {
                   stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { content: res.content });
                 }
               }
@@ -731,7 +774,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     // Tab navigation handlers
     if (window.electronAPI.onNextTab) {
       cleanupFns.push(window.electronAPI.onNextTab(() => {
-        if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.tabs.length > 1) {
+        if (stateRef.current.tabs && stateRef.current.tabs.tabs.length > 1) {
           const currentIndex = stateRef.current.tabs.tabs.findIndex(tab => tab.id === stateRef.current.tabs.activeTabId);
           const nextIndex = (currentIndex + 1) % stateRef.current.tabs.tabs.length;
           const nextTab = stateRef.current.tabs.tabs[nextIndex];
@@ -744,7 +787,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     if (window.electronAPI.onPreviousTab) {
       cleanupFns.push(window.electronAPI.onPreviousTab(() => {
-        if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.tabs.length > 1) {
+        if (stateRef.current.tabs && stateRef.current.tabs.tabs.length > 1) {
           const currentIndex = stateRef.current.tabs.tabs.findIndex(tab => tab.id === stateRef.current.tabs.activeTabId);
           const prevIndex = currentIndex <= 0 ? stateRef.current.tabs.tabs.length - 1 : currentIndex - 1;
           const prevTab = stateRef.current.tabs.tabs[prevIndex];

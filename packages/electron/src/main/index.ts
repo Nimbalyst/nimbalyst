@@ -145,14 +145,31 @@ app.on('open-file', (event, path) => {
 
 // Parse command line arguments
 function parseCommandLineArgs() {
+    logger.main.info(`Full process.argv:`, process.argv);
     const args = process.argv.slice(app.isPackaged ? 1 : 2);
+    logger.main.info(`Parsing command line args (after slice):`, args);
 
     for (let i = 0; i < args.length; i++) {
-        if (args[i] === '--workspace' && i + 1 < args.length) {
+        const arg = args[i];
+        logger.main.info(`Checking arg[${i}]: "${arg}"`);
+
+        if (arg === '--workspace' && i + 1 < args.length) {
             pendingWorkspacePath = args[i + 1];
-            logger.main.info(`Workspace path from CLI: ${pendingWorkspacePath}`);
+            logger.main.info(`✓ Workspace path from CLI: ${pendingWorkspacePath}`);
+        } else if (!arg.startsWith('--') && !arg.startsWith('-')) {
+            // Handle plain file path argument (e.g., "preditor file.md")
+            const argExists = existsSync(arg);
+            const argIsMarkdown = arg.endsWith('.md');
+            logger.main.info(`  Potential file: exists=${argExists}, isMarkdown=${argIsMarkdown}`);
+
+            if (argExists && argIsMarkdown) {
+                pendingFilePath = arg;
+                logger.main.info(`✓ File path from CLI: ${pendingFilePath}`);
+            }
         }
     }
+
+    logger.main.info(`FINAL: pendingFilePath=${pendingFilePath}, pendingWorkspacePath=${pendingWorkspacePath}`);
 }
 
 
@@ -261,8 +278,13 @@ app.whenReady().then(async () => {
         // Handle pending file if we have one
         const window = createWindow(true);
         window.once('ready-to-show', () => {
-            loadFileIntoWindow(window, pendingFilePath!);
-            pendingFilePath = null;
+            window.show();
+            // Wait for renderer to finish initializing before sending file
+            // The renderer needs time to register IPC handlers
+            setTimeout(() => {
+                loadFileIntoWindow(window, pendingFilePath!);
+                pendingFilePath = null;
+            }, 100); // Give renderer 100ms to initialize
         });
     }
 

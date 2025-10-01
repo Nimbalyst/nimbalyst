@@ -980,7 +980,7 @@ export default function App() {
         {/*  numTabs: tabs.tabs.length,*/}
         {/*  activeTabId: tabs.activeTabId*/}
         {/*})}*/}
-        {workspaceMode ? (
+        {workspaceMode || tabs.activeTab ? (
           <TabManager
             tabs={tabs.tabs}
             activeTabId={tabs.activeTabId}
@@ -998,6 +998,7 @@ export default function App() {
                 setIsHistoryDialogOpen(true);
               }
             }}
+            hideTabBar={!workspaceMode}
           >
             {tabs.activeTab ? (
               <EditorContainer
