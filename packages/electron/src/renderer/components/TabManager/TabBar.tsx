@@ -31,6 +31,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   const isDraggingRef = useRef(false);
   const tabBarRef = useRef<HTMLDivElement>(null);
   const tabMenuRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Handle tab click
   const handleTabClick = useCallback((e: React.MouseEvent, tabId: string) => {
@@ -265,6 +266,20 @@ export const TabBar: React.FC<TabBarProps> = ({
     return () => window.removeEventListener('keydown', handleMenuKeyDown);
   }, [showTabMenu, menuSelectedIndex, tabs, handleCloseAllFromMenu, handleTabMenuSelect]);
 
+  // Auto-scroll active tab into view
+  React.useEffect(() => {
+    if (!activeTabId) return;
+
+    const activeTabElement = tabRefs.current.get(activeTabId);
+    if (activeTabElement && tabBarRef.current) {
+      activeTabElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'nearest'
+      });
+    }
+  }, [activeTabId]);
+
   // Keyboard shortcuts
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -321,6 +336,13 @@ export const TabBar: React.FC<TabBarProps> = ({
           {tabs.map((tab, index) => (
             <div
               key={tab.id}
+              ref={(el) => {
+                if (el) {
+                  tabRefs.current.set(tab.id, el);
+                } else {
+                  tabRefs.current.delete(tab.id);
+                }
+              }}
               className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isDirty ? 'dirty' : ''} ${tab.isPinned ? 'pinned' : ''} ${draggedIndex === index ? 'dragging' : ''} ${dragOverIndex === index ? 'drag-over' : ''}`}
               draggable={true}
               onDragStart={(e) => handleDragStart(e, index)}
