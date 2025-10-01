@@ -32,18 +32,22 @@ export class BoardHeaderNode extends ElementNode {
   createDOM(): HTMLElement {
     const element = document.createElement('div');
     element.className = 'kanban-board-header';
-    
+    element.contentEditable = 'false';
+
     // Create title element (will be populated by child nodes)
     const titleContainer = document.createElement('div');
     titleContainer.className = 'kanban-board-title-container';
-    
+    titleContainer.contentEditable = 'true';
+
     // Create controls container for buttons
     const controlsContainer = document.createElement('div');
     controlsContainer.className = 'kanban-board-controls';
+    controlsContainer.contentEditable = 'false';
 
     // Create config button
     const configButton = document.createElement('button');
     configButton.className = 'board-settings-button';
+    configButton.contentEditable = 'false';
     configButton.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
         <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
@@ -75,6 +79,7 @@ export class BoardHeaderNode extends ElementNode {
     addColumnButton.className = 'kanban-add-column-button';
     addColumnButton.innerHTML = '+ Add Column';
     addColumnButton.type = 'button';
+    addColumnButton.contentEditable = 'false';
     
     addColumnButton.addEventListener('click', (e) => {
       e.preventDefault();

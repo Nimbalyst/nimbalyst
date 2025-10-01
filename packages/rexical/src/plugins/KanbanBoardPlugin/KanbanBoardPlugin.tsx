@@ -70,6 +70,17 @@ export function KanbanBoardPlugin(): JSX.Element | null {
     const [currentEditCardKey, setCurrentEditCardKey] = useState<string | null>(null);
     const [currentCardData, setCurrentCardData] = useState<CardData>({ title: '' });
 
+    // Use refs to store the latest state setters to avoid stale closures
+    const setShowCardEditDialogRef = useRef(setShowCardEditDialog);
+    const setCurrentEditCardKeyRef = useRef(setCurrentEditCardKey);
+    const setCurrentCardDataRef = useRef(setCurrentCardData);
+
+    useEffect(() => {
+        setShowCardEditDialogRef.current = setShowCardEditDialog;
+        setCurrentEditCardKeyRef.current = setCurrentEditCardKey;
+        setCurrentCardDataRef.current = setCurrentCardData;
+    });
+
     useEffect(() => {
         // console.log("KanbanBoardPlugin mounted");
         if (!editor.hasNodes([KanbanBoardNode, BoardHeaderNode, BoardColumnNode, BoardColumnHeaderNode, BoardColumnContentNode, BoardCardNode])) {
@@ -135,10 +146,21 @@ export function KanbanBoardPlugin(): JSX.Element | null {
 
         // Handle board configuration events
         const handleBoardConfigure = (event: CustomEvent) => {
-            const { boardNodeKey, currentConfig } = event.detail;
-            setCurrentConfigNodeKey(boardNodeKey);
-            setCurrentConfig(currentConfig);
-            setShowConfigDialog(true);
+            const { boardNodeKey } = event.detail;
+
+            // Only handle if this board belongs to this editor instance
+            editor.getEditorState().read(() => {
+                const node = $getNodeByKey(boardNodeKey);
+                if (!node) {
+                    return;
+                }
+                if ($isBoardNode(node)) {
+                    const config = node.getConfig();
+                    setCurrentConfigNodeKey(boardNodeKey);
+                    setCurrentConfig(config);
+                    setShowConfigDialog(true);
+                }
+            });
         };
 
         window.addEventListener('board-configure', handleBoardConfigure as EventListener);
@@ -149,6 +171,9 @@ export function KanbanBoardPlugin(): JSX.Element | null {
 
             editor.update(() => {
                 const contentNode = $getNodeByKey(contentNodeKey);
+                if (!contentNode) {
+                    return;
+                }
                 if ($isColumnContentNode(contentNode)) {
                     // Create a new card with editable content
                     const newCard = $createCardNode();
@@ -171,6 +196,9 @@ export function KanbanBoardPlugin(): JSX.Element | null {
 
             editor.update(() => {
                 const boardNode = $getNodeByKey(boardNodeKey);
+                if (!boardNode) {
+                    return;
+                }
                 if ($isBoardNode(boardNode)) {
                     // Create a new column with header and content
                     const column = $createColumnNode();
@@ -202,12 +230,13 @@ export function KanbanBoardPlugin(): JSX.Element | null {
             editor.update(() => {
                 // Find the column node by traversing from the header
                 const headerNode = $getNodeByKey(columnNodeKey);
-                if (headerNode) {
-                    // The header's parent should be the column
-                    const columnNode = headerNode.getParent();
-                    if ($isColumnNode(columnNode)) {
-                        columnNode.remove();
-                    }
+                if (!headerNode) {
+                    return;
+                }
+                // The header's parent should be the column
+                const columnNode = headerNode.getParent();
+                if ($isColumnNode(columnNode)) {
+                    columnNode.remove();
                 }
             });
         };
@@ -220,6 +249,10 @@ export function KanbanBoardPlugin(): JSX.Element | null {
 
             editor.update(() => {
                 const cardNode = $getNodeByKey(cardNodeKey);
+                if (!cardNode) {
+                    // Card not in this editor instance, ignore
+                    return;
+                }
                 if ($isCardNode(cardNode)) {
                     cardNode.remove();
                 }
@@ -232,9 +265,17 @@ export function KanbanBoardPlugin(): JSX.Element | null {
         const handleEditCard = (event: CustomEvent) => {
             const { cardNodeKey, currentData } = event.detail;
 
-            setCurrentEditCardKey(cardNodeKey);
-            setCurrentCardData(currentData);
-            setShowCardEditDialog(true);
+            // Only handle if this card belongs to this editor instance
+            editor.getEditorState().read(() => {
+                const node = $getNodeByKey(cardNodeKey);
+                if (!node) {
+                    return;
+                }
+
+                setCurrentEditCardKeyRef.current(cardNodeKey);
+                setCurrentCardDataRef.current(currentData);
+                setShowCardEditDialogRef.current(true);
+            });
         };
 
         window.addEventListener('board-edit-card', handleEditCard as EventListener);
@@ -405,6 +446,7 @@ export function KanbanBoardPlugin(): JSX.Element | null {
         editor.update(() => {
             const boardNode = $getNodeByKey(currentConfigNodeKey);
             if ($isBoardNode(boardNode)) {
+                // setConfig will automatically mark all descendants as dirty
                 boardNode.setConfig(config);
 
                 // Update or create sync service
@@ -469,7 +511,7 @@ export function KanbanBoardPlugin(): JSX.Element | null {
         setCurrentEditCardKey(null);
     };
 
-    const editorContainer = document.querySelector('.stravu-editor');
+    const editorContainer = document.querySelector('.stravu-editor.active');
     const portalTarget = editorContainer || document.body;
 
     return (

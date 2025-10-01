@@ -32,12 +32,14 @@ export class BoardColumnContentNode extends ElementNode {
   createDOM(): HTMLElement {
     const element = document.createElement('div');
     element.className = 'kanban-column-content';
-    
+    element.contentEditable = 'false';
+
     // Add card button
     const addButton = document.createElement('button');
     addButton.className = 'kanban-add-card-button';
     addButton.textContent = '+ Add card';
     addButton.type = 'button';
+    addButton.contentEditable = 'false';
     
     // Add button click handler
     addButton.addEventListener('click', (e) => {
@@ -67,6 +69,7 @@ export class BoardColumnContentNode extends ElementNode {
     if (!cardsContainer) {
       cardsContainer = document.createElement('div');
       cardsContainer.className = 'kanban-cards-container';
+      cardsContainer.contentEditable = 'false';
       // Insert before the add button
       const addButton = element.querySelector('.kanban-add-card-button');
       if (addButton) {

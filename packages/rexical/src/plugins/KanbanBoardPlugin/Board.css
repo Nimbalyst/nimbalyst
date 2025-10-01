@@ -329,16 +329,15 @@
   transform: rotate(2deg);
 }
 
-.kanban-card:focus-within {
-  border-color: #4a90e2;
-  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
-}
+/* Removed focus-within border styling for cleaner look */
 
 .kanban-card-header {
   display: flex;
   justify-content: flex-end;
   padding: 4px;
   min-height: 24px;
+  position: relative;
+  z-index: 10;
 }
 
 .kanban-card-edit {
@@ -351,6 +350,8 @@
   border-radius: 3px;
   display: flex;
   align-items: center;
+  pointer-events: auto;
+  user-select: none;
 }
 
 .kanban-card-edit .material-symbols-outlined {
@@ -376,6 +377,8 @@
   border-radius: 3px;
   display: flex;
   align-items: center;
+  pointer-events: auto;
+  user-select: none;
 }
 
 .kanban-card-delete .material-symbols-outlined {
@@ -396,6 +399,21 @@
   min-height: 20px;
 }
 
+.kanban-card-content:focus,
+.kanban-card-content:focus-visible,
+.kanban-card-content[contenteditable="true"]:focus,
+.kanban-card-content[contenteditable="true"]:focus-visible {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.kanban-card-content *:focus,
+.kanban-card-content *:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .kanban-card-content p {
   margin: 0;
   font-size: 14px;
@@ -411,6 +429,15 @@
   color: #666;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.kanban-card-description {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #666;
+  border-top: 1px solid #f0f0f0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .kanban-card-owner {
@@ -597,10 +624,7 @@
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
 }
 
-.stravu-editor[data-theme="dark"] .kanban-card:focus-within {
-  border-color: var(--stravu-focus-border);
-  box-shadow: 0 0 0 2px var(--stravu-focus-border);
-}
+/* Removed dark theme focus-within border styling */
 
 .stravu-editor[data-theme="dark"] .kanban-card-content p {
   color: var(--stravu-text-primary);
@@ -619,6 +643,11 @@
 }
 
 .stravu-editor[data-theme="dark"] .kanban-card-meta {
+  border-top-color: var(--stravu-editor-border);
+  color: var(--stravu-text-secondary);
+}
+
+.stravu-editor[data-theme="dark"] .kanban-card-description {
   border-top-color: var(--stravu-editor-border);
   color: var(--stravu-text-secondary);
 }
@@ -724,10 +753,7 @@
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
 }
 
-.stravu-editor[data-theme="crystal-dark"] .kanban-card:focus-within {
-  border-color: var(--stravu-focus-border);
-  box-shadow: 0 0 0 2px var(--stravu-focus-border);
-}
+/* Removed crystal-dark theme focus-within border styling */
 
 .stravu-editor[data-theme="crystal-dark"] .kanban-card-content p {
   color: var(--stravu-text-primary);
@@ -746,6 +772,11 @@
 }
 
 .stravu-editor[data-theme="crystal-dark"] .kanban-card-meta {
+  border-top-color: var(--stravu-editor-border);
+  color: var(--stravu-text-secondary);
+}
+
+.stravu-editor[data-theme="crystal-dark"] .kanban-card-description {
   border-top-color: var(--stravu-editor-border);
   color: var(--stravu-text-secondary);
 }

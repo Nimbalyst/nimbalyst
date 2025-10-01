@@ -74,10 +74,12 @@ export class BoardCardNode extends ElementNode {
     element.className = 'kanban-card';
     element.setAttribute('data-card-id', this.__id);
     element.draggable = true;
+    element.contentEditable = 'false';
 
     // Card header with edit and delete buttons
     const cardHeader = document.createElement('div');
     cardHeader.className = 'kanban-card-header';
+    cardHeader.contentEditable = 'false';
     
     // Edit button
     const editButton = document.createElement('button');
@@ -85,37 +87,47 @@ export class BoardCardNode extends ElementNode {
     editButton.innerHTML = '<span class="material-symbols-outlined">edit</span>';
     editButton.type = 'button';
     editButton.title = 'Edit card';
-    
+    editButton.draggable = false;
+
     editButton.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      
+
       window.dispatchEvent(new CustomEvent('board-edit-card', {
-        detail: { 
+        detail: {
           cardNodeKey: this.getKey(),
           cardId: this.__id,
           currentData: this.__data
         }
       }));
     });
-    
+
+    editButton.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+    });
+
     // Delete button
     const deleteButton = document.createElement('button');
     deleteButton.className = 'kanban-card-delete';
     deleteButton.innerHTML = '<span class="material-symbols-outlined">close</span>';
     deleteButton.type = 'button';
     deleteButton.title = 'Delete card';
-    
+    deleteButton.draggable = false;
+
     deleteButton.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      
+
       window.dispatchEvent(new CustomEvent('board-delete-card', {
-        detail: { 
+        detail: {
           cardNodeKey: this.getKey(),
           cardId: this.__id
         }
       }));
+    });
+
+    deleteButton.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
     });
     
     cardHeader.appendChild(editButton);
@@ -125,11 +137,13 @@ export class BoardCardNode extends ElementNode {
     // Card content area
     const cardContent = document.createElement('div');
     cardContent.className = 'kanban-card-content';
+    cardContent.contentEditable = 'true';
     element.appendChild(cardContent);
-    
+
     // Card metadata (owner, due date, priority) - check board config for visibility
     const cardMeta = document.createElement('div');
     cardMeta.className = 'kanban-card-meta';
+    cardMeta.contentEditable = 'false';
     
     // Get board config to check visible fields
     const boardConfig = this.getBoardConfig();
@@ -152,7 +166,7 @@ export class BoardCardNode extends ElementNode {
     if (visibleFields.priority && this.__data.priority) {
       const priority = document.createElement('span');
       priority.className = `kanban-card-priority kanban-card-priority-${this.__data.priority}`;
-      const priorityIcons = { 
+      const priorityIcons = {
         low: '<span class="material-symbols-outlined">low_priority</span>',
         medium: '<span class="material-symbols-outlined">priority_high</span>',
         high: '<span class="material-symbols-outlined">error</span>'
@@ -160,9 +174,18 @@ export class BoardCardNode extends ElementNode {
       priority.innerHTML = priorityIcons[this.__data.priority];
       cardMeta.appendChild(priority);
     }
-    
+
     if (cardMeta.children.length > 0) {
       element.appendChild(cardMeta);
+    }
+
+    // Description (shown after metadata if enabled)
+    if (visibleFields.description && this.__data.description) {
+      const descriptionDiv = document.createElement('div');
+      descriptionDiv.className = 'kanban-card-description';
+      descriptionDiv.contentEditable = 'false';
+      descriptionDiv.textContent = this.__data.description;
+      element.appendChild(descriptionDiv);
     }
 
     // Add drag events
@@ -211,7 +234,7 @@ export class BoardCardNode extends ElementNode {
         if (visibleFields.priority && this.__data.priority) {
           const priority = document.createElement('span');
           priority.className = `kanban-card-priority kanban-card-priority-${this.__data.priority}`;
-          const priorityIcons = { 
+          const priorityIcons = {
             low: '<span class="material-symbols-outlined">low_priority</span>',
             medium: '<span class="material-symbols-outlined">priority_high</span>',
             high: '<span class="material-symbols-outlined">error</span>'
@@ -220,6 +243,21 @@ export class BoardCardNode extends ElementNode {
           cardMeta.appendChild(priority);
         }
       }
+
+      // Update description
+      let descriptionDiv = dom.querySelector('.kanban-card-description') as HTMLElement;
+      if (visibleFields.description && this.__data.description) {
+        if (!descriptionDiv) {
+          descriptionDiv = document.createElement('div');
+          descriptionDiv.className = 'kanban-card-description';
+          descriptionDiv.contentEditable = 'false';
+          dom.appendChild(descriptionDiv);
+        }
+        descriptionDiv.textContent = this.__data.description;
+      } else if (descriptionDiv) {
+        descriptionDiv.remove();
+      }
+
       return true;
     }
     return false;

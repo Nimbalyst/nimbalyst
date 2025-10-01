@@ -32,6 +32,7 @@ export class BoardColumnNode extends ElementNode {
   createDOM(): HTMLElement {
     const element = document.createElement('div');
     element.className = 'kanban-column';
+    element.contentEditable = 'false';
     return element;
   }
 

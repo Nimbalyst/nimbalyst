@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './BoardConfigDialog.css';
 
 export interface BoardConfig {
@@ -30,12 +30,24 @@ export function BoardConfigDialog({ visible, onHide, onSelect, initialConfig }: 
     description: initialConfig?.visibleFields?.description ?? false,
   });
 
+  // Update state when dialog reopens with different initial config
+  useEffect(() => {
+    if (visible) {
+      setVisibleFields({
+        owner: initialConfig?.visibleFields?.owner ?? true,
+        dueDate: initialConfig?.visibleFields?.dueDate ?? true,
+        priority: initialConfig?.visibleFields?.priority ?? true,
+        description: initialConfig?.visibleFields?.description ?? false,
+      });
+    }
+  }, [visible, initialConfig]);
+
   if (!visible) return null;
   
   const handleSave = () => {
     const config: BoardConfig = {
-      visibleFields,
-      ...initialConfig
+      ...initialConfig,
+      visibleFields
     };
     onSelect(config);
     onHide();

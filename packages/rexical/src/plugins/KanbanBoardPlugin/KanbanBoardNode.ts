@@ -1,5 +1,6 @@
 import {
   $applyNodeReplacement,
+  $isElementNode,
   ElementNode,
   LexicalNode,
   NodeKey,
@@ -42,6 +43,20 @@ export class KanbanBoardNode extends ElementNode {
   setConfig(config: BoardConfig): void {
     const writable = this.getWritable();
     writable.__config = config;
+    // Mark all descendant card nodes as dirty to force re-render
+    this.getChildren().forEach(child => {
+      this.markDescendantsDirty(child);
+    });
+  }
+
+  private markDescendantsDirty(node: LexicalNode): void {
+    if ($isElementNode(node)) {
+      node.getChildren().forEach(child => {
+        this.markDescendantsDirty(child);
+      });
+    }
+    // Force writable to mark as dirty
+    node.getWritable();
   }
 
   createDOM(): HTMLElement {

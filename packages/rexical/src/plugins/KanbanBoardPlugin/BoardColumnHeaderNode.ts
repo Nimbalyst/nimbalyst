@@ -32,27 +32,32 @@ export class BoardColumnHeaderNode extends ElementNode {
   createDOM(): HTMLElement {
     const element = document.createElement('div');
     element.className = 'kanban-column-header';
+    element.contentEditable = 'false';
 
     // Drag handle for column reordering
     const dragHandle = document.createElement('div');
     dragHandle.className = 'kanban-column-drag-handle';
     dragHandle.innerHTML = '<span class="material-symbols-outlined">drag_indicator</span>';
     dragHandle.title = 'Drag to reorder column';
-    
+    dragHandle.contentEditable = 'false';
+
     // Header content area (where lexical nodes go)
     const headerContent = document.createElement('div');
     headerContent.className = 'kanban-column-header-content';
+    headerContent.contentEditable = 'true';
 
     // Column actions container
     const columnActions = document.createElement('div');
     columnActions.className = 'kanban-column-actions';
-    
+    columnActions.contentEditable = 'false';
+
     // Delete button
     const deleteButton = document.createElement('button');
     deleteButton.className = 'kanban-column-delete';
     deleteButton.innerHTML = '<span class="material-symbols-outlined">close</span>';
     deleteButton.type = 'button';
     deleteButton.title = 'Delete column';
+    deleteButton.contentEditable = 'false';
     
     deleteButton.addEventListener('click', (e) => {
       e.preventDefault();

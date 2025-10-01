@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CardData } from './BoardCardNode';
 import './CardEditDialog.css';
 
@@ -16,6 +16,34 @@ export function CardEditDialog({ visible, onHide, onSave, initialData }: CardEdi
   const [priority, setPriority] = useState(initialData.priority || 'medium');
   const [description, setDescription] = useState(initialData.description || '');
 
+  // Update form when initialData changes
+  useEffect(() => {
+    if (visible) {
+      setTitle(initialData.title || '');
+      setOwner(initialData.owner || '');
+      setDueDate(initialData.dueDate || '');
+      setPriority(initialData.priority || 'medium');
+      setDescription(initialData.description || '');
+    }
+  }, [visible, initialData]);
+
+  // Handle escape key to close dialog
+  useEffect(() => {
+    if (!visible) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onHide();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [visible, onHide]);
+
   if (!visible) return null;
 
   const handleSave = () => {
@@ -30,11 +58,17 @@ export function CardEditDialog({ visible, onHide, onSave, initialData }: CardEdi
     onHide();
   };
 
+  const handleOverlayClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      handleSave();
+    }
+  };
+
   return (
-    <div className="card-edit-overlay">
+    <div className="card-edit-overlay" onClick={handleOverlayClick}>
       <div className="card-edit-dialog">
         <h3 className="card-edit-title">Edit Card</h3>
-        
+
         <div className="card-edit-field">
           <label className="card-edit-label">
             Title
@@ -101,12 +135,6 @@ export function CardEditDialog({ visible, onHide, onSave, initialData }: CardEdi
         </div>
 
         <div className="card-edit-actions">
-          <button
-            onClick={onHide}
-            className="card-edit-button card-edit-button-cancel"
-          >
-            Cancel
-          </button>
           <button
             onClick={handleSave}
             className="card-edit-button card-edit-button-save"
