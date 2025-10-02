@@ -1,0 +1,139 @@
+.error-toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 500px;
+  pointer-events: none;
+}
+
+.error-toast {
+  background: var(--color-background, #fff);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  pointer-events: auto;
+  animation: slideIn 0.3s ease-out;
+  border-left: 4px solid;
+}
+
+.error-toast--error {
+  border-left-color: #dc3545;
+  background: #fff5f5;
+}
+
+.error-toast--warning {
+  border-left-color: #ffc107;
+  background: #fffbf0;
+}
+
+.error-toast--info {
+  border-left-color: #17a2b8;
+  background: #f0f9ff;
+}
+
+.error-toast-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.error-toast-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.error-toast-title {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--color-text, #333);
+}
+
+.error-toast-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary, #666);
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.error-toast-close:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.error-toast-message {
+  font-size: 13px;
+  color: var(--color-text, #333);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.error-toast-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.error-toast-copy-btn {
+  background: var(--color-button-bg, #007bff);
+  color: var(--color-button-text, #fff);
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.error-toast-copy-btn:hover {
+  background: var(--color-button-hover, #0056b3);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .error-toast--error {
+    background: #3d1f1f;
+  }
+
+  .error-toast--warning {
+    background: #3d3419;
+  }
+
+  .error-toast--info {
+    background: #1a2d35;
+  }
+
+  .error-toast-title,
+  .error-toast-message {
+    color: var(--color-text, #e0e0e0);
+  }
+
+  .error-toast-close {
+    color: var(--color-text-secondary, #aaa);
+  }
+}

@@ -38,6 +38,7 @@ export async function launchElectronApp(options?: {
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'playwright-test-key',
       ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
       PLAYWRIGHT: '1',
+      ELECTRON_RENDERER_URL: 'http://localhost:5273', // Use dev server for HMR
       ...options?.env
     }
   });
@@ -143,7 +144,7 @@ export async function sendAIPrompt(page: Page, prompt: string, options?: {
     try {
       await page.waitForFunction(
         () => {
-          const btn = document.querySelector('button[aria-label*="Send"], button:has-text("Send message")') as HTMLButtonElement;
+          const btn = document.querySelector('button[aria-label*="Send"]') as HTMLButtonElement;
           return btn && !btn.disabled;
         },
         { timeout }

@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { logger } from './utils/logger';
 import type { ConfigTheme, LexicalCommand } from 'rexical';
-import { aiChatBridge, TOGGLE_SEARCH_COMMAND, } from 'rexical';
+import { TOGGLE_SEARCH_COMMAND } from 'rexical';
+// aiChatBridge has been replaced by editorRegistry
 // Import styles - handled by vite plugin for both dev and prod
 import 'rexical/styles';
 // Import refactored hooks and utilities
@@ -16,6 +17,7 @@ import { AgentCommandPalette } from './components/AgentCommandPalette';
 import { AIChat } from './components/AIChat';
 import { HistoryDialog } from './components/HistoryDialog';
 import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
+import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
 import { ApiKeyDialog } from './components/ApiKeyDialog';
 import { AIModelsRedesigned as AIModels } from './components/AIModels/AIModelsRedesigned';
 import { SessionManager } from './components/SessionManager/SessionManager';
@@ -28,6 +30,7 @@ import { useTabs } from './hooks/useTabs';
 import { useTabNavigation } from './hooks/useTabNavigation';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
+import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
 import './WorkspaceWelcome.css';
 import './components/AIModels/AIModelsRedesigned.css';
 
@@ -35,11 +38,7 @@ logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
 logger.ui.info('StravuEditor imported');
 
-// Ensure aiChatBridge is available globally
-if (typeof window !== 'undefined' && !window.aiChatBridge) {
-  (window as any).aiChatBridge = aiChatBridge;
-  logger.ui.info('Set window.aiChatBridge manually');
-}
+// aiChatBridge has been replaced by editorRegistry - no global setup needed
 
 // Logging configuration - control which categories are logged
 const LOG_CONFIG = {
@@ -63,6 +62,7 @@ let pluginsRegistered = false;
 if (!pluginsRegistered) {
   registerDocumentLinkPlugin();
   registerPlanStatusPlugin();
+  registerAIChatPlugin();
   pluginsRegistered = true;
 }
 
@@ -1076,14 +1076,30 @@ export default function App() {
           onSessionLoaded={() => setSessionToLoad(null)}
           onSessionIdChange={setCurrentAISessionId}
           onShowApiKeyError={() => setIsApiKeyDialogOpen(true)}
-          documentContext={{
-            filePath: currentFilePath || '',
-            fileType: 'markdown',
-            content: getContentRef.current ? getContentRef.current() : '',
-            cursorPosition: undefined, // TODO: Get from Lexical editor
-            selection: undefined, // TODO: Get selected text from Lexical
-            getLatestContent: getContentRef.current // Pass the function itself
-          }}
+          documentContext={(() => {
+            // CRITICAL: Always use the ACTIVE tab's information, not global state
+            // This ensures AI edits target the currently visible document
+            const activeTab = tabs.activeTab;
+            if (!activeTab) {
+              return {
+                filePath: '',
+                fileType: 'markdown',
+                content: '',
+                cursorPosition: undefined,
+                selection: undefined,
+                getLatestContent: undefined
+              };
+            }
+
+            return {
+              filePath: activeTab.filePath || '',
+              fileType: 'markdown',
+              content: getContentRef.current ? getContentRef.current() : '',
+              cursorPosition: undefined, // TODO: Get from Lexical editor
+              selection: undefined, // TODO: Get selected text from Lexical
+              getLatestContent: getContentRef.current // Pass the function itself
+            };
+          })()}
           onApplyEdit={(edit, prompt, aiResponse) => {
             console.log('Edit already applied by AIChat component, updating UI state');
             // Store the prompt and response for error reporting
@@ -1156,6 +1172,7 @@ export default function App() {
         message={diffError.message}
         details={diffError.details}
       />
+      <ErrorToastContainer />
     </div>
   );
 }

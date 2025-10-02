@@ -6,7 +6,9 @@ import { EmptyState } from './EmptyState';
 import { PerformanceMetrics } from './PerformanceMetrics';
 import { aiApi, DocumentContext } from '../../services/aiApi';
 import { logger } from '../../utils/logger';
+import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { DEFAULT_MODELS } from '@stravu/runtime/ai/modelConstants';
+import { editorRegistry } from '@stravu/runtime';
 import './AIChat.css';
 
 interface AIChatProps {
@@ -141,6 +143,10 @@ export function AIChat({
   const streamTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
+  // CRITICAL: Store the document context snapshot at the time each message is sent
+  // This ensures edits are applied to the correct document even if the user switches tabs during AI processing
+  const messageDocumentContextRef = useRef<{filePath: string; content: string} | null>(null);
+
   // Load sessions on mount
   const loadSessions = useCallback(async () => {
     try {
@@ -205,10 +211,66 @@ export function AIChat({
         // Auto-apply edits when they arrive
         if (data.edits && data.edits.length > 0) {
           data.edits.forEach(async (edit: any) => {
-            logger.bridge.info('Auto-applying edit from Claude:', edit);
+            // CRITICAL: Use the LOCKED document context from when the message was sent
+            // This prevents edits from going to the wrong document if the user switched tabs
+            const targetContext = messageDocumentContextRef.current;
 
-            // Apply the edit through the API (which handles both applying and error reporting)
-            const result = await aiApi.applyEdit(edit);
+            if (!targetContext || !targetContext.filePath) {
+              const errorMsg = 'Cannot auto-apply edit: No locked document context';
+              logger.bridge.error(errorMsg);
+              errorNotificationService.showError(
+                'AI Edit Failed',
+                'Cannot apply edit - no target document context available. This may indicate the message was sent without an active document.',
+                { details: 'The AI attempted to apply an edit, but no document context was captured when the message was sent.' }
+              );
+              setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: `🚨 Cannot apply edit: No target document context available.`,
+                isError: true
+              }]);
+              return;
+            }
+
+            // Verify the target document is still the active one, or switch to it
+            const currentActive = documentContext?.filePath;
+            if (currentActive !== targetContext.filePath) {
+              logger.bridge.warn(`[AUTO-APPLY] Target document ${targetContext.filePath} is not active (current: ${currentActive})`);
+              logger.bridge.warn(`[AUTO-APPLY] User switched tabs during AI processing - attempting to switch back`);
+
+              // Try to open the target file
+              if (window.electronAPI && workspacePath) {
+                try {
+                  await window.electronAPI.invoke('workspace-open-file', workspacePath, targetContext.filePath);
+                  // Wait a bit for the file to become active
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                } catch (err) {
+                  const errorMsg = `Failed to switch to target document: ${targetContext.filePath}`;
+                  logger.bridge.error(`[AUTO-APPLY] ${errorMsg}`, err);
+                  errorNotificationService.showError(
+                    'AI Edit Failed',
+                    `Cannot apply edit - failed to switch to target document "${targetContext.filePath}".`,
+                    {
+                      details: `The AI tried to apply an edit to ${targetContext.filePath}, but the system could not open that file.`,
+                      stack: err instanceof Error ? err.stack : undefined,
+                      context: { targetFilePath: targetContext.filePath, currentFilePath: currentActive }
+                    }
+                  );
+                  setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    content: `🚨 Cannot apply edit: Failed to switch to target document ${targetContext.filePath}`,
+                    isError: true
+                  }]);
+                  return;
+                }
+              }
+            }
+
+            logger.bridge.info(`Auto-applying edit to LOCKED target: ${targetContext.filePath}:`, edit);
+            console.error('[AUTO-APPLY] Calling aiApi.applyEdit with targetFilePath:', targetContext.filePath);
+
+            // CRITICAL: Apply the edit through the API WITH the target file path
+            const result = await aiApi.applyEdit(edit, targetContext.filePath);
+            console.error('[AUTO-APPLY] Result:', result);
 
             // If we have onApplyEdit callback, notify the parent AFTER the edit is applied
             // This is for UI updates, not for actually applying the edit
@@ -220,12 +282,12 @@ export function AIChat({
             if (!result.success) {
               // Edit failed - send an automatic follow-up message to Claude
               const currentContent = documentContext?.getLatestContent ? documentContext.getLatestContent() : documentContext?.content || '';
-              const errorMessage = `The previous edit command failed because: "${result.error}"\n\nThe current document contains:\n\`\`\`markdown\n${currentContent}\n\`\`\`\n\nPlease provide a corrected edit command using the EXACT text from the document above.`;
+              const errorMessage = `The previous edit command failed because: "${result.error}"\n\nThe current document (${documentContext.filePath}) contains:\n\`\`\`markdown\n${currentContent}\n\`\`\`\n\nPlease provide a corrected edit command using the EXACT text from the document above.`;
 
               // Add error notification to chat
               setMessages(prev => [...prev, {
                 role: 'assistant',
-                content: `⚠️ Edit failed: ${result.error}\n\nAutomatically asking Claude to correct...`
+                content: `⚠️ Edit failed for ${documentContext.filePath}: ${result.error}\n\nAutomatically asking Claude to correct...`
               }]);
 
               // Send the error back to Claude so it can correct itself
@@ -318,7 +380,10 @@ export function AIChat({
                 newMessages.push({
                   role: 'tool',
                   content: '', // Tool messages don't have text content
-                  toolCall: toolCall,
+                  toolCall: {
+                    ...toolCall,
+                    targetFilePath: messageDocumentContextRef.current?.filePath || documentContext?.filePath  // Use locked context
+                  },
                   isError: toolCall.result?.success === false,
                   errorMessage: toolCall.result?.error
                 });
@@ -333,7 +398,7 @@ export function AIChat({
           setMessages(prev => {
             const newMessages = [...prev];
             const signature = `${data.toolError.name}-${JSON.stringify(data.toolError.arguments)}`;
-            const existingIndex = newMessages.findIndex(m => 
+            const existingIndex = newMessages.findIndex(m =>
               m.role === 'tool' && m.toolCall && `${m.toolCall.name}-${JSON.stringify(m.toolCall.arguments)}` === signature
             );
 
@@ -343,7 +408,8 @@ export function AIChat({
               toolCall: {
                 name: data.toolError.name,
                 arguments: data.toolError.arguments,
-                result: data.toolError.result
+                result: data.toolError.result,
+                targetFilePath: messageDocumentContextRef.current?.filePath || documentContext?.filePath  // Use locked context
               },
               isError: true,
               errorMessage: data.toolError.error
@@ -418,27 +484,24 @@ export function AIChat({
       streamingEditIdRef.current = editId; // Set ref immediately
       logger.streaming.info('Generated stream ID:', editId);
 
-      // Initialize the streaming edit in the editor
-      const aiChatBridge = (window as any).aiChatBridge;
-      logger.bridge.info('AI Chat Bridge available:', !!aiChatBridge);
-      logger.bridge.info('Bridge methods:', {
-        startStreamingEdit: !!aiChatBridge?.startStreamingEdit,
-        streamContent: !!aiChatBridge?.streamContent,
-        endStreamingEdit: !!aiChatBridge?.endStreamingEdit
-      });
+      // Initialize the streaming edit in the editor using editorRegistry
+      // CRITICAL: Pass the locked target file path
+      const targetContext = messageDocumentContextRef.current;
+      const targetFilePath = targetContext?.filePath;
 
-      if (aiChatBridge?.startStreamingEdit) {
-        logger.bridge.info('Calling bridge.startStreamingEdit with:', {
-          id: editId,
-          ...config
-        });
-        aiChatBridge.startStreamingEdit({
-          id: editId,
-          ...config
-        });
-      } else {
-        logger.bridge.info('❌ Bridge method startStreamingEdit not available!');
+      if (!targetFilePath) {
+        logger.bridge.error('❌ No target file path available for streaming');
+        return;
       }
+
+      const streamConfig = {
+        id: editId,
+        ...config,
+        targetFilePath  // Lock stream to original document
+      };
+
+      logger.bridge.info('Calling editorRegistry.startStreaming with:', streamConfig);
+      editorRegistry.startStreaming(targetFilePath, streamConfig);
 
       // Determine position text for display
       let positionText = 'at cursor position';
@@ -502,13 +565,17 @@ export function AIChat({
       });
 
       // Stream the content to the editor
-      const aiChatBridge = (window as any).aiChatBridge;
-      if (aiChatBridge?.streamContent) {
-        logger.bridge.info('Calling bridge.streamContent');
-        aiChatBridge.streamContent(currentStreamId, content);
-      } else {
-        logger.bridge.info('❌ Bridge method streamContent not available!');
+      // Stream content to the target file using editorRegistry
+      const targetContext = messageDocumentContextRef.current;
+      const targetFilePath = targetContext?.filePath;
+
+      if (!targetFilePath) {
+        logger.bridge.error('❌ No target file path available for streaming content');
+        return;
       }
+
+      logger.bridge.info('Calling editorRegistry.streamContent');
+      editorRegistry.streamContent(targetFilePath, currentStreamId, content);
     };
 
     const handleStreamEditEnd = async (data?: { error?: string }) => {
@@ -527,13 +594,17 @@ export function AIChat({
       }
 
       // Finalize the streaming edit in the editor
-      const aiChatBridge = (window as any).aiChatBridge;
-      if (aiChatBridge?.endStreamingEdit) {
-        logger.bridge.info('Calling bridge.endStreamingEdit');
-        aiChatBridge.endStreamingEdit(currentStreamId);
-      } else {
-        logger.bridge.info('❌ Bridge method endStreamingEdit not available!');
+      // End streaming using editorRegistry
+      const targetContext = messageDocumentContextRef.current;
+      const targetFilePath = targetContext?.filePath;
+
+      if (!targetFilePath) {
+        logger.bridge.error('❌ No target file path available for ending stream');
+        return;
       }
+
+      logger.bridge.info('Calling editorRegistry.endStreaming');
+      editorRegistry.endStreaming(targetFilePath, currentStreamId);
 
       // Update the streaming status to complete or error
       setMessages(prev => {
@@ -817,7 +888,18 @@ export function AIChat({
       // Note: Don't include getLatestContent function as it can't be serialized for IPC
     } : undefined;
 
-    console.log('[AIChat] Sending document context:', {
+    // CRITICAL: Snapshot the document context at send time
+    // This locks edits to the document that was active when the message was sent
+    if (freshDocumentContext?.filePath) {
+      messageDocumentContextRef.current = {
+        filePath: freshDocumentContext.filePath,
+        content: freshDocumentContext.content
+      };
+      logger.bridge.info(`[AIChat] Locked message to document: ${freshDocumentContext.filePath}`);
+    }
+
+    console.log('[AIChat] Sending message with document context:', {
+      filePath: freshDocumentContext?.filePath,
       hasSelection: !!freshDocumentContext?.selection,
       selectionLength: freshDocumentContext?.selection?.length,
       hasCursorPosition: !!freshDocumentContext?.cursorPosition,
@@ -826,6 +908,11 @@ export function AIChat({
       contentLength: freshDocumentContext?.content?.length,
       contentPreview: freshDocumentContext?.content?.substring(0, 100)
     });
+
+    // CRITICAL: Warn if sending without a valid file path
+    if (!freshDocumentContext?.filePath) {
+      logger.bridge.warn('Sending AI message without a valid document context - edits may fail!');
+    }
 
     // If we don't have a session, we can't send a message
     if (!currentSessionId) {
@@ -950,8 +1037,50 @@ export function AIChat({
 
   const handleApplyEdit = useCallback(async (edit: any): Promise<{ success: boolean; error?: string }> => {
     try {
+      // CRITICAL: Validate that we have a document open before applying edits
+      if (!documentContext || !documentContext.filePath) {
+        const errorMsg = 'Cannot apply edit: No active document';
+        logger.bridge.error(errorMsg);
+        errorNotificationService.showError(
+          'AI Edit Failed',
+          'No active document is open. Please open a file before requesting AI edits.',
+          { details: 'An edit was requested but no document is currently active in the editor.' }
+        );
+        return {
+          success: false,
+          error: 'No active document. Please open a file before applying edits.'
+        };
+      }
+
+      // Additional validation: ensure we have the latest content getter
+      if (!documentContext.getLatestContent) {
+        const errorMsg = 'Cannot apply edit: No content getter available';
+        logger.bridge.error(errorMsg);
+        errorNotificationService.showError(
+          'AI Edit Failed',
+          'Editor not ready. Please wait for the document to fully load before requesting AI edits.',
+          {
+            details: 'The editor is still initializing. Try again in a moment.',
+            context: { filePath: documentContext.filePath }
+          }
+        );
+        return {
+          success: false,
+          error: 'Editor not ready. Please wait for the document to fully load.'
+        };
+      }
+
+      logger.bridge.info(`Applying edit to active document: ${documentContext.filePath}`);
+
       // Apply the edit through the API - this should return a promise
       const result = await aiApi.applyEdit(edit);
+
+      if (result.success) {
+        logger.bridge.info(`Edit successfully applied to ${documentContext.filePath}`);
+      } else {
+        logger.bridge.warn(`Edit failed for ${documentContext.filePath}:`, result.error);
+      }
+
       return result;
     } catch (error) {
       logger.bridge.info('Failed to apply edit:', error);
@@ -960,7 +1089,7 @@ export function AIChat({
         error: error instanceof Error ? error.message : 'Failed to apply changes'
       };
     }
-  }, []);
+  }, [documentContext]);
 
   const handleCancelRequest = useCallback(async () => {
     try {
@@ -1335,6 +1464,7 @@ export function AIChat({
         onRenameSession={handleRenameSession}
         onOpenSessionManager={handleOpenSessionManager}
         onOpenSettings={() => window.electronAPI.openAIModels()}
+        documentContext={documentContext}
       />
 
       {hasApiKey === false ? (
@@ -1364,6 +1494,16 @@ export function AIChat({
               return effectiveModel ? getModelDisplayName(effectiveModel) : undefined;
             })()}
             hasDocument={!!documentContext && !!(documentContext.filePath || documentContext.content)}
+            currentFilePath={documentContext?.filePath}
+            onOpenFile={(filePath: string) => {
+              // Request to open a file - this should be handled by the parent App component
+              if (window.electronAPI && workspacePath) {
+                // Use IPC to open the file in the workspace
+                window.electronAPI.invoke('workspace-open-file', workspacePath, filePath).catch((err: Error) => {
+                  logger.ui.error('Failed to open file from tool call:', err);
+                });
+              }
+            }}
           />
 
           <ChatInput

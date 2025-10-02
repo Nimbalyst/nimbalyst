@@ -59,7 +59,6 @@ import ToolbarPlugin from './plugins/ToolbarPlugin';
 import TreeViewPlugin from './plugins/TreeViewPlugin';
 import SearchReplacePlugin from './plugins/SearchReplacePlugin';
 import { DiffPlugin } from './plugins/DiffPlugin';
-import { AIChatIntegrationPlugin } from './plugins/AIChatIntegrationPlugin';
 import ContentEditable from './ui/ContentEditable';
 import { AnchorProvider } from './context/AnchorContext';
 import { FrontmatterProvider } from './context/FrontmatterContext';
@@ -296,7 +295,6 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             <PageBreakPlugin />
             <LayoutPlugin />
             <DiffPlugin />
-            <AIChatIntegrationPlugin />
             <KanbanBoardPlugin />
             {/* Render any custom plugins including DocumentLinkPlugin when registered */}
             {/* Provide floating anchor element and frontmatter utilities to dynamic plugins */}

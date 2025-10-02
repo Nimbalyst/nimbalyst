@@ -1,6 +1,7 @@
 import { detectStreamingIntent, parseStreamingChunk, StreamingEditRequest } from './aiStreamProtocol';
 import { logger } from '../utils/logger';
 import type { DocumentContext, Message, SessionData } from '@stravu/runtime/ai/server/types';
+import { editorRegistry } from '@stravu/runtime';
 
 const LOG_PREVIEW_LENGTH = 400;
 
@@ -233,32 +234,34 @@ class AIApi {
     });
     
     // Listen for new AI applyDiff events
-    window.electronAPI.onAIApplyDiff(async (data: { replacements: any[], resultChannel: string }) => {
+    window.electronAPI.onAIApplyDiff(async (data: { replacements: any[], resultChannel: string, targetFilePath?: string }) => {
       try {
-        // Try to access the bridge if it's available on the window
-        const aiChatBridge = (window as any).aiChatBridge;
         const replacementCount = Array.isArray(data?.replacements) ? data.replacements.length : undefined;
         const payloadPreview = previewForLog(JSON.stringify(data));
         logger.api.info('Renderer received applyDiff request', {
           replacements: replacementCount,
+          targetFilePath: data.targetFilePath,
           preview: payloadPreview
         });
         if (replacementCount === undefined || replacementCount === 0) {
           logger.api.warn('applyDiff payload missing replacements');
         }
-        
-        if (aiChatBridge) {
-          const result = await aiChatBridge.applyReplacements(data.replacements);
-          logger.api.info('Renderer applyDiff result', result);
-          // Send result back through the result channel
-          window.electronAPI.sendMcpApplyDiffResult(data.resultChannel, result);
-        } else {
-          // No bridge available, send error
+
+        // Get target file path - require it explicitly, or fall back to first registered editor
+        const targetFilePath = data.targetFilePath || editorRegistry.getFilePaths()[0];
+
+        if (!targetFilePath) {
           window.electronAPI.sendMcpApplyDiffResult(data.resultChannel, {
             success: false,
-            error: 'Editor bridge not available'
+            error: 'No target file path available and no editor registered'
           });
+          return;
         }
+
+        const result = await editorRegistry.applyReplacements(targetFilePath, data.replacements);
+        logger.api.info('Renderer applyDiff result', result);
+        // Send result back through the result channel
+        window.electronAPI.sendMcpApplyDiffResult(data.resultChannel, result);
       } catch (error) {
         console.error('Failed to apply diff:', error);
         window.electronAPI.sendMcpApplyDiffResult(data.resultChannel, {
@@ -344,19 +347,28 @@ class AIApi {
     return window.electronAPI.aiCancelRequest();
   }
 
-  async applyEdit(edit: EditRequest): Promise<{ success: boolean; error?: string }> {
-    // Check if we have access to the AI chat bridge (only available when editor is loaded)
+  async applyEdit(edit: EditRequest, targetFilePath?: string): Promise<{ success: boolean; error?: string }> {
+    // Apply diff edits via editor registry
     try {
-      // Try to access the bridge if it's available on the window
-      const aiChatBridge = (window as any).aiChatBridge;
-      
-      // If this is a diff edit with replacements and bridge is available, use it
-      if (aiChatBridge && edit.type === 'diff' && 'replacements' in edit) {
-        logger.api.info('applyEdit via bridge', {
-          replacements: Array.isArray((edit as any).replacements) ? (edit as any).replacements.length : undefined
+      // If this is a diff edit with replacements, use the editor registry
+      if (edit.type === 'diff' && 'replacements' in edit) {
+        // Get target file path - require it explicitly, or fall back to first registered editor
+        const filePath = targetFilePath || editorRegistry.getFilePaths()[0];
+
+        if (!filePath) {
+          return {
+            success: false,
+            error: 'No target file path available and no editor registered'
+          };
+        }
+
+        logger.api.info('applyEdit via registry', {
+          replacements: Array.isArray((edit as any).replacements) ? (edit as any).replacements.length : undefined,
+          targetFilePath: filePath
         });
-        const result = await aiChatBridge.applyReplacements((edit as any).replacements);
-        logger.api.info('applyEdit result from bridge', result);
+
+        const result = await editorRegistry.applyReplacements(filePath, (edit as any).replacements);
+        logger.api.info('applyEdit result from registry', result);
         return result;
       }
 

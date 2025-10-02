@@ -279,10 +279,11 @@ async function tryCreateServer(port: number): Promise<any> {
                   resolve(enhancedResult);
                 });
 
-                // Send the request with the result channel
+                // Send the request with the result channel and target file path
                 windows[0].webContents.send('mcp:applyDiff', {
                   replacements: args.replacements,
-                  resultChannel
+                  resultChannel,
+                  targetFilePath: documentState?.filePath
                 });
               });
             }

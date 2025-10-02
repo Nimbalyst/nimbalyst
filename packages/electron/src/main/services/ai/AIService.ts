@@ -257,8 +257,9 @@ export class AIService {
 
       await providerInstance.initialize(initConfig);
 
-      // Register tool handler
-      const toolHandler = this.createToolHandler(event.sender);
+      // Register tool handler with the document context file path
+      const targetFilePath = documentContext?.filePath;
+      const toolHandler = this.createToolHandler(event.sender, targetFilePath);
       providerInstance.registerToolHandler(toolHandler);
 
       // Track provider for this window
@@ -488,8 +489,9 @@ export class AIService {
           throw initError;
         }
 
-        // Register tool handler
-        const toolHandler = this.createToolHandler(event.sender);
+        // Register tool handler with the session's document context file path
+        const targetFilePath = documentContext?.filePath;
+        const toolHandler = this.createToolHandler(event.sender, targetFilePath);
         provider.registerToolHandler(toolHandler);
       }
 
@@ -1243,12 +1245,13 @@ export class AIService {
     });
   }
 
-  private createToolHandler(webContents: Electron.WebContents): ToolHandler {
+  private createToolHandler(webContents: Electron.WebContents, targetFilePath?: string): ToolHandler {
     const executor = new ToolExecutor(webContents);
 
     return {
       applyDiff: async (args: DiffArgs): Promise<DiffResult> => {
-        return executor.applyDiff(args);
+        // Pass the targetFilePath along with the diff args
+        return executor.applyDiff({ ...args, targetFilePath });
       },
       executeTool: async (name: string, args: any): Promise<any> => {
         return executor.executeTool(name, args);

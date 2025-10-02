@@ -6,7 +6,7 @@
  * executor and the actual tool implementations.
  */
 
-import { aiChatBridge } from 'rexical';
+import { editorRegistry } from '@stravu/runtime';
 import type { DiffResult } from '@stravu/runtime/ai/server/types';
 
 export interface ToolExecutionRequest {
@@ -92,14 +92,21 @@ export class AIToolService {
   /**
    * Apply diff replacements to the current document
    */
-  private async executeApplyDiff(args: { replacements: Array<{ oldText: string; newText: string }> }): Promise<DiffResult> {
-    console.log('[AIToolService] applyDiff:', args.replacements?.length, 'replacements');
+  private async executeApplyDiff(args: { replacements: Array<{ oldText: string; newText: string }>; targetFilePath?: string }): Promise<DiffResult> {
+    console.log('[AIToolService] applyDiff:', args.replacements?.length, 'replacements', 'targetFilePath:', args.targetFilePath);
 
     if (!args?.replacements || !Array.isArray(args.replacements)) {
       throw new Error('applyDiff requires replacements array');
     }
 
-    const result = await aiChatBridge.applyReplacements(args.replacements);
+    // Get the target file path - use from args, or get the first registered editor
+    const targetFilePath = args.targetFilePath || editorRegistry.getFilePaths()[0];
+
+    if (!targetFilePath) {
+      throw new Error('No target file path available and no editor registered');
+    }
+
+    const result = await editorRegistry.applyReplacements(targetFilePath, args.replacements);
 
     if (!result?.success) {
       throw new Error(result?.error || 'Failed to apply diff');
@@ -125,19 +132,22 @@ export class AIToolService {
   /**
    * Update frontmatter in the current document
    */
-  private async executeUpdateFrontmatter(args: { updates: Record<string, any> }): Promise<DiffResult> {
-    console.log('[AIToolService] updateFrontmatter:', args.updates);
+  private async executeUpdateFrontmatter(args: { updates: Record<string, any>; targetFilePath?: string }): Promise<DiffResult> {
+    console.log('[AIToolService] updateFrontmatter:', args.updates, 'targetFilePath:', args.targetFilePath);
 
     if (!args?.updates) {
       throw new Error('updateFrontmatter requires updates object');
     }
 
-    if (!this.getContentFn) {
-      throw new Error('getContent function not set');
+    // Get the target file path - use from args, or get the first registered editor
+    const targetFilePath = args.targetFilePath || editorRegistry.getFilePaths()[0];
+
+    if (!targetFilePath) {
+      throw new Error('No target file path available and no editor registered');
     }
 
     const { parseFrontmatter, serializeWithFrontmatter } = await import('rexical');
-    const currentContent = this.getContentFn();
+    const currentContent = editorRegistry.getContent(targetFilePath);
     const { data: existingData } = parseFrontmatter(currentContent);
 
     // Separate planStatus updates from other updates
@@ -202,7 +212,7 @@ export class AIToolService {
     }
 
     // Apply the replacement
-    const result = await aiChatBridge.applyReplacements(replacements);
+    const result = await editorRegistry.applyReplacements(targetFilePath, replacements);
 
     if (!result?.success) {
       throw new Error(result?.error || 'Failed to update frontmatter');

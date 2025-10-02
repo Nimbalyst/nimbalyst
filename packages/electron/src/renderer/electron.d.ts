@@ -126,8 +126,8 @@ interface ElectronAPI {
   onAIError?: (callback: (error: any) => void) => () => void;
 
   // MCP Server operations
-  onMcpApplyDiff?: (callback: (data: { replacements: any[], resultChannel: string }) => void) => () => void;
-  onMcpStreamContent?: (callback: (data: { streamId: string, content: string, position: string, insertAfter?: string, mode?: string }) => void) => () => void;
+  onMcpApplyDiff?: (callback: (data: { replacements: any[], resultChannel: string, targetFilePath?: string }) => void) => () => void;
+  onMcpStreamContent?: (callback: (data: { streamId: string, content: string, position: string, insertAfter?: string, mode?: string, targetFilePath?: string }) => void) => () => void;
   onMcpNavigateTo?: (callback: (data: { line: number, column: number }) => void) => () => void;
   sendMcpApplyDiffResult?: (resultChannel: string, result: any) => void;
   updateMcpDocumentState?: (state: any) => Promise<void>;

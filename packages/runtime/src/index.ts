@@ -12,6 +12,10 @@ export * from './ai/sessionManager';
 export * from './ai/modelConstants';
 export * from './ai/adapters/sessionStore';
 export * from './storage/repositories/AISessionsRepository';
+// AI Chat Integration
+export { AIChatIntegrationPlugin } from './ai/plugins/AIChatIntegrationPlugin';
+export { editorRegistry } from './ai/EditorRegistry';
+export type { EditorInstance } from './ai/EditorRegistry';
 // Agents
 export * from './agents';
 // Plugins

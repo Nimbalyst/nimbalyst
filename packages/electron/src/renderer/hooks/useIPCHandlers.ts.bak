@@ -1,14 +1,13 @@
 import { useEffect, useRef } from 'react';
 import type { LexicalCommand, TextReplacement } from 'rexical';
 import {
+  aiChatBridge,
   APPROVE_DIFF_COMMAND,
   REJECT_DIFF_COMMAND,
   parseFrontmatter,
   serializeWithFrontmatter,
   type FrontmatterData,
 } from 'rexical';
-import { editorRegistry } from '@stravu/runtime';
-import { getEditorPool } from '../services/EditorPool';
 
 const PLAN_STATUS_KEYS = new Set([
   'planId',
@@ -78,7 +77,7 @@ interface UseIPCHandlersProps {
   setCurrentFilePath: (path: string | null) => void;
   setCurrentFileName: (name: string | null) => void;
   setIsDirty: (dirty: boolean) => void;
-  // NOTE: setContentVersion removed - EditorContainer doesn't need version bumping
+  setContentVersion: (setter: (v: number) => number) => void;
   setIsNewFileDialogOpen: (open: boolean) => void;
   setIsAIChatCollapsed: (collapsed: boolean) => void;
   setAIChatWidth: (width: number) => void;
@@ -86,16 +85,16 @@ interface UseIPCHandlersProps {
   setSessionToLoad: (session: { sessionId: string; workspacePath?: string } | null) => void;
   setIsHistoryDialogOpen: (open: boolean) => void;
   setIsAgentPaletteVisible: (visible: boolean) => void;
-  setTheme: (theme: any) => void;
 
   // Refs
-  // NOTE: initialContentRef removed - EditorPool tracks initialContent per-file
+  initialContentRef: React.MutableRefObject<string>;
   isInitializedRef: React.MutableRefObject<boolean>;
   isDirtyRef: React.MutableRefObject<boolean>;
-  // NOTE: contentVersionRef removed - EditorContainer doesn't need version bumping
+  contentVersionRef: React.MutableRefObject<number>;
   getContentRef: React.MutableRefObject<(() => string) | null>;
   editorRef: React.MutableRefObject<any>;
   searchCommandRef: React.MutableRefObject<LexicalCommand<undefined> | null>;
+  lastSaveTimeRef: React.MutableRefObject<number>;
 
   // State values
   currentFilePath: string | null;
@@ -107,6 +106,7 @@ interface UseIPCHandlersProps {
 
   // Tabs object
   tabs: any;
+  tabPreferences: any;
 
   // Logging configuration
   LOG_CONFIG: {
@@ -143,7 +143,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
-    // NOTE: setContentVersion removed - not needed for EditorContainer
+    setContentVersion,
     setIsNewFileDialogOpen,
     setIsAIChatCollapsed,
     setAIChatWidth,
@@ -151,15 +151,16 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setSessionToLoad,
     setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
-    setTheme,
 
     // Refs
+    initialContentRef,
     isInitializedRef,
     isDirtyRef,
-    // NOTE: contentVersionRef removed - not needed for EditorContainer
+    contentVersionRef,
     getContentRef,
     editorRef,
     searchCommandRef,
+    lastSaveTimeRef,
 
     // State values
     currentFilePath,
@@ -171,6 +172,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     // Tabs
     tabs,
+    tabPreferences,
 
     // Config
     LOG_CONFIG
@@ -193,6 +195,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
+    setContentVersion,
     setIsNewFileDialogOpen,
     setIsAIChatCollapsed,
     setAIChatWidth,
@@ -200,7 +203,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setSessionToLoad,
     setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
-    tabs,  // Add tabs so IPC handlers can create/modify tabs
   });
 
   const stateRef = useRef({
@@ -211,6 +213,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     sessionToLoad,
     isDirty,
     tabs,
+    tabPreferences,
   });
 
   // Update refs whenever values change
@@ -230,6 +233,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
+    setContentVersion,
     setIsNewFileDialogOpen,
     setIsAIChatCollapsed,
     setAIChatWidth,
@@ -237,8 +241,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setSessionToLoad,
     setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
-    setTheme,
-    tabs,  // Keep tabs updated in ref
   };
 
   stateRef.current = {
@@ -249,12 +251,13 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     sessionToLoad,
     isDirty,
     tabs,
+    tabPreferences,
   };
 
   useEffect(() => {
-    if (!window.electronAPI) {
-      return;
-    }
+    if (!window.electronAPI) return;
+
+    if (LOG_CONFIG.IPC_LISTENERS) console.log('[IPC] Setting up IPC listeners (one-time registration)');
 
     // Check for first launch (no API key configured)
     const checkFirstLaunch = async () => {
@@ -307,7 +310,9 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       handlersRef.current.setCurrentFileName(null);
       isDirtyRef.current = false;
       handlersRef.current.setIsDirty(false);
-      // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
+      contentVersionRef.current += 1;
+      handlersRef.current.setContentVersion(v => v + 1);
+      handlersRef.current.setContentVersion(v => v + 1);
       isInitializedRef.current = false;
 
       // Restore AI Chat state when opening a workspace
@@ -328,7 +333,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }
 
       // Open welcome tab if no tabs are open
-      if (stateRef.current.tabs && stateRef.current.tabs.tabs.length === 0) {
+      if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.tabs.length === 0) {
         console.log('[WORKSPACE] No tabs open, opening welcome tab');
         // Delay slightly to ensure workspace state is fully set
         setTimeout(() => handlersRef.current.openWelcomeTab(), 100);
@@ -367,39 +372,17 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }
 
     cleanupFns.push(window.electronAPI.onFileOpenedFromOS(async (data) => {
-      console.log('[FILE_OPS] ✓✓✓ File opened from OS event received:', data.filePath);
-      // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
+      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] File opened from OS:', data.filePath);
+      contentVersionRef.current += 1;
+      handlersRef.current.setContentVersion(v => v + 1);
+      handlersRef.current.setContentVersion(v => v + 1);
       isInitializedRef.current = false;
+      contentRef.current = data.content;
       handlersRef.current.setCurrentFilePath(data.filePath);
       handlersRef.current.setCurrentFileName(data.filePath.split('/').pop() || data.filePath);
       isDirtyRef.current = false;
       handlersRef.current.setIsDirty(false);
-      // NOTE: initialContentRef removed - EditorPool tracks this per-file
-
-      // Add tab for the opened file (works for both single-file and workspace modes)
-      console.log('[FILE_OPS] Checking tabs object:', !!handlersRef.current.tabs);
-      if (handlersRef.current.tabs) {
-        console.log('[FILE_OPS] Adding tab for file opened from OS:', data.filePath);
-
-        // Create EditorPool instance BEFORE creating tab
-        // EditorContainer expects the instance to exist
-        const editorPool = getEditorPool();
-
-        if (!editorPool.has(data.filePath)) {
-          console.log('[FILE_OPS] Creating EditorPool instance for:', data.filePath);
-          editorPool.create(data.filePath, data.content);
-        }
-
-        const tabId = handlersRef.current.tabs.addTab(data.filePath, data.content);
-        console.log('[FILE_OPS] addTab returned:', tabId);
-        if (tabId) {
-          console.log('[FILE_OPS] Tab added with ID:', tabId);
-        } else {
-          console.warn('[FILE_OPS] Failed to add tab - max tabs reached or addTab returned falsy');
-        }
-      } else {
-        console.error('[FILE_OPS] tabs object not available in handlersRef!');
-      }
+      initialContentRef.current = data.content;
 
       // Create automatic snapshot when file is opened from OS
       if (window.electronAPI.history) {
@@ -438,10 +421,11 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }));
     cleanupFns.push(window.electronAPI.onNewUntitledDocument((data) => {
       console.log('Received new-untitled-document event:', data.untitledName);
+      contentRef.current = '';
       handlersRef.current.setCurrentFilePath(null);
       handlersRef.current.setCurrentFileName(data.untitledName);
       // setIsDirty(true); // New documents start as dirty
-      // NOTE: initialContentRef removed - EditorPool tracks this per-file
+      initialContentRef.current = '';
       // Update the window title immediately
       if (window.electronAPI) {
         window.electronAPI.setTitle(`${data.untitledName} • - Preditor`);
@@ -462,10 +446,11 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }));
     cleanupFns.push(window.electronAPI.onFileDeleted((data) => {
       console.log('[FILE_DELETED] File deleted event received:', data.filePath);
+      // console.log('[FILE_DELETED] Tab preferences enabled:', stateRef.current.tabPreferences.preferences.enabled);
       // console.log('[FILE_DELETED] Tabs object:', stateRef.current.tabs);
 
-      // Find and close the tab for this file
-      if (stateRef.current.tabs) {
+      // If tabs are enabled, find and close the tab for this file
+      if (stateRef.current.tabPreferences.preferences.enabled) {
         const tabToClose = stateRef.current.tabs.findTabByPath(data.filePath);
         // console.log('[FILE_DELETED] Tab to close:', tabToClose);
         if (tabToClose) {
@@ -478,6 +463,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             handlersRef.current.setCurrentFilePath(null);
             isDirtyRef.current = false;
             handlersRef.current.setIsDirty(false);
+            contentRef.current = '';
           }
 
           stateRef.current.tabs.removeTab(tabToClose.id);
@@ -499,25 +485,25 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     // Handle file changes on disk
     if (window.electronAPI.onFileChangedOnDisk) {
       cleanupFns.push(window.electronAPI.onFileChangedOnDisk(async (data) => {
-        console.log('[FILE_WATCH] File changed on disk event received:', data.path);
+        // console.log('[FILE_WATCH] File changed on disk event received:', data.path);
 
-        // Check if we should reload - tabs are always enabled now
+        // CRITICAL: Check if we're in tab mode and if this is the active tab's file
         let shouldReload = false;
         let fileToCheck = stateRef.current.currentFilePath;
 
-        if (stateRef.current.tabs && stateRef.current.tabs.activeTab) {
-          // Check if it's the active tab's file
+        if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.activeTab) {
+          // In tab mode, only reload if it's the active tab's file
           fileToCheck = stateRef.current.tabs.activeTab.filePath;
           shouldReload = (fileToCheck === data.path);
-          console.log('[FILE_WATCH] Active tab check:', {
+          console.log('[FILE_WATCH] Tab mode check:', {
             activeTabPath: fileToCheck,
             changedPath: data.path,
             shouldReload
           });
         } else {
-          // Fallback: check against current file
+          // In single-file mode, check against current file
           shouldReload = (stateRef.current.currentFilePath === data.path);
-          console.log('[FILE_WATCH] Current file check:', {
+          console.log('[FILE_WATCH] Single-file mode check:', {
             currentPath: stateRef.current.currentFilePath,
             changedPath: data.path,
             shouldReload
@@ -525,8 +511,12 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         }
 
         if (shouldReload) {
-          // NOTE: EditorContainer now handles file watching with per-file lastSaveTime tracking
-          // This legacy handler is still here but should be removed in future cleanup
+          // Check if this change is from our own save (within 2 seconds)
+          const timeSinceLastSave = Date.now() - lastSaveTimeRef.current;
+          if (timeSinceLastSave < 2000) {
+            console.log('[FILE_WATCH] Ignoring file change, was just saved', timeSinceLastSave, 'ms ago');
+            return;
+          }
 
           // The current file was changed on disk
           try {
@@ -536,7 +526,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
               : await window.electronAPI.switchWorkspaceFile(data.path);
             if (result && result.content !== undefined) {
               // Get current content from the editor
-              const currentContent = getContentRef.current ? getContentRef.current() : '';
+              const currentContent = getContentRef.current ? getContentRef.current() : contentRef.current;
 
               console.log('[FILE CHANGE] Content comparison:', {
                 diskLength: result.content.length,
@@ -554,28 +544,14 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
               }
 
               // Content is different, handle based on dirty state
-              // Check EditorPool for actual dirty state (more reliable than isDirtyRef)
-              const editorPool = getEditorPool();
-              const instance = editorPool.get(data.path);
-              const isFileDirty = instance?.isDirty ?? false;
-
-              if (!isFileDirty) {
+              if (!isDirtyRef.current) {
                 // File is not dirty, reload it automatically
                 console.log('[FILE_WATCH] File is not dirty, reloading from disk');
                 console.log('[FILE_WATCH] Loading content for path:', data.path, 'first 100 chars:', result.content.substring(0, 100));
-
-                // Update EditorPool instance with new content and increment reload version
-                if (editorPool.has(data.path)) {
-                  const currentVersion = instance?.reloadVersion ?? 0;
-                  console.log('[FILE_WATCH] Incrementing reloadVersion for:', data.path, 'from', currentVersion, 'to', currentVersion + 1);
-                  editorPool.update(data.path, {
-                    content: result.content,
-                    initialContent: result.content,
-                    isDirty: false,
-                    reloadVersion: currentVersion + 1
-                  });
-                }
-
+                contentRef.current = result.content;
+                initialContentRef.current = result.content;
+                contentVersionRef.current += 1;
+                handlersRef.current.setContentVersion(v => v + 1);  // Trigger re-render and remount editor
                 // Reset the getContentRef since editor will remount
                 getContentRef.current = null;
                 // Ensure editor is not marked as dirty
@@ -596,31 +572,14 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
                 if (choice) {
                   // User chose to reload from disk
-                  console.log('[FILE_WATCH] User chose to reload from disk, updating EditorPool');
-
-                  // Update EditorPool instance with new content and increment reload version
-                  const editorPool = getEditorPool();
-                  if (editorPool.has(data.path)) {
-                    const instance = editorPool.get(data.path);
-                    const currentVersion = instance?.reloadVersion ?? 0;
-                    console.log('[FILE_WATCH] Incrementing reloadVersion for:', data.path, 'from', currentVersion, 'to', currentVersion + 1);
-                    editorPool.update(data.path, {
-                      content: result.content,
-                      initialContent: result.content,
-                      isDirty: false,
-                      reloadVersion: currentVersion + 1
-                    });
-                  }
-
+                  contentRef.current = result.content;
+                  initialContentRef.current = result.content;
+                  contentVersionRef.current += 1;
+                  handlersRef.current.setContentVersion(v => v + 1);  // Trigger re-render and remount editor
                   // Reset the getContentRef since editor will remount
                   getContentRef.current = null;
                   isDirtyRef.current = false;
                   handlersRef.current.setIsDirty(false);
-
-                  // Update the tab's content
-                  if (stateRef.current.tabs.activeTab && stateRef.current.tabs.activeTab.filePath === data.path) {
-                    stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTab.id, { content: result.content });
-                  }
                 }
                 // If user chose Cancel, we just keep the current changes
               }
@@ -654,12 +613,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }
     }));
     cleanupFns.push(window.electronAPI.onThemeChange((newTheme) => {
+      if (LOG_CONFIG.THEME) console.log('[THEME] Theme changed to:', newTheme);
       const editorTheme = newTheme === 'system' ? 'auto' : newTheme;
-
-      // Apply theme immediately for instant visual feedback
-      if (handlersRef.current.setTheme) {
-        handlersRef.current.setTheme(editorTheme);
-      }
 
       // Flush unsaved changes to disk before visual reset, when possible
       const flushAndReload = async () => {
@@ -670,12 +625,12 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
               if (LOG_CONFIG.THEME) console.log('[THEME] Dirty before theme switch. Saving to disk...');
               const result = await window.electronAPI?.saveFile(content, stateRef.current.currentFilePath);
               if (result?.success) {
-                // NOTE: lastSaveTime now tracked in EditorPool per-file
+                lastSaveTimeRef.current = Date.now();
                 isDirtyRef.current = false;
                 handlersRef.current.setIsDirty(false);
-                // NOTE: initialContentRef removed - EditorPool tracks this per-file
+                initialContentRef.current = content;
                 // Reflect clean state in active tab UI
-                if (stateRef.current.tabs && stateRef.current.tabs.activeTabId) {
+                if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.activeTabId) {
                   stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { isDirty: false });
                 }
                 if (LOG_CONFIG.THEME) console.log('[THEME] Saved successfully before theme switch');
@@ -688,19 +643,23 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             if (window.electronAPI?.readFileContent) {
               const res = await window.electronAPI.readFileContent(stateRef.current.currentFilePath);
               if (res?.content !== undefined) {
-                // NOTE: initialContentRef removed - EditorPool tracks this per-file
-                // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
+                contentRef.current = res.content;
+                initialContentRef.current = res.content;
+                contentVersionRef.current += 1;
+                handlersRef.current.setContentVersion(v => v + 1);
                 // Keep tab content in sync
-                if (stateRef.current.tabs && stateRef.current.tabs.activeTabId) {
+                if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.activeTabId) {
                   stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { content: res.content });
                 }
               }
             } else if (window.electronAPI?.switchWorkspaceFile) {
               const res = await window.electronAPI.switchWorkspaceFile(stateRef.current.currentFilePath);
               if (res?.content !== undefined) {
-                // NOTE: initialContentRef removed - EditorPool tracks this per-file
-                // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
-                if (stateRef.current.tabs && stateRef.current.tabs.activeTabId) {
+                contentRef.current = res.content;
+                initialContentRef.current = res.content;
+                contentVersionRef.current += 1;
+                handlersRef.current.setContentVersion(v => v + 1);
+                if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.activeTabId) {
                   stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { content: res.content });
                 }
               }
@@ -708,6 +667,10 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
           }
         } catch (err) {
           console.error('[THEME] Error flushing/reloading content on theme change:', err);
+        } finally {
+          // Apply theme after content rehydration
+          // Note: This relies on theme state setter in parent component
+          // The parent will need to handle setTheme
         }
       };
 
@@ -792,7 +755,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     // Tab navigation handlers
     if (window.electronAPI.onNextTab) {
       cleanupFns.push(window.electronAPI.onNextTab(() => {
-        if (stateRef.current.tabs && stateRef.current.tabs.tabs.length > 1) {
+        if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.tabs.length > 1) {
           const currentIndex = stateRef.current.tabs.tabs.findIndex(tab => tab.id === stateRef.current.tabs.activeTabId);
           const nextIndex = (currentIndex + 1) % stateRef.current.tabs.tabs.length;
           const nextTab = stateRef.current.tabs.tabs[nextIndex];
@@ -805,7 +768,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     if (window.electronAPI.onPreviousTab) {
       cleanupFns.push(window.electronAPI.onPreviousTab(() => {
-        if (stateRef.current.tabs && stateRef.current.tabs.tabs.length > 1) {
+        if (stateRef.current.tabPreferences.preferences.enabled && stateRef.current.tabs.tabs.length > 1) {
           const currentIndex = stateRef.current.tabs.tabs.findIndex(tab => tab.id === stateRef.current.tabs.activeTabId);
           const prevIndex = currentIndex <= 0 ? stateRef.current.tabs.tabs.length - 1 : currentIndex - 1;
           const prevTab = stateRef.current.tabs.tabs[prevIndex];
@@ -841,18 +804,11 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     // MCP Server handlers
     if (window.electronAPI.onMcpApplyDiff) {
-      cleanupFns.push(window.electronAPI.onMcpApplyDiff(async ({ replacements, resultChannel, targetFilePath }) => {
-        console.log('[MCP] applyDiff request:', replacements, 'targetFilePath:', targetFilePath);
+      cleanupFns.push(window.electronAPI.onMcpApplyDiff(async ({ replacements, resultChannel }) => {
+        console.log('MCP applyDiff request:', replacements);
         try {
-          // Use the explicit targetFilePath from the IPC message, or fall back to first registered editor
-          const filePath = targetFilePath || editorRegistry.getFilePaths()[0];
-
-          if (!filePath) {
-            console.error('[MCP] No target file path available for applyDiff');
-            return;
-          }
-          // Use the editor registry to apply replacements to the target file
-          const result = await editorRegistry.applyReplacements(filePath, replacements);
+          // Use the AI chat bridge to apply replacements
+          const result = await aiChatBridge.applyReplacements(replacements);
 
           // Ensure result is defined and has the expected shape
           const finalResult = result || { success: false, error: 'No result returned from diff application' };
@@ -894,18 +850,10 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }
 
     if (window.electronAPI.onMcpStreamContent) {
-      cleanupFns.push(window.electronAPI.onMcpStreamContent(({ streamId, content, position, insertAfter, mode, targetFilePath }) => {
-        console.log('[MCP] streamContent request:', { streamId, position, mode, targetFilePath });
-
-        // Use the explicit targetFilePath from the IPC message, or fall back to first registered editor
-        const filePath = targetFilePath || editorRegistry.getFilePaths()[0];
-
-        if (!filePath) {
-          console.error('[MCP] No target file path available for streamContent');
-          return;
-        }
+      cleanupFns.push(window.electronAPI.onMcpStreamContent(({ streamId, content, position, insertAfter, mode }) => {
+        console.log('MCP streamContent request:', { streamId, position, mode });
         // Start streaming
-        editorRegistry.startStreaming(filePath, {
+        aiChatBridge.startStreamingEdit({
           id: streamId,
           position: position || 'cursor',
           mode, // Don't default - let the plugin choose based on context (insertAtEnd, etc)
@@ -914,9 +862,9 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
           insertAtEnd: position === 'end' || position === 'end of document'
         });
         // Stream the content
-        editorRegistry.streamContent(filePath, streamId, content);
+        aiChatBridge.streamContent(streamId, content);
         // End streaming
-        editorRegistry.endStreaming(filePath, streamId);
+        aiChatBridge.endStreamingEdit(streamId);
       }));
     }
 
@@ -962,11 +910,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       cleanupFns.push(window.electronAPI.onAIUpdateFrontmatter(async ({ updates, resultChannel }) => {
         console.log('AI updateFrontmatter request:', updates);
         try {
-          if (!currentFilePath) {
-            console.error('[AI] No file path available for updateFrontmatter');
-            return;
-          }
-          const currentContent = editorRegistry.getContent(currentFilePath);
+          const currentContent = aiChatBridge.getContent();
           const { data: existingData } = parseFrontmatter(currentContent);
 
           const normalizedUpdates: Record<string, unknown> = { ...updates };
@@ -1019,7 +963,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
           }
 
           // Apply the replacement
-          const result = await editorRegistry.applyReplacements(currentFilePath, replacements);
+          const result = await aiChatBridge.applyReplacements(replacements);
           const finalResult = result || { success: false, error: 'Failed to update frontmatter' };
 
           if (window.electronAPI.sendAIUpdateFrontmatterResult) {

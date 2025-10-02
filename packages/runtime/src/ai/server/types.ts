@@ -29,6 +29,7 @@ export interface Message {
     name: string;
     arguments?: any;
     result?: any;
+    targetFilePath?: string;  // File path this tool call was executed against
   };
   isError?: boolean;
   errorMessage?: string;

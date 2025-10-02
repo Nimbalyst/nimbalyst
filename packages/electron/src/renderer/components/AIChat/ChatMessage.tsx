@@ -20,6 +20,7 @@ interface ChatMessageProps {
     name: string;
     arguments?: any;
     result?: any;
+    targetFilePath?: string;
   };
   isStreaming?: boolean;
   isError?: boolean;
@@ -27,6 +28,9 @@ interface ChatMessageProps {
   onApplyEdit?: (edit: EditRequest) => Promise<{ success: boolean; error?: string }>;
   onReapply?: (args: any) => void;
   provider?: string;  // Provider for showing appropriate icon
+  hasDocument?: boolean;  // Whether a document is currently open
+  currentFilePath?: string;  // Currently active file path
+  onOpenFile?: (filePath: string) => void;  // Callback to open a file
 }
 
 const ChatMessageComponent = ({
@@ -39,7 +43,10 @@ const ChatMessageComponent = ({
   errorMessage,
   onApplyEdit,
   onReapply,
-  provider
+  provider,
+  hasDocument = true,
+  currentFilePath,
+  onOpenFile
 }: ChatMessageProps) => {
   const [expandedEdits, setExpandedEdits] = useState(false);
   const [appliedEdits, setAppliedEdits] = useState<Set<number>>(new Set());
@@ -158,6 +165,10 @@ const ChatMessageComponent = ({
             result={toolCall.result}
             errorMessage={errorMessage}
             onReapply={onReapply}
+            hasDocument={hasDocument}
+            targetFilePath={toolCall.targetFilePath}
+            currentFilePath={currentFilePath}
+            onOpenFile={onOpenFile}
           />
         </div>
       </div>

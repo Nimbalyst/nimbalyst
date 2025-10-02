@@ -8,9 +8,24 @@ interface ToolCallBlockProps {
   errorMessage?: string;
   isLoading?: boolean;
   onReapply?: (args: any) => void;
+  hasDocument?: boolean;  // Whether a document is currently open
+  targetFilePath?: string;  // The file path this tool call was executed against
+  currentFilePath?: string;  // The currently active file path
+  onOpenFile?: (filePath: string) => void;  // Callback to open a file
 }
 
-export function ToolCallBlock({ toolName, arguments: args, result, errorMessage, isLoading, onReapply }: ToolCallBlockProps) {
+export function ToolCallBlock({
+  toolName,
+  arguments: args,
+  result,
+  errorMessage,
+  isLoading,
+  onReapply,
+  hasDocument = true,
+  targetFilePath,
+  currentFilePath,
+  onOpenFile
+}: ToolCallBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Extract the actual tool name from MCP format (e.g., "mcp__stravu-editor__applyDiff" -> "applyDiff")
@@ -215,6 +230,20 @@ export function ToolCallBlock({ toolName, arguments: args, result, errorMessage,
     return null;
   };
 
+  // Check if this tool call targets a different file than the current one
+  const isDifferentFile = targetFilePath && currentFilePath && targetFilePath !== currentFilePath;
+  const fileName = targetFilePath ? targetFilePath.split('/').pop() || targetFilePath : undefined;
+
+  // Debug logging
+  if (targetFilePath) {
+    console.log('[ToolCallBlock] Target file debug:', {
+      targetFilePath,
+      currentFilePath,
+      isDifferentFile,
+      fileName
+    });
+  }
+
   return (
     <div className="ai-chat-tool-box">
       <div
@@ -237,6 +266,46 @@ export function ToolCallBlock({ toolName, arguments: args, result, errorMessage,
           <span className="ai-chat-tool-badge ai-chat-tool-badge--error">Failed</span>
         )}
       </div>
+
+      {/* Show target file path - always show for applyDiff calls to make it clear */}
+      {targetFilePath && (displayName === 'applyDiff' || isDifferentFile) && (
+        <div className="ai-chat-tool-target-file" style={{
+          padding: '4px 8px',
+          marginTop: '4px',
+          backgroundColor: 'var(--color-info-bg, #d1ecf1)',
+          color: 'var(--color-info-text, #0c5460)',
+          borderRadius: '4px',
+          fontSize: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px'
+        }}>
+          <span>📄 Target:</span>
+          {onOpenFile ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenFile(targetFilePath);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'inherit',
+                textDecoration: 'underline',
+                cursor: 'pointer',
+                padding: 0,
+                font: 'inherit'
+              }}
+              title={`Open ${targetFilePath}`}
+            >
+              {fileName}
+            </button>
+          ) : (
+            <span title={targetFilePath}>{fileName}</span>
+          )}
+          {isDifferentFile && <span style={{ opacity: 0.7 }}>(not currently active)</span>}
+        </div>
+      )}
 
       {isExpanded && (
         <div className="ai-chat-tool-content-wrapper">
@@ -274,10 +343,17 @@ export function ToolCallBlock({ toolName, arguments: args, result, errorMessage,
           {/* Show reapply button for applyDiff tool calls */}
           {(displayName === 'applyDiff' || toolName.endsWith('__applyDiff')) && !isLoading && onReapply && (
             <div className="ai-chat-tool-status">
+              {!hasDocument && (
+                <div className="ai-chat-tool-warning" style={{ marginBottom: '8px', padding: '8px', backgroundColor: 'var(--color-warning-bg, #fff3cd)', color: 'var(--color-warning-text, #856404)', borderRadius: '4px', fontSize: '12px' }}>
+                  ⚠️ No active document - open a file to reapply this edit
+                </div>
+              )}
               <button
                 className="ai-chat-tool-reapply"
                 onClick={() => onReapply(args)}
-                title="Reapply this diff"
+                disabled={!hasDocument}
+                title={hasDocument ? "Reapply this diff" : "Cannot reapply: No active document"}
+                style={!hasDocument ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
               >
                 Reapply
               </button>

@@ -37,11 +37,12 @@ export class ToolExecutor extends EventEmitter {
   /**
    * Execute applyDiff tool
   */
-  async applyDiff(args: DiffArgs): Promise<DiffResult> {
+  async applyDiff(args: DiffArgs & { targetFilePath?: string }): Promise<DiffResult> {
     const resultChannel = `applyDiff-result-${Date.now()}`;
     const replacementCount = Array.isArray(args?.replacements) ? args.replacements.length : undefined;
     logger.ai.info('[ToolExecutor] applyDiff invoked', {
       replacements: replacementCount,
+      targetFilePath: args.targetFilePath,
       preview: previewForLog(JSON.stringify(args ?? {}))
     });
     if (replacementCount === undefined || replacementCount === 0) {
@@ -55,18 +56,19 @@ export class ToolExecutor extends EventEmitter {
         logger.ai.error('[ToolExecutor] applyDiff timed out');
         reject(new Error('applyDiff execution timed out'));
       }, 30000);
-      
+
       // Set up one-time listener for result
       ipcMain.once(resultChannel, (event, result: DiffResult) => {
         clearTimeout(timeout);
         logger.ai.info('[ToolExecutor] applyDiff result received', result);
         resolve(result);
       });
-      
-      // Send to renderer
+
+      // Send to renderer with explicit targetFilePath
       this.webContents.send('ai:applyDiff', {
         replacements: args.replacements,
-        resultChannel
+        resultChannel,
+        targetFilePath: args.targetFilePath
       });
     });
   }

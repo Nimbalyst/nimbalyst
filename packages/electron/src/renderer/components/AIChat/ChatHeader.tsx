@@ -30,6 +30,9 @@ interface ChatHeaderProps {
   onRenameSession?: (sessionId: string, newName: string) => void;
   onOpenSessionManager?: () => void;
   onOpenSettings?: () => void;
+
+  // Debug
+  documentContext?: { filePath?: string } | null;
 }
 
 export function ChatHeader({
@@ -47,8 +50,68 @@ export function ChatHeader({
   onDeleteSession,
   onRenameSession,
   onOpenSessionManager,
-  onOpenSettings
+  onOpenSettings,
+  documentContext
 }: ChatHeaderProps) {
+
+  // Debug button to test streaming validation
+  const handleTestStream = () => {
+    const bridge = (window as any).aiChatBridge;
+    if (!bridge) {
+      alert('Bridge not available');
+      return;
+    }
+
+    const testId = 'test-stream-' + Date.now();
+    const targetPath = documentContext?.filePath;
+
+    console.error('[TEST] Starting test stream with targetFilePath:', targetPath);
+
+    // Start streaming with target file path
+    bridge.startStreamingEdit({
+      id: testId,
+      insertAtEnd: true,
+      targetFilePath: targetPath
+    });
+
+    // Stream some content
+    setTimeout(() => {
+      bridge.streamContent(testId, '\n\n## Test Stream Insert\n\n');
+    }, 100);
+
+    setTimeout(() => {
+      bridge.streamContent(testId, 'This is a test streaming insertion.\n\n');
+    }, 200);
+
+    setTimeout(() => {
+      bridge.endStreamingEdit(testId);
+      console.error('[TEST] Test stream complete');
+    }, 300);
+  };
+
+  // Debug button to test diff validation
+  const handleTestDiff = async () => {
+    const bridge = (window as any).aiChatBridge;
+    if (!bridge) {
+      alert('Bridge not available');
+      return;
+    }
+
+    const targetPath = documentContext?.filePath;
+    console.error('[TEST] Starting test diff with targetFilePath:', targetPath);
+
+    // Create a simple diff replacement using the correct format
+    const replacements = [
+      {
+        oldText: '# B',
+        newText: '# B\n\n## Test Diff Insert\n\nThis was added via applyReplacements (diff).',
+        type: 'replace'
+      }
+    ];
+
+    const result = await bridge.applyReplacements(replacements, targetPath);
+    console.error('[TEST] Test diff result:', result);
+  };
   // Get current session's model info for display
   const getCurrentSessionModel = () => {
     if (currentSessionId) {
@@ -108,6 +171,26 @@ export function ChatHeader({
 
         </h3>
         <div className="ai-chat-header-actions">
+          {/* Debug buttons to test validation */}
+          <button
+            className="ai-chat-action-button"
+            onClick={handleTestStream}
+            title="Test Stream (Debug)"
+            aria-label="Test Stream"
+            style={{ backgroundColor: '#ff6b6b', color: 'white' }}
+          >
+            <MaterialSymbol icon="bug_report" size={18} />
+          </button>
+          <button
+            className="ai-chat-action-button"
+            onClick={handleTestDiff}
+            title="Test Diff (Debug)"
+            aria-label="Test Diff"
+            style={{ backgroundColor: '#51cf66', color: 'white' }}
+          >
+            <MaterialSymbol icon="difference" size={18} />
+          </button>
+
           {onTogglePerformanceMetrics && (
             <button
               className="ai-chat-action-button"

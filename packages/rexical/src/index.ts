@@ -103,6 +103,12 @@ export {
   $convertFromEnhancedMarkdownString // This is the main function to use!
 } from './markdown/EnhancedMarkdownImport';
 
+// Enhanced markdown export
+export {
+  $convertToEnhancedMarkdownString,
+  $convertNodeToEnhancedMarkdownString
+} from './markdown/EnhancedMarkdownExport';
+
 // Export our forked markdown import (prefer $convertFromEnhancedMarkdownString instead)
 export { $convertFromMarkdownStringRexical } from './markdown/LexicalMarkdownImport';
 
@@ -115,13 +121,11 @@ export {
   $approveDiffs,
   $rejectDiffs,
   $hasDiffNodes,
+  $setDiffState,
   APPROVE_DIFF_COMMAND,
   REJECT_DIFF_COMMAND,
   type TextReplacement
 } from './plugins/DiffPlugin/core/exports';
-
-// AI Chat integration
-export { aiChatBridge } from './plugins/AIChatIntegrationPlugin';
 
 // Anchor context for floating UI consumers
 export { AnchorProvider, AnchorContext, useAnchorElem } from './context/AnchorContext';
