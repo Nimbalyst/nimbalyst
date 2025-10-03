@@ -377,3 +377,4 @@ After the frontmatter, plans should include:
 - **Updating plans**: Preserve user edits, append updates rather than overwriting
 - **Status tracking**: Update `status`, `progress`, and `updated` fields as work progresses
 - **Collaboration**: Plans support both human and agent contributors
+- Never use emojis

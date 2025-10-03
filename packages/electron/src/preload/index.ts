@@ -104,6 +104,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('open-welcome-tab', callback);
     return () => ipcRenderer.removeListener('open-welcome-tab', callback);
   },
+  onOpenPlansTab: (callback: () => void) => {
+    ipcRenderer.on('open-plans-tab', callback);
+    return () => ipcRenderer.removeListener('open-plans-tab', callback);
+  },
   onFileDeleted: (callback: (data: { filePath: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('file-deleted', handler);

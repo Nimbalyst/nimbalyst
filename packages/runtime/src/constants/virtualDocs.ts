@@ -13,6 +13,12 @@ export const VIRTUAL_DOCS: Record<string, VirtualDocumentDescriptor> = {
     assetPath: 'assets/welcome.md',
     virtualPath: `${VIRTUAL_DOC_PROTOCOL}welcome`,
   },
+  PLANS: {
+    id: 'plans',
+    title: 'All Plans',
+    assetPath: 'assets/plans.md',
+    virtualPath: `${VIRTUAL_DOC_PROTOCOL}plans`,
+  },
 };
 
 /**

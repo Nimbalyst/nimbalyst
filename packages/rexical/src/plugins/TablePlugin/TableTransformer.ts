@@ -185,7 +185,7 @@ function getTableColumnsSize(table: TableNode) {
 const $createTableCell = (textContent: string): TableCellNode => {
   textContent = textContent.replace(/\\n/g, '\n');
   const cell = $createTableCellNode(TableCellHeaderStates.NO_STATUS);
-  $convertFromEnhancedMarkdownString(textContent, getTransformers(), cell, false, false);
+  $convertFromEnhancedMarkdownString(textContent, getTransformers(), cell, true, false);
   return cell;
 };
 

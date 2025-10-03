@@ -600,6 +600,16 @@ export async function createApplicationMenu() {
                 },
                 { type: 'separator' },
                 {
+                    label: 'All Plans',
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('open-plans-tab');
+                        }
+                    }
+                },
+                { type: 'separator' },
+                {
                     label: 'Agents',
                     submenu: [
                         {

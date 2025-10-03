@@ -166,6 +166,11 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
             }
           }
 
+          // DEBUG: Check if content has blank lines
+          // console.log('[EDITOR_CONTAINER_DEBUG] Creating editor with content:');
+          // console.log('[EDITOR_CONTAINER_DEBUG] First 200 chars:', JSON.stringify(content.substring(0, 200)));
+          // console.log('[EDITOR_CONTAINER_DEBUG] Split by newline:', content.split('\n').slice(0, 10).map((line, i) => `Line ${i}: "${line}"`));
+
           editorPool.create(tab.filePath, content || '');
           logger.ui.info(`[EditorContainer] Created editor instance for tab: ${tab.fileName}`);
         }

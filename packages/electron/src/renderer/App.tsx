@@ -31,6 +31,7 @@ import { useTabNavigation } from './hooks/useTabNavigation';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
+import { registerItemTrackerPlugin } from './plugins/registerItemTrackerPlugin';
 import './WorkspaceWelcome.css';
 import './components/AIModels/AIModelsRedesigned.css';
 
@@ -62,6 +63,7 @@ let pluginsRegistered = false;
 if (!pluginsRegistered) {
   registerDocumentLinkPlugin();
   registerPlanStatusPlugin();
+  registerItemTrackerPlugin();
   registerAIChatPlugin();
   pluginsRegistered = true;
 }
@@ -528,6 +530,36 @@ export default function App() {
     }
   }, [tabs, setIsDirty, setCurrentFileName, setCurrentFilePath]);
 
+  // Open the plans tab - virtual document
+  const openPlansTab = useCallback(async () => {
+    const virtualPath = 'virtual://plans';
+
+    // Check if plans tab is already open
+    const existingTab = tabs.findTabByPath(virtualPath);
+    if (existingTab) {
+      tabs.switchTab(existingTab.id);
+      return;
+    }
+
+    try {
+      const content = await (window.electronAPI.documentService as any).loadVirtual(virtualPath);
+
+      if (!content) {
+        console.error('[PLANS] Failed to load plans document - content is null or undefined');
+        return;
+      }
+
+      // Add the plans tab
+      const tabId = tabs.addTab(virtualPath, content);
+      if (tabId) {
+        // Mark the tab as virtual
+        tabs.updateTab(tabId, { isVirtual: true });
+      }
+    } catch (error) {
+      console.error('[PLANS] Failed to open plans tab:', error);
+    }
+  }, [tabs]);
+
   // Update window title and dirty state
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -789,6 +821,7 @@ export default function App() {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
+    openPlansTab,
 
     // State setters
     setIsApiKeyDialogOpen,

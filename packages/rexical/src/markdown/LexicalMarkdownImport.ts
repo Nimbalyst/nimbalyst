@@ -203,14 +203,19 @@ function $importBlocks(
   textMatchTransformers: Array<TextMatchTransformer>,
   shouldPreserveNewLines: boolean
 ): void {
+  // console.log(`[IMPORT_BLOCKS] Processing line: "${lineText}" (length: ${lineText.length})`);
   const textNode = $createTextNode(lineText);
   const elementNode = $createParagraphNode();
   elementNode.append(textNode);
   rootNode.append(elementNode);
+  // console.log(`[IMPORT_BLOCKS] Created paragraph node, root now has ${rootNode.getChildrenSize()} children`);
 
   for (const { regExp, replace } of elementTransformers) {
     const match = lineText.match(regExp);
     if (match) {
+      // console.log(`[IMPORT_BLOCKS] Element transformer matched for: "${lineText}"`);
+      // console.log(`[IMPORT_BLOCKS]   regExp:`, regExp);
+      // console.log(`[IMPORT_BLOCKS]   match:`, match);
       textNode.setTextContent(lineText.slice(match[0].length));
       if (replace(elementNode, [textNode], match, true) !== false) {
         // Successfully processed by a transformer
@@ -218,14 +223,17 @@ function $importBlocks(
         importTextTransformers(textNode, textFormatTransformersIndex, textMatchTransformers);
         // Make sure the temporary paragraph is removed
         if (elementNode.isAttached()) {
+          // console.log(`[IMPORT_BLOCKS] Removing temporary paragraph after transformer, root now has ${rootNode.getChildrenSize()} children`);
           elementNode.remove();
         }
+        // console.log(`[IMPORT_BLOCKS] After transformer, root has ${rootNode.getChildrenSize()} children`);
         return;
       }
     }
   }
 
   importTextTransformers(textNode, textFormatTransformersIndex, textMatchTransformers);
+  // console.log(`[IMPORT_BLOCKS] After text transformers, root has ${rootNode.getChildrenSize()} children`);
 
   // CRITICAL FIX: This is where Lexical combines indented lines!
   // We're completely disabling line merging for now
@@ -233,6 +241,7 @@ function $importBlocks(
   const DISABLE_LINE_MERGING = true;
 
   if (DISABLE_LINE_MERGING) {
+    // console.log(`[IMPORT_BLOCKS] Line merging disabled, returning with ${rootNode.getChildrenSize()} children in root`);
     return; // Don't merge any lines
   }
 
@@ -275,9 +284,11 @@ export function createMarkdownImport(
 
     for (let i = 0; i < linesLength; i++) {
       const lineText = lines[i];
+      // console.log(`[MARKDOWN IMPORT] Line ${i}: "${lineText}" (length: ${lineText.length})`);
       const [imported, shiftedIndex] = $importMultiline(lines, i, byType.multilineElement, root);
 
       if (imported) {
+        // console.log(`[MARKDOWN IMPORT] Line ${i} consumed by multiline transformer, jumping to ${shiftedIndex}`);
         i = shiftedIndex;
         continue;
       }
@@ -294,8 +305,14 @@ export function createMarkdownImport(
 
     // Remove empty paragraphs
     const children = root.getChildren();
+    // console.log('[MARKDOWN IMPORT] shouldPreserveNewLines:', shouldPreserveNewLines);
+    // console.log('[MARKDOWN IMPORT] children count:', children.length);
     for (const child of children) {
-      if (!shouldPreserveNewLines && isEmptyParagraph(child) && root.getChildrenSize() > 1) {
+      const isEmpty = isEmptyParagraph(child);
+      const shouldRemove = !shouldPreserveNewLines && isEmpty && root.getChildrenSize() > 1;
+      // console.log('[MARKDOWN IMPORT] child:', child.getType(), 'isEmpty:', isEmpty, 'shouldRemove:', shouldRemove);
+      if (shouldRemove) {
+        // console.log('[MARKDOWN IMPORT] REMOVING empty paragraph');
         child.remove();
       }
     }
@@ -314,7 +331,7 @@ export function $convertFromMarkdownStringRexical(
   markdown: string,
   transformers: Array<Transformer>,
   node?: ElementNode,
-  shouldPreserveNewLines: boolean = false
+  shouldPreserveNewLines: boolean = true
 ): void {
   const importMarkdown = createMarkdownImport(transformers, shouldPreserveNewLines);
   return importMarkdown(markdown, node);

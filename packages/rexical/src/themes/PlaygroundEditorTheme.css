@@ -480,7 +480,7 @@
   max-width: var(--max-text-width);
 }
 .PlaygroundEditorTheme__listItem {
-  margin: 0 32px;
+  margin: 0 24px;
 }
 .PlaygroundEditorTheme__listItem::marker {
   color: var(--listitem-marker-color);
