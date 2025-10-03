@@ -17,7 +17,8 @@ import {useLexicalComposerContext} from "@lexical/react/LexicalComposerContext";
 import {mergeRegister} from "@lexical/utils";
 import React from "react";
 
-
+// Re-export TypeaheadMenuOption for convenience
+export type { TypeaheadMenuOption };
 
 export interface TypeaheadMenuProps {
     // Core functionality

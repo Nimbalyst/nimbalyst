@@ -161,8 +161,8 @@ describe('DecoratorNode diff handling', () => {
     const listContent = await editor.getEditorState().read(() => {
       const root = $getRoot();
       const list = root.getChildren().find(child => child.getType() === 'list');
-      if (!list) return [];
-      return list.getChildren().map(item => item.getTextContent());
+      if (!list || !('getChildren' in list)) return [];
+      return (list.getChildren as any)().map((item: any) => item.getTextContent());
     });
 
     expect(listContent).toEqual(['Apple', 'Orange', 'Banana', 'Grapes']);

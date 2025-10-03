@@ -20,5 +20,5 @@
     }
   },
   "include": ["src"],
-  "references": [{ "path": "../stravu-editor" }]
+  "exclude": ["node_modules", "dist", "**/*.d.ts"]
 }

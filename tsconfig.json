@@ -7,11 +7,17 @@
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": []
   },
-  "references": [
-    { "path": "./packages/rexical" },
-    { "path": "./packages/playground" },
-    { "path": "./packages/electron" }
+  "exclude": [
+    "**/node_modules",
+    "**/dist",
+    "**/*.d.ts",
+    "packages/capacitor",
+    "packages/tauri",
+    "packages/playground",
+    "worktrees",
+    "test-utils"
   ]
 }

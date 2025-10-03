@@ -23,7 +23,8 @@
   },
   "include": [
     "src/**/*",
-    "src/vitest-env.d.ts"
+    "src/vitest-env.d.ts",
+    "src/types/prettier.d.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

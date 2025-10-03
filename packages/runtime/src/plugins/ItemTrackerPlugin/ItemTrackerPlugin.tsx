@@ -15,8 +15,15 @@ import { useEffect } from 'react';
 import { $createTrackerItemNode, TrackerItemData, TrackerItemType, TrackerItemNode } from './TrackerItemNode';
 import { TRACKER_ITEM_TRANSFORMERS } from './TrackerItemTransformer';
 import type { PluginPackage } from 'rexical';
-import { TypeaheadMenuPlugin, type TypeaheadMenuOption, type TriggerFunction } from 'rexical';
+import { TypeaheadMenuPlugin, type TypeaheadMenuOption } from 'rexical';
 import './TrackerItem.css';
+
+// Type for trigger function (matches TypeaheadMenuPlugin signature)
+type TriggerFunction = (text: string) => {
+  leadOffset: number;
+  matchingString: string;
+  replaceableString: string;
+} | null;
 
 export const INSERT_TRACKER_TASK_COMMAND: LexicalCommand<void> = createCommand();
 export const INSERT_TRACKER_BUG_COMMAND: LexicalCommand<void> = createCommand();

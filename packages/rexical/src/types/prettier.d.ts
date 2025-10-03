@@ -3,11 +3,12 @@ declare module 'prettier' {
     [key: string]: any;
   }
   export function format(source: string, options?: Options): string;
+  export function formatWithCursor(source: string, options?: Options): any;
+  export const version: string;
 }
 
 declare module 'prettier/standalone' {
   export * from 'prettier';
-  export function format(source: string, options?: any): string;
 }
 
 declare module 'prettier/parser-postcss' {

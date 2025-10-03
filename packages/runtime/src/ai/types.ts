@@ -34,7 +34,7 @@ export type StreamingMode = 'extend' | 'after' | 'append' | 'replace' | 'insert'
 
 export interface StreamingConfig {
   position?: 'cursor' | 'selection' | 'end' | 'after-selection';
-  mode: StreamingMode;
+  mode?: StreamingMode;  // Optional - plugin will decide based on context if not provided
   insertAfter?: string;
   insertAtEnd?: boolean;
 }

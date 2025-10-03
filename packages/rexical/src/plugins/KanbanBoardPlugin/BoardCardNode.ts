@@ -209,13 +209,14 @@ export class BoardCardNode extends ElementNode {
   updateDOM(prevNode: BoardCardNode, dom: HTMLElement): boolean {
     // Update if data changed
     if (prevNode.__data !== this.__data) {
+      // Get board config once for all updates
+      const boardConfig = this.getBoardConfig();
+      const visibleFields = boardConfig?.visibleFields || { owner: true, dueDate: true, priority: true, description: false };
+
       // Update metadata display
       const cardMeta = dom.querySelector('.kanban-card-meta');
       if (cardMeta) {
         cardMeta.innerHTML = '';
-        
-        const boardConfig = this.getBoardConfig();
-        const visibleFields = boardConfig?.visibleFields || { owner: true, dueDate: true, priority: true, description: false };
         
         if (visibleFields.owner && this.__data.owner) {
           const owner = document.createElement('span');

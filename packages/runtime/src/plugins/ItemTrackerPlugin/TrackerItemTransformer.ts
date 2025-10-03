@@ -24,7 +24,7 @@ function generateId(prefix: string): string {
 // ElementTransformer for EXPORT (handles decorator node serialization)
 export const TRACKER_ITEM_ELEMENT_TRANSFORMER: ElementTransformer = {
   dependencies: [TrackerItemNode],
-  export: (node: LexicalNode, exportChildren: () => string) => {
+  export: (node: LexicalNode) => {
     if (!$isTrackerItemNode(node)) {
       return null;
     }
@@ -77,7 +77,7 @@ export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
     const typeMatch = fullMatch.match(/@(bug|task|plan)\[(.+?)\]/);
     if (!typeMatch) {
       console.log('No type match found');
-      return null;
+      return;
     }
 
     const [, type, propsStr] = typeMatch;
@@ -126,12 +126,10 @@ export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
       console.log('Creating TrackerItemNode with data:', data);
       const node = $createTrackerItemNode(data);
       console.log('Created node:', node);
-      // return node;
       textNode.replace(node);
     } catch (e) {
-      // If parsing fails, return null to leave as text
+      // If parsing fails, leave as text
       console.error('Failed to parse tracker item metadata:', e);
-      return null;
     }
   },
   trigger: '@',
