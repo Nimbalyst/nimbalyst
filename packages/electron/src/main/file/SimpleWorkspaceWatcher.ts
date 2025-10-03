@@ -39,7 +39,8 @@ export class SimpleWorkspaceWatcher {
                 const fileTree = getFolderContents(workspacePath);
                 window.webContents.send('workspace-file-tree-updated', { fileTree });
             }, 300);
-            try { (timer as any).unref?.(); } catch {}
+            // Keep a strong reference to ensure timers aren't garbage collected
+            // Note: NOT calling unref() to ensure watcher stays active in tests
 
             this.updateTimers.set(windowId, timer);
         };
@@ -79,8 +80,8 @@ export class SimpleWorkspaceWatcher {
                         }
                     }
                 });
-                // Do not keep the process alive because of watchers
-                try { (watcher as any).unref?.(); } catch {}
+                // Keep a strong reference to prevent garbage collection
+                // Note: NOT calling unref() to ensure watcher stays active in tests
 
                 dirWatchers.set(dirPath, watcher);
 

@@ -341,14 +341,28 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     onTabChangeRef.current = onTabChange;
   }, [onTabChange]);
 
+  // Track previous activeTabId to detect actual changes
+  const prevActiveTabIdRef = useRef<string | null>(null);
+  const tabsRef = useRef(tabs);
+
+  // Update tabs ref on each render
+  tabsRef.current = tabs;
+
   // Call onTabChange whenever activeTabId changes
   useEffect(() => {
-    console.log('[useTabs] activeTabId changed:', activeTabId, 'activeTab:', activeTab?.fileName);
-    if (activeTabId && activeTab && onTabChangeRef.current) {
-      console.log('[useTabs] Calling onTabChange for:', activeTab.fileName);
-      onTabChangeRef.current(activeTab);
+    // Only trigger if activeTabId actually changed
+    if (activeTabId === prevActiveTabIdRef.current) {
+      return;
     }
-  }, [activeTabId, activeTab]);
+
+    prevActiveTabIdRef.current = activeTabId;
+    const currentActiveTab = activeTabId ? tabsRef.current.get(activeTabId) || null : null;
+    console.log('[useTabs] activeTabId changed:', activeTabId, 'activeTab:', currentActiveTab?.fileName);
+    if (activeTabId && currentActiveTab && onTabChangeRef.current) {
+      console.log('[useTabs] Calling onTabChange for:', currentActiveTab.fileName);
+      onTabChangeRef.current(currentActiveTab);
+    }
+  }, [activeTabId]);
 
 
   // Restore state from Electron store on mount (with delay for workspace to load)

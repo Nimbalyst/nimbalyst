@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron';
-import { watch, FSWatcher, statSync } from 'fs';
+import { watch, FSWatcher, statSync, existsSync } from 'fs';
 import { logger } from '../utils/logger';
 import { getWindowId } from '../window/WindowManager';
 
@@ -8,6 +8,7 @@ export class SimpleFileWatcher {
     private watchers = new Map<number, FSWatcher>();
     private filePaths = new Map<number, string>();
     private lastMtimes = new Map<number, number>();  // Track last modification times
+    private deletionCheckTimers = new Map<number, NodeJS.Timeout>();  // Timers to poll for file deletion
 
     private emitFileChanged(window: BrowserWindow, filePath: string) {
         try {
@@ -79,6 +80,30 @@ export class SimpleFileWatcher {
 
             const watcher = watch(filePath, { persistent: true }, (eventType) => {
                 // console.log(`[FileWatcher] Raw event detected: ${eventType} for ${filePath}`);
+
+                // First check if file still exists (catches deletions)
+                if (!existsSync(filePath)) {
+                    console.log(`[FileWatcher] File deleted (external): ${filePath}`);
+                    // Send file-deleted event to notify renderer
+                    try {
+                        if (!window || window.isDestroyed()) {
+                            console.log(`[FileWatcher] Window destroyed, skipping file-deleted event`);
+                        } else {
+                            const contents = window.webContents;
+                            if (!contents || contents.isDestroyed()) {
+                                console.log(`[FileWatcher] webContents destroyed, skipping file-deleted event`);
+                            } else {
+                                console.log(`[FileWatcher] Sending file-deleted event for: ${filePath}`);
+                                contents.send('file-deleted', { filePath });
+                            }
+                        }
+                    } catch (sendError) {
+                        console.error(`[FileWatcher] Error sending file-deleted event:`, sendError);
+                    }
+                    this.stop(windowId);
+                    return;
+                }
+
                 if (eventType === 'change') {
                     // Check if the file actually changed by comparing mtime
                     try {
@@ -110,7 +135,23 @@ export class SimpleFileWatcher {
                         this.restartWatcher(window, windowId, filePath);
                     } catch (error: any) {
                         if (error && error.code === 'ENOENT') {
-                            console.log(`[FileWatcher] File missing after rename event: ${filePath}`);
+                            console.log(`[FileWatcher] File deleted (external): ${filePath}`);
+                            // Send file-deleted event to notify renderer
+                            try {
+                                if (!window || window.isDestroyed()) {
+                                    console.log(`[FileWatcher] Window destroyed, skipping file-deleted event`);
+                                } else {
+                                    const contents = window.webContents;
+                                    if (!contents || contents.isDestroyed()) {
+                                        console.log(`[FileWatcher] webContents destroyed, skipping file-deleted event`);
+                                    } else {
+                                        console.log(`[FileWatcher] Sending file-deleted event for: ${filePath}`);
+                                        contents.send('file-deleted', { filePath });
+                                    }
+                                }
+                            } catch (sendError) {
+                                console.error(`[FileWatcher] Error sending file-deleted event:`, sendError);
+                            }
                             this.stop(windowId);
                         } else {
                             console.error(`[FileWatcher] Error handling rename event for ${filePath}:`, error);
@@ -126,6 +167,35 @@ export class SimpleFileWatcher {
             this.filePaths.set(windowId, filePath);
             logger.fileWatcher.info(`Started simple watcher for: ${filePath}`);
             // console.log(`[FileWatcher] Watcher successfully created and stored for window ${windowId}`);
+
+            // Start polling for file deletion (since fs.watch is unreliable on macOS)
+            const deletionCheckTimer = setInterval(() => {
+                if (!existsSync(filePath)) {
+                    console.log(`[FileWatcher] File deleted detected via polling: ${filePath}`);
+                    clearInterval(deletionCheckTimer);
+                    this.deletionCheckTimers.delete(windowId);
+
+                    // Send file-deleted event to notify renderer
+                    try {
+                        if (!window || window.isDestroyed()) {
+                            console.log(`[FileWatcher] Window destroyed, skipping file-deleted event`);
+                        } else {
+                            const contents = window.webContents;
+                            if (!contents || contents.isDestroyed()) {
+                                console.log(`[FileWatcher] webContents destroyed, skipping file-deleted event`);
+                            } else {
+                                console.log(`[FileWatcher] Sending file-deleted event for: ${filePath}`);
+                                contents.send('file-deleted', { filePath });
+                            }
+                        }
+                    } catch (sendError) {
+                        console.error(`[FileWatcher] Error sending file-deleted event:`, sendError);
+                    }
+                    this.stop(windowId);
+                }
+            }, 1000); // Check every second
+
+            this.deletionCheckTimers.set(windowId, deletionCheckTimer);
         } catch (error) {
             logger.fileWatcher.error('Failed to start watcher:', error);
         }
@@ -134,6 +204,8 @@ export class SimpleFileWatcher {
     stop(windowId: number) {
         const watcher = this.watchers.get(windowId);
         const filePath = this.filePaths.get(windowId);
+        const deletionCheckTimer = this.deletionCheckTimers.get(windowId);
+
         if (watcher) {
             // console.log(`[FileWatcher] Stopping watcher for window ${windowId}, file: ${filePath}`);
             watcher.close();
@@ -142,6 +214,11 @@ export class SimpleFileWatcher {
             this.lastMtimes.delete(windowId);
         } else {
             console.log(`[FileWatcher] No watcher to stop for window ${windowId}`);
+        }
+
+        if (deletionCheckTimer) {
+            clearInterval(deletionCheckTimer);
+            this.deletionCheckTimers.delete(windowId);
         }
     }
 
@@ -160,6 +237,13 @@ export class SimpleFileWatcher {
         }
         this.watchers.clear();
         this.filePaths.clear();
+
+        // Clear all deletion check timers
+        for (const timer of this.deletionCheckTimers.values()) {
+            clearInterval(timer);
+        }
+        this.deletionCheckTimers.clear();
+
         console.log(`[CLEANUP] SimpleFileWatcher.stopAll complete`);
     }
 

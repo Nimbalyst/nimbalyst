@@ -143,19 +143,23 @@ test.describe('File Watcher Updates', () => {
     await page.locator('.file-tree-name', { hasText: 'watched.md' }).click();
     await expect(page.locator('.tab.active .tab-title')).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
+    // Set up dialog handler to catch the alert dialog
+    let dialogShown = false;
+    page.once('dialog', async dialog => {
+      dialogShown = true;
+      expect(dialog.message()).toContain('deleted from disk');
+      await dialog.accept(); // Dismiss the alert
+    });
+
     // Delete the file externally
     await fs.unlink(filePath);
 
-    // Wait for file watcher to detect deletion
-    await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+    // Wait for file watcher to detect deletion and show dialog
+    // Use a longer timeout since file deletion detection can be slow
+    await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION * 2);
 
-    // The app should show some indication that the file was deleted
-    // Could be a notification, dialog, or special tab state
-    const hasDialog = await page.locator('.dialog, .modal, [role="dialog"]').count() > 0;
-    const hasNotification = await page.locator('.notification, .alert, .flash-message').count() > 0;
-    const tabHasWarning = await page.locator('.tab.active .tab-warning, .tab.active .tab-deleted').count() > 0;
-
-    expect(hasDialog || hasNotification || tabHasWarning).toBe(true);
+    // The alert dialog should have been shown
+    expect(dialogShown).toBe(true);
   });
 
   test('should update file tree when new files are created by external process', async () => {

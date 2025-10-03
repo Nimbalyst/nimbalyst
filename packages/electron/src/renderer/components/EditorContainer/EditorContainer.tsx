@@ -5,9 +5,9 @@
  * This preserves editor state (selection, scroll, undo/redo) when switching tabs.
  */
 
-import React, { useRef, useEffect, useCallback } from 'react';
-import { StravuEditor, TOGGLE_SEARCH_COMMAND } from 'rexical';
+import React, { useCallback, useEffect, useRef } from 'react';
 import type { ConfigTheme, TextReplacement } from 'rexical';
+import { StravuEditor } from 'rexical';
 import type { Tab } from '../TabManager/TabManager';
 import { getEditorPool } from '../../services/EditorPool';
 import { logger } from '../../utils/logger';
@@ -243,7 +243,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
   useEffect(() => {
     if (!window.electronAPI) return;
 
-    const handleFileChanged = async (event: any, data: { path: string }) => {
+    const handleFileChanged = async (data: { path: string }) => {
       logger.ui.info(`[EditorContainer] File changed on disk: ${data.path}`);
 
       // Find the tab for this file
@@ -254,15 +254,16 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
       if (!instance) return;
 
       // Ignore file changes shortly after we saved (prevents reload loops)
-      if (instance.lastSaveTime && Date.now() - instance.lastSaveTime < 1000) {
+      // Use a longer window (5 seconds) to account for slow file systems and autosave timing
+      if (instance.lastSaveTime && Date.now() - instance.lastSaveTime < 5000) {
         logger.ui.info(`[EditorContainer] Ignoring file change (just saved ${tab.fileName})`);
         return;
       }
 
-      // If the editor is dirty, warn the user instead of auto-reloading
-      if (instance.isDirty) {
-        logger.ui.warn(`[EditorContainer] File changed but editor is dirty: ${tab.fileName}`);
-        // TODO: Show user a dialog to choose: reload and lose changes, or keep current
+      // Only auto-reload if this is NOT the active tab (background tabs get updated silently)
+      // For the active tab, only reload if it's not dirty
+      if (tab.id === activeTabId && instance.isDirty) {
+        logger.ui.info(`[EditorContainer] File changed but active tab is dirty, keeping local changes: ${tab.fileName}`);
         return;
       }
 
@@ -305,66 +306,91 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
   }, [tabs, editorPool, activeTabId, onContentChange]);
 
   // Set up autosave for all editor instances
+  // Use separate effect that only runs on mount to set up timers once
+  const tabsRef = useRef(tabs);
+  const autosaveTimersSetupRef = useRef(false);
+
+  // Keep tabs ref up to date
+  tabsRef.current = tabs;
+
   useEffect(() => {
-    tabs.forEach((tab) => {
-      const instance = editorPool.get(tab.filePath);
-      if (!instance) return;
+    console.log('[EditorContainer] Setting up autosave timers');
 
-      // Clear existing timer if any
-      if (instance.autosaveTimer) {
-        clearInterval(instance.autosaveTimer);
-      }
-
-      // Set up new autosave timer
-      const timer = setInterval(async () => {
-        const currentInstance = editorPool.get(tab.filePath);
-        if (!currentInstance) return;
-
-        // Skip if not dirty
-        if (!currentInstance.isDirty) return;
-
-        // Skip if not enough time has passed since last change (debounce)
-        if (currentInstance.lastChangeTime &&
-            Date.now() - currentInstance.lastChangeTime < autosaveDebounce) {
+    // Set up timers for all tabs
+    const setupTimers = () => {
+      tabsRef.current.forEach(tab => {
+        const filePath = tab.filePath;
+        const instance = editorPool.get(filePath);
+        if (!instance) {
           return;
         }
 
-        try {
-          const getContentFn = getContentFuncs.current.get(tab.id);
-          if (!getContentFn) return;
-
-          const content = getContentFn();
-          logger.ui.info(`[EditorContainer] Auto-saving: ${tab.fileName}`);
-
-          await saveWithHistory(tab.filePath, content);
-
-          // Update instance to mark as clean and track save time
-          editorPool.update(tab.filePath, {
-            isDirty: false,
-            initialContent: content,
-            lastSaveTime: Date.now(),
-          });
-
-          // Notify parent
-          onContentChange?.(tab.id, false);
-        } catch (error) {
-          logger.ui.error(`[EditorContainer] Autosave failed for ${tab.fileName}:`, error);
+        // Skip if timer already exists
+        if (instance.autosaveTimer) {
+          return;
         }
-      }, autosaveInterval);
 
-      // Store timer in instance
-      editorPool.update(tab.filePath, { autosaveTimer: timer });
-    });
+        console.log(`[EditorContainer] Setting up autosave timer for: ${tab.fileName}`);
+
+        // Set up autosave timer
+        const timer = setInterval(async () => {
+          const currentInstance = editorPool.get(filePath);
+          if (!currentInstance) return;
+
+          // Skip if not dirty
+          if (!currentInstance.isDirty) return;
+
+          // Skip if not enough time has passed since last change (debounce)
+          if (currentInstance.lastChangeTime &&
+              Date.now() - currentInstance.lastChangeTime < autosaveDebounce) {
+            return;
+          }
+
+          try {
+            // Look up current tab dynamically using ref (don't capture in closure)
+            const currentTab = tabsRef.current.find(t => t.filePath === filePath);
+            if (!currentTab) return;
+
+            const getContentFn = getContentFuncs.current.get(currentTab.id);
+            if (!getContentFn) return;
+
+            const content = getContentFn();
+            logger.ui.info(`[EditorContainer] Auto-saving: ${currentTab.fileName}`);
+
+            await saveWithHistory(filePath, content);
+
+            // Update instance to mark as clean and track save time
+            editorPool.update(filePath, {
+              isDirty: false,
+              initialContent: content,
+              lastSaveTime: Date.now(),
+            });
+
+            // Notify parent - use current tab ID from ref to ensure it's fresh
+            logger.ui.info(`[EditorContainer] Notifying parent that ${currentTab.fileName} (${currentTab.id}) is clean`);
+            onContentChange?.(currentTab.id, false);
+          } catch (error) {
+            logger.ui.error(`[EditorContainer] Autosave failed for ${filePath}:`, error);
+          }
+        }, autosaveInterval);
+
+        // Store timer in instance
+        editorPool.update(filePath, { autosaveTimer: timer });
+      });
+    };
+
+    // Set up timers initially
+    setupTimers();
+
+    // Check periodically for new tabs and set up timers for them
+    const checkInterval = setInterval(() => {
+      setupTimers();
+    }, 1000);
 
     // Cleanup function
     return () => {
-      tabs.forEach((tab) => {
-        const instance = editorPool.get(tab.filePath);
-        if (instance?.autosaveTimer) {
-          clearInterval(instance.autosaveTimer);
-          editorPool.update(tab.filePath, { autosaveTimer: null });
-        }
-      });
+      console.log('[EditorContainer] Cleaning up autosave check interval');
+      clearInterval(checkInterval);
     };
   }, [tabs, editorPool, saveWithHistory, onContentChange, autosaveInterval, autosaveDebounce]);
 

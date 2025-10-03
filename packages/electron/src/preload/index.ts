@@ -479,9 +479,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   on: (channel: string, callback: (...args: any[]) => void) => {
     const handler = (_event: any, ...args: any[]) => callback(...args);
     ipcRenderer.on(channel, handler);
+    // Store mapping from callback to handler for proper removal
+    if (!(window as any).__ipcHandlers) {
+      (window as any).__ipcHandlers = new WeakMap();
+    }
+    (window as any).__ipcHandlers.set(callback, { channel, handler });
     return () => ipcRenderer.removeListener(channel, handler);
   },
   off: (channel: string, callback: (...args: any[]) => void) => {
-    ipcRenderer.removeListener(channel, callback);
+    // Look up the actual handler that was registered
+    const handlerInfo = (window as any).__ipcHandlers?.get(callback);
+    if (handlerInfo && handlerInfo.channel === channel) {
+      ipcRenderer.removeListener(channel, handlerInfo.handler);
+      (window as any).__ipcHandlers.delete(callback);
+    } else {
+      // Fallback: try to remove callback directly (won't work but maintains backward compat)
+      ipcRenderer.removeListener(channel, callback);
+    }
   }
 });

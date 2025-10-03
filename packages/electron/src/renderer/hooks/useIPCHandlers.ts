@@ -475,6 +475,10 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         if (tabToClose) {
           // console.log('[FILE_DELETED] Closing tab for deleted file:', data.filePath, 'tab id:', tabToClose.id);
 
+          // Show notification that file was deleted
+          const fileName = data.filePath.split('/').pop() || data.filePath;
+          alert(`The file "${fileName}" has been deleted from disk.`);
+
           // If this is the active tab, we need to immediately clear state to prevent autosave
           if (stateRef.current.tabs.activeTabId === tabToClose.id) {
             // console.log('[FILE_DELETED] This is the active tab, clearing file path immediately');
@@ -501,7 +505,12 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }));
 
     // Handle file changes on disk
-    if (window.electronAPI.onFileChangedOnDisk) {
+    // NOTE: EditorContainer now handles file watching for ALL open tabs (active and background)
+    // with per-file lastSaveTime tracking. This legacy handler has been disabled to avoid
+    // duplicate updates and excessive re-renders.
+    //
+    // Keeping the code here temporarily for reference.
+    if (false && window.electronAPI.onFileChangedOnDisk) {
       cleanupFns.push(window.electronAPI.onFileChangedOnDisk(async (data) => {
         console.log('[FILE_WATCH] File changed on disk event received:', data.path);
 
