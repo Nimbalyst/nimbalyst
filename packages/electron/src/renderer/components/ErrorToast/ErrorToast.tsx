@@ -5,6 +5,11 @@ import './ErrorToast.css';
 export function ErrorToastContainer() {
   const [notifications, setNotifications] = useState<ErrorNotification[]>([]);
 
+  const handleDismiss = useCallback((id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+    errorNotificationService.dismiss(id);
+  }, []);
+
   useEffect(() => {
     const unsubscribe = errorNotificationService.addListener((notification) => {
       setNotifications(prev => [...prev, notification]);
@@ -18,12 +23,7 @@ export function ErrorToastContainer() {
     });
 
     return unsubscribe;
-  }, []);
-
-  const handleDismiss = useCallback((id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-    errorNotificationService.dismiss(id);
-  }, []);
+  }, [handleDismiss]);
 
   const handleCopyDetails = useCallback((notification: ErrorNotification) => {
     const details = `
@@ -78,8 +78,12 @@ ${JSON.stringify(notification.context, null, 2)}
             {notification.dismissible && (
               <button
                 className="error-toast-close"
-                onClick={() => handleDismiss(notification.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDismiss(notification.id);
+                }}
                 aria-label="Dismiss"
+                type="button"
               >
                 ×
               </button>
