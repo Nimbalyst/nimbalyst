@@ -217,26 +217,41 @@ jobs:
             echo "To enable public releases, create a PAT with 'repo' scope and add it as PUBLIC_REPO_PAT secret."
             exit 0
           fi
-          
+
           VERSION="${{ steps.get_version.outputs.VERSION }}"
-          
+
           # Check if release already exists in public repo
           if gh release view "$VERSION" --repo stravu/preditor-releases &>/dev/null; then
             echo "Release $VERSION already exists in public repository"
             exit 0
           fi
-          
+
+          # Extract release notes for this version from RELEASE_NOTES.md
+          RELEASE_NOTES_FILE="packages/electron/RELEASE_NOTES.md"
+          if [ -f "$RELEASE_NOTES_FILE" ]; then
+            # Extract notes for the current version
+            VERSION_NO_V=${VERSION#v}
+            NOTES=$(awk "/^## v?${VERSION_NO_V}[^0-9]/,/^## v?[0-9]/ {if (/^## v?[0-9]/ && !/^## v?${VERSION_NO_V}[^0-9]/) exit; print}" "$RELEASE_NOTES_FILE" | sed '1d' | sed '/^$/d')
+
+            if [ -z "$NOTES" ]; then
+              # Fallback to default notes if version not found
+              NOTES="See [RELEASE_NOTES.md](https://github.com/stravu/preditor/blob/main/packages/electron/RELEASE_NOTES.md) for details."
+            fi
+          else
+            NOTES="Download Preditor Editor for your operating system."
+          fi
+
           # Create release in public repository with update manifests
           gh release create "$VERSION" \
             --repo stravu/preditor-releases \
             --title "Preditor $VERSION" \
-            --notes "Download Preditor Editor for your operating system.
-          
+            --notes "${NOTES}
+
           ### Installation
           - **macOS**: Download and open the .dmg file, drag Preditor to Applications
           - **Windows**: Download and run the .exe installer
           - **Linux**: Download the .AppImage, make it executable, and run it
-          
+
           The app will automatically check for updates." \
             release-files/*.dmg \
             release-files/*.exe \
