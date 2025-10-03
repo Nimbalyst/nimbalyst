@@ -7,7 +7,7 @@ import {
   serializeWithFrontmatter,
   type FrontmatterData,
 } from 'rexical';
-import { editorRegistry } from '@stravu/runtime';
+import { editorRegistry } from '@stravu/runtime/ai/EditorRegistry';
 import { getEditorPool } from '../services/EditorPool';
 
 const PLAN_STATUS_KEYS = new Set([

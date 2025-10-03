@@ -6,7 +6,7 @@
  * executor and the actual tool implementations.
  */
 
-import { editorRegistry } from '@stravu/runtime';
+import { editorRegistry } from '@stravu/runtime/ai/EditorRegistry';
 import type { DiffResult } from '@stravu/runtime/ai/server/types';
 
 export interface ToolExecutionRequest {

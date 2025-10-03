@@ -7,6 +7,28 @@
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./ai/EditorRegistry": {
+      "import": "./dist/ai/EditorRegistry.js",
+      "types": "./dist/ai/EditorRegistry.d.ts"
+    },
+    "./ai/plugins/AIChatIntegrationPlugin": {
+      "import": "./dist/ai/plugins/AIChatIntegrationPlugin/index.js",
+      "types": "./dist/ai/plugins/AIChatIntegrationPlugin/index.d.ts"
+    },
+    "./ai/server/types": {
+      "import": "./dist/ai/types.js",
+      "types": "./dist/ai/types.d.ts"
+    },
+    "./ai/modelConstants": {
+      "import": "./dist/ai/modelConstants.js",
+      "types": "./dist/ai/modelConstants.d.ts"
+    }
+  },
   "files": ["dist"],
   "scripts": {
     "dev": "vite build --watch --mode development",

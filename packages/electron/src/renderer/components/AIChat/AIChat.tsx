@@ -8,7 +8,7 @@ import { aiApi, DocumentContext } from '../../services/aiApi';
 import { logger } from '../../utils/logger';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { DEFAULT_MODELS } from '@stravu/runtime/ai/modelConstants';
-import { editorRegistry } from '@stravu/runtime';
+import { editorRegistry } from '@stravu/runtime/ai/EditorRegistry';
 import './AIChat.css';
 
 interface AIChatProps {

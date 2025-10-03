@@ -6,6 +6,7 @@ import { parseModelInfo } from '../../utils/modelUtils';
 import { SessionDropdown } from './SessionDropdown';
 import { NewSessionButton } from './NewSessionButton';
 import type { SessionData } from '@stravu/runtime/ai/server/types';
+import { editorRegistry } from '@stravu/runtime/ai/EditorRegistry';
 
 // Using SessionData directly from runtime package
 
@@ -56,48 +57,56 @@ export function ChatHeader({
 
   // Debug button to test streaming validation
   const handleTestStream = () => {
-    const bridge = (window as any).aiChatBridge;
-    if (!bridge) {
-      alert('Bridge not available');
+    const targetPath = documentContext?.filePath;
+
+    if (!targetPath) {
+      alert('No file path available');
+      return;
+    }
+
+    if (!editorRegistry.has(targetPath)) {
+      alert('Editor not registered for this file');
       return;
     }
 
     const testId = 'test-stream-' + Date.now();
-    const targetPath = documentContext?.filePath;
-
     console.error('[TEST] Starting test stream with targetFilePath:', targetPath);
 
     // Start streaming with target file path
-    bridge.startStreamingEdit({
+    editorRegistry.startStreaming(targetPath, {
       id: testId,
-      insertAtEnd: true,
-      targetFilePath: targetPath
+      insertAtEnd: true
     });
 
     // Stream some content
     setTimeout(() => {
-      bridge.streamContent(testId, '\n\n## Test Stream Insert\n\n');
+      editorRegistry.streamContent(targetPath, testId, '\n\n## Test Stream Insert\n\n');
     }, 100);
 
     setTimeout(() => {
-      bridge.streamContent(testId, 'This is a test streaming insertion.\n\n');
+      editorRegistry.streamContent(targetPath, testId, 'This is a test streaming insertion.\n\n');
     }, 200);
 
     setTimeout(() => {
-      bridge.endStreamingEdit(testId);
+      editorRegistry.endStreaming(targetPath, testId);
       console.error('[TEST] Test stream complete');
     }, 300);
   };
 
   // Debug button to test diff validation
   const handleTestDiff = async () => {
-    const bridge = (window as any).aiChatBridge;
-    if (!bridge) {
-      alert('Bridge not available');
+    const targetPath = documentContext?.filePath;
+
+    if (!targetPath) {
+      alert('No file path available');
       return;
     }
 
-    const targetPath = documentContext?.filePath;
+    if (!editorRegistry.has(targetPath)) {
+      alert('Editor not registered for this file');
+      return;
+    }
+
     console.error('[TEST] Starting test diff with targetFilePath:', targetPath);
 
     // Create a simple diff replacement using the correct format
@@ -109,7 +118,7 @@ export function ChatHeader({
       }
     ];
 
-    const result = await bridge.applyReplacements(replacements, targetPath);
+    const result = await editorRegistry.applyReplacements(targetPath, replacements);
     console.error('[TEST] Test diff result:', result);
   };
   // Get current session's model info for display
@@ -171,25 +180,29 @@ export function ChatHeader({
 
         </h3>
         <div className="ai-chat-header-actions">
-          {/* Debug buttons to test validation */}
-          <button
-            className="ai-chat-action-button"
-            onClick={handleTestStream}
-            title="Test Stream (Debug)"
-            aria-label="Test Stream"
-            style={{ backgroundColor: '#ff6b6b', color: 'white' }}
-          >
-            <MaterialSymbol icon="bug_report" size={18} />
-          </button>
-          <button
-            className="ai-chat-action-button"
-            onClick={handleTestDiff}
-            title="Test Diff (Debug)"
-            aria-label="Test Diff"
-            style={{ backgroundColor: '#51cf66', color: 'white' }}
-          >
-            <MaterialSymbol icon="difference" size={18} />
-          </button>
+          {/* Debug buttons to test validation (dev mode only) */}
+          {import.meta.env.DEV && (
+            <>
+              <button
+                className="ai-chat-action-button"
+                onClick={handleTestStream}
+                title="Test Stream (Debug)"
+                aria-label="Test Stream"
+                style={{ backgroundColor: '#ff6b6b', color: 'white' }}
+              >
+                <MaterialSymbol icon="bug_report" size={18} />
+              </button>
+              <button
+                className="ai-chat-action-button"
+                onClick={handleTestDiff}
+                title="Test Diff (Debug)"
+                aria-label="Test Diff"
+                style={{ backgroundColor: '#51cf66', color: 'white' }}
+              >
+                <MaterialSymbol icon="difference" size={18} />
+              </button>
+            </>
+          )}
 
           {onTogglePerformanceMetrics && (
             <button

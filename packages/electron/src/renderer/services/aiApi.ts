@@ -1,7 +1,7 @@
 import { detectStreamingIntent, parseStreamingChunk, StreamingEditRequest } from './aiStreamProtocol';
 import { logger } from '../utils/logger';
 import type { DocumentContext, Message, SessionData } from '@stravu/runtime/ai/server/types';
-import { editorRegistry } from '@stravu/runtime';
+import { editorRegistry } from '@stravu/runtime/ai/EditorRegistry';
 
 const LOG_PREVIEW_LENGTH = 400;
 
