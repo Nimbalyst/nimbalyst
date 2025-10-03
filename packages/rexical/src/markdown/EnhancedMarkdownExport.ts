@@ -222,9 +222,21 @@ function exportTopLevelElements(
       elementTransformers,
     );
   } else if ($isDecoratorNode(node)) {
-    // Check element transformers for decorator nodes (like MermaidNode)
+     // Check all transformers for decorator nodes
+    // First try element transformers
     for (const transformer of elementTransformers) {
       const result = transformer.export?.(node, () => node.getTextContent());
+      if (result != null) {
+        return result;
+      }
+    }
+    // Then try text match transformers
+    for (const transformer of textMatchTransformers) {
+      const result = transformer.export?.(
+        node,
+        (_node) => exportChildren(_node, textFormatTransformers, textMatchTransformers, undefined, undefined, shouldPreserveNewLines, elementTransformers),
+        (textNode, textContent) => textContent
+      );
       if (result != null) {
         return result;
       }
