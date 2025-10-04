@@ -30,6 +30,7 @@ import './SearchReplace.css';
 import {SearchReplaceDialog, SearchReplaceDialogHandle} from './SearchReplaceDialog';
 import {mergeRegister} from '@lexical/utils';
 import {$isTextNode, $isElementNode, type LexicalNode} from 'lexical';
+import {useIsEditorActive} from '../../hooks/useIsEditorActive';
 
 export interface SearchMatch {
   key: NodeKey;
@@ -83,6 +84,7 @@ function SearchReplacePlugin(): React.ReactElement | null {
   });
   const highlightManagerRef = useRef<HighlightManager | null>(null);
   const [, setIsEditorFocused] = useState(false);
+  const isEditorActive = useIsEditorActive(editor);
 
   useEffect(() => {
     // Defer highlight manager creation to avoid blocking initial render
@@ -95,6 +97,17 @@ function SearchReplacePlugin(): React.ReactElement | null {
       highlightManagerRef.current?.destroy();
     };
   }, [editor]);
+
+  // Close the search dialog when the editor becomes inactive (e.g., switching tabs)
+  useEffect(() => {
+    if (!isEditorActive && searchState.isVisible) {
+      setSearchState((prev) => ({
+        ...prev,
+        isVisible: false,
+      }));
+      highlightManagerRef.current?.clearHighlights();
+    }
+  }, [isEditorActive, searchState.isVisible]);
 
   const performSearch = useCallback(
     (searchString: string, caseInsensitive: boolean, useRegex: boolean) => {
@@ -360,6 +373,12 @@ function SearchReplacePlugin(): React.ReactElement | null {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Only respond to keyboard events when this editor is active
+      // This prevents multiple Find/Replace dialogs from opening in a multi-tab environment
+      if (!isEditorActive) {
+        return;
+      }
+
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
         e.preventDefault();
         if (!searchState.isVisible) {
@@ -392,7 +411,7 @@ function SearchReplacePlugin(): React.ReactElement | null {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [editor, searchState]);
+  }, [editor, searchState, isEditorActive]);
 
   // Don't render anything if not visible to improve performance
   if (!searchState.isVisible) {

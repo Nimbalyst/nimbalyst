@@ -22,6 +22,7 @@ export { type EditorConfig, DEFAULT_EDITOR_CONFIG, type Theme as ConfigTheme } f
 // Hooks
 export { useFlashMessage } from './hooks/useFlashMessage';
 export { useModal } from './hooks/useModal';
+export { useIsEditorActive } from './hooks/useIsEditorActive';
 
 // Context providers - for advanced usage
 export { ThemeProvider, useTheme, type Theme, type ThemeConfig } from './context/ThemeContext';
