@@ -9,11 +9,28 @@ pkill -f "electron.*packages/electron" || true
 # Wait a moment for processes to fully terminate
 sleep 2
 
+# Clean rexical dist to ensure fresh build
+#echo "Cleaning rexical dist..."
+#rm -rf packages/rexical/dist
+#rm -rf packages/rexical/node_modules/.vite
+
 # Build rexical package first (required dependency)
 echo "Building rexical package..."
 cd packages/rexical
 npm run build
 cd ../..
+
+# Build runtime package (depends on rexical)
+echo "Building runtime package..."
+cd packages/runtime
+npm run build
+cd ../..
+
+# Clean build caches to ensure fresh build with updated packages
+#echo "Cleaning build caches..."
+#rm -rf packages/electron/node_modules/.vite
+#rm -rf packages/runtime/node_modules/.vite
+#rm -rf node_modules/.vite
 
 # Navigate to the electron package directory
 cd packages/electron
