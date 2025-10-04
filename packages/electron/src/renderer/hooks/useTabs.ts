@@ -298,6 +298,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
         fileName: tab.fileName,
         isDirty: tab.isDirty,
         isPinned: tab.isPinned,
+        isVirtual: tab.isVirtual,
         lastSaved: tab.lastSaved?.toISOString()
         // Don't save content or editor state
       }));
@@ -391,6 +392,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
                 content: '', // Content will be loaded when tab is selected
                 isDirty: false, // Reset dirty state on restore
                 isPinned: tab.isPinned,
+                isVirtual: tab.isVirtual,
                 lastSaved: tab.lastSaved ? new Date(tab.lastSaved) : undefined,
                 contentHash: undefined,
                 contentLoadedAt: undefined
