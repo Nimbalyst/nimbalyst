@@ -4,17 +4,24 @@
  */
 
 .plan-table-wrapper {
-  /*margin: 2rem 0;*/
-  background: var(--color-background-secondary);
-  border-radius: 12px;
-  /*padding: 1.5rem;*/
-  border: 2px solid #e5e7eb;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
   transition: all 0.2s ease;
   overflow: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.plan-table-container {
+  flex: 1;
+  overflow: auto;
+  position: relative;
 }
 
 .plan-table-wrapper.selected {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }
 
@@ -25,9 +32,16 @@
 /* Table Styles */
 .plan-table {
   width: 100%;
-    border-radius: 12px;
+  border-radius: 8px;
   border-collapse: collapse;
   font-size: 0.875rem;
+}
+
+.plan-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--background-secondary);
 }
 
 .plan-table thead tr {
@@ -36,15 +50,47 @@
 
 .plan-table-header {
   text-align: left;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 0.75rem;
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   font-size: 0.75rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--border-color);
   white-space: nowrap;
-  background: inherit;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.filter-row .plan-table-header {
+  padding: 0.375rem 0.75rem;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.filter-cell {
+  text-transform: none;
+  font-weight: normal;
+}
+
+.filter-input,
+.filter-select {
+  width: 100%;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  background: var(--background-primary);
+  color: var(--text-primary);
+  transition: border-color 0.15s ease;
+}
+
+.filter-input:focus,
+.filter-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.filter-select {
+  cursor: pointer;
 }
 
 .plan-table-header.sortable {
@@ -55,7 +101,7 @@
 }
 
 .plan-table-header.sortable:hover {
-  background: var(--color-background-hover);
+  background: var(--background-hover);
   opacity: 0.9;
 }
 
@@ -74,7 +120,7 @@
 
 .sort-indicator.active {
   opacity: 1;
-  color: var(--color-primary);
+  color: var(--primary-color);
 }
 
 .plan-table-header.project {
@@ -99,7 +145,7 @@
 
 /* Table Rows */
 .plan-table-row {
-  border-bottom: 1px solid var(--color-border-light);
+  border-bottom: 1px solid var(--border-color);
   transition: background-color 0.15s ease;
   cursor: pointer;
   position: relative;
@@ -114,7 +160,7 @@
 }
 
 .plan-table-cell {
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.75rem;
   vertical-align: middle;
 }
 
@@ -127,7 +173,7 @@
 
 .project-title {
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--text-primary);
   font-size: 0.9375rem;
   line-height: 1.4;
 }
@@ -154,7 +200,7 @@
 /* Updated Text */
 .updated-text {
   font-size: 0.8125rem;
-  color: var(--color-text-tertiary);
+  color: var(--text-tertiary);
 }
 
 /* Compact Progress Field */
@@ -167,7 +213,7 @@
 .progress-value {
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   position: absolute;
   left: 50%;
   top: 50%;
@@ -198,14 +244,14 @@
   justify-content: center;
   gap: 1rem;
   padding: 3rem;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
 }
 
 .spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid var(--color-border);
-  border-top-color: var(--color-primary);
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary-color);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -220,7 +266,7 @@
 .plan-table-empty {
   text-align: center;
   padding: 3rem;
-  color: var(--color-text-tertiary);
+  color: var(--text-tertiary);
   font-size: 0.875rem;
 }
 
@@ -228,7 +274,7 @@
 .plan-table-error {
   text-align: center;
   padding: 2rem;
-  color: var(--color-error);
+  color: #ef4444;
   font-size: 0.875rem;
 }
 
@@ -239,9 +285,30 @@
   border-color: #374151;
 }
 
+[data-theme="dark"] .plan-table thead,
+.dark .plan-table thead {
+  background: #1a1a1a;
+}
+
 [data-theme="dark"] .plan-table thead tr,
 .dark .plan-table thead tr {
   background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .filter-input,
+[data-theme="dark"] .filter-select,
+.dark .filter-input,
+.dark .filter-select {
+  background: #2a2a2a;
+  border-color: #374151;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .filter-input:focus,
+[data-theme="dark"] .filter-select:focus,
+.dark .filter-input:focus,
+.dark .filter-select:focus {
+  border-color: var(--primary-color);
 }
 
 [data-theme="dark"] .progress-bar-container,
@@ -287,9 +354,30 @@
   border-color: #334155;
 }
 
+[data-theme="crystal-dark"] .plan-table thead,
+.crystal-dark .plan-table thead {
+  background: #0f172a;
+}
+
 [data-theme="crystal-dark"] .plan-table thead tr,
 .crystal-dark .plan-table thead tr {
   background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="crystal-dark"] .filter-input,
+[data-theme="crystal-dark"] .filter-select,
+.crystal-dark .filter-input,
+.crystal-dark .filter-select {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+[data-theme="crystal-dark"] .filter-input:focus,
+[data-theme="crystal-dark"] .filter-select:focus,
+.crystal-dark .filter-input:focus,
+.crystal-dark .filter-select:focus {
+  border-color: var(--primary-color);
 }
 
 [data-theme="crystal-dark"] .progress-bar-container,
@@ -331,7 +419,6 @@
 /* Responsive Design */
 @media (max-width: 768px) {
   .plan-table-wrapper {
-    padding: 1rem;
     overflow-x: auto;
   }
 
@@ -341,7 +428,7 @@
 
   .plan-table-header,
   .plan-table-cell {
-    padding: 0.5rem;
+    padding: 0.375rem 0.5rem;
   }
 
   .project-title {

@@ -10,7 +10,7 @@ import {
   $getNodeByKey,
 } from 'lexical';
 import * as React from 'react';
-import type { JSX } from 'react';
+import  { JSX } from 'react';
 import TrackerItemComponent from './TrackerItemComponent';
 
 export type TrackerItemType = 'plan' | 'bug' | 'task';
@@ -101,6 +101,10 @@ export class TrackerItemNode extends DecoratorNode<JSX.Element> {
   isInline(): boolean {
     return true;
   }
+
+    isKeyboardSelectable(): boolean {
+        return super.isKeyboardSelectable();
+    }
 }
 
 export function $createTrackerItemNode(data: TrackerItemData): TrackerItemNode {

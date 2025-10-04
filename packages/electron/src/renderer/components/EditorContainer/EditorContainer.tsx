@@ -11,6 +11,7 @@ import { StravuEditor } from 'rexical';
 import type { Tab } from '../TabManager/TabManager';
 import { getEditorPool } from '../../services/EditorPool';
 import { logger } from '../../utils/logger';
+import { PlanScreen } from '../PlanScreen/PlanScreen';
 import './EditorContainer.css';
 
 interface EditorContainerProps {
@@ -479,6 +480,24 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
     <div className="multi-editor-container">
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
+
+        // Check if this is a virtual plan tab
+        const isPlanTab = tab.isVirtual && tab.filePath === 'virtual://plans';
+
+        if (isPlanTab) {
+          // Render PlanScreen directly for virtual plan tabs
+          return (
+            <div
+              key={tab.id}
+              className={`multi-editor-instance ${isActive ? 'active' : 'hidden'}`}
+              data-active={isActive ? 'true' : 'false'}
+              data-file-path={tab.filePath}
+            >
+              <PlanScreen />
+            </div>
+          );
+        }
+
         const instance = editorPool.get(tab.filePath);
 
         if (!instance) {
