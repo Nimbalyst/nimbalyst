@@ -75,7 +75,9 @@ export {
   createHeadlessEditorFromEditor,
   markdownToJSONSync,
   type InsertMode,
-  getEditorTransformers // Gets complete set of transformers (core + plugin)
+  getEditorTransformers, // Gets complete set of transformers (core + plugin)
+  $convertToEnhancedMarkdownString,
+  $convertNodeToEnhancedMarkdownString
 } from './markdown';
 
 // Markdown normalization utilities
@@ -103,12 +105,6 @@ export {
   $updateFrontmatter,
   $convertFromEnhancedMarkdownString // This is the main function to use!
 } from './markdown/EnhancedMarkdownImport';
-
-// Enhanced markdown export
-export {
-  $convertToEnhancedMarkdownString,
-  $convertNodeToEnhancedMarkdownString
-} from './markdown/EnhancedMarkdownExport';
 
 // Export our forked markdown import (prefer $convertFromEnhancedMarkdownString instead)
 export { $convertFromMarkdownStringRexical } from './markdown/LexicalMarkdownImport';
