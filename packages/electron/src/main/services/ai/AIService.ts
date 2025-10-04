@@ -4,11 +4,8 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import Store from 'electron-store';
-import { SessionManager } from '@stravu/runtime/ai/server/SessionManager';
-import { ProviderFactory } from '@stravu/runtime/ai/server/ProviderFactory';
-import { ModelRegistry } from '@stravu/runtime/ai/server/ModelRegistry';
+import { SessionManager, ProviderFactory, ModelRegistry, AIProvider } from '@stravu/runtime/ai/server';
 import type { SessionStore } from '@stravu/runtime';
-import type { AIProvider } from '@stravu/runtime/ai/server/AIProvider';
 import type {
   DocumentContext,
   Message,

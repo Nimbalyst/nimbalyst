@@ -30,7 +30,6 @@ import { stopAllWorkspaceWatchers } from './file/WorkspaceWatcher.ts';
 import { autoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
 import { migrateUserData } from './migration/dataMigration';
 import { initializeDatabase } from './database/initialize';
-import type { SessionStore } from '@stravu/runtime';
 
 // Track pending file to open
 let pendingFilePath: string | null = null;

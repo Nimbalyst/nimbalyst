@@ -86,6 +86,7 @@ export function registerWorkspaceHandlers() {
             if (!state) {
                 // console.log('[SWITCH_FILE] Creating new window state for window:', windowId);
                 state = {
+                    mode: 'workspace',
                     filePath: null,
                     documentEdited: false,
                     workspacePath: null

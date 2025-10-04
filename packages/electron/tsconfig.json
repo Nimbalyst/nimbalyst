@@ -22,5 +22,5 @@
     "types": []
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist", "out", "**/*.d.ts"]
+  "exclude": ["node_modules", "dist", "out"]
 }

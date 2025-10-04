@@ -142,9 +142,24 @@ interface ElectronAPI {
     openWorkspace: (workspacePath: string) => Promise<{ success: boolean }>;
     removeRecent: (workspacePath: string) => Promise<{ success: boolean }>;
   };
-}
 
-interface Window {
-  electronAPI: ElectronAPI;
-  electron: ElectronAPI; // Alias for compatibility
-}
+  // Document Service
+  documentService: import('@stravu/runtime').DocumentService;
+
+  // Open AI Models window
+  openAIModels: () => Promise<void>;
+
+  // Open external links
+  openExternal: (url: string) => Promise<void>;
+
+  // Generic IPC methods for services
+  invoke: (channel: string, ...args: any[]) => Promise<any>;
+  send: (channel: string, ...args: any[]) => void;
+  on: (channel: string, callback: (...args: any[]) => void) => () => void;
+  off: (channel: string, callback: (...args: any[]) => void) => void;
+  }
+
+  interface Window {
+    electronAPI: ElectronAPI;
+    electron: ElectronAPI; // Alias for compatibility
+  }

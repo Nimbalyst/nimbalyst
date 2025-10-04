@@ -216,6 +216,7 @@ export function registerFileHandlers() {
         if (!state) {
             console.log('[SET_FILE] Creating new window state for window:', windowId);
             state = {
+                mode: 'document',
                 filePath: null,
                 documentEdited: false,
                 workspacePath: null

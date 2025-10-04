@@ -20,13 +20,21 @@
       "import": "./dist/ai/plugins/AIChatIntegrationPlugin/index.js",
       "types": "./dist/ai/plugins/AIChatIntegrationPlugin/index.d.ts"
     },
+    "./ai/server": {
+      "import": "./dist/ai/server/index.js",
+      "types": "./dist/ai/server/index.d.ts"
+    },
     "./ai/server/types": {
-      "import": "./dist/ai/types.js",
-      "types": "./dist/ai/types.d.ts"
+      "import": "./dist/ai/server/types.js",
+      "types": "./dist/ai/server/types.d.ts"
     },
     "./ai/modelConstants": {
       "import": "./dist/ai/modelConstants.js",
       "types": "./dist/ai/modelConstants.d.ts"
+    },
+    "./agents": {
+      "import": "./dist/agents/index.js",
+      "types": "./dist/agents/index.d.ts"
     }
   },
   "files": ["dist"],
