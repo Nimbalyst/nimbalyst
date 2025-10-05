@@ -22,6 +22,7 @@ export {
   INSERT_TRACKER_TASK_COMMAND,
   INSERT_TRACKER_BUG_COMMAND,
   INSERT_TRACKER_PLAN_COMMAND,
+  INSERT_TRACKER_IDEA_COMMAND,
   type ItemTrackerPluginProps,
 } from './ItemTrackerPlugin';
 

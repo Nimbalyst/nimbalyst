@@ -366,7 +366,11 @@ export function createWindow(
 
         // Load the HTML file with error handling
         const loadContent = () => {
-            if (process.env.NODE_ENV === 'development') {
+            // Check for explicit renderer URL from environment (for Playwright tests)
+            if (process.env.ELECTRON_RENDERER_URL) {
+                console.log('[MAIN] Loading from ELECTRON_RENDERER_URL:', process.env.ELECTRON_RENDERER_URL);
+                return window.loadURL(process.env.ELECTRON_RENDERER_URL);
+            } else if (process.env.NODE_ENV === 'development') {
                 console.log('[MAIN] Loading from dev server');
                 return window.loadURL('http://localhost:5273');
             } else {

@@ -5,7 +5,7 @@
  */
 
 import { ElementTransformer, TextMatchTransformer } from '@lexical/markdown';
-import { LexicalNode, TextNode } from 'lexical';
+import { $createTextNode, ElementNode, LexicalNode, TextNode } from 'lexical';
 import {
   $createTrackerItemNode,
   $isTrackerItemNode,
@@ -20,18 +20,20 @@ function generateId(prefix: string): string {
   return `${prefix}_${timestamp}${random}`;
 }
 
-// TODO GH: Do we really need this extra transformer (See the IMAGE transformer)
-// ElementTransformer for EXPORT (handles decorator node serialization)
+// ElementTransformer for EXPORT (handles ElementNode serialization)
 export const TRACKER_ITEM_ELEMENT_TRANSFORMER: ElementTransformer = {
   dependencies: [TrackerItemNode],
-  export: (node: LexicalNode) => {
+  export: (node: LexicalNode, exportChildren: (elementNode: ElementNode) => string) => {
     if (!$isTrackerItemNode(node)) {
       return null;
     }
 
     const data = node.getData();
 
-    // Create the metadata object (omit undefined fields)
+    // Get text content from children
+    const textContent = exportChildren(node);
+
+    // Create the metadata object (omit undefined fields and title since it's in text)
     const metadata: Partial<TrackerItemData> = {
       id: data.id,
       type: data.type,
@@ -44,9 +46,8 @@ export const TRACKER_ITEM_ELEMENT_TRANSFORMER: ElementTransformer = {
     if (data.created) metadata.created = data.created;
     if (data.updated) metadata.updated = data.updated;
     if (data.dueDate) metadata.dueDate = data.dueDate;
-    if (data.title) metadata.title = data.title;
 
-    // Export as @type[key:value ...] format for readability
+    // Export as: text content @type[metadata...]
     const parts: string[] = [];
     parts.push(`id:${metadata.id}`);
     parts.push(`status:${metadata.status}`);
@@ -55,33 +56,34 @@ export const TRACKER_ITEM_ELEMENT_TRANSFORMER: ElementTransformer = {
     if (metadata.created) parts.push(`created:${metadata.created}`);
     if (metadata.updated) parts.push(`updated:${metadata.updated}`);
     if (metadata.dueDate) parts.push(`due:${metadata.dueDate}`);
-    if (metadata.title) parts.push(`title:"${metadata.title.replace(/"/g, '\\"')}"`);
     if (metadata.tags && metadata.tags.length > 0) parts.push(`tags:${metadata.tags.join(',')}`);
 
-    return `@${data.type}[${parts.join(' ')}]`;
+    return `${textContent} @${data.type}[${parts.join(' ')}]`;
   },
   regExp: /(?!)/,  // Never match - negative lookahead that always fails
   replace: () => {},
   type: 'element',
 };
 
-// TextMatchTransformer for IMPORT (handles typing @bug and converting to node)
+// TextMatchTransformer for IMPORT (handles markdown with @bug[...] metadata)
 export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
   dependencies: [TrackerItemNode],
   export: () => null,  // Export handled by ElementTransformer
-  importRegExp: /@(bug|task|plan)\[.+?\]/,
-  regExp: /@(bug|task|plan)\[.+?\]/,
+  importRegExp: /^(.+?)\s+@(bug|task|plan|idea)\[.+?\]$/,
+  regExp: /^(.+?)\s+@(bug|task|plan|idea)\[.+?\]$/,
   replace: (textNode: TextNode, match: RegExpMatchArray) => {
     console.log('TrackerItem transformer matched:', match[0]);
     const fullMatch = match[0];
-    const typeMatch = fullMatch.match(/@(bug|task|plan)\[(.+?)\]/);
-    if (!typeMatch) {
-      console.log('No type match found');
+
+    // Extract text content and metadata
+    const contentMatch = fullMatch.match(/^(.+?)\s+@(bug|task|plan|idea)\[(.+?)\]$/);
+    if (!contentMatch) {
+      console.log('No content match found');
       return;
     }
 
-    const [, type, propsStr] = typeMatch;
-    console.log('Type:', type, 'Props:', propsStr);
+    const [, textContent, type, propsStr] = contentMatch;
+    console.log('Text:', textContent, 'Type:', type, 'Props:', propsStr);
 
     try {
       // Parse key:value pairs
@@ -102,7 +104,6 @@ export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
           case 'created': metadata.created = cleanValue; break;
           case 'updated': metadata.updated = cleanValue; break;
           case 'due': metadata.dueDate = cleanValue; break;
-          case 'title': metadata.title = cleanValue; break;
           case 'tags': metadata.tags = cleanValue.split(','); break;
         }
       }
@@ -113,7 +114,7 @@ export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
       const data: TrackerItemData = {
         id,
         type: (type || metadata.type || 'task') as TrackerItemData['type'],
-        title: metadata.title || `New ${type}`,
+        title: textContent.trim(),
         status: metadata.status || 'to-do',
         priority: metadata.priority,
         owner: metadata.owner,
@@ -125,6 +126,11 @@ export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
 
       console.log('Creating TrackerItemNode with data:', data);
       const node = $createTrackerItemNode(data);
+
+      // Add text content as children
+      const childTextNode = $createTextNode(textContent.trim());
+      node.append(childTextNode);
+
       console.log('Created node:', node);
       textNode.replace(node);
     } catch (e) {
