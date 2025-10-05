@@ -47,7 +47,11 @@ interface ElectronAPI {
   // File operations
   getTheme: () => Promise<string>;
   openFile: () => Promise<{ filePath: string; content: string } | null>;
-  saveFile: (content: string, filePath: string) => Promise<{ success: boolean; filePath: string } | null>;
+  saveFile: (
+    content: string,
+    filePath: string,
+    lastKnownContent?: string
+  ) => Promise<{ success: boolean; filePath: string; conflict?: boolean; diskContent?: string } | null>;
   saveFileAs: (content: string) => Promise<{ success: boolean; filePath: string } | null>;
 
   setDocumentEdited: (edited: boolean) => void;

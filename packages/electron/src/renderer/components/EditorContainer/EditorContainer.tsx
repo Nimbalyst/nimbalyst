@@ -5,7 +5,7 @@
  * This preserves editor state (selection, scroll, undo/redo) when switching tabs.
  */
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { ConfigTheme, TextReplacement } from 'rexical';
 import { StravuEditor } from 'rexical';
 import type { Tab } from '../TabManager/TabManager';
@@ -47,6 +47,8 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
   const editorPool = getEditorPool();
   const getContentFuncs = useRef<Map<string, () => string>>(new Map());
   const lastSnapshotContent = useRef<Map<string, string>>(new Map()); // Track last snapshot content per file
+  // Track a throwaway counter to force React rerenders when editorPool changes outside of state
+  const [, forceRender] = useReducer((count: number) => count + 1, 0);
 
   // Helper: Save file with history snapshot (encapsulates ALL per-file save logic)
   const saveWithHistory = useCallback(async (
@@ -57,10 +59,46 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
     if (!window.electronAPI) return;
 
     try {
-      // Save to disk
-      const result = await window.electronAPI.saveFile(content, filePath);
+      // Get the initial content for conflict detection
+      const instance = editorPool.get(filePath);
+      const initialContent = instance?.initialContent;
+
+      // Save to disk with conflict detection
+      const result = await window.electronAPI.saveFile(content, filePath, initialContent);
 
       if (result) {
+        // Check for conflicts
+        if (result.conflict) {
+          console.log('[EditorContainer] Save conflict detected, prompting user');
+          const shouldOverwrite = window.confirm(
+            'The file has been modified externally since you opened it.\n\n' +
+            'Do you want to overwrite the external changes with your edits?\n\n' +
+            'Click OK to overwrite, or Cancel to reload the file from disk.'
+          );
+
+          if (shouldOverwrite) {
+            // Retry save without conflict checking (force overwrite)
+            const forceResult = await window.electronAPI.saveFile(content, filePath);
+            if (forceResult && forceResult.success) {
+              // Update initial content after successful save
+              editorPool.update(filePath, {
+                initialContent: content,
+                lastSaveTime: Date.now()
+              });
+            }
+          } else {
+            // User chose to reload - update editor with disk content
+            editorPool.update(filePath, {
+              content: result.diskContent,
+              initialContent: result.diskContent,
+              isDirty: false,
+              reloadVersion: (instance?.reloadVersion ?? 0) + 1
+            });
+            forceRender();
+            return;
+          }
+        }
+
         // Create history snapshot for this file
         if (window.electronAPI.history) {
           try {
@@ -241,58 +279,126 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
   }, [activeTabId, tabs, editorPool, onGetContent, saveWithHistory, onContentChange]);
 
   // Set up file watching for all editor instances
+  const processingChangesRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     if (!window.electronAPI) return;
 
     const handleFileChanged = async (data: { path: string }) => {
-      logger.ui.info(`[EditorContainer] File changed on disk: ${data.path}`);
+      // Skip if we're already processing a change for this file
+      if (processingChangesRef.current.has(data.path)) {
+        console.log('[EditorContainer] Already processing change for', data.path, '- ignoring duplicate event');
+        return;
+      }
 
-      // Find the tab for this file
+      // Mark as processing
+      processingChangesRef.current.add(data.path);
+
+      try {
+        await handleFileChangedInternal(data);
+      } finally {
+        // Clear processing flag after a delay to catch rapid-fire events
+        setTimeout(() => {
+          processingChangesRef.current.delete(data.path);
+        }, 1000);
+      }
+    };
+
+    const handleFileChangedInternal = async (data: { path: string }) => {
+      logger.ui.info(`[EditorContainer] File changed on disk: ${data.path}`);
+      console.log('[EditorContainer] file-changed handler invoked', data.path);
+
       const tab = tabs.find(t => t.filePath === data.path);
       if (!tab) return;
 
       const instance = editorPool.get(data.path);
       if (!instance) return;
 
-      // Ignore file changes shortly after we saved (prevents reload loops)
-      // Use a longer window (5 seconds) to account for slow file systems and autosave timing
+      // Prevent reload loops immediately after we saved the file ourselves
       if (instance.lastSaveTime && Date.now() - instance.lastSaveTime < 5000) {
         logger.ui.info(`[EditorContainer] Ignoring file change (just saved ${tab.fileName})`);
         return;
       }
 
-      // Only auto-reload if this is NOT the active tab (background tabs get updated silently)
-      // For the active tab, only reload if it's not dirty
-      if (tab.id === activeTabId && instance.isDirty) {
-        logger.ui.info(`[EditorContainer] File changed but active tab is dirty, keeping local changes: ${tab.fileName}`);
-        return;
-      }
-
-      // Reload the file content
       try {
         const result = await window.electronAPI.readFileContent(data.path);
-        if (result && typeof result === 'object' && 'content' in result) {
-          const newContent = result.content || '';
+        if (!result || typeof result !== 'object' || !('content' in result)) {
+          return;
+        }
 
-          // Update the editor pool instance
+        const newContent = result.content || '';
+        const currentContent = instance.content ?? '';
+
+        if (newContent === currentContent) {
+          logger.ui.info(`[EditorContainer] Disk content matches editor for ${tab.fileName}, skipping reload`);
+          return;
+        }
+
+        const isActiveTab = tab.id === activeTabId;
+        const nextReloadVersion = (instance.reloadVersion ?? 0) + 1;
+
+        const applyReload = async () => {
+          console.log('[EditorContainer] applyReload executing', {
+            file: tab.fileName,
+            isActiveTab,
+            dirty: instance.isDirty,
+            reloadVersion: nextReloadVersion,
+          });
+
+          // Create history snapshot of the external change (new content from disk)
+          if (window.electronAPI?.history && newContent) {
+            try {
+              await window.electronAPI.history.createSnapshot(
+                data.path,
+                newContent,
+                'external-change',
+                'File modified externally'
+              );
+              logger.ui.info(`[EditorContainer] Created history snapshot for external change: ${tab.fileName}`);
+            } catch (error) {
+              logger.ui.error(`[EditorContainer] Failed to create history snapshot:`, error);
+            }
+          }
+
           editorPool.update(data.path, {
             content: newContent,
             initialContent: newContent,
             isDirty: false,
+            reloadVersion: nextReloadVersion,
           });
 
-          logger.ui.info(`[EditorContainer] Reloaded ${tab.fileName} after disk change`);
-
-          // Notify parent
-          onContentChange?.(tab.id, false);
-
-          // If this is the active tab, we need to recreate the editor to show new content
-          if (tab.id === activeTabId) {
-            // Force re-render by destroying and recreating
-            editorPool.destroy(data.path);
-            editorPool.create(data.path, newContent);
+          // Drop any stale getter so the remounted editor can register a fresh one
+          if (getContentFuncs.current.has(tab.id)) {
+            getContentFuncs.current.delete(tab.id);
           }
+
+          logger.ui.info(`[EditorContainer] Reloaded ${tab.fileName} after disk change`);
+          onContentChange?.(tab.id, false);
+          forceRender();
+        };
+
+        if (isActiveTab && instance.isDirty) {
+          console.log('[EditorContainer] prompting to resolve dirty reload', {
+            file: tab.fileName,
+          });
+          const shouldReload = window.confirm(
+            'The file has been changed on disk but you have unsaved changes.\n\n' +
+            'Do you want to reload the file from disk and lose your changes?\n\n' +
+            'Click OK to reload from disk, or Cancel to keep your changes.'
+          );
+
+          if (shouldReload) {
+            console.log('[EditorContainer] user accepted reload', tab.fileName);
+            await applyReload();
+          } else {
+            logger.ui.info(`[EditorContainer] User kept local changes for ${tab.fileName} after disk change`);
+            console.log('[EditorContainer] user declined reload', tab.fileName);
+          }
+          return;
         }
+
+        await applyReload();
+        console.log('[EditorContainer] applied reload without prompt', tab.fileName);
       } catch (error) {
         logger.ui.error(`[EditorContainer] Failed to reload ${tab.fileName}:`, error);
       }

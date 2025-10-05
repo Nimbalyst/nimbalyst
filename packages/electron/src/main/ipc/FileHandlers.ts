@@ -49,7 +49,7 @@ export function registerFileHandlers() {
     });
 
     // Save file
-    ipcMain.handle('save-file', async (event, content: string, specificFilePath: string) => {
+    ipcMain.handle('save-file', async (event, content: string, specificFilePath: string, lastKnownContent?: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {
             console.error('[SAVE] ✗ No window found for event sender');
@@ -66,19 +66,6 @@ export function registerFileHandlers() {
         const filePath = specificFilePath;
 
         console.log('[SAVE] save-file handler called at', new Date().toISOString(), 'for path:', filePath);
-        // console.log('[SAVE] Window ID:', windowId);
-        // console.log('[SAVE] Window state exists:', !!state);
-        // console.log('[SAVE] Current state:', {
-        //     hasState: !!state,
-        //     filePath: state?.filePath,
-        //     workspacePath: state?.workspacePath,
-        //     documentEdited: state?.documentEdited
-        // });
-        // console.log('[SAVE] All window states:', Array.from(windowStates.entries()).map(([id, s]) => ({
-        //     windowId: id,
-        //     filePath: s?.filePath,
-        //     workspacePath: s?.workspacePath
-        // })));
 
         try {
             if (!filePath) {
@@ -91,17 +78,34 @@ export function registerFileHandlers() {
                 return null;
             }
 
+            // Check for conflicts with external changes before saving
+            if (lastKnownContent !== undefined && existsSync(filePath)) {
+                try {
+                    const currentDiskContent = readFileSync(filePath, 'utf-8');
+                    if (currentDiskContent !== lastKnownContent) {
+                        console.log('[SAVE] ⚠ Conflict detected - file changed on disk since last load');
+                        return {
+                            success: false,
+                            conflict: true,
+                            filePath,
+                            diskContent: currentDiskContent
+                        };
+                    }
+                } catch (readError) {
+                    console.error('[SAVE] Failed to check for conflicts:', readError);
+                    // Continue with save if we can't read the file
+                }
+            }
+
             // Mark that we're saving to prevent file watcher from reacting
             savingWindows.add(windowId);
             console.log('[SAVE] Marked window as saving:', windowId);
 
             console.log('[SAVE] Writing to file:', filePath);
-            // console.log('[SAVE] Content preview (first 100 chars):', content.substring(0, 100));
             saveFile(filePath, content);
 
             if (state) {
                 state.documentEdited = false; // Reset dirty state after save
-                // console.log('[SAVE] ✓ Reset documentEdited flag');
             }
 
             // Refresh metadata cache immediately after save if in workspace mode
@@ -120,10 +124,8 @@ export function registerFileHandlers() {
             // Clear the saving flag after a delay to ensure the file watcher doesn't react
             setTimeout(() => {
                 savingWindows.delete(windowId);
-                // console.log('[SAVE] Cleared saving flag for window:', windowId);
             }, AUTOSAVE_DELAY);
 
-            // console.log('[SAVE] ✓ Save successful to:', filePath);
             return { success: true, filePath };
         } catch (error) {
             console.error('[SAVE] ✗ Error saving file:', error);
@@ -333,5 +335,55 @@ export function registerFileHandlers() {
                 error: error instanceof Error ? error.message : 'Unknown error'
             };
         }
+    });
+
+    // Start watching a file (when tab is opened)
+    ipcMain.handle('start-watching-file', async (event, filePath: string) => {
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) {
+            console.error('[START_WATCH] No window found');
+            return { success: false };
+        }
+
+        if (!filePath || filePath.startsWith('virtual://')) {
+            return { success: false };
+        }
+
+        console.log('[START_WATCH] Starting file watcher for:', filePath);
+
+        try {
+            // Wait for the watcher to be ready before returning
+            await startFileWatcher(window, filePath);
+            console.log('[START_WATCH] File watcher ready for:', filePath);
+            return { success: true };
+        } catch (error) {
+            console.error('[START_WATCH] Failed to start watcher:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
+    // Stop watching a specific file (when tab is closed)
+    ipcMain.handle('stop-watching-file', async (event, filePath: string) => {
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) {
+            console.error('[STOP_WATCH] No window found');
+            return { success: false };
+        }
+
+        const windowId = getWindowId(window);
+        if (windowId === null) {
+            console.error('[STOP_WATCH] Failed to find custom window ID');
+            return { success: false };
+        }
+
+        if (!filePath || filePath.startsWith('virtual://')) {
+            return { success: false };
+        }
+
+        console.log('[STOP_WATCH] Stopping file watcher for:', filePath);
+        // Use the ChokidarFileWatcher's stopFile method to stop watching a specific file
+        const { chokidarFileWatcher } = require('../file/FileWatcher');
+        chokidarFileWatcher.stopFile(windowId, filePath);
+        return { success: true };
     });
 }

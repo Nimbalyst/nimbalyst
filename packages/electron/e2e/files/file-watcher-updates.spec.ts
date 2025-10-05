@@ -43,6 +43,14 @@ test.describe('File Watcher Updates', () => {
     const filePath = path.join(workspaceDir, 'watched.md');
     const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
 
+    // Listen for console messages from the Electron app
+    const consoleLogs: string[] = [];
+    page.on('console', msg => {
+      const text = msg.text();
+      consoleLogs.push(text);
+      console.log(`[ELECTRON] ${text}`);
+    });
+
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'watched.md' }).click();
     await expect(page.locator('.tab.active .tab-title')).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
@@ -51,16 +59,23 @@ test.describe('File Watcher Updates', () => {
     let editorText = await editor.innerText();
     expect(editorText).toContain('Original content from disk');
 
+    console.log('[TEST] About to modify file externally');
+
     // Simulate external modification (AI agent editing the file)
     const externalEdit = 'This line was added by an external process like an AI agent.';
     const newContent = `# Watched File\n\nOriginal content from disk.\n\n${externalEdit}\n`;
     await fs.writeFile(filePath, newContent, 'utf8');
+
+    console.log('[TEST] File modified, waiting for detection...');
 
     // Wait for file watcher to detect the change
     // The app should either:
     // 1. Automatically reload the content, or
     // 2. Show a notification/dialog about the external change
     await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+
+    console.log('[TEST] Console logs from app:');
+    consoleLogs.forEach(log => console.log(log));
 
     // Check if content was updated in the editor
     editorText = await editor.innerText();

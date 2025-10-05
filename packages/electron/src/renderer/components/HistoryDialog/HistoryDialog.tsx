@@ -109,6 +109,8 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
         return 'smart_toy';
       case 'pre-apply':
         return 'bolt';
+      case 'external-change':
+        return 'sync_alt';
       case 'auto':
         return 'schedule';
       default:
@@ -144,9 +146,9 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
               </div>
             ) : (
               <div className="history-items">
-                {snapshots.map((snapshot) => (
+                {snapshots.map((snapshot, index) => (
                   <div
-                    key={snapshot.timestamp}
+                    key={`${snapshot.timestamp}-${snapshot.type}-${index}`}
                     className={`history-item ${selectedSnapshot === snapshot.timestamp ? 'selected' : ''}`}
                     onClick={() => handleSnapshotSelect(snapshot.timestamp)}
                   >

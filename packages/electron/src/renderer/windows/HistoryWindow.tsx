@@ -4,7 +4,7 @@ import './HistoryWindow.css';
 
 interface Snapshot {
   timestamp: string;
-  type: 'auto-save' | 'manual' | 'ai-diff' | 'pre-apply';
+  type: 'auto-save' | 'manual' | 'ai-diff' | 'pre-apply' | 'external-change';
   size: number;
   baseMarkdownHash: string;
 }
@@ -137,6 +137,8 @@ export function HistoryWindow() {
         return 'smart_toy';
       case 'pre-apply':
         return 'backup';
+      case 'external-change':
+        return 'sync_alt';
       default:
         return 'history';
     }
@@ -152,6 +154,8 @@ export function HistoryWindow() {
         return 'AI Edit';
       case 'pre-apply':
         return 'Pre-apply';
+      case 'external-change':
+        return 'External Change';
       default:
         return type;
     }

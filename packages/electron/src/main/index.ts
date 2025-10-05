@@ -17,6 +17,7 @@ import { registerSettingsHandlers } from './ipc/SettingsHandlers';
 import { registerWindowHandlers } from './ipc/WindowHandlers';
 import { registerHistoryHandlers } from './ipc/HistoryHandlers';
 import { registerSessionHandlers } from './ipc/SessionHandlers';
+import { registerWorkspaceWatcherHandlers } from './file/WorkspaceWatcher';
 import { getTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
 import { AgentService } from './services/agents/AgentService';
@@ -226,6 +227,7 @@ app.whenReady().then(async () => {
     // Register all IPC handlers
     registerFileHandlers();
     registerWorkspaceHandlers();
+    registerWorkspaceWatcherHandlers();
     registerSettingsHandlers();
     registerWindowHandlers();
     await registerHistoryHandlers();

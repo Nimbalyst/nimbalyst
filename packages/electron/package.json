@@ -40,6 +40,7 @@
     "@types/glob": "^8.1.0",
     "@types/uuid": "^10.0.0",
     "better-sqlite3": "^12.2.0",
+    "chokidar": "^4.0.3",
     "diff": "^5.2.0",
     "electron-log": "^5.4.3",
     "electron-store": "^8.2.0",

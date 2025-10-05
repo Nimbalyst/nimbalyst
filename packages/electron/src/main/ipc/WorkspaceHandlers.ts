@@ -51,6 +51,11 @@ export function registerWorkspaceHandlers() {
 
     // Read file content (without changing watcher or state)
     ipcMain.handle('read-file-content', async (event, filePath: string) => {
+        // Skip virtual files - they don't exist on disk
+        if (filePath.startsWith('virtual://')) {
+            return null;
+        }
+
         try {
             const content = readFileSync(filePath, 'utf-8');
             return { content };
@@ -65,6 +70,11 @@ export function registerWorkspaceHandlers() {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {
             console.error('[SWITCH_FILE] ✗ No window found for event sender');
+            return null;
+        }
+
+        // Skip virtual files - they don't exist on disk
+        if (filePath.startsWith('virtual://')) {
             return null;
         }
 
@@ -97,11 +107,9 @@ export function registerWorkspaceHandlers() {
             const oldFilePath = state.filePath;
             // console.log('[SWITCH_FILE] Previous file:', oldFilePath);
 
-            // Stop watching the old file
-            if (oldFilePath && oldFilePath !== filePath) {
-                // console.log('[SWITCH_FILE] Stopping watcher for old file');
-                stopFileWatcher(windowId);
-            }
+            // Note: We no longer stop the old file watcher here.
+            // SimpleFileWatcher now supports watching multiple files per window,
+            // so all open tabs can be watched simultaneously.
 
             // Update state
             state.filePath = filePath;
@@ -114,9 +122,9 @@ export function registerWorkspaceHandlers() {
                 // console.log('[SWITCH_FILE] Added to recent files');
             }
 
-            // Start watching the new file
-            startFileWatcher(window, filePath);
-            // console.log('[SWITCH_FILE] Started file watcher');
+            // NOTE: File watching is now handled by start-watching-file/stop-watching-file
+            // which are called when tabs are opened/closed, not when switching between them.
+            // This ensures all open tabs remain watched even when in the background.
 
             // Set represented filename for macOS
             if (process.platform === 'darwin') {

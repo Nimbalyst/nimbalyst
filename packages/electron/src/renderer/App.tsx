@@ -196,6 +196,30 @@ export default function App() {
         if (window.electronAPI) {
           window.electronAPI.setCurrentFile(tab.filePath);
         }
+
+        // Double-check: reload file from disk if it changed externally
+        // This catches cases where file watchers missed the change
+        if (!tab.isVirtual && window.electronAPI?.readFileContent) {
+          try {
+            const result = await window.electronAPI.readFileContent(tab.filePath);
+            if (result && result.content) {
+              const editorPool = getEditorPool();
+              const instance = editorPool.get(tab.filePath);
+              if (instance && instance.content !== result.content) {
+                console.log('[App] Tab switch detected external file change, updating EditorPool:', tab.fileName);
+                // Update the EditorPool with the new content
+                editorPool.update(tab.filePath, {
+                  content: result.content,
+                  initialContent: result.content,
+                  isDirty: false,
+                  reloadVersion: (instance.reloadVersion ?? 0) + 1,
+                });
+              }
+            }
+          } catch (error) {
+            console.error('[App] Failed to check file for external changes:', error);
+          }
+        }
       }
     },
     onTabClose: (tab) => {

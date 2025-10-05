@@ -131,7 +131,25 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     setTabOrder(prev => [...prev, tabId]);
     setActiveTabId(tabId);
     console.log('[useTabs] Set activeTabId to:', tabId);
+    console.log('[useTabs] About to check file watcher condition');
 
+    // Start watching the file for external changes (skip virtual files)
+    // Access window.electronAPI directly to avoid stale closure
+    const electronAPI = (window as any).electronAPI;
+    console.log('[useTabs] electronAPI exists?', !!electronAPI, 'filePath:', filePath);
+
+    if (electronAPI && !filePath.startsWith('virtual://')) {
+      console.log('[useTabs] Calling start-watching-file for:', filePath);
+      electronAPI.invoke('start-watching-file', filePath).then((result: any) => {
+        console.log('[useTabs] start-watching-file result:', result);
+      }).catch((err: Error) => {
+        console.error('[useTabs] Failed to start watching file:', err);
+      });
+    } else {
+      console.log('[useTabs] NOT calling start-watching-file - electronAPI:', !!electronAPI, 'isVirtual:', filePath.startsWith('virtual://'));
+    }
+
+    console.log('[useTabs] After file watcher code');
     return tabId;
   }, [enabled, tabs, maxTabs, generateTabId, onTabChange]);
 
@@ -142,6 +160,13 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
 
     // Call onTabClose callback
     onTabClose?.(tab);
+
+    // Stop watching the file (skip virtual files)
+    if (window.electronAPI && !tab.filePath.startsWith('virtual://')) {
+      window.electronAPI.invoke('stop-watching-file', tab.filePath).catch((err: Error) => {
+        console.error('[useTabs] Failed to stop watching file:', err);
+      });
+    }
 
     setTabs(prev => {
       const newTabs = new Map(prev);
@@ -403,12 +428,23 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
             // Set all state at once
             setTabs(restoredTabs);
             setTabOrder(savedState.tabOrder || []);
-            
+
+            // Start watching all restored tabs (skip virtual files)
+            if (window.electronAPI) {
+              for (const tab of restoredTabs.values()) {
+                if (!tab.filePath.startsWith('virtual://')) {
+                  window.electronAPI.invoke('start-watching-file', tab.filePath).catch((err: Error) => {
+                    console.error('[TABS] Failed to start watching restored tab:', tab.filePath, err);
+                  });
+                }
+              }
+            }
+
             // Restore the active tab if it exists
             if (savedState.activeTabId && restoredTabs.has(savedState.activeTabId)) {
               setActiveTabId(savedState.activeTabId);
             }
-            
+
             console.log('[TABS] Restored', restoredTabs.size, 'tabs, active:', savedState.activeTabId);
           } else {
             console.log('[TABS] No saved tabs to restore');

@@ -86,13 +86,23 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
     }
   }, [currentFilePath, items, level, findParentDirs]);
 
-  const toggleDirectory = useCallback((path: string) => {
+  const toggleDirectory = useCallback(async (path: string) => {
     setExpandedDirs(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(path)) {
+      const wasExpanded = newSet.has(path);
+
+      if (wasExpanded) {
         newSet.delete(path);
+        // Notify main process that folder was collapsed
+        if (window.electronAPI) {
+          window.electronAPI.invoke('workspace-folder-collapsed', path);
+        }
       } else {
         newSet.add(path);
+        // Notify main process that folder was expanded
+        if (window.electronAPI) {
+          window.electronAPI.invoke('workspace-folder-expanded', path);
+        }
       }
       return newSet;
     });

@@ -1,14 +1,16 @@
 # Preditor
 
+Preditor is the AI-native markdown workspace for teams that build with agents. It brings document editing, planning, and delivery into a single canvas so you can move from concept to shipped work without switching tools.
 
-Preditor is a powerful, rich text markdown editor based on the Lexical editor project. 
+With agentic workflows and deep ties into your AI coding copilots, Preditor enables assistants that can read your codebase, propose implementation plans, draft documentation, and track features, ideas, and todos—while keeping you in control of every decision.
 
-While heavily leveraging the Lexical playground environment, this editor works to make this functionality available as an embeddable component. It also adds an externally configurable plugin architecture and several new plugins.
+## Key Benefits
 
-## Features Added on top of Lexical
-
-- Search / Replace
-- Red / Green Diff rendering
+- **AI assistive document editing**: Blend natural writing with agent suggestions that understand your context and keep documents aligned with product goals.
+- **Code-aware agent orchestration**: Connect to AI coding agents that can inspect your repository to generate plans, outline changes, and sync action items back to the editor.
+- **Team-aligned workspaces**: Bring engineering, product, and documentation together in one AI-aware canvas that keeps everyone working from the same plan.
+- **Extensible ecosystem**: Compose custom plugins, inputs, and UI to tailor Preditor to engineering, product, or documentation teams.
+- **Production-ready foundations**: Built on Lexical for performance, stability, and accessibility so you can focus on your experience—not the editor internals.
 
 ## Packages
 
@@ -40,6 +42,11 @@ cd packages/electron && npm run build:mac:local
 
 ## Features
 
+### 🤖 Agentic Workflows
+- **Implementation planning**: Spin up AI coding agents that can read your repository, outline proposed changes, and turn them into actionable tasks.
+- **Documentation copilots**: Generate architecture notes, release checklists, and onboarding docs that stay grounded in your source of truth.
+- **Live task tracking**: Keep features, ideas, and todos synced inside the document so every conversation has an owner and next step.
+
 ### 🔥 Core Editor Features
 - **Rich Text Editing**: Full-featured WYSIWYG editor with support for bold, italic, underline, strikethrough, and more
 - **Markdown Support**: Toggle between rich text and markdown source view with the markdown button in the toolbar
@@ -55,6 +62,10 @@ cd packages/electron && npm run build:mac:local
 - **Manual Save**: Cmd+S (Mac) / Ctrl+S (Windows) keyboard shortcuts
 - **File Operations**: New File, Open File, Load File, and Save File operations
 - **URL Integration**: File names are reflected in the URL for bookmarking and sharing
+
+## Open Data Philosophy
+
+Preditor keeps every insight in plain Markdown so you never lose control of your knowledge. Bugs, ideas, tasks, and implementation plans live alongside your content as transparent documents—no opaque databases or locked-down SaaS exports required. When you're ready to share, commit the files to Git and bring your workflows into the same review and collaboration loops that already power your code.
 
 ## Development
 
@@ -410,3 +421,6 @@ This project is based on Meta's Lexical playground and maintains the same MIT li
 - Originally based on the Lexical playground example
 - Transformed into a production-ready editor component
 - Comprehensive plugin architecture for extensibility
+- 
+
+Preditor is a modern, rich‑text Markdown editor that turns documentation and code writing into a fast, delightful experience. Built on Lexical, it delivers blazing performance, elegant formatting, powerful tables, code blocks with syntax highlighting, images, and Excalidraw—plus pro features like search/replace and red/green diff rendering. Its modular plugin architecture and simple React API make integration effortless, while auto‑save, hybrid file system support (Web FS, OPFS, Electron), and cross‑platform apps (Web, Electron, Tauri, Capacitor) keep teams productive everywhere. With AI‑assisted editing, project‑aware file management, and seamless theming, Preditor brings a polished, production‑ready editor to your product in minutes.

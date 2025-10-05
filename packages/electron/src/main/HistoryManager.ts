@@ -10,7 +10,7 @@ import { logger } from './utils/logger';
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 
-export type SnapshotType = 'auto-save' | 'manual' | 'ai-diff' | 'pre-apply';
+export type SnapshotType = 'auto-save' | 'manual' | 'ai-diff' | 'pre-apply' | 'external-change';
 
 export interface Snapshot {
   timestamp: string;
