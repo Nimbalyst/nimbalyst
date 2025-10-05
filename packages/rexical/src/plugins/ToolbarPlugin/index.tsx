@@ -867,16 +867,18 @@ export default function ToolbarPlugin({
         aria-label="Toggle markdown view">
         <i className="format markdown" />
       </button>
-    {/*<button*/}
-    {/*    onClick={() => {*/}
-    {/*        toggleSetting('showTreeView');*/}
-    {/*    }}*/}
-    {/*    className="toolbar-item spaced"*/}
-    {/*    title="Toggle Debug Tree View"*/}
-    {/*    type="button"*/}
-    {/*    aria-label="Toggle Debug Tree View">*/}
-    {/*    <i className="format bug" />*/}
-    {/*</button>*/}
+      {import.meta.env.DEV && (
+        <button
+          onClick={() => {
+            toggleSetting('showTreeView');
+          }}
+          className="toolbar-item spaced"
+          title="Toggle Debug Tree View"
+          type="button"
+          aria-label="Toggle Debug Tree View">
+          <i className="format bug" />
+        </button>
+      )}
       <div className="divider toolbar-main-divider" />
       <button
         disabled={!toolbarState.canUndo || !isEditable}
