@@ -58,13 +58,13 @@ button.font-increment {
 
 /* Dark theme styles - shared across all dark themes */
 .dark-theme .font-size-input {
-  background-color: var(--stravu-bg-tertiary);
-  color: var(--stravu-text-secondary);
+  background-color: var(--surface-tertiary);
+  color: var(--text-secondary);
   border-color: var(--stravu-border-muted);
 }
 
 .dark-theme .font-size-input:disabled {
-  background-color: var(--stravu-bg-secondary);
+  background-color: var(--surface-secondary);
   color: var(--stravu-text-muted);
 }
 

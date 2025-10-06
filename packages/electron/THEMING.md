@@ -77,22 +77,24 @@ if (savedTheme === 'dark') {
 ### 4. Dark Theme Colors
 
 The regular dark theme uses warm grays (#2d2d2d, #1a1a1a, #3a3a3a):
+
 ```css
 :root.dark-theme {
-  --background-primary: #2d2d2d;    /* NOT #0f172a (that's crystal-dark) */
-  --background-secondary: #1a1a1a;
-  --background-tertiary: #3a3a3a;
-  /* ... */
+    --surface-primary: #2d2d2d; /* NOT #0f172a (that's crystal-dark) */
+    --surface-secondary: #1a1a1a;
+    --surface-tertiary: #3a3a3a;
+    /* ... */
 }
 ```
 
 The Crystal Dark theme uses Tailwind gray scale colors (#0f172a, #020617, #1e293b):
+
 ```css
 :root.crystal-dark-theme {
-  --background-primary: #0f172a;
-  --background-secondary: #020617;
-  --background-tertiary: #1e293b;
-  /* ... */
+    --surface-primary: #0f172a;
+    --surface-secondary: #020617;
+    --surface-tertiary: #1e293b;
+    /* ... */
 }
 ```
 
@@ -108,11 +110,12 @@ The Crystal Dark theme uses Tailwind gray scale colors (#0f172a, #020617, #1e293
 ```
 
 ### ✅ CORRECT: Using CSS variables
+
 ```css
 /* ALWAYS DO THIS */
 .my-component {
-  background-color: var(--background-primary);
-  color: var(--text-primary);
+    background-color: var(--surface-primary);
+    color: var(--text-primary);
 }
 ```
 
@@ -128,10 +131,11 @@ The Crystal Dark theme uses Tailwind gray scale colors (#0f172a, #020617, #1e293
 ```
 
 ### ✅ CORRECT: Using variables from index.css
+
 ```css
 /* component.css - ALWAYS DO THIS */
 .my-component {
-  background: var(--background-primary); /* Defined in index.css */
+    background: var(--surface-primary); /* Defined in index.css */
 }
 ```
 
@@ -158,20 +162,21 @@ When creating new components that need theming:
 4. If you need a new color variable, add it to index.css for ALL themes
 
 Example for a new component:
+
 ```css
 /* NewComponent.css */
 .new-component {
-  background: var(--background-primary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
+    background: var(--surface-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-primary);
 }
 
 .new-component:hover {
-  background: var(--background-secondary);
+    background: var(--surface-secondary);
 }
 
 .new-component-title {
-  color: var(--text-secondary);
+    color: var(--text-secondary);
 }
 ```
 

@@ -38,8 +38,8 @@
 
 /* Dark theme styles - shared across all dark themes */
 .stravu-editor.dark-theme .Button__root {
-  background-color: var(--stravu-bg-tertiary);
-  color: var(--stravu-text-primary);
+  background-color: var(--surface-tertiary);
+  color: var(--text-primary);
 }
 
 .stravu-editor.dark-theme .Button__root:hover:not(.Button__disabled) {
@@ -47,11 +47,11 @@
 }
 
 .stravu-editor.dark-theme .Button__disabled {
-  background-color: var(--stravu-bg-secondary);
+  background-color: var(--surface-secondary);
   color: var(--stravu-text-muted);
 }
 
 .stravu-editor.dark-theme .Button__disabled:hover {
-  background-color: var(--stravu-bg-secondary);
+  background-color: var(--surface-secondary);
 }
 

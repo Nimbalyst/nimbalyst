@@ -3,7 +3,7 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--background-primary);
+  background: var(--surface-primary);
   color: var(--text-primary);
   padding-top: 38px; /* Space for macOS title bar */
 }
@@ -25,7 +25,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
   -webkit-app-region: no-drag;
 }
 
@@ -45,8 +45,8 @@
 /* Left navigation */
 .ai-models-nav {
   width: 220px;
-  background: var(--background-secondary);
-  border-right: 1px solid var(--border-color);
+  background: var(--surface-secondary);
+  border-right: 1px solid var(--border-primary);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -58,7 +58,7 @@
 
 .nav-section-bottom {
   margin-top: auto;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-primary);
   padding-top: 12px;
 }
 
@@ -191,8 +191,8 @@
   justify-content: flex-end;
   gap: 12px;
   padding: 16px 20px;
-  border-top: 1px solid var(--border-color);
-  background: var(--background-primary);
+  border-top: 1px solid var(--border-primary);
+  background: var(--surface-primary);
 }
 
 .button-cancel,
@@ -206,9 +206,9 @@
 }
 
 .button-cancel {
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
 }
 
 .button-cancel:hover {
@@ -273,7 +273,7 @@
   align-items: center;
   gap: 12px;
   padding: 16px;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   border-radius: 8px;
   margin-bottom: 24px;
 }
@@ -346,7 +346,7 @@
 /* Installation status */
 .installation-status {
   padding: 16px;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   border-radius: 8px;
   margin-bottom: 16px;
 }
@@ -420,7 +420,7 @@
 .button-uninstall {
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
 }
 
 /* API key input */
@@ -436,8 +436,8 @@
 .api-key-input {
   flex: 1;
   padding: 10px 12px;
-  background: var(--background-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   color: var(--text-primary);
   font-size: 14px;
@@ -456,9 +456,9 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
 }
 
 .test-button:hover:not(:disabled) {
@@ -525,9 +525,9 @@
 .models-action-btn {
   padding: 4px 8px;
   font-size: 12px;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   color: var(--text-secondary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -543,7 +543,7 @@
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 8px;
   padding: 12px;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   border-radius: 8px;
 }
 
@@ -592,8 +592,8 @@
 .cli-config-select {
   flex: 1;
   padding: 8px 12px;
-  background: var(--background-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   color: var(--text-primary);
   font-size: 14px;
@@ -622,7 +622,7 @@
 
 .installation-progress-content {
   width: 500px;
-  background: var(--background-primary, #ffffff);
+  background: var(--surface-primary, #ffffff);
   border-radius: 12px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   overflow: hidden;
@@ -630,7 +630,7 @@
 
 .installation-progress-header {
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color, #e5e5e5);
+  border-bottom: 1px solid var(--border-primary, #e5e5e5);
 }
 
 .installation-progress-title {
@@ -642,7 +642,7 @@
 
 .installation-progress-body {
   padding: 20px;
-  background: var(--background-primary, #ffffff);
+  background: var(--surface-primary, #ffffff);
 }
 
 .installation-progress-status {
@@ -653,7 +653,7 @@
 
 .installation-progress-bar {
   height: 8px;
-  background: var(--background-secondary, #f5f5f5);
+  background: var(--surface-secondary, #f5f5f5);
   border-radius: 4px;
   overflow: hidden;
   margin-bottom: 16px;
@@ -669,7 +669,7 @@
 .installation-progress-log {
   max-height: 200px;
   overflow-y: auto;
-  background: var(--background-secondary, #f5f5f5);
+  background: var(--surface-secondary, #f5f5f5);
   border-radius: 6px;
   padding: 12px;
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
@@ -681,10 +681,10 @@
 
 .installation-progress-footer {
   padding: 16px 20px;
-  border-top: 1px solid var(--border-color, #e5e5e5);
+  border-top: 1px solid var(--border-primary, #e5e5e5);
   display: flex;
   justify-content: flex-end;
-  background: var(--background-primary, #ffffff);
+  background: var(--surface-primary, #ffffff);
 }
 
 .installation-progress-cancel {
@@ -693,9 +693,9 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  background: var(--background-secondary, #f5f5f5);
+  background: var(--surface-secondary, #f5f5f5);
   color: var(--text-primary, #333333);
-  border: 1px solid var(--border-color, #e5e5e5);
+  border: 1px solid var(--border-primary, #e5e5e5);
 }
 
 .installation-progress-cancel:hover {
@@ -704,7 +704,7 @@
 
 /* Tool selection */
 .tools-selection {
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   border-radius: 8px;
   padding: 16px;
 }
@@ -712,7 +712,7 @@
 .tools-header {
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .tools-categories {
@@ -722,10 +722,10 @@
 }
 
 .tool-category {
-  background: var(--background-primary);
+  background: var(--surface-primary);
   border-radius: 6px;
   padding: 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
 }
 
 .tool-category-header {
@@ -734,7 +734,7 @@
   gap: 4px;
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .tool-category-name {

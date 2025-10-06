@@ -124,18 +124,18 @@ Both themes define a comprehensive set of CSS variables in their respective them
 ```css
 /* Dark theme overrides */
 .stravu-editor[data-theme="dark"] .my-component {
-  background: var(--stravu-bg-secondary);
-  color: var(--stravu-text-primary);
-  border-color: var(--stravu-editor-border);
+    background: var(--surface-secondary);
+    color: var(--text-primary);
+    border-color: var(--stravu-editor-border);
 }
 
 .stravu-editor[data-theme="dark"] .my-button {
-  background: var(--stravu-focus-border);
-  color: white;
+    background: var(--stravu-focus-border);
+    color: white;
 }
 
 .stravu-editor[data-theme="dark"] .my-button:hover {
-  background-color: var(--stravu-active-bg);
+    background-color: var(--stravu-active-bg);
 }
 ```
 
@@ -144,18 +144,18 @@ Both themes define a comprehensive set of CSS variables in their respective them
 ```css
 /* Crystal Dark theme overrides */
 .stravu-editor[data-theme="crystal-dark"] .my-component {
-  background: var(--stravu-bg-secondary);
-  color: var(--stravu-text-primary);
-  border-color: var(--stravu-editor-border);
+    background: var(--surface-secondary);
+    color: var(--text-primary);
+    border-color: var(--stravu-editor-border);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .my-button {
-  background: var(--stravu-focus-border);
-  color: white;
+    background: var(--stravu-focus-border);
+    color: white;
 }
 
 .stravu-editor[data-theme="crystal-dark"] .my-button:hover {
-  background-color: var(--stravu-active-bg);
+    background-color: var(--stravu-active-bg);
 }
 ```
 
@@ -198,43 +198,43 @@ Here's a complete example from the SearchReplacePlugin:
 ```css
 /* Light theme (default) */
 .search-replace-dialog {
-  background: #fff;
-  border: 1px solid #e0e0e0;
+    background: #fff;
+    border: 1px solid #e0e0e0;
 }
 
 .search-replace-button {
-  background: #4a90e2;
-  color: white;
+    background: #4a90e2;
+    color: white;
 }
 
 /* Dark theme */
 .stravu-editor[data-theme="dark"] .search-replace-dialog {
-  background: var(--stravu-bg-secondary);
-  border-color: var(--stravu-editor-border);
+    background: var(--surface-secondary);
+    border-color: var(--stravu-editor-border);
 }
 
 .stravu-editor[data-theme="dark"] .search-replace-button {
-  background: var(--stravu-focus-border);
-  color: white;
+    background: var(--stravu-focus-border);
+    color: white;
 }
 
 .stravu-editor[data-theme="dark"] .search-replace-button:hover:not(:disabled) {
-  background-color: var(--stravu-active-bg);
+    background-color: var(--stravu-active-bg);
 }
 
 /* Crystal Dark theme */
 .stravu-editor[data-theme="crystal-dark"] .search-replace-dialog {
-  background: var(--stravu-bg-secondary);
-  border-color: var(--stravu-editor-border);
+    background: var(--surface-secondary);
+    border-color: var(--stravu-editor-border);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .search-replace-button {
-  background: var(--stravu-focus-border);
-  color: white;
+    background: var(--stravu-focus-border);
+    color: white;
 }
 
 .stravu-editor[data-theme="crystal-dark"] .search-replace-button:hover:not(:disabled) {
-  background-color: var(--stravu-active-bg);
+    background-color: var(--stravu-active-bg);
 }
 ```
 

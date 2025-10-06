@@ -8,233 +8,232 @@
 
 /* Crystal Dark theme styles - using Tailwind gray scale colors */
 
-.stravu-editor[data-theme="crystal-dark"] {
-  /* Main background and text colors */
-  --stravu-bg-primary: #1F2837; /* main background */
-  --stravu-bg-secondary: #374151; /* gray-700 for cards, dialogs */
-  --stravu-bg-tertiary: #4B5563; /* gray-600 for hover states */
-  --stravu-text-primary: #F3F4F6; /* gray-100 */
-  --stravu-text-secondary: #D1D5DB; /* gray-300 */
-  --stravu-text-muted: #9CA3AF; /* gray-400 */
-  --stravu-text-disabled: #6B7280; /* gray-500 */
-  
-  /* Editor specific colors */
-  --stravu-editor-bg: #1F2837; /* main background */
-  --stravu-editor-text: #F3F4F6; /* gray-100 */
-  --stravu-editor-border: #374151; /* gray-700 */
-  
-  /* Code colors */
-  --stravu-code-bg: #0F172A; /* slate-900 for contrast */
-  --stravu-code-gutter-bg: #1E293B; /* slate-800 */
-  --stravu-code-border: #374151; /* gray-700 */
-  --stravu-code-text: #F1F5F9; /* slate-100 */
-  
-  /* Table colors */
-  --stravu-table-border: #374151; /* gray-700 */
-  --stravu-table-header-bg: #374151; /* gray-700 */
-  --stravu-table-cell-bg: #1F2837; /* main background */
-  --stravu-table-stripe-bg: #374151; /* gray-700 for striping */
-  --stravu-table-frozen-bg: #1F2837; /* main background */
-  
-  /* Interactive colors */
-  --stravu-hover-bg: #374151; /* gray-700 */
-  --stravu-active-bg: #4B5563; /* gray-600 */
-  --stravu-selection-bg: #2563EB; /* blue-600 */
-  --stravu-focus-border: #3B82F6; /* blue-500 */
-  
-  /* Toolbar colors */
-  --stravu-toolbar-bg: #1F2837; /* main background */
-  --stravu-toolbar-border: #374151; /* gray-700 */
-  --stravu-toolbar-button-hover: #374151; /* gray-700 */
-  --stravu-toolbar-button-active: rgba(37, 99, 235, 0.2); /* blue-600 with opacity */
-  
-  /* Link colors */
-  --stravu-link-color: #60A5FA; /* blue-400 */
-  --stravu-link-hover: #93C5FD; /* blue-300 */
-  
-  /* Highlight colors */
-  --stravu-highlight-bg: rgba(234, 179, 8, 0.2); /* yellow-500 with opacity */
-  --stravu-highlight-border: rgba(234, 179, 8, 0.4); /* yellow-500 with opacity */
-  
-  /* Quote colors */
-  --stravu-quote-text: #D1D5DB; /* gray-300 */
-  --stravu-quote-border: #4B5563; /* gray-600 */
-  
-  /* Heading colors */
-  --stravu-h1-color: #F9FAFB; /* gray-50 */
-  --stravu-h2-color: #F3F4F6; /* gray-100 */
-  --stravu-h3-color: #E5E7EB; /* gray-200 */
-  --stravu-h4-color: #D1D5DB; /* gray-300 */
-  --stravu-h5-color: #9CA3AF; /* gray-400 */
-  --stravu-h6-color: #6B7280; /* gray-500 */
-  
-  /* Status colors */
-  --stravu-success-color: #10B981; /* green-500 */
-  --stravu-warning-color: #EAB308; /* yellow-500 */
-  --stravu-error-color: #EF4444; /* red-500 */
+.crystal-dark-theme,
+[data-theme="crystal-dark"] {
+  /* Base Surface Colors */
+  --surface-primary: #0f172a;
+  --surface-secondary: #020617;
+  --surface-tertiary: #1e293b;
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --surface-selected: rgba(56, 189, 248, 0.15);
+  --surface-active: #4B5563;
+
+  /* Text Colors */
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-tertiary: #94a3b8;
+  --text-disabled: #64748b;
+
+  /* Border & Divider */
+  --border-primary: #1e293b;
+  --border-focus: #3B82F6;
+
+  /* Interactive/Accent Colors */
+  --accent-primary: #38bdf8;
+  --accent-primary-hover: #7dd3fc;
+  --accent-link: #60A5FA;
+  --accent-link-hover: #93C5FD;
+
+  /* Editor-Specific */
+  --editor-background: #1F2837;
+  --editor-text: #F3F4F6;
+
+  /* Code Block */
+  --code-background: #0F172A;
+  --code-gutter: #1E293B;
+  --code-border: #374151;
+  --code-text: #F1F5F9;
+
+  /* Table */
+  --table-border: #374151;
+  --table-header: #374151;
+  --table-cell: #1F2837;
+  --table-stripe: #374151;
+  --table-frozen: #1F2837;
+
+  /* Toolbar */
+  --toolbar-background: #1F2837;
+  --toolbar-border: #374151;
+  --toolbar-button-hover: #374151;
+  --toolbar-button-active: rgba(37, 99, 235, 0.2);
+
+  /* Semantic Colors */
+  --success-color: #10B981;
+  --warning-color: #EAB308;
+  --error-color: #EF4444;
+  --info-color: #38bdf8;
+
+  /* Special Purpose */
+  --highlight-background: rgba(234, 179, 8, 0.2);
+  --highlight-border: rgba(234, 179, 8, 0.4);
+  --quote-text: #D1D5DB;
+  --quote-border: #4B5563;
+
+  /* Lexical-specific */
+  --lexical-indent-base-value: 40px;
 }
 
 /* Global dark theme overrides */
 .stravu-editor[data-theme="crystal-dark"] .editor-shell {
-  background: var(--stravu-bg-primary);
-  color: var(--stravu-text-primary);
+  background: var(--surface-primary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .editor-shell .editor-container {
-  background: var(--stravu-editor-bg);
-  color: var(--stravu-editor-text);
-  border-color: var(--stravu-editor-border);
+  background: var(--editor-background);
+  color: var(--editor-text);
+  border-color: var(--border-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .editor-scroller {
-  background: var(--stravu-editor-bg);
+  background: var(--editor-background);
 }
 
 /* Dark theme playground editor overrides */
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__paragraph {
-  color: var(--stravu-text-primary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__quote {
-  color: var(--stravu-quote-text);
-  border-left-color: var(--stravu-quote-border);
+  color: var(--quote-text);
+  border-left-color: var(--quote-border);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__h1 {
-  color: var(--stravu-h1-color);
+  color: #F9FAFB;
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__h2 {
-  color: var(--stravu-h2-color);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__h3 {
-  color: var(--stravu-h3-color);
+  color: #E5E7EB;
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__h4 {
-  color: var(--stravu-h4-color);
+  color: var(--text-secondary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__h5 {
-  color: var(--stravu-h5-color);
+  color: var(--text-tertiary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__h6 {
-  color: var(--stravu-h6-color);
+  color: var(--text-disabled);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__textHighlight {
-  background: var(--stravu-highlight-bg);
-  border-bottom-color: var(--stravu-highlight-border);
+  background: var(--highlight-background);
+  border-bottom-color: var(--highlight-border);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__textCode {
-  background-color: var(--stravu-code-bg);
-  color: var(--stravu-code-text);
+  background-color: var(--code-background);
+  color: var(--code-text);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__hashtag {
-  background-color: rgba(37, 99, 235, 0.2); /* blue-600 with opacity */
-  color: var(--stravu-text-primary);
+  background-color: rgba(37, 99, 235, 0.2);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__link {
-  color: var(--stravu-link-color);
+  color: var(--accent-link);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__link:hover {
-  color: var(--stravu-link-hover);
+  color: var(--accent-link-hover);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__blockCursor:after {
-  border-top-color: var(--stravu-text-primary);
+  border-top-color: var(--text-primary);
 }
 
 /* Removed code block background/color - let Shiki themes handle this */
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__code:before {
-  background-color: var(--stravu-code-gutter-bg);
-  border-right-color: var(--stravu-code-border);
-  color: var(--stravu-text-muted);
+  background-color: var(--code-gutter);
+  border-right-color: var(--code-border);
+  color: var(--text-tertiary);
 }
 
 /* Table dark theme */
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableCell {
-  border-color: var(--stravu-table-border);
-  background-color: var(--stravu-table-cell-bg);
-  color: var(--stravu-text-primary);
+  border-color: var(--table-border);
+  background-color: var(--table-cell);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableCellHeader {
-  background-color: var(--stravu-table-header-bg);
-  color: var(--stravu-text-primary);
+  background-color: var(--table-header);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableRowStriping tr:nth-child(even),
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableFrozenColumn .PlaygroundEditorTheme__table.PlaygroundEditorTheme__tableRowStriping tr:nth-child(even) > td:first-child {
-  background-color: var(--stravu-table-stripe-bg);
+  background-color: var(--table-stripe);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableFrozenRow tr:nth-of-type(1) > td {
-  background-color: var(--stravu-table-frozen-bg);
+  background-color: var(--table-frozen);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableFrozenRow tr:nth-of-type(1) > th {
-  background-color: var(--stravu-table-header-bg);
+  background-color: var(--table-header);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableFrozenColumn tr > td:first-child {
-  background-color: var(--stravu-table-frozen-bg);
+  background-color: var(--table-frozen);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableFrozenColumn tr > th:first-child {
-  background-color: var(--stravu-table-header-bg);
+  background-color: var(--table-header);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableAddColumns,
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableAddRows {
-  background-color: var(--stravu-bg-tertiary);
+  background-color: var(--surface-tertiary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableAddColumns:hover,
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableAddRows:hover {
-  background-color: var(--stravu-hover-bg);
+  background-color: var(--surface-hover);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableCellActionButton {
-  background-color: var(--stravu-bg-tertiary);
-  color: var(--stravu-text-primary);
+  background-color: var(--surface-tertiary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__tableCellActionButton:hover {
-  background-color: var(--stravu-hover-bg);
+  background-color: var(--surface-hover);
 }
 
 /* Toolbar dark theme */
 .stravu-editor[data-theme="crystal-dark"] .toolbar {
-  background: var(--stravu-toolbar-bg);
-  border-color: var(--stravu-toolbar-border);
+  background: var(--toolbar-background);
+  border-color: var(--toolbar-border);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .toolbar .toolbar-item {
-  color: var(--stravu-text-primary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .toolbar .toolbar-item:hover:not([disabled]) {
-  background-color: var(--stravu-toolbar-button-hover);
+  background-color: var(--toolbar-button-hover);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .toolbar .toolbar-item.active {
-  background-color: var(--stravu-toolbar-button-active);
+  background-color: var(--toolbar-button-active);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .toolbar .toolbar-item .text {
-  color: var(--stravu-text-secondary);
+  color: var(--text-secondary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .toolbar .divider {
-  background-color: var(--stravu-toolbar-border);
+  background-color: var(--toolbar-border);
 }
 
 /* Ensure table of contents icon is visible in Crystal Dark theme */
@@ -244,38 +243,38 @@
 
 /* Dropdown dark theme */
 .stravu-editor[data-theme="crystal-dark"] .dropdown {
-  background-color: var(--stravu-bg-secondary);
-  border-color: var(--stravu-editor-border);
+  background-color: var(--surface-secondary);
+  border-color: var(--border-primary);
   box-shadow: 0 12px 28px 0 rgba(0, 0, 0, 0.6), 0 2px 4px 0 rgba(0, 0, 0, 0.4);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .dropdown .item {
-  background-color: var(--stravu-bg-secondary);
-  color: var(--stravu-text-primary);
+  background-color: var(--surface-secondary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .dropdown .item:hover {
-  background-color: var(--stravu-hover-bg);
+  background-color: var(--surface-hover);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .dropdown .divider {
-  background-color: var(--stravu-editor-border);
+  background-color: var(--border-primary);
 }
 
 /* Typeahead popover dark theme */
 .stravu-editor[data-theme="crystal-dark"] .typeahead-popover {
-  background: var(--stravu-bg-secondary);
+  background: var(--surface-secondary);
   box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.6);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .typeahead-popover ul li {
-  color: var(--stravu-text-primary);
-  background-color: var(--stravu-bg-secondary);
+  color: var(--text-primary);
+  background-color: var(--surface-secondary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .typeahead-popover ul li.selected,
 .stravu-editor[data-theme="crystal-dark"] .typeahead-popover ul li:hover {
-  background-color: var(--stravu-hover-bg);
+  background-color: var(--surface-hover);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .typeahead-popover li .icon {
@@ -284,18 +283,18 @@
 
 /* Typeahead popover dark theme (for popovers rendered outside editor) */
 [data-theme="crystal-dark"] .typeahead-popover {
-  background: #1F2837; /* main background */
+  background: var(--editor-background);
   box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.6);
 }
 
 [data-theme="crystal-dark"] .typeahead-popover ul li {
-  color: #F3F4F6; /* gray-100 */
-  background-color: #1F2837; /* main background */
+  color: var(--text-primary);
+  background-color: var(--editor-background);
 }
 
 [data-theme="crystal-dark"] .typeahead-popover ul li.selected,
 [data-theme="crystal-dark"] .typeahead-popover ul li:hover {
-  background-color: #374151; /* gray-700 */
+  background-color: var(--surface-tertiary);
 }
 
 [data-theme="crystal-dark"] .typeahead-popover li .icon {
@@ -304,16 +303,16 @@
 
 /* Link editor dark theme */
 .stravu-editor[data-theme="crystal-dark"] .link-editor .link-input {
-  background-color: var(--stravu-bg-tertiary);
-  color: var(--stravu-text-primary);
+  background-color: var(--surface-tertiary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .link-editor .link-view {
-  color: var(--stravu-text-primary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .link-editor .link-input a {
-  color: var(--stravu-link-color);
+  color: var(--accent-link);
 }
 
 /* Token colors for dark theme */
@@ -351,41 +350,41 @@
 
 /* HR dark theme */
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__hr:after {
-  background-color: var(--stravu-editor-border);
+  background-color: var(--border-primary);
 }
 
 /* Autocomplete dark theme */
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__autocomplete {
-  color: var(--stravu-text-muted);
+  color: var(--text-tertiary);
 }
 
 /* Layout dark theme */
 .stravu-editor[data-theme="crystal-dark"] .PlaygroundEditorTheme__layoutItem {
-  border-color: var(--stravu-editor-border);
-  background-color: var(--stravu-bg-secondary);
+  border-color: var(--border-primary);
+  background-color: var(--surface-secondary);
 }
 
 /* Dev mode toolbar dark theme */
 .stravu-editor[data-theme="crystal-dark"] div[style*="background-color: #f5f5f5"] {
-  background-color: var(--stravu-bg-secondary) !important;
-  border-bottom-color: var(--stravu-editor-border) !important;
-  color: var(--stravu-text-primary) !important;
+  background-color: var(--surface-secondary) !important;
+  border-bottom-color: var(--border-primary) !important;
+  color: var(--text-primary) !important;
 }
 
 .stravu-editor[data-theme="crystal-dark"] div[style*="background-color: #f5f5f5"] button {
-  background-color: var(--stravu-bg-tertiary);
-  color: var(--stravu-text-primary);
-  border: 1px solid var(--stravu-editor-border);
+  background-color: var(--surface-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] div[style*="background-color: #f5f5f5"] button:hover {
-  background-color: var(--stravu-hover-bg);
+  background-color: var(--surface-hover);
 }
 
 .stravu-editor[data-theme="crystal-dark"] div[style*="background-color: #f5f5f5"] span[style*="color: #666"] {
-  color: var(--stravu-text-secondary) !important;
+  color: var(--text-secondary) !important;
 }
 
 .stravu-editor[data-theme="crystal-dark"] div[style*="background-color: #f5f5f5"] span[style*="color: #999"] {
-  color: var(--stravu-text-muted) !important;
+  color: var(--text-tertiary) !important;
 }

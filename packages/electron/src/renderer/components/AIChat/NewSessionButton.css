@@ -2,7 +2,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  border: 1px solid var(--border-color, #e0e0e0);
+  border: 1px solid var(--border-primary, #e0e0e0);
   border-radius: 6px;
   overflow: visible;
   height: 32px;
@@ -24,7 +24,7 @@
 }
 
 .new-session-button-main:hover:not(:disabled) {
-  background: var(--background-hover);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 
@@ -40,7 +40,7 @@
   padding: 0 8px;
   background: transparent;
   border: none;
-  border-left: 1px solid var(--border-color, #e0e0e0);
+  border-left: 1px solid var(--border-primary, #e0e0e0);
   color: var(--text-primary, #333);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -49,7 +49,7 @@
 }
 
 .new-session-button-dropdown:hover:not(:disabled) {
-  background: var(--background-hover);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }
 
@@ -62,8 +62,8 @@
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  background: var(--background-primary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   z-index: 1000;
@@ -87,7 +87,7 @@
 }
 
 .new-session-dropdown::-webkit-scrollbar-thumb {
-  background: var(--border-color);
+  background: var(--border-primary);
   border-radius: 4px;
 }
 
@@ -123,7 +123,7 @@
 }
 
 .new-session-option:hover {
-  background: var(--background-hover);
+  background: var(--surface-hover);
 }
 
 .new-session-option.selected {
@@ -132,7 +132,7 @@
 }
 
 .new-session-option.selected:hover {
-  background: var(--background-hover);
+  background: var(--surface-hover);
 }
 
 .new-session-option-info {
@@ -267,12 +267,12 @@
 }
 
 .dark .new-session-dropdown {
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 .new-session-divider {
   height: 1px;
-  background: var(--border-color);
+  background: var(--border-primary);
   margin: 4px 0;
 }
 
@@ -292,6 +292,6 @@
 }
 
 .new-session-configure:hover {
-  background: var(--background-hover);
+  background: var(--surface-hover);
   color: var(--text-primary);
 }

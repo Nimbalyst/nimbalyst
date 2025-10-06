@@ -342,12 +342,12 @@
 /* Tab bar specific variables - using global theme colors */
 .tab-bar-container {
   --tab-bar-bg: transparent;
-  --tab-bar-border: var(--border-color);
-  --tab-bg: var(--background-secondary);
-  --tab-border: var(--border-color);
-  --tab-hover-bg: var(--background-tertiary);
-  --tab-active-bg: var(--background-primary);
-  --tab-active-border: var(--border-color);
+  --tab-bar-border: var(--border-primary);
+  --tab-bg: var(--surface-secondary);
+  --tab-border: var(--border-primary);
+  --tab-hover-bg: var(--surface-tertiary);
+  --tab-active-bg: var(--surface-primary);
+  --tab-active-border: var(--border-primary);
   --tab-active-indicator: var(--primary-color);
   --tab-text: var(--text-secondary);
   --tab-active-text: var(--text-primary);
@@ -355,14 +355,14 @@
   --tab-close-hover-bg: #ef4444;
   --tab-close-hover-color: #ffffff;
   --tab-dirty-indicator: #fbbf24;
-  --scrollbar-thumb: var(--border-color);
-  --menu-bg: var(--background-secondary);
-  --menu-border: var(--border-color);
+  --scrollbar-thumb: var(--border-primary);
+  --menu-bg: var(--surface-secondary);
+  --menu-border: var(--border-primary);
   --menu-text: var(--text-secondary);
-  --menu-hover-bg: var(--background-tertiary);
+  --menu-hover-bg: var(--surface-tertiary);
   --menu-active-bg: var(--primary-color);
   --menu-active-text: #ffffff;
   --menu-muted-text: var(--text-tertiary);
-  --menu-selected-bg: var(--background-tertiary);
+  --menu-selected-bg: var(--surface-tertiary);
   --menu-selected-border: var(--primary-color);
 }

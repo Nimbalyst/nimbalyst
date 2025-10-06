@@ -25,7 +25,7 @@
 }
 
 .stravu-editor.dark-theme .floating-text-format-popup {
-  background: var(--stravu-bg-secondary);
+  background: var(--surface-secondary);
   box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.5);
 }
 

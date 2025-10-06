@@ -7,14 +7,14 @@
   flex-direction: column;
   height: 100%;
   width: 100%;
-  background: var(--background-primary);
+  background: var(--surface-primary);
   overflow: hidden;
 }
 
 .plan-screen-header {
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--background-primary);
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--surface-primary);
   flex-shrink: 0;
 }
 

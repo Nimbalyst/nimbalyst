@@ -4,9 +4,9 @@
  */
 
 .plan-table-wrapper {
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   border-radius: 8px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
   transition: all 0.2s ease;
   overflow: hidden;
   height: 100%;
@@ -41,7 +41,7 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
 }
 
 .plan-table thead tr {
@@ -56,7 +56,7 @@
   font-size: 0.75rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
   white-space: nowrap;
   background: rgba(0, 0, 0, 0.03);
 }
@@ -75,10 +75,10 @@
 .filter-select {
   width: 100%;
   padding: 0.25rem 0.5rem;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
   border-radius: 4px;
   font-size: 0.8125rem;
-  background: var(--background-primary);
+  background: var(--surface-primary);
   color: var(--text-primary);
   transition: border-color 0.15s ease;
 }
@@ -101,7 +101,7 @@
 }
 
 .plan-table-header.sortable:hover {
-  background: var(--background-hover);
+  background: var(--surface-hover);
   opacity: 0.9;
 }
 
@@ -145,7 +145,7 @@
 
 /* Table Rows */
 .plan-table-row {
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
   transition: background-color 0.15s ease;
   cursor: pointer;
   position: relative;
@@ -250,7 +250,7 @@
 .spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid var(--border-color);
+  border: 2px solid var(--border-primary);
   border-top-color: var(--primary-color);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;

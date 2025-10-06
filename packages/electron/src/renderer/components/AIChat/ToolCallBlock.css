@@ -1,7 +1,7 @@
 /* Tool call blocks styled like edit command blocks */
 .ai-chat-tool-box {
-  background: var(--background-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   overflow: hidden;
   margin-bottom: 8px;
@@ -18,7 +18,7 @@
 }
 
 .ai-chat-tool-header:hover {
-  background: var(--background-hover);
+  background: var(--surface-hover);
 }
 
 .ai-chat-tool-toggle {
@@ -58,8 +58,8 @@
 
 .ai-chat-tool-content-wrapper {
   padding: 12px;
-  background: var(--background-primary);
-  border-top: 1px solid var(--border-color);
+  background: var(--surface-primary);
+  border-top: 1px solid var(--border-primary);
 }
 
 .ai-chat-tool-error {
@@ -103,7 +103,7 @@
 }
 
 .ai-chat-tool-replacement {
-  border-left: 3px solid var(--border-color);
+  border-left: 3px solid var(--border-primary);
   padding-left: 12px;
 }
 
@@ -133,7 +133,7 @@
   font-family: 'SF Mono', Monaco, monospace;
   font-size: 12px;
   line-height: 1.5;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   padding: 8px;
   border-radius: 4px;
   overflow-x: auto;
@@ -163,7 +163,7 @@
 .ai-chat-tool-file-path {
   font-family: 'SF Mono', Monaco, monospace;
   font-size: 12px;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   padding: 4px 8px;
   border-radius: 4px;
   color: var(--text-primary);
@@ -177,7 +177,7 @@
 .ai-chat-tool-args-content {
   font-family: 'SF Mono', Monaco, monospace;
   font-size: 11px;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   padding: 8px;
   border-radius: 4px;
   overflow-x: auto;
@@ -189,13 +189,13 @@
 .ai-chat-tool-result {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-primary);
 }
 
 .ai-chat-tool-result-content {
   font-family: 'SF Mono', Monaco, monospace;
   font-size: 11px;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   padding: 8px;
   border-radius: 4px;
   overflow-x: auto;
@@ -267,10 +267,10 @@
 
 /* CSS Variables (already defined in AIChat.css, but here for reference) */
 :root {
-  --background-primary: white;
-  --background-secondary: #f5f5f5;
-  --background-hover: rgba(0, 0, 0, 0.05);
-  --border-color: #e0e0e0;
+  --surface-primary: white;
+  --surface-secondary: #f5f5f5;
+  --surface-hover: rgba(0, 0, 0, 0.05);
+  --border-primary: #e0e0e0;
   --text-primary: #1e1e1e;
   --text-secondary: #666;
   --accent-color: #0066cc;
@@ -288,10 +288,10 @@
 /* Dark theme overrides */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background-primary: #1e1e1e;
-    --background-secondary: #2a2a2a;
-    --background-hover: rgba(255, 255, 255, 0.05);
-    --border-color: #404040;
+    --surface-primary: #1e1e1e;
+    --surface-secondary: #2a2a2a;
+    --surface-hover: rgba(255, 255, 255, 0.05);
+    --border-primary: #404040;
     --text-primary: #e0e0e0;
     --text-secondary: #999;
     --accent-color: #4a9eff;

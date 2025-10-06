@@ -35,13 +35,13 @@
 
 /* Dark mode styles - shared across all dark themes */
 .stravu-editor.dark-theme .Input__label {
-  color: var(--stravu-text-secondary);
+  color: var(--text-secondary);
 }
 
 .stravu-editor.dark-theme .Input__input {
   border-color: var(--stravu-editor-border);
-  background-color: var(--stravu-bg-secondary);
-  color: var(--stravu-text-primary);
+  background-color: var(--surface-secondary);
+  color: var(--text-primary);
 }
 
 .stravu-editor.dark-theme .Input__input::placeholder {

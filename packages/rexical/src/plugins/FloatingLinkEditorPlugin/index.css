@@ -15,7 +15,7 @@
 }
 
 .stravu-editor.dark-theme .link-editor {
-  background-color: var(--stravu-bg-secondary);
+  background-color: var(--surface-secondary);
   box-shadow: 0 5px 10px rgba(0, 0, 0, 0.5);
 }
 

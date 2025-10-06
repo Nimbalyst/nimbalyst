@@ -225,7 +225,7 @@
 /* Dark mode support */
 .stravu-editor[data-theme="dark"] .search-replace-dialog,
 .stravu-editor[data-theme="crystal-dark"] .search-replace-dialog {
-  background: var(--stravu-bg-secondary);
+  background: var(--surface-secondary);
   border-color: var(--stravu-editor-border);
 }
 
@@ -241,9 +241,9 @@
 
 .stravu-editor[data-theme="dark"] .search-replace-input,
 .stravu-editor[data-theme="crystal-dark"] .search-replace-input {
-  background: var(--stravu-bg-primary);
+  background: var(--surface-primary);
   border-color: var(--stravu-editor-border);
-  color: var(--stravu-text-primary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="dark"] .search-replace-input:focus,
@@ -255,22 +255,22 @@
 .stravu-editor[data-theme="dark"] .search-replace-close,
 .stravu-editor[data-theme="crystal-dark"] .search-replace-title,
 .stravu-editor[data-theme="crystal-dark"] .search-replace-close {
-  color: var(--stravu-text-primary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="dark"] .search-replace-count {
-  color: var(--stravu-text-secondary);
+  color: var(--text-secondary);
 }
 
 .stravu-editor[data-theme="dark"] .search-replace-option {
-  background: var(--stravu-bg-primary);
+  background: var(--surface-primary);
   border-color: var(--stravu-editor-border);
-  color: var(--stravu-text-secondary);
+  color: var(--text-secondary);
 }
 
 .stravu-editor[data-theme="dark"] .search-replace-option:hover:not(.active) {
-  background-color: var(--stravu-bg-tertiary);
-  color: var(--stravu-text-primary);
+  background-color: var(--surface-tertiary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="dark"] .search-replace-option.active {
@@ -280,14 +280,14 @@
 }
 
 .stravu-editor[data-theme="dark"] .search-replace-nav-button {
-  background: var(--stravu-bg-secondary);
+  background: var(--surface-secondary);
   border-color: var(--stravu-editor-border);
-  color: var(--stravu-text-primary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="dark"] .search-replace-button {
-  background: var(--stravu-bg-tertiary);
-  color: var(--stravu-text-primary);
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="dark"] .search-replace-button:hover:not(:disabled) {
@@ -295,7 +295,7 @@
 }
 
 .stravu-editor[data-theme="dark"] .search-replace-button:disabled {
-  background-color: var(--stravu-bg-secondary);
+  background-color: var(--surface-secondary);
   color: var(--stravu-text-muted);
   opacity: 1;
 }
@@ -320,7 +320,7 @@
 
 /* Crystal Dark theme support */
 .stravu-editor[data-theme="crystal-dark"] .search-replace-dialog {
-  background: var(--stravu-bg-secondary);
+  background: var(--surface-secondary);
   border-color: var(--stravu-editor-border);
 }
 
@@ -329,9 +329,9 @@
 }
 
 .stravu-editor[data-theme="crystal-dark"] .search-replace-input {
-  background: var(--stravu-bg-primary);
+  background: var(--surface-primary);
   border-color: var(--stravu-editor-border);
-  color: var(--stravu-text-primary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .search-replace-input:focus {
@@ -340,22 +340,22 @@
 
 .stravu-editor[data-theme="crystal-dark"] .search-replace-title,
 .stravu-editor[data-theme="crystal-dark"] .search-replace-close {
-  color: var(--stravu-text-primary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .search-replace-count {
-  color: var(--stravu-text-secondary);
+  color: var(--text-secondary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .search-replace-option {
-  background: var(--stravu-bg-primary);
+  background: var(--surface-primary);
   border-color: var(--stravu-editor-border);
-  color: var(--stravu-text-secondary);
+  color: var(--text-secondary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .search-replace-option:hover:not(.active) {
-  background-color: var(--stravu-bg-tertiary);
-  color: var(--stravu-text-primary);
+  background-color: var(--surface-tertiary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .search-replace-option.active {
@@ -365,14 +365,14 @@
 }
 
 .stravu-editor[data-theme="crystal-dark"] .search-replace-nav-button {
-  background: var(--stravu-bg-secondary);
+  background: var(--surface-secondary);
   border-color: var(--stravu-editor-border);
-  color: var(--stravu-text-primary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .search-replace-button {
-  background: var(--stravu-bg-tertiary);
-  color: var(--stravu-text-primary);
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .search-replace-button:hover:not(:disabled) {
@@ -380,7 +380,7 @@
 }
 
 .stravu-editor[data-theme="crystal-dark"] .search-replace-button:disabled {
-  background-color: var(--stravu-bg-secondary);
+  background-color: var(--surface-secondary);
   color: var(--stravu-text-muted);
   opacity: 1;
 }
@@ -441,12 +441,12 @@
 
 /* Dark mode support for history dropdown */
 .stravu-editor[data-theme="dark"] .search-history-dropdown {
-  background: var(--stravu-bg-secondary);
+  background: var(--surface-secondary);
   border-color: var(--stravu-editor-border);
 }
 
 .stravu-editor[data-theme="dark"] .history-item {
-  color: var(--stravu-text-primary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="dark"] .history-item:hover,
@@ -460,12 +460,12 @@
 
 /* Crystal Dark theme support for history dropdown */
 .stravu-editor[data-theme="crystal-dark"] .search-history-dropdown {
-  background: var(--stravu-bg-secondary);
+  background: var(--surface-secondary);
   border-color: var(--stravu-editor-border);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .history-item {
-  color: var(--stravu-text-primary);
+  color: var(--text-primary);
 }
 
 .stravu-editor[data-theme="crystal-dark"] .history-item:hover,

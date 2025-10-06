@@ -14,7 +14,7 @@ html, body, #root { height: 100%; margin: 0; }
 .muted { color: #6b7280; font-size: 12px; margin: 8px 0; }
 
 /* Material Symbols baseline */
-.material-symbols-rounded { 
+.material-symbols-rounded {
   font-family: 'Material Symbols Rounded';
   font-weight: normal;
   font-style: normal;
@@ -34,12 +34,12 @@ html, body, #root { height: 100%; margin: 0; }
 .ai-panel { border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); background: #fff; }
 .ai-wrapper { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px; }
 .ai-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px; border-bottom: 1px solid var(--stravu-editor-border, #e5e7eb); }
-.chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--stravu-editor-border, #e5e7eb); border-radius: 999px; background: var(--stravu-bg-secondary, #fff); cursor: pointer; }
-.icon-btn { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--stravu-editor-border, #e5e7eb); border-radius: 10px; background: var(--stravu-bg-secondary, #fff); cursor: pointer; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--stravu-editor-border, #e5e7eb); border-radius: 999px; background: var(--surface-secondary, #fff); cursor: pointer; }
+.icon-btn { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--stravu-editor-border, #e5e7eb); border-radius: 10px; background: var(--surface-secondary, #fff); cursor: pointer; }
 .icon-btn:active { transform: translateY(1px); }
-.prompt-input { flex: 1; padding: 8px 10px; border: 1px solid var(--stravu-editor-border, #e5e7eb); border-radius: 10px; resize: vertical; min-height: 38px; background: var(--stravu-bg-secondary, #fff); color: var(--stravu-text-primary, #111827); }
+.prompt-input { flex: 1; padding: 8px 10px; border: 1px solid var(--stravu-editor-border, #e5e7eb); border-radius: 10px; resize: vertical; min-height: 38px; background: var(--surface-secondary, #fff); color: var(--text-primary, #111827); }
 .ai-messages { max-height: 240px; overflow: auto; padding: 8px; }
-.bubble { background: var(--stravu-bg-tertiary, #f3f4f6); border: 1px solid var(--stravu-editor-border, #e5e7eb); border-radius: 10px; padding: 6px 8px; max-width: 90%; color: var(--stravu-text-primary, #111827); }
+.bubble { background: var(--surface-tertiary, #f3f4f6); border: 1px solid var(--stravu-editor-border, #e5e7eb); border-radius: 10px; padding: 6px 8px; max-width: 90%; color: var(--text-primary, #111827); }
 .bubble.user { background: var(--stravu-hover-bg, #eef2ff); }
 
 /* Responsive layout for model selection */

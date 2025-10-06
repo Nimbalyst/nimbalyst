@@ -9,8 +9,8 @@
   gap: 8px;
   width: 100%;
   padding: 8px 12px;
-  background: var(--background-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
@@ -18,7 +18,7 @@
 }
 
 .agent-selector-trigger:hover:not(:disabled) {
-  background: var(--background-hover);
+  background: var(--surface-hover);
   border-color: var(--primary-color);
 }
 
@@ -62,8 +62,8 @@
   left: 0;
   right: 0;
   margin-top: 4px;
-  background: var(--background-primary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 1000;
@@ -75,14 +75,14 @@
 
 .agent-search {
   padding: 8px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .agent-search input {
   width: 100%;
   padding: 6px 10px;
-  background: var(--background-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 4px;
   color: var(--text-primary);
   font-size: 14px;
@@ -143,7 +143,7 @@
 }
 
 .agent-item:hover {
-  background: var(--background-hover);
+  background: var(--surface-hover);
 }
 
 .agent-item.selected {
@@ -151,7 +151,7 @@
 }
 
 .agent-item.no-agent {
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
   margin-bottom: 4px;
 }
 
@@ -178,7 +178,7 @@
 .agent-item-version {
   font-size: 11px;
   padding: 1px 4px;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   border-radius: 3px;
   color: var(--text-secondary);
 }

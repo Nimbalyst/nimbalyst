@@ -6,6 +6,73 @@
  *
  *
  */
+
+/* Light Theme Variables */
+:root,
+.light-theme {
+  /* Base Surface Colors */
+  --surface-primary: #ffffff;
+  --surface-secondary: #f9fafb;
+  --surface-tertiary: #f3f4f6;
+  --surface-hover: rgba(0, 0, 0, 0.05);
+  --surface-selected: rgba(59, 130, 246, 0.1);
+  --surface-active: rgba(59, 130, 246, 0.2);
+
+  /* Text Colors */
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --text-disabled: #d1d5db;
+
+  /* Border & Divider */
+  --border-primary: #e5e7eb;
+  --border-focus: #3b82f6;
+
+  /* Interactive/Accent Colors */
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #2563eb;
+  --accent-link: rgb(33, 111, 219);
+  --accent-link-hover: rgb(33, 111, 219);
+
+  /* Editor-Specific */
+  --editor-background: #ffffff;
+  --editor-text: #111827;
+
+  /* Code Block */
+  --code-background: rgb(240, 242, 245);
+  --code-gutter: #eee;
+  --code-border: #ccc;
+  --code-text: #111827;
+
+  /* Table */
+  --table-border: #bbb;
+  --table-header: #f2f3f5;
+  --table-cell: #ffffff;
+  --table-stripe: #f2f5fb;
+  --table-frozen: #ffffff;
+
+  /* Toolbar */
+  --toolbar-background: #ffffff;
+  --toolbar-border: #e5e7eb;
+  --toolbar-button-hover: #f3f4f6;
+  --toolbar-button-active: rgba(59, 130, 246, 0.2);
+
+  /* Semantic Colors */
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --error-color: #ef4444;
+  --info-color: #3b82f6;
+
+  /* Special Purpose */
+  --highlight-background: rgba(255, 212, 0, 0.14);
+  --highlight-border: rgba(255, 212, 0, 0.3);
+  --quote-text: rgb(101, 103, 107);
+  --quote-border: rgb(206, 208, 212);
+
+  /* Lexical-specific */
+  --lexical-indent-base-value: 40px;
+}
+
 .PlaygroundEditorTheme__ltr {
   text-align: left;
 }

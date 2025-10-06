@@ -28,7 +28,7 @@
   max-width: 1200px;
   height: 80%;
   max-height: 800px;
-  background: var(--background-primary, white);
+  background: var(--surface-primary, white);
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   display: flex;
@@ -53,7 +53,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  border-bottom: 1px solid var(--border-primary, #e5e7eb);
 }
 
 .history-dialog-title {
@@ -101,7 +101,7 @@
 }
 
 .history-dialog-close:hover {
-  background: var(--background-hover, rgba(0, 0, 0, 0.05));
+  background: var(--surface-hover, rgba(0, 0, 0, 0.05));
   color: var(--text-primary, #111827);
 }
 
@@ -115,18 +115,18 @@
 /* List Section */
 .history-list {
   width: 350px;
-  border-right: 1px solid var(--border-color, #e5e7eb);
+  border-right: 1px solid var(--border-primary, #e5e7eb);
   display: flex;
   flex-direction: column;
 }
 
 .history-list-header {
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  border-bottom: 1px solid var(--border-primary, #e5e7eb);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--background-secondary, #f9fafb);
+  background: var(--surface-secondary, #f9fafb);
 }
 
 .history-list-header h3 {
@@ -165,7 +165,7 @@
 }
 
 .history-item:hover {
-  background: var(--background-hover, rgba(0, 0, 0, 0.04));
+  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
 }
 
 .history-item.selected {
@@ -281,11 +281,11 @@
 
 .history-preview-header {
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  border-bottom: 1px solid var(--border-primary, #e5e7eb);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--background-secondary, #f9fafb);
+  background: var(--surface-secondary, #f9fafb);
 }
 
 .history-preview-header h3 {
@@ -360,7 +360,7 @@
 
 .history-items::-webkit-scrollbar-thumb,
 .history-preview-content::-webkit-scrollbar-thumb {
-  background: var(--border-color, #e5e7eb);
+  background: var(--border-primary, #e5e7eb);
   border-radius: 4px;
 }
 
@@ -372,7 +372,7 @@
 /* Dark Theme Adjustments */
 .dark-theme .history-dialog,
 .crystal-dark-theme .history-dialog {
-  background: var(--background-primary, #1f2937);
+  background: var(--surface-primary, #1f2937);
 }
 
 .dark-theme .history-dialog-overlay,
@@ -391,7 +391,7 @@
     width: 95%;
     height: 90%;
   }
-  
+
   .history-list {
     width: 280px;
   }

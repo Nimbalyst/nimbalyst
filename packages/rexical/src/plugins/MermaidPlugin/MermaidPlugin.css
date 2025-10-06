@@ -6,7 +6,7 @@
   margin: 1rem 0;
   border: 1px solid var(--stravu-editor-border, #e2e8f0);
   border-radius: 8px;
-  background: var(--stravu-bg-primary, #ffffff);
+  background: var(--surface-primary, #ffffff);
   overflow: hidden;
 }
 
@@ -15,13 +15,13 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 1rem;
-  background: var(--stravu-bg-secondary, #f8fafc);
+  background: var(--surface-secondary, #f8fafc);
   border-bottom: 1px solid var(--stravu-editor-border, #e2e8f0);
 }
 
 .mermaid-label {
   font-weight: 500;
-  color: var(--stravu-text-primary, #1a202c);
+  color: var(--text-primary, #1a202c);
   font-size: 0.875rem;
   display: flex;
   align-items: center;
@@ -34,8 +34,8 @@
   font-size: 0.75rem;
   border: 1px solid var(--stravu-editor-border, #e2e8f0);
   border-radius: 4px;
-  background: var(--stravu-bg-primary, #ffffff);
-  color: var(--stravu-text-primary, #1a202c);
+  background: var(--surface-primary, #ffffff);
+  color: var(--text-primary, #1a202c);
   cursor: pointer;
   transition: background-color 0.2s, border-color 0.2s;
 }
@@ -118,7 +118,7 @@
   resize: none;
   overflow: hidden;
   background: var(--stravu-code-bg, #f8fafc);
-  color: var(--stravu-text-primary, #1a202c);
+  color: var(--text-primary, #1a202c);
   line-height: 1.5;
 }
 

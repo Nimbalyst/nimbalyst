@@ -1,9 +1,9 @@
 .streaming-status {
   margin: 8px 0;
   margin-left: 40px;
-  border: 1px solid var(--border-color, #e0e0e0);
+  border: 1px solid var(--border-primary, #e0e0e0);
   border-radius: 6px;
-  background: var(--background-secondary, #f8f9fa);
+  background: var(--surface-secondary, #f8f9fa);
 }
 
 .streaming-status.active {
@@ -68,8 +68,8 @@
 
 .streaming-status-content {
   padding: 12px;
-  border-top: 1px solid var(--border-color, #e0e0e0);
-  background: var(--background-primary, white);
+  border-top: 1px solid var(--border-primary, #e0e0e0);
+  background: var(--surface-primary, white);
   max-height: 200px;
   overflow-y: auto;
 }
@@ -100,8 +100,8 @@
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
   .streaming-status {
-    --border-color: #3a3a3a;
-    --background-secondary: #2a2a2a;
+    --border-primary: #3a3a3a;
+    --surface-secondary: #2a2a2a;
     --bg-active: #1a3a52;
     --bg-success: #1a3a2a;
     --bg-primary: #1e1e1e;

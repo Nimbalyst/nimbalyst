@@ -36,19 +36,19 @@
 }
 
 .stravu-editor.dark-theme .Modal__modal {
-  background-color: var(--stravu-bg-secondary);
-  color: var(--stravu-text-primary);
+  background-color: var(--surface-secondary);
+  color: var(--text-primary);
   box-shadow: 0 0 20px 0 rgba(0, 0, 0, 0.8);
 }
 
 .stravu-editor.dark-theme .Modal__title {
-  color: var(--stravu-text-primary);
+  color: var(--text-primary);
   border-bottom-color: var(--stravu-editor-border);
 }
 
 .stravu-editor.dark-theme .Modal__closeButton {
-  background-color: var(--stravu-bg-tertiary);
-  color: var(--stravu-text-primary);
+  background-color: var(--surface-tertiary);
+  color: var(--text-primary);
 }
 
 .stravu-editor.dark-theme .Modal__closeButton:hover {

@@ -23,8 +23,8 @@
 }
 
 .agent-command-palette {
-  background: var(--background-primary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   width: 90%;
@@ -48,15 +48,15 @@
 
 .agent-command-palette-header {
   padding: 12px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-primary);
 }
 
 .agent-command-palette-input {
   width: 100%;
   padding: 8px 12px;
   font-size: 16px;
-  background: var(--background-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   color: var(--text-primary);
   outline: none;
@@ -97,11 +97,11 @@
 }
 
 .agent-command-palette-item:hover {
-  background: var(--background-hover);
+  background: var(--surface-hover);
 }
 
 .agent-command-palette-item.selected {
-  background: var(--background-selected);
+  background: var(--surface-selected);
 }
 
 .agent-item-header {
@@ -124,7 +124,7 @@
 .agent-item-version {
   font-size: 11px;
   padding: 2px 6px;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   border-radius: 3px;
   color: var(--text-secondary);
 }
@@ -155,7 +155,7 @@
 
 .agent-command-palette-footer {
   padding: 8px 12px;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-primary);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -171,8 +171,8 @@
 
 .agent-command-palette-hint kbd {
   padding: 2px 4px;
-  background: var(--background-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 3px;
   font-size: 11px;
   font-family: monospace;
@@ -247,8 +247,8 @@
 .agent-param-input,
 .agent-param-select {
   padding: 8px 12px;
-  background: var(--background-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   color: var(--text-primary);
   font-size: 14px;
@@ -296,9 +296,9 @@
 
 .agent-cancel-btn {
   padding: 8px 16px;
-  background: var(--background-secondary);
+  background: var(--surface-secondary);
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
@@ -307,7 +307,7 @@
 }
 
 .agent-cancel-btn:hover {
-  background: var(--background-tertiary);
+  background: var(--surface-tertiary);
 }
 
 /* Dark theme adjustments */

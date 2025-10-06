@@ -1,6 +1,6 @@
 .performance-metrics {
-  background: var(--background-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   padding: 12px;
   margin: 8px;
@@ -53,7 +53,7 @@
 .metrics-history {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-primary);
 }
 
 .history-header {

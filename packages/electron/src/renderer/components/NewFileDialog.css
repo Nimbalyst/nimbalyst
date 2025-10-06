@@ -12,8 +12,8 @@
 }
 
 .new-file-dialog {
-  background: var(--background-primary);
-  border: 1px solid var(--border-color);
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   padding: 24px;
   width: 400px;
@@ -42,8 +42,8 @@
 .new-file-input {
   width: 100%;
   padding: 8px 12px;
-  background: var(--background-secondary, #1e1e1e);
-  border: 1px solid var(--border-color, #464647);
+  background: var(--surface-secondary, #1e1e1e);
+  border: 1px solid var(--border-primary, #464647);
   border-radius: 4px;
   color: var(--text-primary, #cccccc);
   font-size: 14px;
@@ -70,9 +70,9 @@
 
 .new-file-buttons button {
   padding: 6px 16px;
-  border: 1px solid var(--border-color, #464647);
+  border: 1px solid var(--border-primary, #464647);
   border-radius: 4px;
-  background: var(--background-secondary, #1e1e1e);
+  background: var(--surface-secondary, #1e1e1e);
   color: var(--text-primary, #cccccc);
   font-size: 13px;
   cursor: pointer;
@@ -80,7 +80,7 @@
 }
 
 .new-file-buttons button:hover {
-  background: var(--background-hover, #2a2a2a);
+  background: var(--surface-hover, #2a2a2a);
 }
 
 .new-file-buttons button[type="submit"] {
