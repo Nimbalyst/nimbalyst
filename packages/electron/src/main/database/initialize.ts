@@ -35,8 +35,20 @@ export async function initializeDatabase(): Promise<SessionStore> {
 
     // Set up cleanup on app quit
     app.on('before-quit', async () => {
+      const t1 = Date.now();
       logger.main.info('[Database] Closing database connection...');
-      await database.close();
+      console.log(`[DATABASE] [${t1}] Starting database close`);
+      try {
+        // Add timeout to prevent hanging
+        const closePromise = database.close();
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1000));
+        await Promise.race([closePromise, timeoutPromise]);
+        const t2 = Date.now();
+        console.log(`[DATABASE] [${t2}] Database closed (${t2-t1}ms)`);
+      } catch (error) {
+        const t2 = Date.now();
+        console.error(`[DATABASE] [${t2}] Error closing database (${t2-t1}ms):`, error);
+      }
     });
 
     logger.main.info('[Database] Database system ready');

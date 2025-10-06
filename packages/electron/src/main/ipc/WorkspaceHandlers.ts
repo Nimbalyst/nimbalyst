@@ -1,8 +1,13 @@
-import { ipcMain, BrowserWindow } from 'electron';
-import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
-import { join, basename } from 'path';
+import { ipcMain, BrowserWindow, app, shell } from 'electron';
+import { readFileSync, readdirSync, statSync, existsSync, promises as fsPromises } from 'fs';
+import * as fs from 'fs';
+import { join, basename, dirname, extname } from 'path';
+import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import os from 'os';
+
+const { writeFile, mkdir, rename, unlink, rmdir, copyFile, readFile, rm, stat, cp } = fsPromises;
 
 const execAsync = promisify(exec);
 import { windowStates, getWindowId, createWindow } from '../window/WindowManager';
@@ -27,7 +32,6 @@ export function registerWorkspaceHandlers() {
 
     // Create new file
     ipcMain.handle('create-file', async (event, filePath: string, content: string = '') => {
-        const { writeFile } = require('fs').promises;
         try {
             await writeFile(filePath, content, 'utf-8');
             return { success: true, filePath };
@@ -39,7 +43,6 @@ export function registerWorkspaceHandlers() {
 
     // Create new folder
     ipcMain.handle('create-folder', async (event, folderPath: string) => {
-        const { mkdir } = require('fs').promises;
         try {
             await mkdir(folderPath, { recursive: true });
             return { success: true, folderPath };
@@ -188,10 +191,6 @@ export function registerWorkspaceHandlers() {
 
             // Try to use bundled ripgrep from claude-code, fall back to system rg
             let rgPath = 'rg';
-            const app = require('electron').app;
-            const path = require('path');
-            const os = require('os');
-            const fs = require('fs');
 
             // Determine the platform-specific ripgrep binary
             const platform = os.platform();
@@ -519,8 +518,6 @@ export function registerWorkspaceHandlers() {
 
     // File operations for workspace files
     ipcMain.handle('rename-file', async (event, oldPath: string, newName: string) => {
-        const { rename } = require('fs').promises;
-        const { dirname, join } = require('path');
 
         try {
             const newPath = join(dirname(oldPath), newName);
@@ -565,7 +562,6 @@ export function registerWorkspaceHandlers() {
     });
 
     ipcMain.handle('delete-file', async (event, filePath: string) => {
-        const { unlink, rm, stat } = require('fs').promises;
 
         try {
             const stats = await stat(filePath);
@@ -603,8 +599,6 @@ export function registerWorkspaceHandlers() {
 
     // Move file/folder
     ipcMain.handle('move-file', async (event, sourcePath: string, targetPath: string) => {
-        const { rename, stat } = require('fs').promises;
-        const { join, basename } = require('path');
 
         try {
             // Check if source exists
@@ -672,8 +666,6 @@ export function registerWorkspaceHandlers() {
 
     // Copy file/folder
     ipcMain.handle('copy-file', async (event, sourcePath: string, targetPath: string) => {
-        const { cp, stat } = require('fs').promises;
-        const { join, basename, extname } = require('path');
 
         try {
             // Check if source exists
@@ -742,7 +734,6 @@ export function registerWorkspaceHandlers() {
     });
 
     ipcMain.handle('show-in-finder', async (event, filePath: string) => {
-        const { shell } = require('electron');
 
         try {
             shell.showItemInFolder(filePath);

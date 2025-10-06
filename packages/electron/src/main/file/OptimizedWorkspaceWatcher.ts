@@ -55,14 +55,13 @@ export class OptimizedWorkspaceWatcher {
         };
 
         try {
-            // Create a watcher for just the root directory (only immediate children)
+            // Create a watcher that only watches directories explicitly added to watchedPaths
             const watcher = chokidar.watch(workspacePath, {
                 // Performance settings - critical for avoiding CPU spikes!
-                ignored: (path: string) => {
-                    // More robust ignore logic using function instead of globs
+                ignored: (path: string, stats?: any) => {
                     const relativePath = path.replace(workspacePath, '');
 
-                    // Ignore common build/dependency directories
+                    // Always ignore common build/dependency directories
                     if (relativePath.includes('/node_modules/') ||
                         relativePath.includes('/.git/') ||
                         relativePath.includes('/dist/') ||
@@ -97,8 +96,9 @@ export class OptimizedWorkspaceWatcher {
                 // Follow symlinks (optional, set to false if you don't need it)
                 followSymlinks: false,
 
-                // No depth limit - rely on ignored function to filter directories
-                // depth: undefined,
+                // Watch only 1 level deep to prevent recursive watching
+                // Each added folder via watcher.add() will also watch 1 level deep
+                depth: 1,
 
                 // Use native filesystem events (more efficient than polling)
                 usePolling: false,
@@ -214,19 +214,35 @@ export class OptimizedWorkspaceWatcher {
         }
     }
 
-    stopAll() {
+    async stopAll() {
         logger.workspaceWatcher.info(`[CLEANUP] Stopping all workspace watchers (${this.watchers.size} windows)`);
         console.log(`[CLEANUP] OptimizedWorkspaceWatcher.stopAll called with ${this.watchers.size} windows`);
 
+        const closePromises: Promise<void>[] = [];
         for (const [windowId, watcher] of this.watchers.entries()) {
             try {
                 console.log(`[CLEANUP] Closing workspace watcher for window ${windowId}`);
-                watcher.close();
+                // Log what we're watching
+                const watched = watcher.getWatched();
+                const totalFiles = Object.values(watched).reduce((sum: number, files: any) => sum + files.length, 0);
+                console.log(`[CLEANUP] Watcher for window ${windowId} is watching ${totalFiles} files in ${Object.keys(watched).length} directories`);
+                closePromises.push(watcher.close());
             } catch (error) {
                 logger.workspaceWatcher.error(`Error closing watcher for window ${windowId}:`, error);
                 console.error(`[CLEANUP] Error closing workspace watcher for window ${windowId}:`, error);
             }
         }
+
+        // Wait for all watchers to close with a timeout
+        const allClosesPromise = Promise.all(closePromises);
+        const timeoutPromise = new Promise<void>((resolve) => {
+            setTimeout(() => {
+                console.log(`[CLEANUP] Workspace watcher close timed out after 1000ms, forcing cleanup`);
+                resolve();
+            }, 1000);
+        });
+
+        await Promise.race([allClosesPromise, timeoutPromise]);
         this.watchers.clear();
         this.workspacePaths.clear();
 

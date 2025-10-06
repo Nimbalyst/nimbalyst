@@ -1,4 +1,4 @@
-import { spawn, ChildProcess, exec } from 'child_process';
+import { spawn, ChildProcess, exec, execSync } from 'child_process';
 import { ipcMain, BrowserWindow, shell } from 'electron';
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
@@ -81,7 +81,6 @@ export class CLIManager {
     console.log('[CLIManager] Enhanced PATH:', this.getEnhancedPath());
 
     try {
-      const { execSync } = require('child_process');
 
       // Try multiple approaches to find npm
       const enhancedPath = this.getEnhancedPath();
@@ -195,8 +194,7 @@ export class CLIManager {
       // Get global npm root dynamically
       let globalNpmRoot: string | null = null;
       try {
-        const { execSync } = require('child_process');
-        globalNpmRoot = execSync('npm root -g', { encoding: 'utf8' }).trim();
+          globalNpmRoot = execSync('npm root -g', { encoding: 'utf8' }).trim();
       } catch (error) {
         // Ignore error, will use fallback paths
       }
@@ -384,7 +382,6 @@ export class CLIManager {
 
     // Check if we're using Homebrew's npm and need to configure prefix
     try {
-      const { execSync } = require('child_process');
       const npmPath = execSync('which npm', { encoding: 'utf8' }).trim();
       const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
 
@@ -429,8 +426,7 @@ export class CLIManager {
     // Use execSync with a completely clean environment to avoid workspace detection
     return new Promise((resolve, reject) => {
       try {
-        const { execSync } = require('child_process');
-
+  
         // Build the npm command - if we're using Homebrew npm with user prefix, it's still -g
         const npmCommand = `npm install -g ${packageName}`;
 
@@ -516,8 +512,7 @@ export class CLIManager {
 
     return new Promise((resolve, reject) => {
       try {
-        const { execSync } = require('child_process');
-
+  
         // Build the npm command
         const npmCommand = `npm uninstall -g ${packageName}`;
 
@@ -616,8 +611,7 @@ export class CLIManager {
 
     return new Promise((resolve, reject) => {
       try {
-        const { execSync } = require('child_process');
-
+  
         // Build the npm command - use install with @latest to ensure we get the latest version
         const npmCommand = `npm install -g ${packageName}@latest`;
 
@@ -678,8 +672,7 @@ export class CLIManager {
 
     return new Promise((resolve, reject) => {
       try {
-        const { execSync } = require('child_process');
-
+  
         this.sendProgressToRenderer('nodejs' as CLITool, {
           percent: 10,
           status: 'Starting Node.js installation...',
@@ -710,7 +703,6 @@ export class CLIManager {
             // Node not found, which is fine
           }
 
-          const { shell } = require('electron');
           shell.openExternal('https://nodejs.org/en/download/');
 
           reject(new Error('Please download and install Node.js from the opened webpage (NOT via Homebrew), then restart Preditor.'));
@@ -722,7 +714,6 @@ export class CLIManager {
             log: 'Please download and run the Windows installer'
           });
 
-          const { shell } = require('electron');
           shell.openExternal('https://nodejs.org/en/download/');
 
           reject(new Error('Please download and install Node.js from the opened webpage, then restart Preditor.'));
@@ -767,8 +758,7 @@ export class CLIManager {
           }
 
           if (!installed) {
-            const { shell } = require('electron');
-            shell.openExternal('https://nodejs.org/en/download/');
+              shell.openExternal('https://nodejs.org/en/download/');
             reject(new Error('Could not install Node.js automatically. Please install from the opened webpage.'));
             return;
           }
@@ -848,8 +838,7 @@ export class CLIManager {
 
       // Try to get npm prefix if npm exists somewhere
       try {
-        const { execSync } = require('child_process');
-        const npmPrefix = execSync('npm config get prefix 2>/dev/null', {
+          const npmPrefix = execSync('npm config get prefix 2>/dev/null', {
           encoding: 'utf8',
           shell: true,
           timeout: 2000

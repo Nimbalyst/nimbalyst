@@ -3,6 +3,9 @@ import { getWindowId } from '../window/WindowManager';
 import { logger } from '../utils/logger';
 import { chokidarFileWatcher } from './ChokidarFileWatcher';
 
+// Re-export for use in other modules
+export { chokidarFileWatcher };
+
 // Start watching a file for changes
 export async function startFileWatcher(window: BrowserWindow, filePath: string): Promise<void> {
     // Skip watching virtual documents
@@ -47,11 +50,11 @@ export async function checkFileForChanges(window: BrowserWindow, filePath: strin
 }
 
 // Stop all file watchers (used during app quit)
-export function stopAllFileWatchers() {
+export async function stopAllFileWatchers() {
     console.log('[FileWatcher] stopAllFileWatchers called');
     logger.fileWatcher.info('Stopping all file watchers');
     try {
-        chokidarFileWatcher.stopAll();
+        await chokidarFileWatcher.stopAll();
         console.log('[FileWatcher] stopAll completed');
     } catch (error) {
         console.error('[FileWatcher] Error in stopAll:', error);

@@ -16,7 +16,7 @@ import type {
   AIProviderType,
   AIModel,
 } from '@stravu/runtime/ai/server/types';
-import type { AIMessage } from '@stravu/runtime/ai/types';
+import type { Message } from '@stravu/runtime/ai/types';
 import { updateDocumentState } from '../../mcp/httpServer';
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 import { logger } from '../../utils/logger';
@@ -189,7 +189,7 @@ export class AIService {
       let model = modelId;
       if (!model && provider !== 'claude-code') {
         // For non-claude-code providers, try to get a default model
-        const defaultModel = ModelRegistry.getDefaultModel(provider);
+        const defaultModel = await ModelRegistry.getDefaultModel(provider);
         model = defaultModel?.id;
       }
 
@@ -231,8 +231,8 @@ export class AIService {
 
       // Build config based on provider type
       const initConfig: any = {
-        maxTokens: session.providerConfig?.maxTokens,
-        temperature: session.providerConfig?.temperature
+        maxTokens: (session.providerConfig as any)?.maxTokens,
+        temperature: (session.providerConfig as any)?.temperature
       };
 
       // Claude Code manages its own authentication - do not pass API key
@@ -383,7 +383,7 @@ export class AIService {
       }
       
       console.log(`[AIService] Getting provider for: ${session.provider}, sessionId: ${session.id}`);
-      let provider = ProviderFactory.getProvider(session.provider, session.id);
+      let provider = ProviderFactory.getProvider(session.provider as AIProviderType, session.id);
       perfLog.getProviderTime = Date.now() - providerStartTime;
 
       // If provider doesn't exist, create and initialize it
@@ -396,8 +396,7 @@ export class AIService {
 
         // Get the correct API key based on provider
         let apiKey: string | undefined;
-        let errorMessage: string;
-
+        let errorMessage = 'API key not configured';
         switch (session.provider) {
           case 'claude':
           case 'claude-code':
@@ -433,8 +432,8 @@ export class AIService {
 
         const reinitConfig: any = {
           apiKey,
-          maxTokens: session.providerConfig?.maxTokens,
-          temperature: session.providerConfig?.temperature
+          maxTokens: (session.providerConfig as any)?.maxTokens,
+          temperature: (session.providerConfig as any)?.temperature
         };
 
         // Add baseUrl for LMStudio
@@ -831,7 +830,9 @@ export class AIService {
         return { content: fullResponse };
       } catch (error) {
         const errorTime = Date.now() - startTime;
-        
+        const isClaudeCode = session.provider === 'claude-code';
+        const logPrefix = isClaudeCode ? '[CLAUDE-CODE-SERVICE]' : '[AIService]';
+
         if (isClaudeCode) {
           console.error('[CLAUDE-CODE-SERVICE] ========== CRITICAL ERROR ==========');
           console.error('[CLAUDE-CODE-SERVICE] Error caught in stream handler:', error);
@@ -839,26 +840,25 @@ export class AIService {
           console.error('[CLAUDE-CODE-SERVICE] Error message:', error instanceof Error ? error.message : String(error));
           console.error('[CLAUDE-CODE-SERVICE] Error stack:', error instanceof Error ? error.stack : 'No stack');
           console.error('[CLAUDE-CODE-SERVICE] Context:', {
-            errorTime,
-            chunksReceived: chunkCount,
-            textChunks: textChunks,
-            responseLength: fullResponse.length
+            errorTime
           });
         }
-        
+
         console.error(`${logPrefix} Error after ${errorTime}ms:`, error);
 
         // Send error metrics
-        event.sender.send('ai:performanceMetrics', {
-          phase: 'error',
-          errorTime,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        });
+        if (event && event.sender) {
+          event.sender.send('ai:performanceMetrics', {
+            phase: 'error',
+            errorTime,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
 
-        // Send error to renderer
-        event.sender.send('ai:error', {
-          message: error instanceof Error ? error.message : 'Unknown error occurred'
-        });
+          // Send error to renderer
+          event.sender.send('ai:error', {
+            message: error instanceof Error ? error.message : 'Unknown error occurred'
+          });
+        }
 
         throw error;
       }

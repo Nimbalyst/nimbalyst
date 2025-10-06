@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { SessionManager } from '@stravu/runtime/ai/server';
+import type { AIProviderType } from '@stravu/runtime/ai/server/types';
 
 // Initialize session manager
 const sessionManager = new SessionManager();
@@ -10,7 +11,7 @@ export async function registerSessionHandlers() {
 
     // Create session
     ipcMain.handle('session:create', async (event, filePath: string, type: string, source?: any) => {
-        return await sessionManager.createSession(filePath, type as any, source);
+        return await sessionManager.createSession(filePath, type as AIProviderType, source);
     });
 
     // Load session
@@ -18,9 +19,11 @@ export async function registerSessionHandlers() {
         return await sessionManager.loadSession(sessionId);
     });
 
-    // Save session
+    // Save session - maps to updateSessionMessages
     ipcMain.handle('session:save', async (event, session: any) => {
-        await sessionManager.saveSession(session);
+        if (session?.id && session?.messages) {
+            await sessionManager.updateSessionMessages(session.id, session.messages);
+        }
     });
 
     // Delete session
@@ -28,29 +31,33 @@ export async function registerSessionHandlers() {
         await sessionManager.deleteSession(sessionId);
     });
 
-    // Get active session
+    // Get active session - not implemented, returns null
     ipcMain.handle('session:get-active', async (event, filePath: string) => {
-        return await sessionManager.getActiveSession(filePath);
+        // This API doesn't exist in current SessionManager
+        // Would need to track active sessions per file separately
+        return null;
     });
 
-    // Set active session
+    // Set active session - not implemented, no-op
     ipcMain.handle('session:set-active', async (event, filePath: string, sessionId: string, type: string) => {
-        await sessionManager.setActiveSession(filePath, sessionId, type as any);
+        // This API doesn't exist in current SessionManager
+        // Would need to track active sessions per file separately
     });
 
-    // Check conflicts
+    // Check conflicts - not implemented, returns no conflicts
     ipcMain.handle('session:check-conflicts', async (event, session: any, currentMarkdownHash: string) => {
-        return await sessionManager.checkConflicts(session, currentMarkdownHash);
+        // Conflict checking isn't implemented in current system
+        return { hasConflicts: false };
     });
 
-    // Resolve conflict
+    // Resolve conflict - not implemented, no-op
     ipcMain.handle('session:resolve-conflict', async (event, session: any, resolution: string, newBaseHash?: string) => {
-        await sessionManager.resolveConflict(session, resolution as any, newBaseHash);
+        // Conflict resolution isn't implemented in current system
     });
 
-    // Create checkpoint
+    // Create checkpoint - not implemented, no-op
     ipcMain.handle('session:create-checkpoint', async (event, sessionId: string, state: string) => {
-        await sessionManager.createCheckpoint(sessionId, state);
+        // Checkpoints aren't implemented in current system
     });
 }
 

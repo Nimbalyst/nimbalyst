@@ -28,6 +28,18 @@
       "import": "./dist/ai/server/types.js",
       "types": "./dist/ai/server/types.d.ts"
     },
+    "./ai/types": {
+      "import": "./dist/ai/types.js",
+      "types": "./dist/ai/types.d.ts"
+    },
+    "./ai/server/providers/ClaudeProvider": {
+      "import": "./dist/ai/server/providers/ClaudeProvider.js",
+      "types": "./dist/ai/server/providers/ClaudeProvider.d.ts"
+    },
+    "./ai/tools": {
+      "import": "./dist/ai/tools/index.js",
+      "types": "./dist/ai/tools/index.d.ts"
+    },
     "./ai/modelConstants": {
       "import": "./dist/ai/modelConstants.js",
       "types": "./dist/ai/modelConstants.d.ts"

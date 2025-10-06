@@ -69,11 +69,11 @@ export function restartWorkspaceWatcher(window: BrowserWindow, workspacePath: st
 }
 
 // Stop all workspace watchers (used during app quit)
-export function stopAllWorkspaceWatchers() {
+export async function stopAllWorkspaceWatchers() {
     console.log('[WorkspaceWatcher] stopAllWorkspaceWatchers called');
     logger.workspaceWatcher.info('Stopping all workspace watchers');
     try {
-        optimizedWorkspaceWatcher.stopAll();
+        await optimizedWorkspaceWatcher.stopAll();
         console.log('[WorkspaceWatcher] stopAll completed');
     } catch (error) {
         console.error('[WorkspaceWatcher] Error in stopAll:', error);

@@ -1,6 +1,8 @@
-import { Menu, BrowserWindow, app, dialog } from 'electron';
+import { Menu, BrowserWindow, app, dialog, shell } from 'electron';
 import { basename, join } from 'path';
+import * as path from 'path';
 import { existsSync, copyFileSync, mkdirSync } from 'fs';
+import * as fs from 'fs';
 import { windows, windowStates, createWindow, findWindowByFilePath, getWindowId } from '../window/WindowManager';
 import { createAboutWindow } from '../window/AboutWindow';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
@@ -157,7 +159,7 @@ function createWindowListMenu(): any[] {
 }
 
 // Create the recent submenu
-async function createRecentSubmenu(): any[] {
+async function createRecentSubmenu(): Promise<any[]> {
     const recentWorkspaces = await getRecentItems('workspaces');
     const recentDocuments = await getRecentItems('documents');
     const submenu: any[] = [];
@@ -880,8 +882,6 @@ export async function createApplicationMenu() {
                 {
                     label: 'Open Debug Log',
                     click: async () => {
-                        const fs = require('fs');
-                        const path = require('path');
                         const logPath = path.join(app.getPath('userData'), 'preditor-debug.log');
 
                         // Create the log file if it doesn't exist
@@ -889,17 +889,15 @@ export async function createApplicationMenu() {
                             fs.writeFileSync(logPath, `=== Preditor Debug Log ===\nNo debug messages yet.\n\nDebug logging is only active in development mode.\nTo enable debug logging in production, set NODE_ENV=development\n`);
                         }
 
-                        require('electron').shell.openPath(logPath).catch((err: any) => {
+                        shell.openPath(logPath).catch((err: any) => {
                             console.error('Failed to open debug log:', err);
-                            require('electron').dialog.showErrorBox('Error', `Could not open debug log at: ${logPath}`);
+                            dialog.showErrorBox('Error', `Could not open debug log at: ${logPath}`);
                         });
                     }
                 },
                 {
                     label: 'Open Main Log',
                     click: async () => {
-                        const fs = require('fs');
-                        const path = require('path');
                         const logPath = path.join(app.getPath('userData'), 'logs', 'main.log');
 
                         // Create the log file if it doesn't exist
@@ -911,9 +909,9 @@ export async function createApplicationMenu() {
                             fs.writeFileSync(logPath, `=== Preditor Main Log ===\nNo log messages yet.\n\nThis log contains main process and application logs.\n`);
                         }
 
-                        require('electron').shell.openPath(logPath).catch((err: any) => {
+                        shell.openPath(logPath).catch((err: any) => {
                             console.error('Failed to open main log:', err);
-                            require('electron').dialog.showErrorBox('Error', `Could not open main log at: ${logPath}`);
+                            dialog.showErrorBox('Error', `Could not open main log at: ${logPath}`);
                         });
                     }
                 },

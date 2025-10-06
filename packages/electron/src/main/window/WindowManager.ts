@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, app, nativeImage, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import { BrowserWindow, dialog, app, nativeImage, ipcMain, screen, nativeTheme, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import { join, basename } from 'path';
 import { existsSync } from 'fs';
 import { WindowState, FileTreeItem } from '../types';
@@ -115,7 +115,6 @@ export function createWindow(
             height = savedBounds.height;
         } else {
             // Get the display containing the cursor
-            const { screen } = require('electron');
             const cursorPoint = screen.getCursorScreenPoint();
             const display = screen.getDisplayNearestPoint(cursorPoint);
 
@@ -142,7 +141,6 @@ export function createWindow(
         if (currentTheme === 'dark' || currentTheme === 'crystal-dark') {
             backgroundColor = '#1e1e1e';
         } else if (currentTheme === 'system') {
-            const { nativeTheme } = require('electron');
             if (nativeTheme.shouldUseDarkColors) {
                 backgroundColor = '#1e1e1e';
             }
@@ -411,7 +409,6 @@ export function createWindow(
         // Handle unresponsive renderer
         window.webContents.on('unresponsive', () => {
             console.warn('[MAIN] Window became unresponsive');
-            const { dialog } = require('electron');
             const choice = dialog.showMessageBoxSync(window, {
                 type: 'warning',
                 buttons: ['Reload', 'Keep Waiting'],

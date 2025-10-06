@@ -1,7 +1,9 @@
-import { app, BrowserWindow, nativeTheme, nativeImage, ipcMain, globalShortcut } from 'electron';
+import { app, BrowserWindow, nativeTheme, nativeImage, ipcMain, globalShortcut, dialog } from 'electron';
 import type { SessionStore } from '@stravu/runtime';
 import { join } from 'path';
-import { existsSync, writeFileSync, appendFileSync } from 'fs';
+import * as path from 'path';
+import { existsSync, writeFileSync, appendFileSync, readFileSync } from 'fs';
+import * as fs from 'fs';
 
 import { createWindow, windows, windowStates, findWindowByFilePath } from './window/WindowManager';
 import { loadFileIntoWindow } from './file/FileOperations';
@@ -201,10 +203,10 @@ app.whenReady().then(async () => {
         logger.main.error('Error initializing database:', error);
 
         // Show error dialog to user
-        const { dialog } = require('electron');
+        const errorMessage = error instanceof Error ? error.message : String(error);
         dialog.showErrorBox(
             'Database Initialization Failed',
-            `Failed to initialize the database system.\n\nError: ${error.message}\n\nThe application cannot continue without the database.`
+            `Failed to initialize the database system.\n\nError: ${errorMessage}\n\nThe application cannot continue without the database.`
         );
 
         // Exit the app
@@ -418,8 +420,6 @@ app.on('before-quit', async (event) => {
     const forceQuitDelay = app.isPackaged ? 3000 : 2000;
     setupForceQuit(forceQuitDelay);
 
-    const fs = require('fs');
-    const path = require('path');
     let debugLog: string | null = null;
     let canWriteLogs = false;
 
@@ -470,20 +470,23 @@ app.on('before-quit', async (event) => {
 
     // Clean up all file watchers FIRST - these can keep the process alive
     try {
-        console.log('[QUIT] About to clean up file watchers');
+        const t1 = Date.now();
+        console.log(`[QUIT] [${t1}] About to clean up file watchers`);
         if (canWriteLogs && debugLog) {
             try {
                 fs.appendFileSync(debugLog, '[QUIT] Cleaning up file watchers\n');
             } catch (e) {}
         }
 
-        console.log('[QUIT] Calling stopAllFileWatchers...');
-        stopAllFileWatchers();
-        console.log('[QUIT] stopAllFileWatchers returned');
+        console.log(`[QUIT] [${t1}] Calling stopAllFileWatchers...`);
+        await stopAllFileWatchers();
+        const t2 = Date.now();
+        console.log(`[QUIT] [${t2}] stopAllFileWatchers returned (${t2-t1}ms)`);
 
-        console.log('[QUIT] Calling stopAllWorkspaceWatchers...');
-        stopAllWorkspaceWatchers();
-        console.log('[QUIT] stopAllWorkspaceWatchers returned');
+        console.log(`[QUIT] [${t2}] Calling stopAllWorkspaceWatchers...`);
+        await stopAllWorkspaceWatchers();
+        const t3 = Date.now();
+        console.log(`[QUIT] [${t3}] stopAllWorkspaceWatchers returned (${t3-t2}ms)`);
 
         if (canWriteLogs && debugLog) {
             try {
@@ -501,6 +504,8 @@ app.on('before-quit', async (event) => {
 
     try {
         // Clean up AI service
+        const t4 = Date.now();
+        console.log(`[QUIT] [${t4}] Cleaning up AI service`);
         if (aiService) {
             if (canWriteLogs && debugLog) {
                 try {
@@ -510,6 +515,8 @@ app.on('before-quit', async (event) => {
             aiService.destroy();
             aiService = null;
         }
+        const t5 = Date.now();
+        console.log(`[QUIT] [${t5}] AI service cleanup complete (${t5-t4}ms)`);
     } catch (error) {
         console.error('[QUIT] Error destroying AI service:', error);
         if (canWriteLogs && debugLog) {
@@ -521,6 +528,8 @@ app.on('before-quit', async (event) => {
 
     try {
         // Shutdown MCP HTTP server with timeout
+        const t6 = Date.now();
+        console.log(`[QUIT] [${t6}] Shutting down MCP HTTP server`);
         if (canWriteLogs && debugLog) {
             try {
                 fs.appendFileSync(debugLog, '[QUIT] Shutting down MCP HTTP server\n');
@@ -531,11 +540,17 @@ app.on('before-quit', async (event) => {
         const shutdownPromise = shutdownHttpServer();
         const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 500));
         await Promise.race([shutdownPromise, timeoutPromise]);
+        const t7 = Date.now();
+        console.log(`[QUIT] [${t7}] MCP HTTP server shutdown complete (${t7-t6}ms)`);
 
         mcpHttpServer = null;
 
         // Clean up CLI manager
+        const t8 = Date.now();
+        console.log(`[QUIT] [${t8}] Cleaning up CLI manager`);
         cliManager.cleanup();
+        const t9 = Date.now();
+        console.log(`[QUIT] [${t9}] CLI manager cleanup complete (${t9-t8}ms)`);
 
         if (canWriteLogs && debugLog) {
             try {
@@ -553,6 +568,8 @@ app.on('before-quit', async (event) => {
 
     try {
         // Save session state only if we can write
+        const t10 = Date.now();
+        console.log(`[QUIT] [${t10}] Saving session state`);
         if (canWriteLogs) {
             if (debugLog) {
                 try {
@@ -571,6 +588,8 @@ app.on('before-quit', async (event) => {
             });
             const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(false), 300));
             await Promise.race([savePromise, timeoutPromise]);
+            const t11 = Date.now();
+            console.log(`[QUIT] [${t11}] Session state saved (${t11-t10}ms)`);
 
             if (debugLog) {
                 try {
@@ -590,6 +609,8 @@ app.on('before-quit', async (event) => {
     }
 
     // After all cleanup, quit the app
+    const t12 = Date.now();
+    console.log(`[QUIT] [${t12}] All cleanup complete, checking for active handles`);
     if (canWriteLogs && debugLog) {
         try {
             fs.appendFileSync(debugLog, '[QUIT] All cleanup complete, quitting app\n');
@@ -633,7 +654,9 @@ app.on('before-quit', async (event) => {
 
     // Aggressively close all windows to avoid any close prompts or handlers
     try {
+        const t13 = Date.now();
         const all = BrowserWindow.getAllWindows();
+        console.log(`[QUIT] [${t13}] Destroying ${all.length} windows`);
         if (canWriteLogs && debugLog) {
             try { fs.appendFileSync(debugLog, `[QUIT] Destroying ${all.length} windows\n`); } catch (e) {}
         }
@@ -643,11 +666,17 @@ app.on('before-quit', async (event) => {
                 if (!win.isDestroyed()) win.destroy();
             } catch {}
         }
+        const t14 = Date.now();
+        console.log(`[QUIT] [${t14}] Windows destroyed (${t14-t13}ms)`);
     } catch {}
 
     // Ensure process terminates even if something re-hooks quit
     // Use a short delay to allow logs to flush
+    const t15 = Date.now();
+    console.log(`[QUIT] [${t15}] Setting exit timeout`);
     setTimeout(() => {
+        const t16 = Date.now();
+        console.log(`[QUIT] [${t16}] Calling app.exit(0) (${t16-t15}ms after timeout set)`);
         try { app.exit(0); } catch {}
     }, 50);
 });

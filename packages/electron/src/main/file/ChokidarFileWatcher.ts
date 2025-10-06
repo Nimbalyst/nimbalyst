@@ -157,7 +157,7 @@ export class ChokidarFileWatcher {
         }
     }
 
-    stopAll() {
+    async stopAll() {
         let totalWatchers = 0;
         for (const windowWatchers of this.watchers.values()) {
             totalWatchers += windowWatchers.size;
@@ -166,17 +166,21 @@ export class ChokidarFileWatcher {
         logger.fileWatcher.info(`[CLEANUP] Stopping all file watchers (${totalWatchers} active)`);
         console.log(`[CLEANUP] ChokidarFileWatcher.stopAll called with ${totalWatchers} watchers`);
 
+        const closePromises: Promise<void>[] = [];
         for (const [windowId, windowWatchers] of this.watchers.entries()) {
             for (const [filePath, watcher] of windowWatchers.entries()) {
                 try {
                     console.log(`[CLEANUP] Closing file watcher for window ${windowId}, file ${filePath}`);
-                    watcher.close();
+                    closePromises.push(watcher.close());
                 } catch (error) {
                     logger.fileWatcher.error(`Error closing watcher for window ${windowId}, file ${filePath}:`, error);
                     console.error(`[CLEANUP] Error closing file watcher for window ${windowId}, file ${filePath}:`, error);
                 }
             }
         }
+
+        // Wait for all watchers to close
+        await Promise.all(closePromises);
         this.watchers.clear();
 
         console.log(`[CLEANUP] ChokidarFileWatcher.stopAll complete`);

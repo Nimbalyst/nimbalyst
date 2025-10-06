@@ -3,6 +3,7 @@ import { windowStates } from '../window/WindowManager';
 import { getFolderContents } from '../utils/FileTree';
 import { simpleFileWatcher } from './SimpleFileWatcher';
 import { simpleWorkspaceWatcher } from './SimpleWorkspaceWatcher.ts';
+import { checkFileForChanges } from './FileWatcher';
 
 // Get global file watcher statistics
 export function getGlobalFileWatcherStats() {
@@ -123,7 +124,6 @@ export function refreshWorkspaceFileTree(window: BrowserWindow) {
         console.log('[DEBUG] Checking file for changes:', state.filePath);
 
         try {
-            const { checkFileForChanges } = require('./FileWatcher');
             checkFileForChanges(window, state.filePath);
         } catch (error) {
             console.error('[DEBUG] Failed to check file changes:', error);

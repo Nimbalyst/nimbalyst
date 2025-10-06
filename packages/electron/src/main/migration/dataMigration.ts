@@ -1,5 +1,5 @@
 import { app } from 'electron';
-import { existsSync, readdirSync, statSync, copyFileSync, mkdirSync, renameSync } from 'fs';
+import { existsSync, readdirSync, statSync, copyFileSync, mkdirSync, renameSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { logger } from '../utils/logger';
 
@@ -99,9 +99,9 @@ export async function migrateUserData(): Promise<boolean> {
         // Update debug log filename references in migrated files
         try {
             if (existsSync(newConfigPath)) {
-                const configContent = require('fs').readFileSync(newConfigPath, 'utf8');
+                const configContent = readFileSync(newConfigPath, 'utf8');
                 const updatedContent = configContent.replace(/stravu-editor-debug\.log/g, 'preditor-debug.log');
-                require('fs').writeFileSync(newConfigPath, updatedContent);
+                writeFileSync(newConfigPath, updatedContent);
             }
         } catch (error) {
             logger.main.error('Failed to update debug log references:', error);
@@ -109,7 +109,7 @@ export async function migrateUserData(): Promise<boolean> {
         
         // Create a migration marker file
         const migrationMarker = join(newPath, '.migrated-from-stravu-editor');
-        require('fs').writeFileSync(migrationMarker, new Date().toISOString());
+        writeFileSync(migrationMarker, new Date().toISOString());
         
         logger.main.info('User data migration completed successfully');
         return true;
