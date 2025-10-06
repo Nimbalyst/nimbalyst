@@ -9,10 +9,11 @@ pkill -f "electron.*packages/electron" || true
 # Wait a moment for processes to fully terminate
 sleep 2
 
-# Clean rexical dist to ensure fresh build
-#echo "Cleaning rexical dist..."
-#rm -rf packages/rexical/dist
-#rm -rf packages/rexical/node_modules/.vite
+# Install dependencies if node_modules doesn't exist
+if [ ! -d "node_modules" ]; then
+  echo "Installing dependencies..."
+  npm install --legacy-peer-deps
+fi
 
 # Build rexical package first (required dependency)
 echo "Building rexical package..."
