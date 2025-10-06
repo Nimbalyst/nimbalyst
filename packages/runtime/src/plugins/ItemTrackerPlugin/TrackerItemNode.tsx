@@ -7,6 +7,8 @@ import {
   Spread,
   $getNodeByKey,
   DOMExportOutput,
+  DOMConversionMap,
+  DOMConversionOutput,
 } from 'lexical';
 import { ElementDOMSlot } from 'lexical';
 
@@ -36,6 +38,39 @@ export type SerializedTrackerItemNode = Spread<
   SerializedElementNode
 >;
 
+function convertTrackerItemElement(domNode: HTMLElement): DOMConversionOutput | null {
+  const type = domNode.getAttribute('data-tracker-type') as TrackerItemType;
+  const status = domNode.getAttribute('data-tracker-status') as TrackerItemStatus;
+  const checkbox = domNode.querySelector('.tracker-checkbox') as HTMLInputElement;
+  const id = checkbox?.getAttribute('data-tracker-id') || `tracker-${Date.now()}`;
+
+  // Extract priority if present (now inside type badge)
+  const priorityIcon = domNode.querySelector('.tracker-priority-icon');
+  let priority: TrackerItemPriority | undefined;
+  if (priorityIcon) {
+    priority = priorityIcon.getAttribute('data-priority') as TrackerItemPriority;
+  }
+
+  // Extract content text
+  const contentArea = domNode.querySelector('.tracker-content');
+  const title = contentArea?.textContent || '';
+
+  if (!type || !status) {
+    return null;
+  }
+
+  const data: TrackerItemData = {
+    id,
+    type,
+    title,
+    status,
+    priority,
+  };
+
+  const node = $createTrackerItemNode(data);
+  return { node };
+}
+
 export class TrackerItemNode extends ElementNode {
   __data: TrackerItemData;
 
@@ -52,6 +87,20 @@ export class TrackerItemNode extends ElementNode {
     return new TrackerItemNode({ ...node.__data }, node.__key);
   }
 
+  static importDOM(): DOMConversionMap | null {
+    return {
+      span: (domNode: HTMLElement) => {
+        if (!domNode.classList.contains('tracker-item-container')) {
+          return null;
+        }
+        return {
+          conversion: convertTrackerItemElement,
+          priority: 1,
+        };
+      },
+    };
+  }
+
   createDOM(): HTMLElement {
     const container = document.createElement('span');
     container.className = 'tracker-item-container';
@@ -66,36 +115,52 @@ export class TrackerItemNode extends ElementNode {
     checkbox.setAttribute('data-tracker-id', this.__data.id);
     checkbox.contentEditable = 'false';
 
-    // Status indicator badge
-    const statusBadge = document.createElement('span');
-    statusBadge.className = `tracker-status-badge status-${this.__data.status}`;
-    statusBadge.setAttribute('title', this.__data.status);
-    statusBadge.contentEditable = 'false';
-
-    // Type badge (e.g., "@bug", "@task", "@plan")
+    // Type badge (e.g., "@bug", "@task", "@plan") with icons inside
     const typeBadge = document.createElement('span');
     typeBadge.className = `tracker-type-badge tracker-type-${this.__data.type}`;
-    typeBadge.textContent = `@${this.__data.type}`;
     typeBadge.contentEditable = 'false';
+
+    // Add priority icon if set
+    if (this.__data.priority) {
+      const priorityIcon = document.createElement('span');
+      priorityIcon.className = 'material-symbols-outlined tracker-priority-icon';
+      const priorityIcons: Record<string, string> = {
+        'low': 'signal_cellular_alt_1_bar',
+        'medium': 'signal_cellular_alt_2_bar',
+        'high': 'signal_cellular_alt',
+        'critical': 'signal_cellular_alt',
+      };
+      priorityIcon.textContent = priorityIcons[this.__data.priority] || 'signal_cellular_alt_2_bar';
+      priorityIcon.setAttribute('data-priority', this.__data.priority);
+      typeBadge.appendChild(priorityIcon);
+    }
+
+    // Add status icon
+    const statusIcon = document.createElement('span');
+    statusIcon.className = 'material-symbols-outlined tracker-status-icon';
+    const statusIcons: Record<string, string> = {
+      'to-do': 'panorama_fish_eye',
+      'in-progress': 'donut_small',
+      'in-review': 'trip_origin',
+      'done': 'check_circle',
+      'blocked': 'cancel',
+    };
+    statusIcon.textContent = statusIcons[this.__data.status] || 'panorama_fish_eye';
+    statusIcon.setAttribute('data-status', this.__data.status);
+    typeBadge.appendChild(statusIcon);
+
+    // Add type text
+    const typeText = document.createElement('span');
+    typeText.textContent = `@${this.__data.type}`;
+    typeBadge.appendChild(typeText);
 
     // Content area where children render - Lexical handles editability of children
     const content = document.createElement('span');
     content.className = 'tracker-content';
     content.setAttribute('data-lexical-slot', 'content');
 
-    // Append in order: checkbox, priority badge (if set), status badge, type badge, content
+    // Append in order: checkbox, type badge (with icons inside), content
     container.appendChild(checkbox);
-
-    // Priority indicator if set
-    if (this.__data.priority) {
-      const priorityBadge = document.createElement('span');
-      priorityBadge.className = `tracker-priority-badge priority-${this.__data.priority}`;
-      priorityBadge.setAttribute('title', `Priority: ${this.__data.priority}`);
-      priorityBadge.contentEditable = 'false';
-      container.appendChild(priorityBadge);
-    }
-
-    container.appendChild(statusBadge);
     container.appendChild(typeBadge);
     container.appendChild(content);
 
@@ -106,19 +171,6 @@ export class TrackerItemNode extends ElementNode {
       // Dispatch custom event that the plugin will handle
       window.dispatchEvent(new CustomEvent('tracker-item-toggle', {
         detail: { nodeKey: this.getKey(), checked: checkbox.checked }
-      }));
-    });
-
-    // Add click handler for status badge to open metadata editor
-    statusBadge.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      window.dispatchEvent(new CustomEvent('tracker-item-edit', {
-        detail: {
-          nodeKey: this.getKey(),
-          data: this.__data,
-          target: statusBadge
-        }
       }));
     });
 
@@ -150,36 +202,48 @@ export class TrackerItemNode extends ElementNode {
         checkbox.className = `tracker-checkbox tracker-${this.__data.type}`;
       }
 
-      const statusBadge = dom.querySelector('.tracker-status-badge');
-      if (statusBadge) {
-        statusBadge.className = `tracker-status-badge status-${this.__data.status}`;
-        statusBadge.setAttribute('title', this.__data.status);
-      }
-
-      // Update type badge
+      // Update type badge class
       const typeBadge = dom.querySelector('.tracker-type-badge');
       if (typeBadge) {
         typeBadge.className = `tracker-type-badge tracker-type-${this.__data.type}`;
-        typeBadge.textContent = `@${this.__data.type}`;
-      }
 
-      // Update priority badge
-      let priorityBadge = dom.querySelector('.tracker-priority-badge') as HTMLElement;
-      if (this.__data.priority) {
-        if (!priorityBadge) {
-          priorityBadge = document.createElement('span');
-          priorityBadge.className = `tracker-priority-badge priority-${this.__data.priority}`;
-          priorityBadge.setAttribute('title', `Priority: ${this.__data.priority}`);
-          const checkbox = dom.querySelector('.tracker-checkbox');
-          if (checkbox) {
-            checkbox.after(priorityBadge);
+        // Update priority icon
+        let priorityIcon = typeBadge.querySelector('.tracker-priority-icon');
+        if (this.__data.priority) {
+          const priorityIcons: Record<string, string> = {
+            'low': 'signal_cellular_alt_1_bar',
+            'medium': 'signal_cellular_alt_2_bar',
+            'high': 'signal_cellular_alt',
+            'critical': 'signal_cellular_alt',
+          };
+
+          if (!priorityIcon) {
+            priorityIcon = document.createElement('span');
+            priorityIcon.className = 'material-symbols-outlined tracker-priority-icon';
+            priorityIcon.textContent = priorityIcons[this.__data.priority] || 'signal_cellular_alt_2_bar';
+            priorityIcon.setAttribute('data-priority', this.__data.priority);
+            typeBadge.prepend(priorityIcon);
+          } else {
+            priorityIcon.textContent = priorityIcons[this.__data.priority] || 'signal_cellular_alt_2_bar';
+            priorityIcon.setAttribute('data-priority', this.__data.priority);
           }
-        } else {
-          priorityBadge.className = `tracker-priority-badge priority-${this.__data.priority}`;
-          priorityBadge.setAttribute('title', `Priority: ${this.__data.priority}`);
+        } else if (priorityIcon) {
+          priorityIcon.remove();
         }
-      } else if (priorityBadge) {
-        priorityBadge.remove();
+
+        // Update status icon
+        const statusIcon = typeBadge.querySelector('.tracker-status-icon');
+        if (statusIcon) {
+          const statusIcons: Record<string, string> = {
+            'to-do': 'panorama_fish_eye',
+            'in-progress': 'donut_small',
+            'in-review': 'trip_origin',
+            'done': 'check_circle',
+            'blocked': 'cancel',
+          };
+          statusIcon.textContent = statusIcons[this.__data.status] || 'panorama_fish_eye';
+          statusIcon.setAttribute('data-status', this.__data.status);
+        }
       }
 
       return true;

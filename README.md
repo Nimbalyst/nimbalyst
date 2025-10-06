@@ -6,7 +6,7 @@ With agentic workflows and deep ties into your AI coding copilots, Preditor enab
 
 ## Key Benefits
 
-- Local first, open formats - everything is markdown
+- Local first, open formats - everything is markdown, no proprietary database, AI can see everything
 - 
 
 - **AI assistive document editing**: Blend natural writing with agent suggestions that understand your context and keep documents aligned with product goals.

@@ -43,7 +43,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
   autosaveDebounce = 200,
   periodicSnapshotInterval = 300000, // 5 minutes
 }) => {
-  console.log('[EditorContainer] RENDER - tabs:', tabs.length, 'activeTabId:', activeTabId);
+  // console.log('[EditorContainer] RENDER - tabs:', tabs.length, 'activeTabId:', activeTabId);
   const editorPool = getEditorPool();
   const getContentFuncs = useRef<Map<string, () => string>>(new Map());
   const lastSnapshotContent = useRef<Map<string, string>>(new Map()); // Track last snapshot content per file
@@ -287,7 +287,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
     const handleFileChanged = async (data: { path: string }) => {
       // Skip if we're already processing a change for this file
       if (processingChangesRef.current.has(data.path)) {
-        console.log('[EditorContainer] Already processing change for', data.path, '- ignoring duplicate event');
+        // console.log('[EditorContainer] Already processing change for', data.path, '- ignoring duplicate event');
         return;
       }
 
@@ -306,7 +306,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
 
     const handleFileChangedInternal = async (data: { path: string }) => {
       logger.ui.info(`[EditorContainer] File changed on disk: ${data.path}`);
-      console.log('[EditorContainer] file-changed handler invoked', data.path);
+      // console.log('[EditorContainer] file-changed handler invoked', data.path);
 
       const tab = tabs.find(t => t.filePath === data.path);
       if (!tab) return;
@@ -421,7 +421,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
   tabsRef.current = tabs;
 
   useEffect(() => {
-    console.log('[EditorContainer] Setting up autosave timers');
+    // console.log('[EditorContainer] Setting up autosave timers');
 
     // Set up timers for all tabs
     const setupTimers = () => {
@@ -437,7 +437,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
           return;
         }
 
-        console.log(`[EditorContainer] Setting up autosave timer for: ${tab.fileName}`);
+        // console.log(`[EditorContainer] Setting up autosave timer for: ${tab.fileName}`);
 
         // Set up autosave timer
         const timer = setInterval(async () => {
@@ -496,7 +496,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
 
     // Cleanup function
     return () => {
-      console.log('[EditorContainer] Cleaning up autosave check interval');
+      // console.log('[EditorContainer] Cleaning up autosave check interval');
       clearInterval(checkInterval);
     };
   }, [tabs, editorPool, saveWithHistory, onContentChange, autosaveInterval, autosaveDebounce]);

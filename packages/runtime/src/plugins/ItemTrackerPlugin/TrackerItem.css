@@ -75,65 +75,39 @@
   border-color: #f59e0b;
 }
 
-/* Status badge (clickable to edit metadata) */
-.tracker-status-badge {
+/* Type badge (e.g., @bug, @task, @plan) with icons inside */
+.tracker-type-badge {
   flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
   cursor: pointer;
-  transition: all 0.2s ease;
 }
 
-.tracker-status-badge:hover {
-  transform: scale(1.3);
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+.tracker-type-badge .material-symbols-outlined {
+  font-size: 14px;
+  line-height: 1;
 }
 
-.tracker-status-badge.status-to-do {
-  background: #9ca3af;
+/* Priority icon colors */
+.tracker-priority-icon[data-priority="low"] {
+  color: #10b981;
 }
 
-.tracker-status-badge.status-in-progress {
-  background: #f59e0b;
+.tracker-priority-icon[data-priority="medium"] {
+  color: #f59e0b;
 }
 
-.tracker-status-badge.status-in-review {
-  background: #8b5cf6;
+.tracker-priority-icon[data-priority="high"] {
+  color: #ef4444;
 }
 
-.tracker-status-badge.status-done {
-  background: #10b981;
-}
-
-.tracker-status-badge.status-blocked {
-  background: #ef4444;
-}
-
-/* Priority badge */
-.tracker-priority-badge {
-  flex-shrink: 0;
-  width: 4px;
-  height: 16px;
-  border-radius: 2px;
-  margin: 0 2px;
-}
-
-.tracker-priority-badge.priority-low {
-  background: #10b981;
-}
-
-.tracker-priority-badge.priority-medium {
-  background: #f59e0b;
-}
-
-.tracker-priority-badge.priority-high {
-  background: #ef4444;
-}
-
-.tracker-priority-badge.priority-critical {
-  background: #dc2626;
+.tracker-priority-icon[data-priority="critical"] {
+  color: #dc2626;
   animation: pulse-priority 1.5s ease-in-out infinite;
 }
 
@@ -142,16 +116,28 @@
   50% { opacity: 0.6; }
 }
 
-/* Type badge (e.g., @bug, @task, @plan) */
-.tracker-type-badge {
-  flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 3px;
-  cursor: pointer;
+/* Status icon colors */
+.tracker-status-icon[data-status="to-do"] {
+  color: #9ca3af;
 }
 
+.tracker-status-icon[data-status="in-progress"] {
+  color: #f59e0b;
+}
+
+.tracker-status-icon[data-status="in-review"] {
+  color: #8b5cf6;
+}
+
+.tracker-status-icon[data-status="done"] {
+  color: #10b981;
+}
+
+.tracker-status-icon[data-status="blocked"] {
+  color: #ef4444;
+}
+
+/* Type badge background colors */
 .tracker-type-badge.tracker-type-task {
   background: #dbeafe;
   color: #1e40af;

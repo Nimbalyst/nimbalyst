@@ -954,11 +954,11 @@ export default function App() {
 
   // Debug: expose values for testing (in useEffect to run after state updates)
   useEffect(() => {
-    console.log('[APP-DEBUG] Setting window variables:', {
-      activeTab: tabs.activeTab?.fileName,
-      activeTabId: tabs.activeTabId,
-      tabCount: tabs.tabs.length
-    });
+    // console.log('[APP-DEBUG] Setting window variables:', {
+    //   activeTab: tabs.activeTab?.fileName,
+    //   activeTabId: tabs.activeTabId,
+    //   tabCount: tabs.tabs.length
+    // });
     if (typeof window !== 'undefined') {
       (window as any).__tabPreferencesEnabled__ = true;
       (window as any).__activeTab__ = tabs.activeTab;
@@ -1102,7 +1102,7 @@ export default function App() {
 
                   // Only update if isDirty state actually changed to avoid unnecessary re-renders
                   if (tab && tab.isDirty !== changedIsDirty) {
-                    console.log(`[App] onContentChange: ${tab.fileName} isDirty changed ${tab.isDirty} -> ${changedIsDirty}`);
+                    // console.log(`[App] onContentChange: ${tab.fileName} isDirty changed ${tab.isDirty} -> ${changedIsDirty}`);
 
                     // Update the tab's dirty state
                     tabs.updateTab(changedTabId, { isDirty: changedIsDirty });

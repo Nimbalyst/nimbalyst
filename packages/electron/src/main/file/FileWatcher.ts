@@ -18,7 +18,7 @@ export async function startFileWatcher(window: BrowserWindow, filePath: string):
     }
 
     // Use chokidar for reliable atomic save handling
-    logger.fileWatcher.info('Using ChokidarFileWatcher for:', filePath);
+    // logger.fileWatcher.info('Using ChokidarFileWatcher for:', filePath);
     await chokidarFileWatcher.start(window, filePath);
 }
 

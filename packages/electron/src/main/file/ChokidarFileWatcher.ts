@@ -114,8 +114,8 @@ export class ChokidarFileWatcher {
                 });
 
                 windowWatchers.set(filePath, watcher);
-                logger.fileWatcher.info(`Started chokidar watcher for: ${filePath}`);
-                console.log(`[ChokidarFileWatcher] Watcher successfully created for window ${windowId}, file: ${filePath}`);
+                // logger.fileWatcher.info(`Started chokidar watcher for: ${filePath}`);
+                // console.log(`[ChokidarFileWatcher] Watcher successfully created for window ${windowId}, file: ${filePath}`);
             } catch (error) {
                 logger.fileWatcher.error('Failed to start watcher:', error);
                 console.error(`[ChokidarFileWatcher] Failed to start watcher:`, error);

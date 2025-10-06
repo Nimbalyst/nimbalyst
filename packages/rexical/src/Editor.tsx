@@ -72,6 +72,7 @@ import CodeHighlightPlugin from './plugins/CodeHighlightPlugin';
 // Lazy load ExcalidrawPlugin to improve initial load time
 const ExcalidrawPlugin = React.lazy(() => import('./plugins/ExcalidrawPlugin'));
 import { KanbanBoardPlugin } from './plugins/KanbanBoardPlugin';
+import CommentPlugin from "./plugins/CommentPlugin";
 
 
 interface EditorProps {
@@ -243,9 +244,9 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         {/*  This doesn't play well with images embedded as base64 urls (spins forever) */}
         {/*<AutoLinkPlugin />*/}
 
-        {/*<CommentPlugin*/}
-        {/*  providerFactory={isCollab ? createWebsocketProvider : undefined}*/}
-        {/*/>*/}
+        <CommentPlugin
+          // providerFactory={isCollab ? createWebsocketProvider : undefined}
+        />
         {isRichText ? (
           <>
             {/* Collaboration disabled for now */}

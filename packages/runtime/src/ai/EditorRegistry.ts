@@ -24,7 +24,7 @@ class EditorRegistry {
    * Register an editor instance for a file path
    */
   register(instance: EditorInstance): void {
-    console.log('[EditorRegistry] Registering editor for:', instance.filePath);
+    // console.log('[EditorRegistry] Registering editor for:', instance.filePath);
     this.editors.set(instance.filePath, instance);
   }
 
@@ -32,7 +32,7 @@ class EditorRegistry {
    * Unregister an editor instance
    */
   unregister(filePath: string): void {
-    console.log('[EditorRegistry] Unregistering editor for:', filePath);
+    // console.log('[EditorRegistry] Unregistering editor for:', filePath);
     this.editors.delete(filePath);
   }
 

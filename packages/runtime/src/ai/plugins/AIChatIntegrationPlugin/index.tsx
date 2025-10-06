@@ -143,7 +143,7 @@ export function AIChatIntegrationPlugin(): null {
       return;
     }
 
-    console.log('[AIChatIntegrationPlugin] Registering editor for:', filePath);
+    // console.log('[AIChatIntegrationPlugin] Registering editor for:', filePath);
 
     // Create the editor instance interface
     const editorInstance = {
@@ -269,7 +269,7 @@ export function AIChatIntegrationPlugin(): null {
 
     // Cleanup on unmount
     return () => {
-      console.log('[AIChatIntegrationPlugin] Unregistering editor for:', filePath);
+      // console.log('[AIChatIntegrationPlugin] Unregistering editor for:', filePath);
       editorRegistry.unregister(filePath);
       // Clean up any active stream processors
       streamProcessorsRef.current.clear();

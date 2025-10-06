@@ -19,18 +19,18 @@ interface TrackerItemComponentProps {
 }
 
 const statusOptions: { value: TrackerItemStatus; label: string; color: string; icon: string }[] = [
-  { value: 'to-do', label: 'To Do', color: '#6b7280', icon: 'radio_button_unchecked' },
-  { value: 'in-progress', label: 'In Progress', color: '#f59e0b', icon: 'sync' },
-  { value: 'in-review', label: 'In Review', color: '#8b5cf6', icon: 'rate_review' },
+  { value: 'to-do', label: 'To Do', color: '#6b7280', icon: 'panorama_fish_eye' },
+  { value: 'in-progress', label: 'In Progress', color: '#f59e0b', icon: 'donut_small' },
+  { value: 'in-review', label: 'In Review', color: '#8b5cf6', icon: 'trip_origin' },
   { value: 'done', label: 'Done', color: '#10b981', icon: 'check_circle' },
-  { value: 'blocked', label: 'Blocked', color: '#ef4444', icon: 'block' },
+  { value: 'blocked', label: 'Blocked', color: '#ef4444', icon: 'cancel' },
 ];
 
 const priorityOptions: { value: TrackerItemPriority; label: string; color: string; icon: string }[] = [
-  { value: 'low', label: 'Low', color: '#10b981', icon: 'arrow_downward' },
-  { value: 'medium', label: 'Medium', color: '#f59e0b', icon: 'drag_handle' },
-  { value: 'high', label: 'High', color: '#ef4444', icon: 'arrow_upward' },
-  { value: 'critical', label: 'Critical', color: '#dc2626', icon: 'error' },
+  { value: 'low', label: 'Low', color: '#10b981', icon: 'signal_cellular_alt_1_bar' },
+  { value: 'medium', label: 'Medium', color: '#f59e0b', icon: 'signal_cellular_alt_2_bar' },
+  { value: 'high', label: 'High', color: '#ef4444', icon: 'signal_cellular_alt' },
+  { value: 'critical', label: 'Critical', color: '#dc2626', icon: 'signal_cellular_alt' },
 ];
 
 const typeOptions: { value: TrackerItemType; label: string; icon: string }[] = [
