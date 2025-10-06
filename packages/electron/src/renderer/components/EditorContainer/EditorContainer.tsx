@@ -80,10 +80,11 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
             // Retry save without conflict checking (force overwrite)
             const forceResult = await window.electronAPI.saveFile(content, filePath);
             if (forceResult && forceResult.success) {
-              // Update initial content after successful save
+              // Update initial content and track saved content after successful save
               editorPool.update(filePath, {
                 initialContent: content,
-                lastSaveTime: Date.now()
+                lastSaveTime: Date.now(),
+                lastSavedContent: content,
               });
             }
           } else {
@@ -92,7 +93,8 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
               content: result.diskContent,
               initialContent: result.diskContent,
               isDirty: false,
-              reloadVersion: (instance?.reloadVersion ?? 0) + 1
+              reloadVersion: (instance?.reloadVersion ?? 0) + 1,
+              lastSavedContent: result.diskContent,
             });
             forceRender();
             return;
@@ -115,6 +117,11 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
           }
         }
 
+        // Track the content we just saved to detect self-saves
+        editorPool.update(filePath, {
+          lastSavedContent: content,
+        });
+
         // Notify parent that save completed
         if (onSaveComplete) {
           onSaveComplete(result.filePath);
@@ -124,7 +131,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
       logger.ui.error(`[EditorContainer] Failed to save file ${filePath}:`, error);
       throw error;
     }
-  }, [onSaveComplete]);
+  }, [onSaveComplete, editorPool]);
 
   // Handle manual save request (Cmd+S or File > Save menu)
   const handleManualSave = useCallback(async () => {
@@ -142,6 +149,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
     await saveWithHistory(activeTab.filePath, content, 'manual');
 
     // Update instance to mark as clean and track save time
+    // Note: lastSavedContent is already set in saveWithHistory
     editorPool.update(activeTab.filePath, {
       isDirty: false,
       initialContent: content,
@@ -245,6 +253,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
               await saveWithHistory(tab.filePath, content);
 
               // Update instance to mark as clean and track save time
+              // Note: lastSavedContent is already set in saveWithHistory
               editorPool.update(tab.filePath, {
                 isDirty: false,
                 initialContent: content,
@@ -314,12 +323,6 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
       const instance = editorPool.get(data.path);
       if (!instance) return;
 
-      // Prevent reload loops immediately after we saved the file ourselves
-      if (instance.lastSaveTime && Date.now() - instance.lastSaveTime < 5000) {
-        logger.ui.info(`[EditorContainer] Ignoring file change (just saved ${tab.fileName})`);
-        return;
-      }
-
       try {
         const result = await window.electronAPI.readFileContent(data.path);
         if (!result || typeof result !== 'object' || !('content' in result)) {
@@ -328,6 +331,12 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
 
         const newContent = result.content || '';
         const currentContent = instance.content ?? '';
+
+        // Check if this is our own save - compare with last saved content
+        if (instance.lastSavedContent !== undefined && newContent === instance.lastSavedContent) {
+          logger.ui.info(`[EditorContainer] Ignoring file change (just saved ${tab.fileName})`);
+          return;
+        }
 
         if (newContent === currentContent) {
           logger.ui.info(`[EditorContainer] Disk content matches editor for ${tab.fileName}, skipping reload`);
@@ -365,6 +374,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
             initialContent: newContent,
             isDirty: false,
             reloadVersion: nextReloadVersion,
+            lastSavedContent: newContent,
           });
 
           // Drop any stale getter so the remounted editor can register a fresh one
@@ -467,6 +477,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
             await saveWithHistory(filePath, content);
 
             // Update instance to mark as clean and track save time
+            // Note: lastSavedContent is already set in saveWithHistory
             editorPool.update(filePath, {
               isDirty: false,
               initialContent: content,

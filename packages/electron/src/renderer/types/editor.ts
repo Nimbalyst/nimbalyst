@@ -45,6 +45,9 @@ export interface EditorInstance {
   /** Last time this file was saved (to ignore file change events shortly after) */
   lastSaveTime?: number;
 
+  /** Last saved content - used to detect self-saves vs external changes */
+  lastSavedContent?: string;
+
   /** File watcher cleanup function */
   fileWatcherCleanup?: (() => void) | null;
 
