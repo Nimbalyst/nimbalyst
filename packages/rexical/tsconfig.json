@@ -23,6 +23,7 @@
   },
   "include": [
     "src/**/*",
+    "src/vite-env.d.ts",
     "src/vitest-env.d.ts",
     "src/types/prettier.d.ts"
   ],

@@ -7,7 +7,7 @@ const AgentParameterSchema = z.object({
   description: z.string().optional(),
   default: z.any().optional(),
   required: z.boolean().optional(),
-  options: z.array(z.union([z.string(), z.number()])).optional(),
+  options: z.union([z.array(z.string()), z.array(z.number())]).optional(),
   min: z.number().optional(),
   max: z.number().optional(),
 });

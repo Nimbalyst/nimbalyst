@@ -5,6 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Preditor</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <script>
+        // Apply theme immediately before any rendering to prevent flash
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || 'auto';
+            const root = document.documentElement;
+
+            if (savedTheme === 'dark') {
+                root.classList.add('dark-theme');
+                root.setAttribute('data-theme', 'dark');
+            } else if (savedTheme === 'light') {
+                root.classList.add('light-theme');
+                root.setAttribute('data-theme', 'light');
+            } else if (savedTheme === 'crystal-dark') {
+                root.classList.add('crystal-dark-theme');
+                root.setAttribute('data-theme', 'crystal-dark');
+            }
+            // Auto theme handled by CSS prefers-color-scheme
+        })();
+    </script>
     <style>
         body {
             margin: 0;

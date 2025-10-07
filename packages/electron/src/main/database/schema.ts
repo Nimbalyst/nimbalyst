@@ -86,6 +86,7 @@ async function createAISessionsTable(db: PGlite): Promise<void> {
       provider TEXT NOT NULL,
       model TEXT,
       title TEXT NOT NULL DEFAULT 'New conversation',
+      session_type TEXT DEFAULT 'chat',
       messages JSONB NOT NULL DEFAULT '[]',
       document_context JSONB,
       provider_config JSONB,
@@ -93,12 +94,14 @@ async function createAISessionsTable(db: PGlite): Promise<void> {
       draft_input TEXT,
       token_usage JSONB DEFAULT '{}',
       total_tokens JSONB DEFAULT '{"input": 0, "output": 0, "total": 0}',
+      metadata JSONB DEFAULT '{}',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE INDEX IF NOT EXISTS idx_ai_sessions_workspace ON ai_sessions(workspace_id);
     CREATE INDEX IF NOT EXISTS idx_ai_sessions_created ON ai_sessions(created_at);
+    CREATE INDEX IF NOT EXISTS idx_ai_sessions_type ON ai_sessions(session_type);
   `);
 
   // Add columns if they don't exist (for migration)
@@ -108,24 +111,34 @@ async function createAISessionsTable(db: PGlite): Promise<void> {
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS provider TEXT",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS model TEXT",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS title TEXT DEFAULT 'New conversation'",
+    "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS session_type TEXT DEFAULT 'chat'",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS document_context JSONB",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS provider_config JSONB",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS provider_session_id TEXT",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS draft_input TEXT",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS token_usage JSONB DEFAULT '{}'",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS total_tokens JSONB DEFAULT '{\"input\": 0, \"output\": 0, \"total\": 0}'",
+    "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS agent_id TEXT",
     "ALTER TABLE ai_sessions ADD COLUMN IF NOT EXISTS agent_metadata JSONB"
   ];
 
+  // Create index for session_type if it doesn't exist
+  try {
+    await db.exec("CREATE INDEX IF NOT EXISTS idx_ai_sessions_type ON ai_sessions(session_type)");
+  } catch (error) {
+    console.debug('[Schema] Index might already exist: idx_ai_sessions_type');
+  }
+
   for (const statement of alterStatements) {
     try {
       await db.exec(statement);
+      console.log(`[Schema] Successfully executed: ${statement.substring(0, 60)}...`);
     } catch (error) {
-      // Column might already exist, ignore the error
-      console.debug(`[Schema] Column might already exist: ${statement}`);
+      // Column might already exist, or there's an error
+      console.log(`[Schema] Migration statement result: ${statement.substring(0, 60)}... - ${error}`);
     }
   }
 }

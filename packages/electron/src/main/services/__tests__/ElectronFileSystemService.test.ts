@@ -143,10 +143,10 @@ describe('ElectronFileSystemService', () => {
     });
 
     it('should list files with pattern using glob', async () => {
-      (glob as Mock).mockResolvedValue([
+      vi.mocked(glob).mockResolvedValue([
         '/test/workspace/src/index.ts',
         '/test/workspace/src/components/Button.tsx',
-      ]);
+      ] as any);
 
       (fs.stat as Mock).mockResolvedValue({
         size: 500,

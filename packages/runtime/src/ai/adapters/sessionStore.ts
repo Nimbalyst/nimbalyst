@@ -5,7 +5,9 @@ export interface SessionListItem {
   provider: string;
   model?: string;
   title?: string;
+  sessionType?: string;
   workspaceId: string;
+  createdAt: number;
   updatedAt: number;
 }
 
@@ -23,6 +25,7 @@ export interface CreateSessionPayload {
 
 export interface UpdateSessionMetadataPayload extends Partial<CreateSessionPayload> {
   draftInput?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SessionStore {

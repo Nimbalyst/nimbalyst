@@ -13,6 +13,7 @@ import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
 import { saveSessionState, restoreSessionState } from './session/SessionState';
 import { createWorkspaceManagerWindow, setupWorkspaceManagerHandlers } from './window/WorkspaceManagerWindow.ts';
 import { registerSessionManagerHandlers } from './window/SessionManagerWindow';
+import './window/AgenticCodingWindow'; // Register IPC handlers
 import { registerFileHandlers } from './ipc/FileHandlers';
 import { registerWorkspaceHandlers } from './ipc/WorkspaceHandlers.ts';
 import { registerSettingsHandlers } from './ipc/SettingsHandlers';

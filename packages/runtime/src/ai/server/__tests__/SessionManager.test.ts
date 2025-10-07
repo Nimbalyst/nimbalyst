@@ -74,6 +74,7 @@ class InMemorySessionStore implements SessionStore {
         model: session.model,
         title: session.title,
         workspaceId: (session.metadata as any)?.workspaceId,
+        createdAt: session.createdAt || 0,
         updatedAt: session.updatedAt || 0,
       }))
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));

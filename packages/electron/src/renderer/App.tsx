@@ -23,6 +23,7 @@ import { AIModelsRedesigned as AIModels } from './components/AIModels/AIModelsRe
 import { SessionManager } from './components/SessionManager/SessionManager';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { NewFileDialog } from './components/NewFileDialog';
+import { AgenticCodingWindow } from './components/AgenticCodingWindow';
 import { TabManager } from './components/TabManager/TabManager';
 import { EditorContainer } from './components/EditorContainer';
 import { getEditorPool } from './services/EditorPool';
@@ -76,6 +77,30 @@ export default function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const windowMode = urlParams.get('mode');
 
+  // Apply theme for ALL window modes (must run before early returns)
+  const savedTheme = localStorage.getItem('theme') as ConfigTheme || 'auto';
+  useEffect(() => {
+    const root = document.documentElement;
+
+    if (savedTheme === 'dark') {
+      root.classList.add('dark-theme');
+      root.classList.remove('light-theme', 'crystal-dark-theme');
+      root.setAttribute('data-theme', 'dark');
+    } else if (savedTheme === 'light') {
+      root.classList.add('light-theme');
+      root.classList.remove('dark-theme', 'crystal-dark-theme');
+      root.setAttribute('data-theme', 'light');
+    } else if (savedTheme === 'crystal-dark') {
+      root.classList.add('crystal-dark-theme');
+      root.classList.remove('light-theme', 'dark-theme');
+      root.setAttribute('data-theme', 'crystal-dark');
+    } else {
+      // Auto theme - let CSS handle it with prefers-color-scheme
+      root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
+      root.removeAttribute('data-theme');
+    }
+  }, [savedTheme]);
+
   // Handle special window modes
   if (windowMode === 'ai-models') {
     // Set window title for AI Models
@@ -85,6 +110,28 @@ export default function App() {
       }
     }, []);
     return <AIModels onClose={() => window.close()} />;
+  }
+
+  if (windowMode === 'agentic-coding') {
+    const sessionId = urlParams.get('sessionId') || undefined;
+    const workspacePath = urlParams.get('workspacePath');
+    const planDocumentPath = urlParams.get('planDocumentPath') || undefined;
+
+    if (!workspacePath) {
+      return (
+        <div className="h-screen flex items-center justify-center bg-bg-primary">
+          <div className="text-status-error">Missing workspace path</div>
+        </div>
+      );
+    }
+
+    return (
+      <AgenticCodingWindow
+        sessionId={sessionId}
+        workspacePath={workspacePath}
+        planDocumentPath={planDocumentPath}
+      />
+    );
   }
 
   if (windowMode === 'session-manager') {

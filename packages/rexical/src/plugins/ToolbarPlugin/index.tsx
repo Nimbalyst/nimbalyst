@@ -867,7 +867,7 @@ export default function ToolbarPlugin({
         aria-label="Toggle markdown view">
         <i className="format markdown" />
       </button>
-      {import.meta.env.DEV && (
+      {import.meta.env?.DEV && (
         <button
           onClick={() => {
             toggleSetting('showTreeView');

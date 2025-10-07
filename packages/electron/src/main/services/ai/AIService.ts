@@ -16,7 +16,6 @@ import type {
   AIProviderType,
   AIModel,
 } from '@stravu/runtime/ai/server/types';
-import type { Message } from '@stravu/runtime/ai/types';
 import { updateDocumentState } from '../../mcp/httpServer';
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 import { logger } from '../../utils/logger';
@@ -880,7 +879,7 @@ export class AIService {
     });
 
     // Clear session
-    ipcMain.handle('ai:clearSession', async () => {
+    ipcMain.handle('ai:clearSession', async (event) => {
       this.sessionManager.clearCurrentSession();
 
       // Abort any ongoing request

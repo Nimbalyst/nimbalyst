@@ -255,6 +255,10 @@ async function tryCreateServer(port: number): Promise<any> {
           case 'applyDiff': {
             const windows = BrowserWindow.getAllWindows();
             if (windows.length > 0) {
+              // Get the current document state for file path
+              const states = Array.from(documentStateBySession.values());
+              const currentDocState = states[states.length - 1];
+
               // Create a unique channel for the result
               const resultChannel = `mcp-result-${Date.now()}-${Math.random()}`;
 
@@ -281,9 +285,9 @@ async function tryCreateServer(port: number): Promise<any> {
 
                 // Send the request with the result channel and target file path
                 windows[0].webContents.send('mcp:applyDiff', {
-                  replacements: args.replacements,
+                  replacements: args?.replacements,
                   resultChannel,
-                  targetFilePath: documentState?.filePath
+                  targetFilePath: currentDocState?.filePath
                 });
               });
             }

@@ -234,8 +234,8 @@ export class CLIManager {
 
           // Check for latest version
           const latestVersion = await this.getLatestVersion(tool);
-          const updateAvailable = latestVersion && currentVersion !== 'unknown' &&
-                                this.isNewerVersion(latestVersion, currentVersion);
+          const updateAvailable = !!(latestVersion && currentVersion !== 'unknown' &&
+                                this.isNewerVersion(latestVersion, currentVersion));
 
           return {
             installed: true,
@@ -243,7 +243,7 @@ export class CLIManager {
             updateAvailable,
             path: claudePackagePath,
             latestVersion: updateAvailable ? latestVersion : undefined,
-            claudeDesktopVersion // Include this for UI display
+            claudeDesktopVersion: claudeDesktopVersion ?? undefined // Include this for UI display
           };
         } catch (e) {
           // Continue checking other paths
@@ -253,7 +253,7 @@ export class CLIManager {
       // If not found in global, return not installed (even if Claude Desktop has it)
       return {
         installed: false,
-        claudeDesktopVersion // Include this for UI display
+        claudeDesktopVersion: claudeDesktopVersion ?? undefined // Include this for UI display
       };
     }
 
@@ -288,8 +288,8 @@ export class CLIManager {
 
                 // Check for latest version
                 const latestVersion = await this.getLatestVersion(tool);
-                const updateAvailable = latestVersion && currentVersion !== 'unknown' &&
-                                      this.isNewerVersion(latestVersion, currentVersion);
+                const updateAvailable = !!(latestVersion && currentVersion !== 'unknown' &&
+                                      this.isNewerVersion(latestVersion, currentVersion));
 
                 resolve({
                   installed: true,

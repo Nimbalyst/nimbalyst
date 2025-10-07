@@ -57,10 +57,13 @@ export interface AIModel {
   contextWindow?: number;
 }
 
+export type SessionType = 'chat' | 'planning' | 'coding';
+
 export interface SessionData {
   id: string;  // Our session ID
   provider: AIProviderType | string;  // Provider type
   model?: string;  // Specific model used (e.g., 'gpt-4', 'claude-3-5-sonnet')
+  sessionType?: SessionType;  // Type of session: 'chat', 'planning', 'coding'
   messages: Message[];
   documentContext?: DocumentContext;
   workspacePath?: string;

@@ -8,6 +8,7 @@ import { createAboutWindow } from '../window/AboutWindow';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
 import { createWorkspaceManagerWindow } from '../window/WorkspaceManagerWindow.ts';
 import { createAIModelsWindow } from '../window/AIModelsWindow';
+import { createAgenticCodingWindow } from '../window/AgenticCodingWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceWindowState } from '../utils/store';
 import { updateWindowTitleBars, updateNativeTheme } from '../theme/ThemeManager';
@@ -824,6 +825,31 @@ export async function createApplicationMenu() {
                     accelerator: 'CmdOrCtrl+Alt+M',
                     click: async () => {
                         createAIModelsWindow();
+                    }
+                },
+                {
+                    label: 'Agentic Coding...',
+                    accelerator: 'CmdOrCtrl+Alt+A',
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (!focused) return;
+
+                        const windowId = getWindowId(focused);
+                        const state = windowId !== null ? windowStates.get(windowId) : undefined;
+
+                        if (!state || !state.workspacePath) {
+                            dialog.showMessageBox(focused, {
+                                type: 'info',
+                                title: 'No Workspace',
+                                message: 'Please open a workspace to use agentic coding.'
+                            });
+                            return;
+                        }
+
+                        createAgenticCodingWindow({
+                            workspacePath: state.workspacePath,
+                            planDocumentPath: state.filePath && state.filePath.endsWith('.md') ? state.filePath : undefined
+                        });
                     }
                 },
                 { type: 'separator' },

@@ -153,7 +153,9 @@ export function registerSessionManagerHandlers() {
             provider: session.provider,
             model: session.model,
             title: session.title,
-            timestamp: session.updatedAt,
+            createdAt: session.createdAt,
+            updatedAt: session.updatedAt,
+            timestamp: session.updatedAt || session.createdAt,
             messages: session.messages,
             workspacePath: workspaceId === 'default' ? null : workspaceId,
           });

@@ -157,6 +157,45 @@ class PGLiteWorker {
         `);
       }
 
+      // Check ai_sessions table for new columns needed for agentic coding
+      const aiSessionsColumnsResult = await this.db.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'ai_sessions'
+        AND column_name IN ('session_type', 'metadata', 'token_usage', 'total_tokens')
+      `);
+
+      const existingColumns = new Set(aiSessionsColumnsResult.rows.map(row => row.column_name));
+
+      if (!existingColumns.has('session_type')) {
+        console.log('[PGLite Worker] Adding session_type column to ai_sessions...');
+        await this.db.exec(`
+          ALTER TABLE ai_sessions ADD COLUMN session_type TEXT DEFAULT 'chat';
+          CREATE INDEX IF NOT EXISTS idx_ai_sessions_type ON ai_sessions(session_type);
+        `);
+      }
+
+      if (!existingColumns.has('metadata')) {
+        console.log('[PGLite Worker] Adding metadata column to ai_sessions...');
+        await this.db.exec(`
+          ALTER TABLE ai_sessions ADD COLUMN metadata JSONB DEFAULT '{}';
+        `);
+      }
+
+      if (!existingColumns.has('token_usage')) {
+        console.log('[PGLite Worker] Adding token_usage column to ai_sessions...');
+        await this.db.exec(`
+          ALTER TABLE ai_sessions ADD COLUMN token_usage JSONB DEFAULT '{}';
+        `);
+      }
+
+      if (!existingColumns.has('total_tokens')) {
+        console.log('[PGLite Worker] Adding total_tokens column to ai_sessions...');
+        await this.db.exec(`
+          ALTER TABLE ai_sessions ADD COLUMN total_tokens JSONB DEFAULT '{"input": 0, "output": 0, "total": 0}';
+        `);
+      }
+
       console.log('[PGLite Worker] Database migrations completed');
     } catch (error) {
       console.warn('[PGLite Worker] Migration check/execution:', error);
@@ -171,22 +210,27 @@ class PGLiteWorker {
     await this.db.exec(`
       CREATE TABLE IF NOT EXISTS ai_sessions (
         id TEXT PRIMARY KEY,
-        workspace_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL DEFAULT 'default',
         file_path TEXT,
         provider TEXT NOT NULL,
         model TEXT,
-        title TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT 'New conversation',
+        session_type TEXT DEFAULT 'chat',
         messages JSONB NOT NULL DEFAULT '[]',
         document_context JSONB,
         provider_config JSONB,
         provider_session_id TEXT,
         draft_input TEXT,
+        token_usage JSONB DEFAULT '{}',
+        total_tokens JSONB DEFAULT '{"input": 0, "output": 0, "total": 0}',
+        metadata JSONB DEFAULT '{}',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
       CREATE INDEX IF NOT EXISTS idx_ai_sessions_workspace ON ai_sessions(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_ai_sessions_created ON ai_sessions(created_at);
+      CREATE INDEX IF NOT EXISTS idx_ai_sessions_type ON ai_sessions(session_type);
     `);
 
     // Document History table

@@ -49,3 +49,5 @@ export * from './documents/virtualDocTypes';
 export { virtualDocHandler } from './documents/VirtualDocumentHandler';
 // Components
 export { VirtualDocumentBanner } from './components/VirtualDocumentBanner';
+// UI Components
+export * from './ui/AgentTranscript';

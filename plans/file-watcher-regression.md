@@ -54,3 +54,12 @@ planStatus:
     - `/packages/electron/src/renderer/components/EditorContainer/EditorContainer.tsx` - Implemented content-based change detection (lines 118-121, 326-330, 336-339, 372-378, 84-88, 92-98)
   - **Testing**: E2E test "should detect when file is modified on disk by external process" now passes consistently
   - **Status**: Bug fixed, core functionality verified working
+
+
+## Bugs
+- File watcher doesn't see changes immediately after auto-save @bug[id:bug_mgffum864wffh0jy status:to-do priority:medium created:2025-10-06]
+
+
+
+## Future Ideas
+- Build a file cache to speed metadata parsing @idea[id:ida_mgffzyjqancja627 status:to-do priority:medium created:2025-10-06]

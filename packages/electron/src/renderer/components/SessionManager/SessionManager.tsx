@@ -151,8 +151,10 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
     }
   };
 
-  const formatDate = (timestamp: number) => {
+  const formatDate = (timestamp: number | undefined) => {
+    if (!timestamp) return 'Unknown';
     const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return 'Invalid Date';
     return date.toLocaleString();
   };
 
