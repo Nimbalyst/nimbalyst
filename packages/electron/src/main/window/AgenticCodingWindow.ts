@@ -1,6 +1,8 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { join } from 'path';
 import { AISessionsRepository } from '@stravu/runtime';
+import { getAgenticCodingWindowState, saveAgenticCodingWindowState } from '../utils/store';
+import { windows, windowStates, windowFocusOrder, windowDevToolsState } from './WindowManager';
 
 const agenticCodingWindows = new Map<string, BrowserWindow>();
 
@@ -12,19 +14,22 @@ export interface AgenticCodingWindowOptions {
 
 export function createAgenticCodingWindow(options: AgenticCodingWindowOptions) {
   const { sessionId, workspacePath, planDocumentPath } = options;
-  const windowKey = sessionId || `${workspacePath}-new`;
+  const windowKey = workspacePath;  // One window per workspace
 
-  // If window already exists for this session, focus it
+  // If window already exists for this workspace, focus it
   const existingWindow = agenticCodingWindows.get(windowKey);
   if (existingWindow && !existingWindow.isDestroyed()) {
     existingWindow.focus();
     return existingWindow;
   }
 
+  // Load saved window state
+  const savedState = getAgenticCodingWindowState(workspacePath);
+  const bounds = savedState?.bounds || { width: 1400, height: 900 };
+
   // Create the window
   const window = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    ...bounds,
     minWidth: 800,
     minHeight: 600,
     title: 'Agentic Coding Session',
@@ -43,6 +48,19 @@ export function createAgenticCodingWindow(options: AgenticCodingWindowOptions) {
 
   // Store the window
   agenticCodingWindows.set(windowKey, window);
+
+  // Register with WindowManager for session state tracking
+  // Use Electron's window ID so IPC handlers can find the window state
+  const windowId = window.id;
+  windows.set(windowId, window);
+  windowStates.set(windowId, {
+    mode: 'agentic-coding',
+    filePath: null,
+    workspacePath,
+    documentEdited: false
+  });
+  windowFocusOrder.set(windowId, Date.now());
+  windowDevToolsState.set(windowId, savedState?.devToolsOpen || false);
 
   // Load the content
   const loadContent = () => {
@@ -82,6 +100,11 @@ export function createAgenticCodingWindow(options: AgenticCodingWindowOptions) {
   // Show window when ready
   window.once('ready-to-show', () => {
     window.show();
+
+    // Restore dev tools if they were open
+    if (savedState?.devToolsOpen) {
+      window.webContents.openDevTools();
+    }
   });
 
   // Handle renderer process crashes
@@ -92,9 +115,26 @@ export function createAgenticCodingWindow(options: AgenticCodingWindowOptions) {
     }
   });
 
+  // Save window state before closing
+  window.on('close', () => {
+    if (!window.isDestroyed()) {
+      const bounds = window.getBounds();
+      const devToolsOpen = window.webContents.isDevToolsOpened();
+
+      saveAgenticCodingWindowState(workspacePath, {
+        bounds,
+        devToolsOpen
+      });
+    }
+  });
+
   // Clean up on close
   window.on('closed', () => {
     agenticCodingWindows.delete(windowKey);
+    windows.delete(windowId);
+    windowStates.delete(windowId);
+    windowFocusOrder.delete(windowId);
+    windowDevToolsState.delete(windowId);
   });
 
   return window;
@@ -206,3 +246,4 @@ ipcMain.handle('sessions:delete', async (_event, sessionId: string) => {
     return { success: false, error: String(error) };
   }
 });
+

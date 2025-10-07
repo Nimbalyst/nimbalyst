@@ -2,11 +2,14 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import type { Message, SessionData } from '../../../ai/server/types';
 import type { TranscriptSettings } from '../types';
 import { MessageSegment } from './MessageSegment';
+import { ProviderIcon } from '../../icons/ProviderIcons';
+import { parseTimestamp } from '../../../utils/dateUtils';
 
 interface RichTranscriptViewProps {
   sessionId: string;
   sessionStatus?: string;
   messages: Message[];
+  provider?: string;
   settings?: TranscriptSettings;
   onSettingsChange?: (settings: TranscriptSettings) => void;
   showSettings?: boolean;
@@ -23,7 +26,7 @@ const defaultSettings: TranscriptSettings = {
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, messages, settings: propsSettings, onSettingsChange, showSettings }, ref) => {
+>(({ sessionId, sessionStatus, messages, provider, settings: propsSettings, onSettingsChange, showSettings }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -182,8 +185,131 @@ export const RichTranscriptView = React.forwardRef<
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0 1rem' }}>
               {messages.map((message, index) => {
+                // Debug logging
+                if (index === 0 || message.toolCall) {
+                  console.log(`[RichTranscriptView] Message ${index}:`, {
+                    role: message.role,
+                    hasToolCall: !!message.toolCall,
+                    toolCallName: message.toolCall?.name,
+                    contentLength: message.content?.length || 0
+                  });
+                }
+
                 const isUser = message.role === 'user';
+                const isTool = message.role === 'tool';
                 const isCollapsed = collapsedMessages.has(index);
+
+                // Check if this is the start of a new message group (different role from previous)
+                const prevMessage = index > 0 ? messages[index - 1] : null;
+                const isNewGroup = !prevMessage || prevMessage.role !== message.role;
+
+                // Render tool calls in a compact format
+                if (isTool && message.toolCall) {
+                  const tool = message.toolCall;
+                  const toolId = tool.id || tool.name || `tool-${index}`;
+                  const isExpanded = expandedTools.has(toolId);
+
+                  return (
+                    <div
+                      key={`${sessionId}-${index}`}
+                      style={{
+                        marginLeft: '1.75rem',
+                        marginTop: '-0.75rem',
+                        marginBottom: '0.25rem'
+                      }}
+                    >
+                      <div style={{
+                        borderRadius: '0.25rem',
+                        backgroundColor: 'var(--surface-secondary)',
+                        overflow: 'hidden',
+                        border: '1px solid var(--border-primary)'
+                      }}>
+                        <button
+                          onClick={() => toggleToolExpand(toolId)}
+                          style={{
+                            width: '100%',
+                            padding: '0.375rem 0.625rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            textAlign: 'left',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: '0.875rem',
+                            backgroundColor: 'transparent'
+                          }}
+                        >
+                          <svg style={{ width: '1rem', height: '1rem', color: 'var(--accent-primary)', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span style={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'var(--text-primary)', fontWeight: 500 }}>
+                            {tool.name}
+                          </span>
+                          {tool.arguments && (() => {
+                            const args = tool.arguments;
+                            const argStr = Object.keys(args).map(k => {
+                              const val = args[k];
+                              if (typeof val === 'string') return val.length > 30 ? val.substring(0, 30) + '...' : val;
+                              return JSON.stringify(val);
+                            }).join(', ');
+                            return <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{argStr}</span>;
+                          })()}
+                          {tool.result && (
+                            <svg style={{ width: '1rem', height: '1rem', color: 'var(--success-color)', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          )}
+                          <svg style={{ width: '0.75rem', height: '0.75rem', color: 'var(--text-tertiary)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isExpanded ? "M19 9l-7 7-7-7" : "M9 5l7 7-7 7"} />
+                          </svg>
+                        </button>
+
+                        {isExpanded && (
+                          <div style={{ padding: '0.625rem', fontSize: '0.875rem', borderTop: '1px solid var(--border-primary)' }}>
+                            {tool.arguments && Object.keys(tool.arguments).length > 0 && (
+                              <div style={{ marginBottom: '0.5rem' }}>
+                                <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.25rem', fontSize: '0.75rem' }}>Arguments:</div>
+                                <pre style={{
+                                  fontSize: '0.75rem',
+                                  color: 'var(--text-secondary)',
+                                  fontFamily: 'monospace',
+                                  overflowX: 'auto',
+                                  backgroundColor: 'var(--surface-tertiary)',
+                                  padding: '0.5rem',
+                                  borderRadius: '0.25rem',
+                                  margin: 0
+                                }}>
+                                  {JSON.stringify(tool.arguments, null, 2)}
+                                </pre>
+                              </div>
+                            )}
+
+                            {tool.result && (
+                              <div>
+                                <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.25rem', fontSize: '0.75rem' }}>Result:</div>
+                                <pre style={{
+                                  fontSize: '0.75rem',
+                                  color: 'var(--text-primary)',
+                                  fontFamily: 'monospace',
+                                  overflowX: 'auto',
+                                  backgroundColor: 'var(--surface-tertiary)',
+                                  padding: '0.5rem',
+                                  borderRadius: '0.25rem',
+                                  maxHeight: '12rem',
+                                  overflowY: 'auto',
+                                  margin: 0
+                                }}>
+                                  {typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2)}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
 
                 return (
                   <div
@@ -196,34 +322,34 @@ export const RichTranscriptView = React.forwardRef<
                       transition: 'all 0.2s',
                       position: 'relative',
                       backgroundColor: isUser ? 'var(--surface-secondary)' : 'var(--surface-primary)',
-                      padding: settings.compactMode ? '0.75rem' : '1rem'
+                      padding: settings.compactMode ? '0.75rem' : '1rem',
+                      marginTop: !isNewGroup ? '-0.5rem' : '0'
                     }}
                   >
-                    {/* Message Header */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    {/* Message Header - only show for new message groups */}
+                    {isNewGroup && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                       <div style={{
                         borderRadius: '9999px',
                         padding: '0.375rem',
                         flexShrink: 0,
-                        backgroundColor: isUser ? 'rgba(var(--status-success-rgb, 34, 197, 94), 0.2)' : 'rgba(var(--color-interactive-rgb, 59, 130, 246), 0.2)',
-                        color: isUser ? 'var(--status-success)' : 'var(--color-interactive)'
+                        backgroundColor: isUser ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+                        color: isUser ? '#10b981' : '#3b82f6'
                       }}>
                         {isUser ? (
                           <svg className="w-4 h-4" style={{ width: '1rem', height: '1rem' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                           </svg>
                         ) : (
-                          <svg className="w-4 h-4" style={{ width: '1rem', height: '1rem' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                          </svg>
+                          <ProviderIcon provider={provider || 'claude-code'} size={16} />
                         )}
                       </div>
                       <div style={{ flex: 1, display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
                         <span style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '0.875rem' }}>
-                          {isUser ? 'You' : 'Assistant'}
+                          {isUser ? 'You' : 'Claude Code'}
                         </span>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
-                          {new Date(message.timestamp).toLocaleTimeString()}
+                          {parseTimestamp(message.timestamp)?.toLocaleTimeString() || ''}
                         </span>
                       </div>
                       {/* Action buttons */}
@@ -288,14 +414,15 @@ export const RichTranscriptView = React.forwardRef<
                         )}
                       </div>
                     </div>
+                    )}
 
                     {/* Message Content */}
-                    <div style={{ marginLeft: '1.75rem' }}>
+                    <div style={{ marginLeft: isNewGroup ? '1.75rem' : '0' }}>
                       <MessageSegment
                         message={message}
                         isUser={isUser}
                         isCollapsed={isCollapsed}
-                        showToolCalls={settings.showToolCalls}
+                        showToolCalls={false}
                         showThinking={settings.showThinking}
                         expandedTools={expandedTools}
                         onToggleToolExpand={toggleToolExpand}
@@ -322,7 +449,7 @@ export const RichTranscriptView = React.forwardRef<
               style={{
                 pointerEvents: 'auto',
                 padding: '0.75rem',
-                backgroundColor: 'var(--color-interactive)',
+                backgroundColor: 'var(--accent-primary)',
                 color: 'white',
                 borderRadius: '9999px',
                 border: 'none',
@@ -331,11 +458,11 @@ export const RichTranscriptView = React.forwardRef<
                 transition: 'all 0.2s'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--color-interactive-hover)';
+                e.currentTarget.style.backgroundColor = 'var(--accent-primary-hover)';
                 e.currentTarget.style.transform = 'scale(1.1)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--color-interactive)';
+                e.currentTarget.style.backgroundColor = 'var(--accent-primary)';
                 e.currentTarget.style.transform = 'scale(1)';
               }}
               title="Scroll to bottom"

@@ -21,8 +21,72 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 }) => {
   const [isDiffExpanded, setDiffExpanded] = useState(false);
 
+  // Debug logging for tool calls
+  if (message.toolCall) {
+    console.log('[MessageSegment] Rendering message with toolCall:', {
+      role: message.role,
+      toolName: message.toolCall.name,
+      hasArguments: !!message.toolCall.arguments,
+      hasResult: !!message.toolCall.result,
+      showToolCalls
+    });
+  }
+
+  // Render thinking indicator
+  const renderThinking = () => {
+    if (!message.isThinking) return null;
+
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.5rem',
+        color: 'var(--text-secondary)',
+        fontStyle: 'italic'
+      }}>
+        <div style={{
+          display: 'flex',
+          gap: '0.25rem'
+        }}>
+          <div style={{
+            width: '0.5rem',
+            height: '0.5rem',
+            borderRadius: '50%',
+            backgroundColor: 'var(--accent-primary)',
+            animation: 'pulse 1.4s ease-in-out infinite',
+            animationDelay: '0s'
+          }} />
+          <div style={{
+            width: '0.5rem',
+            height: '0.5rem',
+            borderRadius: '50%',
+            backgroundColor: 'var(--accent-primary)',
+            animation: 'pulse 1.4s ease-in-out infinite',
+            animationDelay: '0.2s'
+          }} />
+          <div style={{
+            width: '0.5rem',
+            height: '0.5rem',
+            borderRadius: '50%',
+            backgroundColor: 'var(--accent-primary)',
+            animation: 'pulse 1.4s ease-in-out infinite',
+            animationDelay: '0.4s'
+          }} />
+        </div>
+        <span>Thinking...</span>
+        <style>{`
+          @keyframes pulse {
+            0%, 100% { opacity: 0.4; transform: scale(0.9); }
+            50% { opacity: 1; transform: scale(1.1); }
+          }
+        `}</style>
+      </div>
+    );
+  };
+
   // Render text content
   const renderTextContent = () => {
+    if (message.isThinking) return renderThinking();
     if (!message.content.trim()) return null;
 
     return (
@@ -59,9 +123,9 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     return (
       <div style={{
         borderRadius: '0.375rem',
-        backgroundColor: 'rgba(var(--surface-tertiary-rgb, 128, 128, 128), 0.5)',
+        backgroundColor: 'var(--surface-tertiary)',
         overflow: 'hidden',
-        border: '1px solid rgba(var(--border-primary-rgb, 128, 128, 128), 0.5)',
+        border: '1px solid var(--border-primary)',
         margin: '0.5rem 0'
       }}>
         <button
@@ -69,7 +133,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
           style={{
             width: '100%',
             padding: '0.5rem 0.75rem',
-            backgroundColor: 'rgba(var(--surface-tertiary-rgb, 128, 128, 128), 0.3)',
+            backgroundColor: 'var(--surface-secondary)',
             display: 'flex',
             alignItems: 'center',
             gap: '0.5rem',
@@ -78,10 +142,10 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
             border: 'none',
             cursor: 'pointer'
           }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(var(--surface-tertiary-rgb, 128, 128, 128), 0.5)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(var(--surface-tertiary-rgb, 128, 128, 128), 0.3)'}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-hover)'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-secondary)'}
         >
-          <svg style={{ width: '0.875rem', height: '0.875rem', color: 'var(--color-interactive)', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg style={{ width: '0.875rem', height: '0.875rem', color: 'var(--accent-primary)', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
@@ -89,7 +153,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
             {tool.name}
           </span>
           {tool.result && (
-            <svg style={{ width: '0.875rem', height: '0.875rem', color: 'var(--status-success)', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg style={{ width: '0.875rem', height: '0.875rem', color: 'var(--success-color)', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           )}
@@ -114,7 +178,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
                   color: 'var(--text-secondary)',
                   fontFamily: 'monospace',
                   overflowX: 'auto',
-                  backgroundColor: 'rgba(var(--surface-secondary-rgb, 128, 128, 128), 0.5)',
+                  backgroundColor: 'var(--surface-secondary)',
                   padding: '0.5rem',
                   borderRadius: '0.25rem'
                 }}>
@@ -131,7 +195,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
                   color: 'var(--text-primary)',
                   fontFamily: 'monospace',
                   overflowX: 'auto',
-                  backgroundColor: 'rgba(var(--surface-secondary-rgb, 128, 128, 128), 0.5)',
+                  backgroundColor: 'var(--surface-secondary)',
                   padding: '0.5rem',
                   borderRadius: '0.25rem',
                   maxHeight: '16rem',
@@ -155,12 +219,12 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
       <div style={{
         margin: '0.5rem 0',
         padding: '0.75rem',
-        backgroundColor: 'rgba(var(--status-error-rgb, 239, 68, 68), 0.1)',
-        border: '1px solid rgba(var(--status-error-rgb, 239, 68, 68), 0.3)',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        border: '1px solid rgba(239, 68, 68, 0.3)',
         borderRadius: '0.5rem'
       }}>
         <div style={{
-          color: 'var(--status-error)',
+          color: 'var(--error-color)',
           fontWeight: 600,
           fontSize: '0.875rem',
           marginBottom: '0.5rem'
@@ -226,7 +290,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
                     color: 'var(--text-primary)',
                     fontFamily: 'monospace',
                     overflowX: 'auto',
-                    backgroundColor: 'rgba(var(--surface-secondary-rgb, 128, 128, 128), 0.5)',
+                    backgroundColor: 'var(--surface-secondary)',
                     padding: '0.5rem',
                     borderRadius: '0.25rem'
                   }}>

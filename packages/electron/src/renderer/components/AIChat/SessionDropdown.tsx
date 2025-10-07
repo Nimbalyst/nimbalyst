@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MaterialSymbol } from '../MaterialSymbol';
 import { parseModelInfo, getProviderLabel } from '../../utils/modelUtils';
 import type { SessionData } from '@stravu/runtime/ai/server/types';
+import { formatDate } from '@stravu/runtime';
 import './SessionDropdown.css';
 
 // SessionDropdownItem extends SessionData with message count for display
@@ -52,8 +53,7 @@ export function SessionDropdown({
     if (session?.title) return session.title;
     if (session?.name) return session.name;
     if (session) {
-      const date = new Date(session.createdAt);
-      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return formatDate(session.createdAt);
     }
     return 'Current Session';
   };
@@ -61,8 +61,7 @@ export function SessionDropdown({
   const formatSessionName = (session: SessionDropdownItem) => {
     if (session.title) return session.title;
     if (session.name) return session.name;
-    const date = new Date(session.createdAt);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return formatDate(session.createdAt);
   };
 
   const handleRename = (sessionId: string) => {

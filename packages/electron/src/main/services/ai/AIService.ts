@@ -534,7 +534,13 @@ export class AIService {
           });
         }
 
-        for await (const chunk of provider.sendMessage(message, documentContext, session.id, sessionMessages, workspacePath)) {
+        // Add sessionType to documentContext for provider to use in system prompt
+        const contextWithSession = documentContext ? {
+          ...documentContext,
+          sessionType: session.sessionType
+        } as any : { sessionType: session.sessionType } as any;
+
+        for await (const chunk of provider.sendMessage(message, contextWithSession, session.id, sessionMessages, workspacePath)) {
           chunkCount++;
 
           if (!firstChunkTime) {

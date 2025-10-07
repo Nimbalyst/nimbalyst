@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { AgentTranscriptPanel, TodoItem, FileEditSummary } from '@stravu/runtime';
 import type { SessionData } from '@stravu/runtime/ai/server/types';
 import { SessionDropdown } from './AIChat/SessionDropdown';
+import { WorkspaceHeader } from './WorkspaceHeader';
 
 interface AgenticCodingWindowProps {
   sessionId?: string;
@@ -34,6 +35,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
   const [promptInput, setPromptInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const initializedRef = useRef(false);
 
   console.log('[AgenticCodingWindow] State initialized', { loading, error, activeTabId, tabCount: sessionTabs.length });
 
@@ -167,7 +169,15 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
 
   // Load or create initial session
   useEffect(() => {
-    console.log('[AgenticCodingWindow] useEffect STARTING', { initialSessionId, workspacePath });
+    console.log('[AgenticCodingWindow] useEffect STARTING', { initialSessionId, workspacePath, initialized: initializedRef.current });
+
+    // Prevent double initialization in React StrictMode
+    if (initializedRef.current) {
+      console.log('[AgenticCodingWindow] Already initialized, skipping');
+      return;
+    }
+    initializedRef.current = true;
+
     const loadOrCreateSession = async () => {
       try {
         console.log('[AgenticCodingWindow] loadOrCreateSession START');
@@ -177,6 +187,40 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
         // Load all coding sessions for the dropdown
         await loadCodingSessions();
 
+        // Try to restore from workspace tab state (tabs with agentic:// URLs)
+        const tabStateResult = await window.electronAPI?.getWorkspaceTabState?.();
+        const savedTabs = tabStateResult?.tabs?.filter((tab: any) => tab.filePath?.startsWith('agentic://')) || [];
+
+        if (savedTabs.length > 0) {
+          console.log('[AgenticCoding] Restoring from workspace tabs:', savedTabs.length, 'tabs');
+
+          // Load all session tabs
+          const restoredTabs: SessionTab[] = [];
+          for (const savedTab of savedTabs) {
+            try {
+              const sessionId = savedTab.filePath.replace('agentic://', '');
+              const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+              if (sessionData) {
+                restoredTabs.push({
+                  id: sessionId,
+                  name: savedTab.fileName,
+                  sessionData
+                });
+              }
+            } catch (err) {
+              console.error('[AgenticCoding] Failed to load saved session:', savedTab.filePath, err);
+            }
+          }
+
+          if (restoredTabs.length > 0) {
+            setSessionTabs(restoredTabs);
+            setActiveTabId(tabStateResult.activeTabId?.replace('agentic://', '') || restoredTabs[0].id);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // No saved state - load initial session or create first-time session
         if (initialSessionId) {
           // Load existing session
           const sessionData = await window.electronAPI.aiLoadSession(initialSessionId, workspacePath);
@@ -198,7 +242,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
             setError('Failed to load session');
           }
         } else {
-          // Create new session
+          // First time opening - create a new session
           await createNewSession(planDocumentPath);
         }
       } catch (err) {
@@ -210,7 +254,39 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     };
 
     loadOrCreateSession();
-  }, [initialSessionId, workspacePath, planDocumentPath]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);  // Only run once on mount
+
+  // Save to workspace tab state when tabs change
+  useEffect(() => {
+    if (sessionTabs.length === 0) return;
+
+    const saveState = async () => {
+      try {
+        // Convert session tabs to workspace tab format with agentic:// URLs
+        const tabs = sessionTabs.map(tab => ({
+          id: `agentic://${tab.id}`,
+          filePath: `agentic://${tab.id}`,
+          fileName: tab.name,
+          isDirty: false,
+          isPinned: false,
+          isVirtual: true
+        }));
+
+        await window.electronAPI?.saveWorkspaceTabState?.({
+          tabs,
+          activeTabId: activeTabId ? `agentic://${activeTabId}` : null,
+          tabOrder: tabs.map(t => t.id)
+        });
+      } catch (err) {
+        console.error('[AgenticCoding] Failed to save tabs state:', err);
+      }
+    };
+
+    // Debounce saves
+    const timer = setTimeout(saveState, 500);
+    return () => clearTimeout(timer);
+  }, [sessionTabs, activeTabId]);
 
   // Listen for session updates (metadata changes from tools)
   useEffect(() => {
@@ -264,6 +340,21 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
       console.error('[AgenticCoding] AI error:', error);
       setError(error.message || 'An error occurred');
       setIsSending(false);
+      // Remove thinking message on error
+      if (activeTabId) {
+        setSessionTabs(prev => prev.map(tab => {
+          if (tab.id === activeTabId) {
+            return {
+              ...tab,
+              sessionData: {
+                ...tab.sessionData,
+                messages: tab.sessionData.messages.filter(m => !m.isThinking)
+              }
+            };
+          }
+          return tab;
+        }));
+      }
     };
 
     window.electronAPI.onAIStreamResponse(handleStreamResponse);
@@ -299,6 +390,31 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     setPromptInput('');
     setIsSending(true);
 
+    // Immediately add user message to the transcript
+    setSessionTabs(prev => prev.map(tab => {
+      if (tab.id === activeTabId) {
+        const userMessage = {
+          role: 'user' as const,
+          content: prompt,
+          timestamp: Date.now()
+        };
+        const thinkingMessage = {
+          role: 'assistant' as const,
+          content: '',
+          timestamp: Date.now(),
+          isThinking: true
+        };
+        return {
+          ...tab,
+          sessionData: {
+            ...tab.sessionData,
+            messages: [...tab.sessionData.messages, userMessage, thinkingMessage]
+          }
+        };
+      }
+      return tab;
+    }));
+
     try {
       // Send message via existing AI service (no document context for workspace-level work)
       await window.electronAPI.aiSendMessage(
@@ -311,6 +427,19 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
       console.error('[AgenticCoding] Failed to send message:', err);
       setError(String(err));
       setIsSending(false);
+      // Remove thinking message on error
+      setSessionTabs(prev => prev.map(tab => {
+        if (tab.id === activeTabId) {
+          return {
+            ...tab,
+            sessionData: {
+              ...tab.sessionData,
+              messages: tab.sessionData.messages.filter(m => !m.isThinking)
+            }
+          };
+        }
+        return tab;
+      }));
     }
     // Note: setIsSending(false) happens when we receive the completion event
   };
@@ -324,6 +453,10 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
 
   const activeTab = sessionTabs.find(tab => tab.id === activeTabId);
 
+  const handleOpenSessionManager = () => {
+    window.electronAPI.invoke('open-session-manager', workspacePath);
+  };
+
   console.log('[AgenticCodingWindow] RENDER', { loading, error, activeTabId, tabCount: sessionTabs.length });
 
   if (loading) {
@@ -335,13 +468,64 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     );
   }
 
-  if (error || sessionTabs.length === 0) {
+  if (error) {
     console.log('[AgenticCodingWindow] Rendering ERROR state', { error });
     return (
       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-primary)' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ color: 'var(--status-error)', marginBottom: '0.5rem' }}>Failed to load session</div>
-          {error && <div style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>{error}</div>}
+          <div style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (sessionTabs.length === 0) {
+    console.log('[AgenticCodingWindow] Rendering EMPTY state - no tabs');
+    return (
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
+        <WorkspaceHeader
+          workspacePath={workspacePath}
+          subtitle="Code"
+          actions={
+            <>
+              <button
+                onClick={() => createNewSession()}
+                style={{
+                  padding: '0.375rem 0.75rem',
+                  borderRadius: '0.25rem',
+                  fontSize: '0.75rem',
+                  backgroundColor: 'var(--primary-color)',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: 500
+                }}
+                title="New Session"
+              >
+                New Session
+              </button>
+              <SessionDropdown
+                currentSessionId={null}
+                sessions={availableSessions}
+                onSessionSelect={openSessionInTab}
+                onNewSession={() => createNewSession()}
+                onDeleteSession={deleteSession}
+                onOpenSessionManager={handleOpenSessionManager}
+              />
+            </>
+          }
+        />
+        {/* Empty state */}
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ textAlign: 'center', maxWidth: '400px', padding: '2rem' }}>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
+              No coding sessions open
+            </div>
+            <div style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>
+              Create a new session to start working with AI on your codebase
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -351,29 +535,41 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
   console.log('[AgenticCodingWindow] About to render AgentTranscriptPanel');
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-primary)', backgroundColor: 'var(--surface-secondary)', WebkitAppRegion: 'drag' } as React.CSSProperties}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div>
-            <h1 style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.875rem' }}>
-              Agentic Coding Session
-              <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}> • {workspacePath.split('/').pop()}</span>
-            </h1>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          <SessionDropdown
-            currentSessionId={activeTabId}
-            sessions={availableSessions}
-            onSessionSelect={openSessionInTab}
-            onNewSession={() => createNewSession()}
-            onDeleteSession={deleteSession}
-          />
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
-            {activeTab?.sessionData.provider || 'claude-code'}
-          </span>
-        </div>
-      </div>
+      <WorkspaceHeader
+        workspacePath={workspacePath}
+        subtitle="Code"
+        actions={
+          <>
+            <button
+              onClick={() => createNewSession()}
+              style={{
+                padding: '0.375rem 0.75rem',
+                borderRadius: '0.25rem',
+                fontSize: '0.75rem',
+                backgroundColor: 'var(--primary-color)',
+                color: 'white',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: 500
+              }}
+              title="New Session"
+            >
+              New Session
+            </button>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+              {activeTab?.sessionData.provider || 'claude-code'}
+            </span>
+            <SessionDropdown
+              currentSessionId={activeTabId}
+              sessions={availableSessions}
+              onSessionSelect={openSessionInTab}
+              onNewSession={() => createNewSession()}
+              onDeleteSession={deleteSession}
+              onOpenSessionManager={handleOpenSessionManager}
+            />
+          </>
+        }
+      />
 
       {/* Tabs */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.5rem', borderBottom: '1px solid var(--border-primary)', backgroundColor: 'var(--surface-primary)', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
@@ -427,22 +623,6 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
             </button>
           </div>
         ))}
-        <button
-          onClick={() => createNewSession()}
-          style={{
-            padding: '0.25rem 0.5rem',
-            borderRadius: '0.25rem',
-            fontSize: '0.75rem',
-            backgroundColor: 'transparent',
-            color: 'var(--text-tertiary)',
-            border: '1px solid var(--border-primary)',
-            cursor: 'pointer',
-            marginLeft: '0.5rem'
-          }}
-          title="New Session"
-        >
-          +
-        </button>
       </div>
 
       {/* Active Session Content */}
@@ -454,6 +634,13 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
               sessionData={activeTab.sessionData}
               onFileClick={handleFileClick}
               onTodoClick={handleTodoClick}
+              initialSettings={{
+                showToolCalls: true,
+                compactMode: false,
+                collapseTools: false,
+                showThinking: true,
+                showSessionInit: false
+              }}
             />
           </div>
 

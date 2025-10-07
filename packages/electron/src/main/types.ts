@@ -15,11 +15,11 @@ export interface TabState {
 }
 
 export interface WindowState {
-    mode: 'document' | 'workspace';
+    mode: 'document' | 'workspace' | 'agentic-coding';
     filePath: string | null;
     workspacePath: string | null;
     documentEdited: boolean;
-    
+
     // Tab management (optional for backward compatibility)
     tabs?: TabState[];
     activeTabId?: string;
@@ -33,7 +33,7 @@ export interface RecentItem {
 }
 
 export interface SessionWindow {
-    mode: 'document' | 'workspace';
+    mode: 'document' | 'workspace' | 'agentic-coding';
     filePath?: string;
     workspacePath?: string;
     bounds: {

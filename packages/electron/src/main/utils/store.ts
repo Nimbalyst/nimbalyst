@@ -42,9 +42,15 @@ export interface NavigationHistoryState {
   currentIndex: number;
 }
 
+export interface AgenticCodingWindowState {
+  bounds?: { width: number; height: number; x?: number; y?: number };
+  devToolsOpen?: boolean;
+}
+
 export interface WorkspaceState {
   workspacePath: string;
   windowState?: SessionWindow;
+  agenticCodingWindowState?: AgenticCodingWindowState;
   sidebarWidth: number;
   recentDocuments: string[];
   tabs: TabManagerState;
@@ -96,6 +102,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
     return {
       workspacePath: path,
       windowState: undefined,
+      agenticCodingWindowState: undefined,
       sidebarWidth: 240,
       recentDocuments: [],
       tabs: { ...DEFAULT_TAB_MANAGER_STATE },
@@ -126,6 +133,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
   return {
     workspacePath: raw.workspacePath ?? raw.workspace_path ?? path,
     windowState: raw.windowState ?? raw.window_state ?? undefined,
+    agenticCodingWindowState: raw.agenticCodingWindowState ? { ...raw.agenticCodingWindowState } : undefined,
     sidebarWidth: raw.sidebarWidth ?? raw.uiState?.sidebarWidth ?? raw.ui_state?.sidebarWidth ?? 240,
     recentDocuments: Array.isArray(raw.recentDocuments)
       ? raw.recentDocuments.slice(0, 50)
@@ -156,6 +164,7 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
   return {
     workspacePath: state.workspacePath,
     windowState: state.windowState ? { ...state.windowState } : undefined,
+    agenticCodingWindowState: state.agenticCodingWindowState ? { ...state.agenticCodingWindowState } : undefined,
     sidebarWidth: state.sidebarWidth,
     recentDocuments: [...state.recentDocuments],
     tabs: {
@@ -330,6 +339,23 @@ export function saveWorkspaceWindowState(workspacePath: string, windowState: Ses
 export function clearWorkspaceWindowState(workspacePath: string): void {
   updateWorkspaceState(workspacePath, workspace => {
     delete workspace.windowState;
+  });
+}
+
+// Agentic Coding Window State Management
+export function getAgenticCodingWindowState(workspacePath: string): AgenticCodingWindowState | undefined {
+  return getWorkspaceState(workspacePath).agenticCodingWindowState;
+}
+
+export function saveAgenticCodingWindowState(workspacePath: string, state: AgenticCodingWindowState): void {
+  updateWorkspaceState(workspacePath, workspace => {
+    workspace.agenticCodingWindowState = { ...state };
+  });
+}
+
+export function clearAgenticCodingWindowState(workspacePath: string): void {
+  updateWorkspaceState(workspacePath, workspace => {
+    delete workspace.agenticCodingWindowState;
   });
 }
 

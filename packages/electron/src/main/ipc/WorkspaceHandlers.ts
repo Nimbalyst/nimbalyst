@@ -12,6 +12,7 @@ const { writeFile, mkdir, rename, unlink, rmdir, copyFile, readFile, rm, stat, c
 const execAsync = promisify(exec);
 import { windowStates, getWindowId, createWindow } from '../window/WindowManager';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
+import { createAgenticCodingWindow } from '../window/AgenticCodingWindow';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { getFolderContents } from '../utils/FileTree';
 import {
@@ -729,6 +730,16 @@ export function registerWorkspaceHandlers() {
             return { success: true };
         } catch (error: any) {
             console.error('Error opening session manager:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('open-agentic-coding-window', async (event, options: { workspacePath: string; sessionId?: string; planDocumentPath?: string }) => {
+        try {
+            createAgenticCodingWindow(options);
+            return { success: true };
+        } catch (error: any) {
+            console.error('Error opening agentic coding window:', error);
             return { success: false, error: error.message };
         }
     });

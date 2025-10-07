@@ -33,6 +33,7 @@ export interface Message {
   };
   isError?: boolean;
   errorMessage?: string;
+  isThinking?: boolean;
   isStreamingStatus?: boolean;
   streamingData?: {
     position: string;

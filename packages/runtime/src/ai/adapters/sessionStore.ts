@@ -1,5 +1,9 @@
 import type { Message, SessionData } from '../server/types';
 
+// Type aliases for compatibility
+export type ChatMessage = Message;
+export type ChatSession = SessionData;
+
 export interface SessionListItem {
   id: string;
   provider: string;

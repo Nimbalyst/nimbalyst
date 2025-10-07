@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { SessionData } from '@stravu/runtime/ai/server/types';
+import { formatDate } from '@stravu/runtime';
 import { ProviderIcon } from '../icons/ProviderIcons';
+import { WorkspaceHeader } from '../WorkspaceHeader';
 import './SessionManager.css';
 
 // Helper function to apply theme
@@ -67,6 +69,7 @@ interface SessionManagerProps {
 export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace }) => {
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [selectedSession, setSelectedSession] = useState<SessionData | null>(null);
+  const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -151,11 +154,60 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
     }
   };
 
-  const formatDate = (timestamp: number | undefined) => {
-    if (!timestamp) return 'Unknown';
-    const date = new Date(timestamp);
-    if (isNaN(date.getTime())) return 'Invalid Date';
-    return date.toLocaleString();
+  const handleDeleteSelectedSessions = async () => {
+    if (selectedSessions.size === 0) return;
+
+    const count = selectedSessions.size;
+    if (!confirm(`Are you sure you want to delete ${count} session${count > 1 ? 's' : ''}?`)) {
+      return;
+    }
+
+    try {
+      // Delete all selected sessions
+      for (const sessionId of selectedSessions) {
+        const session = sessions.find(s => s.id === sessionId);
+        if (session) {
+          await window.electronAPI.ai.deleteSession(
+            session.id,
+            session.workspacePath || 'default'
+          );
+        }
+      }
+      await loadSessions();
+      setSelectedSessions(new Set());
+      if (selectedSession && selectedSessions.has(selectedSession.id)) {
+        setSelectedSession(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete sessions:', error);
+    }
+  };
+
+  const handleSessionClick = (session: SessionData, event: React.MouseEvent) => {
+    if (event.metaKey || event.ctrlKey) {
+      // Cmd/Ctrl+Click: Toggle multi-select
+      const newSelected = new Set(selectedSessions);
+      if (newSelected.has(session.id)) {
+        newSelected.delete(session.id);
+      } else {
+        newSelected.add(session.id);
+      }
+      setSelectedSessions(newSelected);
+    } else if (event.shiftKey && selectedSession) {
+      // Shift+Click: Range select
+      const startIdx = filteredSessions.findIndex(s => s.id === selectedSession.id);
+      const endIdx = filteredSessions.findIndex(s => s.id === session.id);
+      const [min, max] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+      const newSelected = new Set(selectedSessions);
+      for (let i = min; i <= max; i++) {
+        newSelected.add(filteredSessions[i].id);
+      }
+      setSelectedSessions(newSelected);
+    } else {
+      // Regular click: Select for detail view and clear multi-select
+      setSelectedSession(session);
+      setSelectedSessions(new Set());
+    }
   };
 
   const getWorkspaceName = (path: string | null | undefined) => {
@@ -181,7 +233,14 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
 
   return (
     <div className="session-manager">
-      <div className="sidebar">
+      {filterWorkspace && (
+        <WorkspaceHeader
+          workspacePath={filterWorkspace}
+          subtitle="History"
+        />
+      )}
+      <div className="session-manager-body">
+        <div className="sidebar">
         <div className="sidebar-header">
           <div className="search-container">
             <span className="search-icon material-symbols-outlined">search</span>
@@ -197,12 +256,27 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
 
         <div className="session-stats">
           {filteredSessions.length} session{filteredSessions.length !== 1 ? 's' : ''}
+          {selectedSessions.size > 0 && (
+            <span className="selection-count">
+              {selectedSessions.size} selected
+            </span>
+          )}
           {filterWorkspace && (
             <span className="workspace-filter">
               {getWorkspaceName(filterWorkspace)}
             </span>
           )}
         </div>
+        {selectedSessions.size > 0 && (
+          <div className="bulk-actions">
+            <button className="btn btn-danger btn-small" onClick={handleDeleteSelectedSessions}>
+              Delete {selectedSessions.size} session{selectedSessions.size > 1 ? 's' : ''}
+            </button>
+            <button className="btn btn-small" onClick={() => setSelectedSessions(new Set())}>
+              Clear Selection
+            </button>
+          </div>
+        )}
 
         <div className="sessions-list">
           {loading ? (
@@ -214,11 +288,14 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
               <p>No sessions found</p>
             </div>
           ) : (
-            filteredSessions.map(session => (
+            filteredSessions.map(session => {
+              const isSelected = selectedSession?.id === session.id;
+              const isMultiSelected = selectedSessions.has(session.id);
+              return (
               <div
                 key={session.id}
-                className={`session-item ${selectedSession?.id === session.id ? 'selected' : ''}`}
-                onClick={() => setSelectedSession(session)}
+                className={`session-item ${isSelected ? 'selected' : ''} ${isMultiSelected ? 'multi-selected' : ''}`}
+                onClick={(e) => handleSessionClick(session, e)}
               >
                 <div className="session-item-icon">
                   <ProviderIcon provider={session.provider} size={16} />
@@ -231,21 +308,22 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
                     <span className={`session-item-provider ${getProviderClass(session.provider)}`}>
                       {session.provider}
                     </span>
-                    <span className="session-item-workspace">
-                      {getWorkspaceName(session.workspacePath)}
-                    </span>
+                    {/*<span className="session-item-workspace">*/}
+                    {/*  {getWorkspaceName(session.workspacePath)}*/}
+                    {/*</span>*/}
                     <span className="session-item-date">
                       {formatDate(session.createdAt)}
                     </span>
                   </div>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
 
-      <div className="content">
+        <div className="content">
         {selectedSession ? (
           <>
             <div className="content-header">
@@ -320,6 +398,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
             <p>Choose a session from the list to view its messages</p>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

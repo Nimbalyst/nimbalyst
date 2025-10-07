@@ -5,6 +5,7 @@ import { RichTranscriptView } from './RichTranscriptView';
 import { TranscriptSidebar } from './TranscriptSidebar';
 import { FileEditsSidebar } from './FileEditsSidebar';
 import { TodosSidebar } from './TodosSidebar';
+import { formatISO } from '../../../utils/dateUtils';
 
 type SidebarTab = 'prompts' | 'files' | 'todos';
 
@@ -63,7 +64,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
       sessionId,
       promptText: msg.content,
       outputIndex: index,
-      timestamp: new Date(msg.timestamp).toISOString(),
+      timestamp: formatISO(msg.timestamp) || new Date().toISOString(),
       completionTimestamp: undefined
     }));
 
@@ -92,6 +93,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
           sessionId={sessionId}
           sessionStatus={sessionData.metadata?.sessionStatus as string}
           messages={sessionData.messages}
+          provider={sessionData.provider}
           settings={initialSettings}
           onSettingsChange={onSettingsChange}
           showSettings={showSettings}
@@ -161,7 +163,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
                   cursor: 'pointer',
                   backgroundColor: 'transparent',
                   border: 'none',
-                  borderBottom: activeTab === 'prompts' ? '2px solid var(--color-interactive)' : '2px solid transparent'
+                  borderBottom: activeTab === 'prompts' ? '2px solid var(--primary-color)' : '2px solid transparent'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
@@ -188,7 +190,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
                   cursor: 'pointer',
                   backgroundColor: 'transparent',
                   border: 'none',
-                  borderBottom: activeTab === 'files' ? '2px solid var(--color-interactive)' : '2px solid transparent'
+                  borderBottom: activeTab === 'files' ? '2px solid var(--primary-color)' : '2px solid transparent'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
@@ -215,7 +217,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
                   cursor: 'pointer',
                   backgroundColor: 'transparent',
                   border: 'none',
-                  borderBottom: activeTab === 'todos' ? '2px solid var(--color-interactive)' : '2px solid transparent'
+                  borderBottom: activeTab === 'todos' ? '2px solid var(--primary-color)' : '2px solid transparent'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>

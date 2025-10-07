@@ -51,3 +51,6 @@ export { virtualDocHandler } from './documents/VirtualDocumentHandler';
 export { VirtualDocumentBanner } from './components/VirtualDocumentBanner';
 // UI Components
 export * from './ui/AgentTranscript';
+export * from './ui/icons/ProviderIcons';
+// Utils
+export * from './utils/dateUtils';

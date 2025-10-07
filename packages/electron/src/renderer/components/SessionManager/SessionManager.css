@@ -1,24 +1,19 @@
 /* Session Manager - Using global theme variables */
 .session-manager {
   display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100vh;
   overflow: hidden;
   background-color: var(--surface-primary);
   color: var(--text-primary);
-  padding-top: 38px; /* Space for macOS title bar */
 }
 
-/* macOS draggable area */
-.session-manager::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 38px;
-  -webkit-app-region: drag;
-  z-index: 1000;
+/* Main content area with sidebar and content */
+.session-manager-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
 }
 
 /* Sidebar - matching project sidebar */
@@ -92,6 +87,23 @@
   font-weight: 500;
 }
 
+.selection-count {
+  padding: 2px 8px;
+  background-color: var(--primary-color);
+  color: white;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.bulk-actions {
+  padding: 8px 12px;
+  background-color: var(--surface-primary);
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  gap: 8px;
+}
+
 .sessions-list {
   flex: 1;
   overflow-y: auto;
@@ -109,6 +121,8 @@
   cursor: pointer;
   transition: background-color 0.1s;
   border-bottom: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .session-item:hover {
@@ -116,8 +130,15 @@
 }
 
 .session-item.selected {
-  background-color: var(--primary-color-light);
-  color: var(--primary-color-dark);
+  background-color: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  border-left: 3px solid var(--primary-color);
+  padding-left: 9px; /* Adjust for border */
+}
+
+.session-item.multi-selected {
+  background-color: color-mix(in srgb, var(--primary-color) 15%, transparent);
+  border-left: 3px solid var(--primary-color);
+  padding-left: 9px; /* Adjust for border */
 }
 
 .session-item-icon {
@@ -128,8 +149,9 @@
   align-items: center;
 }
 
-.session-item.selected .session-item-icon {
-  color: var(--primary-color-dark);
+.session-item.selected .session-item-icon,
+.session-item.multi-selected .session-item-icon {
+  color: var(--primary-color);
 }
 
 .session-item-content {
@@ -147,8 +169,10 @@
   white-space: nowrap;
 }
 
-.session-item.selected .session-item-title {
-  color: var(--primary-color-dark);
+.session-item.selected .session-item-title,
+.session-item.multi-selected .session-item-title {
+  color: var(--primary-color);
+  font-weight: 600;
 }
 
 .session-item-meta {
@@ -285,6 +309,11 @@
 .btn:hover {
   background-color: var(--surface-tertiary);
   border-color: var(--border-color-hover);
+}
+
+.btn-small {
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 .btn-primary {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { PromptMarker } from '../types';
+import { formatTimeAgo, formatDuration } from '../../../utils/dateUtils';
 
 interface TranscriptSidebarProps {
   sessionId: string;
@@ -23,80 +24,132 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
     onNavigateToPrompt(marker);
   };
 
-  const formatDuration = (start: string, end?: string): string => {
-    try {
-      const startTime = new Date(start).getTime();
-      const endTime = end ? new Date(end).getTime() : Date.now();
-      const durationMs = endTime - startTime;
-
-      if (durationMs < 1000) return `${durationMs}ms`;
-      if (durationMs < 60000) return `${(durationMs / 1000).toFixed(1)}s`;
-      const minutes = Math.floor(durationMs / 60000);
-      const seconds = Math.floor((durationMs % 60000) / 1000);
-      return `${minutes}m ${seconds}s`;
-    } catch {
-      return '';
-    }
-  };
-
-  const formatTimeAgo = (timestamp: string): string => {
-    try {
-      const date = new Date(timestamp);
-      const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffMins = Math.floor(diffMs / 60000);
-
-      if (diffMins < 1) return 'just now';
-      if (diffMins < 60) return `${diffMins}m ago`;
-      const diffHours = Math.floor(diffMins / 60);
-      if (diffHours < 24) return `${diffHours}h ago`;
-      const diffDays = Math.floor(diffHours / 24);
-      return `${diffDays}d ago`;
-    } catch {
-      return '';
-    }
-  };
-
   return (
-    <div className={`flex transition-all duration-300 ease-in-out ${isCollapsed ? 'w-0' : 'w-64'}`}>
+    <div style={{
+      display: 'flex',
+      transition: 'all 0.3s ease-in-out',
+      width: isCollapsed ? '0' : '16rem'
+    }}>
       {!isCollapsed && (
-        <div className="w-64 bg-surface-secondary border-l border-border-primary flex flex-col h-full">
-          <div className="p-4 border-b border-border-primary">
-            <h3 className="font-semibold text-text-primary">Prompt History</h3>
-            <p className="text-xs text-text-tertiary mt-1">Click to navigate</p>
+        <div style={{
+          width: '16rem',
+          backgroundColor: 'var(--surface-secondary)',
+          borderLeft: '1px solid var(--border-primary)',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%'
+        }}>
+          <div style={{
+            padding: '0.75rem 1rem',
+            borderBottom: '1px solid var(--border-primary)'
+          }}>
+            <h3 style={{
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              fontSize: '0.875rem',
+              margin: 0
+            }}>
+              Prompt History
+            </h3>
+            <p style={{
+              fontSize: '0.75rem',
+              color: 'var(--text-tertiary)',
+              margin: '0.25rem 0 0 0'
+            }}>
+              Click to navigate
+            </p>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div style={{
+            flex: 1,
+            overflowY: 'auto'
+          }}>
             {prompts.length === 0 ? (
-              <div className="p-4 text-text-tertiary text-sm">
+              <div style={{
+                padding: '1rem',
+                color: 'var(--text-tertiary)',
+                fontSize: '0.875rem'
+              }}>
                 No prompts yet. Start by entering a prompt.
               </div>
             ) : (
-              <div className="space-y-1 p-2">
+              <div style={{ padding: '0.5rem' }}>
                 {prompts.map((marker, index) => (
                   <button
                     key={marker.id}
                     onClick={() => handlePromptClick(marker)}
-                    className={`w-full text-left p-3 rounded-lg transition-colors ${
-                      selectedPromptId === marker.id
-                        ? 'bg-interactive/20 border-interactive border'
-                        : 'hover:bg-bg-hover border border-transparent'
-                    }`}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '0.75rem',
+                      borderRadius: '0.375rem',
+                      marginBottom: '0.25rem',
+                      transition: 'background-color 0.2s',
+                      backgroundColor: selectedPromptId === marker.id
+                        ? 'color-mix(in srgb, var(--primary-color) 15%, transparent)'
+                        : 'transparent',
+                      border: selectedPromptId === marker.id
+                        ? '1px solid var(--primary-color)'
+                        : '1px solid transparent',
+                      cursor: 'pointer',
+                      color: 'inherit'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selectedPromptId !== marker.id) {
+                        e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selectedPromptId !== marker.id) {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }
+                    }}
                   >
-                    <div className="flex items-start space-x-2">
-                      <span className="text-interactive font-mono text-sm mt-0.5">
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '0.5rem'
+                    }}>
+                      <span style={{
+                        color: 'var(--primary-color)',
+                        fontFamily: 'monospace',
+                        fontSize: '0.75rem',
+                        marginTop: '0.125rem',
+                        fontWeight: 600
+                      }}>
                         #{index + 1}
                       </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm text-text-primary line-clamp-2">
+                      <div style={{
+                        flex: 1,
+                        minWidth: 0
+                      }}>
+                        <div style={{
+                          fontSize: '0.8125rem',
+                          color: 'var(--text-primary)',
+                          lineHeight: '1.4',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden'
+                        }}>
                           {marker.promptText}
                         </div>
-                        <div className="flex items-center space-x-2 text-xs text-text-tertiary mt-1">
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          fontSize: '0.6875rem',
+                          color: 'var(--text-tertiary)',
+                          marginTop: '0.375rem'
+                        }}>
                           <span>{formatTimeAgo(marker.timestamp)}</span>
                           {marker.completionTimestamp && (
                             <>
-                              <span className="text-text-tertiary">•</span>
-                              <span className="font-medium text-text-secondary">
+                              <span>•</span>
+                              <span style={{
+                                fontWeight: 500,
+                                color: 'var(--text-secondary)'
+                              }}>
                                 {formatDuration(marker.timestamp, marker.completionTimestamp)}
                               </span>
                             </>

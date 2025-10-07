@@ -26,6 +26,7 @@ import { NewFileDialog } from './components/NewFileDialog';
 import { AgenticCodingWindow } from './components/AgenticCodingWindow';
 import { TabManager } from './components/TabManager/TabManager';
 import { EditorContainer } from './components/EditorContainer';
+import { NavigationGutter, type NavigationMode } from './components/NavigationGutter';
 import { getEditorPool } from './services/EditorPool';
 import { useTabs } from './hooks/useTabs';
 import { useTabNavigation } from './hooks/useTabNavigation';
@@ -194,6 +195,10 @@ export default function App() {
   });
   const [lastPrompt, setLastPrompt] = useState<string>('');
   const [lastAIResponse, setLastAIResponse] = useState<string>('');
+
+  // Navigation gutter state
+  const [navigationMode, setNavigationMode] = useState<NavigationMode>('planning');
+
 
   // Sync theme with main process preference on mount
   useEffect(() => {
@@ -544,6 +549,23 @@ export default function App() {
     window.close();
   }, []);
 
+  // Handle navigation mode change
+  const handleNavigationModeChange = useCallback((mode: NavigationMode) => {
+    setNavigationMode(mode);
+
+    if (mode === 'coding') {
+      // Open agentic coding window
+      if (window.electronAPI && workspacePath) {
+        window.electronAPI.invoke('open-agentic-coding-window', {
+          workspacePath,
+          sessionId: undefined,
+          planDocumentPath: undefined
+        });
+      }
+    }
+    // 'planning' mode is the default - stay in current window
+  }, [workspacePath]);
+
   // Wrapper for workspace file selection utility with component-specific context
   const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
     return handleWorkspaceFileSelectUtil({
@@ -630,6 +652,27 @@ export default function App() {
       console.error('[PLANS] Failed to open plans tab:', error);
     }
   }, [tabs]);
+
+  // Listen for IPC events from menu
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+
+    const handleOpenPlansTab = () => {
+      openPlansTab();
+    };
+
+    const handleToggleAgentPalette = () => {
+      setIsAgentPaletteVisible(prev => !prev);
+    };
+
+    window.electronAPI.on('open-plans-tab', handleOpenPlansTab);
+    window.electronAPI.on('toggle-agent-palette', handleToggleAgentPalette);
+
+    return () => {
+      window.electronAPI.off?.('open-plans-tab', handleOpenPlansTab);
+      window.electronAPI.off?.('toggle-agent-palette', handleToggleAgentPalette);
+    };
+  }, [openPlansTab]);
 
   // Update window title and dirty state
   useEffect(() => {
@@ -1033,6 +1076,29 @@ export default function App() {
         }
       }}
     >
+      {workspaceMode && (
+        <NavigationGutter
+          currentMode={navigationMode}
+          onModeChange={handleNavigationModeChange}
+          onOpenPlans={openPlansTab}
+          onOpenBugs={() => {
+            // TODO: Implement bugs view
+            console.log('Open bugs view');
+          }}
+          onOpenHistory={() => {
+            // Open session manager
+            if (window.electronAPI) {
+              window.electronAPI.invoke('open-session-manager', workspacePath);
+            }
+          }}
+          onOpenSettings={() => {
+            // Open AI Models settings
+            if (window.electronAPI) {
+              window.electronAPI.openAIModels();
+            }
+          }}
+        />
+      )}
       {workspaceMode && workspaceName && (
         <>
           <div ref={sidebarRef} style={{ width: sidebarWidth, position: 'relative' }}>

@@ -24,6 +24,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   private claudeSessionIds: Map<string, string> = new Map(); // Our session ID -> Claude session ID
   private claudeCodeModule?: typeof import('@anthropic-ai/claude-code'); // Dynamically loaded module with type safety
   private queryFunction?: typeof QueryType; // The query function from the SDK with proper types
+  private currentSessionType?: string; // Track session type for prompt customization
 
   static readonly DEFAULT_MODEL = 'claude-code';
 
@@ -793,14 +794,30 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   protected buildSystemPrompt(documentContext?: DocumentContext): string {
+    // Check if this is an agentic coding session
+    const sessionType = (documentContext as any)?.sessionType;
+    if (sessionType === 'coding') {
+      // Minimal prompt for agentic coding mode - let Claude Code work naturally
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-US', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+      });
+      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+      return `Current date and time: ${dateStr} at ${timeStr}
+
+You are an AI assistant integrated into the Preditor editor's agentic coding workspace.
+When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
+    }
+
     const basePrompt = super.buildSystemPrompt(documentContext);
-    
+
     // If no document is open, return just the base prompt (which already has the no-document warning)
     const hasDocument = documentContext && (documentContext.filePath || documentContext.content);
     if (!hasDocument) {
       return basePrompt;
     }
-    
+
     return `${basePrompt}
 
 You have access to the following MCP tools for document editing:
