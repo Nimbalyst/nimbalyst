@@ -219,7 +219,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         allowedTools,
         cwd: workspacePath,
         abortController: this.abortController,
-        model: this.config.model || 'claude-3-5-sonnet-20241022',
+        model: 'sonnet',
         permissionMode: 'bypassPermissions'
         // Do NOT pass API key - Claude Code manages authentication internally
       };
