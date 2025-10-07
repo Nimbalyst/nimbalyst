@@ -78,8 +78,8 @@ export class ChokidarFileWatcher {
             }
 
             try {
-                console.log(`[ChokidarFileWatcher] Setting up watcher for: ${filePath} (window ${windowId})`);
-                console.log(`[ChokidarFileWatcher] Current watched files for window ${windowId}:`, Array.from(windowWatchers.keys()));
+                // console.log(`[ChokidarFileWatcher] Setting up watcher for: ${filePath} (window ${windowId})`);
+                // console.log(`[ChokidarFileWatcher] Current watched files for window ${windowId}:`, Array.from(windowWatchers.keys()));
 
                 // Create a watcher for this specific file only (not a directory!)
                 const watcher = chokidar.watch(filePath, {
@@ -89,7 +89,7 @@ export class ChokidarFileWatcher {
 
                 // Wait for watcher to be ready before resolving
                 watcher.on('ready', () => {
-                    console.log(`[ChokidarFileWatcher] Watcher ready for: ${filePath}`);
+                    // console.log(`[ChokidarFileWatcher] Watcher ready for: ${filePath}`);
                     resolve();
                 });
 

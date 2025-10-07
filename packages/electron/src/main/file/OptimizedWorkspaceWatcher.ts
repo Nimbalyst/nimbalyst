@@ -141,7 +141,7 @@ export class OptimizedWorkspaceWatcher {
                     triggerUpdate();
                 })
                 .on('ready', () => {
-                    console.log(`[WorkspaceWatcher] *** WATCHER READY *** for: ${workspacePath}`);
+                    // console.log(`[WorkspaceWatcher] *** WATCHER READY *** for: ${workspacePath}`);
                 })
                 .on('error', (error) => {
                     logger.workspaceWatcher.error('Watcher error:', error);

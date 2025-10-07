@@ -16,31 +16,31 @@ export function loadFileIntoWindow(window: BrowserWindow, filePath: string) {
             return;
         }
         const state = windowStates.get(windowId);
-        
+
         if (state) {
             state.filePath = filePath;
             state.documentEdited = false;
         } else {
             console.error('[LOAD_FILE] No window state found for window ID:', windowId);
         }
-        
+
         console.log('[LOAD_FILE] Sending file-opened-from-os event to window', window.id);
         console.log('[LOAD_FILE] Event payload:', { filePath, contentLength: content.length });
         window.webContents.send('file-opened-from-os', { filePath, content });
         console.log('[LOAD_FILE] Event sent successfully');
-        
+
         // Set represented filename for macOS
         if (process.platform === 'darwin') {
             window.setRepresentedFilename(filePath);
         }
-        
+
         // Add to recent documents
         addToRecentItems('documents', filePath, basename(filePath));
-        
+
         // Start watching the file for changes
-        console.log('[LOAD_FILE] Starting file watcher');
+        // console.log('[LOAD_FILE] Starting file watcher');
         startFileWatcher(window, filePath);
-        
+
     } catch (error) {
         console.error('[LOAD_FILE] Error loading file from OS:', error);
     }
