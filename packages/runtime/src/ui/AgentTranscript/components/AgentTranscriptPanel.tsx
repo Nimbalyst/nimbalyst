@@ -17,6 +17,7 @@ interface AgentTranscriptPanelProps {
   initialSettings?: TranscriptSettings;
   onFileClick?: (filePath: string) => void;
   onTodoClick?: (todo: TodoItem) => void;
+  hideSidebar?: boolean;  // Hide the prompts/files/todos sidebar
 }
 
 export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
@@ -26,7 +27,8 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   showSettings,
   initialSettings,
   onFileClick,
-  onTodoClick
+  onTodoClick,
+  hideSidebar = false
 }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const stored = localStorage.getItem(`agent-transcript-sidebar-${sessionId}`);
@@ -100,8 +102,8 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
         />
       </div>
 
-      {/* Toggle Button */}
-      <button
+      {/* Toggle Button - hidden if hideSidebar is true */}
+      {!hideSidebar && <button
         onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         style={{
           position: 'absolute',
@@ -136,10 +138,10 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         )}
-      </button>
+      </button>}
 
-      {/* Sidebar with tabs */}
-      <div
+      {/* Sidebar with tabs - hidden if hideSidebar is true */}
+      {!hideSidebar && <div
         style={{
           display: 'flex',
           flexDirection: 'column',
@@ -260,7 +262,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
             </div>
           </>
         )}
-      </div>
+      </div>}
     </div>
   );
 };

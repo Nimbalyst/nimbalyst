@@ -1514,6 +1514,7 @@ export function AIChat({
               <AgentTranscriptPanel
                 sessionId={currentSessionId!}
                 sessionData={sessionData}
+                hideSidebar={true}
                 onFileClick={(filePath: string) => {
                   // Request to open a file
                   if (window.electronAPI && workspacePath) {
