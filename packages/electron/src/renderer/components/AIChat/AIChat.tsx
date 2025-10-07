@@ -1,6 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { ChatHeader } from './ChatHeader';
-import { ChatMessages } from './ChatMessages';
 import { ChatInput } from './ChatInput';
 import { EmptyState } from './EmptyState';
 import { PerformanceMetrics } from './PerformanceMetrics';
@@ -9,6 +8,8 @@ import { logger } from '../../utils/logger';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
 import { DEFAULT_MODELS } from '@stravu/runtime/ai/modelConstants';
 import { editorRegistry } from '@stravu/runtime/ai/EditorRegistry';
+import { AgentTranscriptPanel } from '@stravu/runtime';
+import type { SessionData } from '@stravu/runtime/ai/server/types';
 import './AIChat.css';
 
 interface AIChatProps {
@@ -1415,6 +1416,30 @@ export function AIChat({
     }
   }, [currentSessionId, onSessionIdChange]);
 
+  // Construct SessionData for AgentTranscriptPanel
+  const sessionData = useMemo<SessionData | null>(() => {
+    if (!currentSessionId) return null;
+
+    const session = getCurrentSession();
+    if (!session) return null;
+
+    return {
+      id: currentSessionId,
+      provider: session.provider,
+      model: session.model,
+      sessionType: 'chat', // AIChat sidebar sessions are chat type
+      messages: messages,
+      documentContext: documentContext,
+      workspacePath: workspacePath,
+      name: session.name,
+      title: session.title,
+      draftInput: inputValue,
+      createdAt: session.createdAt || Date.now(),
+      updatedAt: Date.now(),
+      metadata: session.metadata || {}
+    };
+  }, [currentSessionId, messages, documentContext, workspacePath, inputValue, sessions]);
+
   if (isCollapsed) {
     return (
       <button
@@ -1484,27 +1509,37 @@ export function AIChat({
         <>
           <PerformanceMetrics show={showPerformanceMetrics} />
 
-          <ChatMessages
-            messages={messages}
-            isLoading={isLoading}
-            onApplyEdit={handleApplyEdit}
-            provider={getCurrentSession()?.provider || (currentModel ? parseModelId(currentModel).provider : undefined)}
-            modelName={(() => {
-              const effectiveModel = getEffectiveModelId();
-              return effectiveModel ? getModelDisplayName(effectiveModel) : undefined;
-            })()}
-            hasDocument={!!documentContext && !!(documentContext.filePath || documentContext.content)}
-            currentFilePath={documentContext?.filePath}
-            onOpenFile={(filePath: string) => {
-              // Request to open a file - this should be handled by the parent App component
-              if (window.electronAPI && workspacePath) {
-                // Use IPC to open the file in the workspace
-                window.electronAPI.invoke('workspace-open-file', workspacePath, filePath).catch((err: Error) => {
-                  logger.ui.error('Failed to open file from tool call:', err);
-                });
-              }
-            }}
-          />
+          {sessionData ? (
+            <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+              <AgentTranscriptPanel
+                sessionId={currentSessionId!}
+                sessionData={sessionData}
+                onFileClick={(filePath: string) => {
+                  // Request to open a file
+                  if (window.electronAPI && workspacePath) {
+                    window.electronAPI.invoke('workspace-open-file', workspacePath, filePath).catch((err: Error) => {
+                      logger.ui.error('Failed to open file from tool call:', err);
+                    });
+                  }
+                }}
+                onTodoClick={(todo) => {
+                  console.log('[AIChat] TODO clicked:', todo);
+                }}
+                initialSettings={{
+                  showToolCalls: true,
+                  compactMode: false,
+                  collapseTools: false,
+                  showThinking: true,
+                  showSessionInit: false
+                }}
+              />
+            </div>
+          ) : (
+            <div className="ai-chat-empty" style={{ flex: 1 }}>
+              <p>No session active</p>
+              <p className="ai-chat-empty-hint">Click + to create a new session</p>
+            </div>
+          )}
 
           <ChatInput
             ref={chatInputRef}
