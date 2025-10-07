@@ -210,7 +210,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const options: any = {
         // The SDK might internally need the CLI path
         pathToClaudeCodeExecutable: await this.findCliPath().catch(() => undefined),
-        customSystemPrompt: systemPrompt,
+        systemPrompt: {
+          type: 'preset',
+          preset: 'claude_code',
+          append: systemPrompt
+        },
         mcpServers: this.getMcpServersConfig(),
         allowedTools,
         cwd: workspacePath,
