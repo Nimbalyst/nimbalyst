@@ -653,6 +653,25 @@ export default function App() {
     }
   }, [tabs]);
 
+  // Open the bugs tab - virtual screen
+  const openBugsTab = useCallback(() => {
+    const virtualPath = 'virtual://tracker-bugs';
+
+    // Check if bugs tab is already open
+    const existingTab = tabs.findTabByPath(virtualPath);
+    if (existingTab) {
+      tabs.switchTab(existingTab.id);
+      return;
+    }
+
+    // Add the bugs tab (no content needed - BugsScreen renders directly)
+    const tabId = tabs.addTab(virtualPath, '');
+    if (tabId) {
+      // Mark the tab as virtual
+      tabs.updateTab(tabId, { isVirtual: true });
+    }
+  }, [tabs]);
+
   // Listen for IPC events from menu
   useEffect(() => {
     if (!window.electronAPI?.on) return;
@@ -1081,10 +1100,7 @@ export default function App() {
           currentMode={navigationMode}
           onModeChange={handleNavigationModeChange}
           onOpenPlans={openPlansTab}
-          onOpenBugs={() => {
-            // TODO: Implement bugs view
-            console.log('Open bugs view');
-          }}
+          onOpenBugs={openBugsTab}
           onOpenHistory={() => {
             // Open session manager
             if (window.electronAPI) {

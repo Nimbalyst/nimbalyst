@@ -19,6 +19,30 @@ export const VIRTUAL_DOCS: Record<string, VirtualDocumentDescriptor> = {
     assetPath: 'assets/plans.md',
     virtualPath: `${VIRTUAL_DOC_PROTOCOL}plans`,
   },
+  TRACKER_BUGS: {
+    id: 'tracker-bugs',
+    title: 'Bugs',
+    assetPath: 'assets/tracker-bugs.md',
+    virtualPath: `${VIRTUAL_DOC_PROTOCOL}tracker-bugs`,
+  },
+  TRACKER_TASKS: {
+    id: 'tracker-tasks',
+    title: 'Tasks',
+    assetPath: 'assets/tracker-tasks.md',
+    virtualPath: `${VIRTUAL_DOC_PROTOCOL}tracker-tasks`,
+  },
+  TRACKER_IDEAS: {
+    id: 'tracker-ideas',
+    title: 'Ideas',
+    assetPath: 'assets/tracker-ideas.md',
+    virtualPath: `${VIRTUAL_DOC_PROTOCOL}tracker-ideas`,
+  },
+  TRACKER_ALL: {
+    id: 'tracker-all',
+    title: 'All Tracker Items',
+    assetPath: 'assets/tracker-all.md',
+    virtualPath: `${VIRTUAL_DOC_PROTOCOL}tracker-all`,
+  },
 };
 
 /**

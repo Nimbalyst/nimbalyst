@@ -12,6 +12,7 @@ import type { Tab } from '../TabManager/TabManager';
 import { getEditorPool } from '../../services/EditorPool';
 import { logger } from '../../utils/logger';
 import { PlanScreen } from '../PlanScreen/PlanScreen';
+import { BugsScreen } from '../BugsScreen/BugsScreen';
 import './EditorContainer.css';
 
 interface EditorContainerProps {
@@ -600,6 +601,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
 
         // Check if this is a virtual plan tab
         const isPlanTab = tab.isVirtual && tab.filePath === 'virtual://plans';
+        const isBugsTab = tab.isVirtual && tab.filePath === 'virtual://tracker-bugs';
 
         if (isPlanTab) {
           // Render PlanScreen directly for virtual plan tabs
@@ -611,6 +613,20 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
               data-file-path={tab.filePath}
             >
               <PlanScreen />
+            </div>
+          );
+        }
+
+        if (isBugsTab) {
+          // Render BugsScreen directly for virtual bugs tabs
+          return (
+            <div
+              key={tab.id}
+              className={`multi-editor-instance ${isActive ? 'active' : 'hidden'}`}
+              data-active={isActive ? 'true' : 'false'}
+              data-file-path={tab.filePath}
+            >
+              <BugsScreen />
             </div>
           );
         }

@@ -43,6 +43,43 @@ export interface MetadataChangeEvent {
   timestamp: Date;
 }
 
+/**
+ * Tracker item types
+ */
+export type TrackerItemType = 'bug' | 'task' | 'plan' | 'idea';
+export type TrackerItemStatus = 'to-do' | 'in-progress' | 'in-review' | 'done' | 'blocked';
+export type TrackerItemPriority = 'low' | 'medium' | 'high' | 'critical';
+
+/**
+ * Tracker item entry in the database cache
+ */
+export interface TrackerItem {
+  id: string;
+  type: TrackerItemType;
+  title: string;
+  status: TrackerItemStatus;
+  priority?: TrackerItemPriority;
+  owner?: string;
+  module: string;         // file path where item is defined
+  lineNumber?: number;
+  workspace: string;
+  tags?: string[];
+  created?: string;
+  updated?: string;
+  dueDate?: string;
+  lastIndexed: Date;
+}
+
+/**
+ * Event emitted when tracker items change
+ */
+export interface TrackerItemChangeEvent {
+  added: TrackerItem[];
+  updated: TrackerItem[];
+  removed: string[];    // Just IDs for removed entries
+  timestamp: Date;
+}
+
 export interface DocumentService {
   /**
    * List all documents in the current workspace
@@ -100,6 +137,28 @@ export interface DocumentService {
    * Notify that a document's frontmatter has changed (e.g., from AI summary generation)
    */
   notifyFrontmatterChanged?(path: string, frontmatter: Record<string, unknown>): void;
+
+  /**
+   * List all tracker items in the workspace
+   */
+  listTrackerItems?(): Promise<TrackerItem[]>;
+
+  /**
+   * Get tracker items by type
+   */
+  getTrackerItemsByType?(type: TrackerItemType): Promise<TrackerItem[]>;
+
+  /**
+   * Get tracker items by module (file path)
+   */
+  getTrackerItemsByModule?(module: string): Promise<TrackerItem[]>;
+
+  /**
+   * Watch for tracker item changes
+   */
+  watchTrackerItems?(
+    listener: (change: TrackerItemChangeEvent) => void
+  ): () => void;
 }
 
 /**

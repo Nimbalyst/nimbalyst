@@ -7,11 +7,15 @@ import {
   DocumentService,
   DocumentOpenOptions,
   DocumentMetadataEntry,
-  MetadataChangeEvent
+  MetadataChangeEvent,
+  TrackerItem,
+  TrackerItemChangeEvent,
+  TrackerItemType
 } from '@stravu/runtime';
 import crypto from 'crypto';
 import { extractFrontmatter, extractCommonFields } from '../utils/frontmatterReader';
 import { VIRTUAL_DOCS, isVirtualPath } from '@stravu/runtime';
+import { database } from '../database/PGLiteDatabaseWorker';
 
 export class ElectronDocumentService implements DocumentService {
   private workspacePath: string;
@@ -25,6 +29,9 @@ export class ElectronDocumentService implements DocumentService {
   private metadataWatchers: Map<string, (change: MetadataChangeEvent) => void> = new Map();
   private fileStateCache: Map<string, { mtime: number; size: number; hash?: string }> = new Map();
   private initializationPromise: Promise<void> | null = null;
+
+  // Tracker items cache
+  private trackerItemWatchers: Map<string, (change: TrackerItemChangeEvent) => void> = new Map();
 
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
@@ -156,6 +163,9 @@ export class ElectronDocumentService implements DocumentService {
               updated.push(metadata);
             }
           }
+
+          // Update tracker items cache for this file
+          await this.updateTrackerItemsCache(newDoc.path);
         } catch (error) {
           console.error(`[DocumentService] Failed to extract metadata for ${newDoc.path}:`, error);
         }
@@ -512,6 +522,203 @@ export class ElectronDocumentService implements DocumentService {
     }
   }
 
+  // Tracker Items API methods
+  async listTrackerItems(): Promise<TrackerItem[]> {
+    try {
+      const result = await database.query<any>(
+        `SELECT * FROM tracker_items WHERE workspace = $1 ORDER BY last_indexed DESC`,
+        [this.workspacePath]
+      );
+      return result.rows.map(row => this.rowToTrackerItem(row));
+    } catch (error) {
+      console.error('[DocumentService] Failed to list tracker items:', error);
+      return [];
+    }
+  }
+
+  async getTrackerItemsByType(type: TrackerItemType): Promise<TrackerItem[]> {
+    try {
+      const result = await database.query<any>(
+        `SELECT * FROM tracker_items WHERE workspace = $1 AND type = $2 ORDER BY last_indexed DESC`,
+        [this.workspacePath, type]
+      );
+      return result.rows.map(row => this.rowToTrackerItem(row));
+    } catch (error) {
+      console.error('[DocumentService] Failed to get tracker items by type:', error);
+      return [];
+    }
+  }
+
+  async getTrackerItemsByModule(module: string): Promise<TrackerItem[]> {
+    try {
+      const result = await database.query<any>(
+        `SELECT * FROM tracker_items WHERE workspace = $1 AND module = $2 ORDER BY line_number ASC`,
+        [this.workspacePath, module]
+      );
+      return result.rows.map(row => this.rowToTrackerItem(row));
+    } catch (error) {
+      console.error('[DocumentService] Failed to get tracker items by module:', error);
+      return [];
+    }
+  }
+
+  watchTrackerItems(listener: (change: TrackerItemChangeEvent) => void): () => void {
+    const id = Date.now().toString();
+    this.trackerItemWatchers.set(id, listener);
+
+    // Return unsubscribe function
+    return () => {
+      this.trackerItemWatchers.delete(id);
+    };
+  }
+
+  private rowToTrackerItem(row: any): TrackerItem {
+    return {
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      status: row.status,
+      priority: row.priority || undefined,
+      owner: row.owner || undefined,
+      module: row.module,
+      lineNumber: row.line_number || undefined,
+      workspace: row.workspace,
+      tags: row.tags ? JSON.parse(row.tags) : undefined,
+      created: row.created || undefined,
+      updated: row.updated || undefined,
+      dueDate: row.due_date || undefined,
+      lastIndexed: new Date(row.last_indexed)
+    };
+  }
+
+  /**
+   * Parse tracker items from markdown content
+   */
+  private async parseTrackerItems(filePath: string, relativePath: string): Promise<TrackerItem[]> {
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      const items: TrackerItem[] = [];
+      const lines = content.split('\n');
+
+      // Regex to match: text @type[id:... status:...]
+      const trackerRegex = /(.+?)\s+@(bug|task|plan|idea)\[(.+?)\]/;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const match = line.match(trackerRegex);
+
+        if (match) {
+          const [, title, type, propsStr] = match;
+
+          // Parse key:value pairs
+          const props: Record<string, string> = {};
+          const propRegex = /(\w+):((?:"[^"]*")|(?:[^\s\]]+))/g;
+          let propMatch;
+          while ((propMatch = propRegex.exec(propsStr)) !== null) {
+            const [, key, value] = propMatch;
+            props[key] = value.startsWith('"') ? value.slice(1, -1).replace(/\\"/g, '"') : value;
+          }
+
+          items.push({
+            id: props.id || `${type}_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
+            type: type as TrackerItemType,
+            title: title.trim().replace(/^- /, '').replace(/^\[ \] /, '').replace(/^\[x\] /, ''),
+            status: (props.status || 'to-do') as any,
+            priority: props.priority as any,
+            owner: props.owner,
+            module: relativePath,
+            lineNumber: i + 1,
+            workspace: this.workspacePath,
+            tags: props.tags ? props.tags.split(',') : undefined,
+            created: props.created,
+            updated: props.updated,
+            dueDate: props.due || undefined,
+            lastIndexed: new Date()
+          });
+        }
+      }
+
+      return items;
+    } catch (error) {
+      console.error(`[DocumentService] Failed to parse tracker items from ${relativePath}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Update tracker items cache for a file
+   */
+  private async updateTrackerItemsCache(relativePath: string): Promise<void> {
+    const fullPath = path.join(this.workspacePath, relativePath);
+
+    try {
+      // Parse tracker items from the file
+      const items = await this.parseTrackerItems(fullPath, relativePath);
+
+      // Get existing items for this module
+      const existingResult = await database.query<any>(
+        `SELECT id FROM tracker_items WHERE workspace = $1 AND module = $2`,
+        [this.workspacePath, relativePath]
+      );
+      const existingIds = new Set(existingResult.rows.map(row => row.id));
+      const newIds = new Set(items.map(item => item.id));
+
+      // Find items to remove (existed before but not anymore)
+      const removedIds = Array.from(existingIds).filter(id => !newIds.has(id));
+
+      // Remove old items
+      if (removedIds.length > 0) {
+        await database.query(
+          `DELETE FROM tracker_items WHERE id = ANY($1)`,
+          [removedIds]
+        );
+      }
+
+      // Upsert new/updated items
+      for (const item of items) {
+        await database.query(
+          `INSERT INTO tracker_items (
+            id, type, title, status, priority, owner, module, line_number,
+            workspace, tags, created, updated, due_date, last_indexed
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          ON CONFLICT (id) DO UPDATE SET
+            type = $2, title = $3, status = $4, priority = $5, owner = $6,
+            module = $7, line_number = $8, tags = $10, updated = $12, due_date = $13, last_indexed = $14`,
+          [
+            item.id,
+            item.type,
+            item.title,
+            item.status,
+            item.priority || null,
+            item.owner || null,
+            item.module,
+            item.lineNumber || null,
+            item.workspace,
+            item.tags ? JSON.stringify(item.tags) : null,
+            item.created || null,
+            item.updated || null,
+            item.dueDate || null,
+            item.lastIndexed
+          ]
+        );
+      }
+
+      // Notify watchers if there are changes
+      if (items.length > 0 || removedIds.length > 0) {
+        const changeEvent: TrackerItemChangeEvent = {
+          added: items.filter(item => !existingIds.has(item.id)),
+          updated: items.filter(item => existingIds.has(item.id)),
+          removed: removedIds,
+          timestamp: new Date()
+        };
+
+        this.trackerItemWatchers.forEach(callback => callback(changeEvent));
+      }
+    } catch (error) {
+      console.error(`[DocumentService] Failed to update tracker items cache for ${relativePath}:`, error);
+    }
+  }
+
   destroy() {
     if (this.watchInterval) {
       clearInterval(this.watchInterval);
@@ -519,6 +726,7 @@ export class ElectronDocumentService implements DocumentService {
     }
     this.watchers.clear();
     this.metadataWatchers.clear();
+    this.trackerItemWatchers.clear();
     this.metadataCache.clear();
     this.metadataByPath.clear();
     this.fileStateCache.clear();
@@ -694,6 +902,52 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     } catch (error) {
       console.error('[DocumentService] load-virtual failed:', error);
       return null;
+    }
+  });
+
+  // Tracker items handlers
+  ipcMain.handle('document-service:tracker-items-list', async (event) => {
+    try {
+      return await requireDocumentService(event).listTrackerItems();
+    } catch (error) {
+      console.error('[DocumentService] tracker-items-list failed:', error);
+      return [];
+    }
+  });
+
+  ipcMain.handle('document-service:tracker-items-by-type', async (event, type: TrackerItemType) => {
+    try {
+      return await requireDocumentService(event).getTrackerItemsByType(type);
+    } catch (error) {
+      console.error('[DocumentService] tracker-items-by-type failed:', error);
+      return [];
+    }
+  });
+
+  ipcMain.handle('document-service:tracker-items-by-module', async (event, module: string) => {
+    try {
+      return await requireDocumentService(event).getTrackerItemsByModule(module);
+    } catch (error) {
+      console.error('[DocumentService] tracker-items-by-module failed:', error);
+      return [];
+    }
+  });
+
+  // Handle tracker item watch subscriptions
+  ipcMain.on('document-service:tracker-items-watch', (event) => {
+    let unsubscribe: (() => void) | undefined;
+    try {
+      const service = requireDocumentService(event);
+      unsubscribe = service.watchTrackerItems((change: TrackerItemChangeEvent) => {
+        event.sender.send('document-service:tracker-items-changed', change);
+      });
+    } catch (error) {
+      console.error('[DocumentService] tracker-items-watch failed to start:', error);
+    }
+
+    if (unsubscribe) {
+      // Clean up when renderer is destroyed
+      event.sender.once('destroyed', unsubscribe);
     }
   });
 }

@@ -27,3 +27,5 @@ export {
 } from './ItemTrackerPlugin';
 
 export { default as ItemTrackerPlugin } from './ItemTrackerPlugin';
+
+export { TrackerTable } from './TrackerTable';

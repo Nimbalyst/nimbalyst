@@ -140,6 +140,29 @@ The Electron app includes a Window > Theme menu to switch between all themes. Th
 - **Always set both**: When applying themes, set both `data-theme` attribute AND CSS class on root element
 - **See THEMING.md**: Comprehensive theming documentation at `/packages/electron/THEMING.md`
 
+### CSS Variables Reference
+
+**CRITICAL: NEVER MAKE UP CSS VARIABLE NAMES!**
+
+When writing CSS, you MUST use the correct CSS variables from `/packages/rexical/src/themes/PlaygroundEditorTheme.css`. Do NOT invent variable names.
+
+**Correct CSS variables:**
+- `--surface-primary` - Primary background surface (NOT `--bg-primary`)
+- `--surface-secondary` - Secondary background surface (NOT `--bg-secondary`)
+- `--surface-tertiary` - Tertiary background surface (NOT `--bg-tertiary`)
+- `--surface-hover` - Hover state background
+- `--border-primary` - Primary border color (NOT `--border-color`)
+- `--text-primary` - Primary text color
+- `--text-secondary` - Secondary text color
+- `--text-tertiary` - Tertiary/muted text color
+- `--primary-color` - Primary accent color (NOT `--accent-color`)
+
+**CSS Rules:**
+1. **ALWAYS reference** `/packages/rexical/src/themes/PlaygroundEditorTheme.css` when writing CSS
+2. **NEVER hardcode** theme-specific styles (no `[data-theme="dark"]` selectors)
+3. **NEVER invent** CSS variable names - only use variables that exist in PlaygroundEditorTheme.css
+4. **CSS variables handle theming** - they automatically adapt to light/dark/crystal-dark themes
+
 ## Window State Persistence
 
 The Electron app includes comprehensive window state persistence:

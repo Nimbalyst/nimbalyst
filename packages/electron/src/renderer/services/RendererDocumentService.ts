@@ -3,7 +3,10 @@ import {
   DocumentService,
   DocumentOpenOptions,
   DocumentMetadataEntry,
-  MetadataChangeEvent
+  MetadataChangeEvent,
+  TrackerItem,
+  TrackerItemChangeEvent,
+  TrackerItemType
 } from '@stravu/runtime';
 
 /**
@@ -12,6 +15,7 @@ import {
 export class RendererDocumentService implements DocumentService {
   private changeListeners: Map<string, (documents: Document[]) => void> = new Map();
   private metadataChangeListeners: Map<string, (change: MetadataChangeEvent) => void> = new Map();
+  private trackerItemChangeListeners: Map<string, (change: TrackerItemChangeEvent) => void> = new Map();
 
   constructor() {
     // Only set up listeners if window.electronAPI is available
@@ -24,6 +28,11 @@ export class RendererDocumentService implements DocumentService {
       // Listen for metadata change events from main process
       window.electronAPI.on('document-service:metadata-changed', (change: MetadataChangeEvent) => {
         this.metadataChangeListeners.forEach(callback => callback(change));
+      });
+
+      // Listen for tracker item change events from main process
+      window.electronAPI.on('document-service:tracker-items-changed', (change: TrackerItemChangeEvent) => {
+        this.trackerItemChangeListeners.forEach(callback => callback(change));
       });
     }
   }
@@ -105,6 +114,37 @@ export class RendererDocumentService implements DocumentService {
     if (!result.success) {
       throw new Error(result.error || 'Failed to notify frontmatter change');
     }
+  }
+
+  // Tracker items API methods
+  async listTrackerItems(): Promise<TrackerItem[]> {
+    if (!window.electronAPI) return [];
+    return window.electronAPI.invoke('document-service:tracker-items-list');
+  }
+
+  async getTrackerItemsByType(type: TrackerItemType): Promise<TrackerItem[]> {
+    if (!window.electronAPI) return [];
+    return window.electronAPI.invoke('document-service:tracker-items-by-type', type);
+  }
+
+  async getTrackerItemsByModule(module: string): Promise<TrackerItem[]> {
+    if (!window.electronAPI) return [];
+    return window.electronAPI.invoke('document-service:tracker-items-by-module', module);
+  }
+
+  watchTrackerItems(listener: (change: TrackerItemChangeEvent) => void): () => void {
+    const id = Date.now().toString();
+    this.trackerItemChangeListeners.set(id, listener);
+
+    // Start watching if this is the first listener
+    if (this.trackerItemChangeListeners.size === 1 && window.electronAPI) {
+      window.electronAPI.send('document-service:tracker-items-watch');
+    }
+
+    // Return unsubscribe function
+    return () => {
+      this.trackerItemChangeListeners.delete(id);
+    };
   }
 }
 

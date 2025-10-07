@@ -249,6 +249,39 @@ class PGLiteWorker {
       CREATE INDEX IF NOT EXISTS idx_history_workspace_file ON document_history(workspace_id, file_path);
       CREATE INDEX IF NOT EXISTS idx_history_timestamp ON document_history(timestamp);
     `);
+
+    // Tracker Items table
+    console.log('[PGLite Worker] Creating tracker_items table...');
+    try {
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS tracker_items (
+          id TEXT PRIMARY KEY,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          status TEXT NOT NULL,
+          priority TEXT,
+          owner TEXT,
+          module TEXT NOT NULL,
+          line_number INTEGER,
+          workspace TEXT NOT NULL,
+          tags TEXT,
+          created TEXT,
+          updated TEXT,
+          due_date TEXT,
+          last_indexed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tracker_items_type ON tracker_items(type);
+        CREATE INDEX IF NOT EXISTS idx_tracker_items_status ON tracker_items(status);
+        CREATE INDEX IF NOT EXISTS idx_tracker_items_module ON tracker_items(module);
+        CREATE INDEX IF NOT EXISTS idx_tracker_items_workspace ON tracker_items(workspace);
+        CREATE INDEX IF NOT EXISTS idx_tracker_items_priority ON tracker_items(priority);
+      `);
+      console.log('[PGLite Worker] tracker_items table created successfully');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create tracker_items table:', error);
+      throw error;
+    }
   }
 
   async query(message) {
