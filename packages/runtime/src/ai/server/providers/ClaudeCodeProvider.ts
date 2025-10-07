@@ -18,6 +18,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { app } from 'electron';
+import { buildClaudeCodeSystemPromptAddendum } from '../../prompt';
 
 export class ClaudeCodeProvider extends BaseAIProvider {
   private abortController: AbortController | null = null;
@@ -810,39 +811,9 @@ You are an AI assistant integrated into the Preditor editor's agentic coding wor
 When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
     }
 
-    const basePrompt = super.buildSystemPrompt(documentContext);
-
-    // If no document is open, return just the base prompt (which already has the no-document warning)
-    const hasDocument = documentContext && (documentContext.filePath || documentContext.content);
-    if (!hasDocument) {
-      return basePrompt;
-    }
-
-    return `${basePrompt}
-
-You have access to the following MCP tools for document editing:
-- getDocument: Get the current document content and metadata
-- applyDiff: Apply text replacements to the document with diff preview
-- streamContent: Stream markdown content into the document at specific positions
-- getSelection: Get the current selection or cursor position
-- navigateTo: Navigate to a specific line and column
-- getOutline: Get the document outline (headings structure)
-- searchInDocument: Search for text in the current document
-
-CRITICAL RESPONSE RULES - YOU MUST FOLLOW THESE:
-1. When editing documents, your ENTIRE response should be 1 short sentence MAX
-2. NEVER explain what you're about to do (e.g., "Let me...", "I'll...", "First...")
-3. NEVER describe what you added - the user sees it in the document
-4. NEVER list the content you added
-5. NEVER explain your reasoning unless explicitly asked
-
-GOOD responses after editing:
-- "Done."
-- "Added the section."
-- "Fixed the formatting."
-- "Updated with examples."
-
-Remember: The user can SEE the changes in their editor. They don't need you to describe them.`;
+    // For non-coding sessions, use the addendum-based approach
+    const addendum = buildClaudeCodeSystemPromptAddendum(documentContext);
+    return addendum;
   }
 
   /**
