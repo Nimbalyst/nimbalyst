@@ -492,7 +492,12 @@ export function registerWorkspaceHandlers() {
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return null;
 
-        return getWorkspaceTabState(state.workspacePath);
+        // Use different storage for agentic coding windows
+        const storageKey = state.mode === 'agentic-coding'
+            ? `${state.workspacePath}:agentic-coding`
+            : state.workspacePath;
+
+        return getWorkspaceTabState(storageKey);
     });
 
     // Save workspace tab state
@@ -503,7 +508,12 @@ export function registerWorkspaceHandlers() {
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return;
 
-        saveWorkspaceTabState(state.workspacePath, tabState);
+        // Use different storage for agentic coding windows
+        const storageKey = state.mode === 'agentic-coding'
+            ? `${state.workspacePath}:agentic-coding`
+            : state.workspacePath;
+
+        saveWorkspaceTabState(storageKey, tabState);
     });
 
     // Clear workspace tab state
@@ -514,7 +524,12 @@ export function registerWorkspaceHandlers() {
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return;
 
-        clearWorkspaceTabState(state.workspacePath);
+        // Use different storage for agentic coding windows
+        const storageKey = state.mode === 'agentic-coding'
+            ? `${state.workspacePath}:agentic-coding`
+            : state.workspacePath;
+
+        clearWorkspaceTabState(storageKey);
     });
 
     // File operations for workspace files
