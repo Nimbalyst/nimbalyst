@@ -222,28 +222,10 @@ function exportTopLevelElements(
       elementTransformers,
     );
   } else if ($isDecoratorNode(node)) {
-     // Check all transformers for decorator nodes
-    // First try element transformers
-    for (const transformer of elementTransformers) {
-      const result = transformer.export?.(node, () => node.getTextContent());
-      if (result != null) {
-        return result;
-      }
-    }
-    // Then try text match transformers
-    for (const transformer of textMatchTransformers) {
-      const result = transformer.export?.(
-        node,
-        (_node) => exportChildren(_node, textFormatTransformers, textMatchTransformers, undefined, undefined, shouldPreserveNewLines, elementTransformers),
-        (textNode, textContent) => textContent
-      );
-      if (result != null) {
-        return result;
-      }
-    }
-    // If no transformer handles this decorator node, throw an error
-    console.error(`No transformer found for decorator node type: ${node.getType()}`);
-    throw new Error(`Cannot export decorator node of type "${node.getType()}" - no transformer registered`);
+    // Decorator nodes at top level: just return text content as fallback
+    // Element transformers were already checked above (lines 192-211)
+    // Text match transformers will be checked if this decorator is a child in exportChildren
+    return node.getTextContent();
   } else {
     return null;
   }
@@ -365,9 +347,36 @@ function exportChildren(
         }
       }
     } else if ($isDecoratorNode(child)) {
-      // Check element transformers for decorator nodes (like MermaidNode)
+      // Try text match transformers first (like IMAGE_TRANSFORMER)
       let handled = false;
-      if (elementTransformers) {
+      for (const transformer of textMatchTransformers) {
+        if (!transformer.export) {
+          continue;
+        }
+        const result = transformer.export(
+          child,
+          (_node: ElementNode) =>
+            exportChildren(
+              _node,
+              textFormatTransformers,
+              textMatchTransformers,
+              undefined,
+              undefined,
+              shouldPreserveNewLines,
+              elementTransformers,
+            ),
+          (node: TextNode, textContent: string) => textContent,
+        );
+
+        if (result != null) {
+          output.push(result);
+          handled = true;
+          break;
+        }
+      }
+
+      // If no text match transformer handled it, try element transformers (like MermaidNode)
+      if (!handled && elementTransformers) {
         for (const transformer of elementTransformers) {
           const result = transformer.export?.(child, () => '');
           if (result != null) {
@@ -377,10 +386,10 @@ function exportChildren(
           }
         }
       }
+
+      // If still no transformer handled it, just return text content (Lexical's default behavior)
       if (!handled) {
-        // If no transformer handles this decorator node, throw an error
-        console.error(`No transformer found for decorator node type: ${child.getType()}`);
-        throw new Error(`Cannot export decorator node of type "${child.getType()}" - no transformer registered`);
+        output.push(child.getTextContent());
       }
     }
   }
