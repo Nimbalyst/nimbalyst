@@ -230,6 +230,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAIChatState: (state: { collapsed: boolean; width: number; sessionId?: string; workspacePath: string }) => ipcRenderer.send('set-ai-chat-state', state),
 
   // QuickOpen operations
+  buildQuickOpenCache: (workspacePath: string) => ipcRenderer.invoke('build-quick-open-cache', workspacePath),
   searchWorkspaceFiles: (workspacePath: string, query: string) => ipcRenderer.invoke('search-workspace-files', workspacePath, query),
   searchWorkspaceFileNames: (workspacePath: string, query: string) => ipcRenderer.invoke('search-workspace-file-names', workspacePath, query),
   searchWorkspaceFileContent: (workspacePath: string, query: string) => ipcRenderer.invoke('search-workspace-file-content', workspacePath, query),

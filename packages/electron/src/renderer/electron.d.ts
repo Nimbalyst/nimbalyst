@@ -81,6 +81,7 @@ interface ElectronAPI {
   setAIChatState: (state: { workspacePath: string; collapsed: boolean; width: number; currentSessionId?: string; draftInput?: string }) => void;
 
   // QuickOpen operations
+  buildQuickOpenCache?: (workspacePath: string) => Promise<{ success: boolean; fileCount?: number; error?: string }>;
   searchWorkspaceFiles?: (workspacePath: string, query: string) => Promise<any[]>;
   searchWorkspaceFileNames?: (workspacePath: string, query: string) => Promise<any[]>;
   searchWorkspaceFileContent?: (workspacePath: string, query: string) => Promise<any[]>;

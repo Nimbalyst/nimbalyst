@@ -38,6 +38,8 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   const [searchResults, setSearchResults] = useState<FileItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isContentSearch, setIsContentSearch] = useState(false);
+  const [contentSearchTriggered, setContentSearchTriggered] = useState(false);
+  const [mouseHasMoved, setMouseHasMoved] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
   const resultsListRef = useRef<HTMLUListElement>(null);
@@ -54,7 +56,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   // Combined list of files to display
   const displayFiles = searchQuery ? searchResults : recentFileItems;
 
-  // Search for files in the workspace
+  // Search for files in the workspace (name search only)
   const searchFiles = useCallback(async (query: string) => {
     if (!query.trim()) {
       setSearchResults([]);
@@ -62,11 +64,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
       return;
     }
 
-    // Check if it's a content search (starts with >)
-    const isContent = query.startsWith('>');
-    setIsContentSearch(isContent);
-
-    console.log('Searching for files with query:', query, 'in workspace:', workspacePath, 'content search:', isContent);
+    console.log('Searching for files with query:', query, 'in workspace:', workspacePath);
     setIsSearching(true);
 
     try {
@@ -78,12 +76,11 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         return;
       }
 
-      // First, get file name matches immediately
+      // Get file name matches
       if (api.searchWorkspaceFileNames) {
         const fileNameResults = await api.searchWorkspaceFileNames(workspacePath, query);
-        // console.log('File name results:', fileNameResults);
 
-        // Process and display file name results immediately
+        // Process and display file name results
         if (Array.isArray(fileNameResults)) {
           const processedFileNames = fileNameResults
             .map((result: any) => ({
@@ -95,81 +92,96 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
               isContentMatch: false,
             }));
 
-          // Set file name results immediately
           setSearchResults(processedFileNames);
-          setIsSearching(false); // Stop showing "Searching..." for file names
+          setIsSearching(false);
         }
-      }
-
-      // Then search content in the background (don't await!)
-      if (api.searchWorkspaceFileContent) {
-        // Run content search asynchronously without blocking
-        api.searchWorkspaceFileContent(workspacePath, query).then((contentResults: any) => {
-          // console.log('Content search results:', contentResults);
-
-          // Merge content results with existing file name results
-          if (Array.isArray(contentResults)) {
-            setSearchResults(prevResults => {
-              const mergedResults = [...prevResults];
-
-              // Process content results
-              for (const contentResult of contentResults) {
-                const existingIndex = mergedResults.findIndex(r => r.path === contentResult.path);
-
-                if (existingIndex >= 0) {
-                  // File already in results from name match, add content matches
-                  mergedResults[existingIndex].matches = contentResult.matches || [];
-                  mergedResults[existingIndex].isContentMatch = true;
-                } else {
-                  // New file found only by content
-                  mergedResults.push({
-                    path: contentResult.path,
-                    name: contentResult.path.split('/').pop() || contentResult.path,
-                    isRecent: recentFiles.includes(contentResult.path),
-                    matches: contentResult.matches || [],
-                    isFileNameMatch: false,
-                    isContentMatch: true,
-                  });
-                }
-              }
-
-              // Sort merged results: prioritize file name matches over content matches
-              mergedResults.sort((a, b) => {
-                // File name matches come first
-                if (a.isFileNameMatch && !b.isFileNameMatch) return -1;
-                if (!a.isFileNameMatch && b.isFileNameMatch) return 1;
-
-                // Then sort by number of matches (more matches = higher priority)
-                const aMatchCount = a.matches?.length || 0;
-                const bMatchCount = b.matches?.length || 0;
-                if (aMatchCount !== bMatchCount) {
-                  return bMatchCount - aMatchCount;
-                }
-
-                // Finally, sort alphabetically by file name
-                return a.name.localeCompare(b.name);
-              });
-
-              return mergedResults;
-            });
-          }
-        }).catch((error: any) => {
-          console.error('Error in content search:', error);
-          // Don't clear results on content search error, keep file name results
-        });
       }
     } catch (error) {
       console.error('Error searching files:', error);
       setSearchResults([]);
       setIsSearching(false);
     }
-  }, [workspacePath, recentFiles, currentFilePath]);
+  }, [workspacePath, recentFiles]);
+
+  // Search file contents (triggered manually)
+  const searchFileContents = useCallback(async () => {
+    if (!searchQuery.trim() || contentSearchTriggered) {
+      return; // Don't search if already triggered or no query
+    }
+
+    setContentSearchTriggered(true);
+    setIsSearching(true);
+
+    try {
+      const api = (window as any).electronAPI || (window as any).electron;
+      if (!api || !api.searchWorkspaceFileContent) {
+        setIsSearching(false);
+        return;
+      }
+
+      const contentResults = await api.searchWorkspaceFileContent(workspacePath, searchQuery);
+
+      // Merge content results with existing file name results
+      if (Array.isArray(contentResults)) {
+        setSearchResults(prevResults => {
+          const mergedResults = [...prevResults];
+
+          // Process content results
+          for (const contentResult of contentResults) {
+            const existingIndex = mergedResults.findIndex(r => r.path === contentResult.path);
+
+            if (existingIndex >= 0) {
+              // File already in results from name match, add content matches
+              mergedResults[existingIndex].matches = contentResult.matches || [];
+              mergedResults[existingIndex].isContentMatch = true;
+            } else {
+              // New file found only by content
+              mergedResults.push({
+                path: contentResult.path,
+                name: contentResult.path.split('/').pop() || contentResult.path,
+                isRecent: recentFiles.includes(contentResult.path),
+                matches: contentResult.matches || [],
+                isFileNameMatch: false,
+                isContentMatch: true,
+              });
+            }
+          }
+
+          // Sort merged results: prioritize file name matches over content matches
+          mergedResults.sort((a, b) => {
+            // File name matches come first
+            if (a.isFileNameMatch && !b.isFileNameMatch) return -1;
+            if (!a.isFileNameMatch && b.isFileNameMatch) return 1;
+
+            // Then sort by number of matches (more matches = higher priority)
+            const aMatchCount = a.matches?.length || 0;
+            const bMatchCount = b.matches?.length || 0;
+            if (aMatchCount !== bMatchCount) {
+              return bMatchCount - aMatchCount;
+            }
+
+            // Finally, sort alphabetically by file name
+            return a.name.localeCompare(b.name);
+          });
+
+          return mergedResults;
+        });
+      }
+      setIsSearching(false);
+    } catch (error) {
+      console.error('Error in content search:', error);
+      setIsSearching(false);
+    }
+  }, [workspacePath, searchQuery, contentSearchTriggered, recentFiles]);
 
   // Debounced search
   useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
+
+    // Reset content search trigger when query changes
+    setContentSearchTriggered(false);
 
     if (searchQuery) {
       searchTimeoutRef.current = setTimeout(() => {
@@ -192,8 +204,30 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
       setSearchQuery('');
       setSelectedIndex(0);
       setSearchResults([]);
+      setContentSearchTriggered(false);
+      setMouseHasMoved(false);
       setTimeout(() => searchInputRef.current?.focus(), 100);
+
+      // Build file name cache in background
+      const api = (window as any).electronAPI || (window as any).electron;
+      if (api?.buildQuickOpenCache && workspacePath) {
+        api.buildQuickOpenCache(workspacePath).catch((error: any) => {
+          console.error('Failed to build quick open cache:', error);
+        });
+      }
     }
+  }, [isOpen, workspacePath]);
+
+  // Track mouse movement to distinguish between mouse hover and mouse at rest
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleMouseMove = () => {
+      setMouseHasMoved(true);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
   }, [isOpen]);
 
   // Scroll selected item into view
@@ -230,6 +264,12 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
             handleFileSelect(displayFiles[selectedIndex].path);
           }
           break;
+        case 'Tab':
+          e.preventDefault();
+          if (searchQuery && !contentSearchTriggered) {
+            searchFileContents();
+          }
+          break;
         case 'Escape':
           e.preventDefault();
           onClose();
@@ -239,7 +279,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, selectedIndex, displayFiles, onClose]);
+  }, [isOpen, selectedIndex, displayFiles, searchQuery, contentSearchTriggered, onClose, searchFileContents]);
 
   const handleFileSelect = (filePath: string) => {
     onFileSelect(filePath);
@@ -257,12 +297,23 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
             ref={searchInputRef}
             type="text"
             className="quick-open-search"
-            placeholder={isContentSearch ? "Searching content..." : "Search files by name and content..."}
+            placeholder="Search files by name..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           {isSearching && (
-            <div className="quick-open-searching">Searching...</div>
+            <div className="quick-open-searching">
+              {contentSearchTriggered ? 'Searching file contents...' : 'Searching...'}
+            </div>
+          )}
+          {!isSearching && searchQuery && !contentSearchTriggered && (
+            <button
+              className="quick-open-content-search-hint"
+              onClick={() => searchFileContents()}
+              title="Search in file contents"
+            >
+              <kbd>Tab</kbd> Search in file contents
+            </button>
           )}
         </div>
 
@@ -280,7 +331,11 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
                     index === selectedIndex ? 'selected' : ''
                   } ${file.isContentMatch ? 'content-match' : ''} ${file.isFileNameMatch ? 'name-match' : ''}`}
                   onClick={() => handleFileSelect(file.path)}
-                  onMouseEnter={() => setSelectedIndex(index)}
+                  onMouseEnter={() => {
+                    if (mouseHasMoved) {
+                      setSelectedIndex(index);
+                    }
+                  }}
                 >
                   <div className="quick-open-item-name">
                     {file.name}
@@ -329,6 +384,11 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
           <span className="quick-open-hint">
             <kbd>Enter</kbd> Open
           </span>
+          {searchQuery && !contentSearchTriggered && (
+            <span className="quick-open-hint">
+              <kbd>Tab</kbd> Search in file contents
+            </span>
+          )}
           <span className="quick-open-hint">
             <kbd>Esc</kbd> Close
           </span>

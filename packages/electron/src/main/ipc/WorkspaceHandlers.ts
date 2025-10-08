@@ -25,6 +25,9 @@ import {
 } from '../utils/store';
 import { loadFileIntoWindow } from '../file/FileOperations';
 
+// Cache for quick open file searches
+const fileNameCaches = new Map<string, Array<{ path: string; name: string }>>();
+
 export function registerWorkspaceHandlers() {
     // Get folder contents
     ipcMain.handle('get-folder-contents', (event, dirPath: string) => {
@@ -154,31 +157,55 @@ export function registerWorkspaceHandlers() {
         }
     });
 
-    // Search workspace file names only (fast)
+    // Build file name cache for quick open
+    ipcMain.handle('build-quick-open-cache', async (event, workspacePath: string) => {
+        try {
+            const escapedPath = workspacePath.replace(/["'\\]/g, '\\$&');
+            const findCommand = `find "${escapedPath}" -path "*/node_modules/*" -prune -o -type f \\( -name "*.md" -o -name "*.markdown" \\) -print 2>/dev/null`;
+            const { stdout } = await execAsync(findCommand, { shell: '/bin/bash' });
+
+            const cache: Array<{ path: string; name: string }> = [];
+            if (stdout) {
+                const files = stdout.split('\n').filter(f => f.trim());
+                for (const file of files) {
+                    cache.push({
+                        path: file,
+                        name: basename(file).toLowerCase()
+                    });
+                }
+            }
+
+            fileNameCaches.set(workspacePath, cache);
+            return { success: true, fileCount: cache.length };
+        } catch (error) {
+            console.error('Error building quick open cache:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
+    // Search workspace file names only (fast, uses cache)
     ipcMain.handle('search-workspace-file-names', async (event, workspacePath: string, query: string) => {
         try {
             const trimmedQuery = query.trim().toLowerCase();
             if (!trimmedQuery) return [];
 
-            // Escape special characters for shell
-            const escapedPath = workspacePath.replace(/["'\\]/g, '\\$&');
-
-            // First find all markdown files, then filter by basename matching the query
-            // Using awk to extract basename and match against query
-            const fileNameCommand = `find "${escapedPath}" -path "*/node_modules/*" -prune -o -type f \\( -name "*.md" -o -name "*.markdown" \\) -print 2>/dev/null | while read -r file; do basename="\$(basename "\$file")"; if echo "\$basename" | grep -qi "${trimmedQuery.replace(/["'\\]/g, '\\$&')}"; then echo "\$file"; fi; done | head -50`;
-            const { stdout: fileMatches } = await execAsync(fileNameCommand, { shell: '/bin/bash' });
-
-            const results = [];
-            if (fileMatches) {
-                const files = fileMatches.split('\n').filter(f => f.trim());
-                for (const file of files) {
-                    results.push({
-                        path: file,
-                        isFileNameMatch: true,
-                        matches: []
-                    });
-                }
+            // Use cache if available
+            const cache = fileNameCaches.get(workspacePath);
+            if (!cache) {
+                console.warn('Quick open cache not built for workspace:', workspacePath);
+                return [];
             }
+
+            // Filter cache by name match
+            const results = cache
+                .filter(item => item.name.includes(trimmedQuery))
+                .slice(0, 50)
+                .map(item => ({
+                    path: item.path,
+                    isFileNameMatch: true,
+                    matches: []
+                }));
+
             return results;
         } catch (error) {
             console.error('Error searching file names:', error);
