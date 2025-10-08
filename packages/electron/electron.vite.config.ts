@@ -84,15 +84,38 @@ const optimizeExcalidrawPlugin = () => {
 
 const isDev = process.env.NODE_ENV !== 'production';
 const runtimeSrcDir = resolve(__dirname, '../runtime/src');
+const runtimeDistDir = resolve(__dirname, '../runtime/dist');
+const rexicalDistDir = resolve(__dirname, '../rexical/dist');
+
+// Plugin to resolve workspace package subpaths correctly in production
+const resolveWorkspaceSubpaths = () => {
+  return {
+    name: 'resolve-workspace-subpaths',
+    enforce: 'pre' as const,
+    resolveId(source: string, importer?: string) {
+      if (isDev) return null; // Only apply in production
+
+      // Handle @stravu/runtime subpaths
+      if (source.startsWith('@stravu/runtime/')) {
+        const subpath = source.replace('@stravu/runtime/', '');
+        return resolve(runtimeDistDir, subpath, 'index.js');
+      }
+
+      return null;
+    }
+  };
+};
 
 export default defineConfig({
   main: {
+    plugins: [resolveWorkspaceSubpaths()],
     resolve: {
       alias: {
         // Normalize legacy name to current
         '@stravu-editor/runtime': '@stravu/runtime',
-        // Map runtime package for dev HMR; point to dist in prod if available
-        '@stravu/runtime': runtimeSrcDir
+        // Always use src for bundling - simpler than dealing with ESM/CJS issues
+        '@stravu/runtime': runtimeSrcDir,
+        'rexical': resolve(__dirname, '../rexical/src')
       }
     },
     build: {
@@ -112,7 +135,8 @@ export default defineConfig({
     resolve: {
       alias: {
         '@stravu-editor/runtime': '@stravu/runtime',
-        '@stravu/runtime': runtimeSrcDir
+        '@stravu/runtime': runtimeSrcDir,
+        'rexical': resolve(__dirname, '../rexical/src')
       }
     },
     build: {
@@ -176,9 +200,11 @@ export default defineConfig({
       alias: {
         // Block mermaid import to prevent large bundle
         '@excalidraw/mermaid-to-excalidraw': resolve(__dirname, '../rexical/src/mocks/mermaid-mock.ts'),
-        // Ensure renderer also points runtime imports at source during dev
+        // Ensure renderer also points runtime imports at source
         '@stravu-editor/runtime': '@stravu/runtime',
-        '@stravu/runtime': runtimeSrcDir
+        '@stravu/runtime': runtimeSrcDir,
+        'rexical/styles': resolve(__dirname, '../rexical/src/themes/PlaygroundEditorTheme.css'),
+        'rexical': resolve(__dirname, '../rexical/src')
       },
       dedupe: [
         'react',

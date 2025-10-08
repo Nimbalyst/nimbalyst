@@ -13,7 +13,6 @@ import type {
 import type {AppState, BinaryFiles} from '@excalidraw/excalidraw/types';
 import type {JSX} from 'react';
 
-import {exportToSvg} from '@excalidraw/excalidraw';
 import * as React from 'react';
 import {useEffect, useState} from 'react';
 
@@ -97,6 +96,10 @@ export default function ExcalidrawImage({
   useEffect(() => {
     const setContent = async () => {
       try {
+        // Dynamic import to avoid loading Excalidraw at module initialization time
+        // This prevents "document is not defined" errors in Electron's main process
+        const {exportToSvg} = await import('@excalidraw/excalidraw');
+
         const svg: SVGElement = await exportToSvg({
           appState,
           elements,
