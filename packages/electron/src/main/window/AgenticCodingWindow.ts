@@ -2,7 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron';
 import { join } from 'path';
 import { AISessionsRepository } from '@stravu/runtime';
 import { getAgenticCodingWindowState, saveAgenticCodingWindowState } from '../utils/store';
-import { windows, windowStates, windowFocusOrder, windowDevToolsState } from './WindowManager';
+import { windows, windowStates, windowFocusOrder, windowDevToolsState, incrementFocusOrderCounter } from './WindowManager';
 
 const agenticCodingWindows = new Map<string, BrowserWindow>();
 
@@ -59,7 +59,7 @@ export function createAgenticCodingWindow(options: AgenticCodingWindowOptions) {
     workspacePath,
     documentEdited: false
   });
-  windowFocusOrder.set(windowId, Date.now());
+  windowFocusOrder.set(windowId, incrementFocusOrderCounter()); // Use same counter as regular windows
   windowDevToolsState.set(windowId, savedState?.devToolsOpen || false);
 
   // Load the content
@@ -105,6 +105,11 @@ export function createAgenticCodingWindow(options: AgenticCodingWindowOptions) {
     if (savedState?.devToolsOpen) {
       window.webContents.openDevTools();
     }
+  });
+
+  // Update focus order when window gains focus
+  window.on('focus', () => {
+    windowFocusOrder.set(windowId, incrementFocusOrderCounter());
   });
 
   // Handle renderer process crashes

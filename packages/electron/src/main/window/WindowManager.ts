@@ -55,6 +55,11 @@ let windowPositionOffset = 0;
 let untitledCounter = 0;
 let focusOrderCounter = 0; // Counter for tracking focus order
 
+// Export function to increment and get focus order counter
+export function incrementFocusOrderCounter(): number {
+    return ++focusOrderCounter;
+}
+
 // Track whether the app is in the process of quitting so we don't block window close
 let isQuitting = false;
 app.on('before-quit', () => {
@@ -481,6 +486,22 @@ export function getWindowId(browserWindow: BrowserWindow): number | null {
     }
     return null;
 }
+
+// IPC handler to check if a window is focused
+ipcMain.handle('window:is-focused', (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    return window ? window.isFocused() : false;
+});
+
+// IPC handler to force focus a window (for testing)
+ipcMain.handle('window:force-focus', (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (window) {
+        window.focus();
+        return true;
+    }
+    return false;
+});
 
 // Update window title
 export function updateWindowTitle(window: BrowserWindow) {

@@ -67,20 +67,21 @@ export async function restoreSessionState(): Promise<boolean> {
 
     logger.session.info(`Restoring session with ${sessionState.windows.length} window(s)`);
 
-    // Sort windows by focus order (lower order first, so they're created in background)
+    // Sort windows by focus order - LOWEST first, HIGHEST last
+    // This way the last-focused window is created last and naturally gets focus
     const sortedWindows = [...sessionState.windows].sort((a, b) => {
         const aOrder = a.focusOrder || 0;
         const bOrder = b.focusOrder || 0;
         return aOrder - bOrder;
     });
 
-    // Track the window with highest focus order to focus it last
-    let lastFocusedWindow: BrowserWindow | null = null;
-    let highestFocusOrder = -1;
+    logger.session.info(`Window creation order (by focusOrder):`, sortedWindows.map((w, i) =>
+        `${i}: ${w.mode} focusOrder=${w.focusOrder}`
+    ));
 
-    // Restore each window
+    // Restore each window in order - last one created will naturally get focus
     sortedWindows.forEach((sessionWindow, index) => {
-        // Add a small delay between windows to avoid race conditions
+        // Add a small delay between windows to ensure they're created in order
         setTimeout(() => {
             let window: BrowserWindow | null = null;
 
@@ -143,34 +144,15 @@ export async function restoreSessionState(): Promise<boolean> {
                 }
             }
 
-            // Track window with highest focus order
-            if (window) {
-                const focusOrder = sessionWindow.focusOrder || 0;
-                if (focusOrder > highestFocusOrder) {
-                    highestFocusOrder = focusOrder;
-                    lastFocusedWindow = window;
-                }
-
-                // Restore dev tools state
-                if (sessionWindow.devToolsOpen) {
-                    // Wait for window to be ready before opening dev tools
-                    window.webContents.once('did-finish-load', () => {
-                        window.webContents.openDevTools();
-                    });
-                }
+            // Restore dev tools state
+            if (window && sessionWindow.devToolsOpen) {
+                // Wait for window to be ready before opening dev tools
+                window.webContents.once('did-finish-load', () => {
+                    window.webContents.openDevTools();
+                });
             }
-        }, index * 100);
+        }, index * 200);  // 200ms delay between each window creation
     });
-
-    // Focus the last focused window after all windows are created
-    if (lastFocusedWindow) {
-        setTimeout(() => {
-            if (lastFocusedWindow && !lastFocusedWindow.isDestroyed()) {
-                lastFocusedWindow.focus();
-                logger.session.debug('Focused last active window');
-            }
-        }, sortedWindows.length * 100 + 200);
-    }
 
     return true;
 }
