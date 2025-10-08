@@ -301,20 +301,28 @@ export function AIChat({
       } else if (data.partial || data.edits || data.toolCalls) {
         // Streaming partial response
         if (data.partial) {
+          // Check if this is a system message (like slash command output)
+          const isSystemMessage = data.isSystem === true;
+          const messageRole = isSystemMessage ? 'system' : 'assistant';
+
           // Track accumulated content separately to avoid duplication
           setMessages(prev => {
             const newMessages = [...prev];
             const lastMessage = newMessages[newMessages.length - 1];
 
-            if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.isStreamingStatus) {
-              // Update existing assistant message - replace content, don't append
+            if (lastMessage && lastMessage.role === messageRole && !lastMessage.isStreamingStatus) {
+              // Update existing message - replace content, don't append
               // The partial already contains the full accumulated text
               lastMessage.content = data.partial;
-            } else if (!lastMessage || lastMessage.role !== 'assistant' || lastMessage.isStreamingStatus) {
-              // Create new assistant message only if there isn't one yet
+              if (isSystemMessage) {
+                lastMessage.isSystem = true;
+              }
+            } else if (!lastMessage || lastMessage.role !== messageRole || lastMessage.isStreamingStatus) {
+              // Create new message only if there isn't one yet
               newMessages.push({
-                role: 'assistant',
-                content: data.partial
+                role: messageRole,
+                content: data.partial,
+                isSystem: isSystemMessage
               });
             }
             return newMessages;

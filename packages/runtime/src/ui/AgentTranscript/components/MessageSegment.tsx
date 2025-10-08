@@ -89,12 +89,20 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     if (message.isThinking) return renderThinking();
     if (!message.content.trim()) return null;
 
+    // Slight visual variation for system messages
+    const isSystemMessage = message.isSystem || message.role === 'system';
+
     return (
       <div style={isCollapsed ? { maxHeight: '5rem', overflow: 'hidden', position: 'relative' } : {}}>
         <div style={{
           whiteSpace: 'pre-wrap',
           fontWeight: isUser ? 500 : 400,
-          color: 'var(--text-primary)'
+          color: 'var(--text-primary)',
+          ...(isSystemMessage && {
+            opacity: 0.85,
+            fontFamily: 'var(--font-mono, monospace)',
+            fontSize: '0.95em'
+          })
         }}>
           {message.content}
         </div>

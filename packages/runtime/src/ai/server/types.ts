@@ -19,7 +19,7 @@ export interface DocumentContext {
 }
 
 export interface Message {
-  role: 'user' | 'assistant' | 'tool';
+  role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
   timestamp: number;
   // Additional fields for rich message types
@@ -34,6 +34,7 @@ export interface Message {
   isError?: boolean;
   errorMessage?: string;
   isThinking?: boolean;
+  isSystem?: boolean; // For system messages like slash command output
   isStreamingStatus?: boolean;
   streamingData?: {
     position: string;
@@ -115,6 +116,7 @@ export interface ProviderSettings {
 export interface StreamChunk {
   type: 'text' | 'tool_call' | 'tool_error' | 'error' | 'complete' | 'stream_edit_start' | 'stream_edit_content' | 'stream_edit_end';
   content?: string;
+  isSystem?: boolean; // For system messages like slash command output
   toolCall?: {
     id?: string;
     name: string;

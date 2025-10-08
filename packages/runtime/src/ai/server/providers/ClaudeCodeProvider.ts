@@ -402,12 +402,30 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             }
             // Don't yield most system messages to UI - they're internal
           } else if (chunk.type === 'user') {
-            // Handle user messages (including tool results) - don't display to user
-            console.log(`[CLAUDE-CODE] User chunk received (tool results, etc.):`, {
-              role: chunk.role,
-              contentBlocks: Array.isArray(chunk.content) ? chunk.content.length : 'not array'
+            // Handle user messages (including tool results and slash command output)
+            console.log(`[CLAUDE-CODE] User chunk received:`, {
+              role: chunk.message?.role,
+              hasContent: !!chunk.message?.content
             });
-            // These are internal messages going back to Claude - don't display to user
+
+            // Check if this is a slash command result with <local-command-stdout>
+            const content = chunk.message?.content;
+            if (typeof content === 'string' && content.includes('<local-command-stdout>')) {
+              // Extract and display the command output
+              const match = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
+              if (match && match[1]) {
+                const commandOutput = match[1].trim();
+                console.log('[CLAUDE-CODE] Slash command output detected, length:', commandOutput.length);
+
+                // Yield as a system message type
+                yield {
+                  type: 'text',
+                  content: commandOutput,
+                  isSystem: true
+                };
+              }
+            }
+            // Other user messages (like tool results) are internal - don't display
           } else if (chunk.type === 'summary') {
             // Handle summary messages from Claude Code
             console.log(`[CLAUDE-CODE] Summary chunk received:`, chunk);
