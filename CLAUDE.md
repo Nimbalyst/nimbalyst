@@ -226,7 +226,7 @@ The application supports multiple AI providers, including two distinct ways to a
 - **MCP Protocol**: Uses Model Context Protocol for enhanced code-aware features
 - **Provider ID**: `claude-code`
 - **Implementation**: `packages/runtime/src/ai/server/providers/ClaudeCodeProvider.ts`
-  - Dynamically loads `@anthropic-ai/claude-code` SDK from user's installation
+  - Dynamically loads `@anthropic-ai/claude-agent-sdk` SDK from user's installation
   - Requires local installation via npm
   - Provides MCP features through SDK
 - **Features**:
@@ -234,7 +234,7 @@ The application supports multiple AI providers, including two distinct ways to a
   - File system awareness and manipulation
   - Advanced code editing capabilities
   - Manages its own model selection internally (do not pass model IDs)
-- **Installation**: Requires `npm install -g @anthropic-ai/claude-code` or local installation
+- **Installation**: Requires `npm install -g @anthropic-ai/claude-agent-sdk` or local installation
 - **When to use**: For advanced code editing tasks that benefit from MCP's context protocol
 
 #### Other Providers
@@ -279,7 +279,7 @@ The application supports multiple AI providers, including two distinct ways to a
   - Implementation: `packages/runtime/src/ai/server/providers/ClaudeCodeProvider.ts`
   - UI panel: `packages/electron/src/renderer/components/AIModels/panels/ClaudeCodePanel.tsx`
   - Installation manager: `packages/electron/src/renderer/components/AIModels/services/CLIInstaller.ts`
-  - Requires separate installation of `@anthropic-ai/claude-code` package
+  - Requires separate installation of `@anthropic-ai/claude-agent-sdk` package
   - Dynamically loads SDK from user's installation
 
 #### Provider Factory

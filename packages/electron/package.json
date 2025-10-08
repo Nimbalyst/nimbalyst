@@ -55,7 +55,7 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-code": "^2.0.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.10",
     "@electric-sql/pglite-socket": "^0.0.13",
     "@electron/notarize": "^2.3.2",
     "@eslint/js": "^9.37.0",
@@ -167,7 +167,7 @@
         }
       ],
       "signIgnore": [
-        "node_modules/@anthropic-ai/claude-code/vendor/.*\\.jar$"
+        "node_modules/@anthropic-ai/claude-agent-sdk/vendor/.*\\.jar$"
       ],
       "fileAssociations": [
         {

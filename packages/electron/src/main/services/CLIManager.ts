@@ -31,8 +31,8 @@ type CLITool = 'claude-code' | 'openai-codex';
 
 // CLI commands and their npm packages
 const CLI_PACKAGES: Record<CLITool, string> = {
-  'claude-code': '@anthropic-ai/claude-code',  // Actual npm package for Claude Code
-  'openai-codex': '@openai/codex'              // OpenAI Codex package (actual on npm!)
+  'claude-code': '@anthropic-ai/claude-agent-sdk',  // Claude Agent SDK (renamed from claude-code)
+  'openai-codex': '@openai/codex'                    // OpenAI Codex package (actual on npm!)
 };
 
 const CLI_COMMANDS: Record<CLITool, string> = {
@@ -203,14 +203,14 @@ export class CLIManager {
       // Don't check Claude Desktop's location - let user manage their own installation
       const claudePackagePaths = [
         // Dynamic global npm path (where we install it)
-        ...(globalNpmRoot ? [path.join(globalNpmRoot, '@anthropic-ai', 'claude-code')] : []),
+        ...(globalNpmRoot ? [path.join(globalNpmRoot, '@anthropic-ai', 'claude-agent-sdk')] : []),
         // Other common global locations
-        path.join(os.homedir(), '.npm-global', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'),
-        path.join(os.homedir(), '.config', 'yarn', 'global', 'node_modules', '@anthropic-ai', 'claude-code')
+        path.join(os.homedir(), '.npm-global', 'lib', 'node_modules', '@anthropic-ai', 'claude-agent-sdk'),
+        path.join(os.homedir(), '.config', 'yarn', 'global', 'node_modules', '@anthropic-ai', 'claude-agent-sdk')
       ];
 
       // Also check if Claude Desktop has it installed (for display purposes)
-      const claudeDesktopPath = path.join(os.homedir(), '.claude', 'local', 'node_modules', '@anthropic-ai', 'claude-code');
+      const claudeDesktopPath = path.join(os.homedir(), '.claude', 'local', 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
       let claudeDesktopVersion: string | null = null;
       try {
         const packageJsonPath = path.join(claudeDesktopPath, 'package.json');

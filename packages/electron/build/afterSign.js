@@ -23,25 +23,25 @@ exports.default = async function(context) {
   const appPath = path.join(appOutDir, `${packager.appInfo.productName}.app`);
   console.log('AfterSign: appPath =', appPath);
   
-  // Try multiple possible paths for the claude-code module
+  // Try multiple possible paths for the claude-agent-sdk module
   const possiblePaths = [
-    path.join(appPath, 'Contents/Resources/app.asar.unpacked/node_modules/@anthropic-ai/claude-code'),
-    path.join(appPath, 'Contents/Resources/app/node_modules/@anthropic-ai/claude-code'),
-    path.join(appPath, 'Contents/Resources/node_modules/@anthropic-ai/claude-code')
+    path.join(appPath, 'Contents/Resources/app.asar.unpacked/node_modules/@anthropic-ai/claude-agent-sdk'),
+    path.join(appPath, 'Contents/Resources/app/node_modules/@anthropic-ai/claude-agent-sdk'),
+    path.join(appPath, 'Contents/Resources/node_modules/@anthropic-ai/claude-agent-sdk')
   ];
-  
+
   let claudeCodePath = null;
   for (const testPath of possiblePaths) {
     console.log('AfterSign: Checking path:', testPath);
     if (fs.existsSync(testPath)) {
       claudeCodePath = testPath;
-      console.log('AfterSign: Found Claude Code at:', claudeCodePath);
+      console.log('AfterSign: Found Claude Agent SDK at:', claudeCodePath);
       break;
     }
   }
-  
+
   if (!claudeCodePath) {
-    console.log('AfterSign: Claude Code path not found in any of the expected locations');
+    console.log('AfterSign: Claude Agent SDK path not found in any of the expected locations');
     return;
   }
 

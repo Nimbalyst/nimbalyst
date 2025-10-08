@@ -17,19 +17,19 @@ const platformKey = `${arch}-${platform}`;
 console.log(`🎯 Optimizing build for ${platformKey}`);
 
 /**
- * Remove unnecessary ripgrep binaries from claude-code
+ * Remove unnecessary ripgrep binaries from claude-agent-sdk
  */
 function optimizeClaudeCode() {
   // Check both local and monorepo root node_modules
-  let claudeCodePath = path.join(__dirname, '../node_modules/@anthropic-ai/claude-code');
-  
+  let claudeCodePath = path.join(__dirname, '../node_modules/@anthropic-ai/claude-agent-sdk');
+
   if (!fs.existsSync(claudeCodePath)) {
     // Try monorepo root
-    claudeCodePath = path.join(__dirname, '../../../node_modules/@anthropic-ai/claude-code');
+    claudeCodePath = path.join(__dirname, '../../../node_modules/@anthropic-ai/claude-agent-sdk');
   }
-  
+
   if (!fs.existsSync(claudeCodePath)) {
-    console.log('⚠️  claude-code not found, skipping optimization');
+    console.log('⚠️  claude-agent-sdk not found, skipping optimization');
     return;
   }
 
@@ -89,7 +89,7 @@ function optimizeClaudeCode() {
     }
   });
 
-  console.log(`📦 Total space saved from claude-code: ${formatBytes(totalSaved)}`);
+  console.log(`📦 Total space saved from claude-agent-sdk: ${formatBytes(totalSaved)}`);
 }
 
 /**
@@ -292,8 +292,8 @@ function optimizeNativeModules() {
 function optimize() {
   console.log('🚀 Starting aggressive build optimization...\n');
   
-  // Optimize claude-code package
-  console.log('📦 Optimizing claude-code package...');
+  // Optimize claude-agent-sdk package
+  console.log('📦 Optimizing claude-agent-sdk package...');
   optimizeClaudeCode();
   
   // Clean up node_modules

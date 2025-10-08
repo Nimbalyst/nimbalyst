@@ -1,9 +1,9 @@
 /**
- * Claude Code provider using claude-code SDK with MCP support
+ * Claude Code provider using claude-agent-sdk with MCP support
  * Dynamically loads SDK from user's installation to avoid bundling
  */
 
-import type { query as QueryType } from '@anthropic-ai/claude-code';
+import type { query as QueryType } from '@anthropic-ai/claude-agent-sdk';
 import { BaseAIProvider } from '../AIProvider';
 import {
   DocumentContext,
@@ -23,7 +23,7 @@ import { buildClaudeCodeSystemPromptAddendum } from '../../prompt';
 export class ClaudeCodeProvider extends BaseAIProvider {
   private abortController: AbortController | null = null;
   private claudeSessionIds: Map<string, string> = new Map(); // Our session ID -> Claude session ID
-  private claudeCodeModule?: typeof import('@anthropic-ai/claude-code'); // Dynamically loaded module with type safety
+  private claudeCodeModule?: typeof import('@anthropic-ai/claude-agent-sdk'); // Dynamically loaded module with type safety
   private queryFunction?: typeof QueryType; // The query function from the SDK with proper types
   private currentSessionType?: string; // Track session type for prompt customization
 
@@ -50,21 +50,21 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       console.log(`[CLAUDE-CODE] Could not get npm root:`, error);
     }
 
-    // Try to find Claude Code SDK in common locations
+    // Try to find Claude Agent SDK in common locations
     const possiblePaths = [
       // User's local Claude installation (primary)
-      path.join(os.homedir(), '.claude', 'local', 'node_modules', '@anthropic-ai', 'claude-code'),
+      path.join(os.homedir(), '.claude', 'local', 'node_modules', '@anthropic-ai', 'claude-agent-sdk'),
       // Dynamic global npm path
-      ...(globalNpmRoot ? [path.join(globalNpmRoot, '@anthropic-ai', 'claude-code')] : []),
+      ...(globalNpmRoot ? [path.join(globalNpmRoot, '@anthropic-ai', 'claude-agent-sdk')] : []),
       // System-wide npm installations
-      '/usr/local/lib/node_modules/@anthropic-ai/claude-code',
-      '/usr/lib/node_modules/@anthropic-ai/claude-code',
+      '/usr/local/lib/node_modules/@anthropic-ai/claude-agent-sdk',
+      '/usr/lib/node_modules/@anthropic-ai/claude-agent-sdk',
       // Common global npm locations
-      path.join(os.homedir(), '.npm-global', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'),
+      path.join(os.homedir(), '.npm-global', 'lib', 'node_modules', '@anthropic-ai', 'claude-agent-sdk'),
       // Yarn global installation
-      path.join(os.homedir(), '.config', 'yarn', 'global', 'node_modules', '@anthropic-ai', 'claude-code'),
+      path.join(os.homedir(), '.config', 'yarn', 'global', 'node_modules', '@anthropic-ai', 'claude-agent-sdk'),
       // Local development (if available)
-      path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code')
+      path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk')
     ];
 
     // NVM installations - enumerate actual node versions instead of using wildcard
@@ -73,7 +73,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const nodeVersions = fs.readdirSync(nvmDir);
       for (const version of nodeVersions) {
         possiblePaths.push(
-          path.join(nvmDir, version, 'lib', 'node_modules', '@anthropic-ai', 'claude-code')
+          path.join(nvmDir, version, 'lib', 'node_modules', '@anthropic-ai', 'claude-agent-sdk')
         );
       }
     } catch (e) {
@@ -138,7 +138,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     }
 
     throw new Error(
-      'Claude Code SDK not found. Please install it via AI Models settings or run: npm install -g @anthropic-ai/claude-code'
+      'Claude Agent SDK not found. Please install it via AI Models settings or run: npm install -g @anthropic-ai/claude-agent-sdk'
     );
   }
 
@@ -210,18 +210,21 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const options: any = {
         // The SDK might internally need the CLI path
         pathToClaudeCodeExecutable: await this.findCliPath().catch(() => undefined),
+        // BREAKING CHANGE: Claude Agent SDK requires explicit system prompt preset
         systemPrompt: {
           type: 'preset',
           preset: 'claude_code',
           append: systemPrompt
         },
+        // BREAKING CHANGE: Claude Agent SDK requires explicit settings sources
+        settingSources: ['user', 'project', 'local'],
         mcpServers: this.getMcpServersConfig(),
         allowedTools,
         cwd: workspacePath,
         abortController: this.abortController,
         model: 'sonnet',
         permissionMode: 'bypassPermissions'
-        // Do NOT pass API key - Claude Code manages authentication internally
+        // Do NOT pass API key - Claude Agent SDK manages authentication internally
       };
 
       console.log('[CLAUDE-CODE] Options built without API key (Claude Code manages auth internally)');
@@ -735,18 +738,18 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     // Since we're dynamically loading the SDK, look for CLI in user's installation
     const possiblePaths = [
       // User's local Claude installation (primary)
-      path.join(os.homedir(), '.claude', 'local', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+      path.join(os.homedir(), '.claude', 'local', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js'),
       // Dynamic global npm path
-      ...(globalNpmRoot ? [path.join(globalNpmRoot, '@anthropic-ai', 'claude-code', 'cli.js')] : []),
+      ...(globalNpmRoot ? [path.join(globalNpmRoot, '@anthropic-ai', 'claude-agent-sdk', 'cli.js')] : []),
       // System-wide npm installations
-      '/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js',
-      '/usr/lib/node_modules/@anthropic-ai/claude-code/cli.js',
+      '/usr/local/lib/node_modules/@anthropic-ai/claude-agent-sdk/cli.js',
+      '/usr/lib/node_modules/@anthropic-ai/claude-agent-sdk/cli.js',
       // Common global npm locations
-      path.join(os.homedir(), '.npm-global', 'lib', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+      path.join(os.homedir(), '.npm-global', 'lib', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js'),
       // Yarn global installation
-      path.join(os.homedir(), '.config', 'yarn', 'global', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+      path.join(os.homedir(), '.config', 'yarn', 'global', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js'),
       // Development paths (for local testing)
-      path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+      path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js'),
     ];
 
     // NVM installations - enumerate actual node versions
@@ -755,7 +758,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const nodeVersions = fs.readdirSync(nvmDir);
       for (const version of nodeVersions) {
         possiblePaths.push(
-          path.join(nvmDir, version, 'lib', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js')
+          path.join(nvmDir, version, 'lib', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js')
         );
       }
     } catch (e) {
@@ -788,13 +791,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
     // Last resort - try require.resolve
     try {
-      const claudeCodePath = require.resolve('@anthropic-ai/claude-code');
-      const claudeCodeDir = path.dirname(claudeCodePath);
-      const cliPath = path.join(claudeCodeDir, 'cli.js');
-      console.log(`[CLAUDE-CODE] Resolved claude-code CLI at: ${cliPath}`);
+      const claudeAgentPath = require.resolve('@anthropic-ai/claude-agent-sdk');
+      const claudeAgentDir = path.dirname(claudeAgentPath);
+      const cliPath = path.join(claudeAgentDir, 'cli.js');
+      console.log(`[CLAUDE-CODE] Resolved claude-agent-sdk CLI at: ${cliPath}`);
       return cliPath;
     } catch (err) {
-      throw new Error('Could not find claude-code CLI executable');
+      throw new Error('Could not find claude-agent-sdk CLI executable');
     }
   }
 

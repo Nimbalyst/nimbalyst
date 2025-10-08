@@ -120,7 +120,7 @@ function analyzeNodeModules() {
     console.log(`${color}${sizeStr}${colors.reset}  ${pkg.name}`);
     
     // Check for specific problem areas
-    if (pkg.name === '@anthropic-ai/claude-code') {
+    if (pkg.name === '@anthropic-ai/claude-agent-sdk') {
       // Check vendor directory
       const vendorPath = path.join(pkg.path, 'vendor');
       if (fs.existsSync(vendorPath)) {
@@ -187,10 +187,10 @@ function analyzeRelease() {
         if (dir.name === 'app.asar.unpacked') {
           const unpackedModules = path.join(dirPath, 'node_modules');
           if (fs.existsSync(unpackedModules)) {
-            const claudeCode = path.join(unpackedModules, '@anthropic-ai/claude-code');
+            const claudeCode = path.join(unpackedModules, '@anthropic-ai/claude-agent-sdk');
             if (fs.existsSync(claudeCode)) {
               const ccSize = getSize(claudeCode);
-              console.log(`${colors.cyan}              └─ @anthropic-ai/claude-code: ${formatBytes(ccSize)}${colors.reset}`);
+              console.log(`${colors.cyan}              └─ @anthropic-ai/claude-agent-sdk: ${formatBytes(ccSize)}${colors.reset}`);
             }
           }
         }
@@ -221,7 +221,7 @@ function main() {
   
   console.log(`\n${colors.bright}💡 Optimization Tips:${colors.reset}`);
   console.log('1. Run "npm run optimize" to remove unnecessary platform binaries');
-  console.log('2. Consider installing @anthropic-ai/claude-code globally instead of bundling');
+  console.log('2. Consider installing @anthropic-ai/claude-agent-sdk globally instead of bundling');
   console.log('3. Use production builds with minification enabled');
   console.log('');
 }
