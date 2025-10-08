@@ -719,6 +719,107 @@ export class ElectronDocumentService implements DocumentService {
     }
   }
 
+  // Asset management methods
+  async storeAsset(buffer: Buffer, mimeType: string): Promise<{ hash: string, extension: string }> {
+    // Hash the image buffer
+    const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+
+    // Determine file extension from MIME type
+    const extensionMap: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/svg+xml': 'svg'
+    };
+    const extension = extensionMap[mimeType] || 'png';
+
+    // Ensure .preditor/assets directory exists
+    const assetsDir = path.join(this.workspacePath, '.preditor', 'assets');
+    await fs.mkdir(assetsDir, { recursive: true });
+
+    // Write file with hash as name
+    const filename = `${hash}.${extension}`;
+    const assetPath = path.join(assetsDir, filename);
+
+    // Only write if file doesn't already exist (deduplication)
+    try {
+      await fs.access(assetPath);
+      console.log(`[DocumentService] Asset ${hash}.${extension} already exists, skipping write`);
+    } catch {
+      await fs.writeFile(assetPath, buffer);
+      console.log(`[DocumentService] Stored asset ${hash}.${extension} (${buffer.length} bytes)`);
+    }
+
+    return { hash, extension };
+  }
+
+  async getAssetPath(hash: string): Promise<string | null> {
+    const assetsDir = path.join(this.workspacePath, '.preditor', 'assets');
+
+    // Try common extensions
+    const extensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
+    for (const ext of extensions) {
+      const assetPath = path.join(assetsDir, `${hash}.${ext}`);
+      try {
+        await fs.access(assetPath);
+        return assetPath;
+      } catch {
+        // File doesn't exist, try next extension
+      }
+    }
+
+    return null;
+  }
+
+  async garbageCollectAssets(): Promise<number> {
+    const assetsDir = path.join(this.workspacePath, '.preditor', 'assets');
+
+    try {
+      // Check if assets directory exists
+      await fs.access(assetsDir);
+    } catch {
+      // No assets directory, nothing to collect
+      return 0;
+    }
+
+    // Scan all markdown files for asset references
+    const referencedHashes = new Set<string>();
+    const assetRegex = /\.preditor\/assets\/([a-f0-9]+)\./g;
+
+    for (const doc of this.documents) {
+      const fullPath = path.join(this.workspacePath, doc.path);
+      try {
+        const content = await fs.readFile(fullPath, 'utf-8');
+        let match;
+        while ((match = assetRegex.exec(content)) !== null) {
+          referencedHashes.add(match[1]);
+        }
+      } catch (error) {
+        console.error(`[DocumentService] Failed to scan ${doc.path} for asset refs:`, error);
+      }
+    }
+
+    // Get all asset files
+    const assetFiles = await fs.readdir(assetsDir);
+    let deletedCount = 0;
+
+    for (const file of assetFiles) {
+      // Extract hash from filename (before the extension)
+      const hash = file.split('.')[0];
+
+      if (!referencedHashes.has(hash)) {
+        const assetPath = path.join(assetsDir, file);
+        await fs.unlink(assetPath);
+        console.log(`[DocumentService] Deleted unreferenced asset: ${file}`);
+        deletedCount++;
+      }
+    }
+
+    return deletedCount;
+  }
+
   destroy() {
     if (this.watchInterval) {
       clearInterval(this.watchInterval);
@@ -948,6 +1049,36 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     if (unsubscribe) {
       // Clean up when renderer is destroyed
       event.sender.once('destroyed', unsubscribe);
+    }
+  });
+
+  // Asset management handlers
+  ipcMain.handle('document-service:store-asset', async (event, payload: { buffer: number[]; mimeType: string }) => {
+    try {
+      const { buffer, mimeType } = payload;
+      const bufferObj = Buffer.from(buffer);
+      return await requireDocumentService(event).storeAsset(bufferObj, mimeType);
+    } catch (error) {
+      console.error('[DocumentService] store-asset failed:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('document-service:get-asset-path', async (event, hash: string) => {
+    try {
+      return await requireDocumentService(event).getAssetPath(hash);
+    } catch (error) {
+      console.error('[DocumentService] get-asset-path failed:', error);
+      return null;
+    }
+  });
+
+  ipcMain.handle('document-service:gc-assets', async (event) => {
+    try {
+      return await requireDocumentService(event).garbageCollectAssets();
+    } catch (error) {
+      console.error('[DocumentService] gc-assets failed:', error);
+      return 0;
     }
   });
 }

@@ -239,6 +239,42 @@ export default function ImageComponent({
   const activeEditorRef = useRef<LexicalEditor | null>(null);
   const [isLoadError, setIsLoadError] = useState<boolean>(false);
   const isEditable = useLexicalEditable();
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+
+  // Reset load error when src changes
+  useEffect(() => {
+    setIsLoadError(false);
+  }, [src]);
+
+  // Resolve .preditor/assets/ paths to absolute file:// URLs
+  useEffect(() => {
+    if (src.includes('.preditor/assets/') && typeof window !== 'undefined' && (window as any).electronAPI) {
+      // Extract hash from path
+      const match = src.match(/\.preditor\/assets\/([a-f0-9]+)\./);
+      if (match) {
+        const hash = match[1];
+        (window as any).electronAPI.invoke('document-service:get-asset-path', hash)
+          .then((absolutePath: string | null) => {
+            if (absolutePath) {
+              const resolved = `file://${absolutePath}`;
+              // Clear the image cache for the old src so it can reload with new src
+              imageCache.delete(src);
+              setResolvedSrc(resolved);
+            } else {
+              setResolvedSrc(src);
+            }
+          })
+          .catch((error: Error) => {
+            console.error('Failed to resolve asset path:', error);
+            setResolvedSrc(src);
+          });
+      } else {
+        setResolvedSrc(src);
+      }
+    } else {
+      setResolvedSrc(src);
+    }
+  }, [src]);
 
   const $onEnter = useCallback(
     (event: KeyboardEvent) => {
@@ -435,6 +471,12 @@ export default function ImageComponent({
 
   const draggable = isSelected && $isNodeSelection(selection) && !isResizing;
   const isFocused = (isSelected || isResizing) && isEditable;
+
+  // Don't render until we have a resolved src
+  if (!resolvedSrc) {
+    return <div style={{ width, height, minHeight: 100 }}>Loading...</div>;
+  }
+
   return (
     <Suspense fallback={null}>
       <>
@@ -448,7 +490,7 @@ export default function ImageComponent({
                   ? `focused ${$isNodeSelection(selection) ? 'draggable' : ''}`
                   : null
               }
-              src={src}
+              src={resolvedSrc}
               altText={altText}
               imageRef={imageRef}
               width={width}

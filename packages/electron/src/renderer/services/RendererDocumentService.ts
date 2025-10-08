@@ -146,6 +146,24 @@ export class RendererDocumentService implements DocumentService {
       this.trackerItemChangeListeners.delete(id);
     };
   }
+
+  // Asset management methods
+  async storeAsset(buffer: number[], mimeType: string): Promise<{ hash: string; extension: string }> {
+    if (!window.electronAPI) {
+      throw new Error('Electron API not available');
+    }
+    return window.electronAPI.invoke('document-service:store-asset', { buffer, mimeType });
+  }
+
+  async getAssetPath(hash: string): Promise<string | null> {
+    if (!window.electronAPI) return null;
+    return window.electronAPI.invoke('document-service:get-asset-path', hash);
+  }
+
+  async garbageCollectAssets(): Promise<number> {
+    if (!window.electronAPI) return 0;
+    return window.electronAPI.invoke('document-service:gc-assets');
+  }
 }
 
 // Singleton instance

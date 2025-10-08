@@ -99,17 +99,47 @@ export function InsertImageUploadedDialogBody({
 
   const isDisabled = src === '';
 
-  const loadImage = (files: FileList | null) => {
+  const loadImage = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+
+    // Check if we have access to electron API for asset storage
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        // Read file as array buffer
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Array.from(new Uint8Array(arrayBuffer));
+
+        // Store via document service
+        const { hash, extension } = await (window as any).electronAPI.invoke(
+          'document-service:store-asset',
+          { buffer, mimeType: file.type }
+        );
+
+        // Get current document path to calculate relative path
+        // For now, use a placeholder - this will be replaced with actual document path
+        const relativePath = `.preditor/assets/${hash}.${extension}`;
+        setSrc(relativePath);
+      } catch (error) {
+        console.error('Failed to store asset:', error);
+        // Fall back to base64
+        fallbackToBase64(file);
+      }
+    } else {
+      // No electron API, fall back to base64
+      fallbackToBase64(file);
+    }
+  };
+
+  const fallbackToBase64 = (file: File) => {
     const reader = new FileReader();
     reader.onload = function () {
       if (typeof reader.result === 'string') {
         setSrc(reader.result);
       }
-      return '';
     };
-    if (files !== null) {
-      reader.readAsDataURL(files[0]);
-    }
+    reader.readAsDataURL(file);
   };
 
   return (
