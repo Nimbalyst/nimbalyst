@@ -207,6 +207,18 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         : defaultTools;
       console.log('[CLAUDE-CODE] Allowed tools:', allowedTools);
 
+      // Calculate disallowed tools - all tools NOT in the allowed list
+      const allTools = [
+        'Read', 'Write', 'Edit', 'MultiEdit',
+        'Glob', 'Grep', 'LS',
+        'WebFetch', 'WebSearch',
+        'TodoRead', 'TodoWrite', 'Task',
+        'NotebookRead', 'NotebookEdit',
+        'Bash', 'ExitPlanMode'
+      ];
+      const disallowedTools = allTools.filter(tool => !allowedTools.includes(tool));
+      console.log('[CLAUDE-CODE] Disallowed tools:', disallowedTools);
+
       const options: any = {
         // The SDK might internally need the CLI path
         pathToClaudeCodeExecutable: await this.findCliPath().catch(() => undefined),
@@ -220,6 +232,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         settingSources: ['user', 'project', 'local'],
         mcpServers: this.getMcpServersConfig(),
         allowedTools,
+        disallowedTools,
         cwd: workspacePath,
         abortController: this.abortController,
         model: 'sonnet',
