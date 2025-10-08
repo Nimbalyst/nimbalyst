@@ -319,20 +319,42 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             if (chunk.is_error) {
               console.error('[CLAUDE-CODE] Result error:', chunk);
 
-              // Extract error message and display it
-              const errorMessage = chunk.error || chunk.message || chunk.error_message ||
-                                 JSON.stringify(chunk, null, 2);
+              // Extract the actual error message from the result field
+              let errorMessage = chunk.result || chunk.error || chunk.message || chunk.error_message;
+
+              // If we have a result string, use it directly
+              if (typeof errorMessage === 'string') {
+                // Check if it contains API Error
+                if (errorMessage.includes('API Error:')) {
+                  // Extract just the relevant part
+                  const apiErrorMatch = errorMessage.match(/API Error: \d+ (.*?)(?:\s*·|$)/);
+                  if (apiErrorMatch) {
+                    try {
+                      const errorJson = JSON.parse(apiErrorMatch[1]);
+                      if (errorJson.error?.message) {
+                        errorMessage = errorJson.error.message;
+                      }
+                    } catch {
+                      // If parsing fails, use the original message
+                    }
+                  }
+                }
+              } else {
+                // Fallback to JSON stringify
+                errorMessage = JSON.stringify(chunk, null, 2);
+              }
 
               // Yield error to UI
               yield {
                 type: 'error',
-                error: `Claude Code Error: ${errorMessage}`
+                error: errorMessage
               };
 
-              // Also yield as text to ensure visibility
+              // Also yield as text to ensure visibility with better formatting
               yield {
                 type: 'text',
-                content: `❌ Claude Code encountered an error:\n${errorMessage}`
+                content: `❌ ${errorMessage}`,
+                isSystem: true
               };
             }
             // Don't yield result content as text - it's already been sent in the assistant message
