@@ -227,15 +227,25 @@ export function PlanTable({
     return sortPlans(filteredData, currentSortBy, currentSortDirection);
   }
 
-  const handleRowClick = (plan: PlanData) => {
-    // Open the document when clicked
+  const handleRowClick = async (plan: PlanData) => {
+    // Open the document when clicked using the documentService facade
+    // This sends an 'open-document' event that the renderer listens for
     const documentService = (window as any).documentService;
+
     if (documentService && documentService.openDocument) {
-      documentService.getDocumentByPath(plan.path).then((doc: any) => {
-        if (doc) {
-          documentService.openDocument(doc.id);
+      try {
+        // Get the document to obtain its ID
+        const doc = await documentService.getDocumentByPath(plan.path);
+        if (doc && doc.id) {
+          // Use openDocument which sends an event the renderer handles
+          // Pass the relative path as fallback - the main process will join it with workspacePath
+          await documentService.openDocument(doc.id, { path: plan.path });
+        } else {
+          console.error('[PlanTable] Could not find document for path:', plan.path);
         }
-      });
+      } catch (error) {
+        console.error('[PlanTable] Failed to open document:', error);
+      }
     }
   };
 

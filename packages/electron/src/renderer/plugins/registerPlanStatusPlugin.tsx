@@ -6,10 +6,11 @@ import { pluginRegistry } from 'rexical';
 import { planStatusPluginPackage } from '@stravu/runtime';
 import { getDocumentService } from '../services/RendererDocumentService';
 
-// Make document service globally available for the PlanTableComponent
+// Make document service and workspacePath globally available for the PlanTableComponent
 declare global {
   interface Window {
     documentService: any;
+    workspacePath?: string | null;
   }
 }
 

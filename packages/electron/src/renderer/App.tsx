@@ -364,6 +364,13 @@ export default function App() {
       });
   }, [workspacePath]);
 
+  // Expose workspacePath globally for plugins
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).workspacePath = workspacePath;
+    }
+  }, [workspacePath]);
+
   // Handle sidebar resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
