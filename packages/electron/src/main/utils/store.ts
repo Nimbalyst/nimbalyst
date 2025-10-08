@@ -1,4 +1,5 @@
 import Store from 'electron-store';
+import { existsSync } from 'fs';
 import { RecentItem, SessionState, SessionWindow } from '../types';
 import { logger } from './logger';
 
@@ -286,10 +287,34 @@ export function addWorkspaceRecentFile(workspacePath: string, filePath: string):
 export function getWorkspaceTabState(workspacePath: string): TabManagerState & { navigationHistory?: any } {
   const workspace = getWorkspaceState(workspacePath);
   const tabs = workspace.tabs;
+
+  // Filter out tabs for files that no longer exist (unless they're virtual)
+  const validTabs = tabs.tabs.filter(tab => {
+    if (tab.isVirtual || tab.filePath.startsWith('virtual://')) {
+      return true; // Keep virtual tabs
+    }
+    const exists = existsSync(tab.filePath);
+    if (!exists) {
+      console.log('[getWorkspaceTabState] Filtering out non-existent file:', tab.filePath);
+    }
+    return exists;
+  });
+
+  // Get valid tab IDs for filtering
+  const validTabIds = new Set(validTabs.map(tab => tab.id));
+
+  // Filter tab order to only include valid tabs
+  const validTabOrder = tabs.tabOrder.filter(id => validTabIds.has(id));
+
+  // Clear active tab if it was removed
+  const validActiveTabId = tabs.activeTabId && validTabIds.has(tabs.activeTabId)
+    ? tabs.activeTabId
+    : null;
+
   return {
-    tabs: tabs.tabs.map(tab => ({ ...tab })),
-    activeTabId: tabs.activeTabId,
-    tabOrder: [...tabs.tabOrder],
+    tabs: validTabs.map(tab => ({ ...tab })),
+    activeTabId: validActiveTabId,
+    tabOrder: validTabOrder,
     navigationHistory: workspace.navigationHistory
   };
 }

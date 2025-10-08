@@ -60,6 +60,11 @@ export function registerWorkspaceHandlers() {
             return null;
         }
 
+        if (!existsSync(filePath)) {
+            console.log('[READ_FILE] File does not exist:', filePath);
+            return null;
+        }
+
         try {
             const content = readFileSync(filePath, 'utf-8');
             return { content };
