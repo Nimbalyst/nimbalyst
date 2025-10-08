@@ -6,9 +6,7 @@ With agentic workflows and deep ties into your AI coding copilots, Preditor enab
 
 ## Key Benefits
 
-- Local first, open formats - everything is markdown, no proprietary database, AI can see everything
-- 
-
+- **Local first, open formats**: Everything is markdown, no proprietary database that your ai agents can't see
 - **AI assistive document editing**: Blend natural writing with agent suggestions that understand your context and keep documents aligned with product goals.
 - **Code-aware agent orchestration**: Connect to AI coding agents that can inspect your repository to generate plans, outline changes, and sync action items back to the editor.
 - **Team-aligned workspaces**: Bring engineering, product, and documentation together in one AI-aware canvas that keeps everyone working from the same plan.
@@ -424,6 +422,6 @@ This project is based on Meta's Lexical playground and maintains the same MIT li
 - Originally based on the Lexical playground example
 - Transformed into a production-ready editor component
 - Comprehensive plugin architecture for extensibility
-- 
+-
 
 Preditor is a modern, rich‑text Markdown editor that turns documentation and code writing into a fast, delightful experience. Built on Lexical, it delivers blazing performance, elegant formatting, powerful tables, code blocks with syntax highlighting, images, and Excalidraw—plus pro features like search/replace and red/green diff rendering. Its modular plugin architecture and simple React API make integration effortless, while auto‑save, hybrid file system support (Web FS, OPFS, Electron), and cross‑platform apps (Web, Electron, Tauri, Capacitor) keep teams productive everywhere. With AI‑assisted editing, project‑aware file management, and seamless theming, Preditor brings a polished, production‑ready editor to your product in minutes.

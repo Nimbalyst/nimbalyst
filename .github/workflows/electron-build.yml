@@ -226,19 +226,22 @@ jobs:
             exit 0
           fi
 
-          # Extract release notes for this version from RELEASE_NOTES.md
-          RELEASE_NOTES_FILE="packages/electron/RELEASE_NOTES.md"
-          if [ -f "$RELEASE_NOTES_FILE" ]; then
-            # Extract notes for the current version
-            VERSION_NO_V=${VERSION#v}
-            NOTES=$(awk "/^## v?${VERSION_NO_V}[^0-9]/,/^## v?[0-9]/ {if (/^## v?[0-9]/ && !/^## v?${VERSION_NO_V}[^0-9]/) exit; print}" "$RELEASE_NOTES_FILE" | sed '1d' | sed '/^$/d')
+          # Extract release notes from git tag annotation
+          NOTES=$(git tag -l --format='%(contents:body)' "$VERSION" || echo "")
 
-            if [ -z "$NOTES" ]; then
-              # Fallback to default notes if version not found
-              NOTES="See [RELEASE_NOTES.md](https://github.com/stravu/preditor/blob/main/packages/electron/RELEASE_NOTES.md) for details."
+          # If tag has no annotation or notes are empty, try RELEASE_NOTES.md
+          if [ -z "$NOTES" ]; then
+            RELEASE_NOTES_FILE="packages/electron/RELEASE_NOTES.md"
+            if [ -f "$RELEASE_NOTES_FILE" ]; then
+              # Extract notes for the current version
+              VERSION_NO_V=${VERSION#v}
+              NOTES=$(awk "/^## v?${VERSION_NO_V}[^0-9]/,/^## v?[0-9]/ {if (/^## v?[0-9]/ && !/^## v?${VERSION_NO_V}[^0-9]/) exit; print}" "$RELEASE_NOTES_FILE" | sed '1d' | sed '/^$/d')
             fi
-          else
-            NOTES="Download Preditor Editor for your operating system."
+          fi
+
+          # Final fallback if still no notes
+          if [ -z "$NOTES" ]; then
+            NOTES="See [RELEASE_NOTES.md](https://github.com/stravu/preditor/blob/main/packages/electron/RELEASE_NOTES.md) for details."
           fi
 
           # Create release in public repository with update manifests

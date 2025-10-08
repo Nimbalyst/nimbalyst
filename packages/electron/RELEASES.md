@@ -49,17 +49,17 @@ The workflow (`/.github/workflows/electron-build.yml`) automatically:
 ### How It Works
 
 1. **Checking for Updates**
-   - Automatic checks every 60 minutes (production only)
-   - Manual checks via Help → "Check for Updates..."
-   - Compares current version with latest GitHub Release
+  - Automatic checks every 60 minutes (production only)
+  - Manual checks via Help → "Check for Updates..."
+  - Compares current version with latest GitHub Release
 
 2. **Update Flow**
-   ```
+```javascript
    Check → Found → Prompt to Download → Download Progress → Prompt to Restart → Install
-   ```
+```
 
 3. **Configuration** (`packages/electron/package.json`)
-   ```json
+```json
    "publish": [
      {
        "provider": "github",
@@ -67,7 +67,7 @@ The workflow (`/.github/workflows/electron-build.yml`) automatically:
        "repo": "preditor"
      }
    ]
-   ```
+```
 
 ### Update Service Features
 
@@ -130,7 +130,7 @@ npm run build:linux
 
 Each release includes:
 
-```
+```javascript
 Release v0.36.6/
 ├── Preditor-0.36.6.dmg           # macOS installer
 ├── Preditor-0.36.6-mac.zip       # macOS archive
@@ -186,25 +186,25 @@ Set in repository Settings → Secrets:
 ### Build Failures
 
 1. **Certificate issues**
-   ```bash
+```bash
    # Verify certificate locally
    security find-identity -v -p codesigning
-   ```
+```
 
 2. **Notarization failures**
-   - Check Apple Developer account status
-   - Verify app-specific password is valid
-   - Ensure bundle ID matches certificate
+  - Check Apple Developer account status
+  - Verify app-specific password is valid
+  - Ensure bundle ID matches certificate
 
 3. **Auto-update not working**
-   - Verify GitHub Release is published (not draft)
-   - Check update manifest files are present
-   - Ensure version number is higher than current
+  - Verify GitHub Release is published (not draft)
+  - Check update manifest files are present
+  - Ensure version number is higher than current
 
 ### Testing Updates
 
 1. **Test locally** (without publishing)
-   ```bash
+```bash
    # Build and generate update files
    npm run build:mac:local
    
@@ -212,12 +212,12 @@ Set in repository Settings → Secrets:
    npx http-server release -p 8080
    
    # Point app to local server (dev only)
-   ```
+```
 
 2. **Test with pre-release**
-   - Tag with pre-release version: `v0.37.0-beta.1`
-   - Workflow creates pre-release on GitHub
-   - Test with beta users before stable release
+  - Tag with pre-release version: `v0.37.0-beta.1`
+  - Workflow creates pre-release on GitHub
+  - Test with beta users before stable release
 
 ## Manual Release Process
 

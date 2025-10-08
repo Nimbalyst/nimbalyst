@@ -2,13 +2,6 @@
 
 ## v0.42.27 - 2025-10-08
 
-### Bug Fixes
-- Fix workspace package bundling to ensure latest code is included in packaged app
-- Fix Excalidraw image export "document is not defined" error with dynamic imports
-- Fix image decorator node export with proper fallback to text content
-
-## v0.42.25 - 2025-10-08
-
 ### Features
 - Content-addressed image storage for better asset management
 - Tracker items management with database integration and UI components
@@ -16,6 +9,9 @@
 - PlanScreen and PlanTable components with filtering and sorting
 
 ### Bug Fixes
+- Fix workspace package bundling to ensure latest code is included in packaged app
+- Fix Excalidraw image export "document is not defined" error with dynamic imports
+- Fix image decorator node export with proper fallback to text content
 - Filter out tabs for deleted files during session restoration
 - Decorator nodes transformers for images
 - Window restoration ordering
