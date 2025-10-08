@@ -23,6 +23,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   private abortController: AbortController | null = null;
   private claudeSessionIds: Map<string, string> = new Map(); // Our session ID -> Claude session ID
   private currentSessionType?: string; // Track session type for prompt customization
+  private slashCommands: string[] = []; // Available slash commands from SDK
 
   static readonly DEFAULT_MODEL = 'claude-code';
 
@@ -182,15 +183,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         for await (const rawChunk of queryIterator) {
           const chunk = rawChunk as any;
           chunkCount++;
-          
+
           if (chunkCount <= 5) {
-            console.log(`[CLAUDE-CODE] Chunk #${chunkCount}:`, {
-              type: typeof chunk,
-              isString: typeof chunk === 'string',
-              keys: typeof chunk === 'object' ? Object.keys(chunk) : [],
-              chunkType: chunk?.type,
-              length: typeof chunk === 'string' ? chunk.length : undefined
-            });
+            console.log(`[CLAUDE-CODE] Chunk #${chunkCount}:`,
+              typeof chunk === 'string'
+                ? { type: 'string', length: chunk.length, preview: chunk.substring(0, 100) }
+                : JSON.parse(JSON.stringify(chunk))
+            );
           }
         
           if (!firstChunkTime) {
@@ -218,7 +217,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           } else if (chunk && typeof chunk === 'object') {
             // Handle different message types from the SDK
             if (chunkCount <= 5) {
-              console.log(`[CLAUDE-CODE] Object chunk #${chunkCount}, type: ${chunk.type}, keys:`, Object.keys(chunk));
+              console.log(`[CLAUDE-CODE] Object chunk #${chunkCount}:`, JSON.parse(JSON.stringify(chunk)));
             }
             
             if (chunk.session_id && sessionId) {
@@ -356,8 +355,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 session_id: chunk.session_id,
                 toolCount: chunk.tools?.length || 0,
                 mcpServers: chunk.mcp_servers || [],
-                apiKeySource: chunk.apiKeySource
+                apiKeySource: chunk.apiKeySource,
+                slashCommands: chunk.slash_commands || []
               });
+
+              // Capture available slash commands
+              if (chunk.slash_commands && Array.isArray(chunk.slash_commands)) {
+                this.slashCommands = chunk.slash_commands;
+                console.log('[CLAUDE-CODE] Available slash commands:', this.slashCommands);
+              }
 
               // Warn if API key source is "none" - this means Claude Code didn't find credentials
               if (chunk.apiKeySource === 'none') {
@@ -368,11 +374,33 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 console.error('[CLAUDE-CODE]   3. No stored credentials from `claude login` command');
                 console.error('[CLAUDE-CODE] Subsequent API calls will likely fail with authentication errors');
               }
+            } else if (chunk.subtype === 'compact_boundary') {
+              // Handle /compact command response
+              console.log('[CLAUDE-CODE] Compact boundary received:', {
+                pre_tokens: chunk.compact_metadata?.pre_tokens,
+                trigger: chunk.compact_metadata?.trigger
+              });
+
+              // Display compact completion message to user
+              const preTokens = chunk.compact_metadata?.pre_tokens || 'unknown';
+              yield {
+                type: 'text',
+                content: `✓ Conversation compacted (was ${preTokens} tokens)`
+              };
             } else {
               // Other system messages might be relevant
-              console.log('[CLAUDE-CODE] Other system message:', chunk.subtype);
+              console.log('[CLAUDE-CODE] Other system message:', chunk.subtype, chunk);
+
+              // Check if this system message has displayable content
+              if (chunk.message || chunk.text || chunk.content) {
+                const messageText = chunk.message || chunk.text || chunk.content;
+                yield {
+                  type: 'text',
+                  content: typeof messageText === 'string' ? messageText : JSON.stringify(messageText)
+                };
+              }
             }
-            // Don't yield system messages to UI - they're internal
+            // Don't yield most system messages to UI - they're internal
           } else if (chunk.type === 'user') {
             // Handle user messages (including tool results) - don't display to user
             console.log(`[CLAUDE-CODE] User chunk received (tool results, etc.):`, {
@@ -699,5 +727,12 @@ When asked about your identity, be truthful about which AI model you are - do no
    */
   static getDefaultModel(): string {
     return this.DEFAULT_MODEL;
+  }
+
+  /**
+   * Get available slash commands discovered from the SDK
+   */
+  getSlashCommands(): string[] {
+    return [...this.slashCommands];
   }
 }
