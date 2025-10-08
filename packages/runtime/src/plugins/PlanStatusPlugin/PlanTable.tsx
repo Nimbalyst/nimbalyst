@@ -288,14 +288,6 @@ export function PlanTable({
     );
   }
 
-  if (plans.length === 0) {
-    return (
-      <div className="plan-table-empty">
-        <span>No plan documents found</span>
-      </div>
-    );
-  }
-
   const statusOptions = [
     { value: 'all', label: 'All' },
     { value: 'draft', label: 'Draft' },
@@ -398,56 +390,64 @@ export function PlanTable({
             </tr>
           </thead>
           <tbody>
-          {plans.map((plan, index) => (
-            <tr
-              key={index}
-              className="plan-table-row"
-              onClick={() => handleRowClick(plan)}
-            >
-              <td className="plan-table-cell project">
-                <div className="project-info">
-                  <div className="project-title">{plan.title}</div>
-                </div>
-              </td>
-              <td className="plan-table-cell status">
-                <span
-                  className="status-badge"
-                  style={{
-                    backgroundColor: `${getStatusColor(plan.status)}20`,
-                    color: getStatusColor(plan.status),
-                    borderColor: getStatusColor(plan.status)
-                  }}
-                >
-                  {plan.status.charAt(0).toUpperCase() + plan.status.slice(1).replace('-', ' ')}
-                </span>
-              </td>
-              <td className="plan-table-cell priority">
-                <span
-                  className="priority-badge"
-                  style={{ color: getPriorityColor(plan.priority) }}
-                >
-                  {plan.priority.charAt(0).toUpperCase() + plan.priority.slice(1)}
-                </span>
-              </td>
-              <td className="plan-table-cell updated">
-                <span className="updated-text">{formatDate(plan.lastUpdated)}</span>
-              </td>
-              <td className="plan-table-cell progress">
-                <div className="progress-compact">
-                  <div className="progress-bar-container">
-                    <div
-                      className="progress-bar-fill"
-                      style={{
-                        width: `${plan.progress}%`,
-                        backgroundColor: plan.progress === 100 ? '#22c55e' : plan.progress > 0 ? '#60a5fa' : 'transparent'
-                      }}
-                    />
-                    <span className="progress-value">{plan.progress}%</span>
-                  </div>
-                </div>
+          {plans.length === 0 ? (
+            <tr>
+              <td colSpan={5} className="plan-table-empty">
+                <span>No plan documents found</span>
               </td>
             </tr>
-          ))}
+          ) : (
+            plans.map((plan, index) => (
+              <tr
+                key={index}
+                className="plan-table-row"
+                onClick={() => handleRowClick(plan)}
+              >
+                <td className="plan-table-cell project">
+                  <div className="project-info">
+                    <div className="project-title">{plan.title}</div>
+                  </div>
+                </td>
+                <td className="plan-table-cell status">
+                  <span
+                    className="status-badge"
+                    style={{
+                      backgroundColor: `${getStatusColor(plan.status)}20`,
+                      color: getStatusColor(plan.status),
+                      borderColor: getStatusColor(plan.status)
+                    }}
+                  >
+                    {plan.status.charAt(0).toUpperCase() + plan.status.slice(1).replace('-', ' ')}
+                  </span>
+                </td>
+                <td className="plan-table-cell priority">
+                  <span
+                    className="priority-badge"
+                    style={{ color: getPriorityColor(plan.priority) }}
+                  >
+                    {plan.priority.charAt(0).toUpperCase() + plan.priority.slice(1)}
+                  </span>
+                </td>
+                <td className="plan-table-cell updated">
+                  <span className="updated-text">{formatDate(plan.lastUpdated)}</span>
+                </td>
+                <td className="plan-table-cell progress">
+                  <div className="progress-compact">
+                    <div className="progress-bar-container">
+                      <div
+                        className="progress-bar-fill"
+                        style={{
+                          width: `${plan.progress}%`,
+                          backgroundColor: plan.progress === 100 ? '#22c55e' : plan.progress > 0 ? '#60a5fa' : 'transparent'
+                        }}
+                      />
+                      <span className="progress-value">{plan.progress}%</span>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
           </tbody>
         </table>
       </div>
