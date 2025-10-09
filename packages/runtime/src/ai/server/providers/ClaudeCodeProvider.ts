@@ -76,39 +76,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Build options for claude-code SDK
       console.log('[CLAUDE-CODE] Building SDK options...');
 
-      // Get allowed tools from config, default to a safe subset
-      // For coding sessions: allow all tools
-      // For chat sessions: restrict to read-only tools
-      const allTools = [
-        'Read', 'Write', 'Edit', 'MultiEdit',
-        'Glob', 'Grep', 'LS',
-        'WebFetch', 'WebSearch',
-        'TodoRead', 'TodoWrite', 'Task',
-        'NotebookRead', 'NotebookEdit',
-        'Bash', 'ExitPlanMode'
-      ];
-
-      const readOnlyTools = [
-        'Read',
-        'Glob', 'Grep', 'LS',
-        'WebFetch', 'WebSearch',
-        'TodoRead', 'TodoWrite', 'Task',
-        'ExitPlanMode'
-      ];
-
-      // For coding sessions, allow all tools. For chat sessions, restrict to read-only.
-      const defaultTools = this.currentSessionType === 'coding' ? allTools : readOnlyTools;
-
-      const allowedTools = this.config.allowedTools && this.config.allowedTools.length > 0
-        ? this.config.allowedTools
-        : defaultTools;
-      console.log('[CLAUDE-CODE] Session type:', this.currentSessionType);
-      console.log('[CLAUDE-CODE] Allowed tools:', allowedTools);
-
-      // Calculate disallowed tools - all tools NOT in the allowed list
-      const disallowedTools = allTools.filter(tool => !allowedTools.includes(tool));
-      console.log('[CLAUDE-CODE] Disallowed tools:', disallowedTools);
-
       const options: any = {
         // The SDK might internally need the CLI path
         pathToClaudeCodeExecutable: await this.findCliPath().catch(() => undefined),
@@ -121,8 +88,6 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // BREAKING CHANGE: Claude Agent SDK requires explicit settings sources
         settingSources: ['user', 'project', 'local'],
         mcpServers: this.getMcpServersConfig(),
-        allowedTools,
-        // disallowedTools, // letting the agent work for codign
         cwd: workspacePath,
         abortController: this.abortController,
         model: 'sonnet',
