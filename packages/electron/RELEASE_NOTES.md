@@ -1,5 +1,26 @@
 # Release Notes
 
+## Patch Release
+
+### Bug Fixes
+- Fix window ID retrieval for restoring window state
+- Fix exclude git worktrees from quick open and file search results
+- Fix claude-code provider to properly use its own tools in coding mode
+- Fix prevent workspace and agentic window tab state conflicts
+- Fix release notes extraction from git tags
+- Fix disappearing plan table when filtering
+
+### Features
+- Add folder selection and improved drag-and-drop to file tree
+- Optimize Quick Open with file name caching and on-demand content search
+- Enhance image transformer to store size after resizing
+- Add agent integration instructions
+
+### Improvements
+- Quick Open performance optimizations with intelligent caching
+- Better drag-and-drop file handling in file tree
+- Improved window state persistence and restoration
+
 ## v0.42.27 - 2025-10-08
 
 ### Features
