@@ -53,5 +53,17 @@ planStatus:
     progress: 0-100
     dueDate: "2025-09-24"
     startDate: "2025-09-18"
+    agentSessions:
+      - id: session-id-1
+        createdAt: "2025-09-18T10:30:00.000Z"
+        name: "Initial Implementation"
+        status: active | closed
   ---
 ```
+
+### Agent Session Integration
+Plans can now track associated Agent Coding Sessions directly in the frontmatter. The plan status component displays a "Launch Agent" button that:
+- Opens an Agentic Coding Window attached to the plan document
+- Tracks session IDs in the `agentSessions` array
+- Allows jumping back to active sessions or launching additional ones via dropdown
+- Automatically updates when sessions are created or closed

@@ -164,6 +164,14 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     // Reload sessions list
     await loadCodingSessions();
 
+    // Notify plan document about the new session
+    if (planPath) {
+      await window.electronAPI.invoke('plan-status:notify-session-created', {
+        sessionId: sessionData.id,
+        planDocumentPath: planPath
+      });
+    }
+
     return sessionData;
   };
 
@@ -314,6 +322,20 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
       window.electronAPI.off?.('agentic-coding:session-updated', handleSessionUpdate);
     };
   }, []);
+
+  // Listen for requests to open a specific session (from plan status)
+  useEffect(() => {
+    const handleOpenSession = async (sessionId: string) => {
+      console.log('[AgenticCoding] Received request to open session:', sessionId);
+      await openSessionInTab(sessionId);
+    };
+
+    window.electronAPI.on?.('agentic-coding:open-session', handleOpenSession);
+
+    return () => {
+      window.electronAPI.off?.('agentic-coding:open-session', handleOpenSession);
+    };
+  }, [openSessionInTab]);
 
   // Listen for AI streaming responses
   useEffect(() => {

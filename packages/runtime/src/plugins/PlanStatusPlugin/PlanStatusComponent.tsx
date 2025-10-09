@@ -9,7 +9,16 @@ import {
   type FrontmatterData,
 } from 'rexical';
 import './PlanStatus.css';
-import { PlanStatusConfig, PlanStatus, PlanPriority } from './PlanStatusDecoratorNode';
+import { PlanStatusConfig, PlanStatus, PlanPriority, AgentSession } from './PlanStatusDecoratorNode';
+
+// Extend window type to include electron API and globals
+declare global {
+  interface Window {
+    electronAPI?: any;
+    workspacePath?: string | null;
+    currentFilePath?: string | null;
+  }
+}
 
 interface PlanStatusComponentProps {
   nodeKey: NodeKey;
@@ -70,6 +79,8 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
   const [created, setCreated] = useState(DEFAULT_CREATED_DATE);
   const [updated, setUpdated] = useState('');
   const [progress, setProgress] = useState(0);
+  const [agentSessions, setAgentSessions] = useState<AgentSession[]>([]);
+  const [showSessionDropdown, setShowSessionDropdown] = useState(false);
 
   // Refs for click outside handling
   const containerRef = useRef<HTMLDivElement>(null);
@@ -109,6 +120,7 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
         setCreated(config?.created ?? DEFAULT_CREATED_DATE);
         setUpdated(config?.updated ?? '');
         setProgress(config?.progress ?? 0);
+        setAgentSessions(config?.agentSessions ?? []);
       });
     };
 
@@ -123,6 +135,54 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
       removeListener();
     };
   }, [editor, nodeKey]);
+
+  // Listen for agent session creation events from electron
+  useEffect(() => {
+    if (!window.electronAPI?.on) return;
+
+    const handleSessionCreated = (sessionId: string, planPath: string) => {
+      // Check if this event is for the current document
+      if (window.currentFilePath === planPath) {
+        const newSession: AgentSession = {
+          id: sessionId,
+          createdAt: new Date().toISOString(),
+          status: 'active'
+        };
+
+        setAgentSessions(prev => {
+          // Check if session already exists
+          if (prev.some(s => s.id === sessionId)) {
+            return prev;
+          }
+          const updated = [...prev, newSession];
+          // Update frontmatter
+          editor.update(() => {
+            const frontmatter = $getFrontmatter() as FrontmatterWithPlanStatus | null;
+            const currentConfig = (frontmatter?.planStatus ?? {}) as PlanStatusConfig;
+            const nextConfig: PlanStatusConfig = {
+              ...currentConfig,
+              agentSessions: updated,
+              updated: new Date().toISOString()
+            };
+            const nextFrontmatter: FrontmatterData = {
+              ...(frontmatter ?? {}),
+              planStatus: nextConfig
+            };
+            $setFrontmatter(nextFrontmatter);
+          });
+          return updated;
+        });
+      }
+    };
+
+    const cleanup = window.electronAPI.on('plan-status:agent-session-created', handleSessionCreated);
+
+    return () => {
+      if (cleanup && typeof cleanup === 'function') {
+        cleanup();
+      }
+    };
+  }, [editor]);
 
   // Update node state helper - always updates the 'updated' timestamp
   const updateNodeState = useCallback((updates: Partial<PlanStatusConfig>) => {
@@ -243,8 +303,57 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
     return `${Math.floor(days / 365)} years ago`;
   };
 
+  // Agent session handlers
+  const handleLaunchAgentSession = async () => {
+    if (!window.electronAPI || !window.workspacePath || !window.currentFilePath) {
+      console.warn('[PlanStatus] Cannot launch agent session: missing electronAPI, workspace or file path');
+      return;
+    }
+
+    try {
+      const result = await window.electronAPI.invoke('plan-status:launch-agent-session', {
+        workspacePath: window.workspacePath,
+        planDocumentPath: window.currentFilePath
+      });
+
+      if (result.success && result.sessionId) {
+        // Add the new session to the plan status
+        const newSession: AgentSession = {
+          id: result.sessionId,
+          createdAt: new Date().toISOString(),
+          status: 'active'
+        };
+
+        const updatedSessions = [...agentSessions, newSession];
+        setAgentSessions(updatedSessions);
+        updateNodeState({ agentSessions: updatedSessions });
+      }
+    } catch (error) {
+      console.error('[PlanStatus] Failed to launch agent session:', error);
+    }
+  };
+
+  const handleOpenAgentSession = async (sessionId: string) => {
+    if (!window.electronAPI || !window.workspacePath) {
+      console.warn('[PlanStatus] Cannot open agent session: missing electronAPI or workspace');
+      return;
+    }
+
+    try {
+      await window.electronAPI.invoke('plan-status:open-agent-session', {
+        sessionId,
+        workspacePath: window.workspacePath,
+        planDocumentPath: window.currentFilePath
+      });
+    } catch (error) {
+      console.error('[PlanStatus] Failed to open agent session:', error);
+    }
+  };
+
   const selectedStatus = statusOptions.find(opt => opt.value === status) || statusOptions[0];
   const selectedPriority = priorityOptions.find(opt => opt.value === priority) || priorityOptions[1];
+  const activeSessions = agentSessions.filter(s => s.status !== 'closed');
+  const hasActiveSessions = activeSessions.length > 0;
 
   return (
     <div className="plan-status-decorator-container" ref={containerRef}>
@@ -447,6 +556,132 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
                 </>
               )}
             </div>
+          </div>
+
+          {/* Agent Session Button */}
+          <div className="plan-status-summary-item" style={{ position: 'relative' }}>
+            {!hasActiveSessions ? (
+              <button
+                className="plan-status-agent-launch-button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleLaunchAgentSession();
+                }}
+                title="Launch Agent Coding Session"
+                style={{
+                  padding: '0.25rem 0.5rem',
+                  fontSize: '0.75rem',
+                  backgroundColor: 'var(--primary-color)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.25rem',
+                  cursor: 'pointer',
+                  fontWeight: 500
+                }}
+              >
+                Launch Agent
+              </button>
+            ) : (
+              <div style={{ position: 'relative' }}>
+                <button
+                  className="plan-status-agent-session-button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (activeSessions.length === 1) {
+                      handleOpenAgentSession(activeSessions[0].id);
+                    } else {
+                      setShowSessionDropdown(!showSessionDropdown);
+                    }
+                  }}
+                  title="Open Agent Coding Session"
+                  style={{
+                    padding: '0.25rem 0.5rem',
+                    fontSize: '0.75rem',
+                    backgroundColor: 'var(--surface-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '0.25rem',
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.25rem'
+                  }}
+                >
+                  Agent Session{activeSessions.length > 1 ? 's' : ''} ({activeSessions.length})
+                  {activeSessions.length > 1 && <span style={{ fontSize: '0.625rem' }}>▼</span>}
+                </button>
+                {showSessionDropdown && activeSessions.length > 1 && (
+                  <div
+                    className="plan-status-session-dropdown"
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      marginTop: '0.25rem',
+                      backgroundColor: 'var(--surface-secondary)',
+                      border: '1px solid var(--border-primary)',
+                      borderRadius: '0.25rem',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                      zIndex: 1000,
+                      minWidth: '12rem'
+                    }}
+                  >
+                    {activeSessions.map((session, idx) => (
+                      <div
+                        key={session.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenAgentSession(session.id);
+                          setShowSessionDropdown(false);
+                        }}
+                        style={{
+                          padding: '0.5rem 0.75rem',
+                          cursor: 'pointer',
+                          fontSize: '0.75rem',
+                          color: 'var(--text-primary)',
+                          borderBottom: idx < activeSessions.length - 1 ? '1px solid var(--border-primary)' : 'none'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        Session {idx + 1}
+                        <div style={{ fontSize: '0.625rem', color: 'var(--text-tertiary)', marginTop: '0.125rem' }}>
+                          {formatDate(session.createdAt)}
+                        </div>
+                      </div>
+                    ))}
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleLaunchAgentSession();
+                        setShowSessionDropdown(false);
+                      }}
+                      style={{
+                        padding: '0.5rem 0.75rem',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        color: 'var(--primary-color)',
+                        fontWeight: 500,
+                        borderTop: '1px solid var(--border-primary)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      + New Session
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
         </div>

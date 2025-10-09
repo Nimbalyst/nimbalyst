@@ -16,6 +16,13 @@ import PlanStatusComponent from './PlanStatusComponent';
 export type PlanStatus = 'draft' | 'ready-for-development' | 'in-development' | 'in-review' | 'completed' | 'rejected' | 'blocked';
 export type PlanPriority = 'low' | 'medium' | 'high' | 'critical';
 
+export type AgentSession = {
+  id: string;
+  createdAt: string;
+  name?: string;
+  status?: 'active' | 'closed';
+};
+
 export type PlanStatusConfig = {
   planId?: string;
   title?: string;
@@ -30,6 +37,7 @@ export type PlanStatusConfig = {
   dueDate?: string;
   startDate?: string;
   progress?: number;
+  agentSessions?: AgentSession[];
 };
 
 export type SerializedPlanStatusNode = Spread<

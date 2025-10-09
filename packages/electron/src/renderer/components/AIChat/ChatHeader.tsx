@@ -112,8 +112,8 @@ export function ChatHeader({
     // Create a simple diff replacement using the correct format
     const replacements = [
       {
-        oldText: '# B',
-        newText: '# B\n\n## Test Diff Insert\n\nThis was added via applyReplacements (diff).',
+        oldText: 'This is a test streaming insertion',
+        newText: 'This is an update of the test streaming insertion).',
         type: 'replace'
       }
     ];

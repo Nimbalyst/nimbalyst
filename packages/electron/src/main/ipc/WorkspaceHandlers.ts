@@ -12,7 +12,7 @@ const { writeFile, mkdir, rename, unlink, rmdir, copyFile, readFile, rm, stat, c
 const execAsync = promisify(exec);
 import { windowStates, getWindowId, createWindow } from '../window/WindowManager';
 import { createSessionManagerWindow } from '../window/SessionManagerWindow';
-import { createAgenticCodingWindow } from '../window/AgenticCodingWindow';
+import { createAgenticCodingWindow, getAgenticCodingWindow } from '../window/AgenticCodingWindow';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { getFolderContents } from '../utils/FileTree';
 import {
@@ -842,6 +842,80 @@ export function registerWorkspaceHandlers() {
             return { success: true };
         } catch (error: any) {
             console.error('Error showing in finder:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Plan Status Agent Session Integration
+    ipcMain.handle('plan-status:launch-agent-session', async (event, options: { workspacePath: string; planDocumentPath: string }) => {
+        try {
+            const { workspacePath, planDocumentPath } = options;
+
+            // Check if there's already an agentic coding window for this workspace
+            const existingWindow = getAgenticCodingWindow(workspacePath);
+            if (existingWindow && !existingWindow.isDestroyed()) {
+                // Focus the existing window and create a new session tab
+                existingWindow.focus();
+                // The window will handle creating a new session
+                return { success: true, sessionId: null };
+            }
+
+            // Create a new agentic coding window with the plan document attached
+            const window = createAgenticCodingWindow({
+                workspacePath,
+                planDocumentPath
+            });
+
+            // The window will create its own session, but we need to return a session ID
+            // For now, return success and let the window manage the session
+            return { success: true, sessionId: null };
+        } catch (error: any) {
+            console.error('[PlanStatus] Error launching agent session:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('plan-status:open-agent-session', async (event, options: { sessionId: string; workspacePath: string; planDocumentPath?: string }) => {
+        try {
+            const { sessionId, workspacePath, planDocumentPath } = options;
+
+            // Check if there's already an agentic coding window for this workspace
+            const existingWindow = getAgenticCodingWindow(workspacePath);
+            if (existingWindow && !existingWindow.isDestroyed()) {
+                // Focus the window and tell it to open the session
+                existingWindow.focus();
+                existingWindow.webContents.send('agentic-coding:open-session', sessionId);
+                return { success: true };
+            }
+
+            // Create a new window with the session
+            createAgenticCodingWindow({
+                sessionId,
+                workspacePath,
+                planDocumentPath
+            });
+
+            return { success: true };
+        } catch (error: any) {
+            console.error('[PlanStatus] Error opening agent session:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('plan-status:notify-session-created', async (event, options: { sessionId: string; planDocumentPath: string }) => {
+        try {
+            const { sessionId, planDocumentPath } = options;
+
+            // Notify all workspace windows about the new session
+            BrowserWindow.getAllWindows().forEach(window => {
+                if (!window.isDestroyed()) {
+                    window.webContents.send('plan-status:agent-session-created', sessionId, planDocumentPath);
+                }
+            });
+
+            return { success: true };
+        } catch (error: any) {
+            console.error('[PlanStatus] Error notifying session created:', error);
             return { success: false, error: error.message };
         }
     });
