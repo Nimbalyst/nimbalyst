@@ -129,7 +129,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     // Create session through AI service which handles database persistence
     const session = await window.electronAPI.aiCreateSession(
       'claude-code',
-      undefined, // no documentContext for workspace-level work
+      { sessionType: 'coding' } as any, // Mark as coding session to enable all tools
       workspacePath,
       undefined // no specific model - claude-code manages its own
     );
@@ -340,8 +340,48 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
   // Listen for AI streaming responses
   useEffect(() => {
     const handleStreamResponse = async (data: any) => {
-      // Reload the active session to get updated messages
-      if (data.isComplete && activeTabId) {
+      if (!activeTabId) return;
+
+      // Handle streaming tool calls in real-time
+      if (data.toolCalls && Array.isArray(data.toolCalls) && data.toolCalls.length > 0) {
+        console.log('[AgenticCoding] Received tool calls:', data.toolCalls.length);
+        // Reload session to get updated tool calls
+        try {
+          const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
+          if (sessionData) {
+            setSessionTabs(prev => prev.map(tab => {
+              if (tab.id === activeTabId) {
+                return { ...tab, sessionData };
+              }
+              return tab;
+            }));
+          }
+        } catch (err) {
+          console.error('[AgenticCoding] Failed to reload session after tool calls:', err);
+        }
+      }
+
+      // Handle tool errors in real-time
+      if (data.toolError) {
+        console.log('[AgenticCoding] Received tool error:', data.toolError);
+        // Reload session to get updated error
+        try {
+          const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
+          if (sessionData) {
+            setSessionTabs(prev => prev.map(tab => {
+              if (tab.id === activeTabId) {
+                return { ...tab, sessionData };
+              }
+              return tab;
+            }));
+          }
+        } catch (err) {
+          console.error('[AgenticCoding] Failed to reload session after tool error:', err);
+        }
+      }
+
+      // Handle completion - reload final state
+      if (data.isComplete) {
         console.log('[AgenticCoding] Stream complete, reloading session:', activeTabId);
         try {
           const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
@@ -441,10 +481,10 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     }));
 
     try {
-      // Send message via existing AI service (no document context for workspace-level work)
+      // Send message via existing AI service with coding session context
       await window.electronAPI.aiSendMessage(
         prompt,
-        undefined, // no documentContext - claude-code works on whole workspace via MCP
+        { sessionType: 'coding' } as any, // Mark as coding session to enable all tools
         activeTabId,
         workspacePath
       );
