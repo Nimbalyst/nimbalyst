@@ -491,8 +491,11 @@ export function registerWorkspaceHandlers() {
 
     // Get recent workspace files
     ipcMain.handle('get-recent-workspace-files', async (event) => {
-        const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
-        if (!windowId) return [];
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) return [];
+
+        const windowId = getWindowId(window);
+        if (windowId === null) return [];
 
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return [];
@@ -512,8 +515,11 @@ export function registerWorkspaceHandlers() {
 
     // Add to workspace recent files
     ipcMain.on('add-to-workspace-recent-files', async (event, filePath: string) => {
-        const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
-        if (!windowId) return;
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) return;
+
+        const windowId = getWindowId(window);
+        if (windowId === null) return;
 
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return;
@@ -536,8 +542,11 @@ export function registerWorkspaceHandlers() {
      * Both window types share the same workspace path but maintain separate tab histories.
      */
     ipcMain.handle('get-workspace-tab-state', async (event) => {
-        const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
-        if (!windowId) return null;
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) return null;
+
+        const windowId = getWindowId(window);
+        if (windowId === null) return null;
 
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return null;
@@ -561,8 +570,11 @@ export function registerWorkspaceHandlers() {
      * This prevents the agentic window from overwriting workspace tab state when it saves.
      */
     ipcMain.on('save-workspace-tab-state', async (event, tabState) => {
-        const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
-        if (!windowId) return;
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) return;
+
+        const windowId = getWindowId(window);
+        if (windowId === null) return;
 
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return;
@@ -579,8 +591,11 @@ export function registerWorkspaceHandlers() {
 
     // Clear workspace tab state
     ipcMain.on('clear-workspace-tab-state', (event) => {
-        const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
-        if (!windowId) return;
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) return;
+
+        const windowId = getWindowId(window);
+        if (windowId === null) return;
 
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return;
