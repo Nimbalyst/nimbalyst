@@ -112,8 +112,8 @@ export function ChatHeader({
     // Create a simple diff replacement using the correct format
     const replacements = [
       {
-        oldText: 'This is a test streaming insertion',
-        newText: 'This is an update of the test streaming insertion).',
+        oldText: 'This is a test streaming insertion.',
+        newText: 'This is an update of the test streaming insertion.',
         type: 'replace'
       }
     ];
