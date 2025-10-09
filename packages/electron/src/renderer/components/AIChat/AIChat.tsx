@@ -148,6 +148,7 @@ export function AIChat({
   // CRITICAL: Store the document context snapshot at the time each message is sent
   // This ensures edits are applied to the correct document even if the user switches tabs during AI processing
   const messageDocumentContextRef = useRef<{filePath: string; content: string} | null>(null);
+  const lastStreamPartialRef = useRef<{ assistant: string; system: string }>({ assistant: '', system: '' });
 
   // Load sessions on mount
   const loadSessions = useCallback(async () => {
@@ -181,6 +182,7 @@ export function AIChat({
     // Set up streaming response listener
     const handleStreamResponse = (data: any) => {
       if (data.isComplete) {
+        lastStreamPartialRef.current = { assistant: '', system: '' };
         // Final response with edits
         setMessages(prev => {
           const newMessages = [...prev];
@@ -305,29 +307,55 @@ export function AIChat({
           // Check if this is a system message (like slash command output)
           const isSystemMessage = data.isSystem === true;
           const messageRole = isSystemMessage ? 'system' : 'assistant';
+          const roleKey = isSystemMessage ? 'system' : 'assistant';
 
-          // Track accumulated content separately to avoid duplication
-          setMessages(prev => {
-            const newMessages = [...prev];
-            const lastMessage = newMessages[newMessages.length - 1];
+          const previousPartial = lastStreamPartialRef.current[roleKey] || '';
+          let delta = data.partial;
 
-            if (lastMessage && lastMessage.role === messageRole && !lastMessage.isStreamingStatus) {
-              // Update existing message - replace content, don't append
-              // The partial already contains the full accumulated text
-              lastMessage.content = data.partial;
-              if (isSystemMessage) {
-                lastMessage.isSystem = true;
+          if (previousPartial) {
+            if (data.partial.startsWith(previousPartial)) {
+              delta = data.partial.slice(previousPartial.length);
+            } else if (!previousPartial.startsWith(data.partial)) {
+              let divergenceIndex = 0;
+              const limit = Math.min(previousPartial.length, data.partial.length);
+              while (divergenceIndex < limit && previousPartial[divergenceIndex] === data.partial[divergenceIndex]) {
+                divergenceIndex++;
               }
-            } else if (!lastMessage || lastMessage.role !== messageRole || lastMessage.isStreamingStatus) {
-              // Create new message only if there isn't one yet
+              delta = data.partial.slice(divergenceIndex);
+            }
+          }
+
+          lastStreamPartialRef.current[roleKey] = data.partial;
+
+          const shouldUpdateWithoutDelta = isSystemMessage && delta.length === 0;
+
+          if (delta.length > 0 || shouldUpdateWithoutDelta) {
+            setMessages(prev => {
+              const newMessages = [...prev];
+              const lastMessage = newMessages[newMessages.length - 1];
+
+              if (lastMessage && lastMessage.role === messageRole && !lastMessage.isStreamingStatus) {
+                if (delta.length > 0) {
+                  lastMessage.content = (lastMessage.content || '') + delta;
+                }
+                if (isSystemMessage) {
+                  lastMessage.isSystem = true;
+                }
+                return newMessages;
+              }
+
+              if (delta.length === 0) {
+                return prev;
+              }
+
               newMessages.push({
                 role: messageRole,
-                content: data.partial,
+                content: delta,
                 isSystem: isSystemMessage
               });
-            }
-            return newMessages;
-          });
+              return newMessages;
+            });
+          }
         }
 
         // Handle edits that come during streaming (before isComplete)
@@ -444,6 +472,7 @@ export function AIChat({
     // Set up error listener
     const handleError = (error: any) => {
       logger.api.info('Received error from API:', error);
+      lastStreamPartialRef.current = { assistant: '', system: '' };
       setIsLoading(false);
 
       // Add error message to chat
@@ -985,6 +1014,7 @@ export function AIChat({
     setHistoryIndex(-1); // Reset history navigation
     setTempInput(''); // Clear temp input
     setIsLoading(true);
+    lastStreamPartialRef.current = { assistant: '', system: '' };
 
     try {
       // Send message to Claude with fresh document context and session ID
@@ -1112,6 +1142,7 @@ export function AIChat({
       const result = await aiApi.cancelRequest();
       if (result.success) {
         setIsLoading(false);
+        lastStreamPartialRef.current = { assistant: '', system: '' };
         setIsStreamingToEditor(false);
         isStreamingToEditorRef.current = false;
 
