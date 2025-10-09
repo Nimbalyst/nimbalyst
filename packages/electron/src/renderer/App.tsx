@@ -756,6 +756,11 @@ export default function App() {
         e.preventDefault();
         setIsAIChatCollapsed(prev => !prev);
       }
+      // Cmd+Shift+T (Mac) or Ctrl+Shift+T (Windows/Linux) to reopen last closed tab
+      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 't') {
+        e.preventDefault();
+        tabs.reopenLastClosedTab();
+      }
       // Cmd+Y (Mac) or Ctrl+Y (Windows/Linux) for History
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
         e.preventDefault();
@@ -776,7 +781,7 @@ export default function App() {
     // Use capture phase to intercept before any other handlers (like Lexical's)
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [workspaceMode, currentFilePath]);
+  }, [workspaceMode, currentFilePath, tabs.reopenLastClosedTab]);
 
   // Save AI Chat state when it changes (but only after initial load)
   useEffect(() => {

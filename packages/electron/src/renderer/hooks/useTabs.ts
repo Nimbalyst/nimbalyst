@@ -44,6 +44,7 @@ interface UseTabsResult {
   getTabState: (tabId: string) => TabData | undefined;
   closeAllTabs: () => void;
   closeSavedTabs: () => void;
+  reopenLastClosedTab: () => void;
 }
 
 // Simple hash function for content validation
@@ -69,7 +70,10 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
   const [tabs, setTabs] = useState<Map<string, TabData>>(new Map());
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [tabOrder, setTabOrder] = useState<string[]>([]);
+  const [closedTabs, setClosedTabs] = useState<TabData[]>([]);
   const tabIdCounter = useRef(0);
+
+  const MAX_CLOSED_TAB_HISTORY = 10;
 
   // Generate unique tab ID
   const generateTabId = useCallback((): string => {
@@ -158,6 +162,12 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     const tab = tabs.get(tabId);
     if (!tab) return;
 
+    // Add to closed tabs history (before removing)
+    setClosedTabs(prev => {
+      const newClosedTabs = [tab, ...prev].slice(0, MAX_CLOSED_TAB_HISTORY);
+      return newClosedTabs;
+    });
+
     // Call onTabClose callback
     onTabClose?.(tab);
 
@@ -190,7 +200,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
         setActiveTabId(null);
       }
     }
-  }, [tabs, tabOrder, activeTabId, onTabClose, onTabChange]);
+  }, [tabs, tabOrder, activeTabId, onTabClose, onTabChange, MAX_CLOSED_TAB_HISTORY]);
 
   // Switch to a different tab
   const switchTab = useCallback((tabId: string, fromNavigation: boolean = false): void => {
@@ -241,6 +251,17 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
       .filter(tab => !tab.isDirty)
       .forEach(tab => removeTab(tab.id));
   }, [tabs, removeTab]);
+
+  // Reopen the last closed tab
+  const reopenLastClosedTab = useCallback((): void => {
+    if (closedTabs.length === 0) return;
+
+    const [lastClosed, ...remainingClosed] = closedTabs;
+    setClosedTabs(remainingClosed);
+
+    // Reopen the tab - it will get a new ID
+    addTab(lastClosed.filePath);
+  }, [closedTabs, addTab]);
 
   // Toggle pin status and move tab to appropriate position
   const togglePin = useCallback((tabId: string): void => {
@@ -328,10 +349,21 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
         // Don't save content or editor state
       }));
 
+      const closedTabsArray = closedTabs.map(tab => ({
+        id: tab.id,
+        filePath: tab.filePath,
+        fileName: tab.fileName,
+        isDirty: tab.isDirty,
+        isPinned: tab.isPinned,
+        isVirtual: tab.isVirtual,
+        lastSaved: tab.lastSaved?.toISOString()
+      }));
+
       const tabState: any = {
         tabs: tabsArray,
         activeTabId,
-        tabOrder
+        tabOrder,
+        closedTabs: closedTabsArray
       };
 
       // Include navigation state if available
@@ -360,7 +392,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     return () => {
       clearInterval(interval);
     };
-  }, [enabled, tabs.size, activeTabId, tabOrder.length, getNavigationState]); // Use primitive values instead of objects
+  }, [enabled, tabs.size, activeTabId, tabOrder.length, closedTabs.length, getNavigationState]); // Use primitive values instead of objects
 
   // Store onTabChange in a ref to avoid re-running effect
   const onTabChangeRef = useRef(onTabChange);
@@ -430,6 +462,23 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
             setTabs(restoredTabs);
             setTabOrder(savedState.tabOrder || []);
 
+            // Restore closed tabs history if available
+            if (savedState.closedTabs && Array.isArray(savedState.closedTabs)) {
+              const restoredClosedTabs = savedState.closedTabs.map((tab: any) => ({
+                id: tab.id,
+                filePath: tab.filePath,
+                fileName: tab.fileName,
+                content: '',
+                isDirty: false,
+                isPinned: tab.isPinned,
+                isVirtual: tab.isVirtual,
+                lastSaved: tab.lastSaved ? new Date(tab.lastSaved) : undefined,
+                contentHash: undefined,
+                contentLoadedAt: undefined
+              }));
+              setClosedTabs(restoredClosedTabs);
+            }
+
             // Start watching all restored tabs (skip virtual files)
             if (window.electronAPI) {
               for (const tab of restoredTabs.values()) {
@@ -475,7 +524,8 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     saveTabState,
     getTabState,
     closeAllTabs,
-    closeSavedTabs
+    closeSavedTabs,
+    reopenLastClosedTab
   };
 
   return result;

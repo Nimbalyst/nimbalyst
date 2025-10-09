@@ -286,12 +286,6 @@ export const TabBar: React.FC<TabBarProps> = ({
       // Don't handle shortcuts if menu is open
       if (showTabMenu) return;
       
-      // Cmd/Ctrl + T for new tab
-      if ((e.metaKey || e.ctrlKey) && e.key === 't') {
-        e.preventDefault();
-        onNewTab();
-      }
-      
       // Cmd/Ctrl + W to close current tab
       if ((e.metaKey || e.ctrlKey) && e.key === 'w' && activeTabId) {
         e.preventDefault();

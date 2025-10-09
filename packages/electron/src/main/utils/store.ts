@@ -22,6 +22,7 @@ export interface TabState {
   fileName: string;
   isDirty: boolean;
   isPinned: boolean;
+  isVirtual?: boolean;
   lastSaved?: string;
 }
 
@@ -29,6 +30,7 @@ export interface TabManagerState {
   tabs: TabState[];
   activeTabId: string | null;
   tabOrder: string[];
+  closedTabs?: TabState[]; // History of recently closed tabs for reopening
 }
 
 export interface WorkspaceAIPanelState {
@@ -95,6 +97,7 @@ const DEFAULT_TAB_MANAGER_STATE: TabManagerState = {
   tabs: [],
   activeTabId: null,
   tabOrder: [],
+  closedTabs: [],
 };
 
 const DEFAULT_AI_PANEL_STATE: WorkspaceAIPanelState = {
@@ -157,6 +160,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
     tabs: Array.isArray(agenticTabsRaw.tabs) ? agenticTabsRaw.tabs.map((tab: any) => ({ ...tab })) : [],
     activeTabId: agenticTabsRaw.activeTabId ?? null,
     tabOrder: Array.isArray(agenticTabsRaw.tabOrder) ? [...agenticTabsRaw.tabOrder] : [],
+    closedTabs: Array.isArray(agenticTabsRaw.closedTabs) ? agenticTabsRaw.closedTabs.map((tab: any) => ({ ...tab })) : [],
   } : undefined;
 
   return {
@@ -177,6 +181,9 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
         : Array.isArray(fallbackTabs?.tab_order)
           ? [...fallbackTabs.tab_order]
           : [],
+      closedTabs: Array.isArray(fallbackTabs?.closedTabs)
+        ? fallbackTabs.closedTabs.map((tab: any) => ({ ...tab }))
+        : [],
     },
     agenticTabs,
     aiPanel: {
@@ -209,12 +216,14 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
       tabs: state.tabs.tabs.map(tab => ({ ...tab })),
       activeTabId: state.tabs.activeTabId,
       tabOrder: [...state.tabs.tabOrder],
+      closedTabs: state.tabs.closedTabs?.map(tab => ({ ...tab })) ?? [],
     },
     // CRITICAL: Must clone agenticTabs to prevent state corruption
     agenticTabs: state.agenticTabs ? {
       tabs: state.agenticTabs.tabs.map(tab => ({ ...tab })),
       activeTabId: state.agenticTabs.activeTabId,
       tabOrder: [...state.agenticTabs.tabOrder],
+      closedTabs: state.agenticTabs.closedTabs?.map(tab => ({ ...tab })) ?? [],
     } : undefined,
     aiPanel: { ...state.aiPanel },
     navigationHistory: state.navigationHistory ? {
