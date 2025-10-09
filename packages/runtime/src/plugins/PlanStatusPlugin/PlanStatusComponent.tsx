@@ -86,6 +86,9 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const priorityDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Store the file path this component belongs to (captured at mount time)
+  const componentFilePathRef = useRef<string | null>(null);
+
   // Load initial data from node state
   useEffect(() => {
     const loadFromNodeState = () => {
@@ -135,13 +138,18 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
     };
   }, [editor, nodeKey]);
 
+  // Capture this component's file path at mount
+  useEffect(() => {
+    componentFilePathRef.current = window.currentFilePath;
+  }, []); // Only run once at mount
+
   // Listen for agent session creation events from electron
   useEffect(() => {
     if (!window.electronAPI?.on) return;
 
     const handleSessionCreated = (sessionId: string, planPath: string) => {
-      // Check if this event is for the current document
-      if (window.currentFilePath === planPath) {
+      // Check if this event is for THIS component's document (not the currently active tab)
+      if (componentFilePathRef.current === planPath) {
         const newSession: AgentSession = {
           id: sessionId,
           createdAt: new Date().toISOString(),
