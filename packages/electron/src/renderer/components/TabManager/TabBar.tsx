@@ -10,6 +10,10 @@ interface TabBarProps {
   onTogglePin: (tabId: string) => void;
   onTabReorder: (fromIndex: number, toIndex: number) => void;
   onViewHistory?: (tabId: string) => void;
+  onReopenLastClosed?: () => void;
+  hasClosedTabs?: boolean;
+  onTabRename?: (tabId: string, newName: string) => void;
+  allowRename?: boolean;
 }
 
 export const TabBar: React.FC<TabBarProps> = ({
@@ -20,7 +24,11 @@ export const TabBar: React.FC<TabBarProps> = ({
   onNewTab,
   onTogglePin,
   onTabReorder,
-  onViewHistory
+  onViewHistory,
+  onReopenLastClosed,
+  hasClosedTabs = false,
+  onTabRename,
+  allowRename = false
 }) => {
   const [contextMenuTab, setContextMenuTab] = useState<string | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -28,15 +36,20 @@ export const TabBar: React.FC<TabBarProps> = ({
   const [menuSelectedIndex, setMenuSelectedIndex] = useState<number>(-1);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState<string>('');
   const isDraggingRef = useRef(false);
   const tabBarRef = useRef<HTMLDivElement>(null);
   const tabMenuRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const editInputRef = useRef<HTMLInputElement>(null);
+  const clickCountRef = useRef<Map<string, number>>(new Map());
+  const clickTimerRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
-  // Handle tab click
+  // Handle tab click (including double-click for rename)
   const handleTabClick = useCallback((e: React.MouseEvent, tabId: string) => {
-    // Don't handle clicks if we're dragging
-    if (isDraggingRef.current) {
+    // Don't handle clicks if we're dragging or editing
+    if (isDraggingRef.current || editingTabId) {
       return;
     }
 
@@ -49,11 +62,48 @@ export const TabBar: React.FC<TabBarProps> = ({
       return;
     }
 
-    // Left click to select - only if not already active
-    if (e.button === 0 && tabId !== activeTabId) {
-      onTabSelect(tabId);
+    // Left click handling
+    if (e.button === 0) {
+      // Only handle double-click for rename if allowRename is true and onTabRename exists
+      if (allowRename && onTabRename) {
+        const clickCount = (clickCountRef.current.get(tabId) || 0) + 1;
+        clickCountRef.current.set(tabId, clickCount);
+
+        // Clear existing timer
+        const existingTimer = clickTimerRef.current.get(tabId);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+
+        // Set new timer to reset click count
+        const timer = setTimeout(() => {
+          clickCountRef.current.set(tabId, 0);
+        }, 300); // 300ms double-click window
+        clickTimerRef.current.set(tabId, timer);
+
+        // Double-click detected - enter edit mode
+        if (clickCount === 2) {
+          const tab = tabs.find(t => t.id === tabId);
+          if (tab) {
+            setEditingTabId(tabId);
+            setEditingValue(tab.fileName);
+            // Focus input on next tick
+            setTimeout(() => {
+              editInputRef.current?.focus();
+              editInputRef.current?.select();
+            }, 0);
+          }
+          clickCountRef.current.set(tabId, 0);
+          return;
+        }
+      }
+
+      // Single click to select - only if not already active
+      if (tabId !== activeTabId) {
+        onTabSelect(tabId);
+      }
     }
-  }, [onTabSelect, onTabClose, activeTabId]);
+  }, [onTabSelect, onTabClose, activeTabId, editingTabId, allowRename, onTabRename, tabs]);
 
   // Handle close button click
   const handleCloseClick = useCallback((e: React.MouseEvent, tabId: string) => {
@@ -183,6 +233,31 @@ export const TabBar: React.FC<TabBarProps> = ({
     setShowTabMenu(false);
     setMenuSelectedIndex(-1);
   }, [tabs, onTabClose]);
+
+  // Handle rename completion
+  const completeRename = useCallback((save: boolean) => {
+    if (editingTabId && save && onTabRename && editingValue.trim()) {
+      onTabRename(editingTabId, editingValue.trim());
+    }
+    setEditingTabId(null);
+    setEditingValue('');
+  }, [editingTabId, editingValue, onTabRename]);
+
+  // Handle rename input key down
+  const handleRenameKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      completeRename(true);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      completeRename(false);
+    }
+  }, [completeRename]);
+
+  // Handle rename input blur
+  const handleRenameBlur = useCallback(() => {
+    completeRename(true);
+  }, [completeRename]);
 
 
   // Click outside to close context menu
@@ -360,10 +435,33 @@ export const TabBar: React.FC<TabBarProps> = ({
               title={tab.filePath}
             >
               {tab.isPinned && <span className="tab-pin-icon">📌</span>}
-              <span className="tab-title">
-                {tab.fileName}
-                {tab.isDirty && <span className="tab-dirty-indicator">•</span>}
-              </span>
+              {editingTabId === tab.id ? (
+                <input
+                  ref={editInputRef}
+                  type="text"
+                  value={editingValue}
+                  onChange={(e) => setEditingValue(e.target.value)}
+                  onKeyDown={handleRenameKeyDown}
+                  onBlur={handleRenameBlur}
+                  onClick={(e) => e.stopPropagation()}
+                  className="tab-rename-input"
+                  style={{
+                    flex: 1,
+                    fontSize: '13px',
+                    padding: '2px 4px',
+                    border: '1px solid var(--primary-color)',
+                    borderRadius: '2px',
+                    backgroundColor: 'var(--surface-primary)',
+                    color: 'var(--text-primary)',
+                    outline: 'none'
+                  }}
+                />
+              ) : (
+                <span className="tab-title">
+                  {tab.fileName}
+                  {tab.isDirty && <span className="tab-dirty-indicator">•</span>}
+                </span>
+              )}
               {!tab.isPinned && (
                 <button
                   className="tab-close-button"
@@ -464,6 +562,20 @@ export const TabBar: React.FC<TabBarProps> = ({
           <div className="context-menu-item" onClick={handleCloseAll}>
             Close All
           </div>
+          {onReopenLastClosed && hasClosedTabs && (
+            <>
+              <div className="context-menu-separator" />
+              <div
+                className="context-menu-item"
+                onClick={() => {
+                  onReopenLastClosed();
+                  closeContextMenu();
+                }}
+              >
+                Reopen Closed Tab
+              </div>
+            </>
+          )}
         </div>
       )}
     </>

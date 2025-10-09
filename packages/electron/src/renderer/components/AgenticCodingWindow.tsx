@@ -3,6 +3,9 @@ import { AgentTranscriptPanel, TodoItem, FileEditSummary } from '@stravu/runtime
 import type { SessionData } from '@stravu/runtime/ai/server/types';
 import { SessionDropdown } from './AIChat/SessionDropdown';
 import { WorkspaceHeader } from './WorkspaceHeader';
+import { TabBar } from './TabManager/TabBar';
+import type { Tab } from './TabManager/TabManager';
+import './TabManager/TabManager.css';
 
 interface AgenticCodingWindowProps {
   sessionId?: string;
@@ -14,6 +17,7 @@ interface SessionTab {
   id: string;
   name: string;
   sessionData: SessionData;
+  isPinned?: boolean;
 }
 
 type SessionListItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' | 'provider' | 'model'> & {
@@ -34,8 +38,11 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [promptInput, setPromptInput] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [closedSessions, setClosedSessions] = useState<SessionTab[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const initializedRef = useRef(false);
+
+  const MAX_CLOSED_SESSION_HISTORY = 10;
 
   console.log('[AgenticCodingWindow] State initialized', { loading, error, activeTabId, tabCount: sessionTabs.length });
 
@@ -213,7 +220,8 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
                 restoredTabs.push({
                   id: sessionId,
                   name: savedTab.fileName,
-                  sessionData
+                  sessionData,
+                  isPinned: savedTab.isPinned
                 });
               }
             } catch (err) {
@@ -226,6 +234,29 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
             // Extract active tab ID (handle both old agentic:// and new session:// format)
             const activeId = tabStateResult.activeTabId?.replace(/^(session|agentic):\/\//, '') || tabStateResult.activeTabId || restoredTabs[0].id;
             setActiveTabId(activeId);
+
+            // Restore closed sessions history if available
+            if (tabStateResult.closedTabs && Array.isArray(tabStateResult.closedTabs)) {
+              const restoredClosedSessions: SessionTab[] = [];
+              for (const closedTab of tabStateResult.closedTabs) {
+                try {
+                  const sessionId = closedTab.filePath.replace(/^(session|agentic):\/\//, '') || closedTab.id;
+                  const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+                  if (sessionData) {
+                    restoredClosedSessions.push({
+                      id: sessionId,
+                      name: closedTab.fileName,
+                      sessionData,
+                      isPinned: closedTab.isPinned
+                    });
+                  }
+                } catch (err) {
+                  console.error('[AgenticCoding] Failed to load closed session:', closedTab.filePath, err);
+                }
+              }
+              setClosedSessions(restoredClosedSessions);
+            }
+
             setLoading(false);
             return;
           }
@@ -270,7 +301,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
 
   // Save to agentic tab state when tabs change
   useEffect(() => {
-    if (sessionTabs.length === 0) return;
+    if (sessionTabs.length === 0 && closedSessions.length === 0) return;
 
     const saveState = async () => {
       try {
@@ -280,14 +311,23 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
           filePath: `session://${tab.id}`,
           fileName: tab.name,
           isDirty: false,
-          isPinned: false,
+          isPinned: tab.isPinned || false,
           isVirtual: true
+        }));
+
+        // Convert closed sessions to simple format
+        const closedSessionsData = closedSessions.map(tab => ({
+          id: tab.id,
+          filePath: `session://${tab.id}`,
+          fileName: tab.name,
+          isPinned: tab.isPinned || false
         }));
 
         await window.electronAPI?.saveWorkspaceTabState?.({
           tabs,
           activeTabId: activeTabId,
-          tabOrder: tabs.map(t => t.id)
+          tabOrder: tabs.map(t => t.id),
+          closedTabs: closedSessionsData
         });
       } catch (err) {
         console.error('[AgenticCoding] Failed to save tabs state:', err);
@@ -297,7 +337,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     // Debounce saves
     const timer = setTimeout(saveState, 500);
     return () => clearTimeout(timer);
-  }, [sessionTabs, activeTabId]);
+  }, [sessionTabs, activeTabId, closedSessions]);
 
   // Listen for session updates (metadata changes from tools)
   useEffect(() => {
@@ -522,6 +562,128 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     window.electronAPI.invoke('open-session-manager', workspacePath);
   };
 
+  // Convert SessionTab to Tab format for TabBar component
+  const convertToTabs = (sessionTabs: SessionTab[]): Tab[] => {
+    return sessionTabs.map(tab => ({
+      id: tab.id,
+      filePath: `session://${tab.id}`,
+      fileName: tab.name,
+      content: '', // Virtual tabs don't have content
+      isDirty: false,
+      isPinned: tab.isPinned || false,
+      isVirtual: true
+    }));
+  };
+
+  // Handle tab operations from TabBar
+  const handleTabSelect = (tabId: string) => {
+    setActiveTabId(tabId);
+  };
+
+  const handleTabClose = (tabId: string) => {
+    // Find the tab being closed and add to closed sessions history
+    const closingTab = sessionTabs.find(t => t.id === tabId);
+    if (closingTab) {
+      setClosedSessions(prev => [closingTab, ...prev].slice(0, MAX_CLOSED_SESSION_HISTORY));
+    }
+
+    setSessionTabs(prev => {
+      const filtered = prev.filter(t => t.id !== tabId);
+      if (activeTabId === tabId && filtered.length > 0) {
+        setActiveTabId(filtered[filtered.length - 1].id);
+      } else if (filtered.length === 0) {
+        setActiveTabId(null);
+      }
+      return filtered;
+    });
+  };
+
+  // Reopen the last closed session
+  const reopenLastClosedSession = async () => {
+    if (closedSessions.length === 0) return;
+
+    const [lastClosed, ...remainingClosed] = closedSessions;
+    setClosedSessions(remainingClosed);
+
+    // Reopen the session - load it fresh from the database
+    await openSessionInTab(lastClosed.id);
+  };
+
+  const handleTabReorder = (fromIndex: number, toIndex: number) => {
+    setSessionTabs(prev => {
+      const newTabs = [...prev];
+      const [movedTab] = newTabs.splice(fromIndex, 1);
+      newTabs.splice(toIndex, 0, movedTab);
+      return newTabs;
+    });
+  };
+
+  const handleTogglePin = (tabId: string) => {
+    setSessionTabs(prev => {
+      const tab = prev.find(t => t.id === tabId);
+      if (!tab) return prev;
+
+      const newIsPinned = !tab.isPinned;
+      const updatedTab = { ...tab, isPinned: newIsPinned };
+
+      // Create new array with updated tab
+      let newTabs = prev.map(t => t.id === tabId ? updatedTab : t);
+
+      // Reorder: pinned tabs go to the front
+      if (newIsPinned) {
+        // Remove the tab from its current position
+        newTabs = newTabs.filter(t => t.id !== tabId);
+        // Find where to insert it (after the last pinned tab)
+        const lastPinnedIndex = newTabs.findIndex(t => !t.isPinned);
+        const insertIndex = lastPinnedIndex === -1 ? newTabs.length : lastPinnedIndex;
+        newTabs.splice(insertIndex, 0, updatedTab);
+      } else {
+        // Unpinning: move to first unpinned position
+        newTabs = newTabs.filter(t => t.id !== tabId);
+        const firstUnpinnedIndex = newTabs.findIndex(t => !t.isPinned);
+        const insertIndex = firstUnpinnedIndex === -1 ? newTabs.length : firstUnpinnedIndex;
+        newTabs.splice(insertIndex, 0, updatedTab);
+      }
+
+      return newTabs;
+    });
+  };
+
+  const handleNewTab = () => {
+    createNewSession();
+  };
+
+  const handleTabRename = async (tabId: string, newName: string) => {
+    // Update local state
+    setSessionTabs(prev => prev.map(tab => {
+      if (tab.id === tabId) {
+        return { ...tab, name: newName };
+      }
+      return tab;
+    }));
+
+    // Persist to database via SessionManager
+    try {
+      await window.electronAPI.invoke('sessions:update-title', tabId, newName);
+    } catch (err) {
+      console.error('[AgenticCoding] Failed to update session title:', err);
+    }
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + Shift + T to reopen last closed session
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'T') {
+        e.preventDefault();
+        reopenLastClosedSession();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [closedSessions]); // Re-bind when closedSessions changes
+
   console.log('[AgenticCodingWindow] RENDER', { loading, error, activeTabId, tabCount: sessionTabs.length });
 
   if (loading) {
@@ -637,58 +799,19 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
       />
 
       {/* Tabs */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.5rem', borderBottom: '1px solid var(--border-primary)', backgroundColor: 'var(--surface-primary)', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-        {sessionTabs.map(tab => (
-          <div
-            key={tab.id}
-            style={{
-              padding: '0.25rem 0.5rem 0.25rem 0.75rem',
-              borderRadius: '0.25rem',
-              fontSize: '0.75rem',
-              backgroundColor: tab.id === activeTabId ? 'var(--surface-secondary)' : 'transparent',
-              color: tab.id === activeTabId ? 'var(--text-primary)' : 'var(--text-secondary)',
-              border: '1px solid',
-              borderColor: tab.id === activeTabId ? 'var(--border-primary)' : 'transparent',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}
-          >
-            <span
-              onClick={() => setActiveTabId(tab.id)}
-              style={{ cursor: 'pointer' }}
-            >
-              {tab.name}
-            </span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setSessionTabs(prev => {
-                  const filtered = prev.filter(t => t.id !== tab.id);
-                  if (activeTabId === tab.id && filtered.length > 0) {
-                    setActiveTabId(filtered[filtered.length - 1].id);
-                  }
-                  return filtered;
-                });
-              }}
-              style={{
-                padding: '0.125rem',
-                backgroundColor: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                color: 'var(--text-tertiary)',
-                fontSize: '0.875rem',
-                lineHeight: 1
-              }}
-              title="Close tab"
-            >
-              ×
-            </button>
-          </div>
-        ))}
-      </div>
+      <TabBar
+        tabs={convertToTabs(sessionTabs)}
+        activeTabId={activeTabId}
+        onTabSelect={handleTabSelect}
+        onTabClose={handleTabClose}
+        onNewTab={handleNewTab}
+        onTogglePin={handleTogglePin}
+        onTabReorder={handleTabReorder}
+        onReopenLastClosed={reopenLastClosedSession}
+        hasClosedTabs={closedSessions.length > 0}
+        onTabRename={handleTabRename}
+        allowRename={true}
+      />
 
       {/* Active Session Content */}
       {activeTab && (

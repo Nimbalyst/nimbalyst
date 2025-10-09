@@ -72,6 +72,9 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
   const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [sessionTypeFilters, setSessionTypeFilters] = useState<Set<'chat' | 'planning' | 'coding'>>(
+    new Set(['chat', 'planning', 'coding'])
+  );
 
   useEffect(() => {
     loadSessions();
@@ -91,6 +94,12 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
   const filteredSessions = sessions.filter(session => {
     // Apply workspace filter if provided
     if (filterWorkspace && session.workspacePath !== filterWorkspace) {
+      return false;
+    }
+
+    // Apply session type filter
+    const sessionType = session.sessionType || 'chat'; // Default to 'chat' if not specified
+    if (!sessionTypeFilters.has(sessionType)) {
       return false;
     }
 
@@ -216,6 +225,19 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
     return parts[parts.length - 1] || path;
   };
 
+  const toggleSessionTypeFilter = (type: 'chat' | 'planning' | 'coding') => {
+    const newFilters = new Set(sessionTypeFilters);
+    if (newFilters.has(type)) {
+      // Don't allow unchecking the last filter
+      if (newFilters.size > 1) {
+        newFilters.delete(type);
+      }
+    } else {
+      newFilters.add(type);
+    }
+    setSessionTypeFilters(newFilters);
+  };
+
   const getProviderClass = (provider: string) => {
     switch (provider) {
       case 'claude':
@@ -261,11 +283,29 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
               {selectedSessions.size} selected
             </span>
           )}
-          {filterWorkspace && (
-            <span className="workspace-filter">
-              {getWorkspaceName(filterWorkspace)}
-            </span>
-          )}
+        </div>
+        <div className="session-type-filters">
+          <button
+            className={`session-type-filter ${sessionTypeFilters.has('chat') ? 'active' : ''}`}
+            onClick={() => toggleSessionTypeFilter('chat')}
+            title="Toggle chat sessions"
+          >
+            Chat
+          </button>
+          <button
+            className={`session-type-filter ${sessionTypeFilters.has('planning') ? 'active' : ''}`}
+            onClick={() => toggleSessionTypeFilter('planning')}
+            title="Toggle planning sessions"
+          >
+            Planning
+          </button>
+          <button
+            className={`session-type-filter ${sessionTypeFilters.has('coding') ? 'active' : ''}`}
+            onClick={() => toggleSessionTypeFilter('coding')}
+            title="Toggle coding sessions"
+          >
+            Coding
+          </button>
         </div>
         {selectedSessions.size > 0 && (
           <div className="bulk-actions">

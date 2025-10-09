@@ -70,6 +70,11 @@ export async function registerSessionHandlers() {
         await sessionManager.deleteSession(sessionId);
     });
 
+    // Update session title
+    ipcMain.handle('sessions:update-title', async (event, sessionId: string, title: string) => {
+        await sessionManager.updateSessionTitle(sessionId, title);
+    });
+
     // Get active session - not implemented, returns null
     ipcMain.handle('session:get-active', async (event, filePath: string) => {
         // This API doesn't exist in current SessionManager

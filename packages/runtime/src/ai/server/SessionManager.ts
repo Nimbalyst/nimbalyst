@@ -41,6 +41,7 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     id: session.id,
     provider: session.provider as AIProviderType,
     model: session.model ?? undefined,
+    sessionType: session.sessionType,
     createdAt: toTimestampMillis(session.createdAt),
     updatedAt: toTimestampMillis(session.updatedAt),
     messages: session.messages.map(chatMessageFromServerMessage),
@@ -120,7 +121,8 @@ export class SessionManager {
     documentContext?: DocumentContext,
     workspacePath?: string,
     providerConfig?: any,
-    model?: string
+    model?: string,
+    sessionType?: 'chat' | 'planning' | 'coding'
   ): Promise<SessionData> {
     const sessionId = uuidv4();
     const workspace = workspacePath || documentContext?.filePath?.split('/').slice(0, -1).join('/') || 'default';
@@ -129,6 +131,7 @@ export class SessionManager {
       id: sessionId,
       provider,
       model,
+      sessionType,
       workspaceId: workspace,
       filePath: documentContext?.filePath,
       title: 'New conversation',
@@ -141,6 +144,7 @@ export class SessionManager {
       id: sessionId,
       provider,
       model,
+      sessionType,
       createdAt: now,
       updatedAt: now,
       messages: [],

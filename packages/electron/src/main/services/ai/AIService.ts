@@ -152,7 +152,8 @@ export class AIService {
       provider: AIProviderType,
       documentContext?: DocumentContext,
       workspacePath?: string,
-      modelId?: string
+      modelId?: string,
+      sessionType?: 'chat' | 'planning' | 'coding'
     ) => {
       console.log('[AIService] ai:createSession called:', {
         provider,
@@ -226,7 +227,8 @@ export class AIService {
         documentContext,
         workspacePath,
         providerConfig,
-        model
+        model,
+        sessionType || 'chat' // Default to 'chat' if not specified
       );
 
       // Create and initialize provider

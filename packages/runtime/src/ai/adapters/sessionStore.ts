@@ -19,6 +19,7 @@ export interface CreateSessionPayload {
   id: string;
   provider: string;
   model?: string;
+  sessionType?: 'chat' | 'planning' | 'coding';
   title?: string;
   workspaceId: string;
   filePath?: string;
