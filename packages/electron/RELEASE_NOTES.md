@@ -1,6 +1,18 @@
 # Release Notes
 
-## Patch Release
+## v0.42.30 - 2025-10-09
+
+### Bug Fixes
+- Fix auto-update checksum mismatch by including zip files in releases
+- Fix AI text duplication after tool calls in chat
+- Fix markdown export filtering of removed diff nodes
+
+### Features
+- Add Cmd+Shift+T shortcut to reopen closed tabs
+- Add developer option to show all tool calls in AI chat
+- Show tool call results when expanded in chat
+
+## v0.42.28 - 2025-10-09
 
 ### Bug Fixes
 - Fix window ID retrieval for restoring window state
