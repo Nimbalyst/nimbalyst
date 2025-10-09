@@ -331,7 +331,7 @@ import {
           role="presentation"
           style={{
             padding: '8px 12px',
-            backgroundColor: 'var(--background-tertiary, #f5f5f5)',
+            backgroundColor: 'var(--surface-tertiary, #f5f5f5)',
             fontSize: '0.75rem',
             fontWeight: 600,
             color: 'var(--text-secondary, #666)',
@@ -362,7 +362,7 @@ import {
           justifyContent: 'space-between',
           opacity: option.disabled ? 0.5 : 1,
           pointerEvents: option.disabled ? 'none' : 'auto',
-          backgroundColor: isSelected ? 'var(--background-selected, #f0f0f0)' : 'transparent',
+          backgroundColor: isSelected ? 'var(--surface-selected, #f0f0f0)' : 'transparent',
           borderRadius: '4px',
           margin: '2px 4px',
           fontSize: '0.9rem',
@@ -403,7 +403,7 @@ import {
           <span style={{
             fontSize: '0.75rem',
             color: 'var(--text-tertiary, #999)',
-            backgroundColor: 'var(--background-tertiary, #f5f5f5)',
+            backgroundColor: 'var(--surface-tertiary, #f5f5f5)',
             padding: '2px 6px',
             borderRadius: '3px',
             fontFamily: 'monospace'
@@ -583,8 +583,8 @@ import {
             minWidth: `${minWidth}px`,
             maxWidth: `${maxWidth}px`,
             maxHeight: `${maxHeight}px`,
-            backgroundColor: 'var(--background-primary, white)',
-            border: '1px solid var(--border-color, #ccc)',
+            backgroundColor: 'var(--surface-primary, white)',
+            border: '1px solid var(--border-primary, #ccc)',
             borderRadius: '6px',
             display: 'flex',
             flexDirection: 'column',
@@ -593,7 +593,7 @@ import {
         >
           {header && (
             <div style={{
-              borderBottom: '1px solid var(--border-color, #eee)',
+              borderBottom: '1px solid var(--border-primary, #eee)',
               padding: '8px 12px',
               flexShrink: 0,
             }}>
@@ -613,7 +613,7 @@ import {
                         className="typeahead-section-header"
                         style={{
                           padding: '8px 12px',
-                          backgroundColor: 'var(--background-tertiary, #f5f5f5)',
+                          backgroundColor: 'var(--surface-tertiary, #f5f5f5)',
                           fontSize: '0.75rem',
                           fontWeight: 600,
                           color: 'var(--text-secondary, #666)',
@@ -661,7 +661,7 @@ import {
           </div>
           {footer && (
             <div style={{
-              borderTop: '1px solid var(--border-color, #eee)',
+              borderTop: '1px solid var(--border-primary, #eee)',
               padding: '8px 12px',
               flexShrink: 0,
             }}>
@@ -684,8 +684,8 @@ import {
           minWidth: `${minWidth}px`,
           maxWidth: `${maxWidth}px`,
           maxHeight: `${position.maxHeight}px`,
-          backgroundColor: 'var(--background-primary, white)',
-          border: '1px solid var(--border-color, #ccc)',
+          backgroundColor: 'var(--surface-primary, white)',
+          border: '1px solid var(--border-primary, #ccc)',
           borderRadius: '6px',
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
           zIndex: 1000,
@@ -698,7 +698,7 @@ import {
       >
         {header && (
           <div style={{
-            borderBottom: '1px solid var(--border-color, #eee)',
+            borderBottom: '1px solid var(--border-primary, #eee)',
             padding: '6px 10px',
             flexShrink: 0,
           }}>
@@ -728,7 +728,7 @@ import {
                       className="typeahead-section-header"
                       style={{
                         padding: '6px 10px',
-                        backgroundColor: 'var(--background-tertiary, #f5f5f5)',
+                        backgroundColor: 'var(--surface-tertiary, #f5f5f5)',
                         fontSize: '0.7rem',
                         fontWeight: 600,
                         color: 'var(--text-secondary, #666)',
@@ -787,7 +787,7 @@ import {
 
           {footer && (
           <div style={{
-            borderTop: '1px solid var(--border-color, #eee)',
+            borderTop: '1px solid var(--border-primary, #eee)',
             padding: '6px 10px',
             flexShrink: 0,
           }}>

@@ -3,22 +3,22 @@
 ## Critical Rules for Theming
 
 ### NEVER HARDCODE COLORS IN CSS FILES
-All colors MUST use CSS variables defined in `/packages/electron/src/renderer/index.css`. This is the single source of truth for ALL theme colors.
+All colors MUST use CSS variables defined in `/packages/rexical/src/themes/PlaygroundEditorTheme.css`. This is the single source of truth for ALL theme colors.
 
 ### Single Source of Truth
-The theme system uses `/packages/electron/src/renderer/index.css` as the ONLY place where theme colors are defined. All other CSS files MUST reference these variables.
+The theme system uses `/packages/rexical/src/themes/PlaygroundEditorTheme.css` as the ONLY place where theme colors are defined. All other CSS files MUST reference these variables.
 
 ## Theme Architecture
 
 ### 1. Theme Definition Location
 ```
-/packages/electron/src/renderer/index.css
+/packages/rexical/src/themes/PlaygroundEditorTheme.css
 ```
 
 This file contains ALL theme variable definitions for:
 - Light theme (default :root)
-- Dark theme (:root.dark-theme)
-- Crystal Dark theme (:root.crystal-dark-theme)
+- Dark theme (dark theme selectors)
+- Crystal Dark theme (crystal-dark theme selectors)
 
 ### 2. How Themes are Applied
 
@@ -40,12 +40,12 @@ if (savedTheme === 'dark') {
 
 ### 3. CSS Variable Structure
 
-#### Core Variables (defined in index.css):
+#### Core Variables (defined in PlaygroundEditorTheme.css):
 ```css
-/* Backgrounds */
---background-primary: #ffffff;    /* Main content background */
---background-secondary: #f9fafb;  /* Sidebar, panels */
---background-tertiary: #f3f4f6;   /* Hover states, subtle backgrounds */
+/* Surfaces/Backgrounds */
+--surface-primary: #ffffff;       /* Main content background */
+--surface-secondary: #f9fafb;     /* Sidebar, panels */
+--surface-tertiary: #f3f4f6;      /* Hover states, subtle backgrounds */
 
 /* Text */
 --text-primary: #111827;          /* Main text */
@@ -53,25 +53,18 @@ if (savedTheme === 'dark') {
 --text-tertiary: #9ca3af;         /* Very muted text */
 
 /* Borders */
---border-color: #e5e7eb;          /* Default borders */
---border-color-hover: #d1d5db;    /* Hover state borders */
+--border-primary: #e5e7eb;        /* Default borders */
+--border-focus: #3b82f6;          /* Focus state borders */
 
 /* Accent Colors */
---primary-color: #3b82f6;         /* Primary actions, links */
---primary-color-dark: #2563eb;    /* Primary hover */
---primary-color-light: rgba(59, 130, 246, 0.1); /* Primary backgrounds */
+--accent-primary: #3b82f6;        /* Primary actions, links */
+--accent-primary-hover: #2563eb;  /* Primary hover */
 
 /* Status Colors */
 --success-color: #10b981;
---danger-color: #ef4444;
+--error-color: #ef4444;
 --warning-color: #f59e0b;
-
-/* Provider-specific colors */
---provider-claude-bg: #fef3c7;
---provider-claude-color: #92400e;
---provider-claude-code-bg: #dbeafe;
---provider-claude-code-color: #1e40af;
-/* ... etc ... */
+--info-color: #3b82f6;
 ```
 
 ### 4. Dark Theme Colors
@@ -130,12 +123,12 @@ The Crystal Dark theme uses Tailwind gray scale colors (#0f172a, #020617, #1e293
 }
 ```
 
-### ✅ CORRECT: Using variables from index.css
+### ✅ CORRECT: Using variables from PlaygroundEditorTheme.css
 
 ```css
 /* component.css - ALWAYS DO THIS */
 .my-component {
-    background: var(--surface-primary); /* Defined in index.css */
+    background: var(--surface-primary); /* Defined in PlaygroundEditorTheme.css */
 }
 ```
 
@@ -157,9 +150,9 @@ root.classList.add('dark-theme');
 When creating new components that need theming:
 
 1. **NEVER** hardcode colors
-2. **ALWAYS** use variables from index.css
+2. **ALWAYS** use variables from PlaygroundEditorTheme.css
 3. **NEVER** create new theme variable definitions in your component
-4. If you need a new color variable, add it to index.css for ALL themes
+4. If you need a new color variable, add it to PlaygroundEditorTheme.css for ALL themes
 
 Example for a new component:
 
@@ -197,10 +190,10 @@ If a component shows wrong colors:
 2. **Verify variable usage**: Ensure all colors use var(--variable-name)
 3. **Check theme application**: Verify the component sets both data-theme AND class name
 4. **Inspect CSS cascade**: Use DevTools to see which styles are being applied
-5. **Check index.css imports**: Ensure index.css is imported before component CSS
+5. **Check PlaygroundEditorTheme.css imports**: Ensure PlaygroundEditorTheme.css is imported before component CSS
 
 ## The Golden Rule
 
-**There is ONE and ONLY ONE place to define theme colors: `/packages/electron/src/renderer/index.css`**
+**There is ONE and ONLY ONE place to define theme colors: `/packages/rexical/src/themes/PlaygroundEditorTheme.css`**
 
 Everything else MUST reference these variables. No exceptions.
