@@ -18,7 +18,6 @@ planStatus:
   progress: 100
   startDate: "2025-10-09"
 ---
-
 # Filter Removed Nodes from Markdown Export
 <!-- plan-status -->
 
@@ -66,10 +65,10 @@ Successfully implemented the filter for removed diff nodes during markdown expor
 1. **EnhancedMarkdownExport.ts**: Added import for `$getDiffState` from DiffState module
 2. **exportChildren function**: Added check at the start of the main loop to skip any child nodes with `diffState === 'removed'`
 3. **Tests**: Created comprehensive test suite in `diff-export-filter.test.ts` with 4 test cases:
-   - Excluding removed nodes
-   - Including added nodes
-   - Handling multiple removed nodes in sequence
-   - Preserving normal text without diff state
+  - Excluding removed nodes
+  - Including added nodes
+  - Handling multiple removed nodes in sequence
+  - Preserving normal text without diff state
 
 ### Results
 

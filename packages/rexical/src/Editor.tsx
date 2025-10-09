@@ -48,6 +48,7 @@ import ImagesPlugin from './plugins/ImagesPlugin';
 import { LayoutPlugin } from './plugins/LayoutPlugin/LayoutPlugin';
 import LinkPlugin from './plugins/LinkPlugin';
 import MarkdownShortcutPlugin from './plugins/MarkdownShortcutPlugin';
+import MarkdownPastePlugin from './plugins/MarkdownPastePlugin';
 import PageBreakPlugin from './plugins/PageBreakPlugin';
 import ShortcutsPlugin from './plugins/ShortcutsPlugin';
 import SpeechToTextPlugin from './plugins/SpeechToTextPlugin';
@@ -270,6 +271,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
               ErrorBoundary={LexicalErrorBoundary}
             />
             <MarkdownShortcutPlugin />
+            <MarkdownPastePlugin transformers={markdownTransformers} />
             {isCodeHighlighted && (
               <Suspense fallback={null}>
                 <CodeHighlightPlugin />
