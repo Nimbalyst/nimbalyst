@@ -166,7 +166,7 @@ export function registerWorkspaceHandlers() {
     ipcMain.handle('build-quick-open-cache', async (event, workspacePath: string) => {
         try {
             const escapedPath = workspacePath.replace(/["'\\]/g, '\\$&');
-            const findCommand = `find "${escapedPath}" -path "*/node_modules/*" -prune -o -type f \\( -name "*.md" -o -name "*.markdown" \\) -print 2>/dev/null`;
+            const findCommand = `find "${escapedPath}" -path "*/node_modules/*" -prune -o -path "*/.git/*" -prune -o -path "*/.worktrees/*" -prune -o -type f \\( -name "*.md" -o -name "*.markdown" \\) -print 2>/dev/null`;
             const { stdout } = await execAsync(findCommand, { shell: '/bin/bash' });
 
             const cache: Array<{ path: string; name: string }> = [];
@@ -275,8 +275,8 @@ export function registerWorkspaceHandlers() {
                 }
             }
 
-            // Avoid scanning node_modules to keep quick open results relevant
-            const contentCommand = `"${rgPath}" --type md -i --json --glob "!**/node_modules/**" "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
+            // Avoid scanning node_modules and git worktrees to keep quick open results relevant
+            const contentCommand = `"${rgPath}" --type md -i --json --glob "!**/node_modules/**" --glob "!**/.git/**" --glob "!**/.worktrees/**" "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
             const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
 
             const contentMatches = new Map<string, any>();
@@ -330,7 +330,7 @@ export function registerWorkspaceHandlers() {
 
             // First, search file names
             try {
-                const fileNameCommand = `find "${workspacePath}" -path "*/node_modules/*" -prune -o \( -name "*.md" -o -name "*.markdown" \) -print 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
+                const fileNameCommand = `find "${workspacePath}" -path "*/node_modules/*" -prune -o -path "*/.git/*" -prune -o -path "*/.worktrees/*" -prune -o \( -name "*.md" -o -name "*.markdown" \) -print 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
                 const { stdout: fileMatches } = await execAsync(fileNameCommand);
 
                 if (fileMatches) {
@@ -421,8 +421,8 @@ export function registerWorkspaceHandlers() {
                     console.warn('[SEARCH] Could not find bundled ripgrep, falling back to system rg');
                 }
 
-                // Avoid scanning node_modules to keep quick open results relevant
-                contentCommand = `"${rgPath}" --type md -i --json --glob "!**/node_modules/**" "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
+                // Avoid scanning node_modules and git worktrees to keep quick open results relevant
+                contentCommand = `"${rgPath}" --type md -i --json --glob "!**/node_modules/**" --glob "!**/.git/**" --glob "!**/.worktrees/**" "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
                 const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
 
                 if (stdout) {

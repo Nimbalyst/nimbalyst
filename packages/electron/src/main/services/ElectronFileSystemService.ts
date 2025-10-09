@@ -38,6 +38,7 @@ const EXCLUDED_EXTENSIONS = new Set([
 const EXCLUDED_DIRS = new Set([
   'node_modules',
   '.git',
+  '.worktrees',  // Git worktrees
   'dist',
   'build',
   'out',
@@ -198,7 +199,7 @@ export class ElectronFileSystemService implements FileSystemService {
         // Use glob for pattern matching
         const pattern = join(basePath, options.pattern);
         const files = await glob(pattern, {
-          ignore: ['**/node_modules/**', '**/.git/**'],
+          ignore: ['**/node_modules/**', '**/.git/**', '**/.worktrees/**'],
           dot: options?.includeHidden,
           maxDepth: options?.maxDepth || 3
         });
