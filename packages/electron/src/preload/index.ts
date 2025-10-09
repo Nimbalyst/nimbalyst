@@ -279,8 +279,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // AI operations (new unified interface)
   aiHasApiKey: () => ipcRenderer.invoke('ai:hasApiKey'),
   aiInitialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
-  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string) =>
-    ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId),
+  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding') =>
+    ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId, sessionType),
   aiSendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) =>
     ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, workspacePath),
   aiGetSessions: (workspacePath?: string) => ipcRenderer.invoke('ai:getSessions', workspacePath),
@@ -418,8 +418,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ai: {
     hasApiKey: () => ipcRenderer.invoke('ai:hasApiKey'),
     initialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
-    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string) =>
-      ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId),
+    createSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding') =>
+      ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId, sessionType),
     sendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) =>
       ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, workspacePath),
     getSessions: (workspacePath?: string) => ipcRenderer.invoke('ai:getSessions', workspacePath),

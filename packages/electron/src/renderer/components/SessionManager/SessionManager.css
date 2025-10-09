@@ -106,9 +106,20 @@
 }
 
 .session-type-filter.active {
-  background-color: var(--primary-color);
   color: white;
-  border-color: var(--primary-color);
+  border-color: transparent;
+}
+
+.session-type-filter.active.chat {
+  background-color: #3b82f6;
+}
+
+.session-type-filter.active.planning {
+  background-color: #8b5cf6;
+}
+
+.session-type-filter.active.coding {
+  background-color: #10b981;
 }
 
 .selection-count {
@@ -147,6 +158,26 @@
   border-bottom: none;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.session-type-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+
+.session-type-indicator.chat {
+  background-color: #3b82f6; /* Blue */
+}
+
+.session-type-indicator.planning {
+  background-color: #8b5cf6; /* Purple */
+}
+
+.session-type-indicator.coding {
+  background-color: #10b981; /* Green */
 }
 
 .session-item:hover {

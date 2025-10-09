@@ -291,13 +291,14 @@ class AIApi {
     documentContext?: DocumentContext,
     workspacePath?: string,
     provider?: 'claude' | 'claude-code' | 'openai' | 'lmstudio',
-    modelId?: string
+    modelId?: string,
+    sessionType?: 'chat' | 'planning' | 'coding'
   ): Promise<SessionData> {
     // Provider must be explicitly specified, no default
     if (!provider) {
       throw new Error('Provider must be specified when creating a session');
     }
-    return window.electronAPI.aiCreateSession(provider, documentContext, workspacePath, modelId);
+    return window.electronAPI.aiCreateSession(provider, documentContext, workspacePath, modelId, sessionType);
   }
 
   // New method specifically for creating session with provider
@@ -305,9 +306,10 @@ class AIApi {
     provider: 'claude' | 'claude-code' | 'openai',
     documentContext?: DocumentContext,
     workspacePath?: string,
-    modelId?: string
+    modelId?: string,
+    sessionType?: 'chat' | 'planning' | 'coding'
   ): Promise<SessionData> {
-    return window.electronAPI.aiCreateSession(provider, documentContext, workspacePath, modelId);
+    return window.electronAPI.aiCreateSession(provider, documentContext, workspacePath, modelId, sessionType);
   }
 
   async sendMessage(

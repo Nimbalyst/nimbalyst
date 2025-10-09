@@ -136,9 +136,10 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     // Create session through AI service which handles database persistence
     const session = await window.electronAPI.aiCreateSession(
       'claude-code',
-      { sessionType: 'coding' } as any, // Mark as coding session to enable all tools
+      undefined, // no document context
       workspacePath,
-      undefined // no specific model - claude-code manages its own
+      undefined, // no specific model - claude-code manages its own
+      'coding' // Mark as coding session to enable all tools
     );
 
     // Mark as coding session and add plan reference in metadata

@@ -286,21 +286,21 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
         </div>
         <div className="session-type-filters">
           <button
-            className={`session-type-filter ${sessionTypeFilters.has('chat') ? 'active' : ''}`}
+            className={`session-type-filter chat ${sessionTypeFilters.has('chat') ? 'active' : ''}`}
             onClick={() => toggleSessionTypeFilter('chat')}
             title="Toggle chat sessions"
           >
             Chat
           </button>
           <button
-            className={`session-type-filter ${sessionTypeFilters.has('planning') ? 'active' : ''}`}
+            className={`session-type-filter planning ${sessionTypeFilters.has('planning') ? 'active' : ''}`}
             onClick={() => toggleSessionTypeFilter('planning')}
             title="Toggle planning sessions"
           >
             Planning
           </button>
           <button
-            className={`session-type-filter ${sessionTypeFilters.has('coding') ? 'active' : ''}`}
+            className={`session-type-filter coding ${sessionTypeFilters.has('coding') ? 'active' : ''}`}
             onClick={() => toggleSessionTypeFilter('coding')}
             title="Toggle coding sessions"
           >
@@ -331,12 +331,14 @@ export const SessionManager: React.FC<SessionManagerProps> = ({ filterWorkspace 
             filteredSessions.map(session => {
               const isSelected = selectedSession?.id === session.id;
               const isMultiSelected = selectedSessions.has(session.id);
+              const sessionType = session.sessionType || 'chat';
               return (
               <div
                 key={session.id}
                 className={`session-item ${isSelected ? 'selected' : ''} ${isMultiSelected ? 'multi-selected' : ''}`}
                 onClick={(e) => handleSessionClick(session, e)}
               >
+                <div className={`session-type-indicator ${sessionType}`} />
                 <div className="session-item-icon">
                   <ProviderIcon provider={session.provider} size={16} />
                 </div>

@@ -152,6 +152,7 @@ export function registerSessionManagerHandlers() {
             id: session.id,
             provider: session.provider,
             model: session.model,
+            sessionType: session.sessionType,
             title: session.title,
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
