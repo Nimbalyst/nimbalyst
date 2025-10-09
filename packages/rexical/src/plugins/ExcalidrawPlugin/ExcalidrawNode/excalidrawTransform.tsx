@@ -1,7 +1,7 @@
 import { MultilineElementTransformer } from "@lexical/markdown";
 import type { LexicalNode } from "lexical";
 import { $createCodeNode } from "@lexical/code";
-import { $createExcalidrawNode, $isExcalidrawNode, ExcalidrawNode } from "./index.tsx";
+import { $createExcalidrawNode, $isExcalidrawNode, ExcalidrawNode } from "./index";
 
 export const ExcalidrawTransform: MultilineElementTransformer = {
     dependencies: [ExcalidrawNode],

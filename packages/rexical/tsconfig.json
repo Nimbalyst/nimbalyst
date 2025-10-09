@@ -16,7 +16,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
-    "types": [],
+    "types": ["vitest/globals"],
     "paths": {
       "@/*": ["./src/*"]
     }
@@ -25,7 +25,8 @@
     "src/**/*",
     "src/vite-env.d.ts",
     "src/vitest-env.d.ts",
-    "src/types/prettier.d.ts"
+    "src/types/prettier.d.ts",
+    "../../test-utils/setup.ts"
   ],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist", "**/__tests__/**"]
 }

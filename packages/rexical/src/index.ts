@@ -28,7 +28,7 @@ export { useIsEditorActive } from './hooks/useIsEditorActive';
 export { ThemeProvider, useTheme, type Theme, type ThemeConfig } from './context/ThemeContext';
 export { FlashMessageContext } from './context/FlashMessageContext';
 export { SharedHistoryContext } from './context/SharedHistoryContext';
-export { TableContext } from './plugins/TablePlugin/TablePlugin.tsx';
+export { TableContext } from './plugins/TablePlugin/TablePlugin';
 export { ToolbarContext } from './context/ToolbarContext';
 
 // Themes

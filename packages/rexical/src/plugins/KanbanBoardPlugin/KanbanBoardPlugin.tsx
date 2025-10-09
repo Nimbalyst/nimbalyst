@@ -18,7 +18,7 @@ import {
 import {
     KanbanBoardNode,
     $isBoardNode,
-} from './KanbanBoardNode.ts';
+} from './KanbanBoardNode';
 import {
     BoardHeaderNode,
     $isBoardHeaderNode,

@@ -9,7 +9,6 @@ export default defineConfig(({ mode }) => ({
     dts({
       insertTypesEntry: true,
       include: ['src'],
-      skipDiagnostics: true,
       logDiagnostics: false
     })
   ],

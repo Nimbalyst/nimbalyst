@@ -118,7 +118,7 @@ import InsertLayoutDialog from '../LayoutPlugin/InsertLayoutDialog';
 import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
 import {SHORTCUTS} from '../ShortcutsPlugin/shortcuts';
 import { getEditorTransformers } from '../../markdown';
-import {InsertTableDialog} from '../TablePlugin/TablePlugin.tsx';
+import {InsertTableDialog} from '../TablePlugin/TablePlugin';
 import TableOfContentsDropdownPlugin from '../TableOfContentsPlugin';
 import FontSize from './fontSize';
 import {

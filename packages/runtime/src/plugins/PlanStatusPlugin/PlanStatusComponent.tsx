@@ -11,10 +11,9 @@ import {
 import './PlanStatus.css';
 import { PlanStatusConfig, PlanStatus, PlanPriority, AgentSession } from './PlanStatusDecoratorNode';
 
-// Extend window type to include electron API and globals
+// Extend window type to include globals
 declare global {
   interface Window {
-    electronAPI?: any;
     workspacePath?: string | null;
     currentFilePath?: string | null;
   }

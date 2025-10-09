@@ -12,7 +12,7 @@ import type {JSX} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {TextNode} from 'lexical';
 import {useEffect} from 'react';
-import { $createEmojiNode, EmojiNode } from "./EmojiNode.tsx";
+import { $createEmojiNode, EmojiNode } from "./EmojiNode";
 
 // Export the transformer for use in markdown operations
 export { EMOJI_TRANSFORMER } from './EmojiTransformer';

@@ -1,6 +1,6 @@
 import { LexicalEditor } from "lexical";
-import { ReplacementLike, resolveReplacementTexts } from "../../DiffPlugin/core/diffUtils.ts";
-import { $setFrontmatter, FrontmatterData, parseFrontmatter } from "../../../markdown/FrontmatterUtils.ts";
+import { ReplacementLike, resolveReplacementTexts } from "../../DiffPlugin/core/diffUtils";
+import { $setFrontmatter, FrontmatterData, parseFrontmatter } from "../../../markdown/FrontmatterUtils";
 
 const FRONTMATTER_BLOCK_REGEX = /^---\n[\s\S]*?\n---\n?/;
 

@@ -12,7 +12,7 @@ import {
 import {
   $createBoardNode,
   $isBoardNode,
-} from './KanbanBoardNode.ts';
+} from './KanbanBoardNode';
 import {
   $createBoardHeaderNode,
 } from './BoardHeaderNode';

@@ -23,7 +23,7 @@ import {createPortal} from 'react-dom';
 
 import Button from './Button';
 import Modal from './Modal';
-import { useTheme } from "../context/ThemeContext.tsx";
+import { useTheme } from "../context/ThemeContext";
 
 export type ExcalidrawInitialElements = ExcalidrawInitialDataState['elements'];
 
