@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Update Available</title>
+  <link rel="stylesheet" href="./update.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Update Available State -->
+    <div id="state-available" class="state-container">
+      <div class="icon-container">
+        <svg class="app-icon" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+          <rect width="512" height="512" rx="100" fill="url(#gradient)"/>
+          <path d="M256 128L320 224H192L256 128Z" fill="white" opacity="0.9"/>
+          <rect x="192" y="240" width="128" height="144" rx="8" fill="white" opacity="0.9"/>
+          <defs>
+            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+              <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+
+      <div class="version-info">
+        <div class="version-row">
+          <span class="version-label">You are currently on:</span>
+          <span class="version-number" id="current-version">0.0.0</span>
+        </div>
+        <div class="version-arrow">→</div>
+        <div class="version-row">
+          <span class="version-label">The latest version is:</span>
+          <span class="version-number highlight" id="new-version">0.0.0</span>
+        </div>
+      </div>
+
+      <div class="release-notes-container">
+        <div class="release-notes-content" id="release-notes">
+          <!-- Release notes will be inserted here -->
+        </div>
+      </div>
+
+      <div class="button-container">
+        <button class="btn btn-secondary" id="btn-later">Later</button>
+        <button class="btn btn-primary" id="btn-download">Download Update</button>
+      </div>
+    </div>
+
+    <!-- Downloading State -->
+    <div id="state-downloading" class="state-container hidden">
+      <div class="download-container">
+        <div class="download-header">
+          <svg class="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <h2>Downloading update...</h2>
+        </div>
+
+        <div class="progress-bar-container">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <div class="progress-text" id="progress-text">0%</div>
+        </div>
+
+        <div class="download-stats">
+          <span id="download-speed">0 KB/s</span>
+          <span id="download-size">0 MB / 0 MB</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ready to Install State -->
+    <div id="state-ready" class="state-container hidden">
+      <div class="ready-container">
+        <div class="ready-icon-container">
+          <svg class="ready-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9 12l2 2 4-4"/>
+          </svg>
+        </div>
+
+        <h2>Update downloaded</h2>
+        <p class="ready-message">
+          Version <span id="ready-version">0.0.0</span> is ready to install.
+          <br>
+          The application will restart to apply the update.
+        </p>
+
+        <div class="button-container">
+          <button class="btn btn-secondary" id="btn-install-later">Install Later</button>
+          <button class="btn btn-primary" id="btn-restart">Restart to Update</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div id="state-error" class="state-container hidden">
+      <div class="error-container">
+        <div class="error-icon-container">
+          <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="15" y1="9" x2="9" y2="15"/>
+            <line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+        </div>
+
+        <h2>Update failed</h2>
+        <p class="error-message" id="error-message">
+          An error occurred while downloading the update.
+        </p>
+
+        <div class="button-container">
+          <button class="btn btn-secondary" id="btn-error-close">Close</button>
+          <button class="btn btn-primary" id="btn-error-retry">Retry</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./update.js"></script>
+</body>
+</html>

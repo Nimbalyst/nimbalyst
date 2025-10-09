@@ -165,12 +165,20 @@ export default defineConfig({
         const targets: Array<{ src: string; dest: string; overwrite?: boolean }> = [];
         const icon = resolve(__dirname, 'icon.png');
         const about = resolve(__dirname, 'about.html');
+        const updateHtml = resolve(__dirname, 'src/renderer/update.html');
+        const updateCss = resolve(__dirname, 'src/renderer/update.css');
 
         if (fs.existsSync(icon)) {
           targets.push({ src: toPosix(icon), dest: '', overwrite: true });
         }
         if (fs.existsSync(about)) {
           targets.push({ src: toPosix(about), dest: '', overwrite: true });
+        }
+        if (fs.existsSync(updateHtml)) {
+          targets.push({ src: toPosix(updateHtml), dest: '', overwrite: true });
+        }
+        if (fs.existsSync(updateCss)) {
+          targets.push({ src: toPosix(updateCss), dest: '', overwrite: true });
         }
         return viteStaticCopy({ targets });
       })()
@@ -192,7 +200,8 @@ export default defineConfig({
       sourcemap: true,
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/renderer/index.html')
+          index: resolve(__dirname, 'src/renderer/index.html'),
+          update: resolve(__dirname, 'src/renderer/update.ts')
         }
       }
     },

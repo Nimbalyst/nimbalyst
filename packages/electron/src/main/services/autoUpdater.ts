@@ -1,6 +1,7 @@
 import { autoUpdater } from 'electron-updater';
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import log from 'electron-log';
+import { showUpdateAvailable, showDownloadProgress, showUpdateReady, showUpdateError, closeUpdateWindow } from '../window/UpdateWindow';
 
 export class AutoUpdaterService {
   private updateCheckInterval: NodeJS.Timeout | null = null;
@@ -42,20 +43,11 @@ export class AutoUpdaterService {
       log.info('Update available:', info);
       this.isCheckingForUpdate = false;
 
-      // Show dialog to user
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Update Available',
-        message: `A new version ${info.version} is available. Would you like to download it now?`,
-        detail: info.releaseNotes ? `Release notes:\n${info.releaseNotes}` : 'A new version is available for download.',
-        buttons: ['Download', 'Later'],
-        defaultId: 0,
-        cancelId: 1
-      }).then(async (result) => {
-        if (result.response === 0) {
-          // Re-check for updates before downloading to ensure we get the latest
-          await this.checkAndDownloadLatest();
-        }
+      // Show custom update window
+      showUpdateAvailable({
+        version: info.version,
+        releaseNotes: info.releaseNotes as string,
+        releaseDate: info.releaseDate
       });
 
       this.sendToAllWindows('update-available', info);
@@ -70,6 +62,10 @@ export class AutoUpdaterService {
     autoUpdater.on('error', (err) => {
       log.error('Update error:', err);
       this.isCheckingForUpdate = false;
+
+      // Show error in update window
+      showUpdateError(err.message);
+
       this.sendToAllWindows('update-error', err.message);
     });
 
@@ -78,45 +74,26 @@ export class AutoUpdaterService {
       logMessage = `${logMessage} - Downloaded ${progressObj.percent}%`;
       logMessage = `${logMessage} (${progressObj.transferred}/${progressObj.total})`;
       log.info(logMessage);
-      
+
+      // Update the update window with progress
+      showDownloadProgress({
+        bytesPerSecond: progressObj.bytesPerSecond,
+        percent: progressObj.percent,
+        transferred: progressObj.transferred,
+        total: progressObj.total
+      });
+
       this.sendToAllWindows('update-download-progress', progressObj);
     });
 
     autoUpdater.on('update-downloaded', (info) => {
       log.info('Update downloaded:', info);
-      
-      // Show dialog to user
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Update Ready',
-        message: 'Update downloaded. The application will restart to apply the update.',
-        detail: 'Would you like to restart now or later?',
-        buttons: ['Restart Now', 'Later'],
-        defaultId: 0,
-        cancelId: 1
-      }).then(result => {
-        if (result.response === 0) {
-          setImmediate(() => {
-            try {
-              log.info('Attempting to quit and install update...');
-              // Set flag to bypass quit prevention
-              AutoUpdaterService.isUpdating = true;
-              // Force remove all before-quit listeners that might prevent quit
-              app.removeAllListeners('before-quit');
-              app.removeAllListeners('window-all-closed');
-              // Now quit and install
-              autoUpdater.quitAndInstall(false, true);
-            } catch (error) {
-              log.error('Failed to quit and install:', error);
-              // Fallback to force quit
-              AutoUpdaterService.isUpdating = true;
-              app.removeAllListeners('before-quit');
-              app.removeAllListeners('window-all-closed');
-              app.relaunch();
-              app.exit(0);
-            }
-          });
-        }
+
+      // Show update ready state in update window
+      showUpdateReady({
+        version: info.version,
+        releaseNotes: info.releaseNotes as string,
+        releaseDate: info.releaseDate
       });
 
       this.sendToAllWindows('update-downloaded', info);
@@ -128,7 +105,7 @@ export class AutoUpdaterService {
       if (this.isCheckingForUpdate) {
         return { checking: true };
       }
-      
+
       try {
         const result = await autoUpdater.checkForUpdatesAndNotify();
         return result;
@@ -173,6 +150,45 @@ export class AutoUpdaterService {
 
     ipcMain.handle('get-current-version', () => {
       return app.getVersion();
+    });
+
+    // Update window IPC handlers
+    ipcMain.on('update-window:download', async () => {
+      try {
+        log.info('Update window: Starting download...');
+        await autoUpdater.downloadUpdate();
+      } catch (error) {
+        log.error('Failed to download update from update window:', error);
+        showUpdateError(error instanceof Error ? error.message : 'Unknown error');
+      }
+    });
+
+    ipcMain.on('update-window:install', () => {
+      log.info('Update window: Installing update...');
+      setImmediate(() => {
+        try {
+          // Set flag to bypass quit prevention
+          AutoUpdaterService.isUpdating = true;
+          // Force remove all before-quit listeners that might prevent quit
+          app.removeAllListeners('before-quit');
+          app.removeAllListeners('window-all-closed');
+          // Now quit and install
+          autoUpdater.quitAndInstall(false, true);
+        } catch (error) {
+          log.error('Failed to quit and install:', error);
+          // Fallback to force quit
+          AutoUpdaterService.isUpdating = true;
+          app.removeAllListeners('before-quit');
+          app.removeAllListeners('window-all-closed');
+          app.relaunch();
+          app.exit(0);
+        }
+      });
+    });
+
+    ipcMain.on('update-window:dismiss', () => {
+      log.info('Update window: Dismissed');
+      closeUpdateWindow();
     });
   }
 

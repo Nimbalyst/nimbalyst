@@ -1,7 +1,5 @@
 import { BrowserWindow, nativeTheme } from 'electron';
 import { getTheme } from '../utils/store';
-import { updateAboutWindowTheme } from '../window/AboutWindow';
-import { updateAIModelsWindowTheme } from '../window/AIModelsWindow';
 
 // Function to update native theme
 export function updateNativeTheme() {
@@ -55,13 +53,11 @@ export function updateWindowTitleBars() {
         if (process.platform !== 'darwin' && window.setTitleBarOverlay) {
             window.setTitleBarOverlay(titleBarColor);
         }
+
+        // Send theme-change event to all windows
+        // Each window's renderer listens to this and updates its own UI
+        window.webContents.send('theme-change', currentTheme);
     });
-
-    // Update About window if it exists
-    updateAboutWindowTheme();
-
-    // Update AI Models window if it exists
-    updateAIModelsWindowTheme();
 }
 
 // Get title bar colors for current theme
