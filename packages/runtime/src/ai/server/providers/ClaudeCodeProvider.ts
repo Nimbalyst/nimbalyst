@@ -198,7 +198,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             console.log(`[CLAUDE-CODE] Chunk #${chunkCount}:`,
               typeof chunk === 'string'
                 ? { type: 'string', length: chunk.length, preview: chunk.substring(0, 100) }
-                : JSON.parse(JSON.stringify(chunk))
+                : JSON.stringify(chunk, null, 2)
             );
           }
 
@@ -227,7 +227,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           } else if (chunk && typeof chunk === 'object') {
             // Handle different message types from the SDK
             if (chunkCount <= 5) {
-              console.log(`[CLAUDE-CODE] Object chunk #${chunkCount}:`, JSON.parse(JSON.stringify(chunk)));
+              console.log(`[CLAUDE-CODE] Object chunk #${chunkCount}:`, JSON.stringify(chunk, null, 2));
             }
 
             if (chunk.session_id && sessionId) {
