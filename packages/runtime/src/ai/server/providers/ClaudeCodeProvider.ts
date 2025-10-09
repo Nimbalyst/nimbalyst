@@ -77,20 +77,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       console.log('[CLAUDE-CODE] Building SDK options...');
 
       // Get allowed tools from config, default to a safe subset
-      // Default tools: Read, Search & Navigation (all), Web Access (all), Task Management (all), ExitPlanMode
-      const defaultTools = [
-        'Read',
-        'Glob', 'Grep', 'LS',
-        'WebFetch', 'WebSearch',
-        'TodoRead', 'TodoWrite', 'Task',
-        'ExitPlanMode'
-      ];
-      const allowedTools = this.config.allowedTools && this.config.allowedTools.length > 0
-        ? this.config.allowedTools
-        : defaultTools;
-      console.log('[CLAUDE-CODE] Allowed tools:', allowedTools);
-
-      // Calculate disallowed tools - all tools NOT in the allowed list
+      // For coding sessions: allow all tools
+      // For chat sessions: restrict to read-only tools
       const allTools = [
         'Read', 'Write', 'Edit', 'MultiEdit',
         'Glob', 'Grep', 'LS',
@@ -99,6 +87,25 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         'NotebookRead', 'NotebookEdit',
         'Bash', 'ExitPlanMode'
       ];
+
+      const readOnlyTools = [
+        'Read',
+        'Glob', 'Grep', 'LS',
+        'WebFetch', 'WebSearch',
+        'TodoRead', 'TodoWrite', 'Task',
+        'ExitPlanMode'
+      ];
+
+      // For coding sessions, allow all tools. For chat sessions, restrict to read-only.
+      const defaultTools = this.currentSessionType === 'coding' ? allTools : readOnlyTools;
+
+      const allowedTools = this.config.allowedTools && this.config.allowedTools.length > 0
+        ? this.config.allowedTools
+        : defaultTools;
+      console.log('[CLAUDE-CODE] Session type:', this.currentSessionType);
+      console.log('[CLAUDE-CODE] Allowed tools:', allowedTools);
+
+      // Calculate disallowed tools - all tools NOT in the allowed list
       const disallowedTools = allTools.filter(tool => !allowedTools.includes(tool));
       console.log('[CLAUDE-CODE] Disallowed tools:', disallowedTools);
 
@@ -249,12 +256,22 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   const toolName = block.name;
                   const toolArgs = block.input;
                   const isMcpApplyDiff = toolName?.endsWith('__applyDiff');
+
+                  // SDK-native tools that are executed by the Claude Code SDK itself
+                  const sdkNativeTools = ['Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS', 'Bash',
+                                          'WebFetch', 'WebSearch', 'Task', 'ExitPlanMode',
+                                          'NotebookRead', 'NotebookEdit', 'TodoRead', 'TodoWrite'];
+                  const isSdkNativeTool = sdkNativeTools.includes(toolName);
+
                   let executionResult: any | undefined;
 
                   if (!toolName) {
                     console.warn('[CLAUDE-CODE] Tool use block missing name');
                   } else if (isMcpApplyDiff) {
                     console.log(`[CLAUDE-CODE] MCP applyDiff detected: ${toolName} - handled by MCP server`);
+                  } else if (isSdkNativeTool) {
+                    console.log(`[CLAUDE-CODE] SDK-native tool detected: ${toolName} - executed by Claude Code SDK`);
+                    // SDK executes these tools itself, we just observe them
                   } else if (this.toolHandler) {
                     console.log(`[CLAUDE-CODE] Executing tool: ${toolName}`);
                     const toolStartTime = Date.now();
@@ -315,10 +332,20 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             const toolName = toolChunk.name || 'unknown';
             const toolArgs = toolChunk.input;
             const isMcpApplyDiff = toolName.endsWith('__applyDiff');
+
+            // SDK-native tools that are executed by the Claude Code SDK itself
+            const sdkNativeTools = ['Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS', 'Bash',
+                                    'WebFetch', 'WebSearch', 'Task', 'ExitPlanMode',
+                                    'NotebookRead', 'NotebookEdit', 'TodoRead', 'TodoWrite'];
+            const isSdkNativeTool = sdkNativeTools.includes(toolName);
+
             let executionResult: any | undefined;
 
             if (isMcpApplyDiff) {
               console.log(`[CLAUDE-CODE] MCP applyDiff (standalone): ${toolName} - handled by MCP server`);
+            } else if (isSdkNativeTool) {
+              console.log(`[CLAUDE-CODE] SDK-native tool (standalone): ${toolName} - executed by Claude Code SDK`);
+              // SDK executes these tools itself, we just observe them
             } else if (this.toolHandler) {
               console.log(`[CLAUDE-CODE] Executing tool (standalone): ${toolName}`);
               const toolStartTime = Date.now();
