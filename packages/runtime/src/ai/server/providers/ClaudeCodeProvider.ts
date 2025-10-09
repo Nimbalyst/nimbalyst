@@ -11,7 +11,6 @@ import {
   ProviderCapabilities,
   StreamChunk,
   AIModel,
-  DiffArgs,
   Message,
 } from '../types';
 import path from 'path';
@@ -247,31 +246,56 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   console.log(`[CLAUDE-CODE] Tool use #${toolCallCount} detected: ${block.name}`);
                   console.log(`[CLAUDE-CODE] Tool arguments:`, JSON.stringify(block.input || block.arguments, null, 2).substring(0, 500));
 
+                  const toolName = block.name;
+                  const toolArgs = block.input;
+                  const isMcpApplyDiff = toolName?.endsWith('__applyDiff');
+                  let executionResult: any | undefined;
+
+                  if (!toolName) {
+                    console.warn('[CLAUDE-CODE] Tool use block missing name');
+                  } else if (isMcpApplyDiff) {
+                    console.log(`[CLAUDE-CODE] MCP applyDiff detected: ${toolName} - handled by MCP server`);
+                  } else if (this.toolHandler) {
+                    console.log(`[CLAUDE-CODE] Executing tool: ${toolName}`);
+                    const toolStartTime = Date.now();
+                    try {
+                      executionResult = await this.executeToolCall(toolName, toolArgs);
+                      console.log(`[CLAUDE-CODE] ${toolName} execution completed in ${Date.now() - toolStartTime}ms`);
+                      if (executionResult !== undefined) {
+                        try {
+                          console.log(`[CLAUDE-CODE] ${toolName} result:`, JSON.stringify(executionResult, null, 2));
+                        } catch (stringifyError) {
+                          console.log(`[CLAUDE-CODE] ${toolName} result could not be stringified`, stringifyError);
+                        }
+                      }
+                    } catch (error) {
+                      const errorMessage = error instanceof Error ? error.message : 'Tool execution failed';
+                      const errorResult = (error as any)?.toolResult ?? { success: false, error: errorMessage };
+                      executionResult = errorResult;
+                      console.error('[CLAUDE-CODE] Tool execution failed:', error);
+                      yield {
+                        type: 'tool_error',
+                        toolError: {
+                          name: toolName,
+                          arguments: toolArgs,
+                          error: errorMessage,
+                          result: errorResult
+                        }
+                      };
+                    }
+                  } else {
+                    console.warn(`[CLAUDE-CODE] No tool handler registered - skipping execution for ${toolName}`);
+                  }
+
                   // Emit tool call event
                   yield {
                     type: 'tool_call',
                     toolCall: {
-                      name: block.name,
-                      arguments: block.input
+                      name: toolName || 'unknown',
+                      arguments: toolArgs,
+                      ...(executionResult !== undefined ? { result: executionResult } : {})
                     }
                   };
-
-                  // If it's an applyDiff tool (including MCP variant), execute it
-                  // Note: For MCP tools, Claude Code handles the execution internally
-                  // We only execute non-MCP applyDiff calls here
-                  if (block.name === 'applyDiff' && this.toolHandler && this.toolHandler.applyDiff) {
-                    console.log(`[CLAUDE-CODE] Executing non-MCP applyDiff tool`);
-                    try {
-                      const result = await this.toolHandler.applyDiff(block.input as DiffArgs);
-                      console.log(`[CLAUDE-CODE] applyDiff result:`, result);
-                      // Tool result will be sent back to Claude Code automatically
-                    } catch (error) {
-                      console.error('[CLAUDE-CODE] Error executing applyDiff:', error);
-                    }
-                  } else if (block.name?.endsWith('__applyDiff')) {
-                    // MCP applyDiff - Claude Code handles this through MCP server
-                    console.log(`[CLAUDE-CODE] MCP applyDiff detected: ${block.name} - handled by MCP server`);
-                  }
                 }
               }
             } else if (typeof content === 'string') {
@@ -288,28 +312,53 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             console.log(`[CLAUDE-CODE] Standalone tool call #${toolCallCount}: ${toolChunk.name}`);
             console.log(`[CLAUDE-CODE] Standalone tool arguments:`, JSON.stringify(toolChunk.input || toolChunk.arguments, null, 2).substring(0, 500));
 
+            const toolName = toolChunk.name || 'unknown';
+            const toolArgs = toolChunk.input;
+            const isMcpApplyDiff = toolName.endsWith('__applyDiff');
+            let executionResult: any | undefined;
+
+            if (isMcpApplyDiff) {
+              console.log(`[CLAUDE-CODE] MCP applyDiff (standalone): ${toolName} - handled by MCP server`);
+            } else if (this.toolHandler) {
+              console.log(`[CLAUDE-CODE] Executing tool (standalone): ${toolName}`);
+              const toolStartTime = Date.now();
+              try {
+                executionResult = await this.executeToolCall(toolName, toolArgs);
+                console.log(`[CLAUDE-CODE] ${toolName} execution completed in ${Date.now() - toolStartTime}ms`);
+                if (executionResult !== undefined) {
+                  try {
+                    console.log(`[CLAUDE-CODE] ${toolName} result:`, JSON.stringify(executionResult, null, 2));
+                  } catch (stringifyError) {
+                    console.log(`[CLAUDE-CODE] ${toolName} result could not be stringified`, stringifyError);
+                  }
+                }
+              } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : 'Tool execution failed';
+                const errorResult = (error as any)?.toolResult ?? { success: false, error: errorMessage };
+                executionResult = errorResult;
+                console.error('[CLAUDE-CODE] Tool execution failed:', error);
+                yield {
+                  type: 'tool_error',
+                  toolError: {
+                    name: toolName,
+                    arguments: toolArgs,
+                    error: errorMessage,
+                    result: errorResult
+                  }
+                };
+              }
+            } else {
+              console.warn(`[CLAUDE-CODE] No tool handler registered - skipping execution for ${toolName}`);
+            }
+
             yield {
               type: 'tool_call',
               toolCall: {
-                name: toolChunk.name || 'unknown',
-                arguments: toolChunk.input
+                name: toolName,
+                arguments: toolArgs,
+                ...(executionResult !== undefined ? { result: executionResult } : {})
               }
             };
-
-            // Handle applyDiff - only non-MCP versions
-            // MCP tools are handled by the MCP server directly
-            if (toolChunk.name === 'applyDiff' && toolChunk.input && this.toolHandler && this.toolHandler.applyDiff) {
-              console.log(`[CLAUDE-CODE] Executing non-MCP applyDiff tool (standalone)`);
-              try {
-                const result = await this.toolHandler.applyDiff(toolChunk.input as DiffArgs);
-                console.log(`[CLAUDE-CODE] applyDiff result:`, result);
-              } catch (error) {
-                console.error('[CLAUDE-CODE] Error executing applyDiff:', error);
-              }
-            } else if (toolChunk.name?.endsWith('__applyDiff')) {
-              // MCP applyDiff - handled by MCP server
-              console.log(`[CLAUDE-CODE] MCP applyDiff (standalone): ${toolChunk.name} - handled by MCP server`);
-            }
           } else if (chunk.type === 'text') {
             const text = chunk.text || chunk.content || '';
             fullContent += text;

@@ -374,19 +374,50 @@ export class LMStudioProvider extends BaseAIProvider {
                         const args = JSON.parse(toolCallBuffer);
                         
                         // Emit as regular tool call
+                        const toolName = currentToolCall.function.name;
+                        let executionResult: any | undefined;
+                        let executionError: string | undefined;
+
+                        if (this.toolHandler) {
+                          const toolStartTime = Date.now();
+                          try {
+                            executionResult = await this.executeToolCall(toolName, args);
+                            console.log(`[LMStudio] ${toolName} execution completed in ${Date.now() - toolStartTime}ms`);
+                            if (executionResult !== undefined) {
+                              try {
+                                console.log(`[LMStudio] ${toolName} result:`, JSON.stringify(executionResult, null, 2));
+                              } catch (stringifyError) {
+                                console.log(`[LMStudio] ${toolName} result could not be stringified`, stringifyError);
+                              }
+                            }
+                          } catch (error) {
+                            executionError = error instanceof Error ? error.message : 'Tool execution failed';
+                            const errorResult = (error as any)?.toolResult ?? { success: false, error: executionError };
+                            executionResult = errorResult;
+                            console.error(`[LMStudio] ${toolName} execution failed:`, error);
+                            yield {
+                              type: 'tool_error',
+                              toolError: {
+                                name: toolName,
+                                arguments: args,
+                                error: executionError,
+                                result: errorResult
+                              }
+                            };
+                          }
+                        } else {
+                          console.warn(`[LMStudio] No tool handler registered - skipping execution for ${toolName}`);
+                        }
+
                         yield {
                           type: 'tool_call',
                           toolCall: {
                             id: currentToolCall.id,
-                            name: currentToolCall.function.name,
-                            arguments: args
+                            name: toolName,
+                            arguments: args,
+                            ...(executionResult !== undefined ? { result: executionResult } : {})
                           }
                         };
-                        
-                        // Execute tool if handler available
-                        if (currentToolCall.function.name === 'applyDiff' && this.toolHandler && this.toolHandler.applyDiff) {
-                          await this.toolHandler.applyDiff(args);
-                        }
                         
                         // Reset for next tool call
                         currentToolCall = null;

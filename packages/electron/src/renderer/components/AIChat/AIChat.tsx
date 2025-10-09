@@ -392,16 +392,32 @@ export function AIChat({
 
         // Handle tool calls that come during streaming
         if (data.toolCalls && data.toolCalls.length > 0) {
-          // Track tool calls to avoid duplicates
+          // Track tool calls to avoid duplicates, but merge results if we see the same signature again
           setMessages(prev => {
             const newMessages = [...prev];
 
-            // Create a set of existing tool call signatures for deduplication
-            const existingToolCalls = new Set(
-              newMessages
-                .filter(m => m.role === 'tool' && m.toolCall)
-                .map(m => `${m.toolCall?.name}-${JSON.stringify(m.toolCall?.arguments)}`)
-            );
+            // Map existing tool call signatures to their index for quick lookup
+            const existingToolCalls = new Map<string, number>();
+            newMessages.forEach((message, index) => {
+              if (message.role !== 'tool' || !message.toolCall) return;
+              const signature = `${message.toolCall.name}-${JSON.stringify(message.toolCall.arguments)}`;
+              if (!existingToolCalls.has(signature)) {
+                existingToolCalls.set(signature, index);
+              }
+            });
+
+            const resolveResultError = (result: unknown): { isError: boolean; errorMessage?: string } => {
+              if (!result || typeof result !== 'object') {
+                return { isError: false };
+              }
+              const resultObj = result as Record<string, unknown>;
+              const explicitFailure = resultObj.success === false;
+              const explicitError = typeof resultObj.error === 'string' && resultObj.error.length > 0;
+              return {
+                isError: explicitFailure || explicitError,
+                errorMessage: explicitError ? (resultObj.error as string) : undefined
+              };
+            };
 
             for (const toolCall of data.toolCalls) {
               // Filter out applyDiff tool calls unless showToolCalls is enabled
@@ -410,24 +426,39 @@ export function AIChat({
                 continue;
               }
 
-              // Create a unique signature for this tool call
               const signature = `${toolCall.name}-${JSON.stringify(toolCall.arguments)}`;
+              const existingIndex = existingToolCalls.get(signature);
+              const { isError, errorMessage } = resolveResultError(toolCall.result);
 
-              // Only add if we haven't seen this exact tool call before
-              if (!existingToolCalls.has(signature)) {
+              if (existingIndex !== undefined) {
+                const existingMessage = { ...newMessages[existingIndex] };
+                const existingToolCall = existingMessage.toolCall || {};
+                existingMessage.toolCall = {
+                  ...existingToolCall,
+                  ...toolCall,
+                  arguments: toolCall.arguments ?? existingToolCall.arguments,
+                  result: toolCall.result ?? existingToolCall.result,
+                  targetFilePath: existingToolCall.targetFilePath || messageDocumentContextRef.current?.filePath || documentContext?.filePath
+                };
+                existingMessage.isError = isError;
+                existingMessage.errorMessage = isError ? (errorMessage || existingMessage.errorMessage) : undefined;
+                newMessages[existingIndex] = existingMessage;
+              } else {
+                const targetFilePath = messageDocumentContextRef.current?.filePath || documentContext?.filePath;
                 newMessages.push({
                   role: 'tool',
-                  content: '', // Tool messages don't have text content
+                  content: '',
                   toolCall: {
                     ...toolCall,
-                    targetFilePath: messageDocumentContextRef.current?.filePath || documentContext?.filePath  // Use locked context
+                    targetFilePath
                   },
-                  isError: toolCall.result?.success === false,
-                  errorMessage: toolCall.result?.error
+                  isError,
+                  errorMessage
                 });
-                existingToolCalls.add(signature);
+                existingToolCalls.set(signature, newMessages.length - 1);
               }
             }
+
             return newMessages;
           });
         }

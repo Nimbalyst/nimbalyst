@@ -127,6 +127,15 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
     const tool = message.toolCall;
     const isExpanded = expandedTools.has(tool.id || tool.name);
+    const toolResult = tool.result;
+    const resultDetails = typeof toolResult === 'object' && toolResult !== null ? (toolResult as Record<string, any>) : null;
+    const explicitSuccess = resultDetails && 'success' in resultDetails ? resultDetails.success !== false : undefined;
+    const derivedErrorMessage = message.errorMessage || (resultDetails && typeof resultDetails.error === 'string' ? (resultDetails.error as string) : undefined);
+    const didFail = message.isError || explicitSuccess === false || !!derivedErrorMessage;
+    const statusLabel = didFail ? 'Failed' : 'Succeeded';
+    const statusColor = didFail ? 'var(--error-color)' : 'var(--success-color)';
+    const statusBackground = didFail ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)';
+    const hasResult = toolResult !== undefined && toolResult !== null && (typeof toolResult !== 'string' || toolResult.trim().length > 0);
 
     return (
       <div style={{
@@ -160,11 +169,21 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
           <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-primary)', flex: 1 }}>
             {tool.name}
           </span>
-          {tool.result && (
-            <svg style={{ width: '0.875rem', height: '0.875rem', color: 'var(--success-color)', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          )}
+          <span
+            style={{
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              color: statusColor,
+              backgroundColor: statusBackground,
+              padding: '0.125rem 0.5rem',
+              borderRadius: '9999px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.02em',
+              pointerEvents: 'none'
+            }}
+          >
+            {statusLabel}
+          </span>
           {isExpanded ? (
             <svg style={{ width: '0.75rem', height: '0.75rem', color: 'var(--text-tertiary)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -178,7 +197,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
         {isExpanded && (
           <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.75rem' }}>
-            {tool.arguments && Object.keys(tool.arguments).length > 0 && (
+            {typeof tool.arguments === 'object' && tool.arguments !== null && Object.keys(tool.arguments).length > 0 && (
               <div style={{ marginBottom: '0.5rem' }}>
                 <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>Parameters:</div>
                 <pre style={{
@@ -195,9 +214,26 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
               </div>
             )}
 
-            {tool.result && (
-              <div style={{ marginTop: '0.5rem' }}>
-                <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>Result:</div>
+            {typeof tool.arguments === 'string' && tool.arguments.trim().length > 0 && (
+              <div style={{ marginBottom: '0.5rem' }}>
+                <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>Parameters (raw):</div>
+                <pre style={{
+                  fontSize: '0.75rem',
+                  color: 'var(--text-secondary)',
+                  fontFamily: 'monospace',
+                  overflowX: 'auto',
+                  backgroundColor: 'var(--surface-secondary)',
+                  padding: '0.5rem',
+                  borderRadius: '0.25rem'
+                }}>
+                  {tool.arguments}
+                </pre>
+              </div>
+            )}
+
+            <div style={{ marginTop: '0.5rem' }}>
+              <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>Result:</div>
+              {hasResult ? (
                 <pre style={{
                   fontSize: '0.75rem',
                   color: 'var(--text-primary)',
@@ -209,10 +245,27 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
                   maxHeight: '16rem',
                   overflowY: 'auto'
                 }}>
-                  {typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2)}
+                  {typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)}
                 </pre>
-              </div>
-            )}
+              ) : (
+                <div style={{
+                  fontSize: '0.75rem',
+                  color: 'var(--text-tertiary)',
+                  fontStyle: 'italic'
+                }}>
+                  Tool did not return a result.
+                </div>
+              )}
+              {derivedErrorMessage && (
+                <div style={{
+                  marginTop: '0.5rem',
+                  fontSize: '0.75rem',
+                  color: 'var(--error-color)'
+                }}>
+                  {derivedErrorMessage}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -221,7 +274,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
   // Render error
   const renderError = () => {
-    if (!message.isError) return null;
+    if (!message.isError || message.role === 'tool') return null;
 
     return (
       <div style={{

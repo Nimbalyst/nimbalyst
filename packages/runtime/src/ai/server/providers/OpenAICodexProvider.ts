@@ -291,11 +291,62 @@ export class OpenAICodexProvider extends BaseAIProvider {
                   console.log('[OpenAICodexProvider] Yielding chunk object:', JSON.stringify(chunk));
                   yield chunk;
                 } else if (toolCall) {
-                  // Yield tool call chunk
                   console.log('[OpenAICodexProvider] Yielding tool call chunk:', toolCall.name);
+
+                  let parsedArguments: any = toolCall.arguments;
+                  let executionArgs: any = parsedArguments;
+
+                  if (typeof toolCall.arguments === 'string') {
+                    try {
+                      executionArgs = JSON.parse(toolCall.arguments);
+                      parsedArguments = executionArgs;
+                    } catch (parseError) {
+                      console.error('[OpenAICodexProvider] Failed to parse tool arguments:', parseError);
+                      executionArgs = toolCall.arguments;
+                    }
+                  }
+
+                  let executionResult: any | undefined;
+                  const canExecute = typeof executionArgs !== 'string';
+                  if (this.toolHandler && toolCall.name && canExecute) {
+                    try {
+                      executionResult = await this.executeToolCall(toolCall.name, executionArgs);
+                      console.log(`[OpenAICodexProvider] ${toolCall.name} execution succeeded`);
+                      if (executionResult !== undefined) {
+                        try {
+                          console.log(`[OpenAICodexProvider] ${toolCall.name} result:`, JSON.stringify(executionResult, null, 2));
+                        } catch (stringifyError) {
+                          console.log(`[OpenAICodexProvider] ${toolCall.name} result could not be stringified`, stringifyError);
+                        }
+                      }
+                    } catch (error) {
+                      const errorMessage = error instanceof Error ? error.message : 'Tool execution failed';
+                      const errorResult = (error as any)?.toolResult ?? { success: false, error: errorMessage };
+                      executionResult = errorResult;
+                      console.error('[OpenAICodexProvider] Tool execution failed:', error);
+                      yield {
+                        type: 'tool_error',
+                        toolError: {
+                          name: toolCall.name,
+                          arguments: executionArgs,
+                          error: errorMessage,
+                          result: errorResult
+                        }
+                      };
+                    }
+                  } else if (!this.toolHandler) {
+                    console.warn(`[OpenAICodexProvider] No tool handler registered - skipping execution for ${toolCall.name}`);
+                  } else if (!canExecute) {
+                    console.warn(`[OpenAICodexProvider] Unable to execute ${toolCall.name} - arguments could not be parsed`);
+                  }
+
                   const chunk: AIStreamChunk = {
                     type: 'tool_call',
-                    toolCall: toolCall
+                    toolCall: {
+                      name: toolCall.name,
+                      arguments: parsedArguments,
+                      ...(executionResult !== undefined ? { result: executionResult } : {})
+                    }
                   };
                   yield chunk;
                 }

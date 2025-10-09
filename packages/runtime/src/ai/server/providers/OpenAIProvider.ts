@@ -335,23 +335,49 @@ export class OpenAIProvider extends BaseAIProvider {
                   type: 'stream_edit_end'
                 };
               } else {
-                // Regular tool call
+                const toolName = toolCall.function.name;
+                let executionResult: any | undefined;
+                let executionError: string | undefined;
+
+                if (this.toolHandler) {
+                  const toolStartTime = Date.now();
+                  try {
+                    executionResult = await this.executeToolCall(toolName, args);
+                    console.log(`[OpenAIProvider] ${toolName} execution completed in ${Date.now() - toolStartTime}ms`);
+                    if (executionResult !== undefined) {
+                      try {
+                        console.log(`[OpenAIProvider] ${toolName} result:`, JSON.stringify(executionResult, null, 2));
+                      } catch (stringifyError) {
+                        console.log(`[OpenAIProvider] ${toolName} result could not be stringified`, stringifyError);
+                      }
+                    }
+                  } catch (error) {
+                    executionError = error instanceof Error ? error.message : 'Tool execution failed';
+                    const errorResult = (error as any)?.toolResult ?? { success: false, error: executionError };
+                    executionResult = errorResult;
+                    console.error(`[OpenAIProvider] ${toolName} execution failed:`, error);
+                    yield {
+                      type: 'tool_error',
+                      toolError: {
+                        name: toolName,
+                        arguments: args,
+                        error: executionError,
+                        result: errorResult
+                      }
+                    };
+                  }
+                } else {
+                  console.warn(`[OpenAIProvider] No tool handler registered - skipping execution for ${toolName}`);
+                }
+
                 yield {
                   type: 'tool_call',
                   toolCall: {
-                    name: toolCall.function.name,
-                    arguments: args
+                    name: toolName,
+                    arguments: args,
+                    ...(executionResult !== undefined ? { result: executionResult } : {})
                   }
                 };
-                
-                // Execute applyDiff if handler is available
-                if (toolCall.function.name === 'applyDiff' && this.toolHandler && this.toolHandler.applyDiff) {
-                  console.log(`[OpenAIProvider] Executing applyDiff with args:`, JSON.stringify(args, null, 2));
-                  const toolStartTime = Date.now();
-                  const result = await this.toolHandler.applyDiff(args);
-                  console.log(`[OpenAIProvider] ApplyDiff execution completed in ${Date.now() - toolStartTime}ms`);
-                  console.log(`[OpenAIProvider] ApplyDiff result:`, JSON.stringify(result, null, 2));
-                }
               }
             } catch (error) {
               console.error(`[OpenAIProvider] Error parsing tool arguments for call ${callId}:`, error);
