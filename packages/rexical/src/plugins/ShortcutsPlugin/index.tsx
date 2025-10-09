@@ -76,10 +76,18 @@ export default function ShortcutsPlugin({
 
   useEffect(() => {
     const keyboardShortcutsHandler = (event: KeyboardEvent) => {
+      // Allow Electron menu shortcuts to pass through (e.g., Cmd+Shift+A for AI Chat)
+      if (event.code === 'KeyA' && isModifierMatch(event, {metaKey: true, shiftKey: true})) {
+        return false;
+      }
+
       // Short-circuit, a least one modifier must be set
       if (isModifierMatch(event, {})) {
         return false;
-      } else if (isAcceptDiffs(event)) {
+      }
+
+      // === Markdown-compatible shortcuts ===
+      else if (isAcceptDiffs(event)) {
         editor.dispatchCommand(APPROVE_DIFF_COMMAND, undefined);
       } else if (isFormatParagraph(event)) {
         formatParagraph(editor);
@@ -99,51 +107,56 @@ export default function ShortcutsPlugin({
         formatQuote(editor, toolbarState.blockType);
       } else if (isStrikeThrough(event)) {
         editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'strikethrough');
-      } else if (isLowercase(event)) {
-        editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'lowercase');
-      } else if (isUppercase(event)) {
-        editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'uppercase');
-      } else if (isCapitalize(event)) {
-        editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'capitalize');
-      } else if (isIndent(event)) {
-        editor.dispatchCommand(INDENT_CONTENT_COMMAND, undefined);
-      } else if (isOutdent(event)) {
-        editor.dispatchCommand(OUTDENT_CONTENT_COMMAND, undefined);
-      } else if (isCenterAlign(event)) {
-        editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'center');
-      } else if (isLeftAlign(event)) {
-        editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'left');
-      } else if (isRightAlign(event)) {
-        editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'right');
-      } else if (isJustifyAlign(event)) {
-        editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'justify');
-      } else if (isSubscript(event)) {
-        editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'subscript');
-      } else if (isSuperscript(event)) {
-        editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'superscript');
-      } else if (isInsertCodeBlock(event)) {
-        editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'code');
-      } else if (isIncreaseFontSize(event)) {
-        updateFontSize(
-          editor,
-          UpdateFontSizeType.increment,
-          toolbarState.fontSizeInputValue,
-        );
-      } else if (isDecreaseFontSize(event)) {
-        updateFontSize(
-          editor,
-          UpdateFontSizeType.decrement,
-          toolbarState.fontSizeInputValue,
-        );
-      } else if (isClearFormatting(event)) {
-        clearFormatting(editor);
       } else if (isInsertLink(event)) {
         const url = toolbarState.isLink ? null : sanitizeUrl('https://');
         setIsLinkEditMode(!toolbarState.isLink);
         editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
       } else if (isAddComment(event)) {
         editor.dispatchCommand(INSERT_INLINE_COMMAND, undefined);
-      } else {
+      }
+
+      // === Non-markdown shortcuts (disabled) ===
+      // These features are not compatible with markdown editing
+      // } else if (isLowercase(event)) {
+      //   editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'lowercase');
+      // } else if (isUppercase(event)) {
+      //   editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'uppercase');
+      // } else if (isCapitalize(event)) {
+      //   editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'capitalize');
+      // } else if (isIndent(event)) {
+      //   editor.dispatchCommand(INDENT_CONTENT_COMMAND, undefined);
+      // } else if (isOutdent(event)) {
+      //   editor.dispatchCommand(OUTDENT_CONTENT_COMMAND, undefined);
+      // } else if (isCenterAlign(event)) {
+      //   editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'center');
+      // } else if (isLeftAlign(event)) {
+      //   editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'left');
+      // } else if (isRightAlign(event)) {
+      //   editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'right');
+      // } else if (isJustifyAlign(event)) {
+      //   editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, 'justify');
+      // } else if (isSubscript(event)) {
+      //   editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'subscript');
+      // } else if (isSuperscript(event)) {
+      //   editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'superscript');
+      // } else if (isInsertCodeBlock(event)) {
+      //   editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'code');
+      // } else if (isIncreaseFontSize(event)) {
+      //   updateFontSize(
+      //     editor,
+      //     UpdateFontSizeType.increment,
+      //     toolbarState.fontSizeInputValue,
+      //   );
+      // } else if (isDecreaseFontSize(event)) {
+      //   updateFontSize(
+      //     editor,
+      //     UpdateFontSizeType.decrement,
+      //     toolbarState.fontSizeInputValue,
+      //   );
+      // } else if (isClearFormatting(event)) {
+      //   clearFormatting(editor);
+
+      else {
         // No match for any of the event handlers
         return false;
       }

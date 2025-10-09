@@ -295,12 +295,6 @@ app.whenReady().then(async () => {
     // Create application menu
     await createApplicationMenu();
 
-    // Register global shortcuts
-    globalShortcut.register('CommandOrControl+,', () => {
-        // Open AI Models window (preferences)
-        createAIModelsWindow();
-    });
-
     // Set initial native theme
     updateNativeTheme();
 
