@@ -147,6 +147,7 @@ jobs:
           name: ${{ matrix.platform }}-${{ matrix.arch }}
           path: |
             packages/electron/release/*.dmg
+            packages/electron/release/*.zip
             packages/electron/release/*.exe
             packages/electron/release/*.AppImage
             packages/electron/release/*.yml
@@ -172,7 +173,7 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-files
-          find release-artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.yml" -o -name "*.yaml" \) -exec cp {} release-files/ \;
+          find release-artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.yml" -o -name "*.yaml" \) -exec cp {} release-files/ \;
           ls -la release-files/
 
       - name: Get version from tag
@@ -259,6 +260,7 @@ jobs:
 
           The app will automatically check for updates." \
             release-files/*.dmg \
+            release-files/*.zip \
             release-files/*.exe \
             release-files/*.AppImage \
             release-files/*.yml \
