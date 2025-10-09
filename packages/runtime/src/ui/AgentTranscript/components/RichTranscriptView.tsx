@@ -187,12 +187,12 @@ export const RichTranscriptView = React.forwardRef<
               {messages.map((message, index) => {
                 // Debug logging
                 if (index === 0 || message.toolCall) {
-                  console.log(`[RichTranscriptView] Message ${index}:`, {
-                    role: message.role,
-                    hasToolCall: !!message.toolCall,
-                    toolCallName: message.toolCall?.name,
-                    contentLength: message.content?.length || 0
-                  });
+                  // console.log(`[RichTranscriptView] Message ${index}:`, {
+                  //   role: message.role,
+                  //   hasToolCall: !!message.toolCall,
+                  //   toolCallName: message.toolCall?.name,
+                  //   contentLength: message.content?.length || 0
+                  // });
                 }
 
                 const isUser = message.role === 'user';

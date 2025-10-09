@@ -54,6 +54,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     console.log(`[CLAUDE-CODE] Workspace path: ${workspacePath}`);
     console.log(`[CLAUDE-CODE] First 200 chars of message:`, message.substring(0, 200));
 
+    // Track session type for MCP server configuration
+    this.currentSessionType = (documentContext as any)?.sessionType;
+    console.log(`[CLAUDE-CODE] Session type: ${this.currentSessionType}`);
+
     // Create abort controller for this request
     this.abortController = new AbortController();
 
@@ -112,7 +116,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         settingSources: ['user', 'project', 'local'],
         mcpServers: this.getMcpServersConfig(),
         allowedTools,
-        disallowedTools,
+        // disallowedTools, // letting the agent work for codign
         cwd: workspacePath,
         abortController: this.abortController,
         model: 'sonnet',
@@ -157,7 +161,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         resume: options.resume,
         hasAbortController: !!options.abortController
       });
-      
+
       const queryStartTime = Date.now();
 
       console.log('[CLAUDE-CODE] Calling query with prompt length:', message.length);
@@ -167,7 +171,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         prompt: message,
         options
       }) as AsyncIterable<any>;
-      
+
       console.log('[CLAUDE-CODE] Query iterator created, type:', typeof queryIterator);
       console.log('[CLAUDE-CODE] Has Symbol.asyncIterator:', !!queryIterator?.[Symbol.asyncIterator]);
 
@@ -177,7 +181,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       let toolCallCount = 0;
 
       console.log('[CLAUDE-CODE] Starting to iterate over query response...');
-      
+
       // Stream the response
       try {
         for await (const rawChunk of queryIterator) {
@@ -191,7 +195,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 : JSON.parse(JSON.stringify(chunk))
             );
           }
-        
+
           if (!firstChunkTime) {
             firstChunkTime = Date.now();
             const timeToFirstChunk = firstChunkTime - queryStartTime;
@@ -207,9 +211,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               type: 'text',
               content: chunk
             };
-            
+
             // Check if the string looks like an error
-            if (chunk.toLowerCase().includes('error') || 
+            if (chunk.toLowerCase().includes('error') ||
                 chunk.toLowerCase().includes('invalid') ||
                 chunk.toLowerCase().includes('failed')) {
               console.warn('[CLAUDE-CODE] String chunk might contain an error:', chunk);
@@ -219,7 +223,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             if (chunkCount <= 5) {
               console.log(`[CLAUDE-CODE] Object chunk #${chunkCount}:`, JSON.parse(JSON.stringify(chunk)));
             }
-            
+
             if (chunk.session_id && sessionId) {
               // Store the claude session ID
               console.log(`[CLAUDE-CODE] Storing session ID mapping: ${sessionId} -> ${chunk.session_id}`);
@@ -242,7 +246,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   toolCallCount++;
                   console.log(`[CLAUDE-CODE] Tool use #${toolCallCount} detected: ${block.name}`);
                   console.log(`[CLAUDE-CODE] Tool arguments:`, JSON.stringify(block.input || block.arguments, null, 2).substring(0, 500));
-                  
+
                   // Emit tool call event
                   yield {
                     type: 'tool_call',
@@ -283,7 +287,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             const toolChunk = chunk as any;
             console.log(`[CLAUDE-CODE] Standalone tool call #${toolCallCount}: ${toolChunk.name}`);
             console.log(`[CLAUDE-CODE] Standalone tool arguments:`, JSON.stringify(toolChunk.input || toolChunk.arguments, null, 2).substring(0, 500));
-            
+
             yield {
               type: 'tool_call',
               toolCall: {
@@ -452,19 +456,19 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Handle summary messages from Claude Code
             console.log(`[CLAUDE-CODE] Summary chunk received:`, chunk);
             const summary = chunk.summary || '';
-            
+
             // Check if this is an error summary
-            if (summary.toLowerCase().includes('invalid api key') || 
+            if (summary.toLowerCase().includes('invalid api key') ||
                 summary.toLowerCase().includes('error') ||
                 summary.toLowerCase().includes('failed') ||
                 summary.includes('/login') ||
                 summary.toLowerCase().includes('unauthorized')) {
               console.error('[CLAUDE-CODE] ERROR: Summary contains error message:', summary);
               console.error('[CLAUDE-CODE] Full summary chunk:', JSON.stringify(chunk, null, 2));
-              
+
               // Format a user-friendly error message
               let userMessage = summary;
-              
+
               // Make API key errors more actionable
               if (summary.toLowerCase().includes('invalid api key')) {
                 userMessage = `❌ Claude Code Error: ${summary}\n\n` +
@@ -475,35 +479,35 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                             `${summary}\n\n` +
                             `Please ensure your Anthropic API key is correctly configured in Settings.`;
               }
-              
+
               // Yield both as error and as text to ensure visibility
               yield {
                 type: 'error',
                 error: userMessage
               };
-              
+
               yield {
                 type: 'text',
                 content: userMessage
               };
-              
+
               // Send completion event before breaking
               yield {
                 type: 'complete',
                 isComplete: true
               };
-              
+
               // Break out of the loop since we have an error
               break;
             } else {
               // Non-error summary - always display it
               console.log('[CLAUDE-CODE] Informational summary:', summary);
-              
+
               // Always yield summaries to the UI with context
-              const displayMessage = summary ? 
-                `[Claude Code]: ${summary}` : 
+              const displayMessage = summary ?
+                `[Claude Code]: ${summary}` :
                 `[Claude Code]: ${JSON.stringify(chunk)}`;
-                
+
               yield {
                 type: 'text',
                 content: displayMessage
@@ -513,7 +517,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Unknown chunk type - display it anyway so nothing is lost
             console.log(`[CLAUDE-CODE] Unknown chunk type at #${chunkCount}:`, chunk);
             console.log(`[CLAUDE-CODE] Full unknown chunk:`, JSON.stringify(chunk, null, 2));
-            
+
             // Try to extract any text content from the unknown chunk
             let extractedContent = '';
             let hadTextContent = false;
@@ -553,7 +557,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   extractedContent = `\n\n⚠️ **Unhandled message from Claude Code** (type: \`${chunk.type || 'unknown'}\`):\n\n${nestedContent}\n\n`;
                 }
               }
-              
+
               // If we still have no content but have an object, stringify it
               if (!extractedContent && Object.keys(chunk).length > 0) {
                 // Format it nicely for display with clear separation
@@ -563,7 +567,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                                  `---\n\n`;
               }
             }
-            
+
             // If we extracted any content, yield it to the UI
             if (extractedContent) {
               console.log(`[CLAUDE-CODE] Yielding unknown chunk content to UI:`, extractedContent.substring(0, 200));
@@ -572,7 +576,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 content: extractedContent
               };
             }
-            
+
             // Also check if this looks like an error
             const chunkStr = JSON.stringify(chunk).toLowerCase();
             if (chunkStr.includes('error') || chunkStr.includes('fail') || chunkStr.includes('invalid')) {
@@ -593,14 +597,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       console.log(`[CLAUDE-CODE] Stream complete - Total time: ${totalTime}ms`);
       console.log(`[CLAUDE-CODE] Stats - Chunks: ${chunkCount}, Tool calls: ${toolCallCount}, Content length: ${fullContent.length}`);
       console.log(`[CLAUDE-CODE] First 500 chars of response:`, fullContent.substring(0, 500));
-      
+
       yield {
         type: 'complete',
         // Don't send content here - it's already been sent in chunks
         // The AIService accumulates the chunks itself
         isComplete: true
       };
-      
+
       console.log('[CLAUDE-CODE] Complete event yielded');
 
     } catch (error: any) {
@@ -610,7 +614,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       console.error(`[CLAUDE-CODE] Error name: ${error.name}`);
       console.error(`[CLAUDE-CODE] Error message: ${error.message}`);
       console.error(`[CLAUDE-CODE] Error stack:`, error.stack);
-      
+
       if (error.name === 'AbortError' || error.message?.includes('aborted')) {
         console.log(`[CLAUDE-CODE] Request was aborted after ${errorTime}ms`);
         yield {
@@ -668,7 +672,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   private getMcpServersConfig() {
+    // letting the agent work for coding
+    // Don't include MCP servers for agentic coding sessions
+    if (this.currentSessionType === 'coding') {
+      console.log('[CLAUDE-CODE] Agentic coding session - excluding MCP server configuration');
+      return {};
+    }
+
     // Connect to MCP server running in Electron
+    console.log('[CLAUDE-CODE] Including stravu-editor MCP server configuration');
     return {
       "stravu-editor": {
         "type": "sse",
@@ -729,7 +741,7 @@ When asked about your identity, be truthful about which AI model you are - do no
     // In production, add Electron's internal node to PATH
     const electronPath = process.execPath;
     const electronDir = path.dirname(electronPath);
-    
+
     if (!process.env.PATH?.includes(electronDir)) {
       process.env.PATH = `${electronDir}:${process.env.PATH}`;
       console.log('[CLAUDE-CODE] Added Electron dir to PATH:', electronDir);
