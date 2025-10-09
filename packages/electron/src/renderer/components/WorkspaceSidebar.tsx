@@ -51,11 +51,13 @@ export function WorkspaceSidebar({
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [isDragOverRoot, setIsDragOverRoot] = useState(false);
   const [draggedItem, setDraggedItem] = useState<any | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
 
   const handleNewFile = () => {
-    // If a file is currently selected, use its parent directory
-    // Otherwise use the workspace root
-    if (currentFilePath) {
+    // Priority: selected folder > parent of current file > workspace root
+    if (selectedFolder) {
+      setTargetFolder(selectedFolder);
+    } else if (currentFilePath) {
       const parentDir = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
       setTargetFolder(parentDir);
     }
@@ -63,9 +65,10 @@ export function WorkspaceSidebar({
   };
 
   const handleNewFolder = () => {
-    // If a file is currently selected, use its parent directory
-    // Otherwise use the workspace root
-    if (currentFilePath) {
+    // Priority: selected folder > parent of current file > workspace root
+    if (selectedFolder) {
+      setTargetFolder(selectedFolder);
+    } else if (currentFilePath) {
       const parentDir = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
       setTargetFolder(parentDir);
     }
@@ -139,10 +142,24 @@ export function WorkspaceSidebar({
     setIsFolderModalOpen(true);
   };
 
+  const handleFileSelect = (filePath: string) => {
+    setSelectedFolder(null); // Clear folder selection when a file is selected
+    onFileSelect(filePath);
+  };
+
   // Root folder drag and drop handlers
   const handleRootDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.stopPropagation();
+
+    // Check if we're over a folder or file item - if so, don't handle at root level
+    const target = e.target as HTMLElement;
+    const overFolderOrFile = target.closest('.file-tree-directory, .file-tree-file');
+
+    if (overFolderOrFile) {
+      // We're over a specific folder/file, let FileTree handle it
+      setIsDragOverRoot(false);
+      return;
+    }
 
     // Get the drag data to check if it's a valid file/folder
     const dragPath = e.dataTransfer.types.includes('text/plain');
@@ -262,12 +279,14 @@ export function WorkspaceSidebar({
         <FileTree
           items={fileTree}
           currentFilePath={currentFilePath}
-          onFileSelect={onFileSelect}
+          onFileSelect={handleFileSelect}
           level={0}
           onNewFile={handleNewFileInFolder}
           onNewFolder={handleNewFolderInFolder}
           onRefreshFileTree={onRefreshFileTree}
           onViewHistory={onViewHistory}
+          selectedFolder={selectedFolder}
+          onFolderSelect={setSelectedFolder}
         />
           {isDragOverRoot && (
               <div className="root-drop-indicator">

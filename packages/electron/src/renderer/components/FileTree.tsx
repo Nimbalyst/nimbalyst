@@ -18,21 +18,31 @@ interface FileTreeProps {
   onNewFolder?: (folderPath: string) => void;
   onRefreshFileTree?: () => void;
   onViewHistory?: (filePath: string) => void;
+  selectedFolder?: string | null;
+  onFolderSelect?: (folderPath: string) => void;
+  sharedDragState?: {
+    draggedItem: FileTreeItem | null;
+    setDraggedItem: (item: FileTreeItem | null) => void;
+    dragOverItem: string | null;
+    setDragOverItem: (path: string | null) => void;
+    isDragCopy: boolean;
+    setIsDragCopy: (copy: boolean) => void;
+  };
 }
 
 function getFileIcon(fileName: string) {
   const lowerName = fileName.toLowerCase();
-  
+
   // Special files
   if (lowerName === 'readme.md' || lowerName === 'readme.markdown') {
     return <MaterialSymbol icon="info" size={18} />;
   }
-  
+
   // Default markdown icon
   return <MaterialSymbol icon="description" size={18} />;
 }
 
-export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory }: FileTreeProps) {
+export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, selectedFolder, onFolderSelect, sharedDragState }: FileTreeProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -40,11 +50,20 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
     fileName: string;
     fileType: 'file' | 'directory';
   } | null>(null);
-  
-  const [draggedItem, setDraggedItem] = useState<FileTreeItem | null>(null);
-  const [dragOverItem, setDragOverItem] = useState<string | null>(null);
-  const [isDragCopy, setIsDragCopy] = useState(false);
-  
+
+  // Create local drag state for root level, or use shared state for nested levels
+  const [localDraggedItem, setLocalDraggedItem] = useState<FileTreeItem | null>(null);
+  const [localDragOverItem, setLocalDragOverItem] = useState<string | null>(null);
+  const [localIsDragCopy, setLocalIsDragCopy] = useState(false);
+
+  // Use shared state if provided (nested), otherwise use local state (root)
+  const draggedItem = sharedDragState?.draggedItem ?? localDraggedItem;
+  const setDraggedItem = sharedDragState?.setDraggedItem ?? setLocalDraggedItem;
+  const dragOverItem = sharedDragState?.dragOverItem ?? localDragOverItem;
+  const setDragOverItem = sharedDragState?.setDragOverItem ?? setLocalDragOverItem;
+  const isDragCopy = sharedDragState?.isDragCopy ?? localIsDragCopy;
+  const setIsDragCopy = sharedDragState?.setIsDragCopy ?? setLocalIsDragCopy;
+
   // Helper function to find parent directories of a file
   const findParentDirs = useCallback((items: FileTreeItem[], targetPath: string, parents: string[] = []): string[] | null => {
     for (const item of items) {
@@ -57,21 +76,21 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
     }
     return null;
   }, []);
-  
+
   // Initialize expanded directories to show path to current file
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
     const initialExpanded = new Set<string>();
-    
+
     if (currentFilePath && level === 0) {
       const parentDirs = findParentDirs(items, currentFilePath);
       if (parentDirs) {
         parentDirs.forEach(dir => initialExpanded.add(dir));
       }
     }
-    
+
     return initialExpanded;
   });
-  
+
   // Update expanded directories when current file changes
   useEffect(() => {
     if (currentFilePath && level === 0) {
@@ -107,6 +126,19 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
       return newSet;
     });
   }, []);
+
+  const handleFolderClick = useCallback((e: React.MouseEvent, path: string) => {
+    // Check if click was on chevron - let it handle toggle
+    const target = e.target as HTMLElement;
+    if (target.closest('.file-tree-chevron')) {
+      return;
+    }
+
+    // Otherwise select the folder
+    if (onFolderSelect) {
+      onFolderSelect(path);
+    }
+  }, [onFolderSelect]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, item: FileTreeItem) => {
     e.preventDefault();
@@ -156,11 +188,11 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
       e.preventDefault();
       return;
     }
-    
+
     e.dataTransfer.effectAllowed = 'copyMove';
     e.dataTransfer.setData('text/plain', item.path);
     setDraggedItem(item);
-    
+
     // Add a custom drag image with just the text
     const dragImage = document.createElement('div');
     dragImage.textContent = item.name;
@@ -179,7 +211,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
     dragImage.style.pointerEvents = 'none';
     document.body.appendChild(dragImage);
     e.dataTransfer.setDragImage(dragImage, 10, 10);
-    
+
     // Clean up the drag image after a brief delay
     setTimeout(() => {
       if (document.body.contains(dragImage)) {
@@ -196,10 +228,18 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
 
   const handleDragOver = useCallback((e: React.DragEvent, item: FileTreeItem) => {
     e.preventDefault();
-    e.stopPropagation();
-    
+    e.stopPropagation(); // Stop event from bubbling to parent folders
+
+      // console.log("Drag over:", draggedItem?.path, item.path);
+
     // Only allow dropping on directories
     if (draggedItem && item.type === 'directory' && item.path !== draggedItem.path) {
+      // Don't allow dropping a folder into its own descendants
+      if (draggedItem.type === 'directory' && item.path.startsWith(draggedItem.path + '/')) {
+        e.dataTransfer.dropEffect = 'none';
+        return;
+      }
+
       // Check if Option/Alt key is held for copy
       const isCopy = e.altKey || e.metaKey;
       setIsDragCopy(isCopy);
@@ -221,7 +261,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
   const handleDrop = useCallback(async (e: React.DragEvent, targetItem: FileTreeItem) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     // Only allow dropping on directories
     if (!draggedItem || targetItem.type !== 'directory' || draggedItem.path === targetItem.path) {
       setDragOverItem(null);
@@ -229,10 +269,10 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
     }
 
     const isCopy = e.altKey || e.metaKey;
-    
+
     try {
       const targetPath = targetItem.path;
-      
+
       if (isCopy) {
         const result = await window.electronAPI.copyFile(draggedItem.path, targetPath);
         if (!result.success) {
@@ -286,35 +326,47 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
       {items.map((item) => {
         const isExpanded = expandedDirs.has(item.path);
         const isDragOver = dragOverItem === item.path;
-        
+        const isSelected = selectedFolder === item.path;
+
         return (
-          <li key={item.path} className="file-tree-item">
+          <li
+            key={item.path}
+            className="file-tree-item"
+            {...(item.type === 'directory' ? {
+              onDragOver: (e) => handleDragOver(e, item),
+              onDragLeave: handleDragLeave,
+              onDrop: (e) => handleDrop(e, item),
+            } : {})}
+          >
             {item.type === 'directory' ? (
               <>
                 <div
-                  className={`file-tree-directory ${isDragOver ? 'drag-over' : ''}`}
-                  onClick={() => toggleDirectory(item.path)}
+                  className={`file-tree-directory ${isDragOver ? 'drag-over' : ''} ${isSelected ? 'selected' : ''}`}
+                  onClick={(e) => handleFolderClick(e, item.path)}
                   onContextMenu={(e) => handleContextMenu(e, item)}
                   draggable
                   onDragStart={(e) => handleDragStart(e, item)}
                   onDragEnd={handleDragEnd}
-                  onDragOver={(e) => handleDragOver(e, item)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, item)}
                   style={{
                     opacity: draggedItem?.path === item.path ? 0.5 : 1
                   }}
                 >
-                  <span className="file-tree-chevron">
-                    <MaterialSymbol 
-                      icon={isExpanded ? "keyboard_arrow_down" : "keyboard_arrow_right"} 
-                      size={16} 
+                  <span
+                    className="file-tree-chevron"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleDirectory(item.path);
+                    }}
+                  >
+                    <MaterialSymbol
+                      icon={isExpanded ? "keyboard_arrow_down" : "keyboard_arrow_right"}
+                      size={16}
                     />
                   </span>
                   <span className="file-tree-icon">
-                    <MaterialSymbol 
-                      icon={isExpanded ? "folder_open" : "folder"} 
-                      size={18} 
+                    <MaterialSymbol
+                      icon={isExpanded ? "folder_open" : "folder"}
+                      size={18}
                     />
                   </span>
                   <span className="file-tree-name">
@@ -331,6 +383,17 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
                     onNewFile={onNewFile}
                     onNewFolder={onNewFolder}
                     onRefreshFileTree={onRefreshFileTree}
+                    onViewHistory={onViewHistory}
+                    selectedFolder={selectedFolder}
+                    onFolderSelect={onFolderSelect}
+                    sharedDragState={{
+                      draggedItem,
+                      setDraggedItem,
+                      dragOverItem,
+                      setDragOverItem,
+                      isDragCopy,
+                      setIsDragCopy
+                    }}
                   />
                 )}
               </>

@@ -187,6 +187,11 @@
   color: #1e40af;
 }
 
+.file-tree-directory.selected {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
 .file-tree-chevron {
   display: flex;
   align-items: center;
@@ -212,6 +217,11 @@
 }
 
 .file-tree-file.active .file-tree-icon {
+  color: #1e40af;
+}
+
+.file-tree-directory.selected .file-tree-icon,
+.file-tree-directory.selected .file-tree-chevron {
   color: #1e40af;
 }
 
@@ -345,6 +355,11 @@
   color: #ffffff;
 }
 
+.dark-theme .file-tree-directory.selected {
+  background-color: #4a5568;
+  color: #ffffff;
+}
+
 .dark-theme .file-tree-chevron {
   color: #b3b3b3;
 }
@@ -354,6 +369,11 @@
 }
 
 .dark-theme .file-tree-file.active .file-tree-icon {
+  color: #ffffff;
+}
+
+.dark-theme .file-tree-directory.selected .file-tree-icon,
+.dark-theme .file-tree-directory.selected .file-tree-chevron {
   color: #ffffff;
 }
 
@@ -434,6 +454,11 @@
     color: #dbeafe;
   }
 
+  html:not(.light-theme):not(.dark-theme) .file-tree-directory.selected {
+    background-color: #1e3a8a;
+    color: #dbeafe;
+  }
+
   html:not(.light-theme):not(.dark-theme) .file-tree-chevron {
     color: #9ca3af;
   }
@@ -443,6 +468,11 @@
   }
 
   html:not(.light-theme):not(.dark-theme) .file-tree-file.active .file-tree-icon {
+    color: #dbeafe;
+  }
+
+  html:not(.light-theme):not(.dark-theme) .file-tree-directory.selected .file-tree-icon,
+  html:not(.light-theme):not(.dark-theme) .file-tree-directory.selected .file-tree-chevron {
     color: #dbeafe;
   }
 
@@ -536,6 +566,11 @@
   color: #F3F4F6;
 }
 
+.crystal-dark-theme .file-tree-directory.selected {
+  background-color: #2563EB;
+  color: #F3F4F6;
+}
+
 .crystal-dark-theme .file-tree-chevron {
   color: #9CA3AF;
 }
@@ -545,6 +580,11 @@
 }
 
 .crystal-dark-theme .file-tree-file.active .file-tree-icon {
+  color: #F3F4F6;
+}
+
+.crystal-dark-theme .file-tree-directory.selected .file-tree-icon,
+.crystal-dark-theme .file-tree-directory.selected .file-tree-chevron {
   color: #F3F4F6;
 }
 
