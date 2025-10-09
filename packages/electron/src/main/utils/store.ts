@@ -48,13 +48,25 @@ export interface AgenticCodingWindowState {
   devToolsOpen?: boolean;
 }
 
+/**
+ * Workspace state stored per workspace path.
+ *
+ * CRITICAL: Workspace and Agentic Coding windows share the same workspace path but maintain
+ * separate tab states to prevent cross-contamination:
+ * - `tabs`: Stores tab state for the main workspace window
+ * - `agenticTabs`: Stores tab state for the agentic coding window
+ *
+ * The IPC handlers in WorkspaceHandlers.ts route get/save operations to the correct field
+ * based on the window's mode (workspace vs agentic-coding).
+ */
 export interface WorkspaceState {
   workspacePath: string;
   windowState?: SessionWindow;
   agenticCodingWindowState?: AgenticCodingWindowState;
   sidebarWidth: number;
   recentDocuments: string[];
-  tabs: TabManagerState;
+  tabs: TabManagerState; // Tab state for workspace window
+  agenticTabs?: TabManagerState; // Tab state for agentic coding window (separate storage)
   aiPanel: WorkspaceAIPanelState;
   navigationHistory?: NavigationHistoryState;
   lastUpdated: number;
@@ -98,6 +110,13 @@ function workspaceKey(path: string): string {
   return `ws:${base64}`;
 }
 
+/**
+ * Normalize raw workspace state from storage.
+ *
+ * CRITICAL: ALL fields in WorkspaceState MUST be parsed/initialized here.
+ * This includes both `tabs` AND `agenticTabs`. Missing fields will be undefined
+ * in the normalized state, which can cause state corruption.
+ */
 function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
   if (!raw) {
     return {
@@ -107,6 +126,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       sidebarWidth: 240,
       recentDocuments: [],
       tabs: { ...DEFAULT_TAB_MANAGER_STATE },
+      agenticTabs: undefined,
       aiPanel: { ...DEFAULT_AI_PANEL_STATE },
       navigationHistory: undefined,
       lastUpdated: Date.now(),
@@ -131,6 +151,14 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
     };
   }
 
+  // CRITICAL: Parse agenticTabs if present to preserve agentic window tab state
+  const agenticTabsRaw = raw.agenticTabs;
+  const agenticTabs = agenticTabsRaw ? {
+    tabs: Array.isArray(agenticTabsRaw.tabs) ? agenticTabsRaw.tabs.map((tab: any) => ({ ...tab })) : [],
+    activeTabId: agenticTabsRaw.activeTabId ?? null,
+    tabOrder: Array.isArray(agenticTabsRaw.tabOrder) ? [...agenticTabsRaw.tabOrder] : [],
+  } : undefined;
+
   return {
     workspacePath: raw.workspacePath ?? raw.workspace_path ?? path,
     windowState: raw.windowState ?? raw.window_state ?? undefined,
@@ -150,6 +178,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
           ? [...fallbackTabs.tab_order]
           : [],
     },
+    agenticTabs,
     aiPanel: {
       collapsed: aiPanelRaw.collapsed ?? aiPanelRaw.aiChatCollapsed ?? DEFAULT_AI_PANEL_STATE.collapsed,
       width: aiPanelRaw.width ?? aiPanelRaw.aiChatWidth ?? DEFAULT_AI_PANEL_STATE.width,
@@ -161,6 +190,14 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
   };
 }
 
+/**
+ * Deep clone workspace state.
+ *
+ * CRITICAL: ALL fields in WorkspaceState MUST be cloned here.
+ * Missing fields will be dropped during save/load, corrupting state.
+ * This includes both `tabs` AND `agenticTabs` - forgetting agenticTabs
+ * caused a critical bug where plans couldn't be opened.
+ */
 function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
   return {
     workspacePath: state.workspacePath,
@@ -173,6 +210,12 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
       activeTabId: state.tabs.activeTabId,
       tabOrder: [...state.tabs.tabOrder],
     },
+    // CRITICAL: Must clone agenticTabs to prevent state corruption
+    agenticTabs: state.agenticTabs ? {
+      tabs: state.agenticTabs.tabs.map(tab => ({ ...tab })),
+      activeTabId: state.agenticTabs.activeTabId,
+      tabOrder: [...state.agenticTabs.tabOrder],
+    } : undefined,
     aiPanel: { ...state.aiPanel },
     navigationHistory: state.navigationHistory ? {
       history: [...state.navigationHistory.history],
@@ -387,4 +430,38 @@ export function clearAgenticCodingWindowState(workspacePath: string): void {
 export function getAIChatState(workspacePath: string): WorkspaceAIPanelState {
   const { aiPanel } = getWorkspaceState(workspacePath);
   return { ...aiPanel };
+}
+
+/**
+ * Get tab state for the agentic coding window.
+ *
+ * IMPORTANT: This retrieves the `agenticTabs` field, NOT the regular `tabs` field.
+ * This separation ensures that:
+ * 1. Agentic window tabs (AI chat sessions) don't mix with workspace tabs (files)
+ * 2. Opening/closing the agentic window doesn't affect workspace tab state
+ * 3. Each window maintains its own independent tab history
+ *
+ * Called by WorkspaceHandlers.ts when window mode is 'agentic-coding'.
+ */
+export function getAgenticTabState(workspacePath: string): TabManagerState {
+  const workspace = getWorkspaceState(workspacePath);
+  return workspace.agenticTabs ?? { ...DEFAULT_TAB_MANAGER_STATE };
+}
+
+/**
+ * Save tab state for the agentic coding window.
+ *
+ * IMPORTANT: This saves to the `agenticTabs` field, NOT the regular `tabs` field.
+ * This prevents the agentic window from overwriting workspace tab state.
+ *
+ * Called by WorkspaceHandlers.ts when window mode is 'agentic-coding'.
+ */
+export function saveAgenticTabState(workspacePath: string, state: TabManagerState): void {
+  updateWorkspaceState(workspacePath, workspace => {
+    workspace.agenticTabs = {
+      tabs: state.tabs.map(tab => ({ ...tab })),
+      activeTabId: state.activeTabId,
+      tabOrder: [...state.tabOrder],
+    };
+  });
 }

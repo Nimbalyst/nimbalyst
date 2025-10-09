@@ -187,18 +187,19 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
         // Load all coding sessions for the dropdown
         await loadCodingSessions();
 
-        // Try to restore from workspace tab state (tabs with agentic:// URLs)
+        // Try to restore from agentic tab state
         const tabStateResult = await window.electronAPI?.getWorkspaceTabState?.();
-        const savedTabs = tabStateResult?.tabs?.filter((tab: any) => tab.filePath?.startsWith('agentic://')) || [];
+        const savedTabs = tabStateResult?.tabs || [];
 
         if (savedTabs.length > 0) {
-          console.log('[AgenticCoding] Restoring from workspace tabs:', savedTabs.length, 'tabs');
+          console.log('[AgenticCoding] Restoring from agentic tabs:', savedTabs.length, 'tabs');
 
           // Load all session tabs
           const restoredTabs: SessionTab[] = [];
           for (const savedTab of savedTabs) {
             try {
-              const sessionId = savedTab.filePath.replace('agentic://', '');
+              // Extract session ID from session:// or agentic:// URL (backward compat)
+              const sessionId = savedTab.filePath.replace(/^(session|agentic):\/\//, '') || savedTab.id;
               const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
               if (sessionData) {
                 restoredTabs.push({
@@ -214,7 +215,9 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
 
           if (restoredTabs.length > 0) {
             setSessionTabs(restoredTabs);
-            setActiveTabId(tabStateResult.activeTabId?.replace('agentic://', '') || restoredTabs[0].id);
+            // Extract active tab ID (handle both old agentic:// and new session:// format)
+            const activeId = tabStateResult.activeTabId?.replace(/^(session|agentic):\/\//, '') || tabStateResult.activeTabId || restoredTabs[0].id;
+            setActiveTabId(activeId);
             setLoading(false);
             return;
           }
@@ -257,16 +260,16 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);  // Only run once on mount
 
-  // Save to workspace tab state when tabs change
+  // Save to agentic tab state when tabs change
   useEffect(() => {
     if (sessionTabs.length === 0) return;
 
     const saveState = async () => {
       try {
-        // Convert session tabs to workspace tab format with agentic:// URLs
+        // Convert session tabs to tab format
         const tabs = sessionTabs.map(tab => ({
-          id: `agentic://${tab.id}`,
-          filePath: `agentic://${tab.id}`,
+          id: tab.id,
+          filePath: `session://${tab.id}`,
           fileName: tab.name,
           isDirty: false,
           isPinned: false,
@@ -275,7 +278,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
 
         await window.electronAPI?.saveWorkspaceTabState?.({
           tabs,
-          activeTabId: activeTabId ? `agentic://${activeTabId}` : null,
+          activeTabId: activeTabId,
           tabOrder: tabs.map(t => t.id)
         });
       } catch (err) {

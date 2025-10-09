@@ -312,11 +312,11 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     if (!enabled || !window.electronAPI?.saveWorkspaceTabState) return;
 
     const saveState = () => {
-      // Don't save if we haven't restored yet and tabs are empty
+      // Don't save empty state before first restoration attempt
       if (!hasRestoredRef.current && tabs.size === 0) {
         return;
       }
-      
+
       const tabsArray = Array.from(tabs.values()).map(tab => ({
         id: tab.id,
         filePath: tab.filePath,
@@ -348,8 +348,9 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
       }
     };
 
-    // Save immediately when tabs change (but not on initial mount)
-    if (hasRestoredRef.current) {
+    // Save immediately when tabs change, even before restoration completes
+    // (as long as we have tabs to save)
+    if (tabs.size > 0) {
       saveState();
     }
     

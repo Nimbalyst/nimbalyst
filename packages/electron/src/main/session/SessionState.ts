@@ -92,30 +92,8 @@ export async function restoreSessionState(): Promise<boolean> {
                     window = createWindow(false, true, sessionWindow.workspacePath, sessionWindow.bounds);
                     logger.session.info(`Restored workspace window: ${sessionWindow.workspacePath}`);
 
-                    // If there was a file open in the workspace, restore it
-                    if (sessionWindow.filePath && existsSync(sessionWindow.filePath)) {
-                        window.once('ready-to-show', () => {
-                            // Wait a bit for the workspace to load
-                            setTimeout(() => {
-                                window.webContents.send('file-opened-from-os', {
-                                    filePath: sessionWindow.filePath,
-                                    content: readFileSync(sessionWindow.filePath, 'utf-8')
-                                });
-
-                                // Update window state using custom window ID
-                                const windowId = getWindowId(window);
-                                if (windowId !== null) {
-                                    const state = windowStates.get(windowId);
-                                    if (state) {
-                                        state.filePath = sessionWindow.filePath;
-                                    }
-                                } else {
-                                    console.error('[SessionState] Failed to find custom window ID for window')
-                                }
-                            }, 500);
-                        });
-                        logger.session.info(`Restored file in workspace: ${sessionWindow.filePath}`);
-                    }
+                    // Note: Workspace tabs will be restored by the workspace's own tab state management
+                    // We don't manually open files here to avoid interfering with tab restoration
                 } else {
                     logger.session.warn(`Workspace path no longer exists: ${sessionWindow.workspacePath}`);
                 }

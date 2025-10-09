@@ -19,9 +19,14 @@ import {
     getWorkspaceRecentFiles,
     addWorkspaceRecentFile,
     store,
+    // Tab state functions for workspace windows (uses `tabs` field)
     getWorkspaceTabState,
     saveWorkspaceTabState,
-    clearWorkspaceTabState
+    clearWorkspaceTabState,
+    // Tab state functions for agentic coding windows (uses `agenticTabs` field)
+    // These prevent agentic window tabs from mixing with workspace tabs
+    getAgenticTabState,
+    saveAgenticTabState
 } from '../utils/store';
 import { loadFileIntoWindow } from '../file/FileOperations';
 
@@ -516,7 +521,20 @@ export function registerWorkspaceHandlers() {
         addWorkspaceRecentFile(state.workspacePath, filePath);
     });
 
-    // Get workspace tab state
+    /**
+     * Get workspace tab state.
+     *
+     * CRITICAL ROUTING LOGIC: This handler routes to different storage fields based on window mode:
+     * - workspace mode → uses `tabs` field (getWorkspaceTabState)
+     * - agentic-coding mode → uses `agenticTabs` field (getAgenticTabState)
+     *
+     * This separation prevents:
+     * 1. Agentic window tabs (AI chat sessions) from mixing with workspace tabs (files)
+     * 2. Opening/closing the agentic window from affecting workspace tab state
+     * 3. State corruption when switching between windows
+     *
+     * Both window types share the same workspace path but maintain separate tab histories.
+     */
     ipcMain.handle('get-workspace-tab-state', async (event) => {
         const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
         if (!windowId) return null;
@@ -524,15 +542,24 @@ export function registerWorkspaceHandlers() {
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return null;
 
-        // Use different storage for agentic coding windows
-        const storageKey = state.mode === 'agentic-coding'
-            ? `${state.workspacePath}:agentic-coding`
-            : state.workspacePath;
+        // Route to agentic tabs storage for agentic coding windows
+        if (state.mode === 'agentic-coding') {
+            return getAgenticTabState(state.workspacePath);
+        }
 
-        return getWorkspaceTabState(storageKey);
+        // Route to workspace tabs storage for workspace windows
+        return getWorkspaceTabState(state.workspacePath);
     });
 
-    // Save workspace tab state
+    /**
+     * Save workspace tab state.
+     *
+     * CRITICAL ROUTING LOGIC: This handler routes to different storage fields based on window mode:
+     * - workspace mode → saves to `tabs` field (saveWorkspaceTabState)
+     * - agentic-coding mode → saves to `agenticTabs` field (saveAgenticTabState)
+     *
+     * This prevents the agentic window from overwriting workspace tab state when it saves.
+     */
     ipcMain.on('save-workspace-tab-state', async (event, tabState) => {
         const windowId = BrowserWindow.fromWebContents(event.sender)?.id;
         if (!windowId) return;
@@ -540,12 +567,14 @@ export function registerWorkspaceHandlers() {
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return;
 
-        // Use different storage for agentic coding windows
-        const storageKey = state.mode === 'agentic-coding'
-            ? `${state.workspacePath}:agentic-coding`
-            : state.workspacePath;
+        // Route to agentic tabs storage for agentic coding windows
+        if (state.mode === 'agentic-coding') {
+            saveAgenticTabState(state.workspacePath, tabState);
+            return;
+        }
 
-        saveWorkspaceTabState(storageKey, tabState);
+        // Route to workspace tabs storage for workspace windows
+        saveWorkspaceTabState(state.workspacePath, tabState);
     });
 
     // Clear workspace tab state
@@ -556,12 +585,12 @@ export function registerWorkspaceHandlers() {
         const state = windowStates.get(windowId);
         if (!state || !state.workspacePath) return;
 
-        // Use different storage for agentic coding windows
-        const storageKey = state.mode === 'agentic-coding'
-            ? `${state.workspacePath}:agentic-coding`
-            : state.workspacePath;
+        // Agentic coding windows don't need clearing - their tabs are managed differently
+        if (state.mode === 'agentic-coding') {
+            return;
+        }
 
-        clearWorkspaceTabState(storageKey);
+        clearWorkspaceTabState(state.workspacePath);
     });
 
     // File operations for workspace files
