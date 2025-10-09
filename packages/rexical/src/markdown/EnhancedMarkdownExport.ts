@@ -35,6 +35,8 @@ import {
   type FrontmatterData
 } from './FrontmatterUtils';
 
+import { $getDiffState } from '../plugins/DiffPlugin/core/DiffState';
+
 /**
  * Options for enhanced markdown export.
  */
@@ -244,6 +246,11 @@ function exportChildren(
   const children = node.getChildren();
 
   mainLoop: for (const child of children) {
+    // Skip nodes marked as removed in diff state
+    const diffState = $getDiffState(child);
+    if (diffState === 'removed') {
+      continue;
+    }
     if ($isLineBreakNode(child)) {
       if (shouldPreserveNewLines) {
         output.push('\n');
