@@ -71,6 +71,10 @@ export class AIService {
           providerSettings: {
             type: 'object',
             default: {}
+          },
+          showToolCalls: {
+            type: 'boolean',
+            default: false  // Hidden by default, developer mode only
           }
         }
       });
@@ -958,11 +962,13 @@ export class AIService {
     ipcMain.handle('ai:getSettings', async () => {
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
       const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
+      const showToolCalls = this.getSettingsStore().get('showToolCalls', false) as boolean;
 
       return {
         defaultProvider: this.getSettingsStore().get('defaultProvider', 'claude-code'),
         apiKeys: this.maskApiKeys(apiKeys),
-        providerSettings
+        providerSettings,
+        showToolCalls
       };
     });
 
@@ -1001,6 +1007,10 @@ export class AIService {
 
       if (settings.providerSettings) {
         this.getSettingsStore().set('providerSettings', settings.providerSettings);
+      }
+
+      if (settings.showToolCalls !== undefined) {
+        this.getSettingsStore().set('showToolCalls', settings.showToolCalls);
       }
 
       return { success: true };

@@ -75,6 +75,7 @@ export function AIChat({
     // Load performance metrics visibility from localStorage
     return localStorage.getItem('ai-show-performance-metrics') === 'true';
   });
+  const [showToolCalls, setShowToolCalls] = useState(false); // Show tool calls setting (developer mode only)
 
   // Get the current session for easy access
   const getCurrentSession = () => {
@@ -375,9 +376,9 @@ export function AIChat({
             );
 
             for (const toolCall of data.toolCalls) {
-              // Skip applyDiff tool calls since they're already shown as edits in the assistant message
-              // This avoids duplicate UI elements for the same action
-              if (toolCall.name === 'applyDiff' || toolCall.name?.endsWith('__applyDiff')) {
+              // Filter out applyDiff tool calls unless showToolCalls is enabled
+              // This avoids duplicate UI elements (tool call + edit display)
+              if (!showToolCalls && (toolCall.name === 'applyDiff' || toolCall.name?.endsWith('__applyDiff'))) {
                 continue;
               }
 
@@ -683,6 +684,12 @@ export function AIChat({
           // logger.api.info('AI provider now configured, resetting initialization');
           setIsInitialized(false); // This will trigger re-initialization
           setInitError(null); // Clear any previous errors
+        }
+
+        // Load showToolCalls setting
+        const settings = await window.electronAPI.aiGetSettings();
+        if (settings.showToolCalls !== undefined) {
+          setShowToolCalls(settings.showToolCalls);
         }
       } catch (error) {
         logger.api.info('Failed to check API key:', error);

@@ -8,6 +8,7 @@ import { ClaudeCodePanel } from './panels/ClaudeCodePanel';
 import { OpenAIPanel } from './panels/OpenAIPanel';
 import { OpenAICodexPanel } from './panels/OpenAICodexPanel';
 import { LMStudioPanel } from './panels/LMStudioPanel';
+import { AdvancedPanel } from './panels/AdvancedPanel';
 
 // Apply theme IMMEDIATELY when module loads - BEFORE React renders
 // This prevents flash of wrong theme
@@ -99,7 +100,7 @@ interface AIModelsProps {
   onClose: () => void;
 }
 
-type ProviderId = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio';
+type ProviderId = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio' | 'advanced';
 
 interface Provider {
   id: ProviderId;
@@ -166,6 +167,7 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
   const [availableModels, setAvailableModels] = useState<Record<string, Model[]>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [hasChanges, setHasChanges] = useState(false);
+  const [showToolCalls, setShowToolCalls] = useState(false);
 
   // Load current settings on mount
   useEffect(() => {
@@ -190,6 +192,9 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
           });
           return updated;
         });
+      }
+      if (settings.showToolCalls !== undefined) {
+        setShowToolCalls(settings.showToolCalls);
       }
 
       // Fetch ALL models once
@@ -268,7 +273,8 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
   const handleSave = async () => {
     const settings = {
       apiKeys,
-      providerSettings: providers
+      providerSettings: providers,
+      showToolCalls
     };
 
     await window.electronAPI.aiSaveSettings(settings);
@@ -384,6 +390,14 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
         return <OpenAICodexPanel {...commonProps} />;
       case 'lmstudio':
         return <LMStudioPanel {...commonProps} />;
+      case 'advanced':
+        return <AdvancedPanel
+          showToolCalls={showToolCalls}
+          onShowToolCallsChange={(value) => {
+            setShowToolCalls(value);
+            setHasChanges(true);
+          }}
+        />;
       default:
         return null;
     }
@@ -483,7 +497,10 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
           </div>
 
           <div className="nav-section nav-section-bottom">
-            <button className="nav-action-button">
+            <button
+              className={`nav-action-button ${selectedProvider === 'advanced' ? 'active' : ''}`}
+              onClick={() => setSelectedProvider('advanced')}
+            >
               <span>🔧</span> Advanced Settings
             </button>
             <button className="nav-action-button">
