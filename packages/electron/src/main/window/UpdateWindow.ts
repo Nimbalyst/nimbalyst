@@ -46,11 +46,12 @@ export function createUpdateWindow() {
   });
 
   // Load the update.html file
-  if (process.env['ELECTRON_RENDERER_URL']) {
-    updateWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/update.html`);
-  } else {
-    updateWindow.loadFile(join(__dirname, '../renderer/update.html'));
-  }
+  // Always load from file system since update.html is a standalone page
+  // and not served by the dev server
+  const updateHtmlPath = process.env.NODE_ENV === 'development'
+    ? join(__dirname, '../../src/renderer/update.html')
+    : join(__dirname, '../renderer/update.html');
+  updateWindow.loadFile(updateHtmlPath);
 
   updateWindow.once('ready-to-show', () => {
     updateWindow?.show();
@@ -67,14 +68,22 @@ export function showUpdateAvailable(updateInfo: UpdateInfo) {
   const window = createUpdateWindow();
   const currentVersion = app.getVersion();
 
-  window.webContents.once('did-finish-load', () => {
+  const sendData = () => {
     window.webContents.send('update-window:show-available', {
       currentVersion,
       newVersion: updateInfo.version,
       releaseNotes: updateInfo.releaseNotes || '',
       releaseDate: updateInfo.releaseDate
     });
-  });
+  };
+
+  // If window is already loaded, send immediately
+  if (window.webContents.isLoading()) {
+    window.webContents.once('did-finish-load', sendData);
+  } else {
+    // Give a brief moment for renderer to be ready
+    setTimeout(sendData, 100);
+  }
 }
 
 export function showDownloadProgress(progress: DownloadProgress) {
@@ -108,4 +117,29 @@ export function closeUpdateWindow() {
 
 export function getUpdateWindow(): BrowserWindow | null {
   return updateWindow;
+}
+
+// Test helpers - only used in test environment
+if (process.env.NODE_ENV === 'test' || process.env.PLAYWRIGHT === '1') {
+  const { ipcMain } = require('electron');
+
+  ipcMain.handle('test:trigger-update-available', (_event, updateInfo: UpdateInfo) => {
+    showUpdateAvailable(updateInfo);
+  });
+
+  ipcMain.handle('test:trigger-download-progress', (_event, progress: DownloadProgress) => {
+    showDownloadProgress(progress);
+  });
+
+  ipcMain.handle('test:trigger-update-ready', (_event, updateInfo: UpdateInfo) => {
+    showUpdateReady(updateInfo);
+  });
+
+  ipcMain.handle('test:trigger-update-error', (_event, errorMessage: string) => {
+    showUpdateError(errorMessage);
+  });
+
+  ipcMain.handle('test:close-update-window', () => {
+    closeUpdateWindow();
+  });
 }

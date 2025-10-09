@@ -14,9 +14,13 @@ planStatus:
     - export
     - serialization
   created: "2025-10-09"
-  updated: "2025-10-09T12:57:00.000Z"
+  updated: "2025-10-09T20:53:29.349Z"
   progress: 100
   startDate: "2025-10-09"
+  agentSessions:
+    - id: d36681ec-898e-481c-a0b6-883ecfcf086e
+      createdAt: "2025-10-09T20:53:29.349Z"
+      status: active
 ---
 # Filter Removed Nodes from Markdown Export
 <!-- plan-status -->

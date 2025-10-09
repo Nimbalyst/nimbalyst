@@ -156,7 +156,12 @@ export class AutoUpdaterService {
     ipcMain.on('update-window:download', async () => {
       try {
         log.info('Update window: Starting download...');
-        await autoUpdater.downloadUpdate();
+        // In test mode, skip the actual download (tests will manually trigger progress)
+        if (process.env.NODE_ENV !== 'test' && process.env.PLAYWRIGHT !== '1') {
+          await autoUpdater.downloadUpdate();
+        } else {
+          log.info('Test mode: Skipping actual download');
+        }
       } catch (error) {
         log.error('Failed to download update from update window:', error);
         showUpdateError(error instanceof Error ? error.message : 'Unknown error');

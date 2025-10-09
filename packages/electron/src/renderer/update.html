@@ -11,17 +11,7 @@
     <!-- Update Available State -->
     <div id="state-available" class="state-container">
       <div class="icon-container">
-        <svg class="app-icon" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-          <rect width="512" height="512" rx="100" fill="url(#gradient)"/>
-          <path d="M256 128L320 224H192L256 128Z" fill="white" opacity="0.9"/>
-          <rect x="192" y="240" width="128" height="144" rx="8" fill="white" opacity="0.9"/>
-          <defs>
-            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
-              <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
-            </linearGradient>
-          </defs>
-        </svg>
+        <img src="./icon.png" alt="Preditor" class="app-icon" />
       </div>
 
       <div class="version-info">
@@ -122,6 +112,6 @@
     </div>
   </div>
 
-  <script src="./update.js"></script>
+  <script type="module" src="./update.ts"></script>
 </body>
 </html>

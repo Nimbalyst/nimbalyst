@@ -14,10 +14,14 @@ planStatus:
     - media
     - ai-chat
   created: "2025-10-08"
-  updated: "2025-10-08T18:30:00Z"
+  updated: "2025-10-09T20:53:29.349Z"
   progress: 60
   dueDate: "2025-10-29"
   startDate: "2025-10-08"
+  agentSessions:
+    - id: d36681ec-898e-481c-a0b6-883ecfcf086e
+      createdAt: "2025-10-09T20:53:29.349Z"
+      status: active
 ---
 # Agent Image Management Strategy
 <!-- plan-status -->

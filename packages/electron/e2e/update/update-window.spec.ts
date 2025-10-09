@@ -44,10 +44,9 @@ test.describe('Update Window', () => {
   test('should show update available state with formatted release notes', async () => {
     console.log('[TEST] Triggering update available event...');
 
-    // Trigger the update available event from main process
-    await electronApp.evaluate(async ({ app }) => {
-      const { showUpdateAvailable } = await import('./src/main/window/UpdateWindow');
-      showUpdateAvailable({
+    // Trigger the update available event via IPC
+    await page.evaluate(async () => {
+      await window.electronAPI.invoke('test:trigger-update-available', {
         version: '1.0.0',
         releaseNotes: `# Version 1.0.0
 
@@ -121,9 +120,8 @@ console.log('Hello World');
     console.log('[TEST] Testing download progress state...');
 
     // Trigger update available
-    await electronApp.evaluate(async () => {
-      const { showUpdateAvailable } = await import('./src/main/window/UpdateWindow');
-      showUpdateAvailable({
+    await page.evaluate(async () => {
+      await window.electronAPI.invoke('test:trigger-update-available', {
         version: '1.0.0',
         releaseNotes: '## Release Notes\n\nTest release',
       });
@@ -131,49 +129,65 @@ console.log('Hello World');
 
     await page.waitForTimeout(1000);
 
+    // Find the update window by title
     const windows = await electronApp.windows();
-    const updateWindow = windows[windows.length - 1];
-    await updateWindow.waitForLoadState('domcontentloaded');
+    console.log('[TEST] All windows:', windows.length);
+
+    let updateWindow = null;
+    for (const win of windows) {
+      const title = await win.title();
+      console.log('[TEST] Window title:', title);
+      if (title === 'Update Available') {
+        updateWindow = win;
+        break;
+      }
+    }
+
+    expect(updateWindow).toBeTruthy();
+    await updateWindow!.waitForLoadState('domcontentloaded');
+    await updateWindow!.waitForTimeout(1000); // Give time for JS to load
+
+    // Verify we're on the update window by checking for state-available
+    const availableState = updateWindow!.locator('#state-available');
+    await expect(availableState).toBeVisible({ timeout: 5000 });
 
     // Click download button
-    const downloadButton = updateWindow.locator('#btn-download');
+    const downloadButton = updateWindow!.locator('#btn-download');
+    await expect(downloadButton).toBeVisible();
+    console.log('[TEST] Clicking download button...');
     await downloadButton.click();
-    await updateWindow.waitForTimeout(500);
 
-    // Check downloading state is shown
-    const downloadingState = updateWindow.locator('#state-downloading');
-    await expect(downloadingState).toBeVisible({ timeout: 3000 });
+    // Check downloading state is shown (should transition immediately)
+    const downloadingState = updateWindow!.locator('#state-downloading');
+    await expect(downloadingState).toBeVisible({ timeout: 5000 });
 
     // Simulate download progress
-    await electronApp.evaluate(async () => {
-      const { showDownloadProgress } = await import('./src/main/window/UpdateWindow');
-
-      // Simulate progress updates
-      for (let i = 0; i <= 100; i += 20) {
-        showDownloadProgress({
-          percent: i,
+    for (let i = 0; i <= 100; i += 20) {
+      await page.evaluate(async (percent) => {
+        await window.electronAPI.invoke('test:trigger-download-progress', {
+          percent: percent,
           bytesPerSecond: 1024 * 1024 * 2, // 2 MB/s
-          transferred: (50 * 1024 * 1024 * i) / 100, // 50 MB total
+          transferred: (50 * 1024 * 1024 * percent) / 100, // 50 MB total
           total: 50 * 1024 * 1024
         });
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-    });
+      }, i);
+      await updateWindow!.waitForTimeout(200);
+    }
 
     // Check progress bar is visible and updating
-    const progressBar = updateWindow.locator('#progress-fill');
+    const progressBar = updateWindow!.locator('#progress-fill');
     await expect(progressBar).toBeVisible();
 
     // Check progress text
-    const progressText = updateWindow.locator('#progress-text');
+    const progressText = updateWindow!.locator('#progress-text');
     await expect(progressText).toBeVisible();
 
     // Eventually should show 100%
     await expect(progressText).toContainText('100%', { timeout: 5000 });
 
     // Check download stats are shown
-    const downloadSpeed = updateWindow.locator('#download-speed');
-    const downloadSize = updateWindow.locator('#download-size');
+    const downloadSpeed = updateWindow!.locator('#download-speed');
+    const downloadSize = updateWindow!.locator('#download-size');
     await expect(downloadSpeed).toBeVisible();
     await expect(downloadSize).toBeVisible();
   });
@@ -182,9 +196,8 @@ console.log('Hello World');
     console.log('[TEST] Testing ready to install state...');
 
     // Trigger update available
-    await electronApp.evaluate(async () => {
-      const { showUpdateAvailable } = await import('./src/main/window/UpdateWindow');
-      showUpdateAvailable({
+    await page.evaluate(async () => {
+      await window.electronAPI.invoke('test:trigger-update-available', {
         version: '1.0.0',
         releaseNotes: '## Release Notes\n\nTest release',
       });
@@ -197,9 +210,8 @@ console.log('Hello World');
     await updateWindow.waitForLoadState('domcontentloaded');
 
     // Trigger ready state directly
-    await electronApp.evaluate(async () => {
-      const { showUpdateReady } = await import('./src/main/window/UpdateWindow');
-      showUpdateReady({
+    await page.evaluate(async () => {
+      await window.electronAPI.invoke('test:trigger-update-ready', {
         version: '1.0.0',
       });
     });
@@ -231,9 +243,8 @@ console.log('Hello World');
     console.log('[TEST] Testing error state...');
 
     // Trigger update available
-    await electronApp.evaluate(async () => {
-      const { showUpdateAvailable } = await import('./src/main/window/UpdateWindow');
-      showUpdateAvailable({
+    await page.evaluate(async () => {
+      await window.electronAPI.invoke('test:trigger-update-available', {
         version: '1.0.0',
         releaseNotes: '## Release Notes\n\nTest release',
       });
@@ -246,9 +257,8 @@ console.log('Hello World');
     await updateWindow.waitForLoadState('domcontentloaded');
 
     // Trigger error state
-    await electronApp.evaluate(async () => {
-      const { showUpdateError } = await import('./src/main/window/UpdateWindow');
-      showUpdateError('Network connection failed. Please check your internet connection and try again.');
+    await page.evaluate(async () => {
+      await window.electronAPI.invoke('test:trigger-update-error', 'Network connection failed. Please check your internet connection and try again.');
     });
 
     await updateWindow.waitForTimeout(500);
@@ -277,9 +287,8 @@ console.log('Hello World');
     console.log('[TEST] Testing theme switching in update window...');
 
     // Trigger update available
-    await electronApp.evaluate(async () => {
-      const { showUpdateAvailable } = await import('./src/main/window/UpdateWindow');
-      showUpdateAvailable({
+    await page.evaluate(async () => {
+      await window.electronAPI.invoke('test:trigger-update-available', {
         version: '1.0.0',
         releaseNotes: '## Release Notes\n\nTest release',
       });
@@ -301,10 +310,7 @@ console.log('Hello World');
 
     // Send dark theme change
     console.log('[TEST] Switching to dark theme...');
-    await electronApp.evaluate(async () => {
-      const { updateUpdateWindowTheme } = await import('./src/main/window/UpdateWindow');
-      const { BrowserWindow } = await import('electron');
-
+    await electronApp.evaluate(({ BrowserWindow }) => {
       // Send theme-change event to all windows
       BrowserWindow.getAllWindows().forEach(window => {
         window.webContents.send('theme-change', 'dark');
@@ -320,8 +326,7 @@ console.log('Hello World');
 
     // Switch to crystal-dark
     console.log('[TEST] Switching to crystal-dark theme...');
-    await electronApp.evaluate(async () => {
-      const { BrowserWindow } = await import('electron');
+    await electronApp.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows().forEach(window => {
         window.webContents.send('theme-change', 'crystal-dark');
       });
@@ -335,8 +340,7 @@ console.log('Hello World');
 
     // Switch back to light
     console.log('[TEST] Switching to light theme...');
-    await electronApp.evaluate(async () => {
-      const { BrowserWindow } = await import('electron');
+    await electronApp.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows().forEach(window => {
         window.webContents.send('theme-change', 'light');
       });
@@ -353,9 +357,8 @@ console.log('Hello World');
     console.log('[TEST] Testing window dismissal...');
 
     // Trigger update available
-    await electronApp.evaluate(async () => {
-      const { showUpdateAvailable } = await import('./src/main/window/UpdateWindow');
-      showUpdateAvailable({
+    await page.evaluate(async () => {
+      await window.electronAPI.invoke('test:trigger-update-available', {
         version: '1.0.0',
         releaseNotes: '## Release Notes\n\nTest release',
       });

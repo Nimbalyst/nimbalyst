@@ -111,6 +111,7 @@ btnLater.addEventListener('click', () => {
 });
 
 btnDownload.addEventListener('click', () => {
+  console.log('[UPDATE] Download button clicked, transitioning to downloading state');
   window.electronAPI.send('update-window:download');
   showState('downloading');
 });
