@@ -479,6 +479,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
   on: (channel: string, callback: (...args: any[]) => void) => {
     const handler = (_event: any, ...args: any[]) => callback(...args);
+
+    // Increase max listeners for document service channels that may have multiple watchers
+    if (channel.startsWith('document-service:')) {
+      const currentMax = ipcRenderer.getMaxListeners();
+      if (currentMax !== 0 && currentMax < 50) {
+        ipcRenderer.setMaxListeners(50);
+      }
+    }
+
     ipcRenderer.on(channel, handler);
     // Store mapping from callback to handler for proper removal
     if (!(window as any).__ipcHandlers) {

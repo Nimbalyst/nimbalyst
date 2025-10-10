@@ -16,25 +16,37 @@ export class RendererDocumentService implements DocumentService {
   private changeListeners: Map<string, (documents: Document[]) => void> = new Map();
   private metadataChangeListeners: Map<string, (change: MetadataChangeEvent) => void> = new Map();
   private trackerItemChangeListeners: Map<string, (change: TrackerItemChangeEvent) => void> = new Map();
+  private cleanupFunctions: (() => void)[] = [];
 
   constructor() {
     // Only set up listeners if window.electronAPI is available
     if (typeof window !== 'undefined' && window.electronAPI) {
       // Listen for document change events from main process
-      window.electronAPI.on('document-service:documents-changed', (documents: Document[]) => {
+      const unsubscribeDocuments = window.electronAPI.on('document-service:documents-changed', (documents: Document[]) => {
         this.changeListeners.forEach(callback => callback(documents));
       });
+      this.cleanupFunctions.push(unsubscribeDocuments);
 
       // Listen for metadata change events from main process
-      window.electronAPI.on('document-service:metadata-changed', (change: MetadataChangeEvent) => {
+      const unsubscribeMetadata = window.electronAPI.on('document-service:metadata-changed', (change: MetadataChangeEvent) => {
         this.metadataChangeListeners.forEach(callback => callback(change));
       });
+      this.cleanupFunctions.push(unsubscribeMetadata);
 
       // Listen for tracker item change events from main process
-      window.electronAPI.on('document-service:tracker-items-changed', (change: TrackerItemChangeEvent) => {
+      const unsubscribeTrackerItems = window.electronAPI.on('document-service:tracker-items-changed', (change: TrackerItemChangeEvent) => {
         this.trackerItemChangeListeners.forEach(callback => callback(change));
       });
+      this.cleanupFunctions.push(unsubscribeTrackerItems);
     }
+  }
+
+  dispose() {
+    this.cleanupFunctions.forEach(cleanup => cleanup());
+    this.cleanupFunctions = [];
+    this.changeListeners.clear();
+    this.metadataChangeListeners.clear();
+    this.trackerItemChangeListeners.clear();
   }
 
   async listDocuments(): Promise<Document[]> {
@@ -174,4 +186,14 @@ export function getDocumentService(): DocumentService {
     documentService = new RendererDocumentService();
   }
   return documentService;
+}
+
+// Cleanup on HMR
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    if (documentService) {
+      documentService.dispose();
+      documentService = null;
+    }
+  });
 }
