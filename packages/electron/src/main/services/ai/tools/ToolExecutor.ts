@@ -65,6 +65,7 @@ export class ToolExecutor extends EventEmitter {
       });
 
       // Send to renderer with explicit targetFilePath
+      console.log(`[ToolExecutor] Sending applyDiff to renderer with targetFilePath:`, args.targetFilePath);
       this.webContents.send('ai:applyDiff', {
         replacements: args.replacements,
         resultChannel,

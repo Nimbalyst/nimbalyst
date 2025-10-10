@@ -247,13 +247,19 @@ class AIApi {
           logger.api.warn('applyDiff payload missing replacements');
         }
 
-        // Get target file path - require it explicitly, or fall back to first registered editor
-        const targetFilePath = data.targetFilePath || editorRegistry.getFilePaths()[0];
+        // Get target file path - use explicit path if provided, otherwise use active editor
+        let targetFilePath = data.targetFilePath;
+
+        if (!targetFilePath) {
+          // Use the active editor from the registry
+          targetFilePath = editorRegistry.getActiveFilePath();
+          logger.api.info('No explicit targetFilePath, using active editor:', targetFilePath);
+        }
 
         if (!targetFilePath) {
           window.electronAPI.sendMcpApplyDiffResult(data.resultChannel, {
             success: false,
-            error: 'No target file path available and no editor registered'
+            error: 'No target file path available and no active editor'
           });
           return;
         }

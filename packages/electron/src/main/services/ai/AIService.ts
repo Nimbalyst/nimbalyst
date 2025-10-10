@@ -259,9 +259,8 @@ export class AIService {
 
       await providerInstance.initialize(initConfig);
 
-      // Register tool handler with the document context file path
-      const targetFilePath = documentContext?.filePath;
-      const toolHandler = this.createToolHandler(event.sender, targetFilePath);
+      // Register tool handler - targetFilePath will be determined dynamically per tool call
+      const toolHandler = this.createToolHandler(event.sender, documentContext);
       providerInstance.registerToolHandler(toolHandler);
 
       // Track provider for this window
@@ -490,15 +489,23 @@ export class AIService {
           throw initError;
         }
 
-        // Register tool handler with the session's document context file path
-        const targetFilePath = documentContext?.filePath;
-        const toolHandler = this.createToolHandler(event.sender, targetFilePath);
+        // Register tool handler - targetFilePath will be determined dynamically per tool call
+        const toolHandler = this.createToolHandler(event.sender, documentContext);
         provider.registerToolHandler(toolHandler);
       }
 
       // Track provider for this window to avoid cross-window conflicts
       this.providersByWindow.set(event.sender.id, provider);
       console.log(`[AIService] Set provider for window ${event.sender.id}: ${session.provider}`);
+
+      // Re-register tool handler with the CURRENT document context from this message
+      // This ensures applyDiff targets the correct file even when switching tabs
+      console.log(`[AIService] Re-registering tool handler with document context:`, {
+        filePath: documentContext?.filePath,
+        hasContext: !!documentContext
+      });
+      const toolHandler = this.createToolHandler(event.sender, documentContext);
+      provider.registerToolHandler(toolHandler);
 
       try {
         let fullResponse = '';
@@ -1259,12 +1266,15 @@ export class AIService {
     });
   }
 
-  private createToolHandler(webContents: Electron.WebContents, targetFilePath?: string): ToolHandler {
+  private createToolHandler(webContents: Electron.WebContents, documentContext?: DocumentContext): ToolHandler {
     const executor = new ToolExecutor(webContents);
+    console.log(`[AIService] createToolHandler called with documentContext.filePath:`, documentContext?.filePath);
 
     return {
       applyDiff: async (args: DiffArgs): Promise<DiffResult> => {
-        // Pass the targetFilePath along with the diff args
+        // Use the current document context file path (passed in the message)
+        const targetFilePath = documentContext?.filePath;
+        console.log(`[AIService] applyDiff called, targetFilePath from closure:`, targetFilePath);
         return executor.applyDiff({ ...args, targetFilePath });
       },
       executeTool: async (name: string, args: any): Promise<any> => {

@@ -145,6 +145,16 @@ export function AIChatIntegrationPlugin(): null {
 
     // console.log('[AIChatIntegrationPlugin] Registering editor for:', filePath);
 
+    // Set up focus listener to track active editor
+    const handleFocus = () => {
+      console.log('[AIChatIntegrationPlugin] Editor focused:', filePath);
+      editorRegistry.setActive(filePath);
+    };
+
+    // Add focus listener to root element
+    rootElement?.addEventListener('focus', handleFocus, true);
+    rootElement?.addEventListener('click', handleFocus); // Also handle clicks since editors might not always fire focus
+
     // Create the editor instance interface
     const editorInstance = {
       filePath,
@@ -267,6 +277,13 @@ export function AIChatIntegrationPlugin(): null {
     // Register with the registry
     editorRegistry.register(editorInstance);
 
+    // Check if this editor is currently active (data-active="true")
+    const isActive = editorContainer?.getAttribute('data-active') === 'true';
+    if (isActive) {
+      console.log('[AIChatIntegrationPlugin] Registering as active editor:', filePath);
+      editorRegistry.setActive(filePath);
+    }
+
     // Cleanup on unmount
     return () => {
       // console.log('[AIChatIntegrationPlugin] Unregistering editor for:', filePath);
@@ -274,6 +291,9 @@ export function AIChatIntegrationPlugin(): null {
       // Clean up any active stream processors
       streamProcessorsRef.current.clear();
       streamConfigRef.current.clear();
+      // Remove event listeners
+      rootElement?.removeEventListener('focus', handleFocus, true);
+      rootElement?.removeEventListener('click', handleFocus);
     };
   }, [editor]);
 

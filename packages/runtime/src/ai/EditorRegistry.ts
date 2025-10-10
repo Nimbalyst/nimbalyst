@@ -19,6 +19,7 @@ export interface EditorInstance {
 
 class EditorRegistry {
   private editors: Map<string, EditorInstance> = new Map();
+  private activeFilePath: string | null = null;
 
   /**
    * Register an editor instance for a file path
@@ -26,6 +27,10 @@ class EditorRegistry {
   register(instance: EditorInstance): void {
     // console.log('[EditorRegistry] Registering editor for:', instance.filePath);
     this.editors.set(instance.filePath, instance);
+    // Set as active if it's the first editor or explicitly set later
+    if (!this.activeFilePath) {
+      this.activeFilePath = instance.filePath;
+    }
   }
 
   /**
@@ -34,6 +39,15 @@ class EditorRegistry {
   unregister(filePath: string): void {
     // console.log('[EditorRegistry] Unregistering editor for:', filePath);
     this.editors.delete(filePath);
+    // If we're unregistering the active editor, clear it
+    if (this.activeFilePath === filePath) {
+      this.activeFilePath = null;
+      // Set a new active editor if one exists
+      const paths = Array.from(this.editors.keys());
+      if (paths.length > 0) {
+        this.activeFilePath = paths[0];
+      }
+    }
   }
 
   /**
@@ -55,6 +69,25 @@ class EditorRegistry {
    */
   has(filePath: string): boolean {
     return this.editors.has(filePath);
+  }
+
+  /**
+   * Set the active editor by file path
+   */
+  setActive(filePath: string): void {
+    if (this.editors.has(filePath)) {
+      console.log('[EditorRegistry] Setting active editor:', filePath);
+      this.activeFilePath = filePath;
+    } else {
+      console.warn('[EditorRegistry] Attempted to set active editor for unregistered file:', filePath);
+    }
+  }
+
+  /**
+   * Get the currently active file path
+   */
+  getActiveFilePath(): string | null {
+    return this.activeFilePath;
   }
 
   /**
@@ -136,3 +169,8 @@ class EditorRegistry {
 
 // Export singleton instance
 export const editorRegistry = new EditorRegistry();
+
+// Expose for testing (browser environment only)
+if (typeof window !== 'undefined') {
+  (window as any).__editorRegistry = editorRegistry;
+}
