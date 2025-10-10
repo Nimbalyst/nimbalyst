@@ -29,7 +29,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
   workspacePath,
   planDocumentPath
 }) => {
-  console.log('[AgenticCodingWindow] RENDER START', { initialSessionId, workspacePath, planDocumentPath });
+  // console.log('[AgenticCodingWindow] RENDER START', { initialSessionId, workspacePath, planDocumentPath });
 
   const [sessionTabs, setSessionTabs] = useState<SessionTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -44,7 +44,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
 
   const MAX_CLOSED_SESSION_HISTORY = 10;
 
-  console.log('[AgenticCodingWindow] State initialized', { loading, error, activeTabId, tabCount: sessionTabs.length });
+  // console.log('[AgenticCodingWindow] State initialized', { loading, error, activeTabId, tabCount: sessionTabs.length });
 
   // Set window title with workspace name
   useEffect(() => {
@@ -185,18 +185,18 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
 
   // Load or create initial session
   useEffect(() => {
-    console.log('[AgenticCodingWindow] useEffect STARTING', { initialSessionId, workspacePath, initialized: initializedRef.current });
+    // console.log('[AgenticCodingWindow] useEffect STARTING', { initialSessionId, workspacePath, initialized: initializedRef.current });
 
     // Prevent double initialization in React StrictMode
     if (initializedRef.current) {
-      console.log('[AgenticCodingWindow] Already initialized, skipping');
+      // console.log('[AgenticCodingWindow] Already initialized, skipping');
       return;
     }
     initializedRef.current = true;
 
     const loadOrCreateSession = async () => {
       try {
-        console.log('[AgenticCodingWindow] loadOrCreateSession START');
+        // console.log('[AgenticCodingWindow] loadOrCreateSession START');
         setLoading(true);
         setError(null);
 
@@ -208,7 +208,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
         const savedTabs = tabStateResult?.tabs || [];
 
         if (savedTabs.length > 0) {
-          console.log('[AgenticCoding] Restoring from agentic tabs:', savedTabs.length, 'tabs');
+          // console.log('[AgenticCoding] Restoring from agentic tabs:', savedTabs.length, 'tabs');
 
           // Load all session tabs
           const restoredTabs: SessionTab[] = [];
@@ -367,7 +367,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
   // Listen for requests to open a specific session (from plan status)
   useEffect(() => {
     const handleOpenSession = async (sessionId: string) => {
-      console.log('[AgenticCoding] Received request to open session:', sessionId);
+      // console.log('[AgenticCoding] Received request to open session:', sessionId);
       await openSessionInTab(sessionId);
     };
 
@@ -385,7 +385,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
 
       // Handle streaming tool calls in real-time
       if (data.toolCalls && Array.isArray(data.toolCalls) && data.toolCalls.length > 0) {
-        console.log('[AgenticCoding] Received tool calls:', data.toolCalls.length);
+        // console.log('[AgenticCoding] Received tool calls:', data.toolCalls.length);
         // Reload session to get updated tool calls
         try {
           const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
@@ -404,7 +404,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
 
       // Handle tool errors in real-time
       if (data.toolError) {
-        console.log('[AgenticCoding] Received tool error:', data.toolError);
+        // console.log('[AgenticCoding] Received tool error:', data.toolError);
         // Reload session to get updated error
         try {
           const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
@@ -423,7 +423,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
 
       // Handle completion - reload final state
       if (data.isComplete) {
-        console.log('[AgenticCoding] Stream complete, reloading session:', activeTabId);
+        // console.log('[AgenticCoding] Stream complete, reloading session:', activeTabId);
         try {
           const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
           if (sessionData) {
@@ -685,10 +685,10 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [closedSessions]); // Re-bind when closedSessions changes
 
-  console.log('[AgenticCodingWindow] RENDER', { loading, error, activeTabId, tabCount: sessionTabs.length });
+  // console.log('[AgenticCodingWindow] RENDER', { loading, error, activeTabId, tabCount: sessionTabs.length });
 
   if (loading) {
-    console.log('[AgenticCodingWindow] Rendering LOADING state');
+    // console.log('[AgenticCodingWindow] Rendering LOADING state');
     return (
       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-primary)' }}>
         <div style={{ color: 'var(--text-secondary)' }}>Loading session...</div>
@@ -759,8 +759,8 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     );
   }
 
-  console.log('[AgenticCodingWindow] Rendering MAIN content');
-  console.log('[AgenticCodingWindow] About to render AgentTranscriptPanel');
+  // console.log('[AgenticCodingWindow] Rendering MAIN content');
+  // console.log('[AgenticCodingWindow] About to render AgentTranscriptPanel');
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
       <WorkspaceHeader
