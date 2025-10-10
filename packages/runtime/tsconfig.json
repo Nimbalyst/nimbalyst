@@ -4,14 +4,12 @@
     "module": "ESNext",
     "lib": ["ES2020", "DOM"],
     "jsx": "react-jsx",
-    "declaration": true,
-    "outDir": "dist",
-    "rootDir": "src",
     "moduleResolution": "Bundler",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
     "types": []
   },
   "include": ["src"]
