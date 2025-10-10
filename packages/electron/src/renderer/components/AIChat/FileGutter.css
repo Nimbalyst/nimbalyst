@@ -1,0 +1,104 @@
+.file-gutter {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-primary);
+  background-color: var(--surface-secondary);
+  font-size: 0.75rem;
+}
+
+.file-gutter-referenced {
+  border-bottom-color: var(--primary-color);
+  background-color: var(--surface-tertiary);
+}
+
+.file-gutter-edited {
+  border-top: 1px solid var(--status-success);
+  background-color: var(--surface-tertiary);
+}
+
+.file-gutter-single,
+.file-gutter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.2s;
+  width: 100%;
+}
+
+.file-gutter-single:hover,
+.file-gutter-toggle:hover {
+  background-color: var(--surface-hover);
+}
+
+.file-gutter-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.file-gutter-filename {
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-gutter-count {
+  color: var(--text-primary);
+  background-color: var(--surface-secondary);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-weight: 600;
+}
+
+.file-gutter-chevron {
+  margin-left: auto;
+  transition: transform 0.2s;
+}
+
+.file-gutter-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.file-gutter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  padding-left: 1.5rem;
+}
+
+.file-gutter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.375rem 0.5rem;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 0.25rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.file-gutter-item:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--primary-color);
+}
+
+.file-gutter-path {
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

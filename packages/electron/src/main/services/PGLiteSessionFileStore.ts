@@ -1,0 +1,139 @@
+/**
+ * PGLite implementation of SessionFileStore interface from runtime package
+ */
+
+import { v4 as uuidv4 } from 'uuid';
+import type { SessionFileStore, FileLink, FileLinkType } from '@stravu/runtime';
+
+type PGliteLike = {
+  query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }>;
+  exec(sql: string): Promise<void>;
+};
+
+type EnsureReadyFn = () => Promise<void>;
+
+function toMillis(value: unknown): number {
+  if (!value) return Date.now();
+  if (typeof value === 'number') return value;
+  if (value instanceof Date) return value.getTime();
+  const parsed = new Date(value as any).getTime();
+  return Number.isNaN(parsed) ? Date.now() : parsed;
+}
+
+function rowToFileLink(row: any): FileLink {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    workspaceId: row.workspace_id,
+    filePath: row.file_path,
+    linkType: row.link_type as FileLinkType,
+    timestamp: toMillis(row.timestamp),
+    metadata: row.metadata || {}
+  };
+}
+
+export function createPGLiteSessionFileStore(db: PGliteLike, ensureDbReady?: EnsureReadyFn): SessionFileStore {
+  const ensureReady = async () => {
+    if (ensureDbReady) {
+      await ensureDbReady();
+    }
+  };
+
+  return {
+    async ensureReady(): Promise<void> {
+      await ensureReady();
+    },
+
+    async addFileLink(link: Omit<FileLink, 'id'>): Promise<FileLink> {
+      await ensureReady();
+
+      const id = uuidv4();
+      const now = Date.now();
+
+      await db.query(
+        `INSERT INTO session_files (
+          id, session_id, workspace_id, file_path, link_type, timestamp, metadata
+        ) VALUES (
+          $1, $2, $3, $4, $5, to_timestamp($6 / 1000.0), $7
+        )`,
+        [
+          id,
+          link.sessionId,
+          link.workspaceId,
+          link.filePath,
+          link.linkType,
+          link.timestamp || now,
+          link.metadata || {}
+        ]
+      );
+
+      return {
+        id,
+        ...link,
+        timestamp: link.timestamp || now
+      };
+    },
+
+    async getFilesBySession(sessionId: string, linkType?: FileLinkType): Promise<FileLink[]> {
+      await ensureReady();
+
+      const params: any[] = [sessionId];
+      let sql = `
+        SELECT * FROM session_files
+        WHERE session_id = $1
+      `;
+
+      if (linkType) {
+        sql += ` AND link_type = $2`;
+        params.push(linkType);
+      }
+
+      sql += ` ORDER BY timestamp ASC`;
+
+      const { rows } = await db.query<any>(sql, params);
+      return rows.map(rowToFileLink);
+    },
+
+    async getSessionsByFile(workspaceId: string, filePath: string, linkType?: FileLinkType): Promise<string[]> {
+      await ensureReady();
+
+      const params: any[] = [workspaceId, filePath];
+      let sql = `
+        SELECT DISTINCT session_id FROM session_files
+        WHERE workspace_id = $1 AND file_path = $2
+      `;
+
+      if (linkType) {
+        sql += ` AND link_type = $3`;
+        params.push(linkType);
+      }
+
+      sql += ` ORDER BY session_id`;
+
+      const { rows } = await db.query<{ session_id: string }>(sql, params);
+      return rows.map(row => row.session_id);
+    },
+
+    async deleteFileLink(id: string): Promise<void> {
+      await ensureReady();
+      await db.query('DELETE FROM session_files WHERE id = $1', [id]);
+    },
+
+    async deleteSessionLinks(sessionId: string): Promise<void> {
+      await ensureReady();
+      await db.query('DELETE FROM session_files WHERE session_id = $1', [sessionId]);
+    },
+
+    async hasFileLink(sessionId: string, filePath: string, linkType: FileLinkType): Promise<boolean> {
+      await ensureReady();
+
+      const { rows } = await db.query<{ count: string }>(
+        `SELECT COUNT(*) as count FROM session_files
+         WHERE session_id = $1 AND file_path = $2 AND link_type = $3`,
+        [sessionId, filePath, linkType]
+      );
+
+      return parseInt(rows[0]?.count || '0', 10) > 0;
+    }
+  };
+}

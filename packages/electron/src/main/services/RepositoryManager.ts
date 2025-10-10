@@ -5,11 +5,13 @@
 
 import type {
   SessionStore,
+  SessionFileStore,
   DocumentsRepository
 } from '@stravu/runtime';
 import type { WorkspaceRepository } from '../types/workspace';
-import { AISessionsRepository } from '@stravu/runtime';
+import { AISessionsRepository, SessionFilesRepository } from '@stravu/runtime';
 import { createPGLiteSessionStore } from './PGLiteSessionStore';
+import { createPGLiteSessionFileStore } from './PGLiteSessionFileStore';
 import { createPGLiteWorkspaceRepository } from './PGLiteWorkspaceRepository';
 import { createPGLiteDocumentsRepository } from './PGLiteDocumentsRepository';
 import { database } from '../database/PGLiteDatabaseWorker';
@@ -17,6 +19,7 @@ import { logger } from '../utils/logger';
 
 class RepositoryManager {
   private sessionStore: SessionStore | null = null;
+  private sessionFileStore: SessionFileStore | null = null;
   private workspaceRepository: WorkspaceRepository | null = null;
   private documentsRepository: DocumentsRepository | null = null;
   private initialized = false;
@@ -54,6 +57,19 @@ class RepositoryManager {
 
       // Register session store with runtime's AISessionsRepository
       AISessionsRepository.setStore(this.sessionStore);
+
+      // Create session file store
+      this.sessionFileStore = createPGLiteSessionFileStore(
+        dbAdapter,
+        async () => {
+          if (!database.isInitialized()) {
+            await database.initialize();
+          }
+        }
+      );
+
+      // Register session file store with runtime's SessionFilesRepository
+      SessionFilesRepository.setStore(this.sessionFileStore);
 
       // Create workspace repository
       this.workspaceRepository = createPGLiteWorkspaceRepository(dbAdapter);
@@ -107,13 +123,27 @@ class RepositoryManager {
   }
 
   /**
+   * Get the session file store instance
+   */
+  getSessionFileStore(): SessionFileStore {
+    if (!this.sessionFileStore) {
+      throw new Error('RepositoryManager not initialized. Call initialize() first.');
+    }
+    return this.sessionFileStore;
+  }
+
+  /**
    * Clean up resources
    */
   async cleanup(): Promise<void> {
     if (this.sessionStore) {
       AISessionsRepository.clearStore();
     }
+    if (this.sessionFileStore) {
+      SessionFilesRepository.clearStore();
+    }
     this.sessionStore = null;
+    this.sessionFileStore = null;
     this.workspaceRepository = null;
     this.documentsRepository = null;
     this.initialized = false;
@@ -134,4 +164,8 @@ export function getWorkspaceRepository(): WorkspaceRepository {
 
 export function getDocumentsRepository(): DocumentsRepository {
   return repositoryManager.getDocumentsRepository();
+}
+
+export function getSessionFileStore(): SessionFileStore {
+  return repositoryManager.getSessionFileStore();
 }

@@ -20,6 +20,7 @@ import { updateDocumentState } from '../../mcp/httpServer';
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 import { logger } from '../../utils/logger';
 import { windowStates } from '../../window/WindowManager';
+import { sessionFileTracker } from '../SessionFileTracker';
 
 const LOG_PREVIEW_LENGTH = 400;
 
@@ -260,7 +261,7 @@ export class AIService {
       await providerInstance.initialize(initConfig);
 
       // Register tool handler - targetFilePath will be determined dynamically per tool call
-      const toolHandler = this.createToolHandler(event.sender, documentContext);
+      const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, workspacePath);
       providerInstance.registerToolHandler(toolHandler);
 
       // Track provider for this window
@@ -490,7 +491,7 @@ export class AIService {
         }
 
         // Register tool handler - targetFilePath will be determined dynamically per tool call
-        const toolHandler = this.createToolHandler(event.sender, documentContext);
+        const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, workspacePath);
         provider.registerToolHandler(toolHandler);
       }
 
@@ -504,8 +505,24 @@ export class AIService {
         filePath: documentContext?.filePath,
         hasContext: !!documentContext
       });
-      const toolHandler = this.createToolHandler(event.sender, documentContext);
+      const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, workspacePath);
       provider.registerToolHandler(toolHandler);
+
+      // Track user @ mentions in the message
+      try {
+        await sessionFileTracker.trackUserMessage(
+          session.id,
+          workspacePath,
+          message,
+          session.messages.length // Current message index
+        );
+        // Notify renderer that files were tracked (if message had @ mentions)
+        if (message.includes('@')) {
+          event.sender.send('session-files:updated', session.id);
+        }
+      } catch (error) {
+        logger.main.warn('[AIService] Failed to track user @ mentions:', error);
+      }
 
       try {
         let fullResponse = '';
@@ -593,6 +610,23 @@ export class AIService {
                 console.groupEnd();
                 console.log(`[AIService] Tool call #${toolCallCount}: ${chunk.toolCall.name}`);
                 console.log(`[AIService] Tool arguments:`, JSON.stringify(chunk.toolCall.arguments, null, 2));
+
+                // Track file interactions for all tool calls
+                if (workspacePath && chunk.toolCall.arguments) {
+                  try {
+                    await sessionFileTracker.trackToolExecution(
+                      session.id,
+                      workspacePath,
+                      chunk.toolCall.name,
+                      chunk.toolCall.arguments,
+                      chunk.toolCall.result
+                    );
+                    // Notify renderer that files were tracked
+                    event.sender.send('session-files:updated', session.id);
+                  } catch (trackError) {
+                    console.error('[AIService] Failed to track tool call:', trackError);
+                  }
+                }
 
                 const toolName = chunk.toolCall.name;
                 const toolArgs = chunk.toolCall.arguments as Record<string, unknown> | undefined;
@@ -710,6 +744,25 @@ export class AIService {
               // Forward streaming end event to renderer
               console.log('[AIService] Forwarding stream_edit_end to renderer');
               event.sender.send('ai:streamEditEnd', chunk.error ? { error: chunk.error } : {});
+
+              // Track the streamContent file interaction
+              if (documentContext?.filePath && workspacePath) {
+                try {
+                  console.log('[AIService] Tracking streamContent file interaction for:', documentContext.filePath);
+                  await sessionFileTracker.trackToolExecution(
+                    session.id,
+                    workspacePath,
+                    'streamContent',
+                    { file_path: documentContext.filePath },
+                    { success: !chunk.error }
+                  );
+                  console.log('[AIService] streamContent tracking completed');
+                  // Notify renderer that files were tracked
+                  event.sender.send('session-files:updated', session.id);
+                } catch (trackError) {
+                  console.error('[AIService] Failed to track streamContent:', trackError);
+                }
+              }
               break;
 
             case 'error':
@@ -1266,8 +1319,8 @@ export class AIService {
     });
   }
 
-  private createToolHandler(webContents: Electron.WebContents, documentContext?: DocumentContext): ToolHandler {
-    const executor = new ToolExecutor(webContents);
+  private createToolHandler(webContents: Electron.WebContents, documentContext?: DocumentContext, sessionId?: string, workspaceId?: string): ToolHandler {
+    const executor = new ToolExecutor(webContents, sessionId, workspaceId);
     console.log(`[AIService] createToolHandler called with documentContext.filePath:`, documentContext?.filePath);
 
     return {

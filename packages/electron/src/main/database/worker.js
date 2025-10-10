@@ -250,6 +250,26 @@ class PGLiteWorker {
       CREATE INDEX IF NOT EXISTS idx_history_timestamp ON document_history(timestamp);
     `);
 
+    // Session Files table
+    await this.db.exec(`
+      CREATE TABLE IF NOT EXISTS session_files (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        link_type TEXT NOT NULL CHECK (link_type IN ('edited', 'referenced', 'read')),
+        timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        metadata JSONB DEFAULT '{}'
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_session_files_session ON session_files(session_id);
+      CREATE INDEX IF NOT EXISTS idx_session_files_file ON session_files(file_path);
+      CREATE INDEX IF NOT EXISTS idx_session_files_type ON session_files(link_type);
+      CREATE INDEX IF NOT EXISTS idx_session_files_workspace ON session_files(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_session_files_workspace_file ON session_files(workspace_id, file_path);
+      CREATE INDEX IF NOT EXISTS idx_session_files_unique ON session_files(session_id, file_path, link_type);
+    `);
+
     // Tracker Items table
     console.log('[PGLite Worker] Creating tracker_items table...');
     try {

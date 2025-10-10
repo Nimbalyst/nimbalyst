@@ -3,6 +3,7 @@ import { ChatHeader } from './ChatHeader';
 import { ChatInput } from './ChatInput';
 import { EmptyState } from './EmptyState';
 import { PerformanceMetrics } from './PerformanceMetrics';
+import { FileGutter } from './FileGutter';
 import { aiApi, DocumentContext } from '../../services/aiApi';
 import { logger } from '../../utils/logger';
 import { errorNotificationService } from '../../services/ErrorNotificationService';
@@ -244,7 +245,7 @@ export function AIChat({
               // Try to open the target file
               if (window.electronAPI && workspacePath) {
                 try {
-                  await window.electronAPI.invoke('workspace-open-file', workspacePath, targetContext.filePath);
+                  await window.electronAPI.invoke('workspace:open-file', { workspacePath, filePath: targetContext.filePath });
                   // Wait a bit for the file to become active
                   await new Promise(resolve => setTimeout(resolve, 500));
                 } catch (err) {
@@ -1586,6 +1587,20 @@ export function AIChat({
         <>
           <PerformanceMetrics show={showPerformanceMetrics} />
 
+          {/* Referenced documents gutter at top */}
+          <FileGutter
+            sessionId={currentSessionId}
+            workspacePath={workspacePath}
+            type="referenced"
+            onFileClick={(filePath: string) => {
+              if (window.electronAPI && workspacePath) {
+                window.electronAPI.invoke('workspace:open-file', { workspacePath, filePath }).catch((err: Error) => {
+                  logger.ui.error('Failed to open file from gutter:', err);
+                });
+              }
+            }}
+          />
+
           {sessionData ? (
             <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
               <AgentTranscriptPanel
@@ -1595,7 +1610,7 @@ export function AIChat({
                 onFileClick={(filePath: string) => {
                   // Request to open a file
                   if (window.electronAPI && workspacePath) {
-                    window.electronAPI.invoke('workspace-open-file', workspacePath, filePath).catch((err: Error) => {
+                    window.electronAPI.invoke('workspace:open-file', { workspacePath, filePath }).catch((err: Error) => {
                       logger.ui.error('Failed to open file from tool call:', err);
                     });
                   }
@@ -1618,6 +1633,20 @@ export function AIChat({
               <p className="ai-chat-empty-hint">Click + to create a new session</p>
             </div>
           )}
+
+          {/* Edited documents gutter at bottom */}
+          <FileGutter
+            sessionId={currentSessionId}
+            workspacePath={workspacePath}
+            type="edited"
+            onFileClick={(filePath: string) => {
+              if (window.electronAPI && workspacePath) {
+                window.electronAPI.invoke('workspace:open-file', { workspacePath, filePath }).catch((err: Error) => {
+                  logger.ui.error('Failed to open file from gutter:', err);
+                });
+              }
+            }}
+          />
 
           <ChatInput
             ref={chatInputRef}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { AgentTranscriptPanel, TodoItem, FileEditSummary } from '@stravu/runtime';
 import type { SessionData } from '@stravu/runtime/ai/server/types';
 import { SessionDropdown } from './AIChat/SessionDropdown';
+import { FileGutter } from './AIChat/FileGutter';
 import { WorkspaceHeader } from './WorkspaceHeader';
 import { TabBar } from './TabManager/TabBar';
 import type { Tab } from './TabManager/TabManager';
@@ -817,6 +818,14 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
       {/* Active Session Content */}
       {activeTab && (
         <>
+          {/* Referenced files gutter at top */}
+          <FileGutter
+            sessionId={activeTab.id}
+            workspacePath={workspacePath}
+            type="referenced"
+            onFileClick={handleFileClick}
+          />
+
           <div style={{ flex: 1, overflow: 'hidden' }}>
             <AgentTranscriptPanel
               sessionId={activeTab.sessionData.id}

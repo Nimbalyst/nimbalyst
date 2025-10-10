@@ -21,6 +21,7 @@ import { registerWindowHandlers } from './ipc/WindowHandlers';
 import { registerHistoryHandlers } from './ipc/HistoryHandlers';
 import { registerSessionHandlers } from './ipc/SessionHandlers';
 import { registerWorkspaceWatcherHandlers } from './file/WorkspaceWatcher';
+import { setupSessionFileHandlers } from './ipc/SessionFileHandlers';
 import { getTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
 import { AgentService } from './services/agents/AgentService';
@@ -237,6 +238,7 @@ app.whenReady().then(async () => {
     await registerSessionHandlers();
     registerSessionManagerHandlers();
     setupWorkspaceManagerHandlers();
+    setupSessionFileHandlers();
 
     // Initialize AI service
     if (!runtimeSessionStore) {

@@ -802,6 +802,50 @@ export function registerWorkspaceHandlers() {
         }
     });
 
+    ipcMain.handle('workspace:open-file', async (event, options: { workspacePath: string; filePath: string }) => {
+        try {
+            const { workspacePath, filePath } = options;
+
+            // Find the workspace window for this workspace path
+            let targetWindow: BrowserWindow | null = null;
+            for (const [windowId, state] of windowStates) {
+                if (state?.workspacePath === workspacePath && state.mode === 'workspace') {
+                    const window = BrowserWindow.getAllWindows().find(w => getWindowId(w) === windowId);
+                    if (window && !window.isDestroyed()) {
+                        targetWindow = window;
+                        break;
+                    }
+                }
+            }
+
+            // If no workspace window found, create a new one
+            if (!targetWindow) {
+                targetWindow = createWindow(true, false);
+                await new Promise<void>(resolve => {
+                    targetWindow!.once('ready-to-show', () => {
+                        const windowId = getWindowId(targetWindow!);
+                        if (windowId !== null) {
+                            const state = windowStates.get(windowId);
+                            if (state) {
+                                state.workspacePath = workspacePath;
+                            }
+                        }
+                        resolve();
+                    });
+                });
+            }
+
+            // Focus the window and load the file
+            targetWindow.focus();
+            await loadFileIntoWindow(targetWindow, filePath);
+
+            return { success: true };
+        } catch (error: any) {
+            console.error('Error opening file in workspace:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('open-file-in-new-window', async (event, filePath: string) => {
         try {
             const newWindow = createWindow(true, false);

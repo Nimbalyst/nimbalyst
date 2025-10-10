@@ -7,6 +7,7 @@ import { EventEmitter } from 'events';
 import type { DiffArgs, DiffResult, ToolDefinition } from '@stravu/runtime/ai/server/types';
 import { toolRegistry } from './ToolRegistry';
 import { logger } from '../../../utils/logger';
+import { sessionFileTracker } from '../../SessionFileTracker';
 
 const LOG_PREVIEW_LENGTH = 400;
 
@@ -22,10 +23,14 @@ export class ToolExecutor extends EventEmitter {
     reject: (error: any) => void;
     timeout: NodeJS.Timeout;
   }> = new Map();
-  
-  constructor(webContents: WebContents) {
+  private sessionId?: string;
+  private workspaceId?: string;
+
+  constructor(webContents: WebContents, sessionId?: string, workspaceId?: string) {
     super();
     this.webContents = webContents;
+    this.sessionId = sessionId;
+    this.workspaceId = workspaceId;
     this.setupHandlers();
   }
   
@@ -82,9 +87,10 @@ export class ToolExecutor extends EventEmitter {
     position?: string;
     insertAfter?: string;
     mode?: string;
+    targetFilePath?: string;
   }): Promise<void> {
     const streamId = `stream-${Date.now()}`;
-    
+
     // Start streaming - let the AI specify insertAfter with actual content
     this.webContents.send('ai:streamEditStart', {
       id: streamId,
@@ -93,21 +99,39 @@ export class ToolExecutor extends EventEmitter {
       mode: args.mode || 'append',
       insertAtEnd: false
     });
-    
+
     // Stream content in chunks
     const chunkSize = 50;
     const content = args.content;
-    
+
     for (let i = 0; i < content.length; i += chunkSize) {
       const chunk = content.slice(i, Math.min(i + chunkSize, content.length));
       this.webContents.send('ai:streamEditContent', chunk);
-      
+
       // Small delay between chunks for smooth streaming
       await new Promise(resolve => setTimeout(resolve, 10));
     }
-    
+
     // End streaming
     this.webContents.send('ai:streamEditEnd', { id: streamId });
+
+    // Track file interaction after streaming completes
+    if (this.sessionId && this.workspaceId && args.targetFilePath) {
+      try {
+        console.log('[ToolExecutor] Tracking streamContent file interaction');
+        await sessionFileTracker.trackToolExecution(
+          this.sessionId,
+          this.workspaceId,
+          'streamContent',
+          { file_path: args.targetFilePath, content: args.content },
+          { success: true, linesAdded: args.content.split('\n').length }
+        );
+        console.log('[ToolExecutor] streamContent tracking completed');
+      } catch (error) {
+        logger.main.warn('[ToolExecutor] Failed to track streamContent:', error);
+        console.error('[ToolExecutor] streamContent tracking error:', error);
+      }
+    }
   }
 
   /**
@@ -218,32 +242,71 @@ export class ToolExecutor extends EventEmitter {
       throw new Error(`Tool ${name} not found`);
     }
 
+    let result: any;
+
     // Handle built-in tools
     switch (name) {
       case 'applyDiff':
-        return await this.applyDiff(args);
+        result = await this.applyDiff(args);
+        break;
       case 'streamContent':
-        return await this.streamContent(args);
+        result = await this.streamContent(args);
+        break;
       case 'getDocumentContent':
-        return await this.getDocumentContent(args);
+        result = await this.getDocumentContent(args);
+        break;
       case 'updateFrontmatter':
-        return await this.updateFrontmatter(args);
+        result = await this.updateFrontmatter(args);
+        break;
       case 'createDocument':
-        return await this.createDocument(args);
+        result = await this.createDocument(args);
+        break;
       default:
         // Check if tool has a handler (e.g., file tools)
         if (typeof tool.handler === 'function') {
           logger.ai.info(`[ToolExecutor] Executing tool with handler: ${name}`);
           try {
-            return await tool.handler(args);
+            result = await tool.handler(args);
           } catch (error) {
             logger.ai.error(`[ToolExecutor] Tool ${name} execution failed:`, error);
             throw error;
           }
+        } else {
+          // Execute custom/renderer tool
+          result = await this.executeCustomTool(tool, args);
         }
-        // Execute custom/renderer tool
-        return await this.executeCustomTool(tool, args);
     }
+
+    // Track file interactions after successful tool execution
+    console.log('[ToolExecutor] Checking if should track file:', {
+      hasSessionId: !!this.sessionId,
+      hasWorkspaceId: !!this.workspaceId,
+      toolName: name,
+      sessionId: this.sessionId,
+      workspaceId: this.workspaceId
+    });
+
+    if (this.sessionId && this.workspaceId) {
+      try {
+        console.log('[ToolExecutor] Calling sessionFileTracker.trackToolExecution');
+        await sessionFileTracker.trackToolExecution(
+          this.sessionId,
+          this.workspaceId,
+          name,
+          args,
+          result
+        );
+        console.log('[ToolExecutor] File tracking completed successfully');
+      } catch (error) {
+        // Log but don't fail - tracking is not critical
+        logger.main.warn('[ToolExecutor] Failed to track file interaction:', error);
+        console.error('[ToolExecutor] File tracking error:', error);
+      }
+    } else {
+      console.warn('[ToolExecutor] Skipping file tracking - missing sessionId or workspaceId');
+    }
+
+    return result;
   }
   
   /**

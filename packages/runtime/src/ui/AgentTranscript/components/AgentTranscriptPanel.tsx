@@ -73,14 +73,80 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
     setPrompts(markers);
   }, [sessionData.messages, sessionId]);
 
-  // Extract file edits and todos from metadata
+  // Extract file edits from database and todos from metadata
   useEffect(() => {
     const metadata = sessionData.metadata;
     if (metadata) {
-      setFileEdits((metadata.fileEdits as FileEditSummary[]) || []);
       setTodos((metadata.todos as TodoItem[]) || []);
     }
-  }, [sessionData.metadata]);
+
+    // Fetch file links from database via IPC
+    const fetchFileLinks = async () => {
+      try {
+        if (typeof window !== 'undefined' && (window as any).electronAPI) {
+          const result = await (window as any).electronAPI.invoke('session-files:get-by-session', sessionId);
+          if (result.success && result.files) {
+            // Transform FileLink[] to FileEditSummary[]
+            const fileEditsFromDb: FileEditSummary[] = result.files.map((file: any) => ({
+              filePath: file.filePath,
+              linkType: file.linkType,
+              operation: file.metadata?.operation,
+              linesAdded: file.metadata?.linesAdded,
+              linesRemoved: file.metadata?.linesRemoved,
+              timestamp: new Date(file.timestamp).toISOString(),
+              metadata: file.metadata
+            }));
+            setFileEdits(fileEditsFromDb);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch file links:', error);
+      }
+    };
+
+    fetchFileLinks();
+  }, [sessionData.metadata, sessionId]);
+
+  // Listen for file tracking updates and refresh
+  useEffect(() => {
+    if (typeof window === 'undefined' || !(window as any).electronAPI) {
+      return;
+    }
+
+    const handleFileUpdate = async (updatedSessionId: string) => {
+      // Only refresh if the update is for this session
+      if (updatedSessionId === sessionId) {
+        console.log('[AgentTranscriptPanel] Files updated, refreshing...');
+        try {
+          const result = await (window as any).electronAPI.invoke('session-files:get-by-session', sessionId);
+          if (result.success && result.files) {
+            const fileEditsFromDb: FileEditSummary[] = result.files.map((file: any) => ({
+              filePath: file.filePath,
+              linkType: file.linkType,
+              operation: file.metadata?.operation,
+              linesAdded: file.metadata?.linesAdded,
+              linesRemoved: file.metadata?.linesRemoved,
+              timestamp: new Date(file.timestamp).toISOString(),
+              metadata: file.metadata
+            }));
+            setFileEdits(fileEditsFromDb);
+          }
+        } catch (error) {
+          console.error('Failed to refresh file links:', error);
+        }
+      }
+    };
+
+    // Register listener
+    (window as any).electronAPI.on('session-files:updated', handleFileUpdate);
+
+    // Cleanup
+    return () => {
+      if ((window as any).electronAPI?.off) {
+        (window as any).electronAPI.off('session-files:updated', handleFileUpdate);
+      }
+    };
+  }, [sessionId]);
 
   const handleNavigateToPrompt = useCallback((marker: PromptMarker) => {
     transcriptRef.current?.scrollToMessage(marker.outputIndex);
@@ -251,6 +317,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
                 <FileEditsSidebar
                   fileEdits={fileEdits}
                   onFileClick={onFileClick}
+                  workspacePath={sessionData.workspacePath}
                 />
               )}
               {activeTab === 'todos' && (

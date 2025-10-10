@@ -175,3 +175,42 @@ export interface ToolHandler {
   // Dynamic property access for other tools
   [key: string]: ((args: any) => Promise<any>) | ((name: string, args: any) => Promise<any>) | undefined;
 }
+
+/**
+ * File link types for tracking file interactions in AI sessions
+ */
+export type FileLinkType = 'edited' | 'referenced' | 'read';
+
+/**
+ * File link metadata structures for each link type
+ */
+export interface EditedFileMetadata {
+  operation?: 'edit' | 'create' | 'delete' | 'rename';
+  linesAdded?: number;
+  linesRemoved?: number;
+  toolName?: string;
+}
+
+export interface ReferencedFileMetadata {
+  mentionContext?: string;
+  messageIndex?: number;
+}
+
+export interface ReadFileMetadata {
+  toolName?: string;
+  bytesRead?: number;
+  wasPartial?: boolean;
+}
+
+/**
+ * Link between a file and an AI session
+ */
+export interface FileLink {
+  id: string;
+  sessionId: string;
+  workspaceId: string;
+  filePath: string;
+  linkType: FileLinkType;
+  timestamp: number;
+  metadata?: EditedFileMetadata | ReferencedFileMetadata | ReadFileMetadata | Record<string, unknown>;
+}

@@ -103,7 +103,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
       const unpinnedSavedTabs = Array.from(tabs.values()).filter(
         tab => !tab.isPinned && !tab.isDirty
       );
-      
+
       if (unpinnedSavedTabs.length === 0) {
         console.warn('Cannot add new tab: max tabs reached and all tabs are pinned or dirty');
         return null;
@@ -327,7 +327,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
   // Track if we've restored tabs (to avoid saving empty state on mount)
   const hasRestoredRef = useRef(false);
   const lastSavedStateRef = useRef<string>('');
-  
+
   // Save state to Electron store only when it changes
   useEffect(() => {
     if (!enabled || !window.electronAPI?.saveWorkspaceTabState) return;
@@ -385,10 +385,10 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     if (tabs.size > 0) {
       saveState();
     }
-    
+
     // Also save periodically in case of crashes
     const interval = setInterval(saveState, 30000); // Every 30 seconds instead of 5
-    
+
     return () => {
       clearInterval(interval);
     };
@@ -416,9 +416,9 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
 
     prevActiveTabIdRef.current = activeTabId;
     const currentActiveTab = activeTabId ? tabsRef.current.get(activeTabId) || null : null;
-    console.log('[useTabs] activeTabId changed:', activeTabId, 'activeTab:', currentActiveTab?.fileName);
+    // console.log('[useTabs] activeTabId changed:', activeTabId, 'activeTab:', currentActiveTab?.fileName);
     if (activeTabId && currentActiveTab && onTabChangeRef.current) {
-      console.log('[useTabs] Calling onTabChange for:', currentActiveTab.fileName);
+      // console.log('[useTabs] Calling onTabChange for:', currentActiveTab.fileName);
       onTabChangeRef.current(currentActiveTab);
     }
   }, [activeTabId]);
@@ -436,11 +436,11 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
         try {
           const savedState = await window.electronAPI.getWorkspaceTabState();
           hasRestoredRef.current = true; // Mark as restored
-          
+
           if (savedState && savedState.tabs && savedState.tabs.length > 0) {
             // Restore tabs
             const restoredTabs = new Map<string, TabData>();
-            
+
             for (const tab of savedState.tabs) {
               // We'll need to load the content when the tab is activated
               const restoredTab: TabData = {
@@ -457,7 +457,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
               };
               restoredTabs.set(tab.id, restoredTab);
             }
-            
+
             // Set all state at once
             setTabs(restoredTabs);
             setTabOrder(savedState.tabOrder || []);
@@ -506,7 +506,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
 
       loadTabState();
     }, 500); // Wait 500ms for workspace to be loaded in main process
-    
+
     return () => clearTimeout(timer);
   }, [enabled]); // Only run once on mount when enabled
 

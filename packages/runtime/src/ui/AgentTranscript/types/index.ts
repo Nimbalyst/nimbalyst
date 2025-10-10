@@ -51,10 +51,12 @@ export interface AgenticSessionData extends SessionData {
  */
 export interface FileEditSummary {
   filePath: string;
-  operation: 'create' | 'edit' | 'delete' | 'rename';
+  linkType?: 'edited' | 'referenced' | 'read';
+  operation?: 'create' | 'edit' | 'delete' | 'rename';
   linesAdded?: number;
   linesRemoved?: number;
   timestamp: string;
+  metadata?: Record<string, unknown>;
 }
 
 /**
