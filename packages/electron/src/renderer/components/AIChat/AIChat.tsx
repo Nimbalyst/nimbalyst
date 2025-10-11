@@ -11,6 +11,7 @@ import { DEFAULT_MODELS } from '@stravu/runtime/ai/modelConstants';
 import { editorRegistry } from '@stravu/runtime/ai/EditorRegistry';
 import { AgentTranscriptPanel } from '@stravu/runtime';
 import type { SessionData } from '@stravu/runtime/ai/server/types';
+import { useFileMention } from '../../hooks/useFileMention';
 import './AIChat.css';
 
 interface AIChatProps {
@@ -77,6 +78,18 @@ export function AIChat({
     return localStorage.getItem('ai-show-performance-metrics') === 'true';
   });
   const [showToolCalls, setShowToolCalls] = useState(false); // Show tool calls setting (developer mode only)
+
+  // File mention support
+  const {
+    options: fileMentionOptions,
+    handleSearch: handleFileMentionSearch,
+    handleSelect: handleFileMentionSelect
+  } = useFileMention({
+    onInsertReference: () => {
+      // File reference insertion is handled by ChatInput
+      // No additional action needed here
+    }
+  });
 
   // Get the current session for easy access
   const getCurrentSession = () => {
@@ -1657,7 +1670,10 @@ export function AIChat({
             onCancel={handleCancelRequest}
             disabled={isLoading || !isInitialized || !currentSessionId}
             isLoading={isLoading}
-            placeholder={!isInitialized ? "Initializing AI..." : !currentSessionId ? "No session - click + to start" : "Ask anything..."}
+            placeholder={!isInitialized ? "Initializing AI..." : !currentSessionId ? "No session - click + to start" : "Ask anything... (type @ to mention files)"}
+            fileMentionOptions={fileMentionOptions}
+            onFileMentionSearch={handleFileMentionSearch}
+            onFileMentionSelect={handleFileMentionSelect}
           />
         </>
       )}

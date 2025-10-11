@@ -37,12 +37,18 @@ function resolveDocumentServiceForEvent(event: IpcMainEvent | IpcMainInvokeEvent
         return null;
     }
     const state = windowStates.get(windowId);
-    if (!state || state.mode !== 'workspace' || !state.workspacePath) {
-        console.log('[DocumentService] Window not in workspace mode or no path:', {
+    // Support both 'workspace' and 'agentic-coding' modes
+    if (!state || !state.workspacePath) {
+        console.log('[DocumentService] Window has no workspace path:', {
             hasState: !!state,
             mode: state?.mode,
             hasPath: !!state?.workspacePath
         });
+        return null;
+    }
+    // Both workspace and agentic-coding windows should have document service access
+    if (state.mode !== 'workspace' && state.mode !== 'agentic-coding') {
+        console.log('[DocumentService] Window not in supported mode:', state.mode);
         return null;
     }
     const service = documentServices.get(state.workspacePath);

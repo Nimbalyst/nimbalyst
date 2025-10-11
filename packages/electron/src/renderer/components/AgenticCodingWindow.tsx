@@ -6,6 +6,8 @@ import { FileGutter } from './AIChat/FileGutter';
 import { WorkspaceHeader } from './WorkspaceHeader';
 import { TabBar } from './TabManager/TabBar';
 import type { Tab } from './TabManager/TabManager';
+import { AgenticInput } from './AgenticCoding/AgenticInput';
+import { useFileMention } from '../hooks/useFileMention';
 import './TabManager/TabManager.css';
 
 interface AgenticCodingWindowProps {
@@ -44,6 +46,17 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
   const initializedRef = useRef(false);
 
   const MAX_CLOSED_SESSION_HISTORY = 10;
+
+  // File mention support
+  const {
+    options: fileMentionOptions,
+    handleSearch: handleFileMentionSearch,
+    handleSelect: handleFileMentionSelect
+  } = useFileMention({
+    onInsertReference: () => {
+      // File reference insertion is handled by AgenticInput
+    }
+  });
 
   // console.log('[AgenticCodingWindow] State initialized', { loading, error, activeTabId, tabCount: sessionTabs.length });
 
@@ -551,13 +564,6 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     // Note: setIsSending(false) happens when we receive the completion event
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
   const activeTab = sessionTabs.find(tab => tab.id === activeTabId);
 
   const handleOpenSessionManager = () => {
@@ -843,54 +849,16 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
           </div>
 
           {/* Chat Input */}
-          <div style={{
-            borderTop: '1px solid var(--border-primary)',
-            backgroundColor: 'var(--surface-secondary)',
-            padding: '0.75rem',
-            display: 'flex',
-            gap: '0.5rem',
-            alignItems: 'flex-end'
-          }}>
-            <textarea
-              ref={textareaRef}
-              value={promptInput}
-              onChange={(e) => setPromptInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
-              disabled={isSending}
-              style={{
-                flex: 1,
-                minHeight: '2.5rem',
-                maxHeight: '10rem',
-                padding: '0.5rem',
-                backgroundColor: 'var(--surface-primary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border-primary)',
-                borderRadius: '0.375rem',
-                resize: 'vertical',
-                fontFamily: 'inherit',
-                fontSize: '0.875rem',
-                outline: 'none'
-              }}
-            />
-            <button
-              onClick={handleSendMessage}
-              disabled={isSending || !promptInput.trim()}
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: isSending || !promptInput.trim() ? 'var(--surface-tertiary)' : 'var(--color-interactive)',
-                color: isSending || !promptInput.trim() ? 'var(--text-tertiary)' : 'white',
-                border: 'none',
-                borderRadius: '0.375rem',
-                cursor: isSending || !promptInput.trim() ? 'not-allowed' : 'pointer',
-                fontSize: '0.875rem',
-                fontWeight: 500,
-                whiteSpace: 'nowrap'
-              }}
-            >
-              {isSending ? 'Sending...' : 'Send'}
-            </button>
-          </div>
+          <AgenticInput
+            value={promptInput}
+            onChange={setPromptInput}
+            onSend={handleSendMessage}
+            disabled={isSending}
+            placeholder="Type your message... (type @ to mention files)"
+            fileMentionOptions={fileMentionOptions}
+            onFileMentionSearch={handleFileMentionSearch}
+            onFileMentionSelect={handleFileMentionSelect}
+          />
         </>
       )}
     </div>
