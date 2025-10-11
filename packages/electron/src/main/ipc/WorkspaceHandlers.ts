@@ -15,6 +15,7 @@ import { createSessionManagerWindow } from '../window/SessionManagerWindow';
 import { createAgenticCodingWindow, getAgenticCodingWindow } from '../window/AgenticCodingWindow';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { getFolderContents } from '../utils/FileTree';
+import { FIND_PRUNE_ARGS, RIPGREP_EXCLUDE_ARGS } from '../utils/fileFilters';
 import {
     getWorkspaceRecentFiles,
     addWorkspaceRecentFile,
@@ -166,7 +167,8 @@ export function registerWorkspaceHandlers() {
     ipcMain.handle('build-quick-open-cache', async (event, workspacePath: string) => {
         try {
             const escapedPath = workspacePath.replace(/["'\\]/g, '\\$&');
-            const findCommand = `find "${escapedPath}" -path "*/node_modules/*" -prune -o -path "*/.git/*" -prune -o -path "*/.worktrees/*" -prune -o -type f \\( -name "*.md" -o -name "*.markdown" \\) -print 2>/dev/null`;
+            // Use centralized prune arguments to exclude directories
+            const findCommand = `find "${escapedPath}" ${FIND_PRUNE_ARGS} -type f \\( -name "*.md" -o -name "*.markdown" \\) -print 2>/dev/null`;
             const { stdout } = await execAsync(findCommand, { shell: '/bin/bash' });
 
             const cache: Array<{ path: string; name: string }> = [];
@@ -275,8 +277,8 @@ export function registerWorkspaceHandlers() {
                 }
             }
 
-            // Avoid scanning node_modules and git worktrees to keep quick open results relevant
-            const contentCommand = `"${rgPath}" --type md -i --json --glob "!**/node_modules/**" --glob "!**/.git/**" --glob "!**/.worktrees/**" "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
+            // Use centralized ripgrep exclude arguments
+            const contentCommand = `"${rgPath}" --type md -i --json ${RIPGREP_EXCLUDE_ARGS} "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
             const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
 
             const contentMatches = new Map<string, any>();
@@ -328,9 +330,9 @@ export function registerWorkspaceHandlers() {
             // Use --files-with-matches to get file list, then search content
             const allResults = [];
 
-            // First, search file names
+            // First, search file names using centralized exclusion logic
             try {
-                const fileNameCommand = `find "${workspacePath}" -path "*/node_modules/*" -prune -o -path "*/.git/*" -prune -o -path "*/.worktrees/*" -prune -o \( -name "*.md" -o -name "*.markdown" \) -print 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
+                const fileNameCommand = `find "${workspacePath}" ${FIND_PRUNE_ARGS} \\( -name "*.md" -o -name "*.markdown" \\) -print 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
                 const { stdout: fileMatches } = await execAsync(fileNameCommand);
 
                 if (fileMatches) {
@@ -421,8 +423,8 @@ export function registerWorkspaceHandlers() {
                     console.warn('[SEARCH] Could not find bundled ripgrep, falling back to system rg');
                 }
 
-                // Avoid scanning node_modules and git worktrees to keep quick open results relevant
-                contentCommand = `"${rgPath}" --type md -i --json --glob "!**/node_modules/**" --glob "!**/.git/**" --glob "!**/.worktrees/**" "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
+                // Use centralized ripgrep exclude arguments
+                contentCommand = `"${rgPath}" --type md -i --json ${RIPGREP_EXCLUDE_ARGS} "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
                 const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
 
                 if (stdout) {

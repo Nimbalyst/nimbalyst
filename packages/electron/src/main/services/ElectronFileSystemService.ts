@@ -21,51 +21,9 @@ import type {
 } from '@stravu/runtime';
 import { logger } from '../utils/logger';
 import { SafePathValidator } from '../security/SafePathValidator';
+import { shouldExcludeFile, shouldExcludeDir, GLOB_EXCLUDE_PATTERNS } from '../utils/fileFilters';
 
 const execFileAsync = promisify(execFile);
-
-// File extensions to exclude from search
-const EXCLUDED_EXTENSIONS = new Set([
-  '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.ico',
-  '.mp3', '.mp4', '.avi', '.mov', '.wmv',
-  '.zip', '.tar', '.gz', '.rar', '.7z',
-  '.exe', '.dll', '.so', '.dylib',
-  '.pdf', '.doc', '.docx', '.xls', '.xlsx',
-  '.db', '.sqlite', '.lock'
-]);
-
-// Directories to exclude from search
-const EXCLUDED_DIRS = new Set([
-  'node_modules',
-  '.git',
-  '.worktrees',  // Git worktrees
-  'dist',
-  'build',
-  'out',
-  '.next',
-  '.nuxt',
-  '.cache',
-  'coverage',
-  '.vscode',
-  '.idea',
-  '__pycache__',
-  '.DS_Store'
-]);
-
-/**
- * Check if a file should be excluded based on extension
- */
-function shouldExcludeFile(filePath: string): boolean {
-  const ext = extname(filePath).toLowerCase();
-  return EXCLUDED_EXTENSIONS.has(ext);
-}
-
-/**
- * Check if a directory should be excluded
- */
-function shouldExcludeDir(dirName: string): boolean {
-  return EXCLUDED_DIRS.has(dirName);
-}
 
 export class ElectronFileSystemService implements FileSystemService {
   private workspacePath: string;
@@ -196,10 +154,10 @@ export class ElectronFileSystemService implements FileSystemService {
       logger.ai.info('[FileSystemService] Listing files', { path: basePath, pattern: options?.pattern });
 
       if (options?.pattern && options?.recursive !== false) {
-        // Use glob for pattern matching
+        // Use glob for pattern matching with centralized exclusion patterns
         const pattern = join(basePath, options.pattern);
         const files = await glob(pattern, {
-          ignore: ['**/node_modules/**', '**/.git/**', '**/.worktrees/**'],
+          ignore: GLOB_EXCLUDE_PATTERNS,
           dot: options?.includeHidden,
           maxDepth: options?.maxDepth || 3
         });

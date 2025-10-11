@@ -16,6 +16,7 @@ import crypto from 'crypto';
 import { extractFrontmatter, extractCommonFields } from '../utils/frontmatterReader';
 import { VIRTUAL_DOCS, isVirtualPath } from '@stravu/runtime';
 import { database } from '../database/PGLiteDatabaseWorker';
+import { shouldExcludeDir } from '../utils/fileFilters';
 
 export class ElectronDocumentService implements DocumentService {
   private workspacePath: string;
@@ -194,12 +195,13 @@ export class ElectronDocumentService implements DocumentService {
       const items = fsSync.readdirSync(dirPath);
 
       for (const item of items) {
-        // Skip hidden files and ignored directories
-        if (item.startsWith('.') ||
-            item === 'node_modules' ||
-            item === 'dist' ||
-            item === 'build' ||
-            item === 'out') {
+        // Skip hidden files and excluded directories (including worktrees)
+        if (item.startsWith('.') && item !== '.preditor') {
+          continue;
+        }
+
+        // Use centralized directory exclusion logic
+        if (shouldExcludeDir(item)) {
           continue;
         }
 
