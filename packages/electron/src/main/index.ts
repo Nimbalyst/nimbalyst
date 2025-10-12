@@ -564,7 +564,8 @@ app.on('before-quit', async (event) => {
     }
 
     try {
-        // Save session state only if we can write
+        // CRITICAL: Save session state BEFORE destroying windows
+        // Destroying windows removes them from the windows Map, so save must happen first
         const t10 = Date.now();
         console.log(`[QUIT] [${t10}] Saving session state`);
         if (canWriteLogs) {
@@ -605,9 +606,28 @@ app.on('before-quit', async (event) => {
         }
     }
 
+    // Aggressively close all windows to avoid any close prompts or handlers
+    // IMPORTANT: This must happen AFTER saving session state
+    try {
+        const t12 = Date.now();
+        const all = BrowserWindow.getAllWindows();
+        console.log(`[QUIT] [${t12}] Destroying ${all.length} windows`);
+        if (canWriteLogs && debugLog) {
+            try { fs.appendFileSync(debugLog, `[QUIT] Destroying ${all.length} windows\n`); } catch (e) {}
+        }
+        for (const win of all) {
+            try {
+                win.removeAllListeners('close');
+                if (!win.isDestroyed()) win.destroy();
+            } catch {}
+        }
+        const t13 = Date.now();
+        console.log(`[QUIT] [${t13}] Windows destroyed (${t13-t12}ms)`);
+    } catch {}
+
     // After all cleanup, quit the app
-    const t12 = Date.now();
-    console.log(`[QUIT] [${t12}] All cleanup complete, checking for active handles`);
+    const t14 = Date.now();
+    console.log(`[QUIT] [${t14}] All cleanup complete, checking for active handles`);
     if (canWriteLogs && debugLog) {
         try {
             fs.appendFileSync(debugLog, '[QUIT] All cleanup complete, quitting app\n');
@@ -648,24 +668,6 @@ app.on('before-quit', async (event) => {
             }
         } catch (e) {}
     }
-
-    // Aggressively close all windows to avoid any close prompts or handlers
-    try {
-        const t13 = Date.now();
-        const all = BrowserWindow.getAllWindows();
-        console.log(`[QUIT] [${t13}] Destroying ${all.length} windows`);
-        if (canWriteLogs && debugLog) {
-            try { fs.appendFileSync(debugLog, `[QUIT] Destroying ${all.length} windows\n`); } catch (e) {}
-        }
-        for (const win of all) {
-            try {
-                win.removeAllListeners('close');
-                if (!win.isDestroyed()) win.destroy();
-            } catch {}
-        }
-        const t14 = Date.now();
-        console.log(`[QUIT] [${t14}] Windows destroyed (${t14-t13}ms)`);
-    } catch {}
 
     // Ensure process terminates even if something re-hooks quit
     // Use a short delay to allow logs to flush

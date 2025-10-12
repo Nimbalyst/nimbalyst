@@ -30,17 +30,26 @@ export async function launchElectronApp(options?: {
     args.push('--workspace', options.workspace);
   }
 
+  // Build env
+  const testEnv = {
+    ...process.env,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'playwright-test-key',
+    ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
+    ELECTRON_RENDERER_URL: 'http://localhost:5273', // Use dev server for HMR
+    PLAYWRIGHT: '1', // Default: skip session restoration
+    ...options?.env,
+  };
+
+  // If test passes ENABLE_SESSION_RESTORE, remove PLAYWRIGHT to allow restoration
+  if (options?.env && 'ENABLE_SESSION_RESTORE' in options.env) {
+    delete testEnv.PLAYWRIGHT;
+    delete testEnv.ENABLE_SESSION_RESTORE; // Don't pass this to Electron
+  }
+
   return await _electron.launch({
     args,
     cwd: electronCwd,
-    env: {
-      ...process.env,
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'playwright-test-key',
-      ELECTRON_DISABLE_SECURITY_WARNINGS: '1',
-      PLAYWRIGHT: '1',
-      ELECTRON_RENDERER_URL: 'http://localhost:5273', // Use dev server for HMR
-      ...options?.env
-    }
+    env: testEnv
   });
 }
 

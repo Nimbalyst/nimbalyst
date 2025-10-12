@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron';
 import { existsSync, readFileSync } from 'fs';
 import { windows, windowStates, createWindow, windowFocusOrder, windowDevToolsState, getWindowId } from '../window/WindowManager';
 import { loadFileIntoWindow } from '../file/FileOperations';
-import { getSessionState, saveSessionState as saveToStore, SessionState } from '../utils/store';
+import { getSessionState, saveSessionState as saveToStore, SessionState, clearSessionState } from '../utils/store';
 import { startWorkspaceWatcher } from '../file/WorkspaceWatcher.ts';
 import { getFolderContents } from '../utils/FileTree';
 import { basename } from 'path';
@@ -53,9 +53,11 @@ export async function saveSessionState() {
 
 // Restore session state
 export async function restoreSessionState(): Promise<boolean> {
-    // Skip session restoration in test mode
+    // In test mode (PLAYWRIGHT=1), always clear and skip session restoration
+    // Tests that want to test restoration will not set PLAYWRIGHT env var at all
     if (process.env.PLAYWRIGHT === '1') {
-        logger.session.info('Skipping session restoration in test mode');
+        logger.session.info('Test mode: clearing and skipping session restoration');
+        clearSessionState();
         return false;
     }
 
@@ -68,7 +70,7 @@ export async function restoreSessionState(): Promise<boolean> {
     logger.session.info(`Restoring session with ${sessionState.windows.length} window(s)`);
 
     // Sort windows by focus order - LOWEST first, HIGHEST last
-    // This way the last-focused window is created last and naturally gets focus
+    // Windows are shown in creation order, and macOS will naturally focus the last shown window
     const sortedWindows = [...sessionState.windows].sort((a, b) => {
         const aOrder = a.focusOrder || 0;
         const bOrder = b.focusOrder || 0;
@@ -79,58 +81,65 @@ export async function restoreSessionState(): Promise<boolean> {
         `${i}: ${w.mode} focusOrder=${w.focusOrder}`
     ));
 
-    // Restore each window in order - last one created will naturally get focus
-    sortedWindows.forEach((sessionWindow, index) => {
-        // Add a small delay between windows to ensure they're created in order
-        setTimeout(() => {
-            let window: BrowserWindow | null = null;
+    // Restore each window in order
+    // Use async creation to ensure windows are created sequentially
+    for (let index = 0; index < sortedWindows.length; index++) {
+        const sessionWindow = sortedWindows[index];
 
-            if (sessionWindow.mode === 'workspace' && sessionWindow.workspacePath) {
-                // Check if workspace path still exists
-                if (existsSync(sessionWindow.workspacePath)) {
-                    // Restore workspace window
-                    window = createWindow(false, true, sessionWindow.workspacePath, sessionWindow.bounds);
-                    logger.session.info(`Restored workspace window: ${sessionWindow.workspacePath}`);
+        // Wait for previous window to be ready before creating next
+        await new Promise<void>((resolve) => {
+            setTimeout(() => {
+                let window: BrowserWindow | null = null;
 
-                    // Note: Workspace tabs will be restored by the workspace's own tab state management
-                    // We don't manually open files here to avoid interfering with tab restoration
-                } else {
-                    logger.session.warn(`Workspace path no longer exists: ${sessionWindow.workspacePath}`);
+                if (sessionWindow.mode === 'workspace' && sessionWindow.workspacePath) {
+                    // Check if workspace path still exists
+                    if (existsSync(sessionWindow.workspacePath)) {
+                        // Restore workspace window
+                        window = createWindow(false, true, sessionWindow.workspacePath, sessionWindow.bounds);
+                        logger.session.info(`Restored workspace window: ${sessionWindow.workspacePath}`);
+
+                        // Note: Workspace tabs will be restored by the workspace's own tab state management
+                        // We don't manually open files here to avoid interfering with tab restoration
+                    } else {
+                        logger.session.warn(`Workspace path no longer exists: ${sessionWindow.workspacePath}`);
+                    }
+                } else if (sessionWindow.mode === 'document' && sessionWindow.filePath) {
+                    // Check if file still exists
+                    if (existsSync(sessionWindow.filePath)) {
+                        // Restore document window
+                        window = createWindow(true, false, undefined, sessionWindow.bounds);
+                        window.once('ready-to-show', () => {
+                            loadFileIntoWindow(window, sessionWindow.filePath!);
+                        });
+                        logger.session.info(`Restored document window: ${sessionWindow.filePath}`);
+                    } else {
+                        logger.session.warn(`File no longer exists: ${sessionWindow.filePath}`);
+                    }
+                } else if (sessionWindow.mode === 'agentic-coding' && sessionWindow.workspacePath) {
+                    // Check if workspace path still exists
+                    if (existsSync(sessionWindow.workspacePath)) {
+                        // Restore agentic coding window
+                        window = createAgenticCodingWindow({
+                            workspacePath: sessionWindow.workspacePath
+                        });
+                        logger.session.info(`Restored agentic coding window: ${sessionWindow.workspacePath}`);
+                    } else {
+                        logger.session.warn(`Workspace path no longer exists: ${sessionWindow.workspacePath}`);
+                    }
                 }
-            } else if (sessionWindow.mode === 'document' && sessionWindow.filePath) {
-                // Check if file still exists
-                if (existsSync(sessionWindow.filePath)) {
-                    // Restore document window
-                    window = createWindow(true, false, undefined, sessionWindow.bounds);
-                    window.once('ready-to-show', () => {
-                        loadFileIntoWindow(window, sessionWindow.filePath!);
+
+                // Restore dev tools state
+                if (window && sessionWindow.devToolsOpen) {
+                    // Wait for window to be ready before opening dev tools
+                    window.webContents.once('did-finish-load', () => {
+                        window.webContents.openDevTools();
                     });
-                    logger.session.info(`Restored document window: ${sessionWindow.filePath}`);
-                } else {
-                    logger.session.warn(`File no longer exists: ${sessionWindow.filePath}`);
                 }
-            } else if (sessionWindow.mode === 'agentic-coding' && sessionWindow.workspacePath) {
-                // Check if workspace path still exists
-                if (existsSync(sessionWindow.workspacePath)) {
-                    // Restore agentic coding window
-                    window = createAgenticCodingWindow({
-                        workspacePath: sessionWindow.workspacePath
-                    });
-                    logger.session.info(`Restored agentic coding window: ${sessionWindow.workspacePath}`);
-                } else {
-                    logger.session.warn(`Workspace path no longer exists: ${sessionWindow.workspacePath}`);
-                }
-            }
 
-            // Restore dev tools state
-            if (window && sessionWindow.devToolsOpen) {
-                // Wait for window to be ready before opening dev tools
-                window.webContents.once('did-finish-load', () => {
-                    window.webContents.openDevTools();
-                });
-            }
-        }, index * 200);  // 200ms delay between each window creation
-    });
+                resolve();
+            }, 300); // 300ms delay between each window creation
+        });
+    }
 
     return true;
 }

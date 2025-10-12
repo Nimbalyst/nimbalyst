@@ -297,6 +297,10 @@ export function saveSessionState(state: SessionState): void {
   appStore.set('sessionState', { ...state, lastUpdated: state.lastUpdated ?? Date.now() });
 }
 
+export function clearSessionState(): void {
+  appStore.delete('sessionState');
+}
+
 export function getTheme(): AppTheme {
   return appStore.get('theme');
 }

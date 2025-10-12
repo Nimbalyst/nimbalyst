@@ -49,7 +49,7 @@ planStatus:
     // Launch app
     let electronApp = await launchElectronApp({
       workspace: workspacePath,
-      env: { NODE_ENV: 'test', PLAYWRIGHT: undefined }
+      env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' }
     });
 
     let page = await electronApp.firstWindow();
@@ -112,7 +112,7 @@ planStatus:
     console.log('[TEST] First reopen - checking for disappearing tabs bug');
     electronApp = await launchElectronApp({
       workspace: workspacePath,
-      env: { NODE_ENV: 'test', PLAYWRIGHT: undefined }
+      env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' }
     });
 
     await new Promise(resolve => setTimeout(resolve, 3000));
@@ -145,7 +145,7 @@ planStatus:
     console.log('[TEST] Second reopen - checking for agent session in workspace bug');
     electronApp = await launchElectronApp({
       workspace: workspacePath,
-      env: { NODE_ENV: 'test', PLAYWRIGHT: undefined }
+      env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' }
     });
 
     await new Promise(resolve => setTimeout(resolve, 3000));
@@ -186,7 +186,7 @@ planStatus:
     // Launch app
     let electronApp = await launchElectronApp({
       workspace: workspacePath,
-      env: { NODE_ENV: 'test', PLAYWRIGHT: undefined }
+      env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' }
     });
 
     let page = await electronApp.firstWindow();
@@ -231,7 +231,7 @@ planStatus:
 
       electronApp = await launchElectronApp({
         workspace: workspacePath,
-        env: { NODE_ENV: 'test', PLAYWRIGHT: undefined }
+        env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' }
       });
 
       await new Promise(resolve => setTimeout(resolve, 3000));
@@ -291,7 +291,7 @@ planStatus:
     // Launch app
     let electronApp = await launchElectronApp({
       workspace: workspacePath,
-      env: { NODE_ENV: 'test', PLAYWRIGHT: undefined }
+      env: { NODE_ENV: 'test', ENABLE_SESSION_RESTORE: '1' }
     });
 
     let page = await electronApp.firstWindow();
