@@ -1,0 +1,140 @@
+/* Markdown content styling using CSS variables for theming */
+.markdown-content {
+  font-size: 0.9375rem;
+  line-height: 1.625;
+}
+
+/* Remove default margins for first and last children */
+.markdown-content > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-content > *:last-child {
+  margin-bottom: 0;
+}
+
+/* Syntax highlighting theme using CSS variables */
+.markdown-content pre[class*="language-"] {
+  margin: 0.75rem 0;
+}
+
+.markdown-content code[class*="language-"],
+.markdown-content pre[class*="language-"] {
+  color: var(--text-primary);
+  background: var(--surface-tertiary);
+  font-family: var(--font-mono, 'Monaco', 'Courier New', monospace);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  direction: ltr;
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  tab-size: 2;
+  hyphens: none;
+}
+
+/* Syntax highlighting token colors using CSS variables */
+.markdown-content .token.comment,
+.markdown-content .token.prolog,
+.markdown-content .token.doctype,
+.markdown-content .token.cdata {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.markdown-content .token.punctuation {
+  color: var(--text-secondary);
+}
+
+.markdown-content .token.property,
+.markdown-content .token.tag,
+.markdown-content .token.boolean,
+.markdown-content .token.number,
+.markdown-content .token.constant,
+.markdown-content .token.symbol,
+.markdown-content .token.deleted {
+  color: var(--accent-primary);
+}
+
+.markdown-content .token.selector,
+.markdown-content .token.attr-name,
+.markdown-content .token.string,
+.markdown-content .token.char,
+.markdown-content .token.builtin,
+.markdown-content .token.inserted {
+  color: var(--text-primary);
+}
+
+.markdown-content .token.operator,
+.markdown-content .token.entity,
+.markdown-content .token.url,
+.markdown-content .language-css .token.string,
+.markdown-content .style .token.string {
+  color: var(--text-secondary);
+}
+
+.markdown-content .token.atrule,
+.markdown-content .token.attr-value,
+.markdown-content .token.keyword {
+  color: var(--accent-primary);
+  font-weight: 500;
+}
+
+.markdown-content .token.function,
+.markdown-content .token.class-name {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.markdown-content .token.regex,
+.markdown-content .token.important,
+.markdown-content .token.variable {
+  color: var(--accent-primary);
+}
+
+/* Task list items (GFM) */
+.markdown-content input[type="checkbox"] {
+  margin-right: 0.5rem;
+  cursor: pointer;
+}
+
+/* Improve readability for nested lists */
+.markdown-content ul ul,
+.markdown-content ol ul,
+.markdown-content ul ol,
+.markdown-content ol ol {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Add subtle hover effect to links */
+.markdown-content a:hover {
+  opacity: 0.8;
+}
+
+/* Table responsiveness */
+.markdown-content table {
+  display: block;
+  width: 100%;
+  overflow: auto;
+}
+
+/* Code block scrollbar styling */
+.markdown-content pre[class*="language-"]::-webkit-scrollbar {
+  height: 8px;
+}
+
+.markdown-content pre[class*="language-"]::-webkit-scrollbar-track {
+  background: var(--surface-secondary);
+  border-radius: 4px;
+}
+
+.markdown-content pre[class*="language-"]::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 4px;
+}
+
+.markdown-content pre[class*="language-"]::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}

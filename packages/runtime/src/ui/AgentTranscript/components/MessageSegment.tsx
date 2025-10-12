@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { Message } from '../../../ai/server/types';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface MessageSegmentProps {
   message: Message;
@@ -94,18 +95,11 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
     return (
       <div style={isCollapsed ? { maxHeight: '5rem', overflow: 'hidden', position: 'relative' } : {}}>
-        <div style={{
-          whiteSpace: 'pre-wrap',
-          fontWeight: isUser ? 500 : 400,
-          color: 'var(--text-primary)',
-          ...(isSystemMessage && {
-            opacity: 0.85,
-            fontFamily: 'var(--font-mono, monospace)',
-            fontSize: '0.95em'
-          })
-        }}>
-          {message.content}
-        </div>
+        <MarkdownRenderer
+          content={message.content}
+          isUser={isUser}
+          isSystemMessage={isSystemMessage}
+        />
         {isCollapsed && (
           <div style={{
             position: 'absolute',
