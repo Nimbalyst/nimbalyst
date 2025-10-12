@@ -756,7 +756,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }
     }));
     cleanupFns.push(window.electronAPI.onWorkspaceFileTreeUpdated((data) => {
-      // console.log('Workspace file tree updated:', data);
+      console.log('[FILE_TREE] Workspace file tree updated, refreshing...');
       handlersRef.current.setFileTree(data.fileTree);
     }));
 

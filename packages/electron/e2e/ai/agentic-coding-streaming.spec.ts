@@ -97,58 +97,77 @@ planStatus:
   });
 
   test('should display streaming content in real-time', async () => {
-    test.setTimeout(TEST_TIMEOUTS.VERY_LONG);
+    test.setTimeout(60000); // 60 seconds
 
-    // First, verify we can see the agentic window content
-    const title = await agenticWindow.textContent('body');
-    console.log('[Test] Body text length:', title?.length);
+    // Wait for component to fully initialize - check for "No messages to display"
+    await agenticWindow.waitForSelector('text=No messages to display', { timeout: 10000 });
+    console.log('[Test] Component initialized');
 
-    // Check for key agentic window elements
+    // Verify we can see the agentic window content
     const hasPromptsTab = await agenticWindow.locator('button:has-text("Prompts")').count();
     console.log('[Test] Prompts tab count:', hasPromptsTab);
-
-    // Verify this is actually the agentic window
     expect(hasPromptsTab).toBeGreaterThan(0);
 
-    // Simulate streaming response
-    const chunks = ['This is a test streaming response'];
+    // Check if Send button exists
+    const sendButton = await agenticWindow.locator('button:has-text("Send")').count();
+    console.log('[Test] Has send button:', sendButton > 0);
 
-    await simulateAgenticStreaming(agenticWindow, chunks, {
-      delayBetweenChunks: 100,
-      includeCompletion: false
-    });
+    // Wait for the direct test function to be available
+    let directFunctionAvailable = false;
+    for (let i = 0; i < 20; i++) {
+      const available = await agenticWindow.evaluate(() => typeof (window as any).__agenticSetTestStreaming === 'function');
+      if (available) {
+        directFunctionAvailable = true;
+        console.log(`[Test] Direct function available after ${i + 1} attempts`);
+        break;
+      }
+      await agenticWindow.waitForTimeout(100);
+    }
 
-    // Wait for streaming to process
-    await agenticWindow.waitForTimeout(500);
+    if (!directFunctionAvailable) {
+      console.log('[Test] Warning: Direct function not available, component may not have mounted');
+    }
 
-    // Check if test streaming was injected
-    const hasTestAPI = await agenticWindow.evaluate(() => {
-      return typeof (window as any).__testStreamingContent;
-    });
-    console.log('[Test] Test API type:', hasTestAPI);
+    // Use direct function to set streaming content
+    await agenticWindow.evaluate((content) => {
+      console.log('[Test] Calling __agenticSetTestStreaming with:', content);
+      if (typeof (window as any).__agenticSetTestStreaming === 'function') {
+        (window as any).__agenticSetTestStreaming(content);
+      } else {
+        console.log('[Test] ERROR: __agenticSetTestStreaming not available');
+      }
+    }, 'This is a test streaming response');
 
-    const testContent = await agenticWindow.evaluate(() => {
-      return (window as any).__testStreamingContent;
-    });
-    console.log('[Test] Test streaming content:', testContent);
+    // Wait for React to render the streaming content (with retry)
+    let hasIndicator = false;
+    for (let i = 0; i < 10; i++) {
+      await agenticWindow.waitForTimeout(200);
 
-    // Check if React state was updated
-    const reactState = await agenticWindow.evaluate(() => {
-      // Try to find any React internals or DOM hints
-      const transcriptDiv = document.querySelector('[class*="transcript"]');
-      return {
-        hasTranscript: !!transcriptDiv,
-        transcriptHTML: transcriptDiv?.innerHTML?.substring(0, 200),
-        bodyText: document.body.textContent?.substring(0, 500)
-      };
-    });
-    console.log('[Test] React state check:', JSON.stringify(reactState, null, 2));
+      // Check if streaming is appearing in the DOM
+      const domCheck = await agenticWindow.evaluate(() => {
+        const body = document.body.textContent || '';
+        return {
+          hasStreaming: body.includes('streaming...'),
+          hasClaudeCode: body.includes('Claude Code'),
+          bodySnippet: body.substring(0, 500)
+        };
+      });
 
-    // Check for streaming indicator
-    const bodyText = await agenticWindow.textContent('body');
-    const hasIndicator = bodyText?.includes('streaming...');
-    console.log('[Test] Has streaming indicator:', hasIndicator);
-    console.log('[Test] Body text (first 200 chars):', bodyText?.substring(0, 200));
+      hasIndicator = domCheck.hasStreaming;
+      console.log(`[Test] Attempt ${i + 1}:`, {
+        hasStreaming: domCheck.hasStreaming,
+        hasClaudeCode: domCheck.hasClaudeCode
+      });
+      if (hasIndicator) break;
+    }
+
+    // Debug info if it fails
+    if (!hasIndicator) {
+      const bodyText = await agenticWindow.textContent('body');
+      console.log('[Test] Body text (first 400 chars):', bodyText?.substring(0, 400));
+      const testContent = await agenticWindow.evaluate(() => (window as any).__testStreamingContent);
+      console.log('[Test] Test streaming content:', testContent);
+    }
 
     expect(hasIndicator).toBe(true);
   });

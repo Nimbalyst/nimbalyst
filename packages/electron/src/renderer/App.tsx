@@ -253,19 +253,68 @@ export default function App() {
         // This catches cases where file watchers missed the change
         if (!tab.isVirtual && window.electronAPI?.readFileContent) {
           try {
+            console.log(`[TAB_SWITCH_CHECK] Checking ${tab.fileName} for external changes...`);
             const result = await window.electronAPI.readFileContent(tab.filePath);
             if (result && result.content) {
               const editorPool = getEditorPool();
               const instance = editorPool.get(tab.filePath);
-              if (instance && instance.content !== result.content) {
-                console.log('[App] Tab switch detected external file change, updating EditorPool:', tab.fileName);
+
+              console.log(`[TAB_SWITCH_CHECK] ${tab.fileName}:`, {
+                hasInstance: !!instance,
+                diskContentLength: result.content.length,
+                editorContentLength: instance?.content?.length,
+                isDirty: instance?.isDirty,
+                hasLastSaved: instance?.lastSavedContent !== undefined
+              });
+
+              // Skip if this was our own save
+              const isSelfSave = instance?.lastSavedContent !== undefined &&
+                                result.content === instance.lastSavedContent;
+
+              if (instance && instance.content !== result.content && !isSelfSave) {
+                console.log('[TAB_SWITCH_CHECK] External file change detected for:', tab.fileName);
+
+                // If file is dirty, prompt user before reloading
+                if (instance.isDirty) {
+                  console.log('[TAB_SWITCH_CHECK] File is dirty, showing confirm dialog');
+                  const shouldReload = window.confirm(
+                    `The file "${tab.fileName}" has been changed externally but you have unsaved changes.\n\n` +
+                    'Do you want to reload from disk and lose your changes?\n\n' +
+                    'Click OK to reload, or Cancel to keep your changes.'
+                  );
+                  if (!shouldReload) {
+                    console.log('[TAB_SWITCH_CHECK] User cancelled reload');
+                    return;
+                  }
+                } else {
+                  console.log('[TAB_SWITCH_CHECK] File is clean, auto-reloading');
+                }
+
                 // Update the EditorPool with the new content
                 editorPool.update(tab.filePath, {
                   content: result.content,
                   initialContent: result.content,
                   isDirty: false,
                   reloadVersion: (instance.reloadVersion ?? 0) + 1,
+                  lastSavedContent: result.content,
                 });
+
+                // Update tab content to trigger remount
+                tabs.updateTab(tab.id, { content: result.content, isDirty: false });
+
+                // Create history snapshot of the external change
+                if (window.electronAPI.history) {
+                  try {
+                    await window.electronAPI.history.createSnapshot(
+                      tab.filePath,
+                      result.content,
+                      'external-change',
+                      'File modified externally (detected on tab switch)'
+                    );
+                  } catch (error) {
+                    console.error('[App] Failed to create history snapshot:', error);
+                  }
+                }
               }
             }
           } catch (error) {
@@ -578,6 +627,95 @@ export default function App() {
     }
     // 'planning' mode is the default - stay in current window
   }, [workspacePath]);
+
+  // Focus-based file check: Check all open tabs for external changes when window regains focus
+  // This is a fallback mechanism for when file watchers miss updates (e.g., rapid agent edits)
+  useEffect(() => {
+    if (!window.electronAPI?.readFileContent) return;
+
+    let lastFocusCheck = 0;
+    const FOCUS_CHECK_DEBOUNCE = 1000; // Only check once per second
+
+    const handleWindowFocus = async () => {
+      const now = Date.now();
+      if (now - lastFocusCheck < FOCUS_CHECK_DEBOUNCE) {
+        return;
+      }
+      lastFocusCheck = now;
+
+      console.log('[FOCUS_CHECK] Window focused, checking all tabs for external changes');
+
+      // Check all open tabs, not just the active one
+      for (const tab of tabs.tabs) {
+        if (tab.isVirtual || !tab.filePath) continue;
+
+        try {
+          const result = await window.electronAPI.readFileContent(tab.filePath);
+          if (!result || !result.content) continue;
+
+          const editorPool = getEditorPool();
+          const instance = editorPool.get(tab.filePath);
+          if (!instance) continue;
+
+          const diskContent = result.content;
+          const editorContent = instance.content ?? '';
+
+          // Skip if content is the same
+          if (diskContent === editorContent) continue;
+
+          // Skip if this was our own save
+          if (instance.lastSavedContent !== undefined && diskContent === instance.lastSavedContent) {
+            continue;
+          }
+
+          // Skip if file is dirty (user has unsaved changes)
+          if (instance.isDirty) {
+            console.log(`[FOCUS_CHECK] ${tab.fileName} has external changes but is dirty, skipping auto-reload`);
+            continue;
+          }
+
+          // File has changed externally and is not dirty, reload it
+          console.log(`[FOCUS_CHECK] ${tab.fileName} changed externally, reloading from disk`);
+
+          // Update EditorPool with new content and increment reload version
+          editorPool.update(tab.filePath, {
+            content: diskContent,
+            initialContent: diskContent,
+            isDirty: false,
+            reloadVersion: (instance.reloadVersion ?? 0) + 1,
+            lastSavedContent: diskContent,
+          });
+
+          // Update tab content
+          tabs.updateTab(tab.id, { content: diskContent, isDirty: false });
+
+          // If this is the active tab, update global state
+          if (tab.id === tabs.activeTabId) {
+            setIsDirty(false);
+          }
+
+          // Create history snapshot of the external change
+          if (window.electronAPI.history) {
+            try {
+              await window.electronAPI.history.createSnapshot(
+                tab.filePath,
+                diskContent,
+                'external-change',
+                'File modified externally (detected on focus)'
+              );
+            } catch (error) {
+              console.error('[FOCUS_CHECK] Failed to create history snapshot:', error);
+            }
+          }
+        } catch (error) {
+          console.error(`[FOCUS_CHECK] Failed to check ${tab.fileName}:`, error);
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    return () => window.removeEventListener('focus', handleWindowFocus);
+  }, [tabs, setIsDirty]);
 
   // Wrapper for workspace file selection utility with component-specific context
   const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
