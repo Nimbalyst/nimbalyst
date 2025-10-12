@@ -82,11 +82,18 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
       setTestStreamingContent(content);
     };
 
-    console.log('[AgenticCoding] Registering test streaming listener');
+    // Expose direct function for tests
+    (window as any).__agenticSetTestStreaming = (content: string | null) => {
+      console.log('[AgenticCoding] Direct test function called with:', content);
+      setTestStreamingContent(content);
+    };
+
+    console.log('[AgenticCoding] Registering test streaming listener and direct function');
     window.addEventListener('test-streaming-updated', handleTestStreaming);
     return () => {
       console.log('[AgenticCoding] Removing test streaming listener');
       window.removeEventListener('test-streaming-updated', handleTestStreaming);
+      delete (window as any).__agenticSetTestStreaming;
     };
   }, []);
 
@@ -452,41 +459,18 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
       }
 
       // Handle streaming tool calls in real-time
+      // Note: We don't reload the session here anymore - tool calls will be loaded at completion
+      // This prevents tool messages from appearing above the streaming content header
       if (data.toolCalls && Array.isArray(data.toolCalls) && data.toolCalls.length > 0) {
-        // console.log('[AgenticCoding] Received tool calls:', data.toolCalls.length);
-        // Reload session to get updated tool calls
-        try {
-          const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
-          if (sessionData) {
-            setSessionTabs(prev => prev.map(tab => {
-              if (tab.id === activeTabId) {
-                return { ...tab, sessionData };
-              }
-              return tab;
-            }));
-          }
-        } catch (err) {
-          console.error('[AgenticCoding] Failed to reload session after tool calls:', err);
-        }
+        // console.log('[AgenticCoding] Received tool calls during streaming:', data.toolCalls.length);
+        // Tool calls are saved to the database but not displayed until streaming completes
       }
 
       // Handle tool errors in real-time
+      // Note: We don't reload the session here anymore - errors will be loaded at completion
       if (data.toolError) {
-        // console.log('[AgenticCoding] Received tool error:', data.toolError);
-        // Reload session to get updated error
-        try {
-          const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
-          if (sessionData) {
-            setSessionTabs(prev => prev.map(tab => {
-              if (tab.id === activeTabId) {
-                return { ...tab, sessionData };
-              }
-              return tab;
-            }));
-          }
-        } catch (err) {
-          console.error('[AgenticCoding] Failed to reload session after tool error:', err);
-        }
+        // console.log('[AgenticCoding] Received tool error during streaming');
+        // Tool errors are saved to the database but not displayed until streaming completes
       }
 
       // Handle completion - reload final state

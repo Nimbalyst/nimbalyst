@@ -200,11 +200,47 @@ export const RichTranscriptView = React.forwardRef<
                 const isTool = message.role === 'tool';
                 const isCollapsed = collapsedMessages.has(index);
 
-                // Check if this is the start of a new message group (different role from previous)
-                const prevMessage = index > 0 ? messages[index - 1] : null;
-                const isNewGroup = !prevMessage || prevMessage.role !== message.role;
+                // Find tool messages that should be grouped with this message
+                // Tool messages come BEFORE their associated assistant message in the array
+                // So we need to look backward for tool messages when rendering an assistant message
+                const toolMessagesBefore: { message: Message, index: number }[] = [];
+                if (message.role === 'assistant') {
+                  // Look backward for consecutive tool messages
+                  let checkIndex = index - 1;
+                  while (checkIndex >= 0 && messages[checkIndex].role === 'tool') {
+                    toolMessagesBefore.unshift({ message: messages[checkIndex], index: checkIndex });
+                    checkIndex--;
+                  }
+                }
 
-                // Render tool calls in a compact format
+                // Skip rendering tool messages here - they'll be rendered with their assistant message
+                if (isTool) {
+                  // Check if the next non-tool message is an assistant message
+                  let nextIndex = index + 1;
+                  while (nextIndex < messages.length && messages[nextIndex].role === 'tool') {
+                    nextIndex++;
+                  }
+                  if (nextIndex < messages.length && messages[nextIndex].role === 'assistant') {
+                    // This tool message will be rendered with the assistant message
+                    return null;
+                  }
+                  // Otherwise render it normally (orphaned tool message)
+                }
+
+                // Check if this is the start of a new message group
+                const prevMessage = index > 0 ? messages[index - 1] : null;
+                // Skip over tool messages when checking for new group
+                let effectivePrevMessage = prevMessage;
+                let checkIndex = index - 1;
+                while (checkIndex >= 0 && messages[checkIndex].role === 'tool') {
+                  checkIndex--;
+                }
+                if (checkIndex >= 0) {
+                  effectivePrevMessage = messages[checkIndex];
+                }
+                const isNewGroup = !effectivePrevMessage || effectivePrevMessage.role !== message.role;
+
+                // Render tool calls in a compact format (only for orphaned tools now)
                 if (isTool && message.toolCall) {
                   const tool = message.toolCall;
                   const toolId = tool.id || tool.name || `tool-${index}`;
@@ -415,6 +451,112 @@ export const RichTranscriptView = React.forwardRef<
                         )}
                       </div>
                     </div>
+                    )}
+
+                    {/* Tool messages that came before this assistant message */}
+                    {toolMessagesBefore.length > 0 && (
+                      <div style={{ marginLeft: isNewGroup ? '1.75rem' : '0', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                        {toolMessagesBefore.map(({ message: toolMsg, index: toolIndex }) => {
+                          if (!toolMsg.toolCall) return null;
+                          const tool = toolMsg.toolCall;
+                          const toolId = tool.id || tool.name || `tool-${toolIndex}`;
+                          const isExpanded = expandedTools.has(toolId);
+
+                          return (
+                            <div key={`tool-${toolIndex}`} style={{ marginBottom: '0.25rem' }}>
+                              <div style={{
+                                borderRadius: '0.25rem',
+                                backgroundColor: 'var(--surface-secondary)',
+                                overflow: 'hidden',
+                                border: '1px solid var(--border-primary)'
+                              }}>
+                                <button
+                                  onClick={() => toggleToolExpand(toolId)}
+                                  style={{
+                                    width: '100%',
+                                    padding: '0.375rem 0.625rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    textAlign: 'left',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '0.875rem',
+                                    backgroundColor: 'transparent'
+                                  }}
+                                >
+                                  <svg style={{ width: '1rem', height: '1rem', color: 'var(--accent-primary)', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  </svg>
+                                  <span style={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'var(--text-primary)', fontWeight: 500 }}>
+                                    {tool.name}
+                                  </span>
+                                  {tool.arguments && (() => {
+                                    const args = tool.arguments;
+                                    const argStr = Object.keys(args).map(k => {
+                                      const val = args[k];
+                                      if (typeof val === 'string') return val.length > 30 ? val.substring(0, 30) + '...' : val;
+                                      return JSON.stringify(val);
+                                    }).join(', ');
+                                    return <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{argStr}</span>;
+                                  })()}
+                                  {tool.result && (
+                                    <svg style={{ width: '1rem', height: '1rem', color: 'var(--success-color)', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  )}
+                                  <svg style={{ width: '0.75rem', height: '0.75rem', color: 'var(--text-tertiary)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isExpanded ? "M19 9l-7 7-7-7" : "M9 5l7 7-7 7"} />
+                                  </svg>
+                                </button>
+
+                                {isExpanded && (
+                                  <div style={{ padding: '0.625rem', fontSize: '0.875rem', borderTop: '1px solid var(--border-primary)' }}>
+                                    {tool.arguments && Object.keys(tool.arguments).length > 0 && (
+                                      <div style={{ marginBottom: '0.5rem' }}>
+                                        <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.25rem', fontSize: '0.75rem' }}>Arguments:</div>
+                                        <pre style={{
+                                          fontSize: '0.75rem',
+                                          color: 'var(--text-secondary)',
+                                          fontFamily: 'monospace',
+                                          overflowX: 'auto',
+                                          backgroundColor: 'var(--surface-tertiary)',
+                                          padding: '0.5rem',
+                                          borderRadius: '0.25rem',
+                                          margin: 0
+                                        }}>
+                                          {JSON.stringify(tool.arguments, null, 2)}
+                                        </pre>
+                                      </div>
+                                    )}
+
+                                    {tool.result && (
+                                      <div>
+                                        <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.25rem', fontSize: '0.75rem' }}>Result:</div>
+                                        <pre style={{
+                                          fontSize: '0.75rem',
+                                          color: 'var(--text-primary)',
+                                          fontFamily: 'monospace',
+                                          overflowX: 'auto',
+                                          backgroundColor: 'var(--surface-tertiary)',
+                                          padding: '0.5rem',
+                                          borderRadius: '0.25rem',
+                                          maxHeight: '12rem',
+                                          overflowY: 'auto',
+                                          margin: 0
+                                        }}>
+                                          {typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2)}
+                                        </pre>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
 
                     {/* Message Content */}

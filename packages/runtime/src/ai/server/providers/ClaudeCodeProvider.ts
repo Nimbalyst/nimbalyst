@@ -434,12 +434,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
               // Warn if API key source is "none" - this means Claude Code didn't find credentials
               if (chunk.apiKeySource === 'none') {
-                console.error('[CLAUDE-CODE] ⚠️  API Key Source is "none" - Claude Code did not detect any API key!');
-                console.error('[CLAUDE-CODE] This likely means:');
-                console.error('[CLAUDE-CODE]   1. Environment variable ANTHROPIC_API_KEY is not set or not visible to the spawned process');
-                console.error('[CLAUDE-CODE]   2. API key in options is not being recognized by Claude Code SDK');
-                console.error('[CLAUDE-CODE]   3. No stored credentials from `claude login` command');
-                console.error('[CLAUDE-CODE] Subsequent API calls will likely fail with authentication errors');
+                  console.log('[CLAUDE-CODE] no api key: using system configured claude-code credentials');
+                // console.error('[CLAUDE-CODE] ⚠️  API Key Source is "none" - Claude Code did not detect any API key!');
+                // console.error('[CLAUDE-CODE] This likely means:');
+                // console.error('[CLAUDE-CODE]   1. Environment variable ANTHROPIC_API_KEY is not set or not visible to the spawned process');
+                // console.error('[CLAUDE-CODE]   2. API key in options is not being recognized by Claude Code SDK');
+                // console.error('[CLAUDE-CODE]   3. No stored credentials from `claude login` command');
+                // console.error('[CLAUDE-CODE] Subsequent API calls will likely fail with authentication errors');
               }
             } else if (chunk.subtype === 'compact_boundary') {
               // Handle /compact command response
