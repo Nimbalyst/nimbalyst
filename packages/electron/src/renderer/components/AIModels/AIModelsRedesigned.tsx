@@ -16,7 +16,7 @@ const applyTheme = () => {
   if (typeof window === 'undefined') return;
 
   const savedTheme = localStorage.getItem('theme');
-  console.log('[AIModelsRedesigned] Applying theme:', savedTheme);
+  // console.log('[AIModelsRedesigned] Applying theme:', savedTheme);
   const root = document.documentElement;
 
   // Clear all theme classes first
@@ -25,19 +25,19 @@ const applyTheme = () => {
   if (savedTheme === 'dark') {
     root.setAttribute('data-theme', 'dark');
     root.classList.add('dark-theme');
-    console.log('[AIModelsRedesigned] Set to dark theme');
+    // console.log('[AIModelsRedesigned] Set to dark theme');
   } else if (savedTheme === 'crystal-dark') {
     root.setAttribute('data-theme', 'crystal-dark');
     root.classList.add('crystal-dark-theme');
-    console.log('[AIModelsRedesigned] Set to crystal-dark theme');
+    // console.log('[AIModelsRedesigned] Set to crystal-dark theme');
   } else if (savedTheme === 'light') {
     root.setAttribute('data-theme', 'light');
     root.classList.add('light-theme');
-    console.log('[AIModelsRedesigned] Set to light theme');
+    // console.log('[AIModelsRedesigned] Set to light theme');
   } else {
     // Auto - check system preference
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    console.log('[AIModelsRedesigned] No saved theme, system prefers dark:', prefersDark);
+    // console.log('[AIModelsRedesigned] No saved theme, system prefers dark:', prefersDark);
     if (prefersDark) {
       root.setAttribute('data-theme', 'dark');
       root.classList.add('dark-theme');
@@ -46,8 +46,8 @@ const applyTheme = () => {
       root.classList.add('light-theme');
     }
   }
-  console.log('[AIModelsRedesigned] Final classes:', root.className);
-  console.log('[AIModelsRedesigned] Final data-theme:', root.getAttribute('data-theme'));
+  // console.log('[AIModelsRedesigned] Final classes:', root.className);
+  // console.log('[AIModelsRedesigned] Final data-theme:', root.getAttribute('data-theme'));
 };
 
 // Apply theme IMMEDIATELY on module load

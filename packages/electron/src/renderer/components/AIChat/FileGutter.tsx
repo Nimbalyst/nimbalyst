@@ -13,7 +13,7 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick }: File
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
-    console.log('[FileGutter] useEffect triggered:', { sessionId, type });
+    // console.log('[FileGutter] useEffect triggered:', { sessionId, type });
     if (!sessionId) {
       console.log('[FileGutter] No sessionId, clearing files');
       setFiles([]);
@@ -22,18 +22,18 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick }: File
 
     const fetchFiles = async () => {
       try {
-        console.log('[FileGutter] Fetching files for session:', sessionId, 'type:', type);
+        // console.log('[FileGutter] Fetching files for session:', sessionId, 'type:', type);
         if (typeof window !== 'undefined' && (window as any).electronAPI) {
           const result = await (window as any).electronAPI.invoke(
             'session-files:get-by-session',
             sessionId,
             type
           );
-          console.log('[FileGutter] Fetch result:', result);
+          // console.log('[FileGutter] Fetch result:', result);
           if (result.success && result.files) {
             // Extract unique file paths
             const uniquePaths = Array.from(new Set(result.files.map((f: any) => f.filePath)));
-            console.log('[FileGutter] Setting files:', uniquePaths);
+            // console.log('[FileGutter] Setting files:', uniquePaths);
             setFiles(uniquePaths);
           } else {
             console.log('[FileGutter] No files in result or failed');
@@ -58,7 +58,7 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick }: File
     const handleFileUpdate = async (updatedSessionId: string) => {
       // Only refresh if the update is for this session
       if (updatedSessionId === sessionId) {
-        console.log('[FileGutter] Files updated, refreshing...');
+        // console.log('[FileGutter] Files updated, refreshing...');
         try {
           const result = await (window as any).electronAPI.invoke(
             'session-files:get-by-session',

@@ -59,10 +59,10 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const pos = textarea.selectionStart;
 
     const match = extractTriggerMatch(value, pos, '@');
-    console.log('[ChatInput] Typeahead trigger check:', { value, pos, match });
+    // console.log('[ChatInput] Typeahead trigger check:', { value, pos, match });
 
     if (match) {
-      console.log('[ChatInput] Setting typeahead match:', match);
+      // console.log('[ChatInput] Setting typeahead match:', match);
       setTypeaheadMatch(match);
       setCursorPosition(pos);
       onFileMentionSearch(match.query);

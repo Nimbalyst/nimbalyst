@@ -503,8 +503,34 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     console.log('[AgenticCoding] Todo clicked:', todo);
   };
 
+  const handleCancelRequest = async () => {
+    try {
+      const result = await window.electronAPI.aiCancelRequest();
+      if (result.success) {
+        setIsSending(false);
+        // Remove thinking message
+        if (activeTabId) {
+          setSessionTabs(prev => prev.map(tab => {
+            if (tab.id === activeTabId) {
+              return {
+                ...tab,
+                sessionData: {
+                  ...tab.sessionData,
+                  messages: tab.sessionData.messages.filter(m => !m.isThinking)
+                }
+              };
+            }
+            return tab;
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('[AgenticCoding] Failed to cancel request:', err);
+    }
+  };
+
   const handleSendMessage = async () => {
-    if (!promptInput.trim() || !activeTabId || isSending) return;
+    if (!promptInput.trim() || !activeTabId) return;
 
     const prompt = promptInput.trim();
     setPromptInput('');
@@ -853,7 +879,8 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
             value={promptInput}
             onChange={setPromptInput}
             onSend={handleSendMessage}
-            disabled={isSending}
+            onCancel={handleCancelRequest}
+            isLoading={isSending}
             placeholder="Type your message... (type @ to mention files)"
             fileMentionOptions={fileMentionOptions}
             onFileMentionSearch={handleFileMentionSearch}

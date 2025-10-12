@@ -1,12 +1,15 @@
 import React, { useRef, useEffect, KeyboardEvent, useState, useCallback } from 'react';
 import { GenericTypeahead, TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import { extractTriggerMatch, insertAtTrigger, TriggerMatch } from '../Typeahead/typeaheadUtils';
+import '../AIChat/AIChat.css';
 
 interface AgenticInputProps {
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
+  onCancel?: () => void;
   disabled?: boolean;
+  isLoading?: boolean;
   placeholder?: string;
 
   // File mention support
@@ -19,7 +22,9 @@ export function AgenticInput({
   value,
   onChange,
   onSend,
+  onCancel,
   disabled,
+  isLoading,
   placeholder = "Type your message... (Enter to send, Shift+Enter for new line)",
   fileMentionOptions = [],
   onFileMentionSearch,
@@ -29,6 +34,14 @@ export function AgenticInput({
   const [typeaheadMatch, setTypeaheadMatch] = useState<TriggerMatch | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [cursorPosition, setCursorPosition] = useState(0);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+    }
+  }, [value]);
 
   // Check for typeahead trigger when value or cursor changes
   useEffect(() => {
@@ -78,8 +91,8 @@ export function AgenticInput({
   const handleTypeaheadSelect = useCallback((option: TypeaheadOption) => {
     if (!typeaheadMatch || !textareaRef.current) return;
 
-    // Format as markdown link: @[filename](path)
-    const fileMention = `@[${option.label}](${option.data?.path || option.label})`;
+    // Format as simple file mention: @<filepath>
+    const fileMention = `@${option.data?.path || option.label}`;
 
     const { value: newValue, cursorPos } = insertAtTrigger(
       value,
@@ -144,6 +157,13 @@ export function AgenticInput({
       }
     }
 
+    // Handle Escape to cancel (only if typeahead is not open)
+    if (e.key === 'Escape' && isLoading && onCancel) {
+      e.preventDefault();
+      onCancel();
+      return;
+    }
+
     // Handle Enter to send (Shift+Enter for new line, but not when typeahead is open)
     if (e.key === 'Enter' && !e.shiftKey && !typeaheadMatch) {
       e.preventDefault();
@@ -154,54 +174,46 @@ export function AgenticInput({
   };
 
   return (
-    <div style={{
-      borderTop: '1px solid var(--border-primary)',
-      backgroundColor: 'var(--surface-secondary)',
-      padding: '0.75rem',
-      display: 'flex',
-      gap: '0.5rem',
-      alignItems: 'flex-end',
-      position: 'relative'
-    }}>
+    <div className="ai-chat-input" style={{ position: 'relative' }}>
       <textarea
         ref={textareaRef}
+        className="ai-chat-input-field"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled}
+        rows={1}
         style={{
-          flex: 1,
-          minHeight: '2.5rem',
-          maxHeight: '10rem',
-          padding: '0.5rem',
-          backgroundColor: 'var(--surface-primary)',
-          color: 'var(--text-primary)',
-          border: '1px solid var(--border-primary)',
-          borderRadius: '0.375rem',
-          resize: 'vertical',
-          fontFamily: 'inherit',
-          fontSize: '0.875rem',
-          outline: 'none'
+          minHeight: '36px',
+          maxHeight: '200px',
+          resize: 'none'
         }}
       />
-      <button
-        onClick={onSend}
-        disabled={disabled || !value.trim()}
-        style={{
-          padding: '0.5rem 1rem',
-          backgroundColor: disabled || !value.trim() ? 'var(--surface-tertiary)' : 'var(--color-interactive)',
-          color: disabled || !value.trim() ? 'var(--text-tertiary)' : 'white',
-          border: 'none',
-          borderRadius: '0.375rem',
-          cursor: disabled || !value.trim() ? 'not-allowed' : 'pointer',
-          fontSize: '0.875rem',
-          fontWeight: 500,
-          whiteSpace: 'nowrap'
-        }}
-      >
-        {disabled ? 'Sending...' : 'Send'}
-      </button>
+      {isLoading && onCancel ? (
+        <button
+          className="ai-chat-cancel-button"
+          onClick={onCancel}
+          title="Cancel request (Esc)"
+          aria-label="Cancel request"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      ) : (
+        <button
+          className="ai-chat-send-button"
+          onClick={onSend}
+          disabled={disabled || !value.trim()}
+          title="Send message (Enter)"
+          aria-label="Send message"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 8L14 2L11 14L8 9L2 8Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      )}
 
       {/* File mention typeahead */}
       {typeaheadMatch && fileMentionOptions.length > 0 && (

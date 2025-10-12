@@ -38,24 +38,24 @@ export function useFileMention({
 
     const loadDocuments = async () => {
       try {
-        console.log('[useFileMention] Loading documents...');
-        console.log('[useFileMention] window.electronAPI available:', !!window.electronAPI);
+        // console.log('[useFileMention] Loading documents...');
+        // console.log('[useFileMention] window.electronAPI available:', !!window.electronAPI);
         setIsLoading(true);
         const docs = await documentService.listDocuments();
-        console.log('[useFileMention] Loaded documents:', docs.length, docs);
+        // console.log('[useFileMention] Loaded documents:', docs.length, docs);
 
         // If no documents, check if we have a workspace
         if (docs.length === 0) {
-          console.warn('[useFileMention] No documents found. This could mean:');
-          console.warn('  1. No workspace is open');
-          console.warn('  2. DocumentService is not initialized for this window');
-          console.warn('  3. No markdown files exist in the workspace');
+          // console.warn('[useFileMention] No documents found. This could mean:');
+          // console.warn('  1. No workspace is open');
+          // console.warn('  2. DocumentService is not initialized for this window');
+          // console.warn('  3. No markdown files exist in the workspace');
 
           // Try to get more info
           if (window.electronAPI) {
             try {
               const result = await window.electronAPI.invoke('document-service:list');
-              console.log('[useFileMention] Direct IPC call result:', result);
+              // console.log('[useFileMention] Direct IPC call result:', result);
             } catch (ipcErr) {
               console.error('[useFileMention] Direct IPC call failed:', ipcErr);
             }
@@ -83,7 +83,7 @@ export function useFileMention({
 
       // Only update if the count changed to avoid unnecessary re-renders
       if (docs.length !== previousDocCountRef.current) {
-        console.log('[useFileMention] Documents changed:', previousDocCountRef.current, '->', docs.length);
+        // console.log('[useFileMention] Documents changed:', previousDocCountRef.current, '->', docs.length);
         previousDocCountRef.current = docs.length;
         setDocuments(docs);
       }
@@ -125,7 +125,7 @@ export function useFileMention({
     }));
     // Only log on initial load or significant changes
     if (opts.length > 0 && documents.length > 0) {
-      console.log('[useFileMention] Generated options:', opts.length);
+      // console.log('[useFileMention] Generated options:', opts.length);
     }
     return opts;
   }, [documents]);

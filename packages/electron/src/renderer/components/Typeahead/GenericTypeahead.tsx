@@ -96,17 +96,17 @@ export function GenericTypeahead({
         // Add a minimal offset (2px) above the cursor line
         const top = coords.top - menuHeight - 2;
 
-        console.log('[GenericTypeahead] Position calculated:', {
-          top,
-          left,
-          coords,
-          menuHeight,
-          menuWidth,
-          absoluteLeft,
-          absoluteRight,
-          viewportWidth,
-          overflow: absoluteRight - viewportWidth
-        });
+        // console.log('[GenericTypeahead] Position calculated:', {
+        //   top,
+        //   left,
+        //   coords,
+        //   menuHeight,
+        //   menuWidth,
+        //   absoluteLeft,
+        //   absoluteRight,
+        //   viewportWidth,
+        //   overflow: absoluteRight - viewportWidth
+        // });
         setPosition({ top, left });
       } catch (err) {
         console.error('[GenericTypeahead] Failed to calculate position:', err);

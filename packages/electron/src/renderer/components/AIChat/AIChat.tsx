@@ -1668,7 +1668,7 @@ export function AIChat({
             onSend={handleSendMessage}
             onNavigateHistory={handleNavigateHistory}
             onCancel={handleCancelRequest}
-            disabled={isLoading || !isInitialized || !currentSessionId}
+            disabled={!isInitialized || !currentSessionId}
             isLoading={isLoading}
             placeholder={!isInitialized ? "Initializing AI..." : !currentSessionId ? "No session - click + to start" : "Ask anything... (type @ to mention files)"}
             fileMentionOptions={fileMentionOptions}
