@@ -21,6 +21,7 @@ interface SessionTab {
   name: string;
   sessionData: SessionData;
   isPinned?: boolean;
+  draftInput?: string;
 }
 
 type SessionListItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' | 'provider' | 'model'> & {
@@ -39,11 +40,16 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
   const [availableSessions, setAvailableSessions] = useState<SessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [promptInput, setPromptInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [closedSessions, setClosedSessions] = useState<SessionTab[]>([]);
+  const [streamingContent, setStreamingContent] = useState<{
+    sessionId: string;
+    content: string;
+  } | null>(null);
+  const [testStreamingContent, setTestStreamingContent] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const initializedRef = useRef(false);
+  const streamingTimeoutRef = useRef<NodeJS.Timeout>();
 
   const MAX_CLOSED_SESSION_HISTORY = 10;
 
@@ -67,6 +73,22 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
       window.electronAPI.setTitle(`Agentic Coding - ${workspaceName}`);
     }
   }, [workspacePath]);
+
+  // Test mode: listen for test streaming events
+  useEffect(() => {
+    const handleTestStreaming = () => {
+      const content = (window as any).__testStreamingContent;
+      console.log('[AgenticCoding] Test streaming event fired, content:', content);
+      setTestStreamingContent(content);
+    };
+
+    console.log('[AgenticCoding] Registering test streaming listener');
+    window.addEventListener('test-streaming-updated', handleTestStreaming);
+    return () => {
+      console.log('[AgenticCoding] Removing test streaming listener');
+      window.removeEventListener('test-streaming-updated', handleTestStreaming);
+    };
+  }, []);
 
   // Load all coding sessions for the dropdown
   const loadCodingSessions = async () => {
@@ -397,6 +419,38 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     const handleStreamResponse = async (data: any) => {
       if (!activeTabId) return;
 
+      // Handle streaming text content in real-time (debounced)
+      if (data.partial && !data.isComplete) {
+        // Clear any pending timeout
+        if (streamingTimeoutRef.current) {
+          clearTimeout(streamingTimeoutRef.current);
+        }
+
+        // Remove thinking placeholder when streaming starts (first chunk)
+        if (!streamingContent) {
+          setSessionTabs(prev => prev.map(tab => {
+            if (tab.id === activeTabId) {
+              return {
+                ...tab,
+                sessionData: {
+                  ...tab.sessionData,
+                  messages: tab.sessionData.messages.filter(m => !m.isThinking)
+                }
+              };
+            }
+            return tab;
+          }));
+        }
+
+        // Debounce: update every 50ms to avoid excessive renders
+        streamingTimeoutRef.current = setTimeout(() => {
+          setStreamingContent({
+            sessionId: activeTabId,
+            content: data.partial
+          });
+        }, 50);
+      }
+
       // Handle streaming tool calls in real-time
       if (data.toolCalls && Array.isArray(data.toolCalls) && data.toolCalls.length > 0) {
         // console.log('[AgenticCoding] Received tool calls:', data.toolCalls.length);
@@ -437,6 +491,12 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
 
       // Handle completion - reload final state
       if (data.isComplete) {
+        // Clear streaming content
+        setStreamingContent(null);
+        if (streamingTimeoutRef.current) {
+          clearTimeout(streamingTimeoutRef.current);
+        }
+
         // console.log('[AgenticCoding] Stream complete, reloading session:', activeTabId);
         try {
           const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
@@ -460,6 +520,11 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
       console.error('[AgenticCoding] AI error:', error);
       setError(error.message || 'An error occurred');
       setIsSending(false);
+      // Clear streaming content
+      setStreamingContent(null);
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current);
+      }
       // Remove thinking message on error
       if (activeTabId) {
         setSessionTabs(prev => prev.map(tab => {
@@ -481,6 +546,10 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     window.electronAPI.onAIError(handleStreamError);
 
     return () => {
+      // Cleanup streaming timeout on unmount
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current);
+      }
       // Note: onAIStreamResponse and onAIError return cleanup functions
       // but we're using them in a way that doesn't require explicit cleanup
     };
@@ -508,6 +577,11 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
       const result = await window.electronAPI.aiCancelRequest();
       if (result.success) {
         setIsSending(false);
+        // Clear streaming content
+        setStreamingContent(null);
+        if (streamingTimeoutRef.current) {
+          clearTimeout(streamingTimeoutRef.current);
+        }
         // Remove thinking message
         if (activeTabId) {
           setSessionTabs(prev => prev.map(tab => {
@@ -530,10 +604,15 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
   };
 
   const handleSendMessage = async () => {
-    if (!promptInput.trim() || !activeTabId) return;
+    if (!activeTabInput.trim() || !activeTabId) return;
 
-    const prompt = promptInput.trim();
-    setPromptInput('');
+    const prompt = activeTabInput.trim();
+    // Clear input for this tab
+    setSessionTabs(prev => prev.map(tab =>
+      tab.id === activeTabId
+        ? { ...tab, draftInput: '' }
+        : tab
+    ));
     setIsSending(true);
 
     // Immediately add user message to the transcript
@@ -591,6 +670,16 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
   };
 
   const activeTab = sessionTabs.find(tab => tab.id === activeTabId);
+  const activeTabInput = activeTab?.draftInput || '';
+
+  const handleInputChange = (value: string) => {
+    if (!activeTabId) return;
+    setSessionTabs(prev => prev.map(tab =>
+      tab.id === activeTabId
+        ? { ...tab, draftInput: value }
+        : tab
+    ));
+  };
 
   const handleOpenSessionManager = () => {
     window.electronAPI.invoke('open-session-manager', workspacePath);
@@ -862,6 +951,12 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
             <AgentTranscriptPanel
               sessionId={activeTab.sessionData.id}
               sessionData={activeTab.sessionData}
+              streamingContent={
+                testStreamingContent ||
+                (streamingContent?.sessionId === activeTab.id
+                  ? streamingContent.content
+                  : undefined)
+              }
               onFileClick={handleFileClick}
               onTodoClick={handleTodoClick}
               initialSettings={{
@@ -876,8 +971,8 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
 
           {/* Chat Input */}
           <AgenticInput
-            value={promptInput}
-            onChange={setPromptInput}
+            value={activeTabInput}
+            onChange={handleInputChange}
             onSend={handleSendMessage}
             onCancel={handleCancelRequest}
             isLoading={isSending}

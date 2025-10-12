@@ -10,6 +10,7 @@ interface RichTranscriptViewProps {
   sessionStatus?: string;
   messages: Message[];
   provider?: string;
+  streamingContent?: string;
   settings?: TranscriptSettings;
   onSettingsChange?: (settings: TranscriptSettings) => void;
   showSettings?: boolean;
@@ -26,7 +27,7 @@ const defaultSettings: TranscriptSettings = {
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, messages, provider, settings: propsSettings, onSettingsChange, showSettings }, ref) => {
+>(({ sessionId, sessionStatus, messages, provider, streamingContent, settings: propsSettings, onSettingsChange, showSettings }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -55,14 +56,14 @@ export const RichTranscriptView = React.forwardRef<
     }
   }), []);
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to bottom when messages or streaming content changes
   useEffect(() => {
     if (messagesEndRef.current && wasAtBottomRef.current) {
       requestAnimationFrame(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
       });
     }
-  }, [messages]);
+  }, [messages, streamingContent]);
 
   // Handle scroll events
   useEffect(() => {
@@ -178,7 +179,7 @@ export const RichTranscriptView = React.forwardRef<
         }}
       >
         <div style={{ margin: '0 auto', maxWidth: settings.compactMode ? '72rem' : '64rem', padding: '1rem 0' }}>
-          {messages.length === 0 && !isWaitingForResponse ? (
+          {messages.length === 0 && !isWaitingForResponse && !streamingContent ? (
             <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '2rem 0' }}>
               No messages to display
             </div>
@@ -431,7 +432,57 @@ export const RichTranscriptView = React.forwardRef<
                   </div>
                 );
               })}
-              {isWaitingForResponse && (
+
+              {/* Streaming content - shown after all persisted messages */}
+              {streamingContent && (
+                <div
+                  style={{
+                    borderRadius: '0.5rem',
+                    backgroundColor: 'var(--surface-primary)',
+                    padding: settings.compactMode ? '0.75rem' : '1rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <div style={{
+                      borderRadius: '9999px',
+                      padding: '0.375rem',
+                      flexShrink: 0,
+                      backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                      color: '#3b82f6'
+                    }}>
+                      <ProviderIcon provider={provider || 'claude-code'} size={16} />
+                    </div>
+                    <span style={{ fontWeight: 500, color: 'var(--text-primary)', fontSize: '0.875rem' }}>
+                      Claude Code
+                    </span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>
+                      streaming...
+                    </span>
+                  </div>
+                  <div style={{ marginLeft: '1.75rem' }}>
+                    <MessageSegment
+                      message={{ role: 'assistant', content: streamingContent, timestamp: Date.now() }}
+                      isUser={false}
+                      isCollapsed={false}
+                      showToolCalls={false}
+                      showThinking={false}
+                      expandedTools={new Set()}
+                      onToggleToolExpand={() => {}}
+                    />
+                    {/* Pulsing cursor indicator */}
+                    <span style={{
+                      display: 'inline-block',
+                      width: '8px',
+                      height: '16px',
+                      backgroundColor: 'var(--primary-color)',
+                      marginLeft: '2px',
+                      animation: 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+                    }} />
+                  </div>
+                </div>
+              )}
+
+              {isWaitingForResponse && !streamingContent && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-tertiary)' }}>
                   <div style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}>Thinking...</div>
                 </div>
