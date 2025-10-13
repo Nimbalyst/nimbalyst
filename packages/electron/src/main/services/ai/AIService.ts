@@ -1234,6 +1234,60 @@ export class AIService {
       return { success: true };
     });
 
+    // Get slash commands from active claude-code provider
+    ipcMain.handle('ai:getSlashCommands', async (event, sessionId?: string) => {
+      try {
+        console.log('[AIService] ai:getSlashCommands called with sessionId:', sessionId);
+
+        // Try to get provider from window first
+        const windowId = event.sender.id;
+        console.log('[AIService] Looking for provider for window:', windowId);
+        let provider = this.providersByWindow.get(windowId);
+        console.log('[AIService] Provider from window:', provider ? 'found' : 'not found');
+
+        // If no provider for window, try to get from session
+        if (!provider && sessionId) {
+          console.log('[AIService] Trying to get provider from ProviderFactory with sessionId:', sessionId);
+          provider = ProviderFactory.getProvider('claude-code', sessionId);
+          console.log('[AIService] Provider from ProviderFactory:', provider ? 'found' : 'not found');
+        }
+
+        // Check if provider has getSlashCommands method
+        if (provider) {
+          console.log('[AIService] Provider found, checking for getSlashCommands method');
+          console.log('[AIService] Has getSlashCommands:', 'getSlashCommands' in provider);
+
+          if ('getSlashCommands' in provider && typeof (provider as any).getSlashCommands === 'function') {
+            const commands = (provider as any).getSlashCommands();
+            console.log('[AIService] Retrieved slash commands from provider:', commands);
+
+            // If commands array is empty, use the static fallback
+            if (commands.length === 0) {
+              console.log('[AIService] Provider returned empty commands, using static fallback');
+              const { ClaudeCodeProvider } = await import('@stravu/runtime/ai/server/providers/ClaudeCodeProvider');
+              const fallbackCommands = ClaudeCodeProvider.getKnownSlashCommands();
+              console.log('[AIService] Using fallback commands:', fallbackCommands);
+              return { success: true, commands: fallbackCommands };
+            }
+
+            return { success: true, commands };
+          } else {
+            console.log('[AIService] Provider does not have getSlashCommands method');
+          }
+        }
+
+        // No provider found - return the known built-in commands as fallback
+        console.log('[AIService] No provider found, using static Claude Code commands as fallback');
+        const { ClaudeCodeProvider } = await import('@stravu/runtime/ai/server/providers/ClaudeCodeProvider');
+        const fallbackCommands = ClaudeCodeProvider.getKnownSlashCommands();
+        console.log('[AIService] Fallback commands:', fallbackCommands);
+        return { success: true, commands: fallbackCommands };
+      } catch (error) {
+        console.error('[AIService] Error getting slash commands:', error);
+        return { success: false, commands: [], error: error instanceof Error ? error.message : 'Unknown error' };
+      }
+    });
+
     // Get ENABLED models for actual use
     ipcMain.handle('ai:getModels', async () => {
       const providerSettings = this.getSettingsStore().get('providerSettings', {}) as Record<AIProviderType, any>;

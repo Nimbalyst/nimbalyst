@@ -11,6 +11,8 @@ interface AgenticInputProps {
   disabled?: boolean;
   isLoading?: boolean;
   placeholder?: string;
+  workspacePath?: string;
+  sessionId?: string; // Used to trigger command refresh when session changes
 
   // File mention support
   fileMentionOptions?: TypeaheadOption[];
@@ -25,7 +27,9 @@ export function AgenticInput({
   onCancel,
   disabled,
   isLoading,
-  placeholder = "Type your message... (Enter to send, Shift+Enter for new line)",
+  placeholder = "Type your message... (Enter to send, Shift+Enter for new line, @ for files, / for commands)",
+  workspacePath,
+  sessionId,
   fileMentionOptions = [],
   onFileMentionSearch,
   onFileMentionSelect
@@ -34,6 +38,8 @@ export function AgenticInput({
   const [typeaheadMatch, setTypeaheadMatch] = useState<TriggerMatch | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [slashCommandOptions, setSlashCommandOptions] = useState<TypeaheadOption[]>([]);
+  const [allSlashCommands, setAllSlashCommands] = useState<any[]>([]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -43,29 +49,116 @@ export function AgenticInput({
     }
   }, [value]);
 
+  // Fetch slash commands on mount and when workspace changes
+  useEffect(() => {
+    if (!workspacePath) return;
+
+    const fetchSlashCommands = async () => {
+      try {
+        // Get SDK commands from ClaudeCodeProvider if available
+        let sdkCommands: string[] = [];
+        try {
+          const sdkResult = await window.electronAPI.invoke('ai:getSlashCommands', sessionId);
+          if (sdkResult?.success && Array.isArray(sdkResult.commands)) {
+            sdkCommands = sdkResult.commands;
+            console.log('[AgenticInput] Got SDK commands from provider:', sdkCommands);
+          }
+        } catch (sdkError) {
+          console.warn('[AgenticInput] Failed to get SDK commands:', sdkError);
+        }
+
+        // Fetch all commands (built-in + custom)
+        const commands = await window.electronAPI.invoke('slash-command:list', {
+          workspacePath,
+          sdkCommands
+        });
+
+        setAllSlashCommands(commands || []);
+        console.log('[AgenticInput] Loaded slash commands:', commands);
+      } catch (error) {
+        console.error('[AgenticInput] Failed to load slash commands:', error);
+        setAllSlashCommands([]);
+      }
+    };
+
+    fetchSlashCommands();
+  }, [workspacePath, sessionId]); // Refetch when session changes
+
+  // Get icon for command based on name and source
+  const getCommandIcon = (cmd: any): string => {
+    if (cmd.source === 'builtin') {
+      // Built-in command icons
+      const builtinIcons: Record<string, string> = {
+        'compact': 'compress',
+        'clear': 'delete_sweep',
+        'context': 'info',
+        'cost': 'payments',
+        'init': 'restart_alt',
+        'output-style:new': 'palette',
+        'pr-comments': 'comment',
+        'release-notes': 'description',
+        'todos': 'checklist',
+        'review': 'rate_review',
+        'security-review': 'security'
+      };
+      return builtinIcons[cmd.name] || 'bolt';
+    }
+    // Custom command icon
+    return 'code';
+  };
+
+  // Filter slash commands based on query
+  const filterSlashCommands = useCallback((query: string) => {
+    const lowerQuery = query.toLowerCase();
+    const filtered = allSlashCommands
+      .filter(cmd => cmd.name.toLowerCase().includes(lowerQuery))
+      .map(cmd => ({
+        id: cmd.name,
+        label: `/${cmd.name}`,
+        description: cmd.description || `Execute ${cmd.name} command`,
+        icon: getCommandIcon(cmd),
+        section: cmd.source === 'builtin' ? 'Built-in Commands' :
+                 cmd.source === 'project' ? 'Project Commands' : 'User Commands',
+        data: cmd
+      }));
+
+    setSlashCommandOptions(filtered);
+  }, [allSlashCommands]);
+
   // Check for typeahead trigger when value or cursor changes
   useEffect(() => {
-    if (!textareaRef.current || !onFileMentionSearch) return;
+    if (!textareaRef.current) return;
 
     const textarea = textareaRef.current;
     const pos = textarea.selectionStart;
 
-    const match = extractTriggerMatch(value, pos, '@');
+    // Check for both "@" and "/" triggers
+    const match = extractTriggerMatch(value, pos, ['@', '/']);
 
     if (match) {
       setTypeaheadMatch(match);
       setCursorPosition(pos);
-      onFileMentionSearch(match.query);
 
-      // Auto-select first option
-      if (fileMentionOptions.length > 0) {
+      if (match.trigger === '@' && onFileMentionSearch) {
+        // File mention
+        onFileMentionSearch(match.query);
+        // Auto-select first option
+        if (fileMentionOptions.length > 0) {
+          setSelectedIndex(0);
+        }
+      } else if (match.trigger === '/') {
+        // Slash command - filter from already-loaded commands
+        // (Now uses static fallback so commands are always available)
+        filterSlashCommands(match.query);
+
+        // Auto-select first option
         setSelectedIndex(0);
       }
     } else {
       setTypeaheadMatch(null);
       setSelectedIndex(null);
     }
-  }, [value, cursorPosition, onFileMentionSearch]);
+  }, [value, cursorPosition, onFileMentionSearch, filterSlashCommands, allSlashCommands]);
 
   // Update cursor position on selection change
   const handleSelectionChange = useCallback(() => {
@@ -91,13 +184,24 @@ export function AgenticInput({
   const handleTypeaheadSelect = useCallback((option: TypeaheadOption) => {
     if (!typeaheadMatch || !textareaRef.current) return;
 
-    // Format as simple file mention: @<filepath>
-    const fileMention = `@${option.data?.path || option.label}`;
+    let insertText: string;
+
+    if (typeaheadMatch.trigger === '@') {
+      // Format as simple file mention: @<filepath>
+      insertText = `@${option.data?.path || option.label}`;
+    } else if (typeaheadMatch.trigger === '/') {
+      // Format as slash command: /commandname
+      // Extract command name (remove "/" if it's in the label)
+      const commandName = option.data?.name || option.id;
+      insertText = `/${commandName}`;
+    } else {
+      return;
+    }
 
     const { value: newValue, cursorPos } = insertAtTrigger(
       value,
       typeaheadMatch,
-      fileMention
+      insertText
     );
 
     onChange(newValue);
@@ -110,8 +214,8 @@ export function AgenticInput({
       }
     }, 0);
 
-    // Notify parent
-    if (onFileMentionSelect) {
+    // Notify parent for file mentions
+    if (typeaheadMatch.trigger === '@' && onFileMentionSelect) {
       onFileMentionSelect(option);
     }
 
@@ -121,13 +225,16 @@ export function AgenticInput({
   }, [typeaheadMatch, value, onChange, onFileMentionSelect]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Determine which options to use based on trigger type
+    const currentOptions = typeaheadMatch?.trigger === '@' ? fileMentionOptions : slashCommandOptions;
+
     // If typeahead is open, handle navigation keys
-    if (typeaheadMatch && fileMentionOptions.length > 0) {
+    if (typeaheadMatch && currentOptions.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setSelectedIndex(prev => {
           if (prev === null) return 0;
-          return Math.min(prev + 1, fileMentionOptions.length - 1);
+          return Math.min(prev + 1, currentOptions.length - 1);
         });
         return;
       }
@@ -143,8 +250,8 @@ export function AgenticInput({
 
       if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
-        if (selectedIndex !== null && fileMentionOptions[selectedIndex]) {
-          handleTypeaheadSelect(fileMentionOptions[selectedIndex]);
+        if (selectedIndex !== null && currentOptions[selectedIndex]) {
+          handleTypeaheadSelect(currentOptions[selectedIndex]);
         }
         return;
       }
@@ -215,11 +322,14 @@ export function AgenticInput({
         </button>
       )}
 
-      {/* File mention typeahead */}
-      {typeaheadMatch && fileMentionOptions.length > 0 && (
+      {/* Typeahead for file mentions and slash commands */}
+      {typeaheadMatch && (
+        (typeaheadMatch.trigger === '@' && fileMentionOptions.length > 0) ||
+        (typeaheadMatch.trigger === '/' && slashCommandOptions.length > 0)
+      ) && (
         <GenericTypeahead
           anchorElement={textareaRef.current}
-          options={fileMentionOptions}
+          options={typeaheadMatch.trigger === '@' ? fileMentionOptions : slashCommandOptions}
           selectedIndex={selectedIndex}
           onSelectedIndexChange={setSelectedIndex}
           onSelect={handleTypeaheadSelect}

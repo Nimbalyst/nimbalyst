@@ -13,48 +13,71 @@ export interface TriggerMatch {
  * Extract trigger match from text at cursor position
  * @param value Current textarea value
  * @param cursorPos Current cursor position
- * @param trigger Trigger character (e.g., "@")
+ * @param triggers Single trigger character or array of trigger characters (e.g., "@" or ["@", "/"])
  * @returns Match info or null if no match
  */
 export function extractTriggerMatch(
   value: string,
   cursorPos: number,
-  trigger: string
+  triggers: string | string[]
 ): TriggerMatch | null {
+  // Normalize to array
+  const triggerArray = Array.isArray(triggers) ? triggers : [triggers];
+
   // Get text before cursor
   const textBeforeCursor = value.substring(0, cursorPos);
 
-  // Find last occurrence of trigger before cursor
-  const lastTriggerIndex = textBeforeCursor.lastIndexOf(trigger);
+  // Try each trigger and find the closest one to cursor
+  let closestMatch: TriggerMatch | null = null;
+  let closestDistance = Infinity;
 
-  // No trigger found
-  if (lastTriggerIndex === -1) {
-    return null;
-  }
+  for (const trigger of triggerArray) {
+    // Find last occurrence of trigger before cursor
+    const lastTriggerIndex = textBeforeCursor.lastIndexOf(trigger);
 
-  // Check if trigger is at start or preceded by whitespace
-  if (lastTriggerIndex > 0) {
-    const charBeforeTrigger = textBeforeCursor[lastTriggerIndex - 1];
-    if (!/\s/.test(charBeforeTrigger)) {
-      // Trigger must be at start or after whitespace
-      return null;
+    // Skip if trigger not found
+    if (lastTriggerIndex === -1) {
+      continue;
+    }
+
+    // Special handling for slash commands - must be at the very start
+    if (trigger === '/') {
+      if (lastTriggerIndex !== 0) {
+        continue;
+      }
+    } else {
+      // For other triggers (like @), check if at start or preceded by whitespace
+      if (lastTriggerIndex > 0) {
+        const charBeforeTrigger = textBeforeCursor[lastTriggerIndex - 1];
+        if (!/\s/.test(charBeforeTrigger)) {
+          // Trigger must be at start or after whitespace
+          continue;
+        }
+      }
+    }
+
+    // Extract query from trigger to cursor
+    const query = textBeforeCursor.substring(lastTriggerIndex + trigger.length);
+
+    // Query shouldn't contain whitespace (that would end the mention)
+    if (/\s/.test(query)) {
+      continue;
+    }
+
+    // Check if this is the closest trigger to cursor
+    const distance = cursorPos - lastTriggerIndex;
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestMatch = {
+        trigger,
+        query,
+        startIndex: lastTriggerIndex,
+        endIndex: cursorPos
+      };
     }
   }
 
-  // Extract query from trigger to cursor
-  const query = textBeforeCursor.substring(lastTriggerIndex + trigger.length);
-
-  // Query shouldn't contain whitespace (that would end the mention)
-  if (/\s/.test(query)) {
-    return null;
-  }
-
-  return {
-    trigger,
-    query,
-    startIndex: lastTriggerIndex,
-    endIndex: cursorPos
-  };
+  return closestMatch;
 }
 
 /**

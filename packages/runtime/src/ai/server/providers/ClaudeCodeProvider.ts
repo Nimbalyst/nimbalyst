@@ -829,4 +829,24 @@ When asked about your identity, be truthful about which AI model you are - do no
   getSlashCommands(): string[] {
     return [...this.slashCommands];
   }
+
+  /**
+   * Get the known built-in Claude Code slash commands
+   * These are always available, even before a session is initialized
+   */
+  static getKnownSlashCommands(): string[] {
+    return [
+      'compact',
+      'clear',
+      'context',
+      'cost',
+      'init',
+      'output-style:new',
+      'pr-comments',
+      'release-notes',
+      'todos',
+      'review',
+      'security-review'
+    ];
+  }
 }
