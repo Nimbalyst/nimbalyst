@@ -62,7 +62,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.20.9",
+    "@anthropic-ai/sdk": "^0.65.0",
     "@excalidraw/excalidraw": "0.17.6",
     "@types/react-syntax-highlighter": "^15.5.13",
     "esbuild": "0.25.10",

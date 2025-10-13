@@ -127,7 +127,20 @@ export default defineConfig({
         },
         external: [
           '@anthropic-ai/claude-agent-sdk', // Exclude from bundle - loaded dynamically at runtime
-          'sharp' // Native module with platform-specific binaries
+          '@anthropic-ai/sdk', // Anthropic SDK - keep external to avoid bundling issues
+          'openai', // OpenAI SDK - keep external
+          'sharp', // Native module with platform-specific binaries
+          // Node runtime dependencies required by AI SDKs
+          'node-fetch',
+          'formdata-node',
+          'form-data-encoder',
+          'abort-controller',
+          'agentkeepalive',
+          'web-streams-polyfill',
+          // Renderer-only packages
+          '@excalidraw/excalidraw',
+          '@excalidraw/excalidraw/index.css',
+          'mermaid'
         ]
       }
     }
@@ -200,8 +213,9 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        // Block mermaid import to prevent large bundle
+        // Block mermaid imports to prevent large bundle
         '@excalidraw/mermaid-to-excalidraw': resolve(__dirname, '../rexical/src/mocks/mermaid-mock.ts'),
+        'mermaid': resolve(__dirname, '../rexical/src/mocks/mermaid-mock.ts'),
         // Ensure renderer also points runtime imports at source
         '@stravu-editor/runtime': '@stravu/runtime',
         '@stravu/runtime': runtimeSrcDir,

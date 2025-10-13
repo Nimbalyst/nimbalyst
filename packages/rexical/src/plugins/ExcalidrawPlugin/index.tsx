@@ -11,7 +11,8 @@ import type { AppState, BinaryFiles } from '@excalidraw/excalidraw/types';
 import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 
-import '@excalidraw/excalidraw/index.css';
+// NOTE: This CSS file no longer exists in the @excalidraw/excalidraw package
+// import '@excalidraw/excalidraw/index.css';
 
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { $insertNodeToNearestRoot } from '@lexical/utils';
