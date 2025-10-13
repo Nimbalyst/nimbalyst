@@ -126,7 +126,8 @@ export default defineConfig({
           index: resolve(__dirname, 'src/main/index.ts')
         },
         external: [
-          '@anthropic-ai/claude-agent-sdk' // Exclude from bundle - loaded dynamically at runtime
+          '@anthropic-ai/claude-agent-sdk', // Exclude from bundle - loaded dynamically at runtime
+          'sharp' // Native module with platform-specific binaries
         ]
       }
     }

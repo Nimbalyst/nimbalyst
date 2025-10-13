@@ -3,6 +3,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { promises as fs } from 'fs';
 import { BaseAIProvider } from '../AIProvider';
 import {
   DocumentContext,
@@ -52,7 +53,8 @@ export class ClaudeProvider extends BaseAIProvider {
     documentContext?: DocumentContext,
     sessionId?: string,
     messages?: any[],
-    workspacePath?: string
+    workspacePath?: string,
+    attachments?: any[]
   ): AsyncIterableIterator<StreamChunk> {
     if (!this.anthropic) {
       throw new Error('Claude provider not initialized');
@@ -77,10 +79,50 @@ export class ClaudeProvider extends BaseAIProvider {
           continue;
         }
 
-        apiMessages.push({
-          role: msg.role === 'user' ? 'user' : 'assistant',
-          content: msg.content
-        });
+        // Check if message has attachments
+        if (msg.attachments && msg.attachments.length > 0) {
+          // Format as content array with images and text
+          const content: any[] = [];
+
+          // Add images first
+          for (const attachment of msg.attachments) {
+            if (attachment.type === 'image') {
+              // Read image as base64
+              try {
+                const fileBuffer = await fs.readFile(attachment.filepath);
+                const base64Data = fileBuffer.toString('base64');
+
+                content.push({
+                  type: 'image',
+                  source: {
+                    type: 'base64',
+                    media_type: attachment.mimeType,
+                    data: base64Data
+                  }
+                });
+              } catch (error) {
+                console.error('[ClaudeProvider] Failed to read attachment:', error);
+              }
+            }
+          }
+
+          // Add text content
+          content.push({
+            type: 'text',
+            text: msg.content
+          });
+
+          apiMessages.push({
+            role: msg.role === 'user' ? 'user' : 'assistant',
+            content
+          });
+        } else {
+          // No attachments, use simple string content
+          apiMessages.push({
+            role: msg.role === 'user' ? 'user' : 'assistant',
+            content: msg.content
+          });
+        }
       }
     }
 
@@ -88,7 +130,43 @@ export class ClaudeProvider extends BaseAIProvider {
     if (!message || message.trim() === '') {
       throw new Error('Cannot send empty message to Claude API');
     }
-    apiMessages.push({ role: 'user', content: message });
+
+    // Check if current message has attachments
+    if (attachments && attachments.length > 0) {
+      const content: any[] = [];
+
+      // Add images first
+      for (const attachment of attachments) {
+        if (attachment.type === 'image') {
+          try {
+            const fileBuffer = await fs.readFile(attachment.filepath);
+            const base64Data = fileBuffer.toString('base64');
+
+            content.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: attachment.mimeType,
+                data: base64Data
+              }
+            });
+          } catch (error) {
+            console.error('[ClaudeProvider] Failed to read attachment:', error);
+          }
+        }
+      }
+
+      // Add text content
+      content.push({
+        type: 'text',
+        text: message
+      });
+
+      apiMessages.push({ role: 'user', content });
+    } else {
+      // No attachments, use simple string content
+      apiMessages.push({ role: 'user', content: message });
+    }
 
     // Comprehensive logging of what we're sending to Claude
     console.group('🤖 [ClaudeProvider] Preparing API Request to Claude');

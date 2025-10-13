@@ -18,6 +18,17 @@ export interface DocumentContext {
       };
 }
 
+export interface ChatAttachment {
+  id: string;
+  filename: string;
+  filepath: string;
+  mimeType: string;
+  size: number;
+  type: 'image' | 'pdf' | 'document';
+  thumbnail?: string;
+  addedAt: number;
+}
+
 export interface Message {
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
@@ -47,6 +58,7 @@ export interface Message {
     output_tokens: number;
     total_tokens: number;
   };
+  attachments?: ChatAttachment[];
 }
 
 export type AIProviderType = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio';

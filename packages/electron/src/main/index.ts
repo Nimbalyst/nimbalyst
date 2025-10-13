@@ -20,6 +20,7 @@ import { registerSettingsHandlers } from './ipc/SettingsHandlers';
 import { registerWindowHandlers } from './ipc/WindowHandlers';
 import { registerHistoryHandlers } from './ipc/HistoryHandlers';
 import { registerSessionHandlers } from './ipc/SessionHandlers';
+import { registerAttachmentHandlers } from './ipc/AttachmentHandlers';
 import { registerWorkspaceWatcherHandlers } from './file/WorkspaceWatcher';
 import { setupSessionFileHandlers } from './ipc/SessionFileHandlers';
 import { registerSlashCommandHandlers } from './ipc/SlashCommandHandlers';
@@ -241,6 +242,7 @@ app.whenReady().then(async () => {
     setupWorkspaceManagerHandlers();
     setupSessionFileHandlers();
     registerSlashCommandHandlers();
+    registerAttachmentHandlers();
 
     // Initialize AI service
     if (!runtimeSessionStore) {

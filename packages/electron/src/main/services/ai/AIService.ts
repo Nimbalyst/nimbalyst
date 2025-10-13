@@ -283,6 +283,8 @@ export class AIService {
       sessionId?: string,
       workspacePath?: string
     ) => {
+      // Extract attachments from documentContext if present
+      const attachments = (documentContext as any)?.attachments;
       const startTime = Date.now();
       const perfLog: any = {
         startTime,
@@ -570,7 +572,7 @@ export class AIService {
           sessionType: session.sessionType
         } as any : { sessionType: session.sessionType } as any;
 
-        for await (const chunk of provider.sendMessage(message, contextWithSession, session.id, sessionMessages, workspacePath)) {
+        for await (const chunk of provider.sendMessage(message, contextWithSession, session.id, sessionMessages, workspacePath, attachments)) {
           chunkCount++;
 
           if (!firstChunkTime) {

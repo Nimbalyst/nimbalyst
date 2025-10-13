@@ -1,0 +1,114 @@
+.attachment-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--surface-secondary);
+  min-width: 200px;
+  max-width: 250px;
+  position: relative;
+  transition: background-color 0.15s ease;
+}
+
+.attachment-preview:hover {
+  background: var(--surface-hover);
+}
+
+.attachment-preview-thumbnail {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--surface-tertiary);
+  overflow: hidden;
+}
+
+.attachment-preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-preview-icon {
+  font-size: 24px;
+  color: var(--text-secondary);
+}
+
+.attachment-preview-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attachment-preview-filename {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-preview-size {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.attachment-preview-remove {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: background-color 0.15s ease;
+  color: var(--text-tertiary);
+}
+
+.attachment-preview-remove:hover {
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
+}
+
+.attachment-preview-remove .material-icons {
+  font-size: 16px;
+}
+
+/* Attachment list */
+.attachment-preview-list {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-primary) transparent;
+}
+
+.attachment-preview-list::-webkit-scrollbar {
+  height: 6px;
+}
+
+.attachment-preview-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.attachment-preview-list::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 3px;
+}
+
+.attachment-preview-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}

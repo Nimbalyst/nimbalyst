@@ -57,6 +57,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "rexical": "*",
+    "sharp": "^0.34.4",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

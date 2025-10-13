@@ -43,7 +43,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     documentContext?: DocumentContext,
     sessionId?: string,
     messages?: Message[],
-    workspacePath?: string
+    workspacePath?: string,
+    attachments?: any[]
   ): AsyncIterableIterator<StreamChunk> {
     const startTime = Date.now();
     console.log(`[CLAUDE-CODE] ========== START sendMessage ==========`);
@@ -52,10 +53,47 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     console.log(`[CLAUDE-CODE] Session ID: ${sessionId || 'new session'}`);
     console.log(`[CLAUDE-CODE] Workspace path: ${workspacePath}`);
     console.log(`[CLAUDE-CODE] First 200 chars of message:`, message.substring(0, 200));
+    console.log(`[CLAUDE-CODE] Has attachments: ${!!attachments && attachments.length > 0}`);
 
     // Track session type for MCP server configuration
     this.currentSessionType = (documentContext as any)?.sessionType;
     console.log(`[CLAUDE-CODE] Session type: ${this.currentSessionType}`);
+
+    // Handle attachments by copying them to a temp location Claude can access
+    let attachmentRefs: string[] = [];
+    if (attachments && attachments.length > 0 && workspacePath) {
+      console.log(`[CLAUDE-CODE] Processing ${attachments.length} attachments`);
+
+      // Create temp attachments directory in workspace
+      const tempAttachmentsDir = path.join(workspacePath, '.stravu', 'ai-chat-attachments', sessionId || 'default');
+      await fs.promises.mkdir(tempAttachmentsDir, { recursive: true });
+
+      for (const attachment of attachments) {
+        if (attachment.type === 'image' && attachment.filepath) {
+          try {
+            // Copy image to temp location
+            const filename = path.basename(attachment.filepath);
+            const tempPath = path.join(tempAttachmentsDir, filename);
+
+            // Read original and write to temp location
+            const imageData = await fs.promises.readFile(attachment.filepath);
+            await fs.promises.writeFile(tempPath, imageData);
+
+            console.log(`[CLAUDE-CODE] Copied attachment to temp location: ${tempPath}`);
+            attachmentRefs.push(tempPath);
+          } catch (error) {
+            console.error(`[CLAUDE-CODE] Failed to copy attachment:`, error);
+          }
+        }
+      }
+
+      // If we have attachments, prepend them to the message
+      if (attachmentRefs.length > 0) {
+        const attachmentsList = attachmentRefs.map(p => `- ${p}`).join('\n');
+        message = `I have attached the following image files for you to examine:\n${attachmentsList}\n\nPlease use your Read tool to view these images.\n\n${message}`;
+        console.log(`[CLAUDE-CODE] Updated message with ${attachmentRefs.length} attachment references`);
+      }
+    }
 
     // Create abort controller for this request
     this.abortController = new AbortController();

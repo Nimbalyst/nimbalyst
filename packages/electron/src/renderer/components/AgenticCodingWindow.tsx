@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AgentTranscriptPanel, TodoItem, FileEditSummary } from '@stravu/runtime';
-import type { SessionData } from '@stravu/runtime/ai/server/types';
+import type { SessionData, ChatAttachment } from '@stravu/runtime/ai/server/types';
 import { SessionDropdown } from './AIChat/SessionDropdown';
 import { FileGutter } from './AIChat/FileGutter';
 import { WorkspaceHeader } from './WorkspaceHeader';
@@ -22,6 +22,7 @@ interface SessionTab {
   sessionData: SessionData;
   isPinned?: boolean;
   draftInput?: string;
+  draftAttachments?: ChatAttachment[];
 }
 
 type SessionListItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' | 'provider' | 'model'> & {
@@ -591,10 +592,12 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     if (!activeTabInput.trim() || !activeTabId) return;
 
     const prompt = activeTabInput.trim();
-    // Clear input for this tab
+    const attachments = activeTabAttachments;
+
+    // Clear input and attachments for this tab
     setSessionTabs(prev => prev.map(tab =>
       tab.id === activeTabId
-        ? { ...tab, draftInput: '' }
+        ? { ...tab, draftInput: '', draftAttachments: [] }
         : tab
     ));
     setIsSending(true);
@@ -605,7 +608,8 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
         const userMessage = {
           role: 'user' as const,
           content: prompt,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          attachments: attachments.length > 0 ? attachments : undefined
         };
         const thinkingMessage = {
           role: 'assistant' as const,
@@ -628,7 +632,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
       // Send message via existing AI service with coding session context
       await window.electronAPI.aiSendMessage(
         prompt,
-        { sessionType: 'coding' } as any, // Mark as coding session to enable all tools
+        { sessionType: 'coding', attachments } as any, // Mark as coding session to enable all tools, include attachments
         activeTabId,
         workspacePath
       );
@@ -655,12 +659,31 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
 
   const activeTab = sessionTabs.find(tab => tab.id === activeTabId);
   const activeTabInput = activeTab?.draftInput || '';
+  const activeTabAttachments = activeTab?.draftAttachments || [];
 
   const handleInputChange = (value: string) => {
     if (!activeTabId) return;
     setSessionTabs(prev => prev.map(tab =>
       tab.id === activeTabId
         ? { ...tab, draftInput: value }
+        : tab
+    ));
+  };
+
+  const handleAttachmentAdd = (attachment: ChatAttachment) => {
+    if (!activeTabId) return;
+    setSessionTabs(prev => prev.map(tab =>
+      tab.id === activeTabId
+        ? { ...tab, draftAttachments: [...(tab.draftAttachments || []), attachment] }
+        : tab
+    ));
+  };
+
+  const handleAttachmentRemove = (attachmentId: string) => {
+    if (!activeTabId) return;
+    setSessionTabs(prev => prev.map(tab =>
+      tab.id === activeTabId
+        ? { ...tab, draftAttachments: (tab.draftAttachments || []).filter(a => a.id !== attachmentId) }
         : tab
     ));
   };
@@ -965,6 +988,9 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
             fileMentionOptions={fileMentionOptions}
             onFileMentionSearch={handleFileMentionSearch}
             onFileMentionSelect={handleFileMentionSelect}
+            attachments={activeTabAttachments}
+            onAttachmentAdd={handleAttachmentAdd}
+            onAttachmentRemove={handleAttachmentRemove}
           />
         </>
       )}
