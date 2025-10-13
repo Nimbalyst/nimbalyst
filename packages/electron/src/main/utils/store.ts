@@ -45,9 +45,16 @@ export interface NavigationHistoryState {
   currentIndex: number;
 }
 
+export interface SessionHistoryLayout {
+  width: number;
+  collapsed: boolean;
+  collapsedGroups: string[];
+}
+
 export interface AgenticCodingWindowState {
   bounds?: { width: number; height: number; x?: number; y?: number };
   devToolsOpen?: boolean;
+  sessionHistoryLayout?: SessionHistoryLayout;
 }
 
 /**
@@ -166,7 +173,12 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
   return {
     workspacePath: raw.workspacePath ?? raw.workspace_path ?? path,
     windowState: raw.windowState ?? raw.window_state ?? undefined,
-    agenticCodingWindowState: raw.agenticCodingWindowState ? { ...raw.agenticCodingWindowState } : undefined,
+    agenticCodingWindowState: raw.agenticCodingWindowState ? {
+      ...raw.agenticCodingWindowState,
+      sessionHistoryLayout: raw.agenticCodingWindowState.sessionHistoryLayout ? {
+        ...raw.agenticCodingWindowState.sessionHistoryLayout
+      } : undefined
+    } : undefined,
     sidebarWidth: raw.sidebarWidth ?? raw.uiState?.sidebarWidth ?? raw.ui_state?.sidebarWidth ?? 240,
     recentDocuments: Array.isArray(raw.recentDocuments)
       ? raw.recentDocuments.slice(0, 50)
@@ -209,7 +221,14 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
   return {
     workspacePath: state.workspacePath,
     windowState: state.windowState ? { ...state.windowState } : undefined,
-    agenticCodingWindowState: state.agenticCodingWindowState ? { ...state.agenticCodingWindowState } : undefined,
+    agenticCodingWindowState: state.agenticCodingWindowState ? {
+      ...state.agenticCodingWindowState,
+      sessionHistoryLayout: state.agenticCodingWindowState.sessionHistoryLayout ? {
+        width: state.agenticCodingWindowState.sessionHistoryLayout.width,
+        collapsed: state.agenticCodingWindowState.sessionHistoryLayout.collapsed,
+        collapsedGroups: [...state.agenticCodingWindowState.sessionHistoryLayout.collapsedGroups]
+      } : undefined
+    } : undefined,
     sidebarWidth: state.sidebarWidth,
     recentDocuments: [...state.recentDocuments],
     tabs: {

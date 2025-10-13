@@ -1,0 +1,108 @@
+.session-history {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--surface-primary);
+  overflow: hidden;
+}
+
+.session-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0.75rem;
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.session-history-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.session-history-count {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  background: var(--surface-tertiary);
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.75rem;
+}
+
+.session-history-search {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.session-history-search-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 0.25rem;
+  outline: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.session-history-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.session-history-search-input:focus {
+  border-color: var(--border-focus);
+  background: var(--surface-primary);
+}
+
+.session-history-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.5rem 0;
+}
+
+.session-history-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.session-history-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.session-history-list::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 4px;
+}
+
+.session-history-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+.session-history-loading,
+.session-history-error,
+.session-history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 0.8125rem;
+}
+
+.session-history-error {
+  color: var(--error-color);
+}
+
+.session-history-empty p {
+  margin: 0.25rem 0;
+}
+
+.session-history-empty-hint {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}

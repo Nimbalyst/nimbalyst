@@ -1,0 +1,78 @@
+.session-list-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0.75rem;
+  cursor: pointer;
+  border-radius: 0.25rem;
+  margin: 0 0.5rem;
+  transition: background-color 0.15s ease;
+}
+
+.session-list-item:hover {
+  background: var(--surface-hover);
+}
+
+.session-list-item.active {
+  background: var(--surface-selected);
+}
+
+.session-list-item:focus {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
+.session-list-item-content {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.session-list-item-title {
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 0.125rem;
+}
+
+.session-list-item.active .session-list-item-title {
+  font-weight: 600;
+}
+
+.session-list-item-timestamp {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+
+.session-list-item-delete {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-left: 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  opacity: 0.7;
+}
+
+.session-list-item-delete:hover {
+  background: var(--error-color);
+  color: white;
+  opacity: 1;
+}
+
+.session-list-item-delete:focus {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}

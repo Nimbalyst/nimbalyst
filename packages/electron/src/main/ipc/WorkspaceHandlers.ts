@@ -965,4 +965,27 @@ export function registerWorkspaceHandlers() {
             return { success: false, error: error.message };
         }
     });
+
+    // Get agentic coding window state
+    ipcMain.handle('workspace:get-agentic-coding-state', async (event, workspacePath: string) => {
+        try {
+            const { getAgenticCodingWindowState } = await import('../utils/store');
+            return getAgenticCodingWindowState(workspacePath);
+        } catch (error: any) {
+            console.error('Error getting agentic coding window state:', error);
+            return null;
+        }
+    });
+
+    // Save agentic coding window state
+    ipcMain.handle('workspace:save-agentic-coding-state', async (event, workspacePath: string, state: any) => {
+        try {
+            const { saveAgenticCodingWindowState } = await import('../utils/store');
+            saveAgenticCodingWindowState(workspacePath, state);
+            return { success: true };
+        } catch (error: any) {
+            console.error('Error saving agentic coding window state:', error);
+            return { success: false, error: error.message };
+        }
+    });
 }

@@ -7,6 +7,8 @@ import { WorkspaceHeader } from './WorkspaceHeader';
 import { TabBar } from './TabManager/TabBar';
 import type { Tab } from './TabManager/TabManager';
 import { AgenticInput } from './AgenticCoding/AgenticInput';
+import { SessionHistory } from './AgenticCoding/SessionHistory';
+import { ResizablePanel } from './AgenticCoding/ResizablePanel';
 import { useFileMention } from '../hooks/useFileMention';
 import './TabManager/TabManager.css';
 
@@ -52,6 +54,11 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
   const initializedRef = useRef(false);
   const streamingTimeoutRef = useRef<NodeJS.Timeout>();
 
+  // Session history layout state
+  const [sessionHistoryWidth, setSessionHistoryWidth] = useState(240);
+  const [sessionHistoryCollapsed, setSessionHistoryCollapsed] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
+
   const MAX_CLOSED_SESSION_HISTORY = 10;
 
   // File mention support
@@ -74,6 +81,45 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
       window.electronAPI.setTitle(`Agentic Coding - ${workspaceName}`);
     }
   }, [workspacePath]);
+
+  // Load session history layout from workspace state
+  useEffect(() => {
+    const loadLayout = async () => {
+      try {
+        const result = await window.electronAPI.invoke('workspace:get-agentic-coding-state', workspacePath);
+        if (result?.sessionHistoryLayout) {
+          const layout = result.sessionHistoryLayout;
+          setSessionHistoryWidth(layout.width ?? 240);
+          setSessionHistoryCollapsed(layout.collapsed ?? false);
+          setCollapsedGroups(layout.collapsedGroups ?? []);
+        }
+      } catch (err) {
+        console.error('[AgenticCoding] Failed to load session history layout:', err);
+      }
+    };
+    loadLayout();
+  }, [workspacePath]);
+
+  // Save session history layout to workspace state when it changes
+  useEffect(() => {
+    const saveLayout = async () => {
+      try {
+        await window.electronAPI.invoke('workspace:save-agentic-coding-state', workspacePath, {
+          sessionHistoryLayout: {
+            width: sessionHistoryWidth,
+            collapsed: sessionHistoryCollapsed,
+            collapsedGroups
+          }
+        });
+      } catch (err) {
+        console.error('[AgenticCoding] Failed to save session history layout:', err);
+      }
+    };
+
+    // Debounce saves
+    const timer = setTimeout(saveLayout, 500);
+    return () => clearTimeout(timer);
+  }, [workspacePath, sessionHistoryWidth, sessionHistoryCollapsed, collapsedGroups]);
 
   // Test mode: listen for test streaming events
   useEffect(() => {
@@ -837,56 +883,7 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
     );
   }
 
-  if (sessionTabs.length === 0) {
-    console.log('[AgenticCodingWindow] Rendering EMPTY state - no tabs');
-    return (
-      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
-        <WorkspaceHeader
-          workspacePath={workspacePath}
-          subtitle="Code"
-          actions={
-            <>
-              <button
-                onClick={() => createNewSession()}
-                style={{
-                  padding: '0.375rem 0.75rem',
-                  borderRadius: '0.25rem',
-                  fontSize: '0.75rem',
-                  backgroundColor: 'var(--primary-color)',
-                  color: 'white',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: 500
-                }}
-                title="New Session"
-              >
-                New Session
-              </button>
-              <SessionDropdown
-                currentSessionId={null}
-                sessions={availableSessions}
-                onSessionSelect={openSessionInTab}
-                onNewSession={() => createNewSession()}
-                onDeleteSession={deleteSession}
-                onOpenSessionManager={handleOpenSessionManager}
-              />
-            </>
-          }
-        />
-        {/* Empty state */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ textAlign: 'center', maxWidth: '400px', padding: '2rem' }}>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
-              No coding sessions open
-            </div>
-            <div style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>
-              Create a new session to start working with AI on your codebase
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Remove the early return for empty tabs - we want to show session history even with no tabs
 
   // console.log('[AgenticCodingWindow] Rendering MAIN content');
   // console.log('[AgenticCodingWindow] About to render AgentTranscriptPanel');
@@ -928,72 +925,107 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
         }
       />
 
-      {/* Tabs */}
-      <TabBar
-        tabs={convertToTabs(sessionTabs)}
-        activeTabId={activeTabId}
-        onTabSelect={handleTabSelect}
-        onTabClose={handleTabClose}
-        onNewTab={handleNewTab}
-        onTogglePin={handleTogglePin}
-        onTabReorder={handleTabReorder}
-        onReopenLastClosed={reopenLastClosedSession}
-        hasClosedTabs={closedSessions.length > 0}
-        onTabRename={handleTabRename}
-        allowRename={true}
-      />
-
-      {/* Active Session Content */}
-      {activeTab && (
-        <>
-          {/* Referenced files gutter at top */}
-          <FileGutter
-            sessionId={activeTab.id}
+      {/* Main Content with Resizable Session History Panel */}
+      <ResizablePanel
+        leftWidth={sessionHistoryWidth}
+        minWidth={180}
+        maxWidth={400}
+        onWidthChange={setSessionHistoryWidth}
+        collapsed={sessionHistoryCollapsed}
+        leftPanel={
+          <SessionHistory
             workspacePath={workspacePath}
-            type="referenced"
-            onFileClick={handleFileClick}
+            activeSessionId={activeTabId}
+            onSessionSelect={openSessionInTab}
+            onSessionDelete={deleteSession}
+            collapsedGroups={collapsedGroups}
+            onCollapsedGroupsChange={setCollapsedGroups}
           />
+        }
+        rightPanel={
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            {/* Tabs */}
+            {sessionTabs.length > 0 && (
+              <TabBar
+                tabs={convertToTabs(sessionTabs)}
+                activeTabId={activeTabId}
+                onTabSelect={handleTabSelect}
+                onTabClose={handleTabClose}
+                onNewTab={handleNewTab}
+                onTogglePin={handleTogglePin}
+                onTabReorder={handleTabReorder}
+                onReopenLastClosed={reopenLastClosedSession}
+                hasClosedTabs={closedSessions.length > 0}
+                onTabRename={handleTabRename}
+                allowRename={true}
+              />
+            )}
 
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <AgentTranscriptPanel
-              sessionId={activeTab.sessionData.id}
-              sessionData={activeTab.sessionData}
-              streamingContent={
-                testStreamingContent ||
-                (streamingContent?.sessionId === activeTab.id
-                  ? streamingContent.content
-                  : undefined)
-              }
-              onFileClick={handleFileClick}
-              onTodoClick={handleTodoClick}
-              initialSettings={{
-                showToolCalls: true,
-                compactMode: false,
-                collapseTools: false,
-                showThinking: true,
-                showSessionInit: false
-              }}
-            />
+            {/* Active Session Content */}
+            {activeTab ? (
+              <>
+                {/* Referenced files gutter at top */}
+                <FileGutter
+                  sessionId={activeTab.id}
+                  workspacePath={workspacePath}
+                  type="referenced"
+                  onFileClick={handleFileClick}
+                />
+
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <AgentTranscriptPanel
+                    sessionId={activeTab.sessionData.id}
+                    sessionData={activeTab.sessionData}
+                    streamingContent={
+                      testStreamingContent ||
+                      (streamingContent?.sessionId === activeTab.id
+                        ? streamingContent.content
+                        : undefined)
+                    }
+                    onFileClick={handleFileClick}
+                    onTodoClick={handleTodoClick}
+                    initialSettings={{
+                      showToolCalls: true,
+                      compactMode: false,
+                      collapseTools: false,
+                      showThinking: true,
+                      showSessionInit: false
+                    }}
+                  />
+                </div>
+
+                {/* Chat Input */}
+                <AgenticInput
+                  value={activeTabInput}
+                  onChange={handleInputChange}
+                  onSend={handleSendMessage}
+                  onCancel={handleCancelRequest}
+                  isLoading={isSending}
+                  workspacePath={workspacePath}
+                  sessionId={activeTabId || undefined}
+                  fileMentionOptions={fileMentionOptions}
+                  onFileMentionSearch={handleFileMentionSearch}
+                  onFileMentionSelect={handleFileMentionSelect}
+                  attachments={activeTabAttachments}
+                  onAttachmentAdd={handleAttachmentAdd}
+                  onAttachmentRemove={handleAttachmentRemove}
+                />
+              </>
+            ) : (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ textAlign: 'center', maxWidth: '400px', padding: '2rem' }}>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                    No session selected
+                  </div>
+                  <div style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>
+                    Select a session from the history or create a new one
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-
-          {/* Chat Input */}
-          <AgenticInput
-            value={activeTabInput}
-            onChange={handleInputChange}
-            onSend={handleSendMessage}
-            onCancel={handleCancelRequest}
-            isLoading={isSending}
-            workspacePath={workspacePath}
-            sessionId={activeTabId || undefined}
-            fileMentionOptions={fileMentionOptions}
-            onFileMentionSearch={handleFileMentionSearch}
-            onFileMentionSelect={handleFileMentionSelect}
-            attachments={activeTabAttachments}
-            onAttachmentAdd={handleAttachmentAdd}
-            onAttachmentRemove={handleAttachmentRemove}
-          />
-        </>
-      )}
+        }
+      />
     </div>
   );
 };
