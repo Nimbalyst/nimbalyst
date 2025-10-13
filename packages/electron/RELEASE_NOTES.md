@@ -1,8 +1,6 @@
-# Release Notes - v0.42.32
+# Release Notes - v0.42.33
 
 ## Bug Fixes
 
-- **QuickOpen**: Fix worktrees directory being included in file search results, causing duplicate file entries for git worktrees
-  - Added exclusion patterns for both `worktrees/` and `.worktrees/` directories
-  - Updated all file filtering mechanisms (find, ripgrep, glob patterns)
-  - Ensures git worktrees are properly excluded from search results
+- **Code Signing**: Fix macOS code signing failure caused by absolute symlink path for Sharp native dependencies
+- **Security**: Resolve npm security vulnerabilities
