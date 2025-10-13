@@ -105,7 +105,9 @@
     "generateUpdatesFilesForAllChannels": true,
     "asar": true,
     "asarUnpack": [
-      "node_modules/**/*.node"
+      "node_modules/**/*.node",
+      "node_modules/sharp/**/*",
+      "node_modules/@img/**/*"
     ],
     "files": [
       "out/**/*",
@@ -135,6 +137,7 @@
       }
     ],
     "afterSign": "build/afterSign.js",
+    "afterPack": "build/afterPack.js",
     "fileAssociations": [
       {
         "ext": "md",

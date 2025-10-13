@@ -1,6 +1,6 @@
 # Release Notes
 
-## v0.42.31 - TBD
+## v0.42.31 - 2025-10-13
 
 ### Features
 - Image attachment support for AI chat - drag/drop or paste images directly into chat
@@ -20,6 +20,7 @@
 - Enhanced external change detection on tab switch and window focus
 
 ### Bug Fixes
+- Fixed Sharp native dependencies packaging for image processing in packaged builds
 - Fixed session state not being saved before window close on quit
 - Fixed AI editing targeting wrong tab
 - Fixed sessions connecting to wrong document
