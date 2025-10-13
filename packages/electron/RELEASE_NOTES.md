@@ -1,12 +1,10 @@
-# Release Notes - v0.42.34
+# Release Notes - v0.42.35
 
-## Improvements
+## Bug Fixes
 
-- **AI SDK**: Upgrade @anthropic-ai/sdk to v0.65.0 for latest features and improvements
-- **Build System**: Resolve electron-builder dependency resolution issues with AI SDK runtime dependencies
+- **Build System**: Fix Linux build failure by adding ajv dependency to rexical package
 
 ## Technical Changes
 
-- Install AI SDK runtime dependencies (node-fetch, formdata-node, form-data-encoder, etc.) as direct dependencies
-- Configure Vite to properly externalize AI SDKs while allowing electron-builder to package them
-- Remove non-existent Excalidraw CSS import that was causing build warnings
+- Add ajv@^8.0.0 as devDependency in rexical to ensure proper dependency resolution in CI
+- Resolves "Cannot find module 'ajv/dist/core'" error during Linux builds
