@@ -37,6 +37,11 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
     return stored === 'true';
   });
 
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const stored = localStorage.getItem(`agent-transcript-sidebar-width-${sessionId}`);
+    return stored ? parseInt(stored, 10) : 256; // 16rem = 256px
+  });
+
   const [activeTab, setActiveTab] = useState<SidebarTab>(() => {
     const stored = localStorage.getItem(`agent-transcript-tab-${sessionId}`);
     return (stored as SidebarTab) || 'prompts';
@@ -47,10 +52,20 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const transcriptRef = useRef<{ scrollToMessage: (index: number) => void }>(null);
 
+  // Resize logic
+  const [isDragging, setIsDragging] = useState(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(sidebarWidth);
+
   // Save sidebar state
   useEffect(() => {
     localStorage.setItem(`agent-transcript-sidebar-${sessionId}`, String(isSidebarCollapsed));
   }, [isSidebarCollapsed, sessionId]);
+
+  // Save sidebar width
+  useEffect(() => {
+    localStorage.setItem(`agent-transcript-sidebar-width-${sessionId}`, String(sidebarWidth));
+  }, [sidebarWidth, sessionId]);
 
   // Save active tab
   useEffect(() => {
@@ -154,6 +169,40 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
     transcriptRef.current?.scrollToMessage(marker.outputIndex);
   }, []);
 
+  // Handle resize drag
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    startXRef.current = e.clientX;
+    startWidthRef.current = sidebarWidth;
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaX = startXRef.current - e.clientX; // Note: reversed because sidebar is on right
+      const newWidth = Math.max(200, Math.min(600, startWidthRef.current + deltaX));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+
   return (
     <div style={{ display: 'flex', height: '100%', position: 'relative' }}>
       {/* Main Content */}
@@ -177,7 +226,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
         style={{
           position: 'absolute',
           top: '1rem',
-          right: isSidebarCollapsed ? '0' : '16rem',
+          right: isSidebarCollapsed ? '0' : `${sidebarWidth}px`,
           zIndex: 10,
           display: 'flex',
           alignItems: 'center',
@@ -210,14 +259,41 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
       </button>}
 
       {/* Sidebar with tabs - hidden if hideSidebar is true */}
-      {!hideSidebar && <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          width: isSidebarCollapsed ? '0' : '16rem',
-          transition: 'all 0.3s ease-in-out'
-        }}
-      >
+      {!hideSidebar && (
+        <>
+          {/* Draggable Divider */}
+          {!isSidebarCollapsed && (
+            <div
+              onMouseDown={handleMouseDown}
+              style={{
+                width: '4px',
+                cursor: 'ew-resize',
+                background: isDragging ? 'var(--border-focus)' : 'var(--border-primary)',
+                transition: isDragging ? 'none' : 'background-color 0.15s ease',
+                flexShrink: 0,
+                position: 'relative'
+              }}
+            >
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '8px',
+                height: '40px',
+                pointerEvents: 'none'
+              }} />
+            </div>
+          )}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              width: isSidebarCollapsed ? '0' : `${sidebarWidth}px`,
+              transition: isSidebarCollapsed ? 'all 0.3s ease-in-out' : 'none',
+              flexShrink: 0
+            }}
+          >
         {!isSidebarCollapsed && (
           <>
             {/* Tab Navigation */}
@@ -332,7 +408,9 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
             </div>
           </>
         )}
-      </div>}
+          </div>
+        </>
+      )}
     </div>
   );
 };
