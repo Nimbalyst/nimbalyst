@@ -63,12 +63,16 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.9",
+    "@excalidraw/excalidraw": "0.17.6",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "esbuild": "0.25.10",
+    "happy-dom": "20.0.0",
     "openai": "^4.56.0",
     "react-markdown": "^10.1.0",
-    "react-syntax-highlighter": "^15.6.6",
+    "react-syntax-highlighter": "^15.5.0",
     "remark-gfm": "^4.0.1",
     "rexical": "file:../rexical",
+    "vite": "7.1.9",
     "y-websocket": "^1.5.4",
     "yjs": ">=13.5.42"
   },
