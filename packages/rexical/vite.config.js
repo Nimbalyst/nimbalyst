@@ -92,7 +92,8 @@ export default defineConfig(({ mode }) => ({
                 'react',
                 'react-dom',
                 'lexical',
-                /^@lexical\//
+                /^@lexical\//,
+                'mermaid'  // Dynamic import - should not be bundled
             ],
             output: {
                 globals: {
