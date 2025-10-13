@@ -64,37 +64,53 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
       return;
     }
 
-    console.log('Searching for files with query:', query, 'in workspace:', workspacePath);
     setIsSearching(true);
 
     try {
       // Use electron API to search files (check both window.electronAPI and window.electron)
       const api = (window as any).electronAPI || (window as any).electron;
       if (!api) {
-        console.error('Electron API not available at all');
+        console.error('Electron API not available');
         setSearchResults([]);
+        setIsSearching(false);
+        return;
+      }
+
+      if (!workspacePath) {
+        console.error('No workspace path available');
+        setSearchResults([]);
+        setIsSearching(false);
         return;
       }
 
       // Get file name matches
-      if (api.searchWorkspaceFileNames) {
-        const fileNameResults = await api.searchWorkspaceFileNames(workspacePath, query);
+      if (!api.searchWorkspaceFileNames) {
+        console.error('searchWorkspaceFileNames method not available');
+        setSearchResults([]);
+        setIsSearching(false);
+        return;
+      }
 
-        // Process and display file name results
-        if (Array.isArray(fileNameResults)) {
-          const processedFileNames = fileNameResults
-            .map((result: any) => ({
-              path: result.path,
-              name: result.path.split('/').pop() || result.path,
-              isRecent: recentFiles.includes(result.path),
-              matches: result.matches || [],
-              isFileNameMatch: result.isFileNameMatch || false,
-              isContentMatch: false,
-            }));
+      const fileNameResults = await api.searchWorkspaceFileNames(workspacePath, query);
 
-          setSearchResults(processedFileNames);
-          setIsSearching(false);
-        }
+      // Process and display file name results
+      if (Array.isArray(fileNameResults)) {
+        const processedFileNames = fileNameResults
+          .map((result: any) => ({
+            path: result.path,
+            name: result.path.split('/').pop() || result.path,
+            isRecent: recentFiles.includes(result.path),
+            matches: result.matches || [],
+            isFileNameMatch: result.isFileNameMatch || false,
+            isContentMatch: false,
+          }));
+
+        setSearchResults(processedFileNames);
+        setIsSearching(false);
+      } else {
+        console.warn('Results is not an array:', fileNameResults);
+        setSearchResults([]);
+        setIsSearching(false);
       }
     } catch (error) {
       console.error('Error searching files:', error);

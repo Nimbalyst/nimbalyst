@@ -20,6 +20,7 @@ export const EXCLUDED_DIRS = new Set([
   'node_modules',
   '.git',
   '.worktrees',     // Git worktrees - CRITICAL: prevents duplicate file references
+  'worktrees',      // Git worktrees (without dot) - CRITICAL: prevents duplicate file references
   'dist',
   'build',
   'out',
@@ -64,6 +65,7 @@ export const GLOB_EXCLUDE_PATTERNS = [
   '**/node_modules/**',
   '**/.git/**',
   '**/.worktrees/**',
+  '**/worktrees/**',
   '**/dist/**',
   '**/build/**',
   '**/out/**',
@@ -80,9 +82,9 @@ export const GLOB_EXCLUDE_PATTERNS = [
 /**
  * Ripgrep glob arguments for excluding directories (as plain string to avoid bundler issues)
  */
-export const RIPGREP_EXCLUDE_ARGS = '--glob !**/node_modules/** --glob !**/.git/** --glob !**/.worktrees/** --glob !**/dist/** --glob !**/build/** --glob !**/out/** --glob !**/.next/** --glob !**/.nuxt/** --glob !**/.cache/** --glob !**/coverage/** --glob !**/.vscode/** --glob !**/.idea/** --glob !**/__pycache__/** --glob !**/.DS_Store/**';
+export const RIPGREP_EXCLUDE_ARGS = '--glob !**/node_modules/** --glob !**/.git/** --glob !**/.worktrees/** --glob !**/worktrees/** --glob !**/dist/** --glob !**/build/** --glob !**/out/** --glob !**/.next/** --glob !**/.nuxt/** --glob !**/.cache/** --glob !**/coverage/** --glob !**/.vscode/** --glob !**/.idea/** --glob !**/__pycache__/** --glob !**/.DS_Store/**';
 
 /**
  * Find command prune arguments for excluding directories
  */
-export const FIND_PRUNE_ARGS = '-path "*/node_modules/*" -prune -o -path "*/.git/*" -prune -o -path "*/.worktrees/*" -prune -o -path "*/dist/*" -prune -o -path "*/build/*" -prune -o -path "*/out/*" -prune -o -path "*/.next/*" -prune -o -path "*/.nuxt/*" -prune -o -path "*/.cache/*" -prune -o -path "*/coverage/*" -prune -o -path "*/.vscode/*" -prune -o -path "*/.idea/*" -prune -o -path "*/__pycache__/*" -prune -o -path "*/.DS_Store/*" -prune';
+export const FIND_PRUNE_ARGS = '\\( -path "*/node_modules/*" -o -path "*/.git/*" -o -path "*/.worktrees/*" -o -path "*/worktrees/*" -o -path "*/dist/*" -o -path "*/build/*" -o -path "*/out/*" -o -path "*/.next/*" -o -path "*/.nuxt/*" -o -path "*/.cache/*" -o -path "*/coverage/*" -o -path "*/.vscode/*" -o -path "*/.idea/*" -o -path "*/__pycache__/*" -o -path "*/.DS_Store/*" \\) -prune -o';
