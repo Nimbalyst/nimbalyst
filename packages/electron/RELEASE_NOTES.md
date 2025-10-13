@@ -1,5 +1,31 @@
 # Release Notes
 
+## v0.42.31 - TBD
+
+### Features
+- Image attachment support for AI chat - drag/drop or paste images directly into chat
+- Slash command typeahead in agentic coding interface for quick command access
+- File mention support with typeahead in chat input (@filename)
+- AI session file tracking UI with real-time updates
+- Rich markdown formatting in agent transcript output
+- Custom update window with markdown support and unified theming
+- Session type filtering and improved tab management
+- Markdown paste support - automatically transforms pasted markdown into rich text
+
+### Improvements
+- Auto-resize chat input with file mention formatting and cancel functionality
+- Centralized directory/file exclusion logic with git worktree support
+- Better tool filtering based on session type (chat vs coding)
+- Dark mode theming improvements for typeahead menu
+- Enhanced external change detection on tab switch and window focus
+
+### Bug Fixes
+- Fixed session state not being saved before window close on quit
+- Fixed AI editing targeting wrong tab
+- Fixed sessions connecting to wrong document
+- Fixed coding sessions created with incorrect session type
+- Fixed agentic coding window session creation
+
 ## v0.42.30 - 2025-10-09
 
 ### Bug Fixes
