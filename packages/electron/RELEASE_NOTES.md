@@ -1,16 +1,10 @@
-# Release Notes - v0.42.37
+# Release Notes
 
 ## Features
-- Add view toggle to workspace sidebar for improved navigation
-- Add workspace plans panel in left sidebar for better project organization
-- Add resizable sidebar to agent transcript panel
-- Add session history panel to agentic coding window
+- Add mermaid diagram rendering support
 
-## Fixes
-- Disable caption features in ImageComponent
-- Load content for virtual documents during tab restoration
-- Use variable for node_modules directory to avoid Vite resolution issues
-- Add process.env polyfill for better environment handling
+## Improvements
+- Move sidebar view controls to navigation gutter
 
-## UI Improvements
-- General UI tweaks for better user experience
+## Documentation
+- Database schema and planning system documentation
