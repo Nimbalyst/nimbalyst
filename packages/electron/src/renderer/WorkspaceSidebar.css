@@ -123,47 +123,6 @@
 
 /* Search functionality moved to QuickOpen component (Cmd+K) */
 
-/* View toggle styles */
-.workspace-view-toggle {
-  display: flex;
-  padding: 8px 12px;
-  gap: 4px;
-  border-bottom: 1px solid var(--border-primary);
-  background-color: var(--surface-primary);
-}
-
-.view-toggle-button {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--border-primary);
-  background-color: var(--surface-primary);
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.view-toggle-button:hover {
-  background-color: var(--surface-tertiary);
-  color: var(--text-primary);
-}
-
-.view-toggle-button.active {
-  background-color: var(--accent-primary);
-  color: var(--surface-primary);
-  border-color: var(--accent-primary);
-}
-
-.view-toggle-button .material-symbols-outlined {
-  font-size: 18px;
-}
-
 .workspace-file-tree {
   flex: 1;
   overflow-y: auto;

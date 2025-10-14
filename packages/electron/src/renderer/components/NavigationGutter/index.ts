@@ -1,1 +1,1 @@
-export { NavigationGutter, type NavigationMode } from './NavigationGutter';
+export { NavigationGutter, type NavigationMode, type SidebarView } from './NavigationGutter';

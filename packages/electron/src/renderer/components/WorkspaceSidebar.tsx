@@ -16,11 +16,14 @@ interface WorkspaceSidebarProps {
   workspacePath: string;
   fileTree: FileTreeItem[];
   currentFilePath: string | null;
+  currentView: 'files' | 'plans';
   onFileSelect: (filePath: string) => void;
   onCloseWorkspace: () => void;
   onOpenQuickSearch?: () => void;
   onRefreshFileTree?: () => void;
   onViewHistory?: (filePath: string) => void;
+  onNewPlan?: () => void;
+  onOpenPlansTable?: () => void;
 }
 
 // Generate a consistent color based on workspace path
@@ -42,18 +45,20 @@ export function WorkspaceSidebar({
   workspacePath,
   fileTree,
   currentFilePath,
+  currentView,
   onFileSelect,
   onCloseWorkspace,
   onOpenQuickSearch,
   onRefreshFileTree,
-  onViewHistory
+  onViewHistory,
+  onNewPlan,
+  onOpenPlansTable
 }: WorkspaceSidebarProps) {
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [isDragOverRoot, setIsDragOverRoot] = useState(false);
   const [draggedItem, setDraggedItem] = useState<any | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'files' | 'plans'>('files');
 
   const handleNewFile = () => {
     // Priority: selected folder > parent of current file > workspace root
@@ -277,30 +282,35 @@ export function WorkspaceSidebar({
               )}
             </>
           )}
+          {currentView === 'plans' && (
+            <>
+              {onNewPlan && (
+                <button
+                  className="workspace-action-button"
+                  onClick={onNewPlan}
+                  title="New plan"
+                  aria-label="New plan"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                    note_add
+                  </span>
+                </button>
+              )}
+              {onOpenPlansTable && (
+                <button
+                  className="workspace-action-button"
+                  onClick={onOpenPlansTable}
+                  title="Open planning table"
+                  aria-label="Open planning table"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                    table_view
+                  </span>
+                </button>
+              )}
+            </>
+          )}
         </div>
-      </div>
-
-      <div className="workspace-view-toggle">
-        <button
-          className={`view-toggle-button ${currentView === 'files' ? 'active' : ''}`}
-          onClick={() => setCurrentView('files')}
-          title="Files view"
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-            folder
-          </span>
-          <span>Files</span>
-        </button>
-        <button
-          className={`view-toggle-button ${currentView === 'plans' ? 'active' : ''}`}
-          onClick={() => setCurrentView('plans')}
-          title="Plans view"
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
-            description
-          </span>
-          <span>Plans</span>
-        </button>
       </div>
 
       {currentView === 'files' ? (

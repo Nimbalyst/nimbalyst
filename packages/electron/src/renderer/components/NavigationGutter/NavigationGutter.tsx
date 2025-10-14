@@ -3,11 +3,13 @@ import { MaterialSymbol } from '../MaterialSymbol';
 import './NavigationGutter.css';
 
 export type NavigationMode = 'planning' | 'coding';
+export type SidebarView = 'files' | 'plans';
 
 interface NavigationGutterProps {
   currentMode: NavigationMode;
   onModeChange: (mode: NavigationMode) => void;
-  onOpenPlans?: () => void;
+  sidebarView: SidebarView;
+  onSidebarViewChange: (view: SidebarView) => void;
   onOpenBugs?: () => void;
   onOpenHistory?: () => void;
   onOpenSettings?: () => void;
@@ -18,6 +20,7 @@ interface NavButton {
   icon: string;
   label: string;
   mode?: NavigationMode;
+  sidebarView?: SidebarView;
   onClick?: () => void;
   badge?: number;
 }
@@ -25,32 +28,33 @@ interface NavButton {
 export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   currentMode,
   onModeChange,
-  onOpenPlans,
+  sidebarView,
+  onSidebarViewChange,
   onOpenBugs,
   onOpenHistory,
   onOpenSettings,
 }) => {
-  const navButtons: NavButton[] = [
+  const sidebarViewButtons: NavButton[] = [
     {
-      id: 'planning',
-      icon: 'edit_note',
-      label: 'Planning Mode',
-      mode: 'planning',
+      id: 'files',
+      icon: 'account_tree',
+      label: 'Files',
+      sidebarView: 'files',
     },
     {
-      id: 'coding',
-      icon: 'code',
-      label: 'Coding Mode',
-      mode: 'coding',
+      id: 'plans',
+      icon: 'edit_note',
+      label: 'Plans',
+      sidebarView: 'plans',
     },
   ];
 
   const quickAccessButtons: NavButton[] = [
     {
-      id: 'plans',
-      icon: 'description',
-      label: 'Plans',
-      onClick: onOpenPlans,
+      id: 'coding',
+      icon: 'code',
+      label: 'Coding Mode',
+      onClick: () => onModeChange('coding'),
     },
     {
       id: 'bugs',
@@ -76,6 +80,8 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   const handleButtonClick = (button: NavButton) => {
     if (button.mode) {
       onModeChange(button.mode);
+    } else if (button.sidebarView) {
+      onSidebarViewChange(button.sidebarView);
     } else if (button.onClick) {
       button.onClick();
     }
@@ -83,21 +89,21 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 
   return (
     <div className="navigation-gutter">
-      {/* Mode Switcher */}
-      <div className="nav-section nav-modes">
-        {navButtons.map((button) => (
+      {/* Sidebar View Switcher */}
+      <div className="nav-section nav-sidebar-views">
+        {sidebarViewButtons.map((button) => (
           <button
             key={button.id}
-            className={`nav-button ${currentMode === button.mode ? 'active' : ''}`}
+            className={`nav-button ${sidebarView === button.sidebarView ? 'active' : ''}`}
             onClick={() => handleButtonClick(button)}
             title={button.label}
             aria-label={button.label}
-            aria-pressed={currentMode === button.mode}
+            aria-pressed={sidebarView === button.sidebarView}
           >
             <MaterialSymbol
               icon={button.icon}
               size={20}
-              fill={currentMode === button.mode}
+              fill={sidebarView === button.sidebarView}
             />
             {button.badge !== undefined && button.badge > 0 && (
               <span className="nav-badge">{button.badge}</span>

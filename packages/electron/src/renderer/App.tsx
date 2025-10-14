@@ -26,7 +26,7 @@ import { NewFileDialog } from './components/NewFileDialog';
 import { AgenticCodingWindow } from './components/AgenticCodingWindow';
 import { TabManager } from './components/TabManager/TabManager';
 import { EditorContainer } from './components/EditorContainer';
-import { NavigationGutter, type NavigationMode } from './components/NavigationGutter';
+import { NavigationGutter, type NavigationMode, type SidebarView } from './components/NavigationGutter';
 import { getEditorPool } from './services/EditorPool';
 import { useTabs } from './hooks/useTabs';
 import { useTabNavigation } from './hooks/useTabNavigation';
@@ -198,6 +198,7 @@ export default function App() {
 
   // Navigation gutter state
   const [navigationMode, setNavigationMode] = useState<NavigationMode>('planning');
+  const [sidebarView, setSidebarView] = useState<SidebarView>('files');
 
 
   // Sync theme with main process preference on mount
@@ -1255,7 +1256,8 @@ export default function App() {
         <NavigationGutter
           currentMode={navigationMode}
           onModeChange={handleNavigationModeChange}
-          onOpenPlans={openPlansTab}
+          sidebarView={sidebarView}
+          onSidebarViewChange={setSidebarView}
           onOpenBugs={openBugsTab}
           onOpenHistory={() => {
             // Open session manager
@@ -1279,6 +1281,7 @@ export default function App() {
               workspacePath={workspacePath || ''}
               fileTree={fileTree}
               currentFilePath={currentFilePath}
+              currentView={sidebarView}
               onFileSelect={handleWorkspaceFileSelect}
               onCloseWorkspace={handleCloseWorkspace}
               onOpenQuickSearch={() => setIsQuickOpenVisible(true)}
@@ -1291,6 +1294,12 @@ export default function App() {
               onViewHistory={(filePath) => {
                 setIsHistoryDialogOpen(true);
               }}
+              onNewPlan={() => {
+                // Create a new plan file in the plans directory
+                setIsNewFileDialogOpen(true);
+                setCurrentDirectory(workspacePath ? `${workspacePath}/plans` : null);
+              }}
+              onOpenPlansTable={openPlansTab}
             />
           </div>
           <div
