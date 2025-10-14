@@ -505,9 +505,9 @@ export default function ImageComponent({
           <div className="image-caption-container">
             <LexicalNestedComposer initialEditor={caption}>
               <AutoFocusPlugin />
-              <LinkPlugin />
-              <EmojisPlugin />
-              <HashtagPlugin />
+              {/*<LinkPlugin />*/}
+              {/*<EmojisPlugin />*/}
+              {/*<HashtagPlugin />*/}
               {/* Collaboration disabled */}
               {/* {isCollabActive ? (
                 <CollaborationPlugin
@@ -541,7 +541,8 @@ export default function ImageComponent({
             maxWidth={maxWidth}
             onResizeStart={onResizeStart}
             onResizeEnd={onResizeEnd}
-            captionsEnabled={!isLoadError && captionsEnabled}
+            captionsEnabled={false}
+            // captionsEnabled={!isLoadError && captionsEnabled}
           />
         )}
       </>
