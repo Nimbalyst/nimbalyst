@@ -13,6 +13,7 @@
   height: 36px;
   background: transparent;
   user-select: none;
+  background:  var(--surface-secondary);
 }
 
 /* Scrollable Tab Area */
@@ -47,7 +48,7 @@
   padding: 0 8px;
   gap: 4px;
   flex-shrink: 0;
-  border-left: 1px solid var(--tab-bar-border, #e5e7eb);
+  /*border-left: 1px solid var(--tab-bar-border, #e5e7eb);*/
 }
 
 /* Individual Tab */
