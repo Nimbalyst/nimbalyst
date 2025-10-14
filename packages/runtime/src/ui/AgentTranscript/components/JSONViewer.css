@@ -1,0 +1,76 @@
+.json-viewer {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background-color: var(--surface-secondary);
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  overflow-x: auto;
+  margin: 0;
+  white-space: pre;
+}
+
+/* Syntax highlighting colors - VSCode-style colors for consistency
+   Note: These are intentionally theme-specific for optimal readability.
+   Light theme uses darker colors, dark themes use brighter colors. */
+
+/* Light theme (default) */
+.json-key {
+  color: #0451A5;
+  font-weight: 500;
+}
+
+.json-string {
+  color: #A31515;
+}
+
+.json-number {
+  color: #098658;
+}
+
+.json-boolean {
+  color: #0000FF;
+  font-weight: 600;
+}
+
+.json-null {
+  color: #0000FF;
+  font-weight: 600;
+  font-style: italic;
+}
+
+.json-bracket {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.json-punctuation {
+  color: var(--text-tertiary);
+}
+
+/* Dark and Crystal Dark themes - brighter colors for visibility */
+.dark-theme .json-key,
+.crystal-dark-theme .json-key {
+  color: #9CDCFE;
+}
+
+.dark-theme .json-string,
+.crystal-dark-theme .json-string {
+  color: #CE9178;
+}
+
+.dark-theme .json-number,
+.crystal-dark-theme .json-number {
+  color: #B5CEA8;
+}
+
+.dark-theme .json-boolean,
+.crystal-dark-theme .json-boolean {
+  color: #569CD6;
+}
+
+.dark-theme .json-null,
+.crystal-dark-theme .json-null {
+  color: #569CD6;
+}

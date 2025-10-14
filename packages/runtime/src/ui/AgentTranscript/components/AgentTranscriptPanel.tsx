@@ -217,6 +217,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
           streamingContent={streamingContent}
           onSettingsChange={onSettingsChange}
           showSettings={showSettings}
+          documentContext={sessionData.documentContext}
         />
       </div>
 

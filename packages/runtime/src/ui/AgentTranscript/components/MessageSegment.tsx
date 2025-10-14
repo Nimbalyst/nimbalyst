@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import type { Message } from '../../../ai/server/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { JSONViewer } from './JSONViewer';
+import { DiffViewer } from './DiffViewer';
 
 interface MessageSegmentProps {
   message: Message;
@@ -10,6 +12,7 @@ interface MessageSegmentProps {
   showThinking: boolean;
   expandedTools: Set<string>;
   onToggleToolExpand: (toolId: string) => void;
+  documentContext?: { filePath?: string }; // For passing file path to edits
 }
 
 export const MessageSegment: React.FC<MessageSegmentProps> = ({
@@ -18,20 +21,10 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
   isCollapsed = false,
   showToolCalls,
   expandedTools,
-  onToggleToolExpand
+  onToggleToolExpand,
+  documentContext
 }) => {
   const [isDiffExpanded, setDiffExpanded] = useState(false);
-
-  // Debug logging for tool calls
-  if (message.toolCall) {
-    console.log('[MessageSegment] Rendering message with toolCall:', {
-      role: message.role,
-      toolName: message.toolCall.name,
-      hasArguments: !!message.toolCall.arguments,
-      hasResult: !!message.toolCall.result,
-      showToolCalls
-    });
-  }
 
   // Render thinking indicator
   const renderThinking = () => {
@@ -194,17 +187,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
             {typeof tool.arguments === 'object' && tool.arguments !== null && Object.keys(tool.arguments).length > 0 && (
               <div style={{ marginBottom: '0.5rem' }}>
                 <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>Parameters:</div>
-                <pre style={{
-                  fontSize: '0.75rem',
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'monospace',
-                  overflowX: 'auto',
-                  backgroundColor: 'var(--surface-secondary)',
-                  padding: '0.5rem',
-                  borderRadius: '0.25rem'
-                }}>
-                  {JSON.stringify(tool.arguments, null, 2)}
-                </pre>
+                <JSONViewer data={tool.arguments} maxHeight="16rem" />
               </div>
             )}
 
@@ -228,19 +211,23 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
             <div style={{ marginTop: '0.5rem' }}>
               <div style={{ color: 'var(--text-tertiary)', marginBottom: '0.25rem' }}>Result:</div>
               {hasResult ? (
-                <pre style={{
-                  fontSize: '0.75rem',
-                  color: 'var(--text-primary)',
-                  fontFamily: 'monospace',
-                  overflowX: 'auto',
-                  backgroundColor: 'var(--surface-secondary)',
-                  padding: '0.5rem',
-                  borderRadius: '0.25rem',
-                  maxHeight: '16rem',
-                  overflowY: 'auto'
-                }}>
-                  {typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2)}
-                </pre>
+                typeof toolResult === 'string' ? (
+                  <pre style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--text-primary)',
+                    fontFamily: 'monospace',
+                    overflowX: 'auto',
+                    backgroundColor: 'var(--surface-secondary)',
+                    padding: '0.5rem',
+                    borderRadius: '0.25rem',
+                    maxHeight: '16rem',
+                    overflowY: 'auto'
+                  }}>
+                    {toolResult}
+                  </pre>
+                ) : (
+                  <JSONViewer data={toolResult} maxHeight="16rem" />
+                )
               ) : (
                 <div style={{
                   fontSize: '0.75rem',
@@ -326,34 +313,18 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
         {isDiffExpanded && (
           <div style={{
             marginTop: '0.5rem',
-            backgroundColor: 'var(--surface-tertiary)',
-            borderRadius: '0.5rem',
-            padding: '0.75rem',
-            overflow: 'hidden'
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.5rem'
           }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {message.edits.map((edit: any, idx: number) => (
-                <div key={idx} style={{ fontSize: '0.75rem' }}>
-                  <div style={{
-                    color: 'var(--text-secondary)',
-                    fontFamily: 'monospace',
-                    marginBottom: '0.25rem'
-                  }}>
-                    {edit.filePath || edit.file_path || 'Unknown file'}
-                  </div>
-                  <pre style={{
-                    color: 'var(--text-primary)',
-                    fontFamily: 'monospace',
-                    overflowX: 'auto',
-                    backgroundColor: 'var(--surface-secondary)',
-                    padding: '0.5rem',
-                    borderRadius: '0.25rem'
-                  }}>
-                    {edit.content || JSON.stringify(edit, null, 2)}
-                  </pre>
-                </div>
-              ))}
-            </div>
+            {message.edits.map((edit: any, idx: number) => (
+              <DiffViewer
+                key={idx}
+                edit={edit}
+                filePath={documentContext?.filePath}
+                maxHeight="20rem"
+              />
+            ))}
           </div>
         )}
       </div>

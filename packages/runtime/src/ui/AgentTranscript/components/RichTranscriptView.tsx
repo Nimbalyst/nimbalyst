@@ -4,6 +4,7 @@ import type { TranscriptSettings } from '../types';
 import { MessageSegment } from './MessageSegment';
 import { ProviderIcon } from '../../icons/ProviderIcons';
 import { parseTimestamp } from '../../../utils/dateUtils';
+import { JSONViewer } from './JSONViewer';
 import './RichTranscriptView.css';
 
 interface RichTranscriptViewProps {
@@ -15,6 +16,7 @@ interface RichTranscriptViewProps {
   settings?: TranscriptSettings;
   onSettingsChange?: (settings: TranscriptSettings) => void;
   showSettings?: boolean;
+  documentContext?: { filePath?: string };
 }
 
 const defaultSettings: TranscriptSettings = {
@@ -28,7 +30,7 @@ const defaultSettings: TranscriptSettings = {
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, messages, provider, streamingContent, settings: propsSettings, onSettingsChange, showSettings }, ref) => {
+>(({ sessionId, sessionStatus, messages, provider, streamingContent, settings: propsSettings, onSettingsChange, showSettings, documentContext }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -273,18 +275,18 @@ export const RichTranscriptView = React.forwardRef<
                             {tool.arguments && Object.keys(tool.arguments).length > 0 && (
                               <div className="rich-transcript-tool-section">
                                 <div className="rich-transcript-tool-section-label">Arguments:</div>
-                                <pre>
-                                  {JSON.stringify(tool.arguments, null, 2)}
-                                </pre>
+                                <JSONViewer data={tool.arguments} maxHeight="16rem" />
                               </div>
                             )}
 
                             {tool.result && (
                               <div className="rich-transcript-tool-section result">
                                 <div className="rich-transcript-tool-section-label">Result:</div>
-                                <pre>
-                                  {typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2)}
-                                </pre>
+                                {typeof tool.result === 'string' ? (
+                                  <pre>{tool.result}</pre>
+                                ) : (
+                                  <JSONViewer data={tool.result} maxHeight="16rem" />
+                                )}
                               </div>
                             )}
                           </div>
@@ -407,18 +409,18 @@ export const RichTranscriptView = React.forwardRef<
                                     {tool.arguments && Object.keys(tool.arguments).length > 0 && (
                                       <div className="rich-transcript-tool-section">
                                         <div className="rich-transcript-tool-section-label">Arguments:</div>
-                                        <pre>
-                                          {JSON.stringify(tool.arguments, null, 2)}
-                                        </pre>
+                                        <JSONViewer data={tool.arguments} maxHeight="16rem" />
                                       </div>
                                     )}
 
                                     {tool.result && (
                                       <div className="rich-transcript-tool-section result">
                                         <div className="rich-transcript-tool-section-label">Result:</div>
-                                        <pre>
-                                          {typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2)}
-                                        </pre>
+                                        {typeof tool.result === 'string' ? (
+                                          <pre>{tool.result}</pre>
+                                        ) : (
+                                          <JSONViewer data={tool.result} maxHeight="16rem" />
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -440,6 +442,7 @@ export const RichTranscriptView = React.forwardRef<
                         showThinking={settings.showThinking}
                         expandedTools={expandedTools}
                         onToggleToolExpand={toggleToolExpand}
+                        documentContext={documentContext}
                       />
                     </div>
                   </div>
