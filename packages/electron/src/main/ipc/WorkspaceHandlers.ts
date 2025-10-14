@@ -248,18 +248,21 @@ export function registerWorkspaceHandlers() {
             const rgBinaryName = platform === 'win32' ? 'rg.exe' : 'rg';
             const isPackaged = app.isPackaged;
 
+            // Use a variable to avoid Vite trying to resolve 'node_modules' as an identifier
+            const NODE_MODULES_DIR = ['node', '_', 'modules'].join('');
+
             // Check all possible paths, both dev and production
             const possibleRgPaths = [];
 
             if (isPackaged) {
                 const resourcesPath = process.resourcesPath;
                 possibleRgPaths.push(
-                    path.join(resourcesPath, 'app.asar.unpacked', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+                    path.join(resourcesPath, 'app.asar.unpacked', NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
                 );
             } else {
                 possibleRgPaths.push(
-                    path.join(__dirname, '..', '..', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
-                    path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+                    path.join(__dirname, '..', '..', NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+                    path.join(process.cwd(), NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
                 );
             }
 
@@ -377,6 +380,9 @@ export function registerWorkspaceHandlers() {
                 // In production, files are in app.asar.unpacked
                 const isPackaged = app.isPackaged;
 
+                // Use a variable to avoid Vite trying to resolve 'node_modules' as an identifier
+                const NODE_MODULES_DIR = ['node', '_', 'modules'].join('');
+
                 // Check all possible paths, both dev and production
                 const possibleRgPaths = [];
 
@@ -385,13 +391,13 @@ export function registerWorkspaceHandlers() {
                     const resourcesPath = process.resourcesPath;
                     possibleRgPaths.push(
                         // Standard unpacked location
-                        path.join(resourcesPath, 'app.asar.unpacked', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+                        path.join(resourcesPath, 'app.asar.unpacked', NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
                     );
                 } else {
                     // Development paths
                     possibleRgPaths.push(
-                        path.join(__dirname, '..', '..', 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
-                        path.join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+                        path.join(__dirname, '..', '..', NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+                        path.join(process.cwd(), NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
                     );
                 }
 
