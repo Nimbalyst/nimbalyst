@@ -139,8 +139,7 @@ export default defineConfig({
           'web-streams-polyfill',
           // Renderer-only packages
           '@excalidraw/excalidraw',
-          '@excalidraw/excalidraw/index.css',
-          'mermaid'
+          '@excalidraw/excalidraw/index.css'
         ]
       }
     }
@@ -219,7 +218,6 @@ export default defineConfig({
       alias: {
         // Block mermaid imports to prevent large bundle
         '@excalidraw/mermaid-to-excalidraw': resolve(__dirname, '../rexical/src/mocks/mermaid-mock.ts'),
-        'mermaid': resolve(__dirname, '../rexical/src/mocks/mermaid-mock.ts'),
         // Ensure renderer also points runtime imports at source
         '@stravu-editor/runtime': '@stravu/runtime',
         '@stravu/runtime': runtimeSrcDir,

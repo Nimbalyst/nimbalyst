@@ -393,7 +393,7 @@ After the frontmatter, plans should include:
    ```
    # Plan Title
    <!-- plan-status -->
-   ```
+```
 2. **Goals** section outlining objectives
 3. **System Overview** or problem description
 4. **Implementation details** as needed

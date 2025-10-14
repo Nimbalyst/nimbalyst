@@ -17,27 +17,33 @@ interface MermaidComponentProps {
 }
 
 // Dynamic import to avoid bundling mermaid when not needed
-let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
+let mermaidInstance: any = null;
 let currentTheme: string | null = null;
 
-function loadMermaid(isDarkTheme: boolean) {
+async function loadMermaid(isDarkTheme: boolean) {
   const theme = isDarkTheme ? 'dark' : 'default';
 
-  // Re-initialize if theme changed
-  if (!mermaidPromise || currentTheme !== theme) {
-    mermaidPromise = import('mermaid').then((module) => {
-      const mermaid = module.default;
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: theme,
-        securityLevel: 'antiscript',
-        fontFamily: 'monospace',
-      });
-      currentTheme = theme;
-      return mermaid;
+  // Re-initialize if theme changed or not yet loaded
+  if (!mermaidInstance || currentTheme !== theme) {
+    const module = await import('mermaid');
+    // In mermaid v11+, use the named export or default
+    mermaidInstance = module.default || module.mermaid || module;
+
+    // Check if we got a valid mermaid instance
+    if (typeof mermaidInstance.initialize !== 'function') {
+      console.error('Invalid mermaid instance:', mermaidInstance);
+      throw new Error('Failed to load mermaid module');
+    }
+
+    mermaidInstance.initialize({
+      startOnLoad: false,
+      theme: theme,
+      securityLevel: 'antiscript',
+      fontFamily: 'monospace',
     });
+    currentTheme = theme;
   }
-  return mermaidPromise;
+  return mermaidInstance;
 }
 
 function MermaidDiagram({ content, id }: { content: string; id: string }) {
