@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FileTree } from './FileTree';
 import { InputModal } from './InputModal';
+import { PlansPanel } from './PlansPanel/PlansPanel';
 import '../WorkspaceSidebar.css';
 
 interface FileTreeItem {
@@ -52,6 +53,7 @@ export function WorkspaceSidebar({
   const [isDragOverRoot, setIsDragOverRoot] = useState(false);
   const [draggedItem, setDraggedItem] = useState<any | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState<'files' | 'plans'>('files');
 
   const handleNewFile = () => {
     // Priority: selected folder > parent of current file > workspace root
@@ -239,61 +241,94 @@ export function WorkspaceSidebar({
           </div>
         </div>
         <div className="workspace-sidebar-actions">
-          <button
-            className="workspace-action-button"
-            onClick={handleNewFile}
-            title="New file"
-            aria-label="New file"
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-              edit_square
-            </span>
-          </button>
-          <button
-            className="workspace-action-button"
-            onClick={handleNewFolder}
-            title="New folder"
-            aria-label="New folder"
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-              create_new_folder
-            </span>
-          </button>
-          {onOpenQuickSearch && (
-            <button
-              className="workspace-action-button"
-              onClick={onOpenQuickSearch}
-              title="Search files (⌘K)"
-              aria-label="Search files"
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                search
-              </span>
-            </button>
+          {currentView === 'files' && (
+            <>
+              <button
+                className="workspace-action-button"
+                onClick={handleNewFile}
+                title="New file"
+                aria-label="New file"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                  edit_square
+                </span>
+              </button>
+              <button
+                className="workspace-action-button"
+                onClick={handleNewFolder}
+                title="New folder"
+                aria-label="New folder"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                  create_new_folder
+                </span>
+              </button>
+              {onOpenQuickSearch && (
+                <button
+                  className="workspace-action-button"
+                  onClick={onOpenQuickSearch}
+                  title="Search files (⌘K)"
+                  aria-label="Search files"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                    search
+                  </span>
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      <div className={`workspace-file-tree ${isDragOverRoot ? 'drag-over-root' : ''}`}>
-
-        <FileTree
-          items={fileTree}
-          currentFilePath={currentFilePath}
-          onFileSelect={handleFileSelect}
-          level={0}
-          onNewFile={handleNewFileInFolder}
-          onNewFolder={handleNewFolderInFolder}
-          onRefreshFileTree={onRefreshFileTree}
-          onViewHistory={onViewHistory}
-          selectedFolder={selectedFolder}
-          onFolderSelect={setSelectedFolder}
-        />
-          {isDragOverRoot && (
-              <div className="root-drop-indicator">
-                  Drop here to move to workspace root
-              </div>
-          )}
+      <div className="workspace-view-toggle">
+        <button
+          className={`view-toggle-button ${currentView === 'files' ? 'active' : ''}`}
+          onClick={() => setCurrentView('files')}
+          title="Files view"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+            folder
+          </span>
+          <span>Files</span>
+        </button>
+        <button
+          className={`view-toggle-button ${currentView === 'plans' ? 'active' : ''}`}
+          onClick={() => setCurrentView('plans')}
+          title="Plans view"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+            description
+          </span>
+          <span>Plans</span>
+        </button>
       </div>
+
+      {currentView === 'files' ? (
+        <div className={`workspace-file-tree ${isDragOverRoot ? 'drag-over-root' : ''}`}>
+          <FileTree
+            items={fileTree}
+            currentFilePath={currentFilePath}
+            onFileSelect={handleFileSelect}
+            level={0}
+            onNewFile={handleNewFileInFolder}
+            onNewFolder={handleNewFolderInFolder}
+            onRefreshFileTree={onRefreshFileTree}
+            onViewHistory={onViewHistory}
+            selectedFolder={selectedFolder}
+            onFolderSelect={setSelectedFolder}
+          />
+          {isDragOverRoot && (
+            <div className="root-drop-indicator">
+              Drop here to move to workspace root
+            </div>
+          )}
+        </div>
+      ) : (
+        <PlansPanel
+          currentFilePath={currentFilePath}
+          onPlanSelect={onFileSelect}
+        />
+      )}
 
       <InputModal
         isOpen={isFileModalOpen}
