@@ -1,0 +1,86 @@
+.plan-list-item {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-primary);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.plan-list-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.plan-list-item.active {
+  background-color: var(--surface-secondary);
+  border-left: 3px solid var(--accent-primary);
+  padding-left: 9px;
+}
+
+.plan-list-item-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.plan-priority-indicator {
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: -1px;
+  flex-shrink: 0;
+  min-width: 16px;
+}
+
+.plan-type-icon {
+  font-size: 16px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.plan-list-item-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.plan-progress-bar {
+  height: 3px;
+  background-color: var(--surface-secondary);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.plan-progress-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.plan-list-item-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.plan-updated-time {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.plan-status-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid;
+  text-transform: capitalize;
+  font-weight: 500;
+  white-space: nowrap;
+}
