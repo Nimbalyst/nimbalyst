@@ -171,6 +171,23 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
   // Create editor instances for all tabs
   useEffect(() => {
     const loadContent = async (filePath: string) => {
+      // Check if this is a virtual document
+      if (filePath.startsWith('virtual://')) {
+        if (!window.electronAPI?.documentService) {
+          logger.ui.error('[EditorContainer] No documentService available for virtual document');
+          return '';
+        }
+
+        try {
+          const content = await (window.electronAPI.documentService as any).loadVirtual(filePath);
+          return content || '';
+        } catch (error) {
+          logger.ui.error(`[EditorContainer] Failed to load virtual document: ${filePath}`, error);
+          return '';
+        }
+      }
+
+      // Load physical file
       if (!window.electronAPI?.readFileContent) {
         logger.ui.error('[EditorContainer] No electronAPI.readFileContent available');
         return '';
