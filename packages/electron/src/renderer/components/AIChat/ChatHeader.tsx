@@ -238,8 +238,7 @@ export function ChatHeader({
       </div>
 
       <div className="ai-chat-header-bottom">
-
-
+        {/* Model tags */}
           {modelInfo && (
               <div className="ai-chat-model-tags">
               <span className={`ai-chat-provider-tag ${getProviderClass(modelInfo.providerId)}`}>

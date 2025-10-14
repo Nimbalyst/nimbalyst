@@ -88,6 +88,7 @@ interface UseIPCHandlersProps {
   setIsHistoryDialogOpen: (open: boolean) => void;
   setIsAgentPaletteVisible: (visible: boolean) => void;
   setTheme: (theme: any) => void;
+  setAIPlanningMode?: (enabled: boolean) => void;
 
   // Refs
   // NOTE: initialContentRef removed - EditorPool tracks initialContent per-file
@@ -153,6 +154,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setSessionToLoad,
     setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
+    setAIPlanningMode,
     setTheme,
 
     // Refs
@@ -203,6 +205,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setSessionToLoad,
     setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
+    setAIPlanningMode,
     tabs,  // Add tabs so IPC handlers can create/modify tabs
   });
 
@@ -241,6 +244,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setSessionToLoad,
     setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
+    setAIPlanningMode,
     setTheme,
     tabs,  // Keep tabs updated in ref
   };
@@ -321,6 +325,9 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         if (aiChatState) {
           handlersRef.current.setIsAIChatCollapsed(aiChatState.collapsed);
           handlersRef.current.setAIChatWidth(aiChatState.width);
+          if (handlersRef.current.setAIPlanningMode) {
+            handlersRef.current.setAIPlanningMode(aiChatState.planningModeEnabled ?? true);
+          }
           if (aiChatState.currentSessionId) {
             handlersRef.current.setSessionToLoad({ sessionId: aiChatState.currentSessionId, workspacePath: data.workspacePath });
           }

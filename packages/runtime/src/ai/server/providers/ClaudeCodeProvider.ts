@@ -133,6 +133,45 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // Do NOT pass API key - Claude Agent SDK manages authentication internally
       };
 
+      // Apply tool restrictions based on session type
+      // Planning mode: restrict to read-only tools + ExitPlanMode; allow MCP server for edits
+      const DEFAULT_PLANNING_TOOLS = [
+        'Read', 'Glob', 'Grep', 'LS',
+        'WebFetch', 'WebSearch',
+        'TodoRead', 'Task',
+        'ExitPlanMode'
+      ];
+      const SDK_NATIVE_TOOLS = [
+        'Read', 'Write', 'Edit', 'MultiEdit',
+        'Glob', 'Grep', 'LS',
+        'Bash',
+        'WebFetch', 'WebSearch',
+        'Task', 'ExitPlanMode',
+        'NotebookRead', 'NotebookEdit',
+        'TodoRead', 'TodoWrite'
+      ];
+
+      let allowedList: string[] | undefined;
+      if (this.currentSessionType === 'planning') {
+        // In planning mode, enforce read-only toolset regardless of configured settings
+        allowedList = DEFAULT_PLANNING_TOOLS;
+      } else if (this.currentSessionType === 'coding') {
+        allowedList = ['*'];
+      } else if ((this.config as any)?.allowedTools) {
+        allowedList = (this.config as any).allowedTools as string[];
+      }
+
+      if (allowedList) {
+        (options as any).allowedTools = allowedList;
+        // Workaround for SDK bug: also pass all disallowed tools explicitly
+        if (!(allowedList.length === 1 && allowedList[0] === '*')) {
+          const disallowed = SDK_NATIVE_TOOLS.filter(t => !allowedList!.includes(t));
+          (options as any).disallowedTools = disallowed;
+          // Some builds expect 'blockedTools' instead
+          (options as any).blockedTools = disallowed;
+        }
+      }
+
       console.log('[CLAUDE-CODE] Options built without API key (Claude Code manages auth internally)');
 
       // In production, we need to spawn claude-code differently

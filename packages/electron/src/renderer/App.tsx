@@ -184,6 +184,8 @@ export default function App() {
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
+  // Planning mode for AI sidebar (Claude Code safety). Default ON
+  const [aiPlanningModeEnabled, setAIPlanningModeEnabled] = useState<boolean>(true);
   const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
   const [sessionToLoad, setSessionToLoad] = useState<{ sessionId: string; workspacePath?: string } | null>(null);
   const [currentAISessionId, setCurrentAISessionId] = useState<string | null>(null);
@@ -937,11 +939,12 @@ export default function App() {
         collapsed: isAIChatCollapsed,
         width: aiChatWidth,
         currentSessionId: currentAISessionId || undefined,
-      };
+        planningModeEnabled: aiPlanningModeEnabled,
+      } as any;
       if (LOG_CONFIG.AI_CHAT_STATE) console.log('[AI_CHAT] Saving AI Chat state:', state);
       window.electronAPI.setAIChatState(state);
     }
-  }, [isAIChatCollapsed, aiChatWidth, currentAISessionId, isAIChatStateLoaded, workspacePath, workspaceMode]);
+  }, [isAIChatCollapsed, aiChatWidth, currentAISessionId, aiPlanningModeEnabled, isAIChatStateLoaded, workspacePath, workspaceMode]);
 
   // Load recent workspace files when in workspace mode
   useEffect(() => {
@@ -1130,6 +1133,7 @@ export default function App() {
     setSessionToLoad,
     setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
+    setAIPlanningMode: setAIPlanningModeEnabled,
     setTheme,
 
     // Refs
@@ -1422,6 +1426,8 @@ export default function App() {
           onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}
           width={aiChatWidth}
           onWidthChange={setAIChatWidth}
+          planningModeEnabled={aiPlanningModeEnabled}
+          onTogglePlanningMode={setAIPlanningModeEnabled}
           workspacePath={workspacePath || undefined}
           sessionToLoad={sessionToLoad}
           onSessionLoaded={() => setSessionToLoad(null)}

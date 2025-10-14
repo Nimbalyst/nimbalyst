@@ -227,40 +227,42 @@ export const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
   return (
     <div className="ai-chat-input" style={{ position: 'relative' }}>
-      <textarea
-        ref={textareaRef}
-        className="ai-chat-input-field"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        disabled={disabled}
-        rows={1}
-      />
-      {isLoading && onCancel ? (
-        <button
-          className="ai-chat-cancel-button"
-          onClick={onCancel}
-          title="Cancel request (Esc)"
-          aria-label="Cancel request"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-      ) : (
-        <button
-          className="ai-chat-send-button"
-          onClick={handleSend}
-          disabled={disabled || !value.trim()}
-          title="Send message (Enter)"
-          aria-label="Send message"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 8L14 2L11 14L8 9L2 8Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-      )}
+      <div className="ai-chat-input-row">
+        <textarea
+          ref={textareaRef}
+          className="ai-chat-input-field"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          disabled={disabled}
+          rows={1}
+        />
+        {isLoading && onCancel ? (
+          <button
+            className="ai-chat-cancel-button"
+            onClick={onCancel}
+            title="Cancel request (Esc)"
+            aria-label="Cancel request"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        ) : (
+          <button
+            className="ai-chat-send-button"
+            onClick={handleSend}
+            disabled={disabled || !value.trim()}
+            title="Send message (Enter)"
+            aria-label="Send message"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2 8L14 2L11 14L8 9L2 8Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        )}
+      </div>
 
       {/* File mention typeahead */}
       {typeaheadMatch && fileMentionOptions.length > 0 && (

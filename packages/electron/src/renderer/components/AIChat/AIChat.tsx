@@ -19,6 +19,8 @@ interface AIChatProps {
   onToggleCollapse: () => void;
   width: number;
   onWidthChange: (width: number) => void;
+  planningModeEnabled?: boolean;
+  onTogglePlanningMode?: (enabled: boolean) => void;
   documentContext?: DocumentContext & { getLatestContent?: () => string };
   onApplyEdit?: (edit: any, prompt?: string, aiResponse?: string) => void;
   workspacePath?: string;
@@ -32,6 +34,8 @@ export function AIChat({
   onToggleCollapse,
   width,
   onWidthChange,
+  planningModeEnabled = true,
+  onTogglePlanningMode,
   documentContext,
   onApplyEdit,
   workspacePath,
@@ -1053,6 +1057,16 @@ export function AIChat({
       setCurrentModel(expectedModelId);
     }
 
+    // Determine dynamic sessionType for this send (supports toggling on resume)
+    const dynamicSessionType: 'chat' | 'planning' | 'coding' =
+      actualProvider === 'claude-code' ? (planningModeEnabled ? 'planning' : 'chat') : 'chat';
+
+    // Build context with dynamic sessionType
+    const contextForSend = freshDocumentContext ? {
+      ...freshDocumentContext,
+      sessionType: dynamicSessionType
+    } : { sessionType: dynamicSessionType } as any;
+
     // Add user message
     setMessages(prev => [...prev, { role: 'user', content: message }]);
     setInputValue('');
@@ -1062,8 +1076,8 @@ export function AIChat({
     lastStreamPartialRef.current = { assistant: '', system: '' };
 
     try {
-      // Send message to Claude with fresh document context and session ID
-      await aiApi.sendMessage(message, freshDocumentContext, currentSessionId!, workspacePath);
+      // Send message with dynamic sessionType and session ID
+      await aiApi.sendMessage(message, contextForSend, currentSessionId!, workspacePath);
       // Reload sessions to update message counts
       await loadSessions();
     } catch (error: any) {
@@ -1236,7 +1250,16 @@ export function AIChat({
         selection: documentContext.selection
       } : undefined;
 
-      const session = await aiApi.createSession(cleanDocumentContext, workspacePath, provider as any, model);
+      const sessionType: 'chat' | 'planning' | 'coding' | undefined =
+        provider === 'claude-code' ? (planningModeEnabled ? 'planning' : 'chat') : 'chat';
+
+      const session = await aiApi.createSession(
+        cleanDocumentContext,
+        workspacePath,
+        provider as any,
+        model,
+        sessionType
+      );
       setCurrentSessionId(session.id);
       setMessages([]);
       setInputValue(''); // Clear input for new session
@@ -1675,6 +1698,28 @@ export function AIChat({
             onFileMentionSearch={handleFileMentionSearch}
             onFileMentionSelect={handleFileMentionSelect}
           />
+
+          {/* Planning Mode pill toggle (Claude Code only) */}
+          {(() => {
+            const effModelId = getEffectiveModelId();
+            const isClaude = effModelId === 'claude-code' || (effModelId ? parseModelId(effModelId).provider === 'claude-code' : false);
+            if (!isClaude) return null;
+            return (
+              <div style={{ padding: '0 12px 12px' }}>
+                <div className="ai-chat-toggle-row">
+                  <span className="ai-chat-toggle-label">Planning Mode:</span>
+                  <button
+                    className={`ai-chat-pill-toggle ${planningModeEnabled ? 'on' : 'off'}`}
+                    onClick={() => onTogglePlanningMode && onTogglePlanningMode(!planningModeEnabled)}
+                    title="Toggle planning mode (read-only tools + MCP)"
+                    aria-pressed={planningModeEnabled}
+                  >
+                    <span className="pill-knob" />
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </>
       )}
     </div>

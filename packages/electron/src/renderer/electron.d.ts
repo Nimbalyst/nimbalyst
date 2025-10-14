@@ -77,8 +77,8 @@ interface ElectronAPI {
   // Settings operations
   getSidebarWidth: (workspacePath: string) => Promise<number>;
   setSidebarWidth: (workspacePath: string, width: number) => void;
-  getAIChatState: (workspacePath: string) => Promise<{ collapsed: boolean; width: number; currentSessionId?: string; draftInput?: string } | null>;
-  setAIChatState: (state: { workspacePath: string; collapsed: boolean; width: number; currentSessionId?: string; draftInput?: string }) => void;
+  getAIChatState: (workspacePath: string) => Promise<{ collapsed: boolean; width: number; currentSessionId?: string; draftInput?: string; planningModeEnabled?: boolean } | null>;
+  setAIChatState: (state: { workspacePath: string; collapsed: boolean; width: number; currentSessionId?: string; draftInput?: string; planningModeEnabled?: boolean }) => void;
 
   // QuickOpen operations
   buildQuickOpenCache?: (workspacePath: string) => Promise<{ success: boolean; fileCount?: number; error?: string }>;

@@ -258,6 +258,14 @@ export class AIService {
         initConfig.baseUrl = lmstudioSettings.baseUrl || apiKeys['lmstudio_url'] || 'http://127.0.0.1:8234';
       }
 
+      // Pass through allowedTools setting for Claude Code if configured
+      if (provider === 'claude-code') {
+        const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
+        if (providerSettings?.['claude-code']?.allowedTools) {
+          initConfig.allowedTools = providerSettings['claude-code'].allowedTools;
+        }
+      }
+
       await providerInstance.initialize(initConfig);
 
       // Register tool handler - targetFilePath will be determined dynamically per tool call
@@ -569,7 +577,7 @@ export class AIService {
         // Add sessionType to documentContext for provider to use in system prompt
         const contextWithSession = documentContext ? {
           ...documentContext,
-          sessionType: session.sessionType
+          sessionType: (documentContext as any)?.sessionType ?? session.sessionType
         } as any : { sessionType: session.sessionType } as any;
 
         for await (const chunk of provider.sendMessage(message, contextWithSession, session.id, sessionMessages, workspacePath, attachments)) {

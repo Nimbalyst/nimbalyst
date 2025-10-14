@@ -38,6 +38,8 @@ export interface WorkspaceAIPanelState {
   width: number;
   currentSessionId?: string;
   draftInput?: string;
+  // Planning mode toggle for AI sidebar (Claude Code safety)
+  planningModeEnabled?: boolean;
 }
 
 export interface NavigationHistoryState {
@@ -110,6 +112,7 @@ const DEFAULT_TAB_MANAGER_STATE: TabManagerState = {
 const DEFAULT_AI_PANEL_STATE: WorkspaceAIPanelState = {
   collapsed: false,
   width: 350,
+  planningModeEnabled: true,
 };
 
 function workspaceKey(path: string): string {
@@ -203,6 +206,8 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       width: aiPanelRaw.width ?? aiPanelRaw.aiChatWidth ?? DEFAULT_AI_PANEL_STATE.width,
       currentSessionId: aiPanelRaw.currentSessionId ?? aiPanelRaw.sessionId ?? undefined,
       draftInput: aiPanelRaw.draftInput ?? undefined,
+      // Default planning mode ON if missing
+      planningModeEnabled: aiPanelRaw.planningModeEnabled ?? true,
     },
     navigationHistory,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),

@@ -42,7 +42,7 @@ export function registerSettingsHandlers() {
     });
 
     // Set AI Chat state
-    ipcMain.on('set-ai-chat-state', (_event, payload: { collapsed: boolean; width: number; currentSessionId?: string; draftInput?: string; workspacePath: string }) => {
+    ipcMain.on('set-ai-chat-state', (_event, payload: { collapsed: boolean; width: number; currentSessionId?: string; draftInput?: string; planningModeEnabled?: boolean; workspacePath: string }) => {
         if (!payload?.workspacePath) {
             logger.store.warn('[ipc] set-ai-chat-state called without workspacePath');
             return;
@@ -53,6 +53,7 @@ export function registerSettingsHandlers() {
                 width: payload.width,
                 currentSessionId: payload.currentSessionId,
                 draftInput: payload.draftInput,
+                planningModeEnabled: payload.planningModeEnabled ?? state.aiPanel?.planningModeEnabled ?? true,
             };
         });
     });
