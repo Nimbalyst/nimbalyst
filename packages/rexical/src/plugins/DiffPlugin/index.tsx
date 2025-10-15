@@ -37,6 +37,7 @@ import {
   LexicalNode,
 } from 'lexical';
 import React, { useEffect, useCallback } from 'react';
+import { useLexicalEditable } from '@lexical/react/useLexicalEditable';
 import { DiffToolbar } from './DiffToolbar';
 
 import { createCommand } from 'lexical';
@@ -63,6 +64,7 @@ export const APPLY_MARKDOWN_REPLACE_COMMAND = createCommand<ApplyMarkdownReplace
  */
 export function DiffPlugin(): JSX.Element | null {
   const [editor] = useLexicalComposerContext();
+  const isEditable = useLexicalEditable();
 
   useEffect(() => {
     // Apply diff styling based on node state
@@ -294,7 +296,7 @@ export function DiffPlugin(): JSX.Element | null {
 
   return (
     <>
-      <DiffToolbar />
+      {isEditable && <DiffToolbar />}
     </>
   );
 }

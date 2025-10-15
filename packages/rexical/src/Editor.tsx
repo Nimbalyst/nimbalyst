@@ -113,6 +113,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     selectionAlwaysOnDisplay,
     listStrictIndent,
     markdownOnly,
+    editable = true,
   } = config;
 
 
@@ -209,7 +210,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
 
   return (
     <>
-      {isRichText && (
+      {isRichText && editable && (
         <ToolbarPlugin
           editor={editor}
           activeEditor={activeEditor}
@@ -221,13 +222,13 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
           markdownTransformers={markdownTransformers}
         />
       )}
-      {isRichText && (
+      {isRichText && editable && (
         <ShortcutsPlugin
           editor={activeEditor}
           setIsLinkEditMode={setIsLinkEditMode}
         />
       )}
-      {isRichText && <SearchReplacePlugin />}
+      {isRichText && editable && <SearchReplacePlugin />}
       <div
         className={`editor-container ${(runtimeSettings.settings.showTreeView || config.showTreeView) ? 'tree-view' : ''} ${
           !isRichText ? 'plain-text' : ''

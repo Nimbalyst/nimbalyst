@@ -43,6 +43,9 @@ export interface EditorConfig {
   // TODO: Do we need this? Think we either accept content or blank
   emptyEditor?: boolean;
 
+  /** Make editor read-only */
+  editable?: boolean;
+
   /** Open links in a new tab with rel="noopener noreferrer" */
   hasLinkAttributes?: boolean;
 
@@ -91,6 +94,7 @@ export interface EditorConfig {
 export const DEFAULT_EDITOR_CONFIG: EditorConfig = {
   isRichText: true,
   emptyEditor: false,
+  editable: true,
   hasLinkAttributes: false,
   isCodeHighlighted: true,
   selectionAlwaysOnDisplay: false,

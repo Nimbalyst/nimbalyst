@@ -69,6 +69,7 @@ function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
             throw error;
         },
         theme: PlaygroundEditorTheme,
+        editable: config.editable !== undefined ? config.editable : true,
     };
 
     const isDarkTheme = theme === 'dark' || theme === 'crystal-dark';

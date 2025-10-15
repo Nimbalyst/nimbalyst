@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useHistory } from '../../hooks/useHistory';
+import { DiffPreviewEditor } from './DiffPreviewEditor';
+import { TextDiffViewer } from './TextDiffViewer';
 import './HistoryDialog.css';
 
 interface HistoryDialogProps {
@@ -9,11 +11,20 @@ interface HistoryDialogProps {
   onRestore?: (content: string) => void;
 }
 
+type VersionSelection = {
+  timestamp: string;
+  label: 'A' | 'B';
+};
+
 export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryDialogProps) {
   const { snapshots, loading, refreshSnapshots, loadSnapshot, deleteSnapshot } = useHistory(filePath);
-  const [selectedSnapshot, setSelectedSnapshot] = useState<string | null>(null);
+  const [selectedVersions, setSelectedVersions] = useState<VersionSelection[]>([]);
   const [previewContent, setPreviewContent] = useState<string>('');
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [diffMode, setDiffMode] = useState(false);
+  const [diffViewMode, setDiffViewMode] = useState<'rich' | 'text'>('rich');
+  const [versionAContent, setVersionAContent] = useState<string>('');
+  const [versionBContent, setVersionBContent] = useState<string>('');
 
   useEffect(() => {
     if (isOpen && filePath) {
@@ -24,24 +35,140 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
   useEffect(() => {
     // Reset selection when dialog opens/closes
     if (!isOpen) {
-      setSelectedSnapshot(null);
+      setSelectedVersions([]);
       setPreviewContent('');
+      setDiffMode(false);
+      setDiffViewMode('rich');
+      setVersionAContent('');
+      setVersionBContent('');
     }
   }, [isOpen]);
 
-  const handleSnapshotSelect = async (timestamp: string) => {
-    setSelectedSnapshot(timestamp);
-    setLoadingPreview(true);
-    try {
-      const content = await loadSnapshot(timestamp);
-      if (content) {
-        setPreviewContent(content);
+  useEffect(() => {
+    // Handle Escape key to close dialog
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
       }
-    } catch (error) {
-      console.error('Failed to load snapshot:', error);
-      setPreviewContent('Failed to load snapshot');
-    } finally {
-      setLoadingPreview(false);
+    };
+
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
+  const handleSnapshotSelect = async (timestamp: string, isCommandClick: boolean) => {
+    // Check if this version is already selected
+    const existingIndex = selectedVersions.findIndex(v => v.timestamp === timestamp);
+
+    if (existingIndex >= 0) {
+      // Deselect this version
+      const newSelections = selectedVersions.filter(v => v.timestamp !== timestamp);
+      setSelectedVersions(newSelections);
+      setDiffMode(false);
+
+      // If we still have one selection, show its preview
+      if (newSelections.length === 1) {
+        setLoadingPreview(true);
+        try {
+          const content = await loadSnapshot(newSelections[0].timestamp);
+          if (content) {
+            setPreviewContent(content);
+          }
+        } catch (error) {
+          console.error('Failed to load snapshot:', error);
+          setPreviewContent('Failed to load snapshot');
+        } finally {
+          setLoadingPreview(false);
+        }
+      } else {
+        setPreviewContent('');
+      }
+      return;
+    }
+
+    // If not a command-click and we have selections, replace with this one
+    if (!isCommandClick && selectedVersions.length > 0) {
+      setSelectedVersions([{ timestamp, label: 'A' }]);
+      setDiffMode(false);
+
+      // Load preview for the new single selection
+      setLoadingPreview(true);
+      try {
+        const content = await loadSnapshot(timestamp);
+        if (content) {
+          setPreviewContent(content);
+        }
+      } catch (error) {
+        console.error('Failed to load snapshot:', error);
+        setPreviewContent('Failed to load snapshot');
+      } finally {
+        setLoadingPreview(false);
+      }
+      return;
+    }
+
+    // Add new selection (command-click or first selection)
+    if (selectedVersions.length < 2) {
+      const label: 'A' | 'B' = selectedVersions.length === 0 ? 'A' : 'B';
+      const newSelections = [...selectedVersions, { timestamp, label }];
+      setSelectedVersions(newSelections);
+
+      if (newSelections.length === 1) {
+        // Single selection - show normal preview
+        setLoadingPreview(true);
+        try {
+          const content = await loadSnapshot(timestamp);
+          if (content) {
+            setPreviewContent(content);
+          }
+        } catch (error) {
+          console.error('Failed to load snapshot:', error);
+          setPreviewContent('Failed to load snapshot');
+        } finally {
+          setLoadingPreview(false);
+        }
+      } else if (newSelections.length === 2) {
+        // Two selections - load both and enter diff mode
+        setLoadingPreview(true);
+        try {
+          const [versionA, versionB] = newSelections;
+
+          // Determine which is older (A should be older)
+          const indexA = snapshots.findIndex(s => s.timestamp === versionA.timestamp);
+          const indexB = snapshots.findIndex(s => s.timestamp === versionB.timestamp);
+
+          let olderVersion = versionA;
+          let newerVersion = versionB;
+
+          // In the snapshots list, newer versions come first (index 0 is newest)
+          // So higher index means older
+          if (indexA < indexB) {
+            olderVersion = versionB;
+            newerVersion = versionA;
+          }
+
+          const [contentA, contentB] = await Promise.all([
+            loadSnapshot(olderVersion.timestamp),
+            loadSnapshot(newerVersion.timestamp),
+          ]);
+
+          if (contentA && contentB) {
+            setVersionAContent(contentA);
+            setVersionBContent(contentB);
+            setDiffMode(true);
+            // Keep loading overlay visible longer to allow DiffPreviewEditor to render
+            setTimeout(() => setLoadingPreview(false), 1200);
+          }
+        } catch (error) {
+          console.error('Failed to load snapshots for diff:', error);
+          setLoadingPreview(false);
+        }
+      }
     }
   };
 
@@ -65,9 +192,12 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
   const handleDelete = async (timestamp: string) => {
     if (window.confirm('Are you sure you want to delete this snapshot?')) {
       await deleteSnapshot(timestamp);
-      if (selectedSnapshot === timestamp) {
-        setSelectedSnapshot(null);
+      // Remove from selections if selected
+      const newSelections = selectedVersions.filter(v => v.timestamp !== timestamp);
+      if (newSelections.length !== selectedVersions.length) {
+        setSelectedVersions(newSelections);
         setPreviewContent('');
+        setDiffMode(false);
       }
     }
   };
@@ -146,11 +276,14 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
               </div>
             ) : (
               <div className="history-items">
-                {snapshots.map((snapshot, index) => (
+                {snapshots.map((snapshot, index) => {
+                  const isSelected = selectedVersions.some(v => v.timestamp === snapshot.timestamp);
+
+                  return (
                   <div
                     key={`${snapshot.timestamp}-${snapshot.type}-${index}`}
-                    className={`history-item ${selectedSnapshot === snapshot.timestamp ? 'selected' : ''}`}
-                    onClick={() => handleSnapshotSelect(snapshot.timestamp)}
+                    className={`history-item ${isSelected ? 'selected' : ''}`}
+                    onClick={(e) => handleSnapshotSelect(snapshot.timestamp, e.metaKey || e.ctrlKey)}
                   >
                     <div className="history-item-content">
                       <div className="history-item-main">
@@ -175,16 +308,35 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
           
           <div className="history-preview">
             <div className="history-preview-header">
-              <h3>Preview</h3>
-              {selectedSnapshot && (
-                <button 
+              <div className="history-preview-header-left">
+                <h3>{diffMode ? 'Diff Preview' : 'Preview'}</h3>
+                {diffMode && (
+                  <div className="diff-mode-toggle">
+                    <button
+                      className={`diff-mode-button ${diffViewMode === 'rich' ? 'active' : ''}`}
+                      onClick={() => setDiffViewMode('rich')}
+                    >
+                      Rich
+                    </button>
+                    <button
+                      className={`diff-mode-button ${diffViewMode === 'text' ? 'active' : ''}`}
+                      onClick={() => setDiffViewMode('text')}
+                    >
+                      Text
+                    </button>
+                  </div>
+                )}
+              </div>
+              {selectedVersions.length === 1 && (
+                <button
                   className="history-restore-button"
                   onClick={handleRestore}
                   disabled={!previewContent}
@@ -193,16 +345,40 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
                 </button>
               )}
             </div>
-            
-            {loadingPreview ? (
-              <div className="history-preview-loading">Loading preview...</div>
-            ) : selectedSnapshot ? (
+
+            {diffMode ? (
+              <div className="history-preview-content">
+                {diffViewMode === 'rich' ? (
+                  <DiffPreviewEditor
+                    oldMarkdown={versionAContent}
+                    newMarkdown={versionBContent}
+                  />
+                ) : (
+                  <TextDiffViewer
+                    oldText={versionAContent}
+                    newText={versionBContent}
+                  />
+                )}
+              </div>
+            ) : selectedVersions.length === 1 ? (
               <div className="history-preview-content">
                 <pre>{previewContent}</pre>
               </div>
             ) : (
               <div className="history-preview-empty">
-                Select a snapshot to preview
+                {selectedVersions.length === 0
+                  ? 'Select a snapshot to preview, or Cmd+Click a second snapshot to compare'
+                  : 'Cmd+Click another snapshot to see diff comparison'
+                }
+              </div>
+            )}
+
+            {loadingPreview && (diffViewMode === 'rich' || !diffMode) && (
+              <div className="history-preview-loading">
+                <div className="history-preview-loading-spinner" />
+                <div className="history-preview-loading-text">
+                  {selectedVersions.length === 2 ? 'Loading diff...' : 'Loading preview...'}
+                </div>
               </div>
             )}
           </div>
