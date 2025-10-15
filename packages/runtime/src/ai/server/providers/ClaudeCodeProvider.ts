@@ -382,11 +382,18 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   const toolCall = toolCallsById.get(toolResultId);
                   if (toolCall) {
                     toolCall.result = toolResult;
-                    if (isError) {
-                      toolCall.error = true;
+
+                    // Check if this is an error - either explicit is_error flag or error in content
+                    const hasErrorFlag = isError === true;
+                    const hasErrorContent = typeof toolResult === 'string' &&
+                      (toolResult.includes('<tool_use_error>') || toolResult.startsWith('Error:'));
+
+                    if (hasErrorFlag || hasErrorContent) {
+                      toolCall.isError = true;
+                      console.log(`[CLAUDE-CODE] Marked tool call ${toolResultId} as error`);
                     }
 
-                    console.log(`[CLAUDE-CODE] Updated tool call ${toolResultId} with result`);
+                    console.log(`[CLAUDE-CODE] Updated tool call ${toolResultId} with result (isError: ${toolCall.isError || false})`);
 
                     // Re-emit the tool call with the result
                     yield {
@@ -617,11 +624,18 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   const toolCall = toolCallsById.get(toolResultId);
                   if (toolCall) {
                     toolCall.result = toolResult;
-                    if (isError) {
-                      toolCall.error = true;
+
+                    // Check if this is an error - either explicit is_error flag or error in content
+                    const hasErrorFlag = isError === true;
+                    const hasErrorContent = typeof toolResult === 'string' &&
+                      (toolResult.includes('<tool_use_error>') || toolResult.startsWith('Error:'));
+
+                    if (hasErrorFlag || hasErrorContent) {
+                      toolCall.isError = true;
+                      console.log(`[CLAUDE-CODE] Marked tool call ${toolResultId} as error (from user message)`);
                     }
 
-                    console.log(`[CLAUDE-CODE] Updated tool call ${toolResultId} with result from user message`);
+                    console.log(`[CLAUDE-CODE] Updated tool call ${toolResultId} with result from user message (isError: ${toolCall.isError || false})`);
 
                     // Re-emit the tool call with the result
                     yield {
