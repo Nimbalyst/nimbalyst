@@ -227,6 +227,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       let chunkCount = 0;
       let firstChunkTime: number | undefined;
       let toolCallCount = 0;
+      // Track tool calls by ID so we can update them with results
+      const toolCallsById: Map<string, any> = new Map();
 
       console.log('[CLAUDE-CODE] Starting to iterate over query response...');
 
@@ -292,7 +294,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 } else if (block.type === 'tool_use') {
                   // Handle tool calls from Claude
                   toolCallCount++;
-                  console.log(`[CLAUDE-CODE] Tool use #${toolCallCount} detected: ${block.name}`);
+                  const toolId = block.id || `tool-${toolCallCount}`;
+                  console.log(`[CLAUDE-CODE] Tool use #${toolCallCount} detected: ${block.name} (id: ${toolId})`);
                   console.log(`[CLAUDE-CODE] Tool arguments:`, JSON.stringify(block.input || block.arguments, null, 2).substring(0, 500));
 
                   const toolName = block.name;
@@ -312,8 +315,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   } else if (isMcpApplyDiff) {
                     console.log(`[CLAUDE-CODE] MCP applyDiff detected: ${toolName} - handled by MCP server`);
                   } else if (isSdkNativeTool) {
-                    console.log(`[CLAUDE-CODE] SDK-native tool detected: ${toolName} - executed by Claude Code SDK`);
-                    // SDK executes these tools itself, we just observe them
+                    console.log(`[CLAUDE-CODE] SDK-native tool detected: ${toolName} - executed by Claude Code SDK, result will come in tool_result block`);
+                    // SDK executes these tools itself, result will come in a tool_result block
                   } else if (this.toolHandler) {
                     console.log(`[CLAUDE-CODE] Executing tool: ${toolName}`);
                     const toolStartTime = Date.now();
@@ -346,15 +349,53 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                     console.warn(`[CLAUDE-CODE] No tool handler registered - skipping execution for ${toolName}`);
                   }
 
+                  // Create tool call object
+                  const toolCall = {
+                    id: toolId,
+                    name: toolName || 'unknown',
+                    arguments: toolArgs,
+                    ...(executionResult !== undefined ? { result: executionResult } : {})
+                  };
+
+                  // Store in map for later result updates
+                  toolCallsById.set(toolId, toolCall);
+
                   // Emit tool call event
                   yield {
                     type: 'tool_call',
-                    toolCall: {
-                      name: toolName || 'unknown',
-                      arguments: toolArgs,
-                      ...(executionResult !== undefined ? { result: executionResult } : {})
-                    }
+                    toolCall
                   };
+                } else if (block.type === 'tool_result') {
+                  // Handle tool results from Claude Code SDK
+                  const toolResultId = block.tool_use_id || block.id;
+                  const toolResult = block.content;
+                  const isError = block.is_error || false;
+
+                  console.log(`[CLAUDE-CODE] Tool result received for tool ID: ${toolResultId}`);
+                  console.log(`[CLAUDE-CODE] Tool result (first 500 chars):`,
+                    typeof toolResult === 'string'
+                      ? toolResult.substring(0, 500)
+                      : JSON.stringify(toolResult, null, 2).substring(0, 500)
+                  );
+
+                  // Find the corresponding tool call and update it with result
+                  const toolCall = toolCallsById.get(toolResultId);
+                  if (toolCall) {
+                    toolCall.result = toolResult;
+                    if (isError) {
+                      toolCall.error = true;
+                    }
+
+                    console.log(`[CLAUDE-CODE] Updated tool call ${toolResultId} with result`);
+
+                    // Re-emit the tool call with the result
+                    yield {
+                      type: 'tool_call',
+                      toolCall
+                    };
+                  } else {
+                    console.warn(`[CLAUDE-CODE] Received tool result for unknown tool ID: ${toolResultId}`);
+                  }
                 }
               }
             } else if (typeof content === 'string') {
@@ -550,11 +591,51 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Handle user messages (including tool results and slash command output)
             console.log(`[CLAUDE-CODE] User chunk received:`, {
               role: chunk.message?.role,
-              hasContent: !!chunk.message?.content
+              hasContent: !!chunk.message?.content,
+              contentType: Array.isArray(chunk.message?.content) ? 'array' : typeof chunk.message?.content
             });
 
-            // Check if this is a slash command result with <local-command-stdout>
             const content = chunk.message?.content;
+
+            // Check if content is an array (typical for tool results)
+            if (Array.isArray(content)) {
+              for (const block of content) {
+                if (block.type === 'tool_result') {
+                  // Handle tool results from Claude Code SDK
+                  const toolResultId = block.tool_use_id || block.id;
+                  const toolResult = block.content;
+                  const isError = block.is_error || false;
+
+                  console.log(`[CLAUDE-CODE] Tool result in user message for tool ID: ${toolResultId}`);
+                  console.log(`[CLAUDE-CODE] Tool result (first 500 chars):`,
+                    typeof toolResult === 'string'
+                      ? toolResult.substring(0, 500)
+                      : JSON.stringify(toolResult, null, 2).substring(0, 500)
+                  );
+
+                  // Find the corresponding tool call and update it with result
+                  const toolCall = toolCallsById.get(toolResultId);
+                  if (toolCall) {
+                    toolCall.result = toolResult;
+                    if (isError) {
+                      toolCall.error = true;
+                    }
+
+                    console.log(`[CLAUDE-CODE] Updated tool call ${toolResultId} with result from user message`);
+
+                    // Re-emit the tool call with the result
+                    yield {
+                      type: 'tool_call',
+                      toolCall
+                    };
+                  } else {
+                    console.warn(`[CLAUDE-CODE] Received tool result for unknown tool ID: ${toolResultId}`);
+                  }
+                }
+              }
+            }
+
+            // Check if this is a slash command result with <local-command-stdout>
             if (typeof content === 'string' && content.includes('<local-command-stdout>')) {
               // Extract and display the command output
               const match = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
@@ -570,7 +651,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 };
               }
             }
-            // Other user messages (like tool results) are internal - don't display
+            // Other user messages are internal - don't display
           } else if (chunk.type === 'summary') {
             // Handle summary messages from Claude Code
             console.log(`[CLAUDE-CODE] Summary chunk received:`, chunk);
