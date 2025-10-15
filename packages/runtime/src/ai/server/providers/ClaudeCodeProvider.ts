@@ -360,11 +360,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   // Store in map for later result updates
                   toolCallsById.set(toolId, toolCall);
 
-                  // Emit tool call event
-                  yield {
-                    type: 'tool_call',
-                    toolCall
-                  };
+                  // Only emit tool call if we executed it ourselves and have a result
+                  // SDK-native tools will be emitted when their result arrives
+                  if (executionResult !== undefined) {
+                    yield {
+                      type: 'tool_call',
+                      toolCall
+                    };
+                  } else {
+                    console.log(`[CLAUDE-CODE] Deferring tool call emission for ${toolName} until result arrives`);
+                  }
                 } else if (block.type === 'tool_result') {
                   // Handle tool results from Claude Code SDK
                   const toolResultId = block.tool_use_id || block.id;
@@ -381,6 +386,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   // Find the corresponding tool call and update it with result
                   const toolCall = toolCallsById.get(toolResultId);
                   if (toolCall) {
+                    // Check if tool already has a result - if so, skip duplicate
+                    if (toolCall.result !== undefined) {
+                      console.log(`[CLAUDE-CODE] Tool call ${toolResultId} already has result, skipping duplicate`);
+                      continue; // Skip this tool_result block
+                    }
+
                     toolCall.result = toolResult;
 
                     // Check if this is an error - either explicit is_error flag or error in content
@@ -468,14 +479,28 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               console.warn(`[CLAUDE-CODE] No tool handler registered - skipping execution for ${toolName}`);
             }
 
-            yield {
-              type: 'tool_call',
-              toolCall: {
-                name: toolName,
-                arguments: toolArgs,
-                ...(executionResult !== undefined ? { result: executionResult } : {})
-              }
+            // Create tool call object
+            const toolId = toolChunk.id || `tool-${toolCallCount}`;
+            const toolCall = {
+              id: toolId,
+              name: toolName,
+              arguments: toolArgs,
+              ...(executionResult !== undefined ? { result: executionResult } : {})
             };
+
+            // Store in map for later result updates
+            toolCallsById.set(toolId, toolCall);
+
+            // Only emit tool call if we executed it ourselves and have a result
+            // SDK-native tools will be emitted when their result arrives
+            if (executionResult !== undefined) {
+              yield {
+                type: 'tool_call',
+                toolCall
+              };
+            } else {
+              console.log(`[CLAUDE-CODE] Deferring standalone tool call emission for ${toolName} until result arrives`);
+            }
           } else if (chunk.type === 'text') {
             const text = chunk.text || chunk.content || '';
             fullContent += text;
@@ -623,6 +648,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   // Find the corresponding tool call and update it with result
                   const toolCall = toolCallsById.get(toolResultId);
                   if (toolCall) {
+                    // Check if tool already has a result - if so, skip duplicate
+                    if (toolCall.result !== undefined) {
+                      console.log(`[CLAUDE-CODE] Tool call ${toolResultId} already has result from user message, skipping duplicate`);
+                      continue; // Skip this tool_result
+                    }
+
                     toolCall.result = toolResult;
 
                     // Check if this is an error - either explicit is_error flag or error in content
