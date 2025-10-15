@@ -266,134 +266,59 @@ The application supports multiple AI providers, including two distinct ways to a
 - **Model management**: Select/deselect all buttons for bulk model configuration
 - **Smart defaults**: Doesn't auto-select all models when enabling a provider
 
-### Provider Implementation Details
+# Agent Instructions for Preditor Integration
 
-#### Key Files for Claude Providers
-- **Claude API Provider**:
-  - Main implementation: `packages/runtime/src/ai/server/providers/ClaudeProvider.ts`
-  - UI panel: `packages/electron/src/renderer/components/AIModels/panels/ClaudePanel.tsx`
-  - Uses Anthropic SDK directly with API key authentication
-  - Supports model selection from predefined list in `packages/runtime/src/ai/modelConstants.ts`
+This document provides concise instructions for AI agents working with projects that use Preditor's structured planning and tracking systems.
 
-- **Claude Code Provider**:
-  - Implementation: `packages/runtime/src/ai/server/providers/ClaudeCodeProvider.ts`
-  - UI panel: `packages/electron/src/renderer/components/AIModels/panels/ClaudeCodePanel.tsx`
-  - Installation manager: `packages/electron/src/renderer/components/AIModels/services/CLIInstaller.ts`
-  - Requires separate installation of `@anthropic-ai/claude-agent-sdk` package
-  - Dynamically loads SDK from user's installation
+## Plan Documents
 
-#### Provider Factory
-- Location: `packages/runtime/src/ai/server/ProviderFactory.ts`
-- Creates and manages provider instances based on type
-- Provider types: `claude`, `claude-code`, `openai`, `openai-codex`, `lmstudio`
-- Each provider is cached per session for efficiency
-
-## Data Persistence
-
-The Preditor app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage, providing a robust database system that works both in development and packaged builds.
-
-### Database System
-- **Technology**: PGLite (PostgreSQL in WebAssembly) running in Node.js worker thread
-- **Storage**: Persistent file-based database with ACID compliance
-- **Worker architecture**: Isolated worker thread prevents module conflicts
-- **Bundling**: PGLite is fully bundled in packaged apps for reliable distribution
-
-### Database Tables
-- **ai\_sessions**: AI chat conversations with full message history, document context, and provider configurations
-- **app\_settings**: Global application settings (theme, providers, shortcuts, etc.)
-- **project\_state**: Per-project state including window bounds, UI layout, open tabs, file tree, and editor settings
-- **session\_state**: Global session restoration data for windows and focus order
-- **document\_history**: Compressed document edit history with binary content storage
-
-### Data Locations
-- **Database**: `~/Library/Application Support/@preditor/electron/pglite-db/` (macOS)
-- **Logs**: `~/Library/Application Support/@preditor/electron/logs/` - Application logs
-- **Debug log**: `~/Library/Application Support/@preditor/electron/preditor-debug.log` - Debug console output
-- **Legacy files**: `~/Library/Application Support/@preditor/electron/history/` - Preserved file-based history (migrated to database)
-
-### Migration System
-- **Automatic migration**: File-based data automatically migrates to database on first startup
-- **History preservation**: Original history files preserved after migration (not deleted)
-- **Legacy app migration**: Automatically migrates from old Stravu Editor data paths
-- **Version tracking**: Database includes migration timestamps and version information
-
-### Database Features
-- **Compression**: Document history stored as compressed binary data (BYTEA)
-- **JSON support**: Rich JSON fields for complex data structures (JSONB columns)
-- **Indexing**: Optimized indexes for fast queries on projects, timestamps, and file paths
-- **Protocol server**: Optional PostgreSQL protocol server for external database access
-
-## File Operations
-
-### Project Sidebar
-- **Drag and drop**: Move files and folders via drag and drop
-- **Copy on drag**: Hold Option/Alt while dragging to copy instead of move
-- **Visual feedback**: Drop targets are highlighted during drag operations
-- **Automatic renaming**: Copied files get unique names to avoid conflicts
-
-### File Tree Features
-- **Context menus**: Right-click files for rename, delete, open in new window
-- **File watching**: Automatic updates when files change on disk
-- **Recent files**: Quick access to recently opened files in projects
-
-## Agentic Planning System
-
-The repository uses a structured markdown-based planning system for agent-led development workstreams. Plans are stored as markdown files with YAML frontmatter metadata.
-
-### Plan Document Location
-- **Directory**: All plans are stored in the `plans/` folder at the repository root
+### Location and Naming
+- **Directory**: All plans must be stored in the `plans/` folder at the repository root
 - **File naming**: Use descriptive kebab-case names (e.g., `agentic-markdown-planning-system.md`)
 - **Single source of truth**: Plans serve as the authoritative record for features, bugs, and development tasks
 
-### Plan Metadata Structure
-Every plan document MUST include YAML frontmatter with the following fields:
+### Required Frontmatter
+Every plan document MUST include YAML frontmatter with complete metadata:
 
 ```yaml
 ---
 planStatus:
-  planId: plan-[unique-identifier]  # Unique identifier for the plan
-  title: [Plan Title]                # Human-readable title
-  status: [status]                   # Current status (see values below)
-  planType: [type]                   # Type of plan (see values below)
-  priority: [priority]               # Priority level: low | medium | high | critical
-  owner: [username]                  # Primary owner/assignee
-  stakeholders:                      # List of stakeholders
-    - [stakeholder1]
-    - [stakeholder2]
-  tags:                              # Relevant tags for categorization
+  planId: plan-[unique-id]        # Unique identifier for the plan
+  title: [Plan Title]             # Human-readable title
+  status: [status]                # See status values below
+  planType: [type]                # See plan types below
+  priority: low | medium | high | critical
+  owner: [username]               # Primary owner/assignee
+  tags:                           # Relevant tags for categorization (optional)
     - [tag1]
     - [tag2]
-  created: "YYYY-MM-DD"             # Creation date
-  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"  # Last update timestamp
-  progress: [0-100]                  # Completion percentage
-  dueDate: "YYYY-MM-DD"              # Due date (optional)
-  startDate: "YYYY-MM-DD"            # Start date (optional)
+  created: "YYYY-MM-DD"
+  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"
+  progress: [0-100]               # Completion percentage
+  dueDate: "YYYY-MM-DD"           # Due date (optional)
+  startDate: "YYYY-MM-DD"         # Start date (optional)
 ---
 ```
 
 ### Status Values
-- `draft`: Initial planning phase
-- `ready-for-development`: Approved and ready for implementation
-- `in-development`: Currently being worked on
-- `in-review`: Implementation complete, pending review
-- `completed`: Successfully completed
-- `rejected`: Plan has been rejected or cancelled
-- `blocked`: Progress blocked by dependencies
+- `draft` - Initial planning phase
+- `ready-for-development` - Approved and ready for implementation
+- `in-development` - Currently being worked on
+- `in-review` - Implementation complete, pending review
+- `completed` - Successfully completed
+- `rejected` - Plan has been rejected or cancelled
+- `blocked` - Progress blocked by dependencies
 
 ### Plan Types
-- `feature`: New feature development
-- `bug-fix`: Bug fix or issue resolution
-- `refactor`: Code refactoring/improvement
-- `system-design`: Architecture/design work
-- `research`: Research/investigation task
+- `feature` - New feature development
+- `bug-fix` - Bug fix or issue resolution
+- `refactor` - Code refactoring/improvement
+- `system-design` - Architecture/design work
+- `research` - Research/investigation task
 
-### Plan Document Structure
+### Document Structure
 After the frontmatter, plans should include:
-1. **Title** followed by plan status indicator comment on the next line:
-   ```
-   # Plan Title
-   <!-- plan-status -->
-```
+1. **Title** with `<!-- plan-status -->` comment immediately after
 2. **Goals** section outlining objectives
 3. **System Overview** or problem description
 4. **Implementation details** as needed
@@ -404,5 +329,15 @@ After the frontmatter, plans should include:
 - **Updating plans**: Preserve user edits, append updates rather than overwriting
 - **Status tracking**: Update `status`, `progress`, and `updated` fields as work progresses
 - **Collaboration**: Plans support both human and agent contributors
-- Never use emojis
-- stop putting code in plan docs!
+
+## Inline Tracker Items
+
+Track bugs, tasks, and ideas directly in any markdown file using inline syntax:
+
+```markdown
+- Fix login bug @bug[id:bug_abc123 status:in-progress priority:high owner:alice]
+- Add dark mode @task[id:tsk_xyz789 status:to-do priority:medium]
+- Research API design @idea[id:ida_def456 status:to-do]
+```
+
+Metadata attributes: `id`, `status`, `priority`, `owner`, `tags`, `due_date`
