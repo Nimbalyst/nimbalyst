@@ -160,22 +160,45 @@ export function AIChatIntegrationPlugin(): null {
       filePath,
       editor,
 
-      applyReplacements: async (replacements: TextReplacement[]): Promise<{ success: boolean; error?: string }> => {
-        console.log(`[AIChatIntegrationPlugin] Applying ${replacements.length} replacements to:`, filePath);
-
+      applyReplacements: async (replacements: TextReplacement[], requestId?: string): Promise<{ success: boolean; error?: string }> => {
         if (!replacements || !Array.isArray(replacements)) {
           return { success: false, error: 'Invalid replacements array' };
         }
 
         try {
-          const success = editor.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
-          return {
-            success,
-            error: success ? undefined : 'Failed to apply replacements'
-          };
+          // Create a promise that resolves when the diff application completes
+          return await new Promise<{ success: boolean; error?: string }>((resolve) => {
+            // Set up listener for the completion event
+            // Use requestId to correlate events to this specific request
+            const handleComplete = (event: CustomEvent) => {
+              // Only handle events for THIS request
+              if (requestId && event.detail.requestId !== requestId) {
+                return;
+              }
+
+              window.removeEventListener('diffApplyComplete', handleComplete as EventListener);
+
+              if (event.detail.success) {
+                resolve({ success: true });
+              } else {
+                resolve({ success: false, error: event.detail.error || 'Diff application failed' });
+              }
+            };
+
+            window.addEventListener('diffApplyComplete', handleComplete as EventListener);
+
+            // Dispatch the command with requestId attached to the replacements
+            const commandPayload = { replacements, requestId };
+            const commandSuccess = editor.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, commandPayload);
+
+            if (!commandSuccess) {
+              window.removeEventListener('diffApplyComplete', handleComplete as EventListener);
+              resolve({ success: false, error: 'Command handler rejected the replacements' });
+              return;
+            }
+          });
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          console.error('[AIChatIntegrationPlugin] Error applying replacements:', error);
           return { success: false, error: errorMessage };
         }
       },

@@ -862,7 +862,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     // MCP Server handlers
     if (window.electronAPI.onMcpApplyDiff) {
       cleanupFns.push(window.electronAPI.onMcpApplyDiff(async ({ replacements, resultChannel, targetFilePath }) => {
-        console.log('[MCP] applyDiff request:', replacements, 'targetFilePath:', targetFilePath);
         try {
           // Use the explicit targetFilePath from the IPC message, or fall back to first registered editor
           const filePath = targetFilePath || editorRegistry.getFilePaths()[0];
@@ -872,7 +871,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             return;
           }
           // Use the editor registry to apply replacements to the target file
-          const result = await editorRegistry.applyReplacements(filePath, replacements);
+          // Pass the resultChannel as a unique ID so the event can be correlated
+          const result = await editorRegistry.applyReplacements(filePath, replacements, resultChannel);
 
           // Ensure result is defined and has the expected shape
           const finalResult = result || { success: false, error: 'No result returned from diff application' };

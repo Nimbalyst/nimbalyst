@@ -10,7 +10,7 @@ import type { LexicalEditor } from 'lexical';
 export interface EditorInstance {
   filePath: string;
   editor: LexicalEditor;
-  applyReplacements: (replacements: any[]) => Promise<{ success: boolean; error?: string }>;
+  applyReplacements: (replacements: any[], requestId?: string) => Promise<{ success: boolean; error?: string }>;
   startStreaming: (config: any) => void;
   streamContent: (streamId: string, content: string) => void;
   endStreaming: (streamId: string) => void;
@@ -95,17 +95,16 @@ class EditorRegistry {
    */
   async applyReplacements(
     filePath: string,
-    replacements: any[]
+    replacements: any[],
+    requestId?: string
   ): Promise<{ success: boolean; error?: string }> {
     const editor = this.getEditor(filePath);
 
     if (!editor) {
-      console.error('[EditorRegistry] No editor found for file:', filePath);
       return { success: false, error: `No editor registered for ${filePath}` };
     }
 
-    console.log(`[EditorRegistry] Applying ${replacements.length} replacements to:`, filePath);
-    return editor.applyReplacements(replacements);
+    return editor.applyReplacements(replacements, requestId);
   }
 
   /**

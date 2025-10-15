@@ -42,9 +42,20 @@ import { DiffToolbar } from './DiffToolbar';
 import { createCommand } from 'lexical';
 
 /**
+ * Payload for APPLY_MARKDOWN_REPLACE_COMMAND
+ * Supports both legacy array format and new object format with requestId
+ */
+type ApplyMarkdownReplacePayload =
+  | TextReplacement[]
+  | {
+      replacements: TextReplacement[];
+      requestId?: string;
+    };
+
+/**
  * Custom command for applying markdown replacements
  */
-export const APPLY_MARKDOWN_REPLACE_COMMAND = createCommand<TextReplacement[]>('APPLY_MARKDOWN_REPLACE_COMMAND');
+export const APPLY_MARKDOWN_REPLACE_COMMAND = createCommand<ApplyMarkdownReplacePayload>('APPLY_MARKDOWN_REPLACE_COMMAND');
 
 /**
  * React plugin component that sets up commands for diff functionality.
@@ -159,11 +170,14 @@ export function DiffPlugin(): JSX.Element | null {
     );
 
     // Register command to apply markdown replacements
-    const applyMarkdownReplaceUnregister = editor.registerCommand<TextReplacement[]>(
+    const applyMarkdownReplaceUnregister = editor.registerCommand<ApplyMarkdownReplacePayload>(
       APPLY_MARKDOWN_REPLACE_COMMAND,
-      (replacements) => {
+      (payload) => {
+        // Handle both old format (array) and new format (object with replacements + requestId)
+        const replacements = Array.isArray(payload) ? payload : payload?.replacements;
+        const requestId = Array.isArray(payload) ? undefined : payload?.requestId;
+
         if (!replacements || replacements.length === 0) {
-          console.log('No replacements to apply');
           return false;
         }
 
@@ -176,38 +190,61 @@ export function DiffPlugin(): JSX.Element | null {
             return $convertToEnhancedMarkdownString(transformers);
           });
 
-          console.log('Applying diff with replacements:', replacements);
-
-          // Apply the replacements - this will create diff state nodes
+          // Apply the replacements inside editor.update and handle errors there
+          // IMPORTANT: We must dispatch events INSIDE the editor.update callback
+          // because when an error occurs, editor.update() may not return normally
           editor.update(() => {
-            applyMarkdownReplace(
-              editor,
-              currentMarkdown,
-              replacements,
-              transformers
-            );
+            try {
+              applyMarkdownReplace(
+                editor,
+                currentMarkdown,
+                replacements,
+                transformers
+              );
+
+              // Success - dispatch completion event from INSIDE the update callback
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('diffApplyComplete', {
+                  detail: { success: true, requestId }
+                }));
+              }
+            } catch (error: any) {
+              // Handle error from INSIDE the editor.update callback
+              // Extract meaningful error message
+              let errorMessage = 'Failed to apply changes';
+
+              if (error?.context?.errorType === 'TEXT_REPLACEMENT_ERROR') {
+                const replacement = error.context?.additionalInfo?.replacement;
+                if (replacement) {
+                  errorMessage = `Could not find matching text in the document. The text may have been modified or contains different whitespace/formatting.`;
+                }
+              } else if (error?.message) {
+                errorMessage = error.message;
+              }
+
+              // Dispatch error event from INSIDE the catch block
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('diffApplyComplete', {
+                  detail: { success: false, error: errorMessage, requestId }
+                }));
+              }
+            }
           }, { discrete: true });
 
-          console.log('Diff applied successfully');
           return true;
         } catch (error: any) {
-          console.error('Failed to apply diff:', error);
+          // This catches errors from getting markdown or other setup BEFORE editor.update
+          // Errors from applyMarkdownReplace are caught inside the editor.update callback above
+          console.error('[DiffPlugin] Setup error before editor.update:', error);
 
-          // Extract meaningful error message
-          let errorMessage = 'Failed to apply changes';
-
-          if (error?.context?.errorType === 'TEXT_REPLACEMENT_ERROR') {
-            // Whitespace or text mismatch error
-            const replacement = error.context?.additionalInfo?.replacement;
-            if (replacement) {
-              errorMessage = `Could not find matching text in the document. The text may have been modified or contains different whitespace/formatting.`;
-            }
-          } else if (error?.message) {
-            errorMessage = error.message;
+          // Dispatch error event for setup errors
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('diffApplyComplete', {
+              detail: { success: false, error: error.message || 'Unknown error', requestId }
+            }));
           }
 
-          // Re-throw with a more user-friendly error
-          throw new Error(errorMessage);
+          return true;
         }
       },
       COMMAND_PRIORITY_EDITOR,

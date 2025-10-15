@@ -381,12 +381,10 @@ export function applyMarkdownReplace(
   try {
     // Try to apply text replacements to get the target markdown
     newMarkdown = _applyMarkdownEdits(originalMarkdown, normalizedReplacements);
-    // console.log('📝 Text replacements applied successfully');
   } catch (error) {
     // Text replacement failed - construct the new markdown from the replacements
     // This allows TreeMatcher to still work even if exact text matching fails
     // This is normal for structural changes like tables and lists
-    console.log('⚠️ Text replacement failed, constructing new markdown from replacements');
     textReplacementError = error as Error;
 
     // Build the new markdown by applying replacements in a best-effort manner
@@ -461,6 +459,12 @@ export function applyMarkdownReplace(
     }
   }
 
+  // If text replacement failed and we couldn't construct meaningful new markdown,
+  // throw the error immediately - don't try to apply a diff that won't work
+  if (textReplacementError && originalMarkdown === newMarkdown) {
+    throw textReplacementError;
+  }
+
   let {frontmatterUpdated, bodyChanged} = applyFrontmatterUpdateIfNeeded(editor, originalMarkdown, newMarkdown);
 
   if (!bodyChanged && frontmatterUpdated) {
@@ -468,9 +472,7 @@ export function applyMarkdownReplace(
   }
 
   if (originalMarkdown === newMarkdown) {
-    if (textReplacementError) {
-      throw textReplacementError;
-    }
+    // No error but also no changes - just return
     return;
   }
 

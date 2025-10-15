@@ -266,21 +266,40 @@ async function tryCreateServer(port: number): Promise<any> {
               return new Promise((resolve) => {
                 const timeout = setTimeout(() => {
                   ipcMain.removeHandler(resultChannel);
-                  resolve({ success: false, error: 'Timeout waiting for diff application' });
-                }, 5000);
+
+                  resolve({
+                    content: [
+                      {
+                        type: 'text',
+                        text: 'Timed out while waiting for diff to apply. The operation may still be in progress.'
+                      }
+                    ],
+                    isError: true
+                  });
+                }, 30000);
 
                 ipcMain.once(resultChannel, (event, result) => {
                   clearTimeout(timeout);
-                  console.log('[MCP Server] Received applyDiff result:', result);
-                  // Include document path in the result for tool UI display
-                  const enhancedResult = result || { success: false, error: 'No result received' };
+
+                  const success = result?.success ?? false;
+                  const error = result?.error;
+
                   // Get most recent document state for filePath
                   const states = Array.from(documentStateBySession.values());
                   const documentState = states[states.length - 1];
-                  if (enhancedResult.success && documentState?.filePath) {
-                    enhancedResult.filePath = documentState.filePath;
-                  }
-                  resolve(enhancedResult);
+                  const filePath = documentState?.filePath || 'untitled';
+
+                  resolve({
+                    content: [
+                      {
+                        type: 'text',
+                        text: success
+                          ? `Successfully applied diff to ${filePath}`
+                          : `Failed to apply diff: ${error || 'Unknown error'}`
+                      }
+                    ],
+                    isError: !success
+                  });
                 });
 
                 // Send the request with the result channel and target file path
