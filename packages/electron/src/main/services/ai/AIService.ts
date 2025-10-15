@@ -500,6 +500,13 @@ export class AIService {
           throw initError;
         }
 
+        // CRITICAL: Restore provider session data from database
+        // This is essential for session resumption (e.g., Claude Code sessions)
+        if (session.providerSessionId && provider.setProviderSessionData) {
+          console.log(`[AIService] Restoring provider session data for ${session.provider}`);
+          provider.setProviderSessionData(session.id, { claudeSessionId: session.providerSessionId });
+        }
+
         // Register tool handler - targetFilePath will be determined dynamically per tool call
         const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, workspacePath);
         provider.registerToolHandler(toolHandler);

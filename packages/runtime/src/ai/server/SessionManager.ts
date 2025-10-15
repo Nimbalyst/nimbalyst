@@ -35,7 +35,8 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
   const documentContext = metadata.documentContext as DocumentContext | undefined;
   const workspaceId = (metadata.workspaceId as string | undefined) ?? fallbackWorkspace;
   const providerConfig = metadata.providerConfig as SessionData['providerConfig'];
-  const providerSessionId = metadata.providerSessionId as string | undefined;
+  // CRITICAL: providerSessionId is stored at top-level, not in metadata
+  const providerSessionId = session.providerSessionId ?? (metadata.providerSessionId as string | undefined);
 
   return {
     id: session.id,
