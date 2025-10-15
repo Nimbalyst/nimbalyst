@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StravuEditor, pluginRegistry } from 'rexical';
 import { APPLY_MARKDOWN_REPLACE_COMMAND } from 'rexical';
 import type { LexicalEditor } from 'lexical';
@@ -12,6 +12,7 @@ interface DiffPreviewEditorProps {
 export function DiffPreviewEditor({ oldMarkdown, newMarkdown }: DiffPreviewEditorProps) {
   const editorRef = useRef<LexicalEditor | null>(null);
   const appliedRef = useRef(false);
+  const [isReady, setIsReady] = useState(false);
 
   // Debug: Log what nodes are in the registry
   useEffect(() => {
@@ -25,7 +26,7 @@ export function DiffPreviewEditor({ oldMarkdown, newMarkdown }: DiffPreviewEdito
     if (appliedRef.current) return;
     appliedRef.current = true;
 
-    // Wait longer for markdown to be loaded and plugins to register
+    // Wait for markdown to be loaded and plugins to register
     setTimeout(() => {
       const replacements = [{ oldText: oldMarkdown, newText: newMarkdown }];
 
@@ -36,14 +37,18 @@ export function DiffPreviewEditor({ oldMarkdown, newMarkdown }: DiffPreviewEdito
 
         const result = editor.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
         console.log('[DiffPreviewEditor] Command dispatch result:', result);
+
+        // Show the editor after diff is applied
+        setTimeout(() => setIsReady(true), 100);
       } catch (error) {
         console.error('[DiffPreviewEditor] Failed to apply diff in preview:', error);
+        setIsReady(true); // Show anyway if there's an error
       }
     }, 1000);
   };
 
   return (
-    <div className="diff-preview-editor">
+    <div className={`diff-preview-editor ${!isReady ? 'loading' : ''}`}>
       <div className="diff-preview-editor-container">
         <StravuEditor
           config={{

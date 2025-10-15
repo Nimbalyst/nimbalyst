@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useHistory } from '../../hooks/useHistory';
 import { DiffPreviewEditor } from './DiffPreviewEditor';
 import { TextDiffViewer } from './TextDiffViewer';
@@ -23,8 +23,57 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [diffMode, setDiffMode] = useState(false);
   const [diffViewMode, setDiffViewMode] = useState<'rich' | 'text'>('rich');
+  const [compactView, setCompactView] = useState(true);
   const [versionAContent, setVersionAContent] = useState<string>('');
   const [versionBContent, setVersionBContent] = useState<string>('');
+
+  const displayedSnapshots = useMemo(() => {
+    if (!compactView || snapshots.length === 0) {
+      return snapshots;
+    }
+
+    const importantTypes = ['manual', 'external-change', 'ai-diff', 'pre-apply'];
+    const minorTypes = ['auto-save', 'auto'];
+    const timeGroupInterval = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+    const result = [];
+    const grouped: { [key: number]: typeof snapshots } = {};
+
+    // Group minor snapshots by time interval
+    for (let i = 0; i < snapshots.length; i++) {
+      const snapshot = snapshots[i];
+      const isFirst = i === snapshots.length - 1; // oldest (last in array)
+      const isLast = i === 0; // newest (first in array)
+      const isImportant = importantTypes.includes(snapshot.type);
+
+      if (isFirst || isLast || isImportant) {
+        result.push(snapshot);
+      } else if (minorTypes.includes(snapshot.type)) {
+        const timestamp = new Date(snapshot.timestamp).getTime();
+        const groupKey = Math.floor(timestamp / timeGroupInterval);
+
+        if (!grouped[groupKey]) {
+          grouped[groupKey] = [];
+        }
+        grouped[groupKey].push(snapshot);
+      } else {
+        // Unknown types, include them
+        result.push(snapshot);
+      }
+    }
+
+    // Add one representative from each time group (the newest one)
+    Object.values(grouped).forEach((group) => {
+      if (group.length > 0) {
+        result.push(group[0]); // First item is newest in the group
+      }
+    });
+
+    // Sort by timestamp (newest first)
+    return result.sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }, [snapshots, compactView]);
 
   useEffect(() => {
     if (isOpen && filePath) {
@@ -266,17 +315,30 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
         <div className="history-dialog-content">
           <div className="history-list">
             <div className="history-list-header">
-              <h3>Snapshots ({snapshots.length})</h3>
-              {loading && <span className="history-loading">Loading...</span>}
+              <div className="history-list-header-left">
+                <h3>Snapshots ({displayedSnapshots.length}{compactView && snapshots.length !== displayedSnapshots.length ? ` of ${snapshots.length}` : ''})</h3>
+                {loading && <span className="history-loading">Loading...</span>}
+              </div>
+              {snapshots.length > 5 && (
+                <button
+                  className="history-compact-toggle"
+                  onClick={() => setCompactView(!compactView)}
+                  title={compactView ? 'Show all versions' : 'Hide minor auto-saves'}
+                >
+                  <span className="material-symbols-outlined">
+                    {compactView ? 'unfold_more' : 'unfold_less'}
+                  </span>
+                </button>
+              )}
             </div>
-            
-            {snapshots.length === 0 ? (
+
+            {displayedSnapshots.length === 0 ? (
               <div className="history-empty">
                 No history available for this document
               </div>
             ) : (
               <div className="history-items">
-                {snapshots.map((snapshot, index) => {
+                {displayedSnapshots.map((snapshot, index) => {
                   const isSelected = selectedVersions.some(v => v.timestamp === snapshot.timestamp);
 
                   return (

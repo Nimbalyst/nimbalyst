@@ -5,9 +5,14 @@
   flex-direction: column;
 }
 
+.diff-preview-editor.loading {
+  opacity: 0;
+}
+
 .diff-preview-editor-container {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: auto;
+  transition: opacity 0.15s ease;
 }

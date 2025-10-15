@@ -129,6 +129,12 @@
   background: var(--surface-secondary, #f9fafb);
 }
 
+.history-list-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .history-list-header h3 {
   margin: 0;
   font-size: 12px;
@@ -136,6 +142,29 @@
   color: var(--text-secondary, #6b7280);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.history-compact-toggle {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #6b7280);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.history-compact-toggle .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.history-compact-toggle:hover {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-primary, #111827);
 }
 
 .history-loading {
