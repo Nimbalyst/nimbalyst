@@ -67,6 +67,7 @@
     "react-dom": "^18.2.0",
     "rexical": "*",
     "sharp": "^0.34.4",
+    "ulid": "^3.0.1",
     "uuid": "^11.1.0",
     "web-streams-polyfill": "^4.2.0"
   },
