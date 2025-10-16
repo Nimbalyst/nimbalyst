@@ -25,6 +25,14 @@ import {
 import * as fs from 'fs';
 import * as path from 'path';
 
+/**
+ * Helper to trigger manual save and wait for completion
+ */
+async function saveDocument(page: Page): Promise<void> {
+  await page.keyboard.press('Meta+S');
+  await page.waitForTimeout(500); // Brief wait for save to complete
+}
+
 test.describe('Diff Reliability - Complex Structures', () => {
   let electronApp: ElectronApplication;
   let page: Page;
@@ -68,6 +76,8 @@ test.describe('Diff Reliability - Complex Structures', () => {
 
     expect(result.success).toBe(true);
 
+    await saveDocument(page);
+
     // Verify the change was applied
     const updatedContent = fs.readFileSync(testFilePath, 'utf8');
     expect(updatedContent).toContain('Grapes');
@@ -96,6 +106,8 @@ test.describe('Diff Reliability - Complex Structures', () => {
 
     expect(result.success).toBe(true);
 
+    await saveDocument(page);
+
     const updatedContent = fs.readFileSync(testFilePath, 'utf8');
     expect(updatedContent).toContain('Charlie');
   });
@@ -123,6 +135,8 @@ function hello() {
     ]);
 
     expect(result.success).toBe(true);
+
+    await saveDocument(page);
 
     const updatedContent = fs.readFileSync(testFilePath, 'utf8');
     expect(updatedContent).toContain('World');
@@ -156,6 +170,8 @@ More text here.
 
     expect(result.success).toBe(true);
 
+    await saveDocument(page);
+
     const updatedContent = fs.readFileSync(testFilePath, 'utf8');
     expect(updatedContent).toContain('List item 3');
     expect(updatedContent).toContain('with additions');
@@ -182,6 +198,8 @@ More text here.
 
     expect(result.success).toBe(true);
 
+    await saveDocument(page);
+
     const updatedContent = fs.readFileSync(testFilePath, 'utf8');
     expect(updatedContent).toContain('Level 5 Modified');
   });
@@ -207,6 +225,8 @@ Another paragraph.
     ]);
 
     expect(result.success).toBe(true);
+
+    await saveDocument(page);
 
     const updatedContent = fs.readFileSync(testFilePath, 'utf8');
     expect(updatedContent).toContain('single spaces');
@@ -411,6 +431,8 @@ More text with \`backticks\` and |pipes|.
 
     expect(result.success).toBe(true);
 
+    await saveDocument(page);
+
     const updatedContent = fs.readFileSync(testFilePath, 'utf8');
     expect(updatedContent).toContain('tildes');
   });
@@ -460,6 +482,8 @@ Content C
     ]);
 
     expect(result.success).toBe(true);
+
+    await saveDocument(page);
 
     const updatedContent = fs.readFileSync(testFilePath, 'utf8');
     expect(updatedContent).toContain('Content A Modified');
