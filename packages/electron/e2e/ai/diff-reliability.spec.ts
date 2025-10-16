@@ -14,24 +14,20 @@ import {
   launchElectronApp,
   createTempWorkspace,
   TEST_TIMEOUTS,
+  waitForAppReady,
   ACTIVE_EDITOR_SELECTOR
 } from '../helpers';
 import {
   simulateApplyDiff,
   simulateStreamContent,
   waitForEditorReady,
-  createTestMarkdown
+  createTestMarkdown,
+  triggerManualSave,
+  waitForSave
 } from '../utils/aiToolSimulator';
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 import * as path from 'path';
 
-/**
- * Helper to trigger manual save and wait for completion
- */
-async function saveDocument(page: Page): Promise<void> {
-  await page.keyboard.press('Meta+S');
-  await page.waitForTimeout(500); // Brief wait for save to complete
-}
 
 test.describe('Diff Reliability - Complex Structures', () => {
   let electronApp: ElectronApplication;
@@ -43,14 +39,17 @@ test.describe('Diff Reliability - Complex Structures', () => {
     workspaceDir = await createTempWorkspace();
     testFilePath = path.join(workspaceDir, 'test.md');
 
+    // Create initial test file before launching app
+    await fs.writeFile(testFilePath, '# Test\n\nInitial content.\n', 'utf8');
+
     electronApp = await launchElectronApp({ workspace: workspaceDir });
     page = await electronApp.firstWindow();
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
+    await waitForAppReady(page);
   });
 
   test.afterEach(async () => {
     await electronApp.close();
+    await fs.rm(workspaceDir, { recursive: true, force: true });
   });
 
   test('should handle nested list edits', async () => {
@@ -65,9 +64,9 @@ test.describe('Diff Reliability - Complex Structures', () => {
   - Broccoli
 `;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
-    await waitForEditorReady(page);
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Try to add a nested item
     const result = await simulateApplyDiff(page, testFilePath, [
@@ -76,10 +75,16 @@ test.describe('Diff Reliability - Complex Structures', () => {
 
     expect(result.success).toBe(true);
 
-    await saveDocument(page);
+    // Accept the suggested changes
+    await page.click('button:has-text("Accept All")');
+    await page.waitForTimeout(200);
 
-    // Verify the change was applied
-    const updatedContent = fs.readFileSync(testFilePath, 'utf8');
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, 'test.md');
+
+    // Verify the change was applied to disk
+    const updatedContent = await fs.readFile(testFilePath, 'utf8');
     expect(updatedContent).toContain('Grapes');
   });
 
@@ -92,8 +97,9 @@ test.describe('Diff Reliability - Complex Structures', () => {
 | Bob | 25 | LA |
 `;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Add a new row
@@ -106,9 +112,15 @@ test.describe('Diff Reliability - Complex Structures', () => {
 
     expect(result.success).toBe(true);
 
-    await saveDocument(page);
+    // Accept the suggested changes
+    await page.click('button:has-text("Accept All")');
+    await page.waitForTimeout(200);
 
-    const updatedContent = fs.readFileSync(testFilePath, 'utf8');
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, 'test.md');
+
+    const updatedContent = await fs.readFile(testFilePath, 'utf8');
     expect(updatedContent).toContain('Charlie');
   });
 
@@ -122,8 +134,9 @@ function hello() {
 \`\`\`
 `;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Modify code block content
@@ -136,9 +149,15 @@ function hello() {
 
     expect(result.success).toBe(true);
 
-    await saveDocument(page);
+    // Accept the suggested changes
+    await page.click('button:has-text("Accept All")');
+    await page.waitForTimeout(200);
 
-    const updatedContent = fs.readFileSync(testFilePath, 'utf8');
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, 'test.md');
+
+    const updatedContent = await fs.readFile(testFilePath, 'utf8');
     expect(updatedContent).toContain('World');
   });
 
@@ -158,8 +177,9 @@ def foo():
 More text here.
 `;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Modify multiple sections
@@ -170,9 +190,15 @@ More text here.
 
     expect(result.success).toBe(true);
 
-    await saveDocument(page);
+    // Accept the suggested changes
+    await page.click('button:has-text("Accept All")');
+    await page.waitForTimeout(200);
 
-    const updatedContent = fs.readFileSync(testFilePath, 'utf8');
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, 'test.md');
+
+    const updatedContent = await fs.readFile(testFilePath, 'utf8');
     expect(updatedContent).toContain('List item 3');
     expect(updatedContent).toContain('with additions');
   });
@@ -187,8 +213,9 @@ More text here.
         - Level 5
 `;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Modify deep nested item
@@ -198,9 +225,15 @@ More text here.
 
     expect(result.success).toBe(true);
 
-    await saveDocument(page);
+    // Accept the suggested changes
+    await page.click('button:has-text("Accept All")');
+    await page.waitForTimeout(200);
 
-    const updatedContent = fs.readFileSync(testFilePath, 'utf8');
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, 'test.md');
+
+    const updatedContent = await fs.readFile(testFilePath, 'utf8');
     expect(updatedContent).toContain('Level 5 Modified');
   });
 
@@ -212,8 +245,9 @@ This is a paragraph with    multiple    spaces.
 Another paragraph.
 `;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Modify text with whitespace
@@ -226,9 +260,15 @@ Another paragraph.
 
     expect(result.success).toBe(true);
 
-    await saveDocument(page);
+    // Accept the suggested changes
+    await page.click('button:has-text("Accept All")');
+    await page.waitForTimeout(200);
 
-    const updatedContent = fs.readFileSync(testFilePath, 'utf8');
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, 'test.md');
+
+    const updatedContent = await fs.readFile(testFilePath, 'utf8');
     expect(updatedContent).toContain('single spaces');
   });
 });
@@ -243,14 +283,17 @@ test.describe('Diff Reliability - Streaming Scenarios', () => {
     workspaceDir = await createTempWorkspace();
     testFilePath = path.join(workspaceDir, 'test.md');
 
+    // Create initial test file before launching app
+    await fs.writeFile(testFilePath, '# Test\n\nInitial content.\n', 'utf8');
+
     electronApp = await launchElectronApp({ workspace: workspaceDir });
     page = await electronApp.firstWindow();
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
+    await waitForAppReady(page);
   });
 
   test.afterEach(async () => {
     await electronApp.close();
+    await fs.rm(workspaceDir, { recursive: true, force: true });
   });
 
   test('should handle streaming list additions', async () => {
@@ -260,16 +303,19 @@ test.describe('Diff Reliability - Streaming Scenarios', () => {
 - Task 2
 `;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Stream a new list item
     await simulateStreamContent(page, '\n- Task 3\n- Task 4', { insertAtEnd: true });
 
-    await page.waitForTimeout(1000);
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, 'test.md');
 
-    const updatedContent = fs.readFileSync(testFilePath, 'utf8');
+    const updatedContent = await fs.readFile(testFilePath, 'utf8');
     expect(updatedContent).toContain('Task 3');
     expect(updatedContent).toContain('Task 4');
   });
@@ -284,8 +330,9 @@ Content 1
 Content 2
 `;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Stream content into the middle
@@ -295,9 +342,11 @@ Content 2
       { insertAfter: 'Content 1' }
     );
 
-    await page.waitForTimeout(1000);
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, 'test.md');
 
-    const updatedContent = fs.readFileSync(testFilePath, 'utf8');
+    const updatedContent = await fs.readFile(testFilePath, 'utf8');
     expect(updatedContent).toContain('New paragraph in section 1');
   });
 
@@ -307,8 +356,9 @@ Content 2
 Initial content.
 `;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Stream a complex structure
@@ -328,9 +378,11 @@ console.log("code");
 
     await simulateStreamContent(page, complexContent, { insertAtEnd: true });
 
-    await page.waitForTimeout(1500);
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, 'test.md');
 
-    const updatedContent = fs.readFileSync(testFilePath, 'utf8');
+    const updatedContent = await fs.readFile(testFilePath, 'utf8');
     expect(updatedContent).toContain('New Section');
     expect(updatedContent).toContain('List item 1');
     expect(updatedContent).toContain('console.log');
@@ -341,8 +393,9 @@ console.log("code");
 
 `;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Stream multiple chunks rapidly
@@ -351,9 +404,11 @@ console.log("code");
       await page.waitForTimeout(100);
     }
 
-    await page.waitForTimeout(1000);
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, 'test.md');
 
-    const updatedContent = fs.readFileSync(testFilePath, 'utf8');
+    const updatedContent = await fs.readFile(testFilePath, 'utf8');
     for (let i = 1; i <= 5; i++) {
       expect(updatedContent).toContain(`Note ${i}`);
     }
@@ -370,27 +425,32 @@ test.describe('Diff Reliability - Edge Cases', () => {
     workspaceDir = await createTempWorkspace();
     testFilePath = path.join(workspaceDir, 'test.md');
 
+    // Create initial test file before launching app
+    await fs.writeFile(testFilePath, '# Test\n\nInitial content.\n', 'utf8');
+
     electronApp = await launchElectronApp({ workspace: workspaceDir });
     page = await electronApp.firstWindow();
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
+    await waitForAppReady(page);
   });
 
   test.afterEach(async () => {
     await electronApp.close();
+    await fs.rm(workspaceDir, { recursive: true, force: true });
   });
 
   test('should handle empty document edits', async () => {
-    fs.writeFileSync(testFilePath, '');
+    await fs.writeFile(testFilePath, '', 'utf8');
     await page.click('text=test.md');
     await waitForEditorReady(page);
 
     // Add content to empty document
     await simulateStreamContent(page, '# New Document\n\nFirst content.', { insertAtEnd: true });
 
-    await page.waitForTimeout(500);
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, 'test.md');
 
-    const updatedContent = fs.readFileSync(testFilePath, 'utf8');
+    const updatedContent = await fs.readFile(testFilePath, 'utf8');
     expect(updatedContent).toContain('New Document');
   });
 
@@ -398,8 +458,9 @@ test.describe('Diff Reliability - Edge Cases', () => {
     const longLine = 'A'.repeat(500);
     const content = `# Long Lines\n\n${longLine}\n`;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Modify the long line
@@ -418,8 +479,9 @@ Text with *asterisks* and _underscores_ and [brackets].
 More text with \`backticks\` and |pipes|.
 `;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     const result = await simulateApplyDiff(page, testFilePath, [
@@ -431,9 +493,15 @@ More text with \`backticks\` and |pipes|.
 
     expect(result.success).toBe(true);
 
-    await saveDocument(page);
+    // Accept the suggested changes
+    await page.click('button:has-text("Accept All")');
+    await page.waitForTimeout(200);
 
-    const updatedContent = fs.readFileSync(testFilePath, 'utf8');
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, 'test.md');
+
+    const updatedContent = await fs.readFile(testFilePath, 'utf8');
     expect(updatedContent).toContain('tildes');
   });
 
@@ -443,8 +511,9 @@ More text with \`backticks\` and |pipes|.
 **Bold text** followed by *italic text* and ~~strikethrough~~.
 `;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     const result = await simulateApplyDiff(page, testFilePath, [
@@ -470,8 +539,9 @@ Content B
 Content C
 `;
 
-    fs.writeFileSync(testFilePath, content);
-    await page.click('text=test.md');
+    await fs.writeFile(testFilePath, content, 'utf8');
+    await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Apply multiple edits at once
@@ -483,9 +553,15 @@ Content C
 
     expect(result.success).toBe(true);
 
-    await saveDocument(page);
+    // Accept the suggested changes
+    await page.click('button:has-text("Accept All")');
+    await page.waitForTimeout(200);
 
-    const updatedContent = fs.readFileSync(testFilePath, 'utf8');
+    // Save the document
+    await triggerManualSave(electronApp);
+    await waitForSave(page, 'test.md');
+
+    const updatedContent = await fs.readFile(testFilePath, 'utf8');
     expect(updatedContent).toContain('Content A Modified');
     expect(updatedContent).toContain('Content B Modified');
     expect(updatedContent).toContain('Content C Modified');

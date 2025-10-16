@@ -78,8 +78,12 @@ export async function simulateStreamContent(
 ): Promise<void> {
   await page.evaluate(
     async ({ contentText, cfg }) => {
-      // Import the editor registry
-      const { editorRegistry } = await import('@stravu/runtime/ai/EditorRegistry');
+      // Access the already-loaded editorRegistry from window
+      const editorRegistry = (window as any).__editorRegistry;
+
+      if (!editorRegistry) {
+        throw new Error('EditorRegistry not found on window');
+      }
 
       const streamId = `stream-test-${Date.now()}`;
 
@@ -121,8 +125,12 @@ export async function simulateStreamContent(
  */
 export async function simulateGetDocumentContent(page: Page, filePath?: string): Promise<string> {
   return await page.evaluate(async (path) => {
-    // Import the editor registry
-    const { editorRegistry } = await import('@stravu/runtime/ai/EditorRegistry');
+    // Access the already-loaded editorRegistry from window
+    const editorRegistry = (window as any).__editorRegistry;
+
+    if (!editorRegistry) {
+      throw new Error('EditorRegistry not found on window');
+    }
 
     // Get target file path
     const target = path || editorRegistry.getActiveFilePath();
@@ -203,4 +211,27 @@ export async function verifyEditorContains(
 
   const exists = editorText.includes(text);
   return shouldExist ? exists : !exists;
+}
+
+/**
+ * Trigger manual save via IPC (simulates Cmd+S / File > Save menu action)
+ *
+ * This properly simulates how the Electron menu triggers a save by sending
+ * the 'file-save' IPC event to the focused window.
+ */
+export async function triggerManualSave(electronApp: any): Promise<void> {
+  await electronApp.evaluate(({ BrowserWindow }: any) => {
+    const focused = BrowserWindow.getFocusedWindow();
+    if (focused) {
+      focused.webContents.send('file-save');
+    }
+  });
+}
+
+/**
+ * Wait for file to be saved (dirty indicator disappears)
+ */
+export async function waitForSave(page: Page, fileName: string = 'test.md', timeout = 2000): Promise<void> {
+  const tab = page.locator('.tab', { has: page.locator('.tab-title', { hasText: fileName }) });
+  await tab.locator('.tab-dirty-indicator').waitFor({ state: 'hidden', timeout });
 }
