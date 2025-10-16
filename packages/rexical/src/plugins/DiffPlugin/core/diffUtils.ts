@@ -864,6 +864,8 @@ export function $applyNodeDiff(
   switch (diff.changeType) {
     case 'remove': {
       // Find the live node by its markdown content
+      console.log('  Looking for live node with markdown:', diff.sourceMarkdown?.substring(0, 100));
+      console.log('  Available live nodes:', Array.from(liveNodesByMarkdown.keys()).map(k => k.substring(0, 50)));
       const liveNodeKey = liveNodesByMarkdown.get(diff.sourceMarkdown);
       if (!liveNodeKey) {
         console.warn(
@@ -871,6 +873,7 @@ export function $applyNodeDiff(
         );
         return;
       }
+      console.log('  Found live node:', liveNodeKey);
 
       const liveNode = $getNodeByKey(liveNodeKey);
       if (!liveNode) {

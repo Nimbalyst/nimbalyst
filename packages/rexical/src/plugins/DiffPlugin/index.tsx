@@ -83,11 +83,11 @@ export function DiffPlugin(): JSX.Element | null {
         }
 
         const traverseNodes = (node: LexicalNode) => {
-          // Skip table internal nodes as they don't have direct DOM elements
-          // Only process table cells which do have DOM elements
-          const isTableInternalNode = $isTableNode(node) || $isTableRowNode(node);
+          // Skip table row nodes as they don't have direct DOM elements in some implementations
+          // But DO process table nodes and table cell nodes which have DOM elements
+          const isTableRowNode = $isTableRowNode(node);
 
-          if (!isTableInternalNode) {
+          if (!isTableRowNode) {
             const diffState = $getDiffState(node);
             const element = editor.getElementByKey(node.getKey());
 

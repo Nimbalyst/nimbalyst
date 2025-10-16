@@ -314,6 +314,10 @@ export class WindowedTreeMatcher {
     const sourceNodesWithMarkdown = this.sourceEditor.getEditorState().read(() => {
       const root = $getRoot();
       const children = root.getChildren();
+      console.log('🔍 SOURCE EDITOR: Processing', children.length, 'root children');
+      children.forEach((child, idx) => {
+        console.log(`  [${idx}] ${child.getType()} (key: ${child.getKey()})`);
+      });
       const results: NodeWithMarkdown[] = [];
 
       for (const child of children) {
@@ -406,6 +410,10 @@ export class WindowedTreeMatcher {
     const targetNodesWithMarkdown = this.targetEditor.getEditorState().read(() => {
       const root = $getRoot();
       const children = root.getChildren();
+      console.log('🔍 TARGET EDITOR: Processing', children.length, 'root children');
+      children.forEach((child, idx) => {
+        console.log(`  [${idx}] ${child.getType()} (key: ${child.getKey()})`);
+      });
       const results: NodeWithMarkdown[] = [];
 
       for (const child of children) {
