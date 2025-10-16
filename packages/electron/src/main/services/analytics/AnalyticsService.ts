@@ -95,7 +95,7 @@ export class AnalyticsService {
     return this.settingsStore ??= new Store({
       name: 'analytics-settings',
       defaults: {
-        analyticsEnabled: false,
+        analyticsEnabled: true,
         analyticsId: `nimbalyst_${ulid()}`
       }
     });
