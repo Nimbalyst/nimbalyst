@@ -205,10 +205,13 @@ export function DiffPlugin(): JSX.Element | null {
               );
 
               // Success - dispatch completion event from INSIDE the update callback
+              // Use setTimeout to defer event dispatch to next tick to avoid race condition
               if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('diffApplyComplete', {
-                  detail: { success: true, requestId }
-                }));
+                setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent('diffApplyComplete', {
+                    detail: { success: true, requestId }
+                  }));
+                }, 0);
               }
             } catch (error: any) {
               // Handle error from INSIDE the editor.update callback
@@ -225,10 +228,13 @@ export function DiffPlugin(): JSX.Element | null {
               }
 
               // Dispatch error event from INSIDE the catch block
+              // Use setTimeout to defer event dispatch to next tick to avoid race condition
               if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('diffApplyComplete', {
-                  detail: { success: false, error: errorMessage, requestId }
-                }));
+                setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent('diffApplyComplete', {
+                    detail: { success: false, error: errorMessage, requestId }
+                  }));
+                }, 0);
               }
             }
           }, { discrete: true });
@@ -240,10 +246,13 @@ export function DiffPlugin(): JSX.Element | null {
           console.error('[DiffPlugin] Setup error before editor.update:', error);
 
           // Dispatch error event for setup errors
+          // Use setTimeout to defer event dispatch to next tick to avoid race condition
           if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('diffApplyComplete', {
-              detail: { success: false, error: error.message || 'Unknown error', requestId }
-            }));
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('diffApplyComplete', {
+                detail: { success: false, error: error.message || 'Unknown error', requestId }
+              }));
+            }, 0);
           }
 
           return true;
