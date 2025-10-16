@@ -25,7 +25,7 @@ import {
   createWindowedTreeMatcher,
   WindowedMatchResult,
 } from '../../core/TreeMatcher';
-import { $convertFromEnhancedMarkdownString } from "../../../markdown";
+import { $convertFromEnhancedMarkdownString } from "../../../../markdown";
 
 // Helper function to create an editor with markdown content
 function createEditorWithMarkdown(markdown: string) {
