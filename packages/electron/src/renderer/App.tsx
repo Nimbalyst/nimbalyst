@@ -33,6 +33,8 @@ import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin
 import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
 import { registerItemTrackerPlugin } from './plugins/registerItemTrackerPlugin';
+import SettingsScreen from './components/SettingsScreen/SettingsScreen';
+import OnboardingService from './services/OnboardingService';
 import './WorkspaceWelcome.css';
 import './components/AIModels/AIModelsRedesigned.css';
 
@@ -917,6 +919,25 @@ export default function App() {
     loadInitialState();
   }, []);
 
+  // Check for first-time setup when workspace changes
+  useEffect(() => {
+    const checkFirstTimeSetup = async () => {
+      if (!workspacePath || !workspaceMode) return;
+
+      try {
+        const needsSetup = await OnboardingService.needsOnboarding(workspacePath);
+        console.log('[SETTINGS] Needs first-time setup:', needsSetup);
+        if (needsSetup) {
+          setSidebarView('settings');
+        }
+      } catch (error) {
+        console.error('[SETTINGS] Failed to check setup status:', error);
+      }
+    };
+
+    checkFirstTimeSetup();
+  }, [workspacePath, workspaceMode]);
+
   // Set up IPC listeners
   // IPC handlers hook - sets up all IPC communication with main process
   useIPCHandlers({
@@ -1087,15 +1108,9 @@ export default function App() {
               window.electronAPI.invoke('open-session-manager', workspacePath);
             }
           }}
-          onOpenSettings={() => {
-            // Open AI Models settings
-            if (window.electronAPI) {
-              window.electronAPI.openAIModels();
-            }
-          }}
         />
       )}
-      {workspaceMode && workspaceName && (
+      {workspaceMode && workspaceName && sidebarView !== 'settings' && (
         <>
           <div ref={sidebarRef} style={{ width: sidebarWidth, position: 'relative' }}>
             <WorkspaceSidebar
@@ -1152,13 +1167,16 @@ export default function App() {
         </>
       )}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/*{console.log('[APP] Rendering TabManager check:', {*/}
-        {/*  enabled: true,*/}
-        {/*  workspaceMode,*/}
-        {/*  numTabs: tabs.tabs.length,*/}
-        {/*  activeTabId: tabs.activeTabId*/}
-        {/*})}*/}
-        {workspaceMode || tabs.activeTab ? (
+        {sidebarView === 'settings' ? (
+          <SettingsScreen
+            workspacePath={workspacePath || ''}
+            workspaceName={workspaceName || ''}
+            onClose={() => {
+              setSidebarView('files');
+            }}
+            isFirstTime={false}
+          />
+        ) : workspaceMode || tabs.activeTab ? (
           <TabManager
             tabs={tabs.tabs}
             activeTabId={tabs.activeTabId}
@@ -1238,7 +1256,7 @@ export default function App() {
           <WorkspaceWelcome workspaceName={workspaceName || 'Open a file to get started'} />
         )}
       </div>
-      {workspaceMode && (
+      {workspaceMode && sidebarView !== 'settings' && (
         <AIChat
           isCollapsed={isAIChatCollapsed}
           onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}

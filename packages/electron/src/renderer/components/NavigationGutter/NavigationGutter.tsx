@@ -3,7 +3,7 @@ import { MaterialSymbol } from '../MaterialSymbol';
 import './NavigationGutter.css';
 
 export type NavigationMode = 'planning' | 'coding';
-export type SidebarView = 'files' | 'plans';
+export type SidebarView = 'files' | 'plans' | 'settings';
 
 interface NavigationGutterProps {
   currentMode: NavigationMode;
@@ -74,7 +74,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
     id: 'settings',
     icon: 'settings',
     label: 'Settings',
-    onClick: onOpenSettings,
+    sidebarView: 'settings',
   };
 
   const handleButtonClick = (button: NavButton) => {
@@ -133,12 +133,17 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
       {/* Settings (bottom) */}
       <div className="nav-section nav-settings">
         <button
-          className="nav-button"
+          className={`nav-button ${sidebarView === 'settings' ? 'active' : ''}`}
           onClick={() => handleButtonClick(settingsButton)}
           title={settingsButton.label}
           aria-label={settingsButton.label}
+          aria-pressed={sidebarView === 'settings'}
         >
-          <MaterialSymbol icon={settingsButton.icon} size={20} />
+          <MaterialSymbol
+            icon={settingsButton.icon}
+            size={20}
+            fill={sidebarView === 'settings'}
+          />
         </button>
       </div>
     </div>
