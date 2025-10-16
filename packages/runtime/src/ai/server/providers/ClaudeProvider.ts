@@ -421,7 +421,53 @@ export class ClaudeProvider extends BaseAIProvider {
                 } catch {}
               }
 
-              currentToolUse.input = JSON.parse(toolInputBuffer);
+              // Clean the buffer by attempting to parse JSON and handling protocol tag leakage
+              // The fine-grained-tool-streaming beta API sometimes appends protocol tags after valid JSON
+              let parsedInput;
+              try {
+                parsedInput = JSON.parse(toolInputBuffer);
+              } catch (firstError) {
+                // Try to find where valid JSON ends by looking for the closing brace
+                // then removing any trailing garbage (like ]</invoke>})
+                // We only want to remove trailing protocol tags, not XML content in the actual data
+
+                // Find the last valid JSON closing brace
+                // Strategy: try parsing progressively shorter strings from the end
+                let cleaned = toolInputBuffer.trim();
+
+                // Common pattern: valid JSON followed by ]</invoke>} or similar
+                // Try removing common protocol tag patterns from the END only
+                const protocolTagPatterns = [
+                  /]<\/invoke>}$/,
+                  /<\/invoke>$/,
+                  /]<\/[^>]+>}$/,
+                  /<\/[^>]+>$/
+                ];
+
+                for (const pattern of protocolTagPatterns) {
+                  const testBuffer = cleaned.replace(pattern, '');
+                  if (testBuffer !== cleaned) {
+                    try {
+                      parsedInput = JSON.parse(testBuffer);
+                      console.warn('[ClaudeProvider] Removed trailing protocol tag from tool input:', {
+                        pattern: pattern.toString(),
+                        removed: cleaned.substring(testBuffer.length)
+                      });
+                      cleaned = testBuffer;
+                      break;
+                    } catch {
+                      // This pattern didn't help, try next
+                    }
+                  }
+                }
+
+                // If still not parsed, throw the original error
+                if (!parsedInput) {
+                  throw firstError;
+                }
+              }
+
+              currentToolUse.input = parsedInput;
 
               // Add tool_use to assistant content for conversation continuation
               assistantContent.push({
