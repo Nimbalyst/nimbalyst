@@ -496,6 +496,30 @@ export async function createApplicationMenu() {
                         if (focused) focused.close();
                     }
                 },
+                {
+                    label: 'Close Project',
+                    accelerator: 'CmdOrCtrl+Shift+W',
+                    enabled: (() => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (!focused) return false;
+                        const windowId = getWindowId(focused);
+                        if (windowId === null) return false;
+                        const state = windowStates.get(windowId);
+                        return state?.mode === 'workspace';
+                    })(),
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            const windowId = getWindowId(focused);
+                            if (windowId !== null) {
+                                const state = windowStates.get(windowId);
+                                if (state?.mode === 'workspace') {
+                                    focused.close();
+                                }
+                            }
+                        }
+                    }
+                },
                 { type: 'separator' },
                 {
                     label: 'Quit',

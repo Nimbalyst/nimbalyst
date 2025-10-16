@@ -85,6 +85,12 @@ export class ChokidarFileWatcher {
                 const watcher = chokidar.watch(filePath, {
                     ignoreInitial: true,  // Don't fire events for initial file state
                     persistent: true,      // Keep the process running
+                    awaitWriteFinish: {    // Wait for writes to finish (handles atomic saves)
+                        stabilityThreshold: 100,  // Wait 100ms after last change
+                        pollInterval: 50          // Check every 50ms
+                    },
+                    usePolling: false,     // Use native fs.watch (faster)
+                    atomic: true,          // Handle atomic writes (vim-style saves)
                 });
 
                 // Wait for watcher to be ready before resolving

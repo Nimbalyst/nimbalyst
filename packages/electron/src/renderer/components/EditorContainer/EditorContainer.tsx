@@ -239,6 +239,10 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
           // console.log('[EDITOR_CONTAINER_DEBUG] Split by newline:', content.split('\n').slice(0, 10).map((line, i) => `Line ${i}: "${line}"`));
 
           editorPool.create(tab.filePath, content || '');
+          // Mark the loaded content as "saved" to prevent false positive file change warnings
+          editorPool.update(tab.filePath, {
+            lastSavedContent: content || '',
+          });
           logger.ui.info(`[EditorContainer] Created editor instance for tab: ${tab.fileName}`);
         }
       }
@@ -326,22 +330,31 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
       try {
         await handleFileChangedInternal(data);
       } finally {
-        // Clear processing flag after a delay to catch rapid-fire events
+        // Clear processing flag after a SHORT delay to allow for rapid changes but prevent infinite loops
         setTimeout(() => {
           processingChangesRef.current.delete(data.path);
-        }, 1000);
+        }, 100); // Reduced from 1000ms to 100ms to catch rapid changes
       }
     };
 
     const handleFileChangedInternal = async (data: { path: string }) => {
+      console.log('[EditorContainer] ========== FILE CHANGED EVENT ==========');
+      console.log('[EditorContainer] File path:', data.path);
       logger.ui.info(`[EditorContainer] File changed on disk: ${data.path}`);
-      // console.log('[EditorContainer] file-changed handler invoked', data.path);
 
       const tab = tabs.find(t => t.filePath === data.path);
-      if (!tab) return;
+      if (!tab) {
+        console.log('[EditorContainer] No tab found for file:', data.path);
+        return;
+      }
+      console.log('[EditorContainer] Found tab:', tab.fileName);
 
       const instance = editorPool.get(data.path);
-      if (!instance) return;
+      if (!instance) {
+        console.log('[EditorContainer] No editor instance found for:', data.path);
+        return;
+      }
+      console.log('[EditorContainer] Editor instance found, content length:', instance.content?.length ?? 'undefined');
 
       try {
         const result = await window.electronAPI.readFileContent(data.path);
@@ -352,27 +365,44 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
         const newContent = result.content || '';
         const currentContent = instance.content ?? '';
 
-        // Check if this is our own save - compare with last saved content
-        if (instance.lastSavedContent !== undefined && newContent === instance.lastSavedContent) {
-          logger.ui.info(`[EditorContainer] Ignoring file change (just saved ${tab.fileName})`);
-          return;
-        }
-
+        // First: Check if disk content matches what we currently have in the editor
+        // If they're the same, no action needed
         if (newContent === currentContent) {
           logger.ui.info(`[EditorContainer] Disk content matches editor for ${tab.fileName}, skipping reload`);
           return;
         }
 
+        // Second: Check if this change is from our own recent save operation
+        // Only ignore if we saved recently (within 3 seconds) AND the disk content matches what we saved
+        if (instance.lastSaveTime &&
+            Date.now() - instance.lastSaveTime < 3000 &&
+            instance.lastSavedContent !== undefined &&
+            newContent === instance.lastSavedContent) {
+          logger.ui.info(`[EditorContainer] Ignoring file change (our own save of ${tab.fileName} within last 3 seconds)`);
+          return;
+        }
+
+        // If we get here, it's a legitimate external change that differs from our editor content
+        logger.ui.info(`[EditorContainer] External change detected for ${tab.fileName}: disk content differs from editor`);
+        console.log('[EditorContainer] External change details:', {
+          file: tab.fileName,
+          currentLength: currentContent.length,
+          newLength: newContent.length,
+          lastSaveTime: instance.lastSaveTime ? new Date(instance.lastSaveTime).toISOString() : 'never',
+          timeSinceLastSave: instance.lastSaveTime ? Date.now() - instance.lastSaveTime : 'N/A'
+        });
+
         const isActiveTab = tab.id === activeTabId;
         const nextReloadVersion = (instance.reloadVersion ?? 0) + 1;
 
         const applyReload = async () => {
-          console.log('[EditorContainer] applyReload executing', {
-            file: tab.fileName,
-            isActiveTab,
-            dirty: instance.isDirty,
-            reloadVersion: nextReloadVersion,
-          });
+          console.log('[EditorContainer] ========== APPLYING RELOAD ==========');
+          console.log('[EditorContainer] File:', tab.fileName);
+          console.log('[EditorContainer] Is active tab:', isActiveTab);
+          console.log('[EditorContainer] Was dirty:', instance.isDirty);
+          console.log('[EditorContainer] New reload version:', nextReloadVersion);
+          console.log('[EditorContainer] Old content length:', currentContent.length);
+          console.log('[EditorContainer] New content length:', newContent.length);
 
           // Create history snapshot of the external change (new content from disk)
           if (window.electronAPI?.history && newContent) {
