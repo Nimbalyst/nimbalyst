@@ -16,6 +16,8 @@ import {
   ListItemNode,
 } from '@lexical/list';
 
+import { $getDiffState } from '../plugins/DiffPlugin/core/DiffState';
+
 // Regex patterns for different list types
 export const ORDERED_LIST_REGEX = /^(\s*)(\d{1,})\.\s/;
 export const UNORDERED_LIST_REGEX = /^(\s*)[-*+]\s/;
@@ -177,6 +179,12 @@ export function listExport(
 
   for (const listItemNode of children) {
     if ($isListItemNode(listItemNode)) {
+      // Skip list items marked as removed in diff state
+      const diffState = $getDiffState(listItemNode);
+      if (diffState === 'removed') {
+        continue;
+      }
+
       // Check if this item contains a nested list as its only child
       if (listItemNode.getChildrenSize() === 1) {
         const firstChild = listItemNode.getFirstChild();

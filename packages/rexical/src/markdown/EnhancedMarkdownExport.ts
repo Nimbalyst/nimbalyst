@@ -191,6 +191,12 @@ function exportTopLevelElements(
   textMatchTransformers: Array<TextMatchTransformer>,
   shouldPreserveNewLines: boolean = false,
 ): string | null {
+  // Skip nodes marked as removed in diff state
+  const diffState = $getDiffState(node);
+  if (diffState === 'removed') {
+    return null;
+  }
+
   for (const transformer of elementTransformers) {
     if (!transformer.export) {
       continue;
