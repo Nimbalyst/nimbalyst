@@ -9,6 +9,7 @@ import { OpenAIPanel } from './panels/OpenAIPanel';
 import { OpenAICodexPanel } from './panels/OpenAICodexPanel';
 import { LMStudioPanel } from './panels/LMStudioPanel';
 import { AdvancedPanel } from './panels/AdvancedPanel';
+import {AnalyticsSettingsPanel} from "./panels/AnalyticsPanel.tsx";
 
 // Apply theme IMMEDIATELY when module loads - BEFORE React renders
 // This prevents flash of wrong theme
@@ -100,7 +101,7 @@ interface AIModelsProps {
   onClose: () => void;
 }
 
-type ProviderId = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio' | 'advanced';
+type ProviderId = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio' | 'advanced' | 'analytics';
 
 interface Provider {
   id: ProviderId;
@@ -398,6 +399,8 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
             setHasChanges(true);
           }}
         />;
+      case 'analytics':
+        return <AnalyticsSettingsPanel/>;
       default:
         return null;
     }
@@ -501,10 +504,13 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
               className={`nav-action-button ${selectedProvider === 'advanced' ? 'active' : ''}`}
               onClick={() => setSelectedProvider('advanced')}
             >
-              <span>🔧</span> Advanced Settings
+              Advanced Settings
+            </button>
+            <button className={'nav-action-button'} onClick={() => setSelectedProvider('analytics')}>
+              Analytics
             </button>
             <button className="nav-action-button">
-              <span>📚</span> Documentation
+              Documentation
             </button>
           </div>
         </nav>

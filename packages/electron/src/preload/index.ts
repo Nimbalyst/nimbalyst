@@ -474,6 +474,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Open external links
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
 
+  // analytics
+  analytics: {
+    allowedToSendAnalytics: () => ipcRenderer.invoke('analytics:allowed'),
+    getDistinctId: () => ipcRenderer.invoke('analytics:get-distinct-id'),
+    optIn: () => ipcRenderer.invoke('analytics:opt-in'),
+    optOut: () => ipcRenderer.invoke('analytics:opt-out'),
+    sendEvent: (eventName: string, properties?: Record<string | number, any>) => ipcRenderer.invoke('analytics:send-event', eventName, properties),
+  },
+
   // Generic IPC methods for services that need them
   invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
   send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),

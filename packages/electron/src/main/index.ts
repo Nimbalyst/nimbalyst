@@ -37,6 +37,8 @@ import { stopAllWorkspaceWatchers } from './file/WorkspaceWatcher.ts';
 import { autoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
 import { migrateUserData } from './migration/dataMigration';
 import { initializeDatabase } from './database/initialize';
+import {AnalyticsService} from "./services/analytics/AnalyticsService.ts";
+import {registerAnalyticsHandlers} from "./ipc/AnalyticsHandlers.ts";
 
 // Track pending file to open
 let pendingFilePath: string | null = null;
@@ -56,6 +58,8 @@ const appStartTime = Date.now();
 
 // Single instance lock - prevent multiple instances from running
 const gotTheLock = app.requestSingleInstanceLock();
+
+const analytics = AnalyticsService.getInstance();
 
 if (!gotTheLock) {
     // Another instance is already running, quit immediately
@@ -243,6 +247,7 @@ app.whenReady().then(async () => {
     setupSessionFileHandlers();
     registerSlashCommandHandlers();
     registerAttachmentHandlers();
+    registerAnalyticsHandlers();
 
     // Initialize AI service
     if (!runtimeSessionStore) {
@@ -423,6 +428,9 @@ app.on('before-quit', async (event) => {
 
     let debugLog: string | null = null;
     let canWriteLogs = false;
+
+    // stop analytics
+    await analytics.destroy();
 
     // Check if we can write to userData directory
     try {

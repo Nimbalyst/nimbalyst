@@ -42,6 +42,7 @@ export enum LogComponent {
   THEME = 'THEME',
   STORE = 'STORE',
   SAVE = 'SAVE',
+  ANALYTICS = 'ANALYTICS',
   
   // General
   MAIN = 'MAIN',
@@ -192,6 +193,10 @@ const defaultConfig: LoggerConfig = {
       enabled: true,
       level: LogLevel.INFO
     },
+    [LogComponent.ANALYTICS]: {
+      enabled: true,
+      level: LogLevel.INFO
+    },
     
     // General
     [LogComponent.MAIN]: {
@@ -335,6 +340,7 @@ export const logger = {
   theme: createComponentLogger(LogComponent.THEME),
   store: createComponentLogger(LogComponent.STORE),
   save: createComponentLogger(LogComponent.SAVE),
+  analytics: createComponentLogger(LogComponent.ANALYTICS),
   
   // General
   main: createComponentLogger(LogComponent.MAIN),

@@ -148,6 +148,15 @@ interface ElectronAPI {
     removeRecent: (workspacePath: string) => Promise<{ success: boolean }>;
   };
 
+  // analytics
+  analytics?: {
+    allowedToSendAnalytics: () => Promise<boolean>;
+    getDistinctId: () => Promise<string>;
+    optIn: () => Promise<void>;
+    optOut: () => Promise<void>;
+    sendEvent: (eventName: string, properties?: Record<string | number, any>) => void;
+  }
+
   // Document Service
   documentService: import('@stravu/runtime').DocumentService;
 
