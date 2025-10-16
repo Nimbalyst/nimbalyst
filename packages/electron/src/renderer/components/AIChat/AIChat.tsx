@@ -232,92 +232,128 @@ export function AIChat({
 
         // Auto-apply edits when they arrive
         if (data.edits && data.edits.length > 0) {
-          data.edits.forEach(async (edit: any) => {
-            // CRITICAL: Use the LOCKED document context from when the message was sent
-            // This prevents edits from going to the wrong document if the user switched tabs
-            const targetContext = messageDocumentContextRef.current;
+          // Use Promise.all to properly await all edits and track results
+          (async () => {
+            const editResults = await Promise.all(data.edits.map(async (edit: any) => {
+              // CRITICAL: Use the LOCKED document context from when the message was sent
+              // This prevents edits from going to the wrong document if the user switched tabs
+              const targetContext = messageDocumentContextRef.current;
 
-            if (!targetContext || !targetContext.filePath) {
-              const errorMsg = 'Cannot auto-apply edit: No locked document context';
-              logger.bridge.error(errorMsg);
-              errorNotificationService.showError(
-                'AI Edit Failed',
-                'Cannot apply edit - no target document context available. This may indicate the message was sent without an active document.',
-                { details: 'The AI attempted to apply an edit, but no document context was captured when the message was sent.' }
-              );
-              setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: `🚨 Cannot apply edit: No target document context available.`,
-                isError: true
-              }]);
-              return;
-            }
+              if (!targetContext || !targetContext.filePath) {
+                const errorMsg = 'Cannot auto-apply edit: No locked document context';
+                logger.bridge.error(errorMsg);
+                errorNotificationService.showError(
+                  'AI Edit Failed',
+                  'Cannot apply edit - no target document context available. This may indicate the message was sent without an active document.',
+                  { details: 'The AI attempted to apply an edit, but no document context was captured when the message was sent.' }
+                );
+                setMessages(prev => [...prev, {
+                  role: 'assistant',
+                  content: `🚨 Cannot apply edit: No target document context available.`,
+                  isError: true
+                }]);
+                return { success: false, filePath: null };
+              }
 
-            // Verify the target document is still the active one, or switch to it
-            const currentActive = documentContext?.filePath;
-            if (currentActive !== targetContext.filePath) {
-              logger.bridge.warn(`[AUTO-APPLY] Target document ${targetContext.filePath} is not active (current: ${currentActive})`);
-              logger.bridge.warn(`[AUTO-APPLY] User switched tabs during AI processing - attempting to switch back`);
+              // Verify the target document is still the active one, or switch to it
+              const currentActive = documentContext?.filePath;
+              if (currentActive !== targetContext.filePath) {
+                logger.bridge.warn(`[AUTO-APPLY] Target document ${targetContext.filePath} is not active (current: ${currentActive})`);
+                logger.bridge.warn(`[AUTO-APPLY] User switched tabs during AI processing - attempting to switch back`);
 
-              // Try to open the target file
-              if (window.electronAPI && workspacePath) {
+                // Try to open the target file
+                if (window.electronAPI && workspacePath) {
+                  try {
+                    await window.electronAPI.invoke('workspace:open-file', { workspacePath, filePath: targetContext.filePath });
+                    // Wait a bit for the file to become active
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                  } catch (err) {
+                    const errorMsg = `Failed to switch to target document: ${targetContext.filePath}`;
+                    logger.bridge.error(`[AUTO-APPLY] ${errorMsg}`, err);
+                    errorNotificationService.showError(
+                      'AI Edit Failed',
+                      `Cannot apply edit - failed to switch to target document "${targetContext.filePath}".`,
+                      {
+                        details: `The AI tried to apply an edit to ${targetContext.filePath}, but the system could not open that file.`,
+                        stack: err instanceof Error ? err.stack : undefined,
+                        context: { targetFilePath: targetContext.filePath, currentFilePath: currentActive }
+                      }
+                    );
+                    setMessages(prev => [...prev, {
+                      role: 'assistant',
+                      content: `🚨 Cannot apply edit: Failed to switch to target document ${targetContext.filePath}`,
+                      isError: true
+                    }]);
+                    return { success: false, filePath: targetContext.filePath };
+                  }
+                }
+              }
+
+              logger.bridge.info(`Auto-applying edit to LOCKED target: ${targetContext.filePath}:`, edit);
+              console.error('[AUTO-APPLY] Calling aiApi.applyEdit with targetFilePath:', targetContext.filePath);
+
+              // CRITICAL: Apply the edit through the API WITH the target file path
+              const result = await aiApi.applyEdit(edit, targetContext.filePath);
+              console.error('[AUTO-APPLY] Result:', result);
+
+              // If we have onApplyEdit callback, notify the parent AFTER the edit is applied
+              // This is for UI updates, not for actually applying the edit
+              if (onApplyEdit) {
+                // Pass the result so the parent knows if it succeeded
+                onApplyEdit(edit, currentUserMessage, data.content);
+              }
+
+              if (!result.success) {
+                // Edit failed - send an automatic follow-up message to Claude
+                const currentContent = documentContext?.getLatestContent ? documentContext.getLatestContent() : documentContext?.content || '';
+                const errorMessage = `The previous edit command failed because: "${result.error}"\n\nThe current document (${documentContext.filePath}) contains:\n\`\`\`markdown\n${currentContent}\n\`\`\`\n\nPlease provide a corrected edit command using the EXACT text from the document above.`;
+
+                // Add error notification to chat
+                setMessages(prev => [...prev, {
+                  role: 'assistant',
+                  content: `⚠️ Edit failed for ${documentContext.filePath}: ${result.error}\n\nAutomatically asking Claude to correct...`
+                }]);
+
+                // Send the error back to Claude so it can correct itself
+                setTimeout(() => {
+                  handleSendMessage(errorMessage);
+                }, 500);
+              }
+
+              return { success: result.success, filePath: targetContext.filePath };
+            }));
+
+            // Create history snapshot after all edits complete
+            const successfulEdits = editResults.filter(r => r.success);
+            if (successfulEdits.length > 0 && successfulEdits[0].filePath && window.electronAPI?.history) {
+              const targetContext = messageDocumentContextRef.current;
+              const session = getCurrentSession();
+
+              if (targetContext?.filePath && session) {
                 try {
-                  await window.electronAPI.invoke('workspace:open-file', { workspacePath, filePath: targetContext.filePath });
-                  // Wait a bit for the file to become active
-                  await new Promise(resolve => setTimeout(resolve, 500));
-                } catch (err) {
-                  const errorMsg = `Failed to switch to target document: ${targetContext.filePath}`;
-                  logger.bridge.error(`[AUTO-APPLY] ${errorMsg}`, err);
-                  errorNotificationService.showError(
-                    'AI Edit Failed',
-                    `Cannot apply edit - failed to switch to target document "${targetContext.filePath}".`,
-                    {
-                      details: `The AI tried to apply an edit to ${targetContext.filePath}, but the system could not open that file.`,
-                      stack: err instanceof Error ? err.stack : undefined,
-                      context: { targetFilePath: targetContext.filePath, currentFilePath: currentActive }
-                    }
+                  // Get latest content for snapshot
+                  const latestContent = documentContext?.getLatestContent?.() || documentContext?.content || '';
+
+                  // Create prompt summary (truncate to 100 chars)
+                  const promptSummary = currentUserMessage.length > 100
+                    ? currentUserMessage.substring(0, 97) + '...'
+                    : currentUserMessage;
+
+                  // Create snapshot with rich metadata
+                  await window.electronAPI.history.createSnapshot(
+                    targetContext.filePath,
+                    latestContent,
+                    'ai-edit',
+                    `AI Edit: ${promptSummary}`
                   );
-                  setMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: `🚨 Cannot apply edit: Failed to switch to target document ${targetContext.filePath}`,
-                    isError: true
-                  }]);
-                  return;
+
+                  logger.bridge.info(`Created AI edit history snapshot for ${targetContext.filePath}`);
+                } catch (error) {
+                  logger.bridge.error('Failed to create AI edit history snapshot:', error);
                 }
               }
             }
-
-            logger.bridge.info(`Auto-applying edit to LOCKED target: ${targetContext.filePath}:`, edit);
-            console.error('[AUTO-APPLY] Calling aiApi.applyEdit with targetFilePath:', targetContext.filePath);
-
-            // CRITICAL: Apply the edit through the API WITH the target file path
-            const result = await aiApi.applyEdit(edit, targetContext.filePath);
-            console.error('[AUTO-APPLY] Result:', result);
-
-            // If we have onApplyEdit callback, notify the parent AFTER the edit is applied
-            // This is for UI updates, not for actually applying the edit
-            if (onApplyEdit) {
-              // Pass the result so the parent knows if it succeeded
-              onApplyEdit(edit, currentUserMessage, data.content);
-            }
-
-            if (!result.success) {
-              // Edit failed - send an automatic follow-up message to Claude
-              const currentContent = documentContext?.getLatestContent ? documentContext.getLatestContent() : documentContext?.content || '';
-              const errorMessage = `The previous edit command failed because: "${result.error}"\n\nThe current document (${documentContext.filePath}) contains:\n\`\`\`markdown\n${currentContent}\n\`\`\`\n\nPlease provide a corrected edit command using the EXACT text from the document above.`;
-
-              // Add error notification to chat
-              setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: `⚠️ Edit failed for ${documentContext.filePath}: ${result.error}\n\nAutomatically asking Claude to correct...`
-              }]);
-
-              // Send the error back to Claude so it can correct itself
-              setTimeout(() => {
-                handleSendMessage(errorMessage);
-              }, 500);
-            }
-          });
+          })();
         }
       } else if (data.partial || data.edits || data.toolCalls) {
         // Streaming partial response
@@ -704,6 +740,35 @@ export function AIChat({
         }
         return newMessages;
       });
+
+      // Create AI edit history snapshot after streaming completes
+      // Only create if streaming was successful (no error) and we have content
+      if (!data?.error && streamingContent && streamingContent.length > 0 && window.electronAPI?.history) {
+        const session = getCurrentSession();
+        if (targetFilePath && session) {
+          try {
+            // Get latest content for snapshot (includes the streamed content)
+            const latestContent = documentContext?.getLatestContent?.() || documentContext?.content || '';
+
+            // Create prompt summary (truncate to 100 chars)
+            const promptSummary = currentUserMessage.length > 100
+              ? currentUserMessage.substring(0, 97) + '...'
+              : currentUserMessage;
+
+            // Create snapshot with rich metadata
+            await window.electronAPI.history.createSnapshot(
+              targetFilePath,
+              latestContent,
+              'ai-edit',
+              `AI Edit: ${promptSummary}`
+            );
+
+            logger.bridge.info(`Created AI edit history snapshot for streaming edit: ${targetFilePath}`);
+          } catch (error) {
+            logger.bridge.error('Failed to create AI edit history snapshot for streaming:', error);
+          }
+        }
+      }
 
       // Save the streaming status message to the session
       // This ensures it persists when sessions are reloaded

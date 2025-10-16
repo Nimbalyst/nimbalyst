@@ -4,9 +4,10 @@ import './HistoryWindow.css';
 
 interface Snapshot {
   timestamp: string;
-  type: 'auto-save' | 'manual' | 'ai-diff' | 'pre-apply' | 'external-change';
+  type: 'auto-save' | 'manual' | 'ai-diff' | 'pre-apply' | 'external-change' | 'ai-edit';
   size: number;
   baseMarkdownHash: string;
+  metadata?: any;
 }
 
 export function HistoryWindow() {
@@ -135,6 +136,8 @@ export function HistoryWindow() {
         return 'bookmark';
       case 'ai-diff':
         return 'smart_toy';
+      case 'ai-edit':
+        return 'auto_awesome';
       case 'pre-apply':
         return 'backup';
       case 'external-change':
@@ -151,6 +154,8 @@ export function HistoryWindow() {
       case 'manual':
         return 'Manual';
       case 'ai-diff':
+        return 'AI Diff';
+      case 'ai-edit':
         return 'AI Edit';
       case 'pre-apply':
         return 'Pre-apply';

@@ -10,7 +10,7 @@ import { logger } from './utils/logger';
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
 
-export type SnapshotType = 'auto-save' | 'manual' | 'ai-diff' | 'pre-apply' | 'external-change';
+export type SnapshotType = 'auto-save' | 'manual' | 'ai-diff' | 'pre-apply' | 'external-change' | 'ai-edit';
 
 export interface Snapshot {
   timestamp: string;
@@ -137,14 +137,42 @@ export class HistoryManager {
   ): Promise<void> {
     const timestamp = new Date().toISOString();
 
-    // Compress the state
-    const compressed = await gzip(Buffer.from(state, 'utf-8'));
-
     // Calculate markdown hash
     const baseMarkdownHash = crypto
       .createHash('sha256')
       .update(state)
       .digest('hex');
+
+    // Check for duplicate: if the most recent snapshot has the same content hash, skip
+    try {
+      // Ensure database is initialized
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      // Get the most recent snapshot for this file
+      const recentResult = await database.query<{ metadata: any }>(`
+        SELECT metadata
+        FROM document_history
+        WHERE file_path = $1
+        ORDER BY timestamp DESC
+        LIMIT 1
+      `, [filePath]);
+
+      if (recentResult.rows.length > 0) {
+        const recentMetadata = recentResult.rows[0].metadata;
+        if (recentMetadata?.baseMarkdownHash === baseMarkdownHash) {
+          logger.main.debug('[HistoryManager] Skipping duplicate snapshot (same content hash):', filePath);
+          return; // Skip creating duplicate
+        }
+      }
+    } catch (error) {
+      // If deduplication check fails, continue with snapshot creation
+      logger.main.warn('[HistoryManager] Deduplication check failed, creating snapshot anyway:', error);
+    }
+
+    // Compress the state
+    const compressed = await gzip(Buffer.from(state, 'utf-8'));
 
     // Save to database
     try {

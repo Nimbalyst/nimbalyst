@@ -106,10 +106,12 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
         if (window.electronAPI.history) {
           try {
             const description = snapshotType === 'manual' ? 'Manual save' : 'Auto-save';
+            // Map 'auto' -> 'auto-save' for database compatibility
+            const dbSnapshotType = snapshotType === 'manual' ? 'manual' : 'auto-save';
             await window.electronAPI.history.createSnapshot(
               result.filePath,
               content,
-              snapshotType,
+              dbSnapshotType,
               description
             );
           } catch (error) {
@@ -405,12 +407,16 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
           forceRender();
         };
 
-        if (isActiveTab && instance.isDirty) {
+        // IMPORTANT: Protect ALL dirty files from being overwritten, not just active ones
+        // This prevents AI-streamed content from being lost when the file is not active
+        if (instance.isDirty) {
           console.log('[EditorContainer] prompting to resolve dirty reload', {
             file: tab.fileName,
+            isActive: isActiveTab
           });
+
           const shouldReload = window.confirm(
-            'The file has been changed on disk but you have unsaved changes.\n\n' +
+            `The file "${tab.fileName}" has been changed on disk but you have unsaved changes.\n\n` +
             'Do you want to reload the file from disk and lose your changes?\n\n' +
             'Click OK to reload from disk, or Cancel to keep your changes.'
           );
@@ -597,7 +603,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
             await window.electronAPI.history.createSnapshot(
               tab.filePath,
               content,
-              'auto',
+              'auto-save',
               'Periodic auto-save'
             );
             lastSnapshotContent.current.set(tab.filePath, content);

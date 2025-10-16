@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 
-export type SnapshotType = 'auto-save' | 'manual' | 'ai-diff' | 'pre-apply' | 'external-change';
+export type SnapshotType = 'auto-save' | 'manual' | 'ai-diff' | 'pre-apply' | 'external-change' | 'ai-edit';
 
 export interface Snapshot {
   timestamp: string;

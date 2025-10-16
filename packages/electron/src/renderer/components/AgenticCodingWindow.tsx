@@ -538,6 +538,64 @@ export const AgenticCodingWindow: React.FC<AgenticCodingWindowProps> = ({
               }
               return tab;
             }));
+
+            // Create history snapshots for edited files
+            if (window.electronAPI?.history && sessionData.messages) {
+              try {
+                // Find the most recent user message for prompt summary
+                const userMessages = sessionData.messages.filter((m: any) => m.role === 'user');
+                const lastUserMessage = userMessages[userMessages.length - 1];
+                const promptSummary = lastUserMessage?.content
+                  ? (lastUserMessage.content.length > 100
+                    ? lastUserMessage.content.substring(0, 97) + '...'
+                    : lastUserMessage.content)
+                  : 'AI Edit';
+
+                // Find tool calls that indicate file edits (applyDiff, etc.)
+                const editedFiles = new Set<string>();
+                for (const message of sessionData.messages) {
+                  if (message.role === 'tool' && message.toolCall) {
+                    const toolName = message.toolCall.name;
+                    // Check for file editing tools
+                    if (toolName === 'applyDiff' || toolName?.endsWith('__applyDiff') ||
+                        toolName === 'editFile' || toolName?.endsWith('__editFile')) {
+                      const targetFile = message.toolCall.targetFilePath ||
+                                        message.toolCall.arguments?.filePath ||
+                                        message.toolCall.arguments?.file;
+                      if (targetFile && message.toolCall.result?.success) {
+                        editedFiles.add(targetFile);
+                      }
+                    }
+                  }
+                }
+
+                // Create snapshots for each edited file
+                for (const filePath of editedFiles) {
+                  try {
+                    // Read the current file content
+                    const fileContent = await window.electronAPI.invoke('workspace:read-file', {
+                      workspacePath,
+                      filePath
+                    });
+
+                    if (fileContent) {
+                      await window.electronAPI.history.createSnapshot(
+                        filePath,
+                        fileContent,
+                        'ai-edit',
+                        `AI Edit: ${promptSummary}`
+                      );
+
+                      console.log('[AgenticCoding] Created AI edit history snapshot for', filePath);
+                    }
+                  } catch (error) {
+                    console.error('[AgenticCoding] Failed to create snapshot for', filePath, error);
+                  }
+                }
+              } catch (error) {
+                console.error('[AgenticCoding] Failed to create AI edit history snapshots:', error);
+              }
+            }
           }
         } catch (err) {
           console.error('[AgenticCoding] Failed to reload session after completion:', err);
