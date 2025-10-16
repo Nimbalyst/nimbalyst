@@ -113,11 +113,20 @@ export function FileContextMenu({
     onClose();
   };
 
+  const handleCopyPath = async () => {
+    try {
+      await navigator.clipboard.writeText(filePath);
+      onClose();
+    } catch (error) {
+      console.error('Failed to copy path to clipboard:', error);
+    }
+  };
+
   const handleDelete = () => {
     const confirmMessage = fileType === 'directory'
       ? `Are you sure you want to delete the folder "${fileName}" and all its contents?`
       : `Are you sure you want to delete "${fileName}"?`;
-    
+
     if (window.confirm(confirmMessage)) {
       onDelete(filePath);
       onClose();
@@ -211,9 +220,14 @@ export function FileContextMenu({
         <MaterialSymbol icon="folder_open" size={18} />
         <span>Show in Finder</span>
       </div>
-      
+
+      <div className="context-menu-item" onClick={handleCopyPath}>
+        <MaterialSymbol icon="content_copy" size={18} />
+        <span>Copy Path</span>
+      </div>
+
       <div className="context-menu-separator" />
-      
+
       <div className="context-menu-item context-menu-item-danger" onClick={handleDelete}>
         <MaterialSymbol icon="delete" size={18} />
         <span>Delete</span>
