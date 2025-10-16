@@ -78,6 +78,8 @@ When invoking IPC from the renderer:
 
 ## Debugging Tips
 
+- **Restart the dev server** after adding new IPC handlers or modifying preload scripts to ensure changes take effect.
+  These file are not hot-reloaded.
 - **Check the channel name** on both sides—typos are the most common source of `undefined` results.
 - **Ensure a return statement** inside `ipcMain.handle` callbacks. If you forget to `return`, `ipcRenderer.invoke` resolves to `undefined`.
 - **Use DevTools**: run `await window.electronAPI.invoke('channel', …)` from the console to inspect responses.
