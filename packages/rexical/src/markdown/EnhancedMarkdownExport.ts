@@ -69,7 +69,7 @@ export function $convertToEnhancedMarkdownString(
   if (includeFrontmatter) {
     let frontmatter = $getFrontmatter() || {};
 
-    // Check if there's a PlanStatusNode and merge its config into frontmatter
+    // Check if there's a PlanStatusNode or DecisionStatusNode and merge its config into frontmatter
     const root = $getRoot();
     const children = root.getChildren();
     for (const child of children) {
@@ -84,6 +84,18 @@ export function $convertToEnhancedMarkdownString(
           };
         }
         break; // Only process first PlanStatusNode
+      }
+      // Check if this is a DecisionStatusNode
+      if (child.getType() === 'decision-status') {
+        // Use exportJSON to get the node's config
+        const exported = (child as any).exportJSON();
+        if (exported && exported.config) {
+          frontmatter = {
+            ...frontmatter,
+            decisionStatus: exported.config
+          };
+        }
+        break; // Only process first DecisionStatusNode
       }
     }
 

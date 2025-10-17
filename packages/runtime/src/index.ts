@@ -24,6 +24,8 @@ export { DocumentLinkPlugin } from './plugins/DocumentLinkPlugin';
 export { DocumentReferenceNode, DocumentReferenceTransformer, $createDocumentReferenceNode, $isDocumentReferenceNode } from './plugins/DocumentLinkPlugin/DocumentLinkNode';
 export { planStatusPluginPackage, PlanStatusNode, $createPlanStatusNode, $isPlanStatusNode, PLAN_STATUS_TRANSFORMER, INSERT_PLAN_STATUS_COMMAND } from './plugins/PlanStatusPlugin';
 export type { PlanStatusPluginProps } from './plugins/PlanStatusPlugin';
+export { decisionStatusPluginPackage, DecisionStatusNode, $createDecisionStatusNode, $isDecisionStatusNode, DECISION_STATUS_TRANSFORMER, INSERT_DECISION_STATUS_COMMAND } from './plugins/DecisionStatusPlugin';
+export type { DecisionStatusPluginProps } from './plugins/DecisionStatusPlugin';
 export {
   itemTrackerPluginPackage,
   TrackerItemNode,

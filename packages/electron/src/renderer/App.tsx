@@ -31,6 +31,7 @@ import { useTabs } from './hooks/useTabs';
 import { useTabNavigation } from './hooks/useTabNavigation';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
+import { registerDecisionStatusPlugin } from './plugins/registerDecisionStatusPlugin';
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
 import { registerItemTrackerPlugin } from './plugins/registerItemTrackerPlugin';
 import SettingsScreen from './components/SettingsScreen/SettingsScreen';
@@ -66,6 +67,7 @@ let pluginsRegistered = false;
 if (!pluginsRegistered) {
   registerDocumentLinkPlugin();
   registerPlanStatusPlugin();
+  registerDecisionStatusPlugin();
   registerItemTrackerPlugin();
   registerAIChatPlugin();
   pluginsRegistered = true;

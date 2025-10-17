@@ -50,7 +50,8 @@ function getTypeIcon(type: TrackerItemType): string {
     'bug': 'bug_report',
     'task': 'check_box',
     'plan': 'assignment',
-    'idea': 'lightbulb'
+    'idea': 'lightbulb',
+    'decision': 'gavel'
   };
   return icons[type];
 }
@@ -297,6 +298,7 @@ export function TrackerTable({
     { value: 'task', label: 'Tasks', icon: 'check_box' },
     { value: 'plan', label: 'Plans', icon: 'assignment' },
     { value: 'idea', label: 'Ideas', icon: 'lightbulb' },
+    { value: 'decision', label: 'Decisions', icon: 'gavel' },
   ];
 
   return (

@@ -579,6 +579,7 @@ export class ElectronDocumentService implements DocumentService {
       id: row.id,
       type: row.type,
       title: row.title,
+      description: row.description || undefined,
       status: row.status,
       priority: row.priority || undefined,
       owner: row.owner || undefined,
@@ -603,7 +604,7 @@ export class ElectronDocumentService implements DocumentService {
       const lines = content.split('\n');
 
       // Regex to match: text @type[id:... status:...]
-      const trackerRegex = /(.+?)\s+@(bug|task|plan|idea)\[(.+?)\]/;
+      const trackerRegex = /(.+?)\s+@(bug|task|plan|idea|decision)\[(.+?)\]/;
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -621,10 +622,30 @@ export class ElectronDocumentService implements DocumentService {
             props[key] = value.startsWith('"') ? value.slice(1, -1).replace(/\\"/g, '"') : value;
           }
 
+          // Extract description from indented lines below
+          let description: string | undefined;
+          const descriptionLines: string[] = [];
+          let j = i + 1;
+          while (j < lines.length) {
+            const nextLine = lines[j];
+            // Check if line is indented (starts with 2+ spaces or a tab)
+            if (nextLine.match(/^(\s{2,}|\t)/)) {
+              // Remove leading indentation and add to description
+              descriptionLines.push(nextLine.replace(/^(\s{2,}|\t)/, ''));
+              j++;
+            } else {
+              break;
+            }
+          }
+          if (descriptionLines.length > 0) {
+            description = descriptionLines.join('\n').trim();
+          }
+
           items.push({
             id: props.id || `${type}_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
             type: type as TrackerItemType,
             title: title.trim().replace(/^- /, '').replace(/^\[ \] /, '').replace(/^\[x\] /, ''),
+            description,
             status: (props.status || 'to-do') as any,
             priority: props.priority as any,
             owner: props.owner,
@@ -680,16 +701,17 @@ export class ElectronDocumentService implements DocumentService {
       for (const item of items) {
         await database.query(
           `INSERT INTO tracker_items (
-            id, type, title, status, priority, owner, module, line_number,
+            id, type, title, description, status, priority, owner, module, line_number,
             workspace, tags, created, updated, due_date, last_indexed
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
           ON CONFLICT (id) DO UPDATE SET
-            type = $2, title = $3, status = $4, priority = $5, owner = $6,
-            module = $7, line_number = $8, tags = $10, updated = $12, due_date = $13, last_indexed = $14`,
+            type = $2, title = $3, description = $4, status = $5, priority = $6, owner = $7,
+            module = $8, line_number = $9, tags = $11, updated = $13, due_date = $14, last_indexed = $15`,
           [
             item.id,
             item.type,
             item.title,
+            item.description || null,
             item.status,
             item.priority || null,
             item.owner || null,

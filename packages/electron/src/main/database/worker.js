@@ -196,6 +196,23 @@ class PGLiteWorker {
         `);
       }
 
+      // Check tracker_items table for description column
+      const trackerItemsColumnsResult = await this.db.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'tracker_items'
+        AND column_name = 'description'
+      `);
+
+      const hasDescription = trackerItemsColumnsResult.rows.length > 0;
+
+      if (!hasDescription) {
+        console.log('[PGLite Worker] Adding description column to tracker_items...');
+        await this.db.exec(`
+          ALTER TABLE tracker_items ADD COLUMN description TEXT;
+        `);
+      }
+
       console.log('[PGLite Worker] Database migrations completed');
     } catch (error) {
       console.warn('[PGLite Worker] Migration check/execution:', error);
@@ -278,6 +295,7 @@ class PGLiteWorker {
           id TEXT PRIMARY KEY,
           type TEXT NOT NULL,
           title TEXT NOT NULL,
+          description TEXT,
           status TEXT NOT NULL,
           priority TEXT,
           owner TEXT,

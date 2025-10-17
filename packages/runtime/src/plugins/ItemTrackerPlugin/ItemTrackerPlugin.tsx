@@ -62,6 +62,7 @@ function insertTrackerItemNode(editor: LexicalEditor, type: TrackerItemType, exi
     if (type === 'bug') prefix = 'bug';
     else if (type === 'plan') prefix = 'pln';
     else if (type === 'idea') prefix = 'ida';
+    else if (type === 'decision') prefix = 'dec';
 
     const itemData: TrackerItemData = {
       id: generateId(prefix),
@@ -177,6 +178,14 @@ function ItemTrackerPlugin(): JSX.Element | null {
       keywords: ['idea', 'suggestion', 'brainstorm'],
       onSelect: () => insertTrackerItemNode(editor, 'idea'),
     },
+    {
+      id: 'decision',
+      label: 'Decision',
+      description: 'Track a decision or ADR',
+      icon: <span className="material-symbols-outlined">gavel</span>,
+      keywords: ['decision', 'adr', 'architecture'],
+      onSelect: () => insertTrackerItemNode(editor, 'decision'),
+    },
   ];
 
   const filteredOptions = query
@@ -200,6 +209,7 @@ function ItemTrackerPlugin(): JSX.Element | null {
         if (type === 'bug') prefix = 'bug';
         else if (type === 'plan') prefix = 'pln';
         else if (type === 'idea') prefix = 'ida';
+        else if (type === 'decision') prefix = 'dec';
 
         // Create tracker item
         const itemData: TrackerItemData = {
@@ -462,6 +472,7 @@ function ItemTrackerPlugin(): JSX.Element | null {
               {editorState.data.type === 'bug' ? 'bug_report' :
                editorState.data.type === 'task' ? 'check_box' :
                editorState.data.type === 'idea' ? 'lightbulb' :
+               editorState.data.type === 'decision' ? 'gavel' :
                'assignment'}
             </span>
             <span>{editorState.data.type.charAt(0).toUpperCase() + editorState.data.type.slice(1)}</span>
@@ -528,6 +539,20 @@ function ItemTrackerPlugin(): JSX.Element | null {
                 updateTrackerData(editorState.nodeKey, { dueDate: newDueDate });
                 setEditorState({ ...editorState, data: { ...editorState.data, dueDate: newDueDate } });
               }}
+            />
+          </div>
+
+          <div className="tracker-item-popover-field">
+            <label>Description</label>
+            <textarea
+              rows={3}
+              value={editorState.data.description || ''}
+              onChange={(e) => {
+                const newDescription = e.target.value || undefined;
+                updateTrackerData(editorState.nodeKey, { description: newDescription });
+                setEditorState({ ...editorState, data: { ...editorState.data, description: newDescription } });
+              }}
+              placeholder="Add description..."
             />
           </div>
 

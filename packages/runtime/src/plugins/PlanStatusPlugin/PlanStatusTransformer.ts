@@ -15,9 +15,10 @@ export const PLAN_STATUS_TRANSFORMER: ElementTransformer = {
   dependencies: [PlanStatusNode],
   export: (node: LexicalNode) => {
     // Export as a simple HTML comment marker
+    // TODO: Could detect document type and export appropriate marker
     return $isPlanStatusNode(node) ? '<!-- plan-status -->' : null;
   },
-  regExp: /^<!-- plan-status -->$/,
+  regExp: /^<!-- (?:plan-status|decision-status) -->$/,
   replace: (parentNode, _1, _2, isImport) => {
     const planStatusNode = $createPlanStatusNode();
 

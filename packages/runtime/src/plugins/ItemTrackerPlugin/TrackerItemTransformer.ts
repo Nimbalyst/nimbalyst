@@ -58,7 +58,16 @@ export const TRACKER_ITEM_ELEMENT_TRANSFORMER: ElementTransformer = {
     if (metadata.dueDate) parts.push(`due:${metadata.dueDate}`);
     if (metadata.tags && metadata.tags.length > 0) parts.push(`tags:${metadata.tags.join(',')}`);
 
-    return `${textContent} @${data.type}[${parts.join(' ')}]`;
+    let result = `${textContent} @${data.type}[${parts.join(' ')}]`;
+
+    // Add description as indented lines if present
+    if (data.description) {
+      const descriptionLines = data.description.split('\n');
+      const indentedDescription = descriptionLines.map(line => `  ${line}`).join('\n');
+      result += '\n' + indentedDescription;
+    }
+
+    return result;
   },
   regExp: /(?!)/,  // Never match - negative lookahead that always fails
   replace: () => {},
@@ -69,14 +78,14 @@ export const TRACKER_ITEM_ELEMENT_TRANSFORMER: ElementTransformer = {
 export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
   dependencies: [TrackerItemNode],
   export: () => null,  // Export handled by ElementTransformer
-  importRegExp: /^(.+?)\s+@(bug|task|plan|idea)\[.+?\]$/,
-  regExp: /^(.+?)\s+@(bug|task|plan|idea)\[.+?\]$/,
+  importRegExp: /^(.+?)\s+@(bug|task|plan|idea|decision)\[.+?\]$/,
+  regExp: /^(.+?)\s+@(bug|task|plan|idea|decision)\[.+?\]$/,
   replace: (textNode: TextNode, match: RegExpMatchArray) => {
     console.log('TrackerItem transformer matched:', match[0]);
     const fullMatch = match[0];
 
     // Extract text content and metadata
-    const contentMatch = fullMatch.match(/^(.+?)\s+@(bug|task|plan|idea)\[(.+?)\]$/);
+    const contentMatch = fullMatch.match(/^(.+?)\s+@(bug|task|plan|idea|decision)\[(.+?)\]$/);
     if (!contentMatch) {
       console.log('No content match found');
       return;
@@ -111,6 +120,9 @@ export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
       // Generate ID if not present
       const id = metadata.id || generateId(type || 'tsk');
 
+      // Note: Description will be handled by the parser in ElectronDocumentService
+      // since it requires looking at following lines. The transformer only handles
+      // the inline portion.
       const data: TrackerItemData = {
         id,
         type: (type || metadata.type || 'task') as TrackerItemData['type'],
