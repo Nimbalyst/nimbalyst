@@ -8,6 +8,7 @@ import { join, extname, basename } from 'path';
 import { createHash } from 'crypto';
 import type { ChatAttachment } from '@stravu/runtime';
 import sharp from 'sharp';
+import {AnalyticsService} from "./analytics/AnalyticsService.ts";
 
 export interface AttachmentValidation {
   valid: boolean;
@@ -17,6 +18,7 @@ export interface AttachmentValidation {
 export class AttachmentService {
   private workspacePath: string;
   private attachmentsDir: string;
+  private readonly analytics: AnalyticsService = AnalyticsService.getInstance();
 
   // Supported file types and their MIME types
   private static readonly SUPPORTED_TYPES: Record<string, string[]> = {
@@ -107,6 +109,7 @@ export class AttachmentService {
         addedAt: timestamp
       };
 
+      this.analytics.sendEvent('add_attachment');
       return { success: true, attachment };
     } catch (error) {
       console.error('[AttachmentService] Failed to save attachment', error);
@@ -142,6 +145,7 @@ export class AttachmentService {
         }
       }
 
+      this.analytics.sendEvent('delete_attachment');
       return { success: false, error: 'Attachment not found' };
     } catch (error) {
       console.error('[AttachmentService] Failed to delete attachment', error);

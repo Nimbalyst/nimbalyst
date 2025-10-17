@@ -228,6 +228,9 @@ export function TrackerTable({
 
   const handleColumnClick = (column: SortColumn) => {
     const newDirection = currentSortBy === column && currentSortDirection === 'desc' ? 'asc' : 'desc';
+    if (currentSortBy !== column) {
+      window.electronAPI.analytics?.sendEvent('tracker_table_sort', { column });
+    }
     setCurrentSortBy(column);
     setCurrentSortDirection(newDirection);
 

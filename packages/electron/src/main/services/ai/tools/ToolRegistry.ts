@@ -5,6 +5,7 @@ import {
   ToolRegistry as RuntimeToolRegistry,
   toolRegistry as runtimeToolRegistry,
 } from '@stravu/runtime/ai/tools';
+import {AnalyticsService} from "../../analytics/AnalyticsService.ts";
 
 let bridgeInitialized = false;
 
@@ -26,6 +27,7 @@ function setupRendererToolBridge(registry: ToolRegistry): void {
 
 export class ToolRegistry extends EventEmitter {
   private correlationCounter = 0;
+  private readonly analytics = AnalyticsService.getInstance();
 
   constructor(private readonly registry: RuntimeToolRegistry) {
     super();
@@ -33,6 +35,7 @@ export class ToolRegistry extends EventEmitter {
   }
 
   register(tool: ToolDefinition): void {
+    this.analytics.sendEvent('register_tool')
     this.registry.register(tool);
     this.emit('tool:registered', tool);
   }
@@ -42,6 +45,7 @@ export class ToolRegistry extends EventEmitter {
   }
 
   unregister(toolName: string): void {
+    this.analytics.sendEvent('unregister_tool')
     const existing = this.registry.get(toolName);
     if (existing) {
       this.registry.unregister(toolName);

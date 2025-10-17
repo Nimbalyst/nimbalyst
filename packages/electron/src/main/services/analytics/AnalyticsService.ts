@@ -37,9 +37,20 @@ export class AnalyticsService {
     this.log.info(`Analytics allowed: ${this.allowedToSendAnalytics()}`)
   }
 
+  public async sendEventImmediate(eventName: string, properties?: Record<string | number, any>): Promise<void> {
+    if (this.allowedToSendAnalytics() && this.postHogClient && eventName) {
+      this.log.info(`event (immediate): ${eventName}`, properties || {});
+      return this.postHogClient.captureImmediate({
+        distinctId: this.getDistinctId(),
+        event: eventName,
+        properties: properties,
+      });
+    }
+  }
+
   public sendEvent(eventName: string, properties?: Record<string | number, any>): void {
     if (this.allowedToSendAnalytics() && this.postHogClient && eventName) {
-      this.log.debug(`event: ${eventName}`, properties || {});
+      this.log.info(`event: ${eventName}`, properties || {});
       this.postHogClient.capture({
         distinctId: this.getDistinctId(),
         event: eventName,

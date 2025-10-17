@@ -8,8 +8,10 @@ import type { DiffArgs, DiffResult, ToolDefinition } from '@stravu/runtime/ai/se
 import { toolRegistry } from './ToolRegistry';
 import { logger } from '../../../utils/logger';
 import { sessionFileTracker } from '../../SessionFileTracker';
+import {AnalyticsService} from "../../analytics/AnalyticsService.ts";
 
 const LOG_PREVIEW_LENGTH = 400;
+const analytics = AnalyticsService.getInstance();
 
 function previewForLog(value?: string, max: number = LOG_PREVIEW_LENGTH): string {
   if (!value) return '';
@@ -43,6 +45,7 @@ export class ToolExecutor extends EventEmitter {
    * Execute applyDiff tool
   */
   async applyDiff(args: DiffArgs & { targetFilePath?: string }): Promise<DiffResult> {
+    analytics.sendEvent('apply_diff_tool');
     const resultChannel = `applyDiff-result-${Date.now()}`;
     const replacementCount = Array.isArray(args?.replacements) ? args.replacements.length : undefined;
     logger.ai.info('[ToolExecutor] applyDiff invoked', {
@@ -201,6 +204,7 @@ export class ToolExecutor extends EventEmitter {
    * Execute createDocument tool
    */
   async createDocument(args: { filePath: string; initialContent?: string; switchToFile?: boolean }): Promise<any> {
+    analytics.sendEvent('create_document_tool');
     const resultChannel = `createDocument-result-${Date.now()}`;
     logger.ai.info('[ToolExecutor] createDocument invoked', {
       filePath: args?.filePath,
@@ -313,6 +317,7 @@ export class ToolExecutor extends EventEmitter {
    * Execute a custom/renderer tool
    */
   private async executeCustomTool(tool: ToolDefinition, args: any): Promise<any> {
+    analytics.sendEvent('execute_custom_tool');
     const correlationId = `tool-${tool.name}-${Date.now()}`;
     
     return new Promise((resolve, reject) => {

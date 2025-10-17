@@ -21,6 +21,7 @@ import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 import { logger } from '../../utils/logger';
 import { windowStates } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
+import {AnalyticsService} from "../analytics/AnalyticsService.ts";
 
 const LOG_PREVIEW_LENGTH = 400;
 
@@ -32,6 +33,7 @@ function previewForLog(value?: string, max: number = LOG_PREVIEW_LENGTH): string
 export class AIService {
   private sessionManager: SessionManager;
   private settingsStore: Store | null = null;
+  private readonly analytics = AnalyticsService.getInstance();
   // Track providers per window to avoid cross-window conflicts
   private providersByWindow: Map<number, AIProvider> = new Map();
 
@@ -280,6 +282,7 @@ export class AIService {
         updateDocumentState(documentContext, session.id);
       }
 
+      this.analytics.sendEvent('create_ai_session', { provider });
       return session;
     });
 
@@ -1032,6 +1035,7 @@ export class AIService {
       if (provider) {
         provider.abort();
         console.log(`[AIService] Cancelled request for window ${windowId}`);
+        this.analytics.sendEvent('cancel_ai_request', {provider})
         return { success: true };
       }
       return { success: false, error: 'No active request to cancel' };

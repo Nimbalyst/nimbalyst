@@ -186,6 +186,7 @@ function parseCommandLineArgs() {
 // App ready handler
 app.whenReady().then(async () => {
     logger.main.info('App ready');
+    analytics.sendEvent('app_startup');
 
     // Parse command line arguments
     parseCommandLineArgs();
@@ -403,6 +404,7 @@ app.on('activate', () => {
 // Before quit handler
 app.on('before-quit', async (event) => {
     console.log('[QUIT] before-quit event triggered');
+    await analytics.sendEventImmediate('app_quit');
 
     // If auto-updater is updating, don't prevent quit
     if (AutoUpdaterService.isUpdatingApp()) {
