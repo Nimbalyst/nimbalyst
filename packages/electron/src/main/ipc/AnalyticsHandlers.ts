@@ -23,4 +23,7 @@ export function registerAnalyticsHandlers() {
   ipcMain.handle("analytics:send-event", (_event, eventName: string, properties?: Record<string | number, any>): void => {
     return analytics.sendEvent(eventName, properties);
   });
+
+  // sendEventImmediate is intentionally not exposed via IPC--this is a blocking synchronous call that should only be
+  // used in in a few specific cases, and never by the renderer because it will result in perceived UI lag.
 }
