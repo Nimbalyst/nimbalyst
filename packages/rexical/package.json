@@ -53,7 +53,7 @@
     "diff": "^8.0.2",
     "esbuild": "0.25.10",
     "front-matter": "^4.0.2",
-    "happy-dom": "20.0.0",
+    "happy-dom": "^20.0.4",
     "js-yaml": "^4.1.0",
     "lodash-es": "^4.17.21",
     "mermaid": "^11.12.0",

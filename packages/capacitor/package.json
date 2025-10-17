@@ -15,7 +15,7 @@
     "@electric-sql/pglite": "^0.2.5",
     "@excalidraw/excalidraw": "0.17.6",
     "esbuild": "0.25.10",
-    "happy-dom": "20.0.0",
+    "happy-dom": "^20.0.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
