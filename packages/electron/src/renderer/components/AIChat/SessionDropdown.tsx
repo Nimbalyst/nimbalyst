@@ -32,7 +32,9 @@ export function SessionDropdown({
   const [isOpen, setIsOpen] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -87,19 +89,40 @@ export function SessionDropdown({
     }
   };
 
+  // Calculate menu position when opening
+  const handleToggle = () => {
+    if (!isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      // Position menu so its right edge aligns with button's right edge
+      setMenuPosition({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right // Distance from right edge of viewport
+      });
+    }
+    setIsOpen(!isOpen);
+  };
+
   return (
     <div className="session-dropdown" ref={dropdownRef}>
-      <button 
+      <button
+        ref={triggerRef}
         className="session-dropdown-trigger"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggle}
         title="Session History"
       >
         <MaterialSymbol icon="history" size={18} />
         <MaterialSymbol icon="expand_more" size={16} className={`session-dropdown-arrow ${isOpen ? 'open' : ''}`} />
       </button>
 
-      {isOpen && (
-        <div className="session-dropdown-menu">
+      {isOpen && menuPosition && (
+        <div
+          className="session-dropdown-menu"
+          style={{
+            position: 'fixed',
+            top: `${menuPosition.top}px`,
+            right: `${menuPosition.right}px`
+          }}
+        >
           {onOpenSessionManager && (
             <button
               className="session-dropdown-all-sessions"

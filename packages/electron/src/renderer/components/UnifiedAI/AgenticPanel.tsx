@@ -1,0 +1,1014 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import type { SessionData, ChatAttachment } from '@stravu/runtime/ai/server/types';
+import { AISessionView } from './AISessionView';
+import { SessionDropdown } from '../AIChat/SessionDropdown';
+import { SessionHistory } from '../AgenticCoding/SessionHistory';
+import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
+import { TabBar } from '../TabManager/TabBar';
+import type { Tab } from '../TabManager/TabManager';
+import { useFileMention } from '../../hooks/useFileMention';
+import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
+import type { AIMode } from './ModeTag';
+
+export interface AgenticPanelProps {
+  // Mode configuration
+  mode: 'chat' | 'agent'; // chat = sidebar, agent = full window
+  workspacePath: string;
+
+  // Optional context
+  documentContext?: any; // DocumentContext type
+
+  // Initial session (optional)
+  initialSessionId?: string;
+
+  // Plan document path (optional, for agent mode)
+  planDocumentPath?: string;
+
+  // Callbacks for external coordination
+  onSessionChange?: (sessionId: string | null) => void;
+}
+
+interface SessionTab {
+  id: string;
+  name: string;
+  sessionData: SessionData;
+  isPinned?: boolean;
+  draftInput?: string;
+  draftAttachments?: ChatAttachment[];
+  mode?: AIMode; // Plan vs Agent mode (default: plan)
+  model?: string; // Current model ID (provider:model format)
+}
+
+type SessionListItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' | 'provider' | 'model'> & {
+  messageCount?: number;
+};
+
+/**
+ * AgenticPanel is the top-level container for unified AI interface.
+ *
+ * Key features:
+ * - Supports both 'chat' mode (sidebar) and 'agent' mode (full window)
+ * - Manages session collection and active session
+ * - Shows SessionHistory in agent mode (hidden in chat mode)
+ * - Shows TabBar in agent mode (single session dropdown in chat mode)
+ * - Coordinates session lifecycle (create, load, delete)
+ * - Handles streaming state across all sessions
+ * - Persists state to workspace
+ */
+export function AgenticPanel({
+  mode,
+  workspacePath,
+  documentContext,
+  initialSessionId,
+  planDocumentPath,
+  onSessionChange
+}: AgenticPanelProps) {
+  // Session state
+  const [sessionTabs, setSessionTabs] = useState<SessionTab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [availableSessions, setAvailableSessions] = useState<SessionListItem[]>([]);
+  const [closedSessions, setClosedSessions] = useState<SessionTab[]>([]);
+
+  // UI state
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
+
+  // Session history layout state (agent mode only)
+  const [sessionHistoryWidth, setSessionHistoryWidth] = useState(240);
+  const [sessionHistoryCollapsed, setSessionHistoryCollapsed] = useState(mode === 'chat'); // Collapsed in chat mode
+  const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
+
+  // Streaming state
+  const [streamingContent, setStreamingContent] = useState<{
+    sessionId: string;
+    content: string;
+  } | null>(null);
+  const [testStreamingContent, setTestStreamingContent] = useState<string | null>(null);
+  const streamingTimeoutRef = useRef<NodeJS.Timeout>();
+
+  // Initialization
+  const initializedRef = useRef(false);
+
+  // Constants
+  const MAX_CLOSED_SESSION_HISTORY = 10;
+
+  // File mention support
+  const {
+    options: fileMentionOptions,
+    handleSearch: handleFileMentionSearch,
+    handleSelect: handleFileMentionSelect
+  } = useFileMention({
+    onInsertReference: () => {
+      // File reference insertion is handled by AIInput
+    }
+  });
+
+  // Load session history layout from workspace state
+  useEffect(() => {
+    if (mode !== 'agent') return; // Only for agent mode
+
+    const loadLayout = async () => {
+      try {
+        const workspaceState = await window.electronAPI.invoke('workspace:get-state', workspacePath);
+        const result = workspaceState?.agenticCodingWindowState;
+        if (result?.sessionHistoryLayout) {
+          const layout = result.sessionHistoryLayout;
+          setSessionHistoryWidth(layout.width ?? 240);
+          setSessionHistoryCollapsed(layout.collapsed ?? false);
+          setCollapsedGroups(layout.collapsedGroups ?? []);
+        }
+      } catch (err) {
+        console.error('[AgenticPanel] Failed to load session history layout:', err);
+      }
+    };
+    loadLayout();
+  }, [workspacePath, mode]);
+
+  // Save session history layout to workspace state when it changes (agent mode only)
+  useEffect(() => {
+    if (mode !== 'agent') return;
+
+    const saveLayout = async () => {
+      try {
+        await window.electronAPI.invoke('workspace:update-state', workspacePath, {
+          agenticCodingWindowState: {
+            sessionHistoryLayout: {
+              width: sessionHistoryWidth,
+              collapsed: sessionHistoryCollapsed,
+              collapsedGroups
+            }
+          }
+        });
+      } catch (err) {
+        console.error('[AgenticPanel] Failed to save session history layout:', err);
+      }
+    };
+
+    const timer = setTimeout(saveLayout, 500);
+    return () => clearTimeout(timer);
+  }, [workspacePath, sessionHistoryWidth, sessionHistoryCollapsed, collapsedGroups, mode]);
+
+  // Test mode: listen for test streaming events
+  useEffect(() => {
+    const handleTestStreaming = () => {
+      const content = (window as any).__testStreamingContent;
+      console.log('[AgenticPanel] Test streaming event fired, content:', content);
+      setTestStreamingContent(content);
+    };
+
+    (window as any).__agenticSetTestStreaming = (content: string | null) => {
+      console.log('[AgenticPanel] Direct test function called with:', content);
+      setTestStreamingContent(content);
+    };
+
+    window.addEventListener('test-streaming-updated', handleTestStreaming);
+    return () => {
+      window.removeEventListener('test-streaming-updated', handleTestStreaming);
+      delete (window as any).__agenticSetTestStreaming;
+    };
+  }, []);
+
+  // Load all sessions for the workspace
+  const loadSessions = useCallback(async () => {
+    try {
+      const sessionType = mode === 'agent' ? 'coding' : undefined; // Filter by type in agent mode
+      const result = await window.electronAPI.invoke('sessions:list', workspacePath);
+      if (result.success && Array.isArray(result.sessions)) {
+        const sessions = result.sessions
+          .filter((s: any) => !sessionType || s.sessionType === sessionType)
+          .map((s: any) => ({
+            id: s.id,
+            createdAt: s.createdAt,
+            name: s.name,
+            title: s.title,
+            provider: s.provider,
+            model: s.model,
+            messageCount: 0 // TODO: Get actual count
+          }));
+        setAvailableSessions(sessions);
+      }
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to load sessions:', err);
+    }
+  }, [workspacePath, mode]);
+
+  // Open a session in a new tab (agent mode) or load it (chat mode)
+  const openSessionInTab = useCallback(async (sessionId: string) => {
+    // Check if already open
+    const existingTab = sessionTabs.find(tab => tab.id === sessionId);
+    if (existingTab) {
+      setActiveTabId(sessionId);
+      return;
+    }
+
+    try {
+      const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+      if (sessionData) {
+        const planPath = sessionData.metadata?.planDocumentPath as string | undefined;
+        const tabName = planPath
+          ? `Plan: ${planPath.split('/').pop()}`
+          : sessionData.title || `Session ${sessionTabs.length + 1}`;
+
+        const newTab: SessionTab = {
+          id: sessionData.id,
+          name: tabName,
+          sessionData
+        };
+
+        if (mode === 'chat') {
+          // In chat mode, replace the current session
+          setSessionTabs([newTab]);
+        } else {
+          // In agent mode, add as new tab
+          setSessionTabs(prev => [...prev, newTab]);
+        }
+
+        setActiveTabId(sessionData.id);
+
+        if (onSessionChange) {
+          onSessionChange(sessionData.id);
+        }
+      }
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to load session:', err);
+    }
+  }, [sessionTabs, workspacePath, mode, onSessionChange]);
+
+  // Delete a session
+  const deleteSession = useCallback(async (sessionId: string) => {
+    try {
+      await window.electronAPI.invoke('sessions:delete', sessionId);
+
+      // Remove from tabs if open
+      setSessionTabs(prev => {
+        const filtered = prev.filter(tab => tab.id !== sessionId);
+        if (activeTabId === sessionId && filtered.length > 0) {
+          setActiveTabId(filtered[0].id);
+          if (onSessionChange) {
+            onSessionChange(filtered[0].id);
+          }
+        } else if (filtered.length === 0) {
+          setActiveTabId(null);
+          if (onSessionChange) {
+            onSessionChange(null);
+          }
+        }
+        return filtered;
+      });
+
+      await loadSessions();
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to delete session:', err);
+    }
+  }, [activeTabId, loadSessions, onSessionChange]);
+
+  // Create a new session
+  const createNewSession = useCallback(async (planPath?: string) => {
+    const session = await window.electronAPI.aiCreateSession(
+      'claude-code',
+      undefined,
+      workspacePath,
+      undefined,
+      mode === 'agent' ? 'coding' : 'chat'
+    );
+
+    // Add metadata if needed
+    if (mode === 'agent') {
+      await window.electronAPI.invoke('agentic-coding:update-session-metadata', session.id, {
+        sessionType: 'coding',
+        planDocumentPath: planPath,
+        fileEdits: [],
+        todos: []
+      });
+    }
+
+    const tabName = planPath
+      ? `Plan: ${planPath.split('/').pop()}`
+      : `Session ${sessionTabs.length + 1}`;
+
+    const sessionData = await window.electronAPI.aiLoadSession(session.id, workspacePath);
+    if (!sessionData) {
+      throw new Error('Failed to load newly created session');
+    }
+
+    const newTab: SessionTab = {
+      id: sessionData.id,
+      name: tabName,
+      sessionData
+    };
+
+    if (mode === 'chat') {
+      setSessionTabs([newTab]);
+    } else {
+      setSessionTabs(prev => [...prev, newTab]);
+    }
+
+    setActiveTabId(sessionData.id);
+
+    await loadSessions();
+
+    if (planPath && mode === 'agent') {
+      await window.electronAPI.invoke('plan-status:notify-session-created', {
+        sessionId: sessionData.id,
+        planDocumentPath: planPath
+      });
+    }
+
+    if (onSessionChange) {
+      onSessionChange(sessionData.id);
+    }
+
+    return sessionData;
+  }, [sessionTabs, workspacePath, mode, loadSessions, onSessionChange]);
+
+  // Load or create initial session
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
+    const loadOrCreateSession = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        await loadSessions();
+
+        // Try to restore from workspace state
+        const workspaceState = await window.electronAPI?.invoke('workspace:get-state', workspacePath);
+
+        if (mode === 'agent') {
+          // Agent mode: restore multiple tabs
+          const tabStateResult = workspaceState?.agenticTabs;
+          const savedTabs = tabStateResult?.tabs || [];
+
+          if (savedTabs.length > 0) {
+            const restoredTabs: SessionTab[] = [];
+            for (const savedTab of savedTabs) {
+              try {
+                const sessionId = savedTab.filePath.replace(/^(session|agentic):\/\//, '') || savedTab.id;
+                const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+                if (sessionData) {
+                  restoredTabs.push({
+                    id: sessionId,
+                    name: savedTab.fileName,
+                    sessionData,
+                    isPinned: savedTab.isPinned
+                  });
+                }
+              } catch (err) {
+                console.error('[AgenticPanel] Failed to load saved session:', savedTab.filePath, err);
+              }
+            }
+
+            if (restoredTabs.length > 0) {
+              setSessionTabs(restoredTabs);
+              const activeId = tabStateResult.activeTabId?.replace(/^(session|agentic):\/\//, '') || tabStateResult.activeTabId || restoredTabs[0].id;
+              setActiveTabId(activeId);
+
+              if (onSessionChange) {
+                onSessionChange(activeId);
+              }
+
+              setLoading(false);
+              return;
+            }
+          }
+        } else {
+          // Chat mode: restore single active session from aiPanel state
+          const aiPanelState = workspaceState?.aiPanel;
+          const savedSessionId = aiPanelState?.currentSessionId;
+
+          if (savedSessionId) {
+            try {
+              const sessionData = await window.electronAPI.aiLoadSession(savedSessionId, workspacePath);
+              if (sessionData) {
+                const tab: SessionTab = {
+                  id: sessionData.id,
+                  name: sessionData.title || 'Session',
+                  sessionData
+                };
+
+                setSessionTabs([tab]);
+                setActiveTabId(sessionData.id);
+
+                if (onSessionChange) {
+                  onSessionChange(sessionData.id);
+                }
+
+                setLoading(false);
+                return;
+              }
+            } catch (err) {
+              console.error('[AgenticPanel] Failed to load saved chat session:', err);
+            }
+          }
+        }
+
+        // No saved state - load initial session or create first-time session
+        if (initialSessionId) {
+          const sessionData = await window.electronAPI.aiLoadSession(initialSessionId, workspacePath);
+          if (sessionData) {
+            const planPath = sessionData.metadata?.planDocumentPath as string | undefined;
+            const tabName = planPath
+              ? `Plan: ${planPath.split('/').pop()}`
+              : 'Session 1';
+
+            const tab: SessionTab = {
+              id: sessionData.id,
+              name: tabName,
+              sessionData
+            };
+
+            setSessionTabs([tab]);
+            setActiveTabId(sessionData.id);
+
+            if (onSessionChange) {
+              onSessionChange(sessionData.id);
+            }
+          } else {
+            setError('Failed to load session');
+          }
+        } else if (mode === 'agent') {
+          // In agent mode, create a session by default
+          await createNewSession(planDocumentPath);
+        }
+        // In chat mode, don't create a session automatically - wait for user
+      } catch (err) {
+        console.error('[AgenticPanel] Failed to load/create session:', err);
+        setError(String(err));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadOrCreateSession();
+  }, []); // Only run once
+
+  // Save to workspace state when tabs/session changes
+  useEffect(() => {
+    if (sessionTabs.length === 0 && !activeTabId) return;
+
+    const saveState = async () => {
+      try {
+        if (mode === 'agent') {
+          // Agent mode: save multiple tabs
+          const tabs = sessionTabs.map(tab => ({
+            id: tab.id,
+            filePath: `session://${tab.id}`,
+            fileName: tab.name,
+            isDirty: false,
+            isPinned: tab.isPinned || false,
+            isVirtual: true
+          }));
+
+          await window.electronAPI?.invoke('workspace:update-state', workspacePath, {
+            agenticTabs: {
+              tabs,
+              activeTabId: activeTabId,
+              tabOrder: tabs.map(t => t.id),
+              closedTabs: closedSessions.map(tab => ({
+                id: tab.id,
+                filePath: `session://${tab.id}`,
+                fileName: tab.name,
+                isPinned: tab.isPinned || false
+              }))
+            }
+          });
+        } else {
+          // Chat mode: save single active session to aiPanel state
+          if (activeTabId) {
+            await window.electronAPI?.invoke('workspace:update-state', workspacePath, {
+              aiPanel: {
+                currentSessionId: activeTabId
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.error('[AgenticPanel] Failed to save state:', err);
+      }
+    };
+
+    const timer = setTimeout(saveState, 500);
+    return () => clearTimeout(timer);
+  }, [sessionTabs, activeTabId, closedSessions, mode, workspacePath]);
+
+  // Listen for AI streaming responses
+  useEffect(() => {
+    const handleStreamResponse = async (data: any) => {
+      if (!activeTabId) return;
+
+      // Handle streaming text content
+      if (data.partial && !data.isComplete) {
+        if (streamingTimeoutRef.current) {
+          clearTimeout(streamingTimeoutRef.current);
+        }
+
+        // Remove thinking placeholder when streaming starts
+        if (!streamingContent) {
+          setSessionTabs(prev => prev.map(tab => {
+            if (tab.id === activeTabId) {
+              return {
+                ...tab,
+                sessionData: {
+                  ...tab.sessionData,
+                  messages: tab.sessionData.messages.filter(m => !m.isThinking)
+                }
+              };
+            }
+            return tab;
+          }));
+        }
+
+        streamingTimeoutRef.current = setTimeout(() => {
+          setStreamingContent({
+            sessionId: activeTabId,
+            content: data.partial
+          });
+        }, 50);
+      }
+
+      // Handle completion
+      if (data.isComplete) {
+        setStreamingContent(null);
+        if (streamingTimeoutRef.current) {
+          clearTimeout(streamingTimeoutRef.current);
+        }
+
+        try {
+          const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
+          if (sessionData) {
+            setSessionTabs(prev => prev.map(tab => {
+              if (tab.id === activeTabId) {
+                return { ...tab, sessionData };
+              }
+              return tab;
+            }));
+          }
+        } catch (err) {
+          console.error('[AgenticPanel] Failed to reload session after completion:', err);
+        } finally {
+          setIsSending(false);
+        }
+      }
+    };
+
+    const handleStreamError = (error: any) => {
+      console.error('[AgenticPanel] AI error:', error);
+      setError(error.message || 'An error occurred');
+      setIsSending(false);
+      setStreamingContent(null);
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current);
+      }
+    };
+
+    window.electronAPI.onAIStreamResponse(handleStreamResponse);
+    window.electronAPI.onAIError(handleStreamError);
+
+    return () => {
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current);
+      }
+    };
+  }, [activeTabId, workspacePath, streamingContent]);
+
+  // Handle draft input change
+  const handleDraftInputChange = useCallback((sessionId: string, value: string) => {
+    setSessionTabs(prev => prev.map(tab =>
+      tab.id === sessionId ? { ...tab, draftInput: value } : tab
+    ));
+  }, []);
+
+  // Handle draft attachments change
+  const handleDraftAttachmentsChange = useCallback((sessionId: string, attachments: ChatAttachment[]) => {
+    setSessionTabs(prev => prev.map(tab =>
+      tab.id === sessionId ? { ...tab, draftAttachments: attachments } : tab
+    ));
+  }, []);
+
+  // Handle mode change (plan <-> agent)
+  const handleModeChange = useCallback((sessionId: string, newMode: AIMode) => {
+    setSessionTabs(prev => prev.map(tab =>
+      tab.id === sessionId ? { ...tab, mode: newMode } : tab
+    ));
+  }, []);
+
+  // Handle model change
+  const handleModelChange = useCallback((sessionId: string, newModel: string) => {
+    setSessionTabs(prev => prev.map(tab =>
+      tab.id === sessionId ? { ...tab, model: newModel } : tab
+    ));
+  }, []);
+
+  // Handle send message
+  const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments: ChatAttachment[]) => {
+    if (!message.trim() || !sessionId) return;
+
+    setIsSending(true);
+
+    // Add user message immediately
+    setSessionTabs(prev => prev.map(tab => {
+      if (tab.id === sessionId) {
+        const userMessage = {
+          role: 'user' as const,
+          content: message,
+          timestamp: Date.now(),
+          attachments: attachments.length > 0 ? attachments : undefined
+        };
+        const thinkingMessage = {
+          role: 'assistant' as const,
+          content: '',
+          timestamp: Date.now(),
+          isThinking: true
+        };
+        return {
+          ...tab,
+          sessionData: {
+            ...tab.sessionData,
+            messages: [...tab.sessionData.messages, userMessage, thinkingMessage]
+          }
+        };
+      }
+      return tab;
+    }));
+
+    try {
+      await window.electronAPI.aiSendMessage(
+        message,
+        { sessionType: mode === 'agent' ? 'coding' : 'chat', attachments } as any,
+        sessionId,
+        workspacePath
+      );
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to send message:', err);
+      setError(String(err));
+      setIsSending(false);
+
+      // Remove thinking message on error
+      setSessionTabs(prev => prev.map(tab => {
+        if (tab.id === sessionId) {
+          return {
+            ...tab,
+            sessionData: {
+              ...tab.sessionData,
+              messages: tab.sessionData.messages.filter(m => !m.isThinking)
+            }
+          };
+        }
+        return tab;
+      }));
+    }
+  }, [workspacePath, mode]);
+
+  // Handle cancel request
+  const handleCancelRequest = useCallback(async (sessionId: string) => {
+    try {
+      const result = await window.electronAPI.aiCancelRequest();
+      if (result.success) {
+        setIsSending(false);
+        setStreamingContent(null);
+        if (streamingTimeoutRef.current) {
+          clearTimeout(streamingTimeoutRef.current);
+        }
+
+        // Remove thinking message
+        setSessionTabs(prev => prev.map(tab => {
+          if (tab.id === sessionId) {
+            return {
+              ...tab,
+              sessionData: {
+                ...tab.sessionData,
+                messages: tab.sessionData.messages.filter(m => !m.isThinking)
+              }
+            };
+          }
+          return tab;
+        }));
+      }
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to cancel request:', err);
+    }
+  }, []);
+
+  // Handle file click
+  const handleFileClick = useCallback(async (filePath: string) => {
+    try {
+      await window.electronAPI.invoke('workspace:open-file', {
+        workspacePath,
+        filePath
+      });
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to open file:', err);
+    }
+  }, [workspacePath]);
+
+  // Tab management (agent mode only)
+  const handleTabSelect = useCallback((tabId: string) => {
+    setActiveTabId(tabId);
+    if (onSessionChange) {
+      onSessionChange(tabId);
+    }
+  }, [onSessionChange]);
+
+  const handleTabClose = useCallback((tabId: string) => {
+    const closingTab = sessionTabs.find(t => t.id === tabId);
+    if (closingTab) {
+      setClosedSessions(prev => [closingTab, ...prev].slice(0, MAX_CLOSED_SESSION_HISTORY));
+    }
+
+    setSessionTabs(prev => {
+      const filtered = prev.filter(t => t.id !== tabId);
+      if (activeTabId === tabId && filtered.length > 0) {
+        const newActiveId = filtered[filtered.length - 1].id;
+        setActiveTabId(newActiveId);
+        if (onSessionChange) {
+          onSessionChange(newActiveId);
+        }
+      } else if (filtered.length === 0) {
+        setActiveTabId(null);
+        if (onSessionChange) {
+          onSessionChange(null);
+        }
+      }
+      return filtered;
+    });
+  }, [sessionTabs, activeTabId, onSessionChange]);
+
+  const handleTabReorder = useCallback((fromIndex: number, toIndex: number) => {
+    setSessionTabs(prev => {
+      const newTabs = [...prev];
+      const [movedTab] = newTabs.splice(fromIndex, 1);
+      newTabs.splice(toIndex, 0, movedTab);
+      return newTabs;
+    });
+  }, []);
+
+  const handleTogglePin = useCallback((tabId: string) => {
+    setSessionTabs(prev => {
+      const tab = prev.find(t => t.id === tabId);
+      if (!tab) return prev;
+
+      const newIsPinned = !tab.isPinned;
+      const updatedTab = { ...tab, isPinned: newIsPinned };
+
+      let newTabs = prev.map(t => t.id === tabId ? updatedTab : t);
+
+      if (newIsPinned) {
+        newTabs = newTabs.filter(t => t.id !== tabId);
+        const lastPinnedIndex = newTabs.findIndex(t => !t.isPinned);
+        const insertIndex = lastPinnedIndex === -1 ? newTabs.length : lastPinnedIndex;
+        newTabs.splice(insertIndex, 0, updatedTab);
+      } else {
+        newTabs = newTabs.filter(t => t.id !== tabId);
+        const firstUnpinnedIndex = newTabs.findIndex(t => !t.isPinned);
+        const insertIndex = firstUnpinnedIndex === -1 ? newTabs.length : firstUnpinnedIndex;
+        newTabs.splice(insertIndex, 0, updatedTab);
+      }
+
+      return newTabs;
+    });
+  }, []);
+
+  const handleTabRename = useCallback(async (tabId: string, newName: string) => {
+    setSessionTabs(prev => prev.map(tab => {
+      if (tab.id === tabId) {
+        return { ...tab, name: newName };
+      }
+      return tab;
+    }));
+
+    try {
+      await window.electronAPI.invoke('sessions:update-title', tabId, newName);
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to update session title:', err);
+    }
+  }, []);
+
+  const reopenLastClosedSession = useCallback(async () => {
+    if (closedSessions.length === 0) return;
+
+    const [lastClosed, ...remainingClosed] = closedSessions;
+    setClosedSessions(remainingClosed);
+
+    await openSessionInTab(lastClosed.id);
+  }, [closedSessions, openSessionInTab]);
+
+  // Convert SessionTab to Tab format for TabBar
+  const convertToTabs = (sessionTabs: SessionTab[]): Tab[] => {
+    return sessionTabs.map(tab => ({
+      id: tab.id,
+      filePath: `session://${tab.id}`,
+      fileName: tab.name,
+      content: '',
+      isDirty: false,
+      isPinned: tab.isPinned || false,
+      isVirtual: true
+    }));
+  };
+
+  if (loading) {
+    return (
+      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-primary)' }}>
+        <div style={{ color: 'var(--text-secondary)' }}>Loading session...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-primary)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ color: 'var(--status-error)', marginBottom: '0.5rem' }}>Failed to load session</div>
+          <div style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Chat mode: single session with dropdown selector
+  if (mode === 'chat') {
+    const activeTab = sessionTabs.find(tab => tab.id === activeTabId);
+
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
+        {/* Header with session dropdown */}
+        <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'space-between' }}>
+          <SessionDropdown
+            currentSessionId={activeTabId}
+            sessions={availableSessions}
+            onSessionSelect={openSessionInTab}
+            onNewSession={() => createNewSession()}
+            onDeleteSession={deleteSession}
+            onOpenSessionManager={() => window.electronAPI.invoke('open-session-manager', workspacePath)}
+          />
+          <button
+            onClick={() => createNewSession()}
+            style={{
+              padding: '0.375rem 0.75rem',
+              borderRadius: '0.375rem',
+              fontSize: '0.8125rem',
+              fontWeight: 500,
+              backgroundColor: 'var(--primary-color)',
+              color: 'white',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              transition: 'opacity 0.15s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            title="Start new conversation"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            New
+          </button>
+        </div>
+
+        {/* Session view or empty state */}
+        {activeTab ? (
+          <AISessionView
+            sessionId={activeTab.id}
+            sessionData={activeTab.sessionData}
+            isActive={true}
+            mode="chat"
+            workspacePath={workspacePath}
+            documentContext={documentContext}
+            draftInput={activeTab.draftInput}
+            draftAttachments={activeTab.draftAttachments}
+            onDraftInputChange={handleDraftInputChange}
+            onDraftAttachmentsChange={handleDraftAttachmentsChange}
+            onSendMessage={handleSendMessage}
+            onCancelRequest={handleCancelRequest}
+            fileMentionOptions={fileMentionOptions}
+            onFileMentionSearch={handleFileMentionSearch}
+            onFileMentionSelect={handleFileMentionSelect}
+            onFileClick={handleFileClick}
+            isLoading={isSending}
+            streamingContent={streamingContent?.sessionId === activeTab.id ? streamingContent.content : undefined}
+            testStreamingContent={testStreamingContent}
+            aiMode={activeTab.mode || 'plan'}
+            onAIModeChange={(newMode) => handleModeChange(activeTab.id, newMode)}
+            currentModel={activeTab.model || activeTab.sessionData.model || 'claude-code'}
+            onModelChange={(newModel) => handleModelChange(activeTab.id, newModel)}
+          />
+        ) : (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ textAlign: 'center', maxWidth: '400px', padding: '2rem' }}>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                No session selected
+              </div>
+              <button
+                onClick={() => createNewSession()}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.25rem',
+                  fontSize: '0.875rem',
+                  backgroundColor: 'var(--primary-color)',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: 500
+                }}
+              >
+                New Session
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Agent mode: multi-tab with session history
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
+      <ResizablePanel
+        leftWidth={sessionHistoryWidth}
+        minWidth={180}
+        maxWidth={400}
+        onWidthChange={setSessionHistoryWidth}
+        collapsed={sessionHistoryCollapsed}
+        leftPanel={
+          <SessionHistory
+            workspacePath={workspacePath}
+            activeSessionId={activeTabId}
+            onSessionSelect={openSessionInTab}
+            onSessionDelete={deleteSession}
+            collapsedGroups={collapsedGroups}
+            onCollapsedGroupsChange={setCollapsedGroups}
+          />
+        }
+        rightPanel={
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            {/* Tabs */}
+            {sessionTabs.length > 0 && (
+              <TabBar
+                tabs={convertToTabs(sessionTabs)}
+                activeTabId={activeTabId}
+                onTabSelect={handleTabSelect}
+                onTabClose={handleTabClose}
+                onNewTab={() => createNewSession()}
+                onTogglePin={handleTogglePin}
+                onTabReorder={handleTabReorder}
+                onReopenLastClosed={reopenLastClosedSession}
+                hasClosedTabs={closedSessions.length > 0}
+                onTabRename={handleTabRename}
+                allowRename={true}
+              />
+            )}
+
+            {/* Session views */}
+            {sessionTabs.map(tab => (
+              <AISessionView
+                key={tab.id}
+                sessionId={tab.id}
+                sessionData={tab.sessionData}
+                isActive={tab.id === activeTabId}
+                mode="agent"
+                workspacePath={workspacePath}
+                documentContext={documentContext}
+                draftInput={tab.draftInput}
+                draftAttachments={tab.draftAttachments}
+                onDraftInputChange={handleDraftInputChange}
+                onDraftAttachmentsChange={handleDraftAttachmentsChange}
+                onSendMessage={handleSendMessage}
+                onCancelRequest={handleCancelRequest}
+                fileMentionOptions={fileMentionOptions}
+                onFileMentionSearch={handleFileMentionSearch}
+                onFileMentionSelect={handleFileMentionSelect}
+                onFileClick={handleFileClick}
+                isLoading={isSending && tab.id === activeTabId}
+                streamingContent={streamingContent?.sessionId === tab.id ? streamingContent.content : undefined}
+                testStreamingContent={testStreamingContent}
+                aiMode={tab.mode || 'plan'}
+                onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
+                currentModel={tab.model || tab.sessionData.model || 'claude-code'}
+                onModelChange={(newModel) => handleModelChange(tab.id, newModel)}
+              />
+            ))}
+
+            {/* Empty state */}
+            {sessionTabs.length === 0 && (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ textAlign: 'center', maxWidth: '400px', padding: '2rem' }}>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                    No session selected
+                  </div>
+                  <div style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>
+                    Select a session from the history or create a new one
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        }
+      />
+    </div>
+  );
+}

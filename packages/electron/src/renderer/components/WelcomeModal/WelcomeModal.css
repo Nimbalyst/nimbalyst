@@ -1,0 +1,674 @@
+/* Overlay */
+.welcome-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Modal */
+.welcome-modal {
+  background: var(--surface-primary);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  width: 90%;
+  max-width: 700px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease-out;
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Progress Bar */
+.welcome-modal-progress {
+  height: 4px;
+  background: var(--surface-tertiary);
+  position: relative;
+}
+
+.welcome-modal-progress-bar {
+  height: 100%;
+  background: var(--primary-color);
+  transition: width 0.3s ease;
+}
+
+/* Header */
+.welcome-modal-header {
+  padding: 24px 32px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.welcome-modal-header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.welcome-modal-close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.welcome-modal-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* Content */
+.welcome-modal-content {
+  padding: 32px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Error message */
+.welcome-modal-error {
+  background: #fee;
+  border: 1px solid #fcc;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  color: #c33;
+}
+
+/* Welcome Step */
+.welcome-step {
+  text-align: center;
+}
+
+.welcome-step-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.welcome-step h3 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  color: var(--text-primary);
+}
+
+.welcome-step > p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 32px;
+}
+
+.welcome-features {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  text-align: left;
+}
+
+.welcome-feature {
+  padding: 16px;
+  background: var(--surface-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+}
+
+.welcome-feature strong {
+  display: block;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  font-size: 15px;
+}
+
+.welcome-feature p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Plans Location Step */
+.plans-location-step {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.plan-location-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.plan-location-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface-secondary);
+  border: 2px solid var(--border-primary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.plan-location-option:hover {
+  border-color: var(--primary-color);
+  background: var(--surface-hover);
+}
+
+.plan-location-option input[type='radio'] {
+  margin-top: 2px;
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.plan-location-content {
+  flex: 1;
+}
+
+.plan-location-content strong {
+  display: block;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  font-size: 15px;
+}
+
+.plan-location-content p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.custom-location-input {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--surface-tertiary);
+  border-radius: 6px;
+}
+
+.custom-location-input input[type='text'] {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.custom-location-input input[type='text']:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.plan-location-info {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.plan-location-info p {
+  margin: 0 0 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.plan-location-info ul {
+  margin: 0;
+  padding-left: 24px;
+  color: var(--text-secondary);
+}
+
+.plan-location-info li {
+  margin-bottom: 6px;
+}
+
+.plan-location-info code {
+  background: var(--surface-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+/* Claude Code Step */
+.claude-code-step {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.step-description {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.claude-code-option {
+  margin-bottom: 24px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  padding: 12px;
+  border-radius: 6px;
+  transition: background 0.2s ease;
+}
+
+.checkbox-label:hover {
+  background: var(--surface-hover);
+}
+
+.checkbox-label input[type='checkbox'] {
+  margin-top: 2px;
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.checkbox-label span {
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.checkbox-label strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.claude-code-options {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 16px;
+}
+
+.options-intro {
+  margin: 0 0 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.claude-code-options .checkbox-label {
+  margin-bottom: 8px;
+}
+
+.config-info {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.config-info p {
+  margin: 0 0 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.config-info ul {
+  margin: 0;
+  padding-left: 24px;
+  color: var(--text-secondary);
+}
+
+.config-info li {
+  margin-bottom: 6px;
+}
+
+.config-info code {
+  background: var(--surface-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.skip-info {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.skip-info p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+/* First Plan Step */
+.first-plan-step {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.plan-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plan-option-button {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
+  background: var(--surface-secondary);
+  border: 2px solid var(--border-primary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+}
+
+.plan-option-button:hover {
+  border-color: var(--primary-color);
+  background: var(--surface-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.plan-option-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.plan-option-content {
+  flex: 1;
+}
+
+.plan-option-content strong {
+  display: block;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  font-size: 15px;
+}
+
+.plan-option-content p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.plan-option-content code {
+  background: var(--surface-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.plan-option-info {
+  padding: 12px 16px;
+  background: var(--surface-tertiary);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.plan-option-info code {
+  background: var(--surface-primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+/* Plan View Step */
+.plan-view-step {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.plan-view-features {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.plan-view-feature {
+  padding: 16px;
+  background: var(--surface-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+}
+
+.plan-view-feature strong {
+  display: block;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  font-size: 15px;
+}
+
+.plan-view-feature p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.plan-view-access {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.plan-view-access p {
+  margin: 0 0 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.plan-view-access ul {
+  margin: 0;
+  padding-left: 24px;
+  color: var(--text-secondary);
+}
+
+.plan-view-access li {
+  margin-bottom: 6px;
+}
+
+/* Complete Step */
+.complete-step {
+  text-align: center;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.complete-icon {
+  width: 80px;
+  height: 80px;
+  background: var(--primary-color);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  margin: 0 auto 20px;
+  font-weight: bold;
+}
+
+.complete-step h3 {
+  margin: 0 0 12px;
+  font-size: 24px;
+  color: var(--text-primary);
+}
+
+.complete-step > p {
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+}
+
+.next-steps {
+  text-align: left;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.next-steps h4 {
+  margin: 0 0 12px;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.next-steps ul {
+  margin: 0;
+  padding-left: 24px;
+  color: var(--text-secondary);
+}
+
+.next-steps li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.next-steps code {
+  background: var(--surface-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.help-links {
+  text-align: center;
+}
+
+.help-links p {
+  color: var(--text-secondary);
+  margin: 0 0 6px;
+}
+
+.help-links p:first-child {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+/* Footer */
+.welcome-modal-footer {
+  padding: 16px 32px;
+  border-top: 1px solid var(--border-primary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface-secondary);
+}
+
+.welcome-modal-footer-left,
+.welcome-modal-footer-right {
+  display: flex;
+  gap: 12px;
+}
+
+.welcome-modal-button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  outline: none;
+}
+
+.welcome-modal-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.welcome-modal-button.primary {
+  background: var(--primary-color);
+  color: white;
+}
+
+.welcome-modal-button.primary:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.welcome-modal-button.secondary {
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+.welcome-modal-button.secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+/* Scrollbar styling */
+.welcome-modal-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.welcome-modal-content::-webkit-scrollbar-track {
+  background: var(--surface-secondary);
+}
+
+.welcome-modal-content::-webkit-scrollbar-thumb {
+  background: var(--surface-tertiary);
+  border-radius: 4px;
+}
+
+.welcome-modal-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
