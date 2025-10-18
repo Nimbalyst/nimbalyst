@@ -493,7 +493,21 @@ export async function createApplicationMenu() {
                     accelerator: 'CmdOrCtrl+W',
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
-                        if (focused) focused.close();
+                        if (focused) {
+                            const windowId = getWindowId(focused);
+                            if (windowId !== null) {
+                                const state = windowStates.get(windowId);
+
+                                // If in agentic coding mode, close the active tab instead of the window
+                                if (state?.mode === 'agentic-coding') {
+                                    focused.webContents.send('agentic-coding:close-active-tab');
+                                    return;
+                                }
+                            }
+
+                            // Default behavior: close the window
+                            focused.close();
+                        }
                     }
                 },
                 {

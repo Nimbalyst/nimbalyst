@@ -824,6 +824,22 @@ export function AgenticPanel({
     });
   }, [sessionTabs, activeTabId, onSessionChange]);
 
+  // Listen for Cmd+W to close active tab in agent mode
+  useEffect(() => {
+    if (mode !== 'agent') return;
+
+    const handleCloseActiveTab = () => {
+      if (activeTabId) {
+        handleTabClose(activeTabId);
+      }
+    };
+
+    window.electronAPI.on('agentic-coding:close-active-tab', handleCloseActiveTab);
+    return () => {
+      window.electronAPI.off('agentic-coding:close-active-tab', handleCloseActiveTab);
+    };
+  }, [mode, activeTabId, handleTabClose]);
+
   const handleTabReorder = useCallback((fromIndex: number, toIndex: number) => {
     setSessionTabs(prev => {
       const newTabs = [...prev];
