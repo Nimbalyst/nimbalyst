@@ -24,6 +24,9 @@ export interface AgenticPanelProps {
   // Plan document path (optional, for agent mode)
   planDocumentPath?: string;
 
+  // Whether keyboard shortcuts should be active (for agent mode tabs)
+  isActive?: boolean;
+
   // Callbacks for external coordination
   onSessionChange?: (sessionId: string | null) => void;
   onContentModeChange?: (mode: string) => void; // Switch to files mode when opening a document
@@ -62,6 +65,7 @@ export function AgenticPanel({
   documentContext,
   initialSessionId,
   planDocumentPath,
+  isActive = true,
   onSessionChange,
   onContentModeChange
 }: AgenticPanelProps) {
@@ -1071,6 +1075,7 @@ export function AgenticPanel({
                 hasClosedTabs={closedSessions.length > 0}
                 onTabRename={handleTabRename}
                 allowRename={true}
+                isActive={isActive}
               />
               </div>
             )}

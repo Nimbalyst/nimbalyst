@@ -23,6 +23,7 @@ interface TabManagerProps {
   onNewTab: () => void;
   onViewHistory?: (tabId: string) => void;
   hideTabBar?: boolean;
+  isActive?: boolean; // Whether this TabManager's keyboard shortcuts should be active
   children: React.ReactNode;
 }
 
@@ -36,6 +37,7 @@ export const TabManager: React.FC<TabManagerProps> = ({
   onNewTab,
   onViewHistory,
   hideTabBar = false,
+  isActive = true,
   children
 }) => {
   return (
@@ -50,6 +52,7 @@ export const TabManager: React.FC<TabManagerProps> = ({
           onTogglePin={onTogglePin}
           onTabReorder={onTabReorder}
           onViewHistory={onViewHistory}
+          isActive={isActive}
         />
       )}
       <div className="tab-content">

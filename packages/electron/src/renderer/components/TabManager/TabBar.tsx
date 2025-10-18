@@ -14,6 +14,7 @@ interface TabBarProps {
   hasClosedTabs?: boolean;
   onTabRename?: (tabId: string, newName: string) => void;
   allowRename?: boolean;
+  isActive?: boolean; // Whether this TabBar should handle keyboard shortcuts
 }
 
 export const TabBar: React.FC<TabBarProps> = ({
@@ -28,7 +29,8 @@ export const TabBar: React.FC<TabBarProps> = ({
   onReopenLastClosed,
   hasClosedTabs = false,
   onTabRename,
-  allowRename = false
+  allowRename = false,
+  isActive = true
 }) => {
   const [contextMenuTab, setContextMenuTab] = useState<string | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -357,20 +359,23 @@ export const TabBar: React.FC<TabBarProps> = ({
 
   // Keyboard shortcuts
   React.useEffect(() => {
+    // Only handle keyboard shortcuts if this TabBar is active
+    if (!isActive) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't handle shortcuts if menu is open
       if (showTabMenu) return;
-      
+
       // Cmd/Ctrl + W to close current tab
       if ((e.metaKey || e.ctrlKey) && e.key === 'w' && activeTabId) {
         e.preventDefault();
         onTabClose(activeTabId);
       }
-      
+
       // Cmd/Ctrl + Shift + [ or ] to navigate tabs
       if ((e.metaKey || e.ctrlKey) && e.shiftKey) {
         const currentIndex = tabs.findIndex(tab => tab.id === activeTabId);
-        
+
         if (e.key === '[' && currentIndex > 0) {
           e.preventDefault();
           onTabSelect(tabs[currentIndex - 1].id);
@@ -379,7 +384,7 @@ export const TabBar: React.FC<TabBarProps> = ({
           onTabSelect(tabs[currentIndex + 1].id);
         }
       }
-      
+
       // Cmd/Ctrl + 1-9 to jump to tab
       if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
@@ -392,7 +397,7 @@ export const TabBar: React.FC<TabBarProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [tabs, activeTabId, onTabSelect, onTabClose, onNewTab, showTabMenu]);
+  }, [tabs, activeTabId, onTabSelect, onTabClose, onNewTab, showTabMenu, isActive]);
 
   if (tabs.length === 0) {
     return null;

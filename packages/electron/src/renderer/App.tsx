@@ -1125,6 +1125,7 @@ export default function App() {
                 }
               }}
               hideTabBar={!workspaceMode}
+              isActive={activeMode === 'files'}
             >
             {tabs.activeTab ? (
               <TabContent
@@ -1189,6 +1190,7 @@ export default function App() {
               workspacePath={workspacePath}
               documentContext={documentContext}
               onContentModeChange={setActiveMode}
+              isActive={activeMode === 'agent'}
             />
           )}
         </div>
@@ -1221,6 +1223,7 @@ export default function App() {
                 }
               }}
               hideTabBar={!workspaceMode}
+              isActive={activeMode === 'plan'}
             >
               {tabs.activeTab ? (
                 <TabContent
