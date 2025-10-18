@@ -8,7 +8,6 @@ import {
   type FrontmatterData,
 } from 'rexical';
 import { editorRegistry } from '@stravu/runtime/ai/EditorRegistry';
-import { getEditorPool } from '../services/EditorPool';
 
 const PLAN_STATUS_KEYS = new Set([
   'planId',
@@ -75,7 +74,6 @@ interface UseIPCHandlersProps {
   setWorkspacePath: (path: string | null) => void;
   setWorkspaceName: (name: string | null) => void;
   setFileTree: (tree: FileTreeItem[]) => void;
-  setCurrentDirectory: (dir: string | null) => void;
   setCurrentFilePath: (path: string | null) => void;
   setCurrentFileName: (name: string | null) => void;
   setIsDirty: (dirty: boolean) => void;
@@ -91,7 +89,7 @@ interface UseIPCHandlersProps {
   setAIPlanningMode?: (enabled: boolean) => void;
 
   // Refs
-  // NOTE: initialContentRef removed - EditorPool tracks initialContent per-file
+  // NOTE: initialContentRef removed - TabEditor tracks initialContent per-tab
   isInitializedRef: React.MutableRefObject<boolean>;
   isDirtyRef: React.MutableRefObject<boolean>;
   // NOTE: contentVersionRef removed - EditorContainer doesn't need version bumping
@@ -101,7 +99,6 @@ interface UseIPCHandlersProps {
 
   // State values
   currentFilePath: string | null;
-  currentDirectory: string | null;
   workspaceMode: boolean;
   workspacePath: string | null;
   sessionToLoad: { sessionId: string; workspacePath?: string } | null;
@@ -142,7 +139,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setWorkspacePath,
     setWorkspaceName,
     setFileTree,
-    setCurrentDirectory,
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
@@ -167,7 +163,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     // State values
     currentFilePath,
-    currentDirectory,
     workspaceMode,
     workspacePath,
     sessionToLoad,
@@ -194,7 +189,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setWorkspacePath,
     setWorkspaceName,
     setFileTree,
-    setCurrentDirectory,
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
@@ -211,7 +205,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
   const stateRef = useRef({
     currentFilePath,
-    currentDirectory,
     workspaceMode,
     workspacePath,
     sessionToLoad,
@@ -233,7 +226,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setWorkspacePath,
     setWorkspaceName,
     setFileTree,
-    setCurrentDirectory,
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
@@ -251,7 +243,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
   stateRef.current = {
     currentFilePath,
-    currentDirectory,
     workspaceMode,
     workspacePath,
     sessionToLoad,
@@ -291,10 +282,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     if (window.electronAPI.onFileNewInWorkspace) {
       cleanupFns.push(window.electronAPI.onFileNewInWorkspace(() => {
         if (stateRef.current.workspaceMode) {
-          // Use current directory or workspace root
-          if (!stateRef.current.currentDirectory && stateRef.current.workspacePath) {
-            handlersRef.current.setCurrentDirectory(stateRef.current.workspacePath);
-          }
           handlersRef.current.setIsNewFileDialogOpen(true);
         }
       }));
@@ -308,8 +295,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       handlersRef.current.setWorkspacePath(data.workspacePath);
       handlersRef.current.setWorkspaceName(data.workspaceName);
       handlersRef.current.setFileTree(data.fileTree);
-      // Set current directory to workspace root
-      handlersRef.current.setCurrentDirectory(data.workspacePath);
       // Clear current document (EditorContainer manages content now)
       handlersRef.current.setCurrentFilePath(null);
       handlersRef.current.setCurrentFileName(null);
@@ -386,22 +371,14 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       handlersRef.current.setCurrentFileName(data.filePath.split('/').pop() || data.filePath);
       isDirtyRef.current = false;
       handlersRef.current.setIsDirty(false);
-      // NOTE: initialContentRef removed - EditorPool tracks this per-file
+      // NOTE: initialContentRef removed - TabEditor tracks this per-tab
 
       // Add tab for the opened file (works for both single-file and workspace modes)
       console.log('[FILE_OPS] Checking tabs object:', !!handlersRef.current.tabs);
       if (handlersRef.current.tabs) {
         console.log('[FILE_OPS] Adding tab for file opened from OS:', data.filePath);
 
-        // Create EditorPool instance BEFORE creating tab
-        // EditorContainer expects the instance to exist
-        const editorPool = getEditorPool();
-
-        if (!editorPool.has(data.filePath)) {
-          console.log('[FILE_OPS] Creating EditorPool instance for:', data.filePath);
-          editorPool.create(data.filePath, data.content);
-        }
-
+        // TabContent/TabEditor will handle editor creation and state management
         const tabId = handlersRef.current.tabs.addTab(data.filePath, data.content);
         console.log('[FILE_OPS] addTab returned:', tabId);
         if (tabId) {
@@ -453,7 +430,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       handlersRef.current.setCurrentFilePath(null);
       handlersRef.current.setCurrentFileName(data.untitledName);
       // setIsDirty(true); // New documents start as dirty
-      // NOTE: initialContentRef removed - EditorPool tracks this per-file
+      // NOTE: initialContentRef removed - TabEditor tracks this per-tab
       // Update the window title immediately
       if (window.electronAPI) {
         window.electronAPI.setTitle(`${data.untitledName} • - Preditor`);
@@ -512,148 +489,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }
     }));
 
-    // Handle file changes on disk
-    // NOTE: EditorContainer now handles file watching for ALL open tabs (active and background)
-    // with per-file lastSaveTime tracking. This legacy handler has been disabled to avoid
-    // duplicate updates and excessive re-renders.
-    //
-    // Keeping the code here temporarily for reference.
-    if (false && window.electronAPI.onFileChangedOnDisk) {
-      cleanupFns.push(window.electronAPI.onFileChangedOnDisk(async (data) => {
-        console.log('[FILE_WATCH] File changed on disk event received:', data.path);
-
-        // Check if we should reload - tabs are always enabled now
-        let shouldReload = false;
-        let fileToCheck = stateRef.current.currentFilePath;
-
-        if (stateRef.current.tabs && stateRef.current.tabs.activeTab) {
-          // Check if it's the active tab's file
-          fileToCheck = stateRef.current.tabs.activeTab.filePath;
-          shouldReload = (fileToCheck === data.path);
-          console.log('[FILE_WATCH] Active tab check:', {
-            activeTabPath: fileToCheck,
-            changedPath: data.path,
-            shouldReload
-          });
-        } else {
-          // Fallback: check against current file
-          shouldReload = (stateRef.current.currentFilePath === data.path);
-          console.log('[FILE_WATCH] Current file check:', {
-            currentPath: stateRef.current.currentFilePath,
-            changedPath: data.path,
-            shouldReload
-          });
-        }
-
-        if (shouldReload) {
-          // NOTE: EditorContainer now handles file watching with per-file lastSaveTime tracking
-          // This legacy handler is still here but should be removed in future cleanup
-
-          // The current file was changed on disk
-          try {
-            // Read the file content without touching the watcher
-            const result = window.electronAPI.readFileContent
-              ? await window.electronAPI.readFileContent(data.path)
-              : await window.electronAPI.switchWorkspaceFile(data.path);
-            if (result && result.content !== undefined) {
-              // Get current content from the editor
-              const currentContent = getContentRef.current ? getContentRef.current() : '';
-
-              console.log('[FILE CHANGE] Content comparison:', {
-                diskLength: result.content.length,
-                currentLength: currentContent.length,
-                diskFirst100: result.content.substring(0, 100),
-                currentFirst100: currentContent.substring(0, 100),
-                areEqual: result.content === currentContent
-              });
-
-              // Compare the content
-              if (result.content === currentContent) {
-                // Content is the same, ignore the change (likely from our own save)
-                // console.log('File changed on disk but content is identical, ignoring');
-                return;
-              }
-
-              // Content is different, handle based on dirty state
-              // Check EditorPool for actual dirty state (more reliable than isDirtyRef)
-              const editorPool = getEditorPool();
-              const instance = editorPool.get(data.path);
-              const isFileDirty = instance?.isDirty ?? false;
-
-              if (!isFileDirty) {
-                // File is not dirty, reload it automatically
-                console.log('[FILE_WATCH] File is not dirty, reloading from disk');
-                console.log('[FILE_WATCH] Loading content for path:', data.path, 'first 100 chars:', result.content.substring(0, 100));
-
-                // Update EditorPool instance with new content and increment reload version
-                if (editorPool.has(data.path)) {
-                  const currentVersion = instance?.reloadVersion ?? 0;
-                  console.log('[FILE_WATCH] Incrementing reloadVersion for:', data.path, 'from', currentVersion, 'to', currentVersion + 1);
-                  editorPool.update(data.path, {
-                    content: result.content,
-                    initialContent: result.content,
-                    isDirty: false,
-                    reloadVersion: currentVersion + 1
-                  });
-                }
-
-                // Reset the getContentRef since editor will remount
-                getContentRef.current = null;
-                // Ensure editor is not marked as dirty
-                isDirtyRef.current = false;
-                handlersRef.current.setIsDirty(false);
-                // IMPORTANT: Update the tab's content so it doesn't reload and restart the watcher
-                if (stateRef.current.tabs.activeTab && stateRef.current.tabs.activeTab.filePath === data.path) {
-                  stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTab.id, { content: result.content });
-                }
-              } else {
-                // File is dirty, we have a conflict
-                console.log('[FILE_WATCH] File changed on disk but local changes exist');
-                const choice = confirm(
-                  'The file has been changed on disk but you have unsaved changes.\n\n' +
-                  'Do you want to reload the file from disk and lose your changes?\n\n' +
-                  'Click OK to reload from disk, or Cancel to keep your changes.'
-                );
-
-                if (choice) {
-                  // User chose to reload from disk
-                  console.log('[FILE_WATCH] User chose to reload from disk, updating EditorPool');
-
-                  // Update EditorPool instance with new content and increment reload version
-                  const editorPool = getEditorPool();
-                  if (editorPool.has(data.path)) {
-                    const instance = editorPool.get(data.path);
-                    const currentVersion = instance?.reloadVersion ?? 0;
-                    console.log('[FILE_WATCH] Incrementing reloadVersion for:', data.path, 'from', currentVersion, 'to', currentVersion + 1);
-                    editorPool.update(data.path, {
-                      content: result.content,
-                      initialContent: result.content,
-                      isDirty: false,
-                      reloadVersion: currentVersion + 1
-                    });
-                  }
-
-                  // Reset the getContentRef since editor will remount
-                  getContentRef.current = null;
-                  isDirtyRef.current = false;
-                  handlersRef.current.setIsDirty(false);
-
-                  // Update the tab's content
-                  if (stateRef.current.tabs.activeTab && stateRef.current.tabs.activeTab.filePath === data.path) {
-                    stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTab.id, { content: result.content });
-                  }
-                }
-                // If user chose Cancel, we just keep the current changes
-              }
-            }
-          } catch (error) {
-            console.error('[FILE_WATCH] Failed to check file changes:', error);
-          }
-        } else {
-          console.log('[FILE_WATCH] Ignoring file change for non-active file:', data.path);
-        }
-      }));
-    }
+    // NOTE: File watching is now handled by TabEditor component for each individual tab.
+    // The legacy file change handler has been removed as it's no longer needed.
     cleanupFns.push(window.electronAPI.onFileMoved(async (data) => {
       console.log('File moved:', data);
       if (stateRef.current.currentFilePath === data.sourcePath) {
@@ -691,10 +528,10 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
               if (LOG_CONFIG.THEME) console.log('[THEME] Dirty before theme switch. Saving to disk...');
               const result = await window.electronAPI?.saveFile(content, stateRef.current.currentFilePath);
               if (result?.success) {
-                // NOTE: lastSaveTime now tracked in EditorPool per-file
+                // NOTE: lastSaveTime now tracked in TabEditor per-tab
                 isDirtyRef.current = false;
                 handlersRef.current.setIsDirty(false);
-                // NOTE: initialContentRef removed - EditorPool tracks this per-file
+                // NOTE: initialContentRef removed - TabEditor tracks this per-tab
                 // Reflect clean state in active tab UI
                 if (stateRef.current.tabs && stateRef.current.tabs.activeTabId) {
                   stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { isDirty: false });
@@ -709,7 +546,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             if (window.electronAPI?.readFileContent) {
               const res = await window.electronAPI.readFileContent(stateRef.current.currentFilePath);
               if (res?.content !== undefined) {
-                // NOTE: initialContentRef removed - EditorPool tracks this per-file
+                // NOTE: initialContentRef removed - TabEditor tracks this per-tab
                 // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
                 // Keep tab content in sync
                 if (stateRef.current.tabs && stateRef.current.tabs.activeTabId) {
@@ -719,7 +556,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             } else if (window.electronAPI?.switchWorkspaceFile) {
               const res = await window.electronAPI.switchWorkspaceFile(stateRef.current.currentFilePath);
               if (res?.content !== undefined) {
-                // NOTE: initialContentRef removed - EditorPool tracks this per-file
+                // NOTE: initialContentRef removed - TabEditor tracks this per-tab
                 // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
                 if (stateRef.current.tabs && stateRef.current.tabs.activeTabId) {
                   stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { content: res.content });

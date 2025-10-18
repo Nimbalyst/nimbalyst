@@ -21,7 +21,6 @@ interface QuickOpenProps {
   onClose: () => void;
   workspacePath: string;
   currentFilePath?: string | null;
-  recentFiles: string[];
   onFileSelect: (filePath: string) => void;
 }
 
@@ -30,7 +29,6 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   onClose,
   workspacePath,
   currentFilePath,
-  recentFiles,
   onFileSelect,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,6 +38,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   const [isContentSearch, setIsContentSearch] = useState(false);
   const [contentSearchTriggered, setContentSearchTriggered] = useState(false);
   const [mouseHasMoved, setMouseHasMoved] = useState(false);
+  const [recentFiles, setRecentFiles] = useState<string[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout>();
   const resultsListRef = useRef<HTMLUListElement>(null);
@@ -213,6 +212,20 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
       }
     };
   }, [searchQuery, searchFiles]);
+
+  // Load recent files when modal opens
+  useEffect(() => {
+    if (isOpen && window.electronAPI?.getRecentWorkspaceFiles) {
+      window.electronAPI.getRecentWorkspaceFiles()
+        .then(files => {
+          setRecentFiles(files || []);
+        })
+        .catch(error => {
+          console.error('[QuickOpen] Failed to load recent files:', error);
+          setRecentFiles([]);
+        });
+    }
+  }, [isOpen]);
 
   // Reset state when modal opens/closes
   useEffect(() => {

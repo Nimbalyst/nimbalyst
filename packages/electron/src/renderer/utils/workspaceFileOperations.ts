@@ -15,7 +15,6 @@ interface FileSelectOptions {
   isInitializedRef: React.MutableRefObject<boolean>;
   setCurrentFilePath: (path: string | null) => void;
   setCurrentFileName: (name: string) => void;
-  setCurrentDirectory: (dir: string | null) => void;
 }
 
 export async function handleWorkspaceFileSelect(options: FileSelectOptions): Promise<void> {
@@ -26,7 +25,6 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
     isInitializedRef,
     setCurrentFilePath,
     setCurrentFileName,
-    setCurrentDirectory,
   } = options;
 
   // NOTE: autoSaveCancellationRef removed - EditorContainer handles all autosave now
@@ -76,10 +74,6 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
         console.log('[TABS] Added tab with ID:', tabId);
         // State updates (contentRef, currentFilePath, etc.) will be handled by onTabChange callback
       }
-
-      // Update current directory based on the file path
-      const dirPath = result.filePath.substring(0, result.filePath.lastIndexOf('/'));
-      setCurrentDirectory(dirPath);
 
       // Add to recent files
       if (window.electronAPI?.addToWorkspaceRecentFiles) {
