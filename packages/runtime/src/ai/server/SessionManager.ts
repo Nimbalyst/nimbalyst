@@ -259,4 +259,31 @@ export class SessionManager {
       this.currentSession = { ...this.currentSession, title };
     }
   }
+
+  async updateSessionModel(sessionId: string, model: string): Promise<void> {
+    console.log(`[SessionManager] updateSessionModel called: sessionId=${sessionId}, model=${model}`);
+    await AISessionsRepository.updateMetadata(sessionId, { model });
+    console.log(`[SessionManager] Database updated with new model`);
+    if (this.currentSession?.id === sessionId) {
+      console.log(`[SessionManager] Updating current session model from ${this.currentSession.model} to ${model}`);
+      this.currentSession = { ...this.currentSession, model };
+    }
+  }
+
+  async updateSessionProviderAndModel(sessionId: string, provider: string, model: string): Promise<void> {
+    console.log(`[SessionManager] updateSessionProviderAndModel called: sessionId=${sessionId}, provider=${provider}, model=${model}`);
+    await AISessionsRepository.updateMetadata(sessionId, {
+      provider,
+      model
+    });
+    console.log(`[SessionManager] Database updated with new provider and model`);
+    if (this.currentSession?.id === sessionId) {
+      console.log(`[SessionManager] Updating current session: provider ${this.currentSession.provider} -> ${provider}, model ${this.currentSession.model} -> ${model}`);
+      this.currentSession = {
+        ...this.currentSession,
+        provider: provider as AIProviderType,
+        model
+      };
+    }
+  }
 }

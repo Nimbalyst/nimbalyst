@@ -215,7 +215,9 @@ export function AgenticPanel({
         const newTab: SessionTab = {
           id: sessionData.id,
           name: tabName,
-          sessionData
+          sessionData,
+          mode: 'plan',
+          model: sessionData.model || sessionData.provider || 'claude-code'
         };
 
         if (mode === 'chat') {
@@ -297,7 +299,9 @@ export function AgenticPanel({
     const newTab: SessionTab = {
       id: sessionData.id,
       name: tabName,
-      sessionData
+      sessionData,
+      mode: 'plan',
+      model: sessionData.model || sessionData.provider || 'claude-code'
     };
 
     if (mode === 'chat') {
@@ -355,7 +359,9 @@ export function AgenticPanel({
                     id: sessionId,
                     name: savedTab.fileName,
                     sessionData,
-                    isPinned: savedTab.isPinned
+                    isPinned: savedTab.isPinned,
+                    mode: 'plan',
+                    model: sessionData.model || sessionData.provider || 'claude-code'
                   });
                 }
               } catch (err) {
@@ -388,7 +394,9 @@ export function AgenticPanel({
                 const tab: SessionTab = {
                   id: sessionData.id,
                   name: sessionData.title || 'Session',
-                  sessionData
+                  sessionData,
+                  mode: 'plan',
+                  model: sessionData.model || sessionData.provider || 'claude-code'
                 };
 
                 setSessionTabs([tab]);
@@ -419,7 +427,9 @@ export function AgenticPanel({
             const tab: SessionTab = {
               id: sessionData.id,
               name: tabName,
-              sessionData
+              sessionData,
+              mode: 'plan',
+              model: sessionData.model || sessionData.provider || 'claude-code'
             };
 
             setSessionTabs([tab]);
@@ -598,10 +608,47 @@ export function AgenticPanel({
   }, []);
 
   // Handle model change
-  const handleModelChange = useCallback((sessionId: string, newModel: string) => {
-    setSessionTabs(prev => prev.map(tab =>
-      tab.id === sessionId ? { ...tab, model: newModel } : tab
-    ));
+  const handleModelChange = useCallback(async (sessionId: string, newModel: string) => {
+    console.log(`[AgenticPanel] handleModelChange called - sessionId: ${sessionId}, newModel: ${newModel}`);
+
+    // Parse provider from model ID (format: "provider:model" or just "provider")
+    const [newProvider, ...modelParts] = newModel.split(':');
+    const actualModel = modelParts.length > 0 ? modelParts.join(':') : newModel;
+
+    console.log(`[AgenticPanel] Parsed provider: ${newProvider}, model: ${actualModel}`);
+
+    // Update local state immediately for responsive UI
+    setSessionTabs(prev => prev.map(tab => {
+      if (tab.id === sessionId) {
+        console.log(`[AgenticPanel] Updating tab ${tab.id}:`);
+        console.log(`  - provider: ${tab.sessionData.provider} -> ${newProvider}`);
+        console.log(`  - model: ${tab.model} -> ${newModel}`);
+        console.log(`  - sessionData.model: ${tab.sessionData.model} -> ${newModel}`);
+        return {
+          ...tab,
+          model: newModel,
+          // Also update sessionData with both provider and model
+          sessionData: {
+            ...tab.sessionData,
+            provider: newProvider as any,
+            model: newModel
+          }
+        };
+      }
+      return tab;
+    }));
+
+    // Persist both provider and model changes to session data in database
+    try {
+      console.log(`[AgenticPanel] Persisting changes to database: ${sessionId}`);
+      console.log(`  - provider: ${newProvider}`);
+      console.log(`  - model: ${newModel}`);
+
+      await window.electronAPI.invoke('sessions:update-provider-and-model', sessionId, newProvider, newModel);
+      console.log(`[AgenticPanel] Provider and model changes persisted successfully`);
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to update session provider/model:', err);
+    }
   }, []);
 
   // Handle send message
