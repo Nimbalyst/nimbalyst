@@ -51,6 +51,9 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
   // Track a throwaway counter to force React rerenders when editorPool changes outside of state
   const [, forceRender] = useReducer((count: number) => count + 1, 0);
 
+  // Create stable onContentChange callbacks for each tab
+  const contentChangeCallbacks = useRef<Map<string, () => void>>(new Map());
+
   // Helper: Save file with history snapshot (encapsulates ALL per-file save logic)
   const saveWithHistory = useCallback(async (
     filePath: string,
@@ -138,18 +141,41 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
 
   // Handle manual save request (Cmd+S or File > Save menu)
   const handleManualSave = useCallback(async () => {
-    if (!activeTabId) return;
+    console.log('[EditorContainer] handleManualSave called', {
+      activeTabId,
+      tabsCount: tabs.length,
+      hasGetContentFn: !!getContentFuncs.current.get(activeTabId || ''),
+      allTabIds: tabs.map(t => t.id),
+      getContentFuncKeys: Array.from(getContentFuncs.current.keys())
+    });
+
+    if (!activeTabId) {
+      console.log('[EditorContainer] No activeTabId, returning');
+      return;
+    }
 
     const activeTab = tabs.find(t => t.id === activeTabId);
-    if (!activeTab) return;
+    if (!activeTab) {
+      console.log('[EditorContainer] No activeTab found, returning');
+      return;
+    }
 
     const getContentFn = getContentFuncs.current.get(activeTabId);
-    if (!getContentFn) return;
+    if (!getContentFn) {
+      console.log('[EditorContainer] No getContentFn found for activeTabId:', activeTabId);
+      return;
+    }
 
+    console.log('[EditorContainer] Using getContentFn with ID:', (getContentFn as any).__fnId);
     const content = getContentFn();
+    console.log('[EditorContainer] Got content, length:', content.length);
+    console.log('[EditorContainer] Content preview:', content.substring(0, 100));
+    console.log('[EditorContainer] EditorPool instance content length:', editorPool.get(activeTab.filePath)?.content?.length);
     logger.ui.info(`[EditorContainer] Manual save: ${activeTab.fileName}`);
 
+    console.log('[EditorContainer] Calling saveWithHistory with content length:', content.length);
     await saveWithHistory(activeTab.filePath, content, 'manual');
+    console.log('[EditorContainer] saveWithHistory completed');
 
     // Update instance to mark as clean and track save time
     // Note: lastSavedContent is already set in saveWithHistory
@@ -238,6 +264,7 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
           // console.log('[EDITOR_CONTAINER_DEBUG] First 200 chars:', JSON.stringify(content.substring(0, 200)));
           // console.log('[EDITOR_CONTAINER_DEBUG] Split by newline:', content.split('\n').slice(0, 10).map((line, i) => `Line ${i}: "${line}"`));
 
+          console.log('[EditorContainer] Creating editorPool with content length:', content?.length, 'for tab:', tab.fileName);
           editorPool.create(tab.filePath, content || '');
           // Mark the loaded content as "saved" to prevent false positive file change warnings
           editorPool.update(tab.filePath, {
@@ -371,6 +398,15 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
           logger.ui.info(`[EditorContainer] Disk content matches editor for ${tab.fileName}, skipping reload`);
           return;
         }
+
+        console.log('[FILE_WATCH] Checking if our own save:', {
+          hasLastSaveTime: !!instance.lastSaveTime,
+          timeSince: instance.lastSaveTime ? Date.now() - instance.lastSaveTime : 'N/A',
+          hasLastSavedContent: instance.lastSavedContent !== undefined,
+          diskContentLength: newContent.length,
+          savedContentLength: instance.lastSavedContent?.length,
+          contentsMatch: newContent === instance.lastSavedContent
+        });
 
         // Second: Check if this change is from our own recent save operation
         // Only ignore if we saved recently (within 3 seconds) AND the disk content matches what we saved
@@ -696,6 +732,37 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
           return null;
         }
 
+        console.log('[EditorContainer] Rendering StravuEditor for tab:', tab.fileName, 'isActive:', isActive, 'key:', `${tab.filePath}-v${instance.reloadVersion ?? 0}-theme-${theme}`);
+
+        // Create or get stable callback for this tab
+        if (!contentChangeCallbacks.current.has(tab.id)) {
+          contentChangeCallbacks.current.set(tab.id, () => {
+            console.log('[EditorContainer] onContentChange CALLED for tab:', tab.id);
+            const getContentFn = getContentFuncs.current.get(tab.id);
+            if (!getContentFn) {
+              console.log('[EditorContainer] onContentChange - NO getContentFn for tab:', tab.id);
+              return;
+            }
+
+            const instance = editorPool.get(tab.filePath);
+            if (!instance) return;
+
+            const currentContent = getContentFn();
+            console.log('[EditorContainer] onContentChange - content length:', currentContent.length, 'tabId:', tab.id);
+            const isDirty = currentContent !== instance.initialContent;
+
+            editorPool.update(tab.filePath, {
+              content: currentContent,
+              isDirty,
+              lastChangeTime: Date.now(),
+            });
+
+            onContentChange?.(tab.id, isDirty);
+          });
+        }
+
+        const stableOnContentChange = contentChangeCallbacks.current.get(tab.id)!;
+
         return (
           <div
             key={tab.id}
@@ -708,29 +775,12 @@ export const EditorContainer: React.FC<EditorContainerProps> = ({
               config={{
                 initialContent: instance.content,
                 theme,
-                onContentChange: () => {
-                  // Get current content and compare to initialContent
-                  const getContentFn = getContentFuncs.current.get(tab.id);
-                  if (!getContentFn) {
-                    return;
-                  }
-
-                  const currentContent = getContentFn();
-                  const isDirty = currentContent !== instance.initialContent;
-
-                  // Update the EditorPool instance with content, dirty state, and change time
-                  // This happens on every edit but is just updating a Map, not triggering React re-renders
-                  editorPool.update(tab.filePath, {
-                    content: currentContent,
-                    isDirty,
-                    lastChangeTime: Date.now(), // Track for autosave debouncing
-                  });
-
-                  // Notify parent (App.tsx will check if isDirty actually changed)
-                  onContentChange?.(tab.id, isDirty);
-                },
+                onContentChange: stableOnContentChange,
                 onGetContent: (getContentFn) => {
                   // Store this tab's getContent function
+                  const fnId = Date.now() + Math.random();
+                  console.log('[EditorContainer] onGetContent called for tab:', tab.id, 'fnId:', fnId, 'isActive:', isActive);
+                  (getContentFn as any).__fnId = fnId;
                   getContentFuncs.current.set(tab.id, getContentFn);
 
                   // If this is the active tab, pass it to parent immediately

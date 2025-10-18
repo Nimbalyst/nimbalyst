@@ -41,6 +41,7 @@ import SettingsScreen from './components/SettingsScreen/SettingsScreen';
 import OnboardingService from './services/OnboardingService';
 import './WorkspaceWelcome.css';
 import './components/AIModels/AIModelsRedesigned.css';
+import { getEditorPool } from "./services/EditorPool.ts";
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
@@ -1227,81 +1228,84 @@ export default function App() {
               isFirstTime={false}
             />
           ) : workspaceMode || tabs.activeTab ? (
-          <TabManager
-            tabs={tabs.tabs}
-            activeTabId={tabs.activeTabId}
-            onTabSelect={tabs.switchTab}
-            onTabClose={tabs.removeTab}
-            onNewTab={() => {
-              // Open file dialog or create untitled tab
-              setIsNewFileDialogOpen(true);
-            }}
-            onTogglePin={tabs.togglePin}
-            onTabReorder={tabs.reorderTabs}
-            onViewHistory={(tabId) => {
-              const tab = tabs.getTabState(tabId);
-              if (tab && tab.filePath) {
-                setIsHistoryDialogOpen(true);
-              }
-            }}
-            hideTabBar={!workspaceMode}
-          >
+          <div className="file-tabs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <TabManager
+              tabs={tabs.tabs}
+              activeTabId={tabs.activeTabId}
+              onTabSelect={tabs.switchTab}
+              onTabClose={tabs.removeTab}
+              onNewTab={() => {
+                // Open file dialog or create untitled tab
+                setIsNewFileDialogOpen(true);
+              }}
+              onTogglePin={tabs.togglePin}
+              onTabReorder={tabs.reorderTabs}
+              onViewHistory={(tabId) => {
+                const tab = tabs.getTabState(tabId);
+                if (tab && tab.filePath) {
+                  setIsHistoryDialogOpen(true);
+                }
+              }}
+              hideTabBar={!workspaceMode}
+            >
             {tabs.activeTab ? (
               <EditorContainer
                 tabs={tabs.tabs}
                 activeTabId={tabs.activeTabId}
                 theme={theme}
-                onManualSaveReady={(saveFn) => {
-                  // Store manual save function for use by menu handlers
-                  handleSaveRef.current = saveFn;
-                }}
-                onSaveComplete={(filePath) => {
-                  // Update UI state after save completes
-                  setCurrentFilePath(filePath);
-                  setCurrentFileName(filePath.split('/').pop() || filePath);
-                  setIsDirty(false);
+              onManualSaveReady={(saveFn) => {
+                // Store manual save function for use by menu handlers
+                console.log('[App] onManualSaveReady called, storing save function');
+                handleSaveRef.current = saveFn;
+              }}
+              onSaveComplete={(filePath) => {
+                // Update UI state after save completes
+                setCurrentFilePath(filePath);
+                setCurrentFileName(filePath.split('/').pop() || filePath);
+                setIsDirty(false);
 
-                  // Update tab state
-                  if (tabs.activeTabId) {
-                    tabs.updateTab(tabs.activeTabId, {
-                      isDirty: false,
-                      lastSaved: new Date()
-                    });
+                // Update tab state
+                if (tabs.activeTabId) {
+                  tabs.updateTab(tabs.activeTabId, {
+                    isDirty: false,
+                    lastSaved: new Date()
+                  });
+                }
+              }}
+              onGetContent={(getContentFn) => {
+                logger.ui.info('Received getContent function for tab');
+                getContentRef.current = getContentFn;
+
+                // Configure aiToolService with content getter
+                aiToolService.setGetContentFunction(getContentFn);
+              }}
+              onEditorReady={(editor) => {
+                logger.ui.info('Editor ready for tab');
+                editorRef.current = editor;
+                searchCommandRef.current = TOGGLE_SEARCH_COMMAND;
+              }}
+              onContentChange={(changedTabId, changedIsDirty) => {
+                const tab = tabs.getTabState(changedTabId);
+
+                // Only update if isDirty state actually changed to avoid unnecessary re-renders
+                if (tab && tab.isDirty !== changedIsDirty) {
+                  // console.log(`[App] onContentChange: ${tab.fileName} isDirty changed ${tab.isDirty} -> ${changedIsDirty}`);
+
+                  // Update the tab's dirty state
+                  tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
+
+                  // For the active tab, update global UI state (for window title, menus, etc.)
+                  if (changedTabId === tabs.activeTabId) {
+                    setIsDirty(changedIsDirty);
                   }
-                }}
-                onGetContent={(getContentFn) => {
-                  logger.ui.info('Received getContent function for tab');
-                  getContentRef.current = getContentFn;
-
-                  // Configure aiToolService with content getter
-                  aiToolService.setGetContentFunction(getContentFn);
-                }}
-                onEditorReady={(editor) => {
-                  logger.ui.info('Editor ready for tab');
-                  editorRef.current = editor;
-                  searchCommandRef.current = TOGGLE_SEARCH_COMMAND;
-                }}
-                onContentChange={(changedTabId, changedIsDirty) => {
-                  const tab = tabs.getTabState(changedTabId);
-
-                  // Only update if isDirty state actually changed to avoid unnecessary re-renders
-                  if (tab && tab.isDirty !== changedIsDirty) {
-                    // console.log(`[App] onContentChange: ${tab.fileName} isDirty changed ${tab.isDirty} -> ${changedIsDirty}`);
-
-                    // Update the tab's dirty state
-                    tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
-
-                    // For the active tab, update global UI state (for window title, menus, etc.)
-                    if (changedTabId === tabs.activeTabId) {
-                      setIsDirty(changedIsDirty);
-                    }
-                  }
-                }}
-              />
+                }
+              }}
+            />
             ) : (
               <WorkspaceWelcome workspaceName={workspaceName || 'Workspace'} />
             )}
           </TabManager>
+          </div>
         ) : (
           <WorkspaceWelcome workspaceName={workspaceName || 'Open a file to get started'} />
         )}
@@ -1320,6 +1324,28 @@ export default function App() {
             <AgenticPanel
               mode="agent"
               workspacePath={workspacePath}
+              documentContext={(() => {
+                const activeTab = tabs.activeTab;
+                if (!activeTab) {
+                  return {
+                    filePath: '',
+                    fileType: 'markdown',
+                    content: '',
+                    cursorPosition: undefined,
+                    selection: undefined,
+                    getLatestContent: undefined
+                  };
+                }
+
+                return {
+                  filePath: activeTab.filePath || '',
+                  fileType: 'markdown',
+                  content: getContentRef.current ? getContentRef.current() : '',
+                  cursorPosition: undefined,
+                  selection: undefined,
+                  getLatestContent: getContentRef.current
+                };
+              })()}
               onContentModeChange={setActiveMode}
             />
           )}
@@ -1335,7 +1361,8 @@ export default function App() {
           inset: 0
         }}>
           {workspaceMode || tabs.activeTab ? (
-            <TabManager
+            <div className="plan-tabs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <TabManager
               tabs={tabs.tabs}
               activeTabId={tabs.activeTabId}
               onTabSelect={tabs.switchTab}
@@ -1358,44 +1385,45 @@ export default function App() {
                   tabs={tabs.tabs}
                   activeTabId={tabs.activeTabId}
                   theme={theme}
-                  onManualSaveReady={(saveFn) => {
-                    handleSaveRef.current = saveFn;
-                  }}
-                  onSaveComplete={(filePath) => {
-                    setCurrentFilePath(filePath);
-                    setCurrentFileName(filePath.split('/').pop() || filePath);
-                    setIsDirty(false);
-                    if (tabs.activeTabId) {
-                      tabs.updateTab(tabs.activeTabId, {
-                        isDirty: false,
-                        lastSaved: new Date()
-                      });
+                onManualSaveReady={(saveFn) => {
+                  handleSaveRef.current = saveFn;
+                }}
+                onSaveComplete={(filePath) => {
+                  setCurrentFilePath(filePath);
+                  setCurrentFileName(filePath.split('/').pop() || filePath);
+                  setIsDirty(false);
+                  if (tabs.activeTabId) {
+                    tabs.updateTab(tabs.activeTabId, {
+                      isDirty: false,
+                      lastSaved: new Date()
+                    });
+                  }
+                }}
+                onGetContent={(getContentFn) => {
+                  logger.ui.info('Received getContent function for tab');
+                  getContentRef.current = getContentFn;
+                  aiToolService.setGetContentFunction(getContentFn);
+                }}
+                onEditorReady={(editor) => {
+                  logger.ui.info('Editor ready for tab');
+                  editorRef.current = editor;
+                  searchCommandRef.current = TOGGLE_SEARCH_COMMAND;
+                }}
+                onContentChange={(changedTabId, changedIsDirty) => {
+                  const tab = tabs.getTabState(changedTabId);
+                  if (tab && tab.isDirty !== changedIsDirty) {
+                    tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
+                    if (changedTabId === tabs.activeTabId) {
+                      setIsDirty(changedIsDirty);
                     }
-                  }}
-                  onGetContent={(getContentFn) => {
-                    logger.ui.info('Received getContent function for tab');
-                    getContentRef.current = getContentFn;
-                    aiToolService.setGetContentFunction(getContentFn);
-                  }}
-                  onEditorReady={(editor) => {
-                    logger.ui.info('Editor ready for tab');
-                    editorRef.current = editor;
-                    searchCommandRef.current = TOGGLE_SEARCH_COMMAND;
-                  }}
-                  onContentChange={(changedTabId, changedIsDirty) => {
-                    const tab = tabs.getTabState(changedTabId);
-                    if (tab && tab.isDirty !== changedIsDirty) {
-                      tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
-                      if (changedTabId === tabs.activeTabId) {
-                        setIsDirty(changedIsDirty);
-                      }
-                    }
-                  }}
-                />
+                  }
+                }}
+              />
               ) : (
                 <WorkspaceWelcome workspaceName={workspaceName || 'Open a plan to get started'} />
               )}
             </TabManager>
+            </div>
           ) : (
             <WorkspaceWelcome workspaceName="Open a plan to get started" />
           )}

@@ -16,7 +16,8 @@ export const TEST_TIMEOUTS = {
 };
 
 // Selector for the active editor (accounts for multi-editor architecture)
-export const ACTIVE_EDITOR_SELECTOR = '.multi-editor-instance.active .editor [contenteditable="true"]';
+// Scoped to file-tabs-container to avoid matching plan or AI editors
+export const ACTIVE_EDITOR_SELECTOR = '.file-tabs-container .multi-editor-instance.active .editor [contenteditable="true"]';
 
 export async function launchElectronApp(options?: {
   workspace?: string;

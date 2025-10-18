@@ -989,7 +989,8 @@ export function AgenticPanel({
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             {/* Tabs */}
             {sessionTabs.length > 0 && (
-              <TabBar
+              <div className="ai-session-tabs-container">
+                <TabBar
                 tabs={convertToTabs(sessionTabs)}
                 activeTabId={activeTabId}
                 onTabSelect={handleTabSelect}
@@ -1002,6 +1003,7 @@ export function AgenticPanel({
                 onTabRename={handleTabRename}
                 allowRename={true}
               />
+              </div>
             )}
 
             {/* Session views */}
