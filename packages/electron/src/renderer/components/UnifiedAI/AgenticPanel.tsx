@@ -80,6 +80,7 @@ export function AgenticPanel({
   const [sessionHistoryWidth, setSessionHistoryWidth] = useState(240);
   const [sessionHistoryCollapsed, setSessionHistoryCollapsed] = useState(mode === 'chat'); // Collapsed in chat mode
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
+  const [sessionHistoryRefreshTrigger, setSessionHistoryRefreshTrigger] = useState(0);
 
   // Streaming state
   const [streamingContent, setStreamingContent] = useState<{
@@ -313,6 +314,9 @@ export function AgenticPanel({
     setActiveTabId(sessionData.id);
 
     await loadSessions();
+
+    // Trigger SessionHistory refresh
+    setSessionHistoryRefreshTrigger(prev => prev + 1);
 
     if (planPath && mode === 'agent') {
       await window.electronAPI.invoke('plan-status:notify-session-created', {
@@ -1044,8 +1048,10 @@ export function AgenticPanel({
             activeSessionId={activeTabId}
             onSessionSelect={openSessionInTab}
             onSessionDelete={deleteSession}
+            onNewSession={() => createNewSession()}
             collapsedGroups={collapsedGroups}
             onCollapsedGroupsChange={setCollapsedGroups}
+            refreshTrigger={sessionHistoryRefreshTrigger}
           />
         }
         rightPanel={

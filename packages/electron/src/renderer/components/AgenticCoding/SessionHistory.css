@@ -13,6 +13,13 @@
   padding: 0.75rem 0.75rem;
   border-bottom: 1px solid var(--border-primary);
   flex-shrink: 0;
+  gap: 0.5rem;
+}
+
+.session-history-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .session-history-title {
@@ -105,4 +112,31 @@
 .session-history-empty-hint {
   font-size: 0.75rem;
   color: var(--text-tertiary);
+}
+
+.session-history-new-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 0.25rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.session-history-new-button:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary-color);
+}
+
+.session-history-new-button:active {
+  background: var(--surface-tertiary);
+}
+
+.session-history-new-button svg {
+  display: block;
 }

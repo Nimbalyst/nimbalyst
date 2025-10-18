@@ -15,8 +15,10 @@ interface SessionHistoryProps {
   activeSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete?: (sessionId: string) => void;
+  onNewSession?: () => void;
   collapsedGroups: string[];
   onCollapsedGroupsChange: (groups: string[]) => void;
+  refreshTrigger?: number; // Optional trigger to force refresh
 }
 
 export const SessionHistory: React.FC<SessionHistoryProps> = ({
@@ -24,8 +26,10 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   activeSessionId,
   onSessionSelect,
   onSessionDelete,
+  onNewSession,
   collapsedGroups,
-  onCollapsedGroupsChange
+  onCollapsedGroupsChange,
+  refreshTrigger
 }) => {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +64,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
 
   useEffect(() => {
     loadSessions();
-  }, [loadSessions]);
+  }, [loadSessions, refreshTrigger]);
 
   const handleToggleGroup = (groupName: string) => {
     if (collapsedGroups.includes(groupName)) {
@@ -94,6 +98,22 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       <div className="session-history">
         <div className="session-history-header">
           <h3 className="session-history-title">Sessions</h3>
+          {onNewSession && (
+            <button
+              className="session-history-new-button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNewSession();
+              }}
+              title="Create new session"
+              aria-label="Create new session"
+              type="button"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
         </div>
         <div className="session-history-loading">
           <span>Loading sessions...</span>
@@ -107,6 +127,22 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       <div className="session-history">
         <div className="session-history-header">
           <h3 className="session-history-title">Sessions</h3>
+          {onNewSession && (
+            <button
+              className="session-history-new-button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNewSession();
+              }}
+              title="Create new session"
+              aria-label="Create new session"
+              type="button"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
         </div>
         <div className="session-history-error">
           <span>{error}</span>
@@ -120,6 +156,22 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       <div className="session-history">
         <div className="session-history-header">
           <h3 className="session-history-title">Sessions</h3>
+          {onNewSession && (
+            <button
+              className="session-history-new-button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNewSession();
+              }}
+              title="Create new session"
+              aria-label="Create new session"
+              type="button"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
         </div>
         <div className="session-history-empty">
           <p>No coding sessions yet</p>
@@ -134,8 +186,22 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   return (
     <div className="session-history">
       <div className="session-history-header">
-        <h3 className="session-history-title">Sessions</h3>
-        <span className="session-history-count">{sessions.length}</span>
+        <div className="session-history-header-left">
+          <h3 className="session-history-title">Sessions</h3>
+          <span className="session-history-count">{sessions.length}</span>
+        </div>
+        {onNewSession && (
+          <button
+            className="session-history-new-button"
+            onClick={onNewSession}
+            title="Create new session"
+            aria-label="Create new session"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </button>
+        )}
       </div>
       <div className="session-history-search">
         <input
