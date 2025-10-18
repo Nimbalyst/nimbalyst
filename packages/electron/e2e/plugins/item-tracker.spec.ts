@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, waitForAppReady } from '../helpers';
+import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, waitForAppReady, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -39,7 +39,7 @@ test.describe('Item Tracker Plugin', () => {
     // Open the test file
     await page.locator('.file-tree-name', { hasText: 'test.md' }).first().waitFor({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });

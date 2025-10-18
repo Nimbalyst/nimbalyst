@@ -232,6 +232,6 @@ export async function triggerManualSave(electronApp: any): Promise<void> {
  * Wait for file to be saved (dirty indicator disappears)
  */
 export async function waitForSave(page: Page, fileName: string = 'test.md', timeout = 2000): Promise<void> {
-  const tab = page.locator('.tab', { has: page.locator('.tab-title', { hasText: fileName }) });
+  const tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: fileName }) });
   await tab.locator('.tab-dirty-indicator').waitFor({ state: 'hidden', timeout });
 }

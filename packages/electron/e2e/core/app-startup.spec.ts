@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, waitForAppReady } from '../helpers';
+import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, waitForAppReady, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -45,7 +45,7 @@ test.describe('App Startup - Core Smoke Tests', () => {
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
 
     // Wait for tab to appear
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Wait for editor to load
     const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
@@ -60,21 +60,21 @@ test.describe('App Startup - Core Smoke Tests', () => {
     await page.locator('.file-tree-name', { hasText: 'test.md' }).first().waitFor({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
 
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await editor.click();
     await page.keyboard.type(' - edited');
 
     // Check for dirty indicator
-    await expect(page.locator('.tab.active .tab-dirty-indicator')).toBeVisible();
+    await expect(page.locator('.file-tabs-container .tab.active .tab-dirty-indicator')).toBeVisible();
   });
 
   test('should save file with Cmd+S', async () => {
     await page.locator('.file-tree-name', { hasText: 'test.md' }).first().waitFor({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
 
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await editor.click();
@@ -86,7 +86,7 @@ test.describe('App Startup - Core Smoke Tests', () => {
     const marker = `save-test-${Date.now()}`;
     await page.keyboard.type(marker);
 
-    await expect(page.locator('.tab.active .tab-dirty-indicator')).toBeVisible();
+    await expect(page.locator('.file-tabs-container .tab.active .tab-dirty-indicator')).toBeVisible();
 
     // Save
     await page.keyboard.press('Meta+S');

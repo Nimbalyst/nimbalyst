@@ -13,8 +13,8 @@ planStatus:
     - architecture
     - state-management
   created: "2025-10-17"
-  updated: "2025-10-18T17:15:00.000Z"
-  progress: 75
+  updated: "2025-10-18T20:45:00.000Z"
+  progress: 85
 ---
 # App.tsx State Cleanup
 <!-- plan-status -->
@@ -351,10 +351,29 @@ For now, revert to last known working version of EditorContainer.tsx from git hi
 - React lifecycle manages everything naturally
 - Stable component methods instead of callback confusion
 
+### Test Selector Updates (2025-10-18)
+
+**Completed:**
+- Added `ACTIVE_FILE_TAB_SELECTOR` constant to helpers.ts
+- Updated 48 instances across 11 test files to use the new constant
+- Scoped 56 standalone `.tab` selectors to `.file-tabs-container .tab`
+- Fixed 6 instances of `.tab.active .tab-dirty-indicator` to be scoped
+- Disabled `editor-sleep-management` test (EditorPool no longer exists)
+
+**Test Results:**
+- Most selector issues resolved
+- 12/15 file/tab tests passing
+- 3 tests failing due to actual functionality bugs (manual save), not selectors
+- Manual save tests show content not being saved properly - separate bug to fix
+
 ### Remaining Work
 
-- Update e2e test selectors (`.tab.active` → `.file-tabs-container .tab.active`)
-- Remove EditorPool and old EditorContainer files once tests pass
+- Fix manual save functionality bugs (separate from this refactor)
+- Remove EditorPool and old EditorContainer files
+- Phase 1 cleanup: Delete unused state variables from App.tsx
+  - Remove navigationMode, lastPrompt, lastAIResponse, diffError
+  - Move recentWorkspaceFiles to QuickOpen
+  - Remove currentDirectory state
 - Phase 2: Refactor AIChat to own its state (separate plan)
 - Phase 2: Consider moving WorkspaceSidebar resize logic (separate plan)
 
@@ -362,6 +381,7 @@ For now, revert to last known working version of EditorContainer.tsx from git hi
 
 - TabEditor/TabContent architecture successfully implemented
 - Core refactor complete and working in production
-- Test failures are selector specificity issues, not functionality bugs
+- Test selector issues resolved - scoped to .file-tabs-container
+- Remaining test failures are functionality bugs (manual save), not selector issues
 - AIChat refactor deferred - needs separate focused effort
 - WorkspaceSidebar resize logic kept as-is - works correctly, risky to change

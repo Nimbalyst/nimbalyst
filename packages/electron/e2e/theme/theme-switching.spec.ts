@@ -146,7 +146,7 @@ test.describe('Theme Switching', () => {
     await page.waitForTimeout(500);
 
     // Verify we have 2 tabs
-    const tabs = page.locator('.tab');
+    const tabs = page.locator('.file-tabs-container .tab');
     await expect(tabs).toHaveCount(2);
 
     // Switch to dark theme

@@ -140,7 +140,7 @@ This is the second document.
     await verifyActiveTab('document-2.md');
 
     // Verify we have 2 tabs
-    const tabs = page.locator('.tab');
+    const tabs = page.locator('.file-tabs-container .tab');
     await expect(tabs).toHaveCount(2);
 
     // Now send a message and check that document-2.md is in the context
@@ -277,7 +277,7 @@ This is the second document.
     await verifyActiveTab('document-2.md');
 
     // CRITICAL: Verify we're on Document 2 and Document 1 is still in a tab
-    const tabs = page.locator('.tab');
+    const tabs = page.locator('.file-tabs-container .tab');
     await expect(tabs).toHaveCount(2);
 
     // Edit Document 2: Add a task (in the SAME AI session)

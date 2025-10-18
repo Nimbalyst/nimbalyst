@@ -5,7 +5,8 @@ import {
     createTempWorkspace,
     TEST_TIMEOUTS,
     waitForAppReady,
-    ACTIVE_EDITOR_SELECTOR
+    ACTIVE_EDITOR_SELECTOR,
+    ACTIVE_FILE_TAB_SELECTOR
 } from '../helpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -53,7 +54,7 @@ test.describe('File Watcher Updates', () => {
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'watched.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Verify initial content
     let editorText = await editor.innerText();
@@ -88,7 +89,7 @@ test.describe('File Watcher Updates', () => {
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'watched.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Make local unsaved changes
     await editor.click();
@@ -96,7 +97,7 @@ test.describe('File Watcher Updates', () => {
     await page.keyboard.type('\nLocal unsaved edit.');
 
     // Verify dirty state
-    const tab = page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'watched.md' }) });
+    const tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'watched.md' }) });
     await expect(tab.locator('.tab-dirty-indicator')).toBeVisible();
 
     // Set up dialog handler to catch the confirm dialog
@@ -127,11 +128,11 @@ test.describe('File Watcher Updates', () => {
 
     // Open watched.md
     await page.locator('.file-tree-name', { hasText: 'watched.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Switch to other.md
     await page.locator('.file-tree-name', { hasText: 'other.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('other.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('other.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Modify watched.md externally while it's in the background
     const externalEdit = 'AI agent made this change while tab was inactive.';
@@ -142,8 +143,8 @@ test.describe('File Watcher Updates', () => {
     await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
 
     // Switch back to watched.md
-    await page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'watched.md' }) }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'watched.md' }) }).click();
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await page.waitForTimeout(TEST_TIMEOUTS.DEFAULT_WAIT);
 
     // Content should reflect the external changes
@@ -156,7 +157,7 @@ test.describe('File Watcher Updates', () => {
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'watched.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Set up dialog handler to catch the alert dialog
     let dialogShown = false;
@@ -199,7 +200,7 @@ test.describe('File Watcher Updates', () => {
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'watched.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Make rapid successive external modifications (like an AI agent editing in iterations)
     const changes = [
@@ -227,7 +228,7 @@ test.describe('File Watcher Updates', () => {
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'watched.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('watched.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Position cursor at a specific location
     await editor.click();

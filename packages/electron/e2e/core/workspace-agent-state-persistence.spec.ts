@@ -66,7 +66,7 @@ planStatus:
     await page.waitForTimeout(1000);
 
     // Verify we have 2 tabs
-    const tabs = await page.locator('.tab').count();
+    const tabs = await page.locator('.file-tabs-container .tab').count();
     expect(tabs).toBe(2);
 
     // Open the plan document
@@ -74,7 +74,7 @@ planStatus:
     await page.waitForTimeout(1000);
 
     // Now we should have 3 tabs
-    const tabsAfterPlan = await page.locator('.tab').count();
+    const tabsAfterPlan = await page.locator('.file-tabs-container .tab').count();
     expect(tabsAfterPlan).toBe(3);
 
     // Open agentic coding window via IPC
@@ -126,12 +126,12 @@ planStatus:
     await firstReopenWorkspace.waitForTimeout(2000);
 
     // CRITICAL: Check that tabs are present on first reopen
-    const tabsOnFirstReopen = await firstReopenWorkspace.locator('.tab').count();
+    const tabsOnFirstReopen = await firstReopenWorkspace.locator('.file-tabs-container .tab').count();
     console.log('[TEST] Tabs on first reopen:', tabsOnFirstReopen);
     expect(tabsOnFirstReopen).toBeGreaterThanOrEqual(3);
 
     // Verify tab content is correct
-    const tabTexts = await firstReopenWorkspace.locator('.tab').allTextContents();
+    const tabTexts = await firstReopenWorkspace.locator('.file-tabs-container .tab').allTextContents();
     console.log('[TEST] Tab texts on first reopen:', tabTexts);
     expect(tabTexts.some(t => t.includes('test1.md'))).toBe(true);
     expect(tabTexts.some(t => t.includes('test2.md'))).toBe(true);
@@ -173,7 +173,7 @@ planStatus:
     expect(agenticHeader).toBe(false);
 
     // Verify tabs are still present on second reopen
-    const tabsOnSecondReopen = await secondReopenWorkspace.locator('.tab').count();
+    const tabsOnSecondReopen = await secondReopenWorkspace.locator('.file-tabs-container .tab').count();
     console.log('[TEST] Tabs on second reopen:', tabsOnSecondReopen);
     expect(tabsOnSecondReopen).toBeGreaterThanOrEqual(3);
 
@@ -306,7 +306,7 @@ planStatus:
     await page.locator('.file-tree-name', { hasText: 'test2.md' }).click();
     await page.waitForTimeout(500);
 
-    const workspaceTabCount = await page.locator('.tab').count();
+    const workspaceTabCount = await page.locator('.file-tabs-container .tab').count();
     console.log('[TEST] Workspace tab count before opening agent:', workspaceTabCount);
     expect(workspaceTabCount).toBeGreaterThanOrEqual(2);
 
@@ -359,7 +359,7 @@ planStatus:
     }
 
     // Final verification after switching - workspace tabs should still be present
-    const finalTabCount = await page.locator('.tab').count();
+    const finalTabCount = await page.locator('.file-tabs-container .tab').count();
     console.log('[TEST] Workspace tab count after focus switching:', finalTabCount);
     expect(finalTabCount).toBe(workspaceTabCount);
 

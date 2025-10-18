@@ -5,7 +5,8 @@ import {
   createTempWorkspace,
   TEST_TIMEOUTS,
   waitForAppReady,
-  ACTIVE_EDITOR_SELECTOR
+  ACTIVE_EDITOR_SELECTOR,
+  ACTIVE_FILE_TAB_SELECTOR
 } from '../helpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -46,7 +47,7 @@ test.describe('Manual Save (Cmd+S)', () => {
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'manual-save-test.md' }).click();
-    await expect(page.locator('.file-tabs-container .tab.active .tab-title')).toContainText('manual-save-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('manual-save-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Click in editor and add content
     await editor.click();
@@ -87,7 +88,7 @@ test.describe('Manual Save (Cmd+S)', () => {
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'manual-save-test.md' }).click();
-    await expect(page.locator('.file-tabs-container .tab.active .tab-title')).toContainText('manual-save-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('manual-save-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Get initial mtime
     const initialStats = await fs.stat(filePath);

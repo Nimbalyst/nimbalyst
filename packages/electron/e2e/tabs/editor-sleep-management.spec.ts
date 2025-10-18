@@ -38,13 +38,15 @@ test.describe('Editor Sleep Management', () => {
     await fs.rm(workspaceDir, { recursive: true, force: true }).catch(() => undefined);
   });
 
-  test('should allow opening more than 20 tabs and sleep editors beyond limit', async () => {
+  test.skip('should allow opening more than 20 tabs and sleep editors beyond limit', async () => {
+    // NOTE: This test is obsolete - EditorPool has been removed in favor of TabEditor/TabContent architecture
+    // The new architecture doesn't use sleep/wake since all editors are React components that unmount when not visible
     // Open 20 files (at the limit)
     console.log('Opening first 20 files...');
     for (let i = 1; i <= 20; i++) {
       const fileName = `file-${String(i).padStart(2, '0')}.md`;
       await page.locator('.file-tree-name', { hasText: fileName }).click();
-      await expect(page.locator('.tab .tab-title', { hasText: fileName })).toBeVisible({
+      await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: fileName })).toBeVisible({
         timeout: TEST_TIMEOUTS.TAB_SWITCH
       });
       if (i % 5 === 0) {
@@ -53,7 +55,7 @@ test.describe('Editor Sleep Management', () => {
     }
 
     // All 20 tabs should be open
-    const tabCount = await page.locator('.tab').count();
+    const tabCount = await page.locator('.file-tabs-container .tab').count();
     expect(tabCount).toBe(20);
     console.log(`✓ All 20 tabs are open`);
 
@@ -71,7 +73,7 @@ test.describe('Editor Sleep Management', () => {
     // Open 21st file - should put the oldest (file-01) to sleep
     console.log('Opening file 21 (should sleep file-01)...');
     await page.locator('.file-tree-name', { hasText: 'file-21.md' }).click();
-    await expect(page.locator('.tab .tab-title', { hasText: 'file-21.md' })).toBeVisible({
+    await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: 'file-21.md' })).toBeVisible({
       timeout: TEST_TIMEOUTS.TAB_SWITCH
     });
     await page.waitForTimeout(500);
@@ -91,7 +93,7 @@ test.describe('Editor Sleep Management', () => {
     for (let i = 22; i <= 25; i++) {
       const fileName = `file-${String(i).padStart(2, '0')}.md`;
       await page.locator('.file-tree-name', { hasText: fileName }).click();
-      await expect(page.locator('.tab .tab-title', { hasText: fileName })).toBeVisible({
+      await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: fileName })).toBeVisible({
         timeout: TEST_TIMEOUTS.TAB_SWITCH
       });
     }

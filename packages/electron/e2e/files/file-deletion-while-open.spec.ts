@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR } from '../helpers';
+import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
@@ -41,7 +41,7 @@ test.describe('File deletion while open', () => {
 
       // Open the file
       await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-      await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+      await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
       // Make some edits to ensure autosave would trigger
       const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
@@ -50,7 +50,7 @@ test.describe('File deletion while open', () => {
 
       // Wait a moment for the dirty indicator
       await page.waitForTimeout(500);
-      await expect(page.locator('.tab.active .tab-dirty-indicator')).toBeVisible();
+      await expect(page.locator('.file-tabs-container .tab.active .tab-dirty-indicator')).toBeVisible();
 
       // Right-click on the file in the tree and delete it
       await page.locator('.file-tree-name', { hasText: 'test.md' }).click({ button: 'right' });
@@ -68,7 +68,7 @@ test.describe('File deletion while open', () => {
       console.log('File exists after deletion:', fileExists);
 
       // The tab should be closed
-      await expect(page.locator('.tab .tab-title', { hasText: 'test.md' })).toHaveCount(0);
+      await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: 'test.md' })).toHaveCount(0);
 
       // Verify the file was actually deleted and not recreated
       await expect.poll(async () => {

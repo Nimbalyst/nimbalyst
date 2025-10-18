@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR } from '../helpers';
+import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
@@ -30,7 +30,7 @@ test.describe('Autosave before navigation', () => {
       await page.locator('.file-tree-name', { hasText: 'target.md' }).first().waitFor({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
 
       await page.locator('.file-tree-name', { hasText: 'source.md' }).click();
-      await expect(page.locator('.tab.active .tab-title')).toContainText('source.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+      await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('source.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
       const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
       await editor.click();
@@ -44,7 +44,7 @@ test.describe('Autosave before navigation', () => {
 
       const documentReference = page.locator('.document-reference', { hasText: 'target.md' });
       await expect(documentReference).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });
-      await expect(page.locator('.tab.active .tab-dirty-indicator')).toBeVisible();
+      await expect(page.locator('.file-tabs-container .tab.active .tab-dirty-indicator')).toBeVisible();
 
       // Click outside editor first to deselect
       await page.locator('.workspace-sidebar').click();
@@ -58,9 +58,9 @@ test.describe('Autosave before navigation', () => {
 
       // Wait for navigation to complete - tab should switch to target.md
       // Use a longer timeout since this involves autosave + navigation
-      await expect(page.locator('.tab.active .tab-title')).toContainText('target.md', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
+      await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('target.md', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
 
-      const sourceTabDirty = page.locator('.tab', {
+      const sourceTabDirty = page.locator('.file-tabs-container .tab', {
         has: page.locator('.tab-title', { hasText: 'source.md' })
       }).locator('.tab-dirty-indicator');
       await expect(sourceTabDirty).toHaveCount(0);
@@ -71,7 +71,7 @@ test.describe('Autosave before navigation', () => {
       }).toContain(marker);
 
       await page.locator('.tab-title', { hasText: 'source.md' }).click();
-      await expect(page.locator('.tab.active .tab-title')).toContainText('source.md');
+      await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('source.md');
 
       // Wait for editor to fully load and settle
       // The editor needs time to load content from disk and compare with initial state

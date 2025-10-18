@@ -200,7 +200,7 @@ test.describe('Single File Mode', () => {
     await expect(tabManager).toBeVisible();
 
     // Should have exactly one tab
-    const tabs = page.locator('.tab');
+    const tabs = page.locator('.file-tabs-container .tab');
     await expect(tabs).toHaveCount(1);
   });
 

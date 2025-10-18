@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, getEditorContent } from '../helpers';
+import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, getEditorContent, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
@@ -31,7 +31,7 @@ test.describe('History restore functionality', () => {
 
       // Open the test file
       await page.locator('.file-tree-name', { hasText: 'test-document.md' }).click();
-      await expect(page.locator('.tab.active .tab-title')).toContainText('test-document.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+      await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test-document.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
       // Verify original content is loaded
       const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
@@ -107,7 +107,7 @@ test.describe('History restore functionality', () => {
       expect(editorText).not.toContain('Second Edit');
 
       // Document should be marked as dirty (unsaved changes)
-      await expect(page.locator('.tab.active .tab-dirty-indicator')).toBeVisible();
+      await expect(page.locator('.file-tabs-container .tab.active .tab-dirty-indicator')).toBeVisible();
 
       // Save the restored version
       await page.keyboard.press(getKeyboardShortcut('Mod+S'));
@@ -125,7 +125,7 @@ test.describe('History restore functionality', () => {
 
       // Reopen the file
       await page.locator('.file-tree-name', { hasText: 'test-document.md' }).click();
-      await expect(page.locator('.tab.active .tab-title')).toContainText('test-document.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+      await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test-document.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
       // Verify restored content persists after reload
       editorText = await editor.innerText();
@@ -160,7 +160,7 @@ test.describe('History restore functionality', () => {
       await page.locator('.file-tree-name', { hasText: 'immediate-test.md' }).first().waitFor({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
 
       await page.locator('.file-tree-name', { hasText: 'immediate-test.md' }).click();
-      await expect(page.locator('.tab.active .tab-title')).toContainText('immediate-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+      await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('immediate-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
       const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
       await editor.waitFor({ state: 'visible', timeout: TEST_TIMEOUTS.EDITOR_LOAD });

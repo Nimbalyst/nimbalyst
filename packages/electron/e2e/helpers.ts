@@ -19,6 +19,10 @@ export const TEST_TIMEOUTS = {
 // Scoped to file-tabs-container to avoid matching plan or AI editors
 export const ACTIVE_EDITOR_SELECTOR = '.file-tabs-container .multi-editor-instance.active .editor [contenteditable="true"]';
 
+// Selector for the active file tab title
+// Scoped to file-tabs-container to avoid matching AI Chat tabs
+export const ACTIVE_FILE_TAB_SELECTOR = '.file-tabs-container .tab.active .tab-title';
+
 export async function launchElectronApp(options?: {
   workspace?: string;
   env?: Record<string, string>;

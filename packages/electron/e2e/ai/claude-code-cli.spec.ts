@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, ACTIVE_EDITOR_SELECTOR } from '../helpers';
+import { launchElectronApp, createTempWorkspace, ACTIVE_EDITOR_SELECTOR, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
 import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -32,7 +32,7 @@ test.describe('Claude Code CLI Integration', () => {
   test.skip('should configure Claude Code provider and execute tools', async () => {
     // First, open the test document
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: 5000 });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: 5000 });
 
     // Wait for editor to load
     const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
@@ -104,7 +104,7 @@ test.describe('Claude Code CLI Integration', () => {
   test.skip('should handle Claude Code CLI unavailable gracefully', async () => {
     // First, open the test document
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: 5000 });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: 5000 });
 
     // Open AI Chat panel
     await page.keyboard.press('Meta+Shift+A');
@@ -130,7 +130,7 @@ test.describe('Claude Code CLI Integration', () => {
   test('should show Claude Code in model picker when available', async () => {
     // First, open the test document
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: 5000 });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: 5000 });
 
     // Check that Claude Code CLI appears in the model picker
     await page.keyboard.press('Meta+Shift+A');

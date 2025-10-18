@@ -5,7 +5,8 @@ import {
   createTempWorkspace,
   TEST_TIMEOUTS,
   waitForAppReady,
-  ACTIVE_EDITOR_SELECTOR
+  ACTIVE_EDITOR_SELECTOR,
+  ACTIVE_FILE_TAB_SELECTOR
 } from '../helpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -46,7 +47,7 @@ test.describe('Autosave Timing', () => {
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'autosave-test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('autosave-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('autosave-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Click in editor and add content
     await editor.click();
@@ -54,7 +55,7 @@ test.describe('Autosave Timing', () => {
     await page.keyboard.type(`\n\n${marker}\n`);
 
     // Verify dirty state appears
-    const tab = page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'autosave-test.md' }) });
+    const tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'autosave-test.md' }) });
     await expect(tab.locator('.tab-dirty-indicator')).toBeVisible({ timeout: 1000 });
 
     // Wait for autosave (2s interval + 200ms debounce + buffer)
@@ -74,7 +75,7 @@ test.describe('Autosave Timing', () => {
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'autosave-test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('autosave-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('autosave-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Get initial file modification time
     const initialStats = await fs.stat(filePath);
@@ -95,7 +96,7 @@ test.describe('Autosave Timing', () => {
     expect(duringStats.mtimeMs).toBe(initialMtime);
 
     // Verify dirty indicator is still visible
-    const tab = page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'autosave-test.md' }) });
+    const tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'autosave-test.md' }) });
     await expect(tab.locator('.tab-dirty-indicator')).toBeVisible();
 
     // Stop typing and wait for autosave
@@ -124,7 +125,7 @@ test.describe('Autosave Timing', () => {
 
     // Open first file
     await page.locator('.file-tree-name', { hasText: 'autosave-test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('autosave-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('autosave-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Edit first file
     const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
@@ -133,12 +134,12 @@ test.describe('Autosave Timing', () => {
     await page.keyboard.type(`\n\n${marker1}\n`);
 
     // Verify first file is dirty
-    const tab1 = page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'autosave-test.md' }) });
+    const tab1 = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'autosave-test.md' }) });
     await expect(tab1.locator('.tab-dirty-indicator')).toBeVisible();
 
     // Open second file
     await page.locator('.file-tree-name', { hasText: 'second-file.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('second-file.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('second-file.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Edit second file
     await editor.click();
@@ -146,7 +147,7 @@ test.describe('Autosave Timing', () => {
     await page.keyboard.type(`\n\n${marker2}\n`);
 
     // Verify second file is dirty
-    const tab2 = page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'second-file.md' }) });
+    const tab2 = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'second-file.md' }) });
     await expect(tab2.locator('.tab-dirty-indicator')).toBeVisible();
 
     // Wait for both files to autosave
@@ -169,7 +170,7 @@ test.describe('Autosave Timing', () => {
 
     // Open the file
     await page.locator('.file-tree-name', { hasText: 'autosave-test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('autosave-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('autosave-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Get initial mtime
     const initialStats = await fs.stat(filePath);
@@ -200,7 +201,7 @@ test.describe('Autosave Timing', () => {
     expect(afterStats.mtimeMs).toBeGreaterThan(initialMtime);
 
     // Verify dirty indicator is gone
-    const tab = page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'autosave-test.md' }) });
+    const tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'autosave-test.md' }) });
     await expect(tab.locator('.tab-dirty-indicator')).toHaveCount(0);
   });
 });

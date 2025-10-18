@@ -15,7 +15,8 @@ import {
   createTempWorkspace,
   TEST_TIMEOUTS,
   waitForAppReady,
-  ACTIVE_EDITOR_SELECTOR
+  ACTIVE_EDITOR_SELECTOR,
+  ACTIVE_FILE_TAB_SELECTOR
 } from '../helpers';
 import {
   simulateApplyDiff,
@@ -66,7 +67,7 @@ test.describe('Diff Reliability - Complex Structures', () => {
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Try to add a nested item
     const result = await simulateApplyDiff(page, testFilePath, [
@@ -99,7 +100,7 @@ test.describe('Diff Reliability - Complex Structures', () => {
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Add a new row
@@ -136,7 +137,7 @@ function hello() {
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Modify code block content
@@ -179,7 +180,7 @@ More text here.
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Modify multiple sections
@@ -215,7 +216,7 @@ More text here.
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Modify deep nested item
@@ -247,7 +248,7 @@ Another paragraph.
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Modify text with whitespace
@@ -305,7 +306,7 @@ test.describe('Diff Reliability - Streaming Scenarios', () => {
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Stream a new list item
@@ -332,7 +333,7 @@ Content 2
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Stream content into the middle
@@ -358,7 +359,7 @@ Initial content.
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Stream a complex structure
@@ -395,7 +396,7 @@ console.log("code");
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Stream multiple chunks rapidly
@@ -460,7 +461,7 @@ test.describe('Diff Reliability - Edge Cases', () => {
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Modify the long line
@@ -481,7 +482,7 @@ More text with \`backticks\` and |pipes|.
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     const result = await simulateApplyDiff(page, testFilePath, [
@@ -513,7 +514,7 @@ More text with \`backticks\` and |pipes|.
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     const result = await simulateApplyDiff(page, testFilePath, [
@@ -541,7 +542,7 @@ Content C
 
     await fs.writeFile(testFilePath, content, 'utf8');
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
     await waitForEditorReady(page);
 
     // Apply multiple edits at once

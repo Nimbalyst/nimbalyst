@@ -5,7 +5,8 @@ import {
     createTempWorkspace,
     TEST_TIMEOUTS,
     waitForAppReady,
-    ACTIVE_EDITOR_SELECTOR
+    ACTIVE_EDITOR_SELECTOR,
+    ACTIVE_FILE_TAB_SELECTOR
 } from '../helpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -40,16 +41,16 @@ test.describe('Tab Reordering', () => {
   test('should allow dragging tabs to reorder them', async () => {
     // Open all three files
     await page.locator('.file-tree-name', { hasText: 'file1.md' }).click();
-    await expect(page.locator('.tab .tab-title', { hasText: 'file1.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: 'file1.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     await page.locator('.file-tree-name', { hasText: 'file2.md' }).click();
-    await expect(page.locator('.tab .tab-title', { hasText: 'file2.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: 'file2.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     await page.locator('.file-tree-name', { hasText: 'file3.md' }).click();
-    await expect(page.locator('.tab .tab-title', { hasText: 'file3.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: 'file3.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Get all tabs
-    const tabs = page.locator('.tab .tab-title');
+    const tabs = page.locator('.file-tabs-container .tab .tab-title');
     await expect(tabs).toHaveCount(3);
 
     // Check initial order
@@ -57,8 +58,8 @@ test.describe('Tab Reordering', () => {
     expect(initialOrder).toEqual(['file1.md', 'file2.md', 'file3.md']);
 
     // Drag file3 to the first position
-    const file3Tab = page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'file3.md' }) });
-    const file1Tab = page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'file1.md' }) });
+    const file3Tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'file3.md' }) });
+    const file1Tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'file1.md' }) });
 
     // Perform drag and drop
     await file3Tab.dragTo(file1Tab);
@@ -74,12 +75,12 @@ test.describe('Tab Reordering', () => {
   test('should show visual feedback during drag', async () => {
     // Open two files
     await page.locator('.file-tree-name', { hasText: 'file1.md' }).click();
-    await expect(page.locator('.tab .tab-title', { hasText: 'file1.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: 'file1.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     await page.locator('.file-tree-name', { hasText: 'file2.md' }).click();
-    await expect(page.locator('.tab .tab-title', { hasText: 'file2.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator('.file-tabs-container .tab .tab-title', { hasText: 'file2.md' })).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
-    const file2Tab = page.locator('.tab', { has: page.locator('.tab-title', { hasText: 'file2.md' }) });
+    const file2Tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'file2.md' }) });
 
     // Start drag
     const box = await file2Tab.boundingBox();
@@ -100,7 +101,7 @@ test.describe('Tab Reordering', () => {
 
   test('should not reload tab when clicking on already active tab', async () => {
     await page.locator('.file-tree-name', { hasText: 'file1.md' }).click();
-    await expect(page.locator('.tab.active .tab-title')).toContainText('file1.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('file1.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
     await editor.click();
@@ -118,6 +119,6 @@ test.describe('Tab Reordering', () => {
     expect(editorText).toContain(marker);
 
     // Tab should still be active
-    await expect(page.locator('.tab.active .tab-title')).toContainText('file1.md');
+    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('file1.md');
   });
 });

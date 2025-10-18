@@ -255,7 +255,7 @@ planStatus:
     await agenticWindow.waitForTimeout(200);
 
     // Switch back to first tab
-    const firstTab = agenticWindow.locator('.tab').first();
+    const firstTab = agenticWindow.locator('.file-tabs-container .tab').first();
     await firstTab.click();
     await agenticWindow.waitForTimeout(500);
 
