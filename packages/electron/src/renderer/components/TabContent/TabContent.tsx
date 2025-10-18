@@ -124,34 +124,27 @@ export const TabContent: React.FC<TabContentProps> = ({
   useEffect(() => {
     const loadMissingContent = async () => {
       for (const tab of tabs) {
-        console.log('[TabContent] Checking tab:', tab.fileName, 'hasContent:', !!tab.content, 'contentLength:', tab.content?.length);
-
         // Skip if we already have content
         if (tabContents.has(tab.id)) {
-          console.log('[TabContent] Already have content for:', tab.fileName);
           continue;
         }
 
         // Skip if already loading
         if (loadingRef.current.has(tab.id)) {
-          console.log('[TabContent] Already loading:', tab.fileName);
           continue;
         }
 
         // Skip if tab already has content
         if (tab.content && tab.content.length > 0) {
-          console.log('[TabContent] Tab has content, storing:', tab.fileName, tab.content.length);
           setTabContents(prev => new Map(prev).set(tab.id, tab.content));
           continue;
         }
 
-        console.log('[TabContent] Loading content from file for:', tab.fileName);
         // Mark as loading
         loadingRef.current.add(tab.id);
 
         // Load content
         const content = await loadContent(tab.filePath);
-        console.log('[TabContent] Loaded content:', tab.fileName, 'length:', content.length);
         setTabContents(prev => new Map(prev).set(tab.id, content));
 
         // Mark as done loading
@@ -236,7 +229,6 @@ export const TabContent: React.FC<TabContentProps> = ({
         // Don't render editor until we have content loaded
         // This prevents initializing with empty content
         if (!content && !tab.content) {
-          console.log('[TabContent] Waiting for content to load for:', tab.fileName);
           return (
             <div
               key={tab.id}

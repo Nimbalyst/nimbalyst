@@ -101,6 +101,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     if (!window.electronAPI) return;
 
     try {
+      // Update refs BEFORE saving so file watcher can detect it's our own save
+      // CRITICAL: Update both ref and state synchronously to ensure file watcher sees the change
+      const saveTime = Date.now();
+      lastSaveTimeRef.current = saveTime;
+      lastSavedContentRef.current = contentToSave;
+      setLastSaveTime(saveTime);
+      setLastSavedContent(contentToSave);
+
+      logger.ui.info(`[TabEditor] Saving ${fileName}, set lastSaveTime to ${saveTime}`);
+
       // Save to disk with conflict detection
       const result = await window.electronAPI.saveFile(
         contentToSave,
@@ -153,9 +163,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           }
         }
 
-        // Update internal state
-        setLastSavedContent(contentToSave);
-        setLastSaveTime(Date.now());
+        // Update remaining state (refs were already updated before save)
         initialContentRef.current = contentToSave;
         setIsDirty(false);
 
@@ -165,9 +173,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       }
     } catch (error) {
       logger.ui.error(`[TabEditor] Failed to save file ${filePath}:`, error);
+      // Reset refs on error
+      setLastSaveTime(null);
+      lastSaveTimeRef.current = null;
       throw error;
     }
-  }, [filePath, onSaveComplete, onDirtyChange]);
+  }, [filePath, fileName, onSaveComplete, onDirtyChange]);
 
   // Manual save function
   const handleManualSave = useCallback(async () => {
@@ -177,17 +188,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     }
 
     const currentContent = getContentFnRef.current();
-    logger.ui.info(`[TabEditor] Manual save: ${fileName}`);
-
     await saveWithHistory(currentContent, 'manual');
-  }, [fileName, saveWithHistory]);
-
-  // Expose manual save function to parent
-  useEffect(() => {
-    if (onManualSaveReady) {
-      onManualSaveReady(handleManualSave);
-    }
-  }, [handleManualSave, onManualSaveReady]);
+  }, [saveWithHistory]);
 
   // Content change handler from editor
   const handleContentChange = useCallback(() => {
@@ -271,12 +273,18 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
     const processingChangeRef = { current: false };
 
+    // Create a stable handler function that we can properly clean up
     const handleFileChanged = async (data: { path: string }) => {
       // Only handle changes for this file
-      if (data.path !== filePath) return;
+      if (data.path !== filePath) {
+        return;
+      }
 
       // Skip if already processing
-      if (processingChangeRef.current) return;
+      if (processingChangeRef.current) {
+        logger.ui.info(`[TabEditor] Already processing file change for ${fileName}, skipping`);
+        return;
+      }
       processingChangeRef.current = true;
 
       try {
@@ -297,10 +305,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         }
 
         // Check if this is our own recent save
-        if (lastSaveTimeRef.current &&
-            Date.now() - lastSaveTimeRef.current < 3000 &&
-            newContent === lastSavedContentRef.current) {
-          logger.ui.info(`[TabEditor] Ignoring file change (our own save of ${fileName})`);
+        // We check BOTH time-based and content-based matching to avoid false positives
+        const timeSinceLastSave = lastSaveTimeRef.current ? Date.now() - lastSaveTimeRef.current : Infinity;
+        const contentMatchesLastSave = newContent === lastSavedContentRef.current;
+        const contentMatchesEditor = newContent === currentContent;
+
+        if (timeSinceLastSave < 3000 && (contentMatchesLastSave || contentMatchesEditor)) {
+          logger.ui.info(`[TabEditor] Ignoring file change (our own save of ${fileName}), timeSince=${timeSinceLastSave}ms`);
           return;
         }
 
@@ -347,18 +358,24 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         await applyReload();
       } finally {
+        // Use a longer timeout to prevent rapid refires
         setTimeout(() => {
           processingChangeRef.current = false;
-        }, 100);
+        }, 1000);
       }
     };
 
+    logger.ui.info(`[TabEditor] Registering file watcher for: ${fileName} (${filePath})`);
     window.electronAPI.on('file-changed-on-disk', handleFileChanged);
 
+    // Cleanup function - CRITICAL: This must remove the exact same function reference
     return () => {
+      logger.ui.info(`[TabEditor] Unregistering file watcher for: ${fileName} (${filePath})`);
       window.electronAPI.off('file-changed-on-disk', handleFileChanged);
     };
-  }, [filePath, fileName, onDirtyChange]);
+    // NOTE: onDirtyChange is NOT in dependencies to prevent re-registering listeners
+    // We call it directly in handleFileChanged which captures the current value
+  }, [filePath, fileName]);
 
   return (
     <div
@@ -381,6 +398,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             getContentFnRef.current = getContentFn;
             if (onGetContentReady) {
               onGetContentReady(getContentFn);
+            }
+            // Now that we have getContentFn, expose the manual save function
+            if (onManualSaveReady) {
+              onManualSaveReady(handleManualSave);
             }
           },
           onSaveRequest: handleManualSave,

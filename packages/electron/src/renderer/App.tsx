@@ -41,7 +41,6 @@ import SettingsScreen from './components/SettingsScreen/SettingsScreen';
 import OnboardingService from './services/OnboardingService';
 import './WorkspaceWelcome.css';
 import './components/AIModels/AIModelsRedesigned.css';
-import { getEditorPool } from "./services/EditorPool.ts";
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
@@ -184,9 +183,8 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
   const [isAgentPaletteVisible, setIsAgentPaletteVisible] = useState(false);
-  const [recentWorkspaceFiles, setRecentWorkspaceFiles] = useState<string[]>([]);
   const [isNewFileDialogOpen, setIsNewFileDialogOpen] = useState(false);
-  const [currentDirectory, setCurrentDirectory] = useState<string | null>(null);
+  const [newFileDirectory, setNewFileDirectory] = useState<string | null>(null);
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
@@ -202,11 +200,8 @@ export default function App() {
     message: '',
     details: undefined
   });
-  const [lastPrompt, setLastPrompt] = useState<string>('');
-  const [lastAIResponse, setLastAIResponse] = useState<string>('');
 
   // Navigation gutter state
-  const [navigationMode, setNavigationMode] = useState<NavigationMode>('planning');
   const [sidebarView, setSidebarView] = useState<SidebarView>('files');
 
   // Content mode management - simple state, no manager needed
@@ -257,8 +252,6 @@ export default function App() {
     aiToolService.registerBridgeMethods();
   }, []);
 
-  // NOTE: lastSaveTime is now tracked per-file in EditorPool (see editor.ts EditorInstance.lastSaveTime)
-
   // Tab management state
   // Tabs are always enabled - removed tabPreferences
 
@@ -267,7 +260,7 @@ export default function App() {
 
   // console.log('[APP] Creating useTabs hook, workspaceMode:', workspaceMode, 'workspacePath:', workspacePath);
   const tabs = useTabs({
-    maxTabs: Infinity, // Unlimited tabs - EditorPool manages memory with sleep state (max 20 rendered)
+    maxTabs: Infinity, // Unlimited tabs
     enabled: true,
     workspacePath, // Pass workspace path for unified state management
     getNavigationState: () => getNavigationStateRef.current?.(),
@@ -333,12 +326,9 @@ export default function App() {
   }, [workspaceMode, workspacePath, navigation.setNavigationState]);
 
   const getContentRef = useRef<(() => string) | null>(null);
-  // NOTE: initialContentRef removed - EditorPool tracks initialContent per-file
   const editorRef = useRef<any>(null);
   const searchCommandRef = useRef<LexicalCommand<undefined> | null>(null);
-  // NOTE: contentVersionRef removed - EditorContainer doesn't need version bumping for remounts
   const isInitializedRef = useRef<boolean>(false);
-  // NOTE: autoSnapshotIntervalRef removed - EditorContainer handles periodic snapshots now
 
   // NOTE: autoSaveIntervalRef and autoSaveCancellationRef removed - EditorContainer handles autosave now
   const activeSavesRef = useRef<Set<string>>(new Set());
@@ -355,8 +345,8 @@ export default function App() {
     currentFilePath,
   });
 
-  // NOTE: useHMRStateRestoration removed - no longer needed now that EditorContainer/EditorPool
-  // manage all editor state and useTabs persists tabs to localStorage. During HMR, tabs will
+  // NOTE: useHMRStateRestoration removed - no longer needed now that TabEditor
+  // manages all editor state and useTabs persists tabs to localStorage. During HMR, tabs will
   // be restored from localStorage and editors recreated from tab content.
 
   // Prepare AI chat state loading
@@ -535,23 +525,12 @@ export default function App() {
       const result = await window.electronAPI.saveFileAs(content);
       if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Save as result:', result);
       if (result) {
-        // NOTE: lastSaveTime now tracked in EditorPool per-file
         if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Setting current file path to:', result.filePath);
         setCurrentFilePath(result.filePath);
         setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
         setIsDirty(false);
 
-        // Update EditorPool state for the active tab
-        if (tabs.activeTab) {
-          const editorPool = getEditorPool();
-          editorPool.update(result.filePath, {
-            isDirty: false,
-            initialContent: content,
-            lastSaveTime: Date.now(),
-          });
-        }
-
-        // Update tab state if tabs are enabled
+        // Update tab state
         if (tabs.activeTabId) {
           tabs.updateTab(tabs.activeTabId, {
             filePath: result.filePath,
@@ -576,23 +555,6 @@ export default function App() {
     window.close();
   }, []);
 
-  // Handle navigation mode change
-  const handleNavigationModeChange = useCallback((mode: NavigationMode) => {
-    setNavigationMode(mode);
-
-    if (mode === 'coding') {
-      // Open agentic coding window
-      if (window.electronAPI && workspacePath) {
-        window.electronAPI.invoke('open-agentic-coding-window', {
-          workspacePath,
-          sessionId: undefined,
-          planDocumentPath: undefined
-        });
-      }
-    }
-    // 'planning' mode is the default - stay in current window
-  }, [workspacePath]);
-
   // Wrapper for workspace file selection utility with component-specific context
   const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
     return handleWorkspaceFileSelectUtil({
@@ -602,9 +564,8 @@ export default function App() {
       isInitializedRef,
       setCurrentFilePath,
       setCurrentFileName,
-      setCurrentDirectory,
     });
-  }, [currentFilePath, tabs, setCurrentFileName, setCurrentFilePath, setCurrentDirectory]);
+  }, [currentFilePath, tabs, setCurrentFileName, setCurrentFilePath]);
 
   // Configure aiToolService with handleWorkspaceFileSelect
   useEffect(() => {
@@ -643,7 +604,6 @@ export default function App() {
         tabs.updateTab(tabId, { isVirtual: true });
 
         // Global UI state will be updated by onTabChange callback
-        // EditorPool will be updated by EditorContainer
       }
     } catch (error) {
       console.error('[WELCOME] Failed to open welcome tab:', error);
@@ -758,15 +718,6 @@ export default function App() {
         e.stopPropagation();
         e.stopImmediatePropagation();
         if (workspaceMode) {
-          // Load recent files before showing dialog
-          if (window.electronAPI?.getRecentWorkspaceFiles) {
-            window.electronAPI.getRecentWorkspaceFiles().then(files => {
-              // console.log('[RECENT_FILES] Loaded files for QuickOpen:', files);
-              setRecentWorkspaceFiles(files || []);
-            }).catch(error => {
-              console.error('[RECENT_FILES] Failed to load:', error);
-            });
-          }
           setIsQuickOpenVisible(true);
         }
         return false;
@@ -828,28 +779,6 @@ export default function App() {
     saveAIChatState();
   }, [isAIChatCollapsed, aiChatWidth, currentAISessionId, aiPlanningModeEnabled, isAIChatStateLoaded, workspacePath, workspaceMode]);
 
-  // Load recent workspace files when in workspace mode
-  useEffect(() => {
-    if (!workspaceMode || !window.electronAPI) return;
-
-    const loadRecentFiles = async () => {
-      try {
-        if (window.electronAPI.getRecentWorkspaceFiles) {
-          // console.log('[RECENT_FILES] Loading recent files for workspace');
-          const files = await window.electronAPI.getRecentWorkspaceFiles();
-          // console.log('[RECENT_FILES] Loaded recent files:', files);
-          setRecentWorkspaceFiles(files || []);
-        } else {
-          console.warn('[RECENT_FILES] getRecentWorkspaceFiles API not available');
-        }
-      } catch (error) {
-        console.error('[RECENT_FILES] Failed to load recent workspace files:', error);
-      }
-    };
-
-    loadRecentFiles();
-  }, [workspaceMode, currentFilePath]); // Reload when current file changes
-
   // Handle QuickOpen file selection
   const handleQuickOpenFileSelect = useCallback(async (filePath: string) => {
     await handleWorkspaceFileSelect(filePath);
@@ -858,9 +787,12 @@ export default function App() {
 
   // Handle creating a new file in workspace
   const handleCreateNewFile = useCallback(async (fileName: string) => {
-    if (!window.electronAPI || !currentDirectory) return;
+    if (!window.electronAPI) return;
 
-    const filePath = `${currentDirectory}/${fileName}`;
+    const directory = newFileDirectory || workspacePath;
+    if (!directory) return;
+
+    const filePath = `${directory}/${fileName}`;
 
     try {
       // Create the file with empty content
@@ -874,11 +806,14 @@ export default function App() {
         const tree = await window.electronAPI.getFolderContents(workspacePath);
         setFileTree(tree);
       }
+
+      // Reset the directory after creating the file
+      setNewFileDirectory(null);
     } catch (error) {
       console.error('Failed to create file:', error);
       alert('Failed to create file: ' + error);
     }
-  }, [currentDirectory, workspacePath, handleWorkspaceFileSelect]);
+  }, [newFileDirectory, workspacePath, handleWorkspaceFileSelect]);
 
   // Handle restoring content from history
   const handleRestoreFromHistory = useCallback((content: string) => {
@@ -989,7 +924,7 @@ export default function App() {
     handleNew,
     handleOpen,
     handleSave: async () => {
-      // Delegate to EditorContainer's manual save
+      // Delegate to TabEditor's manual save via TabContent
       if (handleSaveRef.current) {
         await handleSaveRef.current();
       }
@@ -1005,7 +940,6 @@ export default function App() {
     setWorkspacePath,
     setWorkspaceName,
     setFileTree,
-    setCurrentDirectory,
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
@@ -1028,7 +962,6 @@ export default function App() {
 
     // State values
     currentFilePath,
-    currentDirectory,
     workspaceMode,
     workspacePath,
     sessionToLoad,
@@ -1176,7 +1109,7 @@ export default function App() {
               onNewPlan={() => {
                 // Create a new plan file in the plans directory
                 setIsNewFileDialogOpen(true);
-                setCurrentDirectory(workspacePath ? `${workspacePath}/plans` : null);
+                setNewFileDirectory(workspacePath ? `${workspacePath}/plans` : null);
               }}
               onOpenPlansTable={openPlansTab}
             />
@@ -1481,9 +1414,6 @@ export default function App() {
           })()}
           onApplyEdit={(edit, prompt, aiResponse) => {
             console.log('Edit already applied by AIChat component, updating UI state');
-            // Store the prompt and response for error reporting
-            setLastPrompt(prompt || '');
-            setLastAIResponse(aiResponse || '');
 
             // The edit has already been applied by AIChat.tsx through aiApi.applyEdit()
             // This callback is just for UI state updates, not for applying the edit
@@ -1508,7 +1438,6 @@ export default function App() {
             onClose={() => setIsQuickOpenVisible(false)}
             workspacePath={workspacePath}
             currentFilePath={currentFilePath}
-            recentFiles={recentWorkspaceFiles}
             onFileSelect={handleQuickOpenFileSelect}
           />
           <AgentCommandPalette
@@ -1522,8 +1451,11 @@ export default function App() {
           />
           <NewFileDialog
             isOpen={isNewFileDialogOpen}
-            onClose={() => setIsNewFileDialogOpen(false)}
-            currentDirectory={currentDirectory || workspacePath}
+            onClose={() => {
+              setIsNewFileDialogOpen(false);
+              setNewFileDirectory(null);
+            }}
+            currentDirectory={newFileDirectory || workspacePath}
             workspacePath={workspacePath}
             onCreateFile={handleCreateNewFile}
           />
