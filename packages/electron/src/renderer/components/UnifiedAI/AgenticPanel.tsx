@@ -635,9 +635,27 @@ export function AgenticPanel({
     }));
 
     try {
+      // Prepare document context - strip out non-serializable functions
+      let contextToSend = undefined;
+      if (documentContext) {
+        const { getLatestContent, ...serializableContext } = documentContext as any;
+
+        // If getLatestContent exists, call it to get the current content
+        if (typeof getLatestContent === 'function') {
+          serializableContext.content = getLatestContent();
+        }
+
+        contextToSend = {
+          ...serializableContext,
+          attachments: attachments.length > 0 ? attachments : undefined
+        };
+      } else if (attachments.length > 0) {
+        contextToSend = { attachments };
+      }
+
       await window.electronAPI.aiSendMessage(
         message,
-        { sessionType: mode === 'agent' ? 'coding' : 'chat', attachments } as any,
+        contextToSend,
         sessionId,
         workspacePath
       );
@@ -660,7 +678,7 @@ export function AgenticPanel({
         return tab;
       }));
     }
-  }, [workspacePath, mode]);
+  }, [workspacePath, mode, documentContext]);
 
   // Handle cancel request
   const handleCancelRequest = useCallback(async (sessionId: string) => {

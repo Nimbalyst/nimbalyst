@@ -313,17 +313,15 @@ export const RichTranscriptView = React.forwardRef<
                     {isNewGroup && (
                       <div className="rich-transcript-message-header">
                       <div className={`rich-transcript-message-avatar ${isUser ? 'user' : 'assistant'}`}>
-                        {isUser ? (
+                        {isUser && (
                           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                           </svg>
-                        ) : (
-                          <ProviderIcon provider={provider || 'claude-code'} size={16} />
                         )}
                       </div>
                       <div className="rich-transcript-message-meta">
                         <span className="rich-transcript-message-sender">
-                          {isUser ? 'You' : 'Claude Code'}
+                          {isUser ? 'You' : ''}
                         </span>
                         <span className="rich-transcript-message-time">
                           {parseTimestamp(message.timestamp)?.toLocaleTimeString() || ''}
@@ -463,12 +461,6 @@ export const RichTranscriptView = React.forwardRef<
               {streamingContent && (
                 <div className={`rich-transcript-streaming ${settings.compactMode ? 'compact' : 'normal'}`}>
                   <div className="rich-transcript-streaming-header">
-                    <div className="rich-transcript-streaming-avatar">
-                      <ProviderIcon provider={provider || 'claude-code'} size={16} />
-                    </div>
-                    <span className="rich-transcript-streaming-sender">
-                      Claude Code
-                    </span>
                     <span className="rich-transcript-streaming-indicator">
                       streaming...
                     </span>
