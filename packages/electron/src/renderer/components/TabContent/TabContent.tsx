@@ -224,11 +224,13 @@ export const TabContent: React.FC<TabContentProps> = ({
         }
 
         // Regular editor tab
-        const content = tabContents.get(tab.id) || tab.content || '';
+        const content = tabContents.get(tab.id) ?? tab.content ?? '';
 
         // Don't render editor until we have content loaded
-        // This prevents initializing with empty content
-        if (!content && !tab.content) {
+        // Check if content has been loaded (including empty files)
+        // Use .has() to distinguish between "not loaded" vs "loaded but empty"
+        const hasContent = tabContents.has(tab.id) || tab.content !== undefined;
+        if (!hasContent) {
           return (
             <div
               key={tab.id}
