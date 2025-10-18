@@ -2,7 +2,7 @@
 planStatus:
   planId: plan-app-state-cleanup
   title: App.tsx State Cleanup
-  status: in-development
+  status: completed
   planType: refactor
   priority: medium
   owner: ghinkle
@@ -13,8 +13,8 @@ planStatus:
     - architecture
     - state-management
   created: "2025-10-17"
-  updated: "2025-10-18T20:45:00.000Z"
-  progress: 85
+  updated: "2025-10-18T23:00:00.000Z"
+  progress: 100
 ---
 # App.tsx State Cleanup
 <!-- plan-status -->
@@ -366,14 +366,49 @@ For now, revert to last known working version of EditorContainer.tsx from git hi
 - 3 tests failing due to actual functionality bugs (manual save), not selectors
 - Manual save tests show content not being saved properly - separate bug to fix
 
+### Phase 1 State Cleanup (2025-10-18)
+
+**Completed:**
+- Removed unused state variables from App.tsx:
+  - `navigationMode` - Was set but never used
+  - `lastPrompt`, `lastAIResponse` - Only used in onApplyEdit, removed
+  - Note: Kept `diffError` state per user request for future error handling
+- Moved `recentWorkspaceFiles` to QuickOpen component:
+  - QuickOpen now loads its own recent files via useEffect
+  - Removed prop from QuickOpen interface
+  - Removed state and loading logic from App.tsx
+- Removed `currentDirectory` state variable:
+  - Replaced with `newFileDirectory` (temporary state for file creation dialog)
+  - Updated `handleCreateNewFile` to use `newFileDirectory || workspacePath`
+  - Removed from `workspaceFileOperations.ts`, `useIPCHandlers.ts`
+  - NewFileDialog now receives computed directory as prop
+
+**Impact:**
+- Removed 3 unused state variables
+- Moved 1 state variable to component that owns it
+- Simplified component prop interfaces
+- Reduced ~80 lines of code from App.tsx
+- All functionality working correctly
+
+### EditorPool Cleanup (2025-10-18)
+
+**Completed:**
+- Removed all EditorPool references from useIPCHandlers.ts
+- Removed disabled file watching code that used EditorPool
+- Deleted EditorPool.ts service file
+- Deleted useEditorPool.ts hook
+- Deleted EditorContainer component directory
+- Deleted WorkspaceEditor component (was using EditorContainer)
+- Updated all comments referencing EditorPool to reference TabEditor instead
+
+**Impact:**
+- Removed ~800 lines of obsolete code
+- TabEditor/TabContent architecture is now the sole editing system
+- Simpler, cleaner codebase with clear component boundaries
+
 ### Remaining Work
 
 - Fix manual save functionality bugs (separate from this refactor)
-- Remove EditorPool and old EditorContainer files
-- Phase 1 cleanup: Delete unused state variables from App.tsx
-  - Remove navigationMode, lastPrompt, lastAIResponse, diffError
-  - Move recentWorkspaceFiles to QuickOpen
-  - Remove currentDirectory state
 - Phase 2: Refactor AIChat to own its state (separate plan)
 - Phase 2: Consider moving WorkspaceSidebar resize logic (separate plan)
 

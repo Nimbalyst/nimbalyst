@@ -8,6 +8,8 @@ import 'rexical/styles';
 // Import refactored hooks and utilities
 import { useIPCHandlers } from './hooks/useIPCHandlers';
 import { useWindowLifecycle } from './hooks/useWindowLifecycle';
+import { useTheme } from './hooks/useTheme';
+import { useDocumentContext } from './hooks/useDocumentContext';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from './utils/workspaceFileOperations';
 import { aiToolService } from './services/AIToolService';
 import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx';
@@ -85,28 +87,9 @@ export default function App() {
   const windowMode = urlParams.get('mode');
 
   // Apply theme for ALL window modes (must run before early returns)
-  const savedTheme = localStorage.getItem('theme') as ConfigTheme || 'auto';
-  useEffect(() => {
-    const root = document.documentElement;
+  const { theme, setTheme } = useTheme();
 
-    if (savedTheme === 'dark') {
-      root.classList.add('dark-theme');
-      root.classList.remove('light-theme', 'crystal-dark-theme');
-      root.setAttribute('data-theme', 'dark');
-    } else if (savedTheme === 'light') {
-      root.classList.add('light-theme');
-      root.classList.remove('dark-theme', 'crystal-dark-theme');
-      root.setAttribute('data-theme', 'light');
-    } else if (savedTheme === 'crystal-dark') {
-      root.classList.add('crystal-dark-theme');
-      root.classList.remove('light-theme', 'dark-theme');
-      root.setAttribute('data-theme', 'crystal-dark');
-    } else {
-      // Auto theme - let CSS handle it with prefers-color-scheme
-      root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
-      root.removeAttribute('data-theme');
-    }
-  }, [savedTheme]);
+  // Document context hook needs to be after tabs - will declare after special window modes
 
   // Handle special window modes
   if (windowMode === 'ai-models') {
@@ -174,12 +157,6 @@ export default function App() {
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
   const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
-  // Initialize theme from localStorage immediately
-  const [theme, setTheme] = useState<ConfigTheme>(() => {
-    const savedTheme = localStorage.getItem('theme');
-    console.log('[App] Initial theme from localStorage:', savedTheme);
-    return (savedTheme as ConfigTheme) || 'auto';
-  });
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
   const [isAgentPaletteVisible, setIsAgentPaletteVisible] = useState(false);
@@ -232,20 +209,6 @@ export default function App() {
       });
   }, [activeMode, workspacePath]);
 
-  // Sync theme with main process preference on mount
-  useEffect(() => {
-    if (!window.electronAPI?.getTheme) return;
-    window.electronAPI
-      .getTheme()
-      .then(themeValue => {
-        if (!themeValue) return;
-        const resolvedTheme = (themeValue === 'system' ? 'auto' : themeValue) as ConfigTheme;
-        setTheme(resolvedTheme);
-      })
-      .catch(error => {
-        console.error('[THEME] Failed to load theme from main process:', error);
-      });
-  }, []);
 
   // Register aiToolService methods on aiChatBridge for runtime to use
   useEffect(() => {
@@ -292,6 +255,15 @@ export default function App() {
     tabsRef.current = tabs;
   }, [tabs]);
 
+  // Declare refs needed by hooks below
+  const getContentRef = useRef<(() => string) | null>(null);
+
+  // Build document context for AI features
+  const documentContext = useDocumentContext({
+    activeTab: tabs.activeTab,
+    getContentRef
+  });
+
   // Initialize tab navigation for back/forward functionality
   const navigation = useTabNavigation({
     enabled: workspaceMode,
@@ -324,8 +296,6 @@ export default function App() {
     const timer = setTimeout(restoreNavigationState, 600);
     return () => clearTimeout(timer);
   }, [workspaceMode, workspacePath, navigation.setNavigationState]);
-
-  const getContentRef = useRef<(() => string) | null>(null);
   const editorRef = useRef<any>(null);
   const searchCommandRef = useRef<LexicalCommand<undefined> | null>(null);
   const isInitializedRef = useRef<boolean>(false);
@@ -419,31 +389,6 @@ export default function App() {
     };
   }, [sidebarWidth]);
 
-  // Apply theme to document and save to localStorage
-  useEffect(() => {
-    const root = document.documentElement;
-
-    if (theme === 'dark') {
-      root.classList.add('dark-theme');
-      root.classList.remove('light-theme', 'crystal-dark-theme');
-      root.setAttribute('data-theme', 'dark');
-    } else if (theme === 'light') {
-      root.classList.add('light-theme');
-      root.classList.remove('dark-theme', 'crystal-dark-theme');
-      root.setAttribute('data-theme', 'light');
-    } else if (theme === 'crystal-dark') {
-      root.classList.add('crystal-dark-theme');
-      root.classList.remove('light-theme', 'dark-theme');
-      root.setAttribute('data-theme', 'crystal-dark');
-    } else {
-      // Auto theme - let CSS handle it with prefers-color-scheme
-      root.classList.remove('dark-theme', 'light-theme', 'crystal-dark-theme');
-      root.removeAttribute('data-theme');
-    }
-
-    // Save theme to localStorage
-    localStorage.setItem('theme', theme);
-  }, [theme]);
 
   // Handle new file
   const handleNew = useCallback(() => {
@@ -1242,28 +1187,7 @@ export default function App() {
             <AgenticPanel
               mode="agent"
               workspacePath={workspacePath}
-              documentContext={(() => {
-                const activeTab = tabs.activeTab;
-                if (!activeTab) {
-                  return {
-                    filePath: '',
-                    fileType: 'markdown',
-                    content: '',
-                    cursorPosition: undefined,
-                    selection: undefined,
-                    getLatestContent: undefined
-                  };
-                }
-
-                return {
-                  filePath: activeTab.filePath || '',
-                  fileType: 'markdown',
-                  content: getContentRef.current ? getContentRef.current() : '',
-                  cursorPosition: undefined,
-                  selection: undefined,
-                  getLatestContent: getContentRef.current
-                };
-              })()}
+              documentContext={documentContext}
               onContentModeChange={setActiveMode}
             />
           )}
@@ -1388,30 +1312,7 @@ export default function App() {
           onSessionLoaded={() => setSessionToLoad(null)}
           onSessionIdChange={setCurrentAISessionId}
           onShowApiKeyError={() => setIsApiKeyDialogOpen(true)}
-          documentContext={(() => {
-            // CRITICAL: Always use the ACTIVE tab's information, not global state
-            // This ensures AI edits target the currently visible document
-            const activeTab = tabs.activeTab;
-            if (!activeTab) {
-              return {
-                filePath: '',
-                fileType: 'markdown',
-                content: '',
-                cursorPosition: undefined,
-                selection: undefined,
-                getLatestContent: undefined
-              };
-            }
-
-            return {
-              filePath: activeTab.filePath || '',
-              fileType: 'markdown',
-              content: getContentRef.current ? getContentRef.current() : '',
-              cursorPosition: undefined, // TODO: Get from Lexical editor
-              selection: undefined, // TODO: Get selected text from Lexical
-              getLatestContent: getContentRef.current // Pass the function itself
-            };
-          })()}
+          documentContext={documentContext}
           onApplyEdit={(edit, prompt, aiResponse) => {
             console.log('Edit already applied by AIChat component, updating UI state');
 
