@@ -133,7 +133,7 @@ import {
 
 import {createHeadlessEditor} from '@lexical/headless';
 import {createNodeFromSerialized} from './createNodeFromSerialized';
-import {$setDiffState} from './DiffState';
+import {$setDiffState, $getDiffState} from './DiffState';
 import {DiffHandlerContext, diffHandlerRegistry} from '../handlers';
 import {DefaultDiffHandler} from '../handlers/DefaultDiffHandler';
 import {ListDiffHandler} from '../handlers/ListDiffHandler';
@@ -858,7 +858,7 @@ export function $applyNodeDiff(
   targetEditor?: LexicalEditor,
   treeMatcher?: any,
 ): void {
-  console.log(`Applying diff: ${diff.changeType} ${diff.nodeType}`);
+  // console.log(`Applying diff: ${diff.changeType} ${diff.nodeType}`);
   const liveRoot = $getRoot();
 
   switch (diff.changeType) {
@@ -885,6 +885,10 @@ export function $applyNodeDiff(
       if ($isElementNode(liveNode)) {
         // Set diff state to 'removed' - preserve original content for reject functionality
         $setDiffState(liveNode, 'removed');
+        console.log('  ✅ Set diff state to REMOVED on node:', liveNode.getKey(), liveNode.getType());
+        // Verify it was set
+        const verifyState = $getDiffState(liveNode);
+        console.log('  🔍 Verified diff state immediately:', verifyState);
         // NOTE: We don't call $markNodeAsRemoved here because we want to preserve
         // the original content for proper reject functionality. The NodeState is
         // sufficient for tracking that this node should be removed on approve.

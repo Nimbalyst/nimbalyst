@@ -236,20 +236,45 @@ async function tryCreateServer(port: number): Promise<any> {
 
         switch (name) {
           case 'getDocument': {
-            // TODO: Need to get sessionId from the request context
-            // For now, get the most recent document state
-            const states = Array.from(documentStateBySession.values());
-            const documentState = states[states.length - 1];
-
-            // Ensure documentState includes filePath for tool display
-            if (documentState && !documentState.error) {
+            // Get the active window's current document content
+            const windows = BrowserWindow.getAllWindows();
+            if (windows.length > 0) {
+              // Request fresh content from the renderer
+              const result = await windows[0].webContents.executeJavaScript(`
+                (function() {
+                  // Try to get content from editorRegistry (multi-file mode)
+                  if (window.__editorRegistry) {
+                    const activePath = window.__editorRegistry.getActiveFilePath();
+                    if (activePath) {
+                      const content = window.__editorRegistry.getContent(activePath);
+                      return { content, filePath: activePath, fileType: 'markdown' };
+                    }
+                  }
+                  // Fallback: try to get from global bridge (legacy)
+                  if (window.aiChatBridge && window.aiChatBridge.getContent) {
+                    const content = window.aiChatBridge.getContent();
+                    return { content, filePath: 'untitled.md', fileType: 'markdown' };
+                  }
+                  return { content: '', error: 'No document open' };
+                })()
+              `);
               return {
-                ...documentState,
-                // Ensure filePath is included for tool UI display
-                filePath: documentState.filePath || 'untitled'
+                content: [
+                  {
+                    type: 'text',
+                    text: JSON.stringify(result, null, 2)
+                  }
+                ]
               };
             }
-            return documentState || { content: '', error: 'No document open' };
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({ content: '', error: 'No window available' }, null, 2)
+                }
+              ]
+            };
           }
 
           case 'applyDiff': {

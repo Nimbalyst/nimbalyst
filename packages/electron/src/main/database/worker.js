@@ -171,7 +171,14 @@ class PGLiteWorker {
         console.log('[PGLite Worker] Adding session_type column to ai_sessions...');
         await this.db.exec(`
           ALTER TABLE ai_sessions ADD COLUMN session_type TEXT DEFAULT 'chat';
+          UPDATE ai_sessions SET session_type = 'chat' WHERE session_type IS NULL;
           CREATE INDEX IF NOT EXISTS idx_ai_sessions_type ON ai_sessions(session_type);
+        `);
+      } else {
+        // Fix existing sessions with NULL session_type (from before this fix)
+        console.log('[PGLite Worker] Fixing NULL session_type values...');
+        await this.db.exec(`
+          UPDATE ai_sessions SET session_type = 'chat' WHERE session_type IS NULL;
         `);
       }
 

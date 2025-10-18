@@ -16,7 +16,6 @@ planStatus:
   updated: "2025-10-15T00:00:00.000Z"
   progress: 100
 ---
-
 # AI Edit History Tagging
 <!-- plan-status -->
 
@@ -162,25 +161,25 @@ if (successfulEdits.length > 0 && targetContext?.filePath) {
 Successfully implemented AI edit history tagging. Changes made:
 
 1. **Type Definitions** (3 files):
-   - Added `'ai-edit'` to `SnapshotType` union in HistoryManager.ts, useHistory.ts, and HistoryWindow.tsx
+  - Added `'ai-edit'` to `SnapshotType` union in HistoryManager.ts, useHistory.ts, and HistoryWindow.tsx
 
 2. **History Window UI** (HistoryWindow.tsx):
-   - Added `'ai-edit'` case with `'auto_awesome'` icon
-   - Added label "AI Edit" (distinct from "AI Diff")
-   - Added metadata field to Snapshot interface
+  - Added `'ai-edit'` case with `'auto_awesome'` icon
+  - Added label "AI Edit" (distinct from "AI Diff")
+  - Added metadata field to Snapshot interface
 
 3. **AIChat.tsx Snapshot Creation**:
-   - Changed edit application from forEach to Promise.all for proper async tracking
-   - Track successful edits with results array
-   - After all edits complete, create ONE snapshot per AI response
-   - Includes prompt summary in snapshot description
-   - Only creates snapshot if at least one edit succeeded
+  - Changed edit application from forEach to Promise.all for proper async tracking
+  - Track successful edits with results array
+  - After all edits complete, create ONE snapshot per AI response
+  - Includes prompt summary in snapshot description
+  - Only creates snapshot if at least one edit succeeded
 
 4. **AgenticCodingWindow.tsx Snapshot Creation**:
-   - After stream completes and session reloads
-   - Scans messages for tool calls that indicate file edits (applyDiff, editFile)
-   - Extracts edited file paths from successful tool results
-   - Creates snapshot for each edited file with prompt summary
-   - Reads current file content for accurate snapshot
+  - After stream completes and session reloads
+  - Scans messages for tool calls that indicate file edits (applyDiff, editFile)
+  - Extracts edited file paths from successful tool results
+  - Creates snapshot for each edited file with prompt summary
+  - Reads current file content for accurate snapshot
 
 All snapshots are tagged with type `'ai-edit'` and include a description like "AI Edit: [prompt summary]" for easy identification in history.

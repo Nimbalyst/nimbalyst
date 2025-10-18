@@ -284,6 +284,7 @@ export function $rejectDiffs(editor: LexicalEditor): void {
  */
 export function $hasDiffNodes(editor: LexicalEditor): boolean {
   let hasDiffNodes = false;
+  let diffNodesFound: string[] = [];
 
   editor.getEditorState().read(() => {
     const root = $getRoot();
@@ -300,6 +301,7 @@ export function $hasDiffNodes(editor: LexicalEditor): boolean {
           diffState === 'modified'
         ) {
           hasDiffNodes = true;
+          diffNodesFound.push(`${child.getType()}:${diffState} "${child.getTextContent().substring(0, 20)}"`);
           return;
         }
 
@@ -307,6 +309,7 @@ export function $hasDiffNodes(editor: LexicalEditor): boolean {
         const nodeType = child.getType();
         if (nodeType === 'add' || nodeType === 'remove') {
           hasDiffNodes = true;
+          diffNodesFound.push(`legacy:${nodeType} "${child.getTextContent().substring(0, 20)}"`);
           return;
         }
 
@@ -321,6 +324,12 @@ export function $hasDiffNodes(editor: LexicalEditor): boolean {
 
     checkForDiffNodes(root);
   });
+
+  if (diffNodesFound.length > 0) {
+    console.log('🔍 $hasDiffNodes found diff nodes:', diffNodesFound);
+  } else {
+    console.log('❌ $hasDiffNodes: NO diff nodes found');
+  }
 
   return hasDiffNodes;
 }

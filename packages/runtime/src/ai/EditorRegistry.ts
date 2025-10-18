@@ -10,6 +10,7 @@ import type { LexicalEditor } from 'lexical';
 export interface EditorInstance {
   filePath: string;
   editor: LexicalEditor;
+  hasPendingDiffs: () => boolean;
   applyReplacements: (replacements: any[], requestId?: string) => Promise<{ success: boolean; error?: string }>;
   startStreaming: (config: any) => void;
   streamContent: (streamId: string, content: string) => void;

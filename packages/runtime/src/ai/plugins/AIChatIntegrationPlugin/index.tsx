@@ -8,7 +8,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $setDiffState, APPLY_MARKDOWN_REPLACE_COMMAND, type TextReplacement } from 'rexical';
+import { $setDiffState, APPLY_MARKDOWN_REPLACE_COMMAND, type TextReplacement, $hasDiffNodes } from 'rexical';
 import { $getSelection, $isRangeSelection, $getRoot, $isElementNode, LexicalNode } from 'lexical';
 import { MarkdownStreamProcessor, getEditorTransformers } from 'rexical';
 import { $isHeadingNode } from '@lexical/rich-text';
@@ -159,6 +159,14 @@ export function AIChatIntegrationPlugin(): null {
     const editorInstance = {
       filePath,
       editor,
+
+      hasPendingDiffs: (): boolean => {
+        let hasDiffs = false;
+        editor.getEditorState().read(() => {
+          hasDiffs = $hasDiffNodes(editor);
+        });
+        return hasDiffs;
+      },
 
       applyReplacements: async (replacements: TextReplacement[], requestId?: string): Promise<{ success: boolean; error?: string }> => {
         if (!replacements || !Array.isArray(replacements)) {
