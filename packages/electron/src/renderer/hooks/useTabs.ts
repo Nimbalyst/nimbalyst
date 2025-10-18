@@ -27,6 +27,7 @@ interface UseTabsOptions {
   enabled?: boolean;
   onTabChange?: (tab: TabData) => void;
   onTabClose?: (tab: TabData) => void;
+  workspacePath?: string | null;
 }
 
 interface UseTabsResult {
@@ -64,7 +65,8 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     enabled = true,
     onTabChange,
     onTabClose,
-    getNavigationState
+    getNavigationState,
+    workspacePath
   } = options;
 
   const [tabs, setTabs] = useState<Map<string, TabData>>(new Map());
@@ -330,9 +332,9 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
 
   // Save state to Electron store only when it changes
   useEffect(() => {
-    if (!enabled || !window.electronAPI?.saveWorkspaceTabState) return;
+    if (!enabled || !window.electronAPI?.invoke || !workspacePath) return;
 
-    const saveState = () => {
+    const saveState = async () => {
       // Don't save empty state before first restoration attempt
       if (!hasRestoredRef.current && tabs.size === 0) {
         return;
@@ -367,16 +369,20 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
       };
 
       // Include navigation state if available
-      if (getNavigationState) {
-        tabState.navigationHistory = getNavigationState();
-      }
+      const navigationHistory = getNavigationState ? getNavigationState() : undefined;
 
       // Only save if state has actually changed
       const stateString = JSON.stringify(tabState);
       if (stateString !== lastSavedStateRef.current) {
-        window.electronAPI.saveWorkspaceTabState(tabState);
-        lastSavedStateRef.current = stateString;
-        // Remove excessive logging - only log errors or important events
+        try {
+          await window.electronAPI.invoke('workspace:update-state', workspacePath, {
+            tabs: tabState,
+            navigationHistory
+          });
+          lastSavedStateRef.current = stateString;
+        } catch (error) {
+          console.error('[useTabs] Failed to save tab state:', error);
+        }
       }
     };
 
@@ -392,7 +398,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     return () => {
       clearInterval(interval);
     };
-  }, [enabled, tabs.size, activeTabId, tabOrder.length, closedTabs.length, getNavigationState]); // Use primitive values instead of objects
+  }, [enabled, tabs.size, activeTabId, tabOrder.length, closedTabs.length, getNavigationState, workspacePath]); // Use primitive values instead of objects
 
   // Store onTabChange in a ref to avoid re-running effect
   const onTabChangeRef = useRef(onTabChange);
@@ -426,7 +432,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
 
   // Restore state from Electron store on mount (with delay for workspace to load)
   useEffect(() => {
-    if (!enabled || !window.electronAPI?.getWorkspaceTabState) {
+    if (!enabled || !window.electronAPI?.invoke || !workspacePath) {
       return;
     }
 
@@ -434,7 +440,8 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     const timer = setTimeout(async () => {
       const loadTabState = async () => {
         try {
-          const savedState = await window.electronAPI.getWorkspaceTabState();
+          const workspaceState = await window.electronAPI.invoke('workspace:get-state', workspacePath);
+          const savedState = workspaceState?.tabs;
           hasRestoredRef.current = true; // Mark as restored
 
           if (savedState && savedState.tabs && savedState.tabs.length > 0) {
@@ -508,7 +515,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     }, 500); // Wait 500ms for workspace to be loaded in main process
 
     return () => clearTimeout(timer);
-  }, [enabled]); // Only run once on mount when enabled
+  }, [enabled, workspacePath]); // Run when workspace path changes
 
   const result = {
     tabs: tabOrder.map(id => tabs.get(id)!).filter(Boolean),

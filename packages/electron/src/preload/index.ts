@@ -226,8 +226,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Settings operations
   getSidebarWidth: (workspacePath: string) => ipcRenderer.invoke('get-sidebar-width', workspacePath),
   setSidebarWidth: (workspacePath: string, width: number) => ipcRenderer.send('set-sidebar-width', { workspacePath, width }),
-  getAIChatState: (workspacePath: string) => ipcRenderer.invoke('get-ai-chat-state', workspacePath),
-  setAIChatState: (state: { collapsed: boolean; width: number; sessionId?: string; workspacePath: string; planningModeEnabled?: boolean }) => ipcRenderer.send('set-ai-chat-state', state),
+  // AI Chat state has been moved to unified workspace state - use invoke('workspace:get-state', path) instead
 
   // QuickOpen operations
   buildQuickOpenCache: (workspacePath: string) => ipcRenderer.invoke('build-quick-open-cache', workspacePath),
@@ -237,10 +236,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRecentWorkspaceFiles: () => ipcRenderer.invoke('get-recent-workspace-files'),
   addToWorkspaceRecentFiles: (filePath: string) => ipcRenderer.send('add-to-workspace-recent-files', filePath),
 
-  // Tab state operations (includes navigation history)
-  getWorkspaceTabState: () => ipcRenderer.invoke('get-workspace-tab-state'),
-  saveWorkspaceTabState: (tabState: any) => ipcRenderer.send('save-workspace-tab-state', tabState),
-  clearWorkspaceTabState: () => ipcRenderer.send('clear-workspace-tab-state'),
+  // Tab state has been moved to unified workspace state - use invoke('workspace:get-state', path) instead
 
   // History operations
   history: {

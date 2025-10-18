@@ -20,14 +20,8 @@ import {
     getWorkspaceRecentFiles,
     addWorkspaceRecentFile,
     store,
-    // Tab state functions for workspace windows (uses `tabs` field)
-    getWorkspaceTabState,
-    saveWorkspaceTabState,
-    clearWorkspaceTabState,
-    // Tab state functions for agentic coding windows (uses `agenticTabs` field)
-    // These prevent agentic window tabs from mixing with workspace tabs
-    getAgenticTabState,
-    saveAgenticTabState
+    getWorkspaceState,
+    updateWorkspaceState
 } from '../utils/store';
 import { loadFileIntoWindow } from '../file/FileOperations';
 
@@ -535,85 +529,16 @@ export function registerWorkspaceHandlers() {
         addWorkspaceRecentFile(state.workspacePath, filePath);
     });
 
-    /**
-     * Get workspace tab state.
-     *
-     * CRITICAL ROUTING LOGIC: This handler routes to different storage fields based on window mode:
-     * - workspace mode → uses `tabs` field (getWorkspaceTabState)
-     * - agentic-coding mode → uses `agenticTabs` field (getAgenticTabState)
-     *
-     * This separation prevents:
-     * 1. Agentic window tabs (AI chat sessions) from mixing with workspace tabs (files)
-     * 2. Opening/closing the agentic window from affecting workspace tab state
-     * 3. State corruption when switching between windows
-     *
-     * Both window types share the same workspace path but maintain separate tab histories.
-     */
-    ipcMain.handle('get-workspace-tab-state', async (event) => {
-        const window = BrowserWindow.fromWebContents(event.sender);
-        if (!window) return null;
-
-        const windowId = getWindowId(window);
-        if (windowId === null) return null;
-
-        const state = windowStates.get(windowId);
-        if (!state || !state.workspacePath) return null;
-
-        // Route to agentic tabs storage for agentic coding windows
-        if (state.mode === 'agentic-coding') {
-            return getAgenticTabState(state.workspacePath);
-        }
-
-        // Route to workspace tabs storage for workspace windows
-        return getWorkspaceTabState(state.workspacePath);
+    // Get entire workspace state - no routing, no BS
+    ipcMain.handle('workspace:get-state', async (event, workspacePath: string) => {
+        return getWorkspaceState(workspacePath);
     });
 
-    /**
-     * Save workspace tab state.
-     *
-     * CRITICAL ROUTING LOGIC: This handler routes to different storage fields based on window mode:
-     * - workspace mode → saves to `tabs` field (saveWorkspaceTabState)
-     * - agentic-coding mode → saves to `agenticTabs` field (saveAgenticTabState)
-     *
-     * This prevents the agentic window from overwriting workspace tab state when it saves.
-     */
-    ipcMain.on('save-workspace-tab-state', async (event, tabState) => {
-        const window = BrowserWindow.fromWebContents(event.sender);
-        if (!window) return;
-
-        const windowId = getWindowId(window);
-        if (windowId === null) return;
-
-        const state = windowStates.get(windowId);
-        if (!state || !state.workspacePath) return;
-
-        // Route to agentic tabs storage for agentic coding windows
-        if (state.mode === 'agentic-coding') {
-            saveAgenticTabState(state.workspacePath, tabState);
-            return;
-        }
-
-        // Route to workspace tabs storage for workspace windows
-        saveWorkspaceTabState(state.workspacePath, tabState);
-    });
-
-    // Clear workspace tab state
-    ipcMain.on('clear-workspace-tab-state', (event) => {
-        const window = BrowserWindow.fromWebContents(event.sender);
-        if (!window) return;
-
-        const windowId = getWindowId(window);
-        if (windowId === null) return;
-
-        const state = windowStates.get(windowId);
-        if (!state || !state.workspacePath) return;
-
-        // Agentic coding windows don't need clearing - their tabs are managed differently
-        if (state.mode === 'agentic-coding') {
-            return;
-        }
-
-        clearWorkspaceTabState(state.workspacePath);
+    // Update workspace state - takes partial update, merges atomically
+    ipcMain.handle('workspace:update-state', async (event, workspacePath: string, updates: any) => {
+        return updateWorkspaceState(workspacePath, (state) => {
+            Object.assign(state, updates);
+        });
     });
 
     // File operations for workspace files
@@ -972,26 +897,6 @@ export function registerWorkspaceHandlers() {
         }
     });
 
-    // Get agentic coding window state
-    ipcMain.handle('workspace:get-agentic-coding-state', async (event, workspacePath: string) => {
-        try {
-            const { getAgenticCodingWindowState } = await import('../utils/store');
-            return getAgenticCodingWindowState(workspacePath);
-        } catch (error: any) {
-            console.error('Error getting agentic coding window state:', error);
-            return null;
-        }
-    });
-
-    // Save agentic coding window state
-    ipcMain.handle('workspace:save-agentic-coding-state', async (event, workspacePath: string, state: any) => {
-        try {
-            const { saveAgenticCodingWindowState } = await import('../utils/store');
-            saveAgenticCodingWindowState(workspacePath, state);
-            return { success: true };
-        } catch (error: any) {
-            console.error('Error saving agentic coding window state:', error);
-            return { success: false, error: error.message };
-        }
-    });
+    // Agentic coding state has been moved to unified workspace state
+    // Use workspace:get-state and workspace:update-state instead
 }

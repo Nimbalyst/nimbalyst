@@ -24,6 +24,9 @@ export interface WindowState {
     tabs?: TabState[];
     activeTabId?: string;
     tabsEnabled?: boolean;
+
+    // Content mode system (Phase 2 - mode preservation)
+    contentMode?: 'files' | 'agent' | 'plan'; // Active content mode in workspace
 }
 
 export interface RecentItem {

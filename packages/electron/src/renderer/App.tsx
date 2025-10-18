@@ -24,11 +24,14 @@ import { SessionManager } from './components/SessionManager/SessionManager';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { NewFileDialog } from './components/NewFileDialog';
 import { AgenticCodingWindow } from './components/AgenticCodingWindow';
+import { AgenticPanel } from './components/UnifiedAI';
 import { TabManager } from './components/TabManager/TabManager';
 import { EditorContainer } from './components/EditorContainer';
 import { NavigationGutter, type NavigationMode, type SidebarView } from './components/NavigationGutter';
+import { BugsScreen } from './components/BugsScreen/BugsScreen';
 import { useTabs } from './hooks/useTabs';
 import { useTabNavigation } from './hooks/useTabNavigation';
+import type { ContentMode } from './types/WindowModeTypes';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
 import { registerDecisionStatusPlugin } from './plugins/registerDecisionStatusPlugin';
@@ -205,6 +208,33 @@ export default function App() {
   const [navigationMode, setNavigationMode] = useState<NavigationMode>('planning');
   const [sidebarView, setSidebarView] = useState<SidebarView>('files');
 
+  // Content mode management - simple state, no manager needed
+  const [activeMode, setActiveMode] = useState<ContentMode>('files');
+
+  // Load active mode from workspace state
+  useEffect(() => {
+    if (!workspacePath || !window.electronAPI?.invoke) return;
+
+    window.electronAPI.invoke('workspace:get-state', workspacePath)
+      .then(state => {
+        if (state?.activeMode) {
+          setActiveMode(state.activeMode as ContentMode);
+        }
+      })
+      .catch(error => {
+        console.error('[ContentMode] Failed to load active mode:', error);
+      });
+  }, [workspacePath]);
+
+  // Save active mode when it changes
+  useEffect(() => {
+    if (!workspacePath || !window.electronAPI?.invoke) return;
+
+    window.electronAPI.invoke('workspace:update-state', workspacePath, { activeMode })
+      .catch(error => {
+        console.error('[ContentMode] Failed to save active mode:', error);
+      });
+  }, [activeMode, workspacePath]);
 
   // Sync theme with main process preference on mount
   useEffect(() => {
@@ -238,6 +268,7 @@ export default function App() {
   const tabs = useTabs({
     maxTabs: Infinity, // Unlimited tabs - EditorPool manages memory with sleep state (max 20 rendered)
     enabled: true,
+    workspacePath, // Pass workspace path for unified state management
     getNavigationState: () => getNavigationStateRef.current?.(),
     onTabChange: async (tab) => {
       console.log(`[App] onTabChange: switching to ${tab.fileName}, isDirty=${tab.isDirty}`);
@@ -282,13 +313,13 @@ export default function App() {
 
   // Restore navigation state when tabs are restored
   useEffect(() => {
-    if (!window.electronAPI?.getWorkspaceTabState) return;
+    if (!window.electronAPI?.invoke || !workspacePath) return;
 
     const restoreNavigationState = async () => {
       try {
-        const savedState = await window.electronAPI.getWorkspaceTabState();
-        if (savedState?.navigationHistory) {
-          navigation.setNavigationState(savedState.navigationHistory);
+        const workspaceState = await window.electronAPI.invoke('workspace:get-state', workspacePath);
+        if (workspaceState?.navigationHistory) {
+          navigation.setNavigationState(workspaceState.navigationHistory);
         }
       } catch (error) {
         console.error('Failed to restore navigation state:', error);
@@ -298,7 +329,7 @@ export default function App() {
     // Delay to ensure tabs are loaded first
     const timer = setTimeout(restoreNavigationState, 600);
     return () => clearTimeout(timer);
-  }, [workspaceMode, navigation.setNavigationState]);
+  }, [workspaceMode, workspacePath, navigation.setNavigationState]);
 
   const getContentRef = useRef<(() => string) | null>(null);
   // NOTE: initialContentRef removed - EditorPool tracks initialContent per-file
@@ -773,18 +804,27 @@ export default function App() {
 
   // Save AI Chat state when it changes (but only after initial load)
   useEffect(() => {
-    if (!workspacePath || !workspaceMode) return;
-    if (isAIChatStateLoaded && window.electronAPI.setAIChatState) {
-      const state = {
-        workspacePath,
-        collapsed: isAIChatCollapsed,
-        width: aiChatWidth,
-        currentSessionId: currentAISessionId || undefined,
-        planningModeEnabled: aiPlanningModeEnabled,
-      } as any;
-      if (LOG_CONFIG.AI_CHAT_STATE) console.log('[AI_CHAT] Saving AI Chat state:', state);
-      window.electronAPI.setAIChatState(state);
-    }
+    if (!workspacePath || !workspaceMode || !isAIChatStateLoaded) return;
+    if (!window.electronAPI?.invoke) return;
+
+    const saveAIChatState = async () => {
+      try {
+        const aiPanelState = {
+          collapsed: isAIChatCollapsed,
+          width: aiChatWidth,
+          currentSessionId: currentAISessionId || undefined,
+          planningModeEnabled: aiPlanningModeEnabled,
+        };
+        if (LOG_CONFIG.AI_CHAT_STATE) console.log('[AI_CHAT] Saving AI Chat state:', aiPanelState);
+        await window.electronAPI.invoke('workspace:update-state', workspacePath, {
+          aiPanel: aiPanelState
+        });
+      } catch (error) {
+        console.error('[AI_CHAT] Failed to save AI Chat state:', error);
+      }
+    };
+
+    saveAIChatState();
   }, [isAIChatCollapsed, aiChatWidth, currentAISessionId, aiPlanningModeEnabled, isAIChatStateLoaded, workspacePath, workspaceMode]);
 
   // Load recent workspace files when in workspace mode
@@ -922,23 +962,24 @@ export default function App() {
   }, []);
 
   // Check for first-time setup when workspace changes
-  useEffect(() => {
-    const checkFirstTimeSetup = async () => {
-      if (!workspacePath || !workspaceMode) return;
+  // TEMPORARILY DISABLED - causing settings screen to show on every load
+  // useEffect(() => {
+  //   const checkFirstTimeSetup = async () => {
+  //     if (!workspacePath || !workspaceMode) return;
 
-      try {
-        const needsSetup = await OnboardingService.needsOnboarding(workspacePath);
-        console.log('[SETTINGS] Needs first-time setup:', needsSetup);
-        if (needsSetup) {
-          setSidebarView('settings');
-        }
-      } catch (error) {
-        console.error('[SETTINGS] Failed to check setup status:', error);
-      }
-    };
+  //     try {
+  //       const needsSetup = await OnboardingService.needsOnboarding(workspacePath);
+  //       console.log('[SETTINGS] Needs first-time setup:', needsSetup);
+  //       if (needsSetup) {
+  //         setSidebarView('settings');
+  //       }
+  //     } catch (error) {
+  //       console.error('[SETTINGS] Failed to check setup status:', error);
+  //     }
+  //   };
 
-    checkFirstTimeSetup();
-  }, [workspacePath, workspaceMode]);
+  //   checkFirstTimeSetup();
+  // }, [workspacePath, workspaceMode]);
 
   // Set up IPC listeners
   // IPC handlers hook - sets up all IPC communication with main process
@@ -1099,10 +1140,8 @@ export default function App() {
     >
       {workspaceMode && (
         <NavigationGutter
-          currentMode={navigationMode}
-          onModeChange={handleNavigationModeChange}
-          sidebarView={sidebarView}
-          onSidebarViewChange={setSidebarView}
+          contentMode={activeMode}
+          onContentModeChange={setActiveMode}
           onOpenBugs={openBugsTab}
           onOpenHistory={() => {
             // Open session manager
@@ -1112,7 +1151,7 @@ export default function App() {
           }}
         />
       )}
-      {workspaceMode && workspaceName && sidebarView !== 'settings' && (
+      {workspaceMode && workspaceName && sidebarView !== 'settings' && activeMode === 'files' && (
         <>
           <div ref={sidebarRef} style={{ width: sidebarWidth, position: 'relative' }}>
             <WorkspaceSidebar
@@ -1168,17 +1207,26 @@ export default function App() {
           </div>
         </>
       )}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {sidebarView === 'settings' ? (
-          <SettingsScreen
-            workspacePath={workspacePath || ''}
-            workspaceName={workspaceName || ''}
-            onClose={() => {
-              setSidebarView('files');
-            }}
-            isFirstTime={false}
-          />
-        ) : workspaceMode || tabs.activeTab ? (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+        {/* Files Mode - always mounted, hidden when inactive */}
+        <div style={{
+          display: activeMode === 'files' ? 'flex' : 'none',
+          flex: 1,
+          flexDirection: 'column',
+          overflow: 'hidden',
+          position: 'absolute',
+          inset: 0
+        }}>
+          {sidebarView === 'settings' ? (
+            <SettingsScreen
+              workspacePath={workspacePath || ''}
+              workspaceName={workspaceName || ''}
+              onClose={() => {
+                setSidebarView('files');
+              }}
+              isFirstTime={false}
+            />
+          ) : workspaceMode || tabs.activeTab ? (
           <TabManager
             tabs={tabs.tabs}
             activeTabId={tabs.activeTabId}
@@ -1257,8 +1305,135 @@ export default function App() {
         ) : (
           <WorkspaceWelcome workspaceName={workspaceName || 'Open a file to get started'} />
         )}
+        </div>
+
+        {/* Agent Mode - always mounted, hidden when inactive */}
+        <div style={{
+          display: activeMode === 'agent' ? 'flex' : 'none',
+          flex: 1,
+          flexDirection: 'column',
+          overflow: 'hidden',
+          position: 'absolute',
+          inset: 0
+        }}>
+          {workspaceMode && workspacePath && (
+            <AgenticPanel
+              mode="agent"
+              mountLocation="main"
+              workspacePath={workspacePath}
+            />
+          )}
+        </div>
+
+        {/* Plan Mode - uses editor with file tree for editing plan documents */}
+        <div style={{
+          display: activeMode === 'plan' ? 'flex' : 'none',
+          flex: 1,
+          flexDirection: 'column',
+          overflow: 'hidden',
+          position: 'absolute',
+          inset: 0
+        }}>
+          {workspaceMode || tabs.activeTab ? (
+            <TabManager
+              tabs={tabs.tabs}
+              activeTabId={tabs.activeTabId}
+              onTabSelect={tabs.switchTab}
+              onTabClose={tabs.removeTab}
+              onNewTab={() => {
+                setIsNewFileDialogOpen(true);
+              }}
+              onTogglePin={tabs.togglePin}
+              onTabReorder={tabs.reorderTabs}
+              onViewHistory={(tabId) => {
+                const tab = tabs.getTabState(tabId);
+                if (tab && tab.filePath) {
+                  setIsHistoryDialogOpen(true);
+                }
+              }}
+              hideTabBar={!workspaceMode}
+            >
+              {tabs.activeTab ? (
+                <EditorContainer
+                  tabs={tabs.tabs}
+                  activeTabId={tabs.activeTabId}
+                  theme={theme}
+                  onManualSaveReady={(saveFn) => {
+                    handleSaveRef.current = saveFn;
+                  }}
+                  onSaveComplete={(filePath) => {
+                    setCurrentFilePath(filePath);
+                    setCurrentFileName(filePath.split('/').pop() || filePath);
+                    setIsDirty(false);
+                    if (tabs.activeTabId) {
+                      tabs.updateTab(tabs.activeTabId, {
+                        isDirty: false,
+                        lastSaved: new Date()
+                      });
+                    }
+                  }}
+                  onGetContent={(getContentFn) => {
+                    logger.ui.info('Received getContent function for tab');
+                    getContentRef.current = getContentFn;
+                    aiToolService.setGetContentFunction(getContentFn);
+                  }}
+                  onEditorReady={(editor) => {
+                    logger.ui.info('Editor ready for tab');
+                    editorRef.current = editor;
+                    searchCommandRef.current = TOGGLE_SEARCH_COMMAND;
+                  }}
+                  onContentChange={(changedTabId, changedIsDirty) => {
+                    const tab = tabs.getTabState(changedTabId);
+                    if (tab && tab.isDirty !== changedIsDirty) {
+                      tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
+                      if (changedTabId === tabs.activeTabId) {
+                        setIsDirty(changedIsDirty);
+                      }
+                    }
+                  }}
+                />
+              ) : (
+                <WorkspaceWelcome workspaceName={workspaceName || 'Open a plan to get started'} />
+              )}
+            </TabManager>
+          ) : (
+            <WorkspaceWelcome workspaceName="Open a plan to get started" />
+          )}
+        </div>
+
+        {/* Tracker Mode - bug/task tracking view */}
+        <div style={{
+          display: activeMode === 'tracker' ? 'flex' : 'none',
+          flex: 1,
+          flexDirection: 'column',
+          overflow: 'hidden',
+          position: 'absolute',
+          inset: 0
+        }}>
+          <BugsScreen />
+        </div>
+
+        {/* Settings Mode - settings screen */}
+        <div style={{
+          display: activeMode === 'settings' ? 'flex' : 'none',
+          flex: 1,
+          flexDirection: 'column',
+          overflow: 'hidden',
+          position: 'absolute',
+          inset: 0
+        }}>
+          <SettingsScreen
+            workspacePath={workspacePath || ''}
+            workspaceName={workspaceName || ''}
+            onClose={() => {
+              // Switch back to files mode when closing settings
+              setActiveMode('files');
+            }}
+            isFirstTime={false}
+          />
+        </div>
       </div>
-      {workspaceMode && sidebarView !== 'settings' && (
+      {workspaceMode && sidebarView !== 'settings' && activeMode === 'files' && (
         <AIChat
           isCollapsed={isAIChatCollapsed}
           onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}

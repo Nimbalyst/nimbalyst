@@ -73,7 +73,10 @@ export interface AgenticCodingWindowState {
 export interface WorkspaceState {
   workspacePath: string;
   windowState?: SessionWindow;
+  // only when separate agentic coding window is open
   agenticCodingWindowState?: AgenticCodingWindowState;
+  // Window mode state for unified AI interface (files/agent/plan modes)
+  windowModeState?: any;
   sidebarWidth: number;
   recentDocuments: string[];
   tabs: TabManagerState; // Tab state for workspace window
@@ -182,6 +185,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
         ...raw.agenticCodingWindowState.sessionHistoryLayout
       } : undefined
     } : undefined,
+    windowModeState: raw.windowModeState ?? undefined,
     sidebarWidth: raw.sidebarWidth ?? raw.uiState?.sidebarWidth ?? raw.ui_state?.sidebarWidth ?? 240,
     recentDocuments: Array.isArray(raw.recentDocuments)
       ? raw.recentDocuments.slice(0, 50)
@@ -234,6 +238,7 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
         collapsedGroups: [...state.agenticCodingWindowState.sessionHistoryLayout.collapsedGroups]
       } : undefined
     } : undefined,
+    windowModeState: state.windowModeState ? { ...state.windowModeState } : undefined,
     sidebarWidth: state.sidebarWidth,
     recentDocuments: [...state.recentDocuments],
     tabs: {

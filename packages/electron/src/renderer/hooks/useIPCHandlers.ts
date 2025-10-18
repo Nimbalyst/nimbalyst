@@ -320,7 +320,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
       // Restore AI Chat state when opening a workspace
       try {
-        const aiChatState = await window.electronAPI.getAIChatState(data.workspacePath);
+        const workspaceState = await window.electronAPI.invoke('workspace:get-state', data.workspacePath);
+        const aiChatState = workspaceState?.aiPanel;
         console.log('Restoring AI Chat state for workspace:', aiChatState);
         if (aiChatState) {
           handlersRef.current.setIsAIChatCollapsed(aiChatState.collapsed);
