@@ -616,14 +616,23 @@ export default function App() {
       setIsAgentPaletteVisible(prev => !prev);
     };
 
+    const handleSetContentMode = (_event: any, mode: ContentMode) => {
+      if (workspaceMode) {
+        setActiveMode(mode);
+      }
+    };
+
     window.electronAPI.on('open-plans-tab', handleOpenPlansTab);
-    window.electronAPI.on('toggle-agent-palette', handleToggleAgentPalette);
+    window.electronAPI.on('set-content-mode', handleSetContentMode);
+    // COMMENTED OUT - Cmd+K now switches to Agent mode
+    // window.electronAPI.on('toggle-agent-palette', handleToggleAgentPalette);
 
     return () => {
       window.electronAPI.off?.('open-plans-tab', handleOpenPlansTab);
-      window.electronAPI.off?.('toggle-agent-palette', handleToggleAgentPalette);
+      window.electronAPI.off?.('set-content-mode', handleSetContentMode);
+      // window.electronAPI.off?.('toggle-agent-palette', handleToggleAgentPalette);
     };
-  }, [openPlansTab]);
+  }, [openPlansTab, workspaceMode]);
 
   // Update window title and dirty state
   useEffect(() => {
@@ -647,16 +656,46 @@ export default function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd+K (Mac) or Ctrl+K (Windows/Linux) for Agent Command Palette
+      // Cmd+E for Files mode
+      if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        if (workspaceMode) {
+          setActiveMode('files');
+        }
+        return false;
+      }
+      // Cmd+K for Agent mode
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
         if (workspaceMode) {
-          setIsAgentPaletteVisible(true);
+          setActiveMode('agent');
         }
         return false;
       }
+      // Cmd+L for Plans mode
+      if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        if (workspaceMode) {
+          setActiveMode('plan');
+        }
+        return false;
+      }
+      // Cmd+K (Mac) or Ctrl+K (Windows/Linux) for Agent Command Palette - COMMENTED OUT
+      // if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      //   e.preventDefault();
+      //   e.stopPropagation();
+      //   e.stopImmediatePropagation();
+      //   if (workspaceMode) {
+      //     setIsAgentPaletteVisible(true);
+      //   }
+      //   return false;
+      // }
       // Cmd+O (Mac) or Ctrl+O (Windows/Linux) for Quick Open
       if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
         e.preventDefault();

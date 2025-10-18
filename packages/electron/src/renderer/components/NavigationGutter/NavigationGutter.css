@@ -19,6 +19,11 @@
   padding: 4px 6px;
 }
 
+.nav-spacer {
+  width: 100%;
+  height: 16px;
+}
+
 .nav-modes {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-primary);

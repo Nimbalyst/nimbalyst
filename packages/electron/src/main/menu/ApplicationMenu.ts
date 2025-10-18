@@ -620,6 +620,37 @@ export async function createApplicationMenu() {
             label: 'View',
             submenu: [
                 {
+                    label: 'Files Mode',
+                    accelerator: 'CmdOrCtrl+E',
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('set-content-mode', 'files');
+                        }
+                    }
+                },
+                {
+                    label: 'Agent Mode',
+                    accelerator: 'CmdOrCtrl+K',
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('set-content-mode', 'agent');
+                        }
+                    }
+                },
+                {
+                    label: 'Plans Mode',
+                    accelerator: 'CmdOrCtrl+L',
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('set-content-mode', 'plan');
+                        }
+                    }
+                },
+                { type: 'separator' },
+                {
                     label: 'Navigate Back',
                     accelerator: process.platform === 'darwin' ? 'Cmd+Alt+Left' : 'Ctrl+Alt+Left',
                     click: async () => {
@@ -653,17 +684,18 @@ export async function createApplicationMenu() {
                 {
                     label: 'Agents',
                     submenu: [
-                        {
-                            label: 'Open Agent Command Palette',
-                            accelerator: 'CmdOrCtrl+K',
-                            click: async () => {
-                                const focused = BrowserWindow.getFocusedWindow();
-                                if (focused) {
-                                    focused.webContents.send('toggle-agent-palette');
-                                }
-                            }
-                        },
-                        { type: 'separator' },
+                        // COMMENTED OUT - Cmd+K now switches to Agent mode
+                        // {
+                        //     label: 'Open Agent Command Palette',
+                        //     accelerator: 'CmdOrCtrl+K',
+                        //     click: async () => {
+                        //         const focused = BrowserWindow.getFocusedWindow();
+                        //         if (focused) {
+                        //             focused.webContents.send('toggle-agent-palette');
+                        //         }
+                        //     }
+                        // },
+                        // { type: 'separator' },
                         {
                             label: 'Install Built-in Agents',
                             submenu: [

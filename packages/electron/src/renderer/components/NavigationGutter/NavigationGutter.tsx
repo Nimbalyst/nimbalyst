@@ -30,24 +30,28 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   onOpenHistory,
 }) => {
   // Content mode buttons - primary navigation (top)
-  const contentModeButtons: NavButton[] = [
+  const contentModeButtonsTop: NavButton[] = [
     {
       id: 'files',
       icon: 'account_tree',
-      label: 'Files',
+      label: 'Files (Cmd+E)',
       contentMode: 'files',
-    },
-    {
-      id: 'agent',
-      icon: 'code',
-      label: 'Agent',
-      contentMode: 'agent',
     },
     {
       id: 'plan',
       icon: 'edit_note',
-      label: 'Plans',
+      label: 'Plans (Cmd+L)',
       contentMode: 'plan',
+    },
+  ];
+
+  // Content mode buttons - agent section (after spacer)
+  const contentModeButtonsAgent: NavButton[] = [
+    {
+      id: 'agent',
+      icon: 'code',
+      label: 'Agent (Cmd+K)',
+      contentMode: 'agent',
     },
     {
       id: 'tracker',
@@ -85,9 +89,35 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 
   return (
     <div className="navigation-gutter">
-      {/* Content Mode Switcher */}
+      {/* Content Mode Switcher - Top Group (Files, Plans) */}
       <div className="nav-section nav-content-modes">
-        {contentModeButtons.map((button) => (
+        {contentModeButtonsTop.map((button) => (
+          <button
+            key={button.id}
+            className={`nav-button ${contentMode === button.contentMode ? 'active' : ''}`}
+            onClick={() => handleButtonClick(button)}
+            title={button.label}
+            aria-label={button.label}
+            aria-pressed={contentMode === button.contentMode}
+          >
+            <MaterialSymbol
+              icon={button.icon}
+              size={20}
+              fill={contentMode === button.contentMode}
+            />
+            {button.badge !== undefined && button.badge > 0 && (
+              <span className="nav-badge">{button.badge}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Spacer */}
+      <div className="nav-spacer" />
+
+      {/* Content Mode Switcher - Agent Group (Agent, Tracker) */}
+      <div className="nav-section nav-content-modes">
+        {contentModeButtonsAgent.map((button) => (
           <button
             key={button.id}
             className={`nav-button ${contentMode === button.contentMode ? 'active' : ''}`}
