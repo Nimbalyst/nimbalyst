@@ -34,6 +34,7 @@ import { BugsScreen } from './components/BugsScreen/BugsScreen';
 import { useTabs } from './hooks/useTabs';
 import { useTabNavigation } from './hooks/useTabNavigation';
 import type { ContentMode } from './types/WindowModeTypes';
+import { PlansPanel } from './components/PlansPanel/PlansPanel';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
 import { registerDecisionStatusPlugin } from './plugins/registerDecisionStatusPlugin';
@@ -1238,11 +1239,46 @@ export default function App() {
         <div style={{
           display: activeMode === 'plan' ? 'flex' : 'none',
           flex: 1,
-          flexDirection: 'column',
+          flexDirection: 'row',
           overflow: 'hidden',
           position: 'absolute',
           inset: 0
         }}>
+          {workspaceMode && (
+            <>
+              <div style={{ width: sidebarWidth, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                <PlansPanel
+                  currentFilePath={currentFilePath}
+                  onPlanSelect={handleWorkspaceFileSelect}
+                />
+              </div>
+              <div
+                style={{
+                  width: '5px',
+                  cursor: 'col-resize',
+                  backgroundColor: 'transparent',
+                  position: 'relative',
+                  zIndex: 10,
+                  marginLeft: '-2.5px',
+                  marginRight: '-2.5px'
+                }}
+                onMouseDown={handleMouseDown}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: '2px',
+                    width: '1px',
+                    backgroundColor: '#e5e7eb',
+                    transition: 'background-color 0.2s'
+                  }}
+                  className="sidebar-resize-handle"
+                />
+              </div>
+            </>
+          )}
           {workspaceMode || tabs.activeTab ? (
             <div className="plan-tabs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <TabManager

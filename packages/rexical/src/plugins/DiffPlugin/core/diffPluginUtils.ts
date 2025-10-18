@@ -326,9 +326,9 @@ export function $hasDiffNodes(editor: LexicalEditor): boolean {
   });
 
   if (diffNodesFound.length > 0) {
-    console.log('🔍 $hasDiffNodes found diff nodes:', diffNodesFound);
+    // console.log('🔍 $hasDiffNodes found diff nodes:', diffNodesFound);
   } else {
-    console.log('❌ $hasDiffNodes: NO diff nodes found');
+    // console.log('❌ $hasDiffNodes: NO diff nodes found');
   }
 
   return hasDiffNodes;
