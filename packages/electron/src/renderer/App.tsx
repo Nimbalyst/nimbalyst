@@ -1319,8 +1319,8 @@ export default function App() {
           {workspaceMode && workspacePath && (
             <AgenticPanel
               mode="agent"
-              mountLocation="main"
               workspacePath={workspacePath}
+              onContentModeChange={setActiveMode}
             />
           )}
         </div>

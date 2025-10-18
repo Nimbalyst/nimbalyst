@@ -26,6 +26,7 @@ export interface AgenticPanelProps {
 
   // Callbacks for external coordination
   onSessionChange?: (sessionId: string | null) => void;
+  onContentModeChange?: (mode: string) => void; // Switch to files mode when opening a document
 }
 
 interface SessionTab {
@@ -61,7 +62,8 @@ export function AgenticPanel({
   documentContext,
   initialSessionId,
   planDocumentPath,
-  onSessionChange
+  onSessionChange,
+  onContentModeChange
 }: AgenticPanelProps) {
   // Session state
   const [sessionTabs, setSessionTabs] = useState<SessionTab[]>([]);
@@ -608,6 +610,10 @@ export function AgenticPanel({
 
     setIsSending(true);
 
+    // Get the session to determine sessionType
+    const currentTab = sessionTabs.find(tab => tab.id === sessionId);
+    const sessionType = currentTab?.sessionData?.sessionType || (mode === 'agent' ? 'coding' : 'chat');
+
     // Add user message immediately
     setSessionTabs(prev => prev.map(tab => {
       if (tab.id === sessionId) {
@@ -647,10 +653,23 @@ export function AgenticPanel({
 
         contextToSend = {
           ...serializableContext,
+          sessionType,  // Include sessionType for MCP tool availability
           attachments: attachments.length > 0 ? attachments : undefined
         };
+
+        // Debug log to verify filePath is included
+        console.log('[AgenticPanel] Sending document context:', {
+          hasFilePath: !!contextToSend.filePath,
+          filePath: contextToSend.filePath,
+          sessionType: contextToSend.sessionType,
+          hasContent: !!contextToSend.content,
+          contentLength: contextToSend.content?.length
+        });
       } else if (attachments.length > 0) {
-        contextToSend = { attachments };
+        contextToSend = { attachments, sessionType };
+      } else {
+        // Even without document context or attachments, pass sessionType
+        contextToSend = { sessionType };
       }
 
       await window.electronAPI.aiSendMessage(
@@ -678,7 +697,7 @@ export function AgenticPanel({
         return tab;
       }));
     }
-  }, [workspacePath, mode, documentContext]);
+  }, [workspacePath, mode, documentContext, sessionTabs]);
 
   // Handle cancel request
   const handleCancelRequest = useCallback(async (sessionId: string) => {
@@ -717,10 +736,14 @@ export function AgenticPanel({
         workspacePath,
         filePath
       });
+      // Switch to files mode after opening the file
+      if (onContentModeChange) {
+        onContentModeChange('files');
+      }
     } catch (err) {
       console.error('[AgenticPanel] Failed to open file:', err);
     }
-  }, [workspacePath]);
+  }, [workspacePath, onContentModeChange]);
 
   // Tab management (agent mode only)
   const handleTabSelect = useCallback((tabId: string) => {
