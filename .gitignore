@@ -153,3 +153,4 @@ bundle-analysis.json
 worktrees/
 
 .preditor/
+.nimbalyst/

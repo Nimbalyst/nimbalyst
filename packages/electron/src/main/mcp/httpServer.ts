@@ -181,7 +181,7 @@ async function tryCreateServer(port: number): Promise<any> {
       // Create a new MCP server instance for this connection
       const server = new Server(
         {
-          name: 'preditor',
+          name: 'nimbalyst-mcp',
           version: '1.0.0'
         },
         {

@@ -65,7 +65,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       console.log(`[CLAUDE-CODE] Processing ${attachments.length} attachments`);
 
       // Create temp attachments directory in workspace
-      const tempAttachmentsDir = path.join(workspacePath, '.stravu', 'ai-chat-attachments', sessionId || 'default');
+      const tempAttachmentsDir = path.join(workspacePath, '.nimbalyst', 'ai-chat-attachments', sessionId || 'default');
       await fs.promises.mkdir(tempAttachmentsDir, { recursive: true });
 
       for (const attachment of attachments) {
