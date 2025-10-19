@@ -72,6 +72,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const isDirtyRef = useRef(isDirty);
   const lastChangeTimeRef = useRef<number>(0);
   const getContentFnRef = useRef<(() => string) | null>(null);
+  const editorRef = useRef<any>(null);
   const initialContentRef = useRef(initialContent);
   const lastSaveTimeRef = useRef<number | null>(lastSaveTime);
   const lastSavedContentRef = useRef<string>(lastSavedContent);
@@ -149,11 +150,28 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             }
           } else {
             // User chose to reload - update editor with disk content
+            // Update editor content programmatically to avoid remount
+            if (editorRef.current) {
+              try {
+                // Import Lexical functions from 'lexical' and rexical functions from 'rexical'
+                const { $getRoot } = await import('lexical');
+                const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+                const transformers = getEditorTransformers();
+
+                editorRef.current.update(() => {
+                  const root = $getRoot();
+                  root.clear();
+                  $convertFromEnhancedMarkdownString(result.diskContent, transformers);
+                });
+              } catch (error) {
+                logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
+              }
+            }
+
             setContent(result.diskContent);
             initialContentRef.current = result.diskContent;
             setLastSavedContent(result.diskContent);
             setIsDirty(false);
-            setReloadVersion(v => v + 1);
             return;
           }
         }
@@ -361,11 +379,29 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             }
           }
 
+          // Update editor content programmatically using Lexical API
+          // This avoids remounting and preserves focus
+          if (editorRef.current) {
+            try {
+              // Import Lexical functions from 'lexical' and rexical functions from 'rexical'
+              const { $getRoot } = await import('lexical');
+              const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+              const transformers = getEditorTransformers();
+
+              editorRef.current.update(() => {
+                const root = $getRoot();
+                root.clear();
+                $convertFromEnhancedMarkdownString(newContent, transformers);
+              });
+            } catch (error) {
+              logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
+            }
+          }
+
           setContent(newContent);
           initialContentRef.current = newContent;
           setLastSavedContent(newContent);
           setIsDirty(false);
-          setReloadVersion(v => v + 1);
 
           onDirtyChange?.(false);
         };
@@ -431,6 +467,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 if (onManualSaveReady) {
                   onManualSaveReady(handleManualSave);
                 }
+              },
+              onEditorReady: (editor) => {
+                editorRef.current = editor;
               },
               onSaveRequest: handleManualSave,
               textReplacements: isActive ? textReplacements : undefined,
