@@ -12,7 +12,7 @@ exports.default = async function(context) {
     return;
   }
   
-  const resourcesPath = path.join(appOutDir, 'Preditor.app/Contents/Resources');
+  const resourcesPath = path.join(appOutDir, 'Nimbalyst.app/Contents/Resources');
   const unpackedPath = path.join(resourcesPath, 'app.asar.unpacked/node_modules');
   
   // Source: where libvips actually is
