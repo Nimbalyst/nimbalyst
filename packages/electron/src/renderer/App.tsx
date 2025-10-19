@@ -140,7 +140,7 @@ export default function App() {
     // Set window title for Workspace Manager
     React.useEffect(() => {
       if (window.electronAPI) {
-        window.electronAPI.setTitle('Workspace Manager - Preditor');
+        window.electronAPI.setTitle('Workspace Manager - Nimbalyst');
       }
     }, []);
     return <WorkspaceManager />;
@@ -639,15 +639,15 @@ export default function App() {
   useEffect(() => {
     if (!window.electronAPI) return;
 
-    let title = 'Preditor';
+    let title = 'Nimbalyst';
     if (workspaceMode && workspaceName) {
       if (currentFileName) {
-        title = `${currentFileName}${isDirty ? ' •' : ''} - ${workspaceName} - Preditor`;
+        title = `${currentFileName}${isDirty ? ' •' : ''} - ${workspaceName} - Nimbalyst`;
       } else {
-        title = `${workspaceName} - Preditor`;
+        title = `${workspaceName} - Nimbalyst`;
       }
     } else if (currentFileName) {
-      title = `${currentFileName}${isDirty ? ' •' : ''} - Preditor`;
+      title = `${currentFileName}${isDirty ? ' •' : ''} - Nimbalyst`;
     }
 
     window.electronAPI.setTitle(title);

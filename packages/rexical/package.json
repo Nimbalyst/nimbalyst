@@ -14,12 +14,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/stravu/stravu-editor.git"
+    "url": "https://github.com/stravu/nimbalyst.git"
   },
   "bugs": {
-    "url": "https://github.com/stravu/stravu-editor/issues"
+    "url": "https://github.com/stravu/nimbalyst/issues"
   },
-  "homepage": "https://github.com/stravu/stravu-editor#readme",
+  "homepage": "https://github.com/stravu/nimbalyst#readme",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

@@ -136,7 +136,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
         {isFirstTime && (
           <div className="settings-welcome">
             <h3>Welcome to {workspaceName}!</h3>
-            <p>Configure your project below to get started with Preditor's planning and tracking features.</p>
+            <p>Configure your project below to get started with Nimbalyst's planning and tracking features.</p>
           </div>
         )}
 
@@ -180,7 +180,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
             Claude Code Integration
           </h3>
           <p className="settings-help">
-            Configure Claude Code to understand Preditor's extended markdown features for plans and tracking.
+            Configure Claude Code to understand Nimbalyst's extended markdown features for plans and tracking.
           </p>
 
           <div className="settings-field">
@@ -234,7 +234,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     />
                     <div className="checkbox-content">
                       <span className="checkbox-label">Configure CLAUDE.md</span>
-                      <span className="checkbox-description">Add Preditor-specific instructions</span>
+                      <span className="checkbox-description">Add Nimbalyst-specific instructions</span>
                     </div>
                   </div>
                 </label>

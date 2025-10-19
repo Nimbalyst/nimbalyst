@@ -1,13 +1,13 @@
 {
-  "name": "preditor-monorepo",
+  "name": "nimbalyst-monorepo",
   "version": "0.33.1",
   "private": true,
-  "description": "Monorepo for Preditor - A rich text editor built with Meta's Lexical framework",
+  "description": "Monorepo for Nimbalyst - A rich text editor built with Meta's Lexical framework",
   "author": "Stravu Team",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/stravu/preditor.git"
+    "url": "https://github.com/stravu/nimbalyst.git"
   },
   "type": "module",
   "scripts": {

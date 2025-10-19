@@ -1,10 +1,10 @@
 import { EventEmitter } from 'events';
 import { ipcMain } from 'electron';
-import type { ToolDefinition } from '@stravu/runtime/ai/server/types';
+import type { ToolDefinition } from '@nimbalyst/runtime/ai/server/types';
 import {
   ToolRegistry as RuntimeToolRegistry,
   toolRegistry as runtimeToolRegistry,
-} from '@stravu/runtime/ai/tools';
+} from '@nimbalyst/runtime/ai/tools';
 
 let bridgeInitialized = false;
 

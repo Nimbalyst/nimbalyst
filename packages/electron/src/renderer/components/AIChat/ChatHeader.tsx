@@ -5,8 +5,8 @@ import { ProviderIcon } from '../icons/ProviderIcons';
 import { parseModelInfo } from '../../utils/modelUtils';
 import { SessionDropdown } from './SessionDropdown';
 import { NewSessionButton } from './NewSessionButton';
-import type { SessionData } from '@stravu/runtime/ai/server/types';
-import { editorRegistry } from '@stravu/runtime/ai/EditorRegistry';
+import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
+import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 
 // Using SessionData directly from runtime package
 

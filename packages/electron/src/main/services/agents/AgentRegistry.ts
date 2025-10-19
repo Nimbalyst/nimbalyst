@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { Agent, AgentRegistryOptions } from '@stravu/runtime/agents';
+import { Agent, AgentRegistryOptions } from '@nimbalyst/runtime/agents';
 import { AgentValidator } from './AgentSchema';
 
 export class AgentRegistry extends EventEmitter {

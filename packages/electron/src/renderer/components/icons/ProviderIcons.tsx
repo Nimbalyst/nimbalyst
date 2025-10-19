@@ -9,4 +9,4 @@ export {
   GenericAIIcon,
   ProviderIcon,
   getProviderIcon
-} from '@stravu/runtime';
+} from '@nimbalyst/runtime';

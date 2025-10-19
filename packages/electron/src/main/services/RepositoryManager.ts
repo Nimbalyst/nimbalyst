@@ -7,9 +7,9 @@ import type {
   SessionStore,
   SessionFileStore,
   DocumentsRepository
-} from '@stravu/runtime';
+} from '@nimbalyst/runtime';
 import type { WorkspaceRepository } from '../types/workspace';
-import { AISessionsRepository, SessionFilesRepository } from '@stravu/runtime';
+import { AISessionsRepository, SessionFilesRepository } from '@nimbalyst/runtime';
 import { createPGLiteSessionStore } from './PGLiteSessionStore';
 import { createPGLiteSessionFileStore } from './PGLiteSessionFileStore';
 import { createPGLiteWorkspaceRepository } from './PGLiteWorkspaceRepository';

@@ -11,10 +11,10 @@ import {
   TrackerItem,
   TrackerItemChangeEvent,
   TrackerItemType
-} from '@stravu/runtime';
+} from '@nimbalyst/runtime';
 import crypto from 'crypto';
 import { extractFrontmatter, extractCommonFields } from '../utils/frontmatterReader';
-import { VIRTUAL_DOCS, isVirtualPath } from '@stravu/runtime';
+import { VIRTUAL_DOCS, isVirtualPath } from '@nimbalyst/runtime';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { shouldExcludeDir } from '../utils/fileFilters';
 

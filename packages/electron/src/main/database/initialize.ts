@@ -6,7 +6,7 @@
 import { app } from 'electron';
 import { database } from './PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
-import type { SessionStore } from '@stravu/runtime';
+import type { SessionStore } from '@nimbalyst/runtime';
 import { repositoryManager } from '../services/RepositoryManager';
 
 /**

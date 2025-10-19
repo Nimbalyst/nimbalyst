@@ -18,7 +18,7 @@ import type {
   FileListOptions,
   FileInfo,
   FileReadOptions
-} from '@stravu/runtime';
+} from '@nimbalyst/runtime';
 import { logger } from '../utils/logger';
 import { SafePathValidator } from '../security/SafePathValidator';
 import { shouldExcludeFile, shouldExcludeDir, GLOB_EXCLUDE_PATTERNS } from '../utils/fileFilters';

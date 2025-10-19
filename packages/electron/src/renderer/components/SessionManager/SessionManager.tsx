@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import type { SessionData } from '@stravu/runtime/ai/server/types';
-import { formatDate } from '@stravu/runtime';
+import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
+import { formatDate } from '@nimbalyst/runtime';
 import { ProviderIcon } from '../icons/ProviderIcons';
 import { WorkspaceHeader } from '../WorkspaceHeader';
 import './SessionManager.css';

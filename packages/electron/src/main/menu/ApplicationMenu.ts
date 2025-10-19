@@ -978,11 +978,11 @@ export async function createApplicationMenu() {
                 {
                     label: 'Open Debug Log',
                     click: async () => {
-                        const logPath = path.join(app.getPath('userData'), 'preditor-debug.log');
+                        const logPath = path.join(app.getPath('userData'), 'nimbalyst-debug.log');
 
                         // Create the log file if it doesn't exist
                         if (!fs.existsSync(logPath)) {
-                            fs.writeFileSync(logPath, `=== Preditor Debug Log ===\nNo debug messages yet.\n\nDebug logging is only active in development mode.\nTo enable debug logging in production, set NODE_ENV=development\n`);
+                            fs.writeFileSync(logPath, `=== Nimbalyst Debug Log ===\nNo debug messages yet.\n\nDebug logging is only active in development mode.\nTo enable debug logging in production, set NODE_ENV=development\n`);
                         }
 
                         shell.openPath(logPath).catch((err: any) => {
@@ -1002,7 +1002,7 @@ export async function createApplicationMenu() {
                             if (!fs.existsSync(logsDir)) {
                                 fs.mkdirSync(logsDir, { recursive: true });
                             }
-                            fs.writeFileSync(logPath, `=== Preditor Main Log ===\nNo log messages yet.\n\nThis log contains main process and application logs.\n`);
+                            fs.writeFileSync(logPath, `=== Nimbalyst Main Log ===\nNo log messages yet.\n\nThis log contains main process and application logs.\n`);
                         }
 
                         shell.openPath(logPath).catch((err: any) => {
@@ -1150,7 +1150,7 @@ Note: Only one connection at a time is supported.`,
             label: app.getName(),
             submenu: [
                 {
-                    label: 'About Preditor',
+                    label: 'About Nimbalyst',
                     click: async () => {
                         createAboutWindow();
                     }
@@ -1227,7 +1227,7 @@ Note: Only one connection at a time is supported.`,
                 },
                 { type: 'separator' },
                 {
-                    label: 'About Preditor',
+                    label: 'About Nimbalyst',
                     click: async () => {
                         createAboutWindow();
                     }
@@ -1261,7 +1261,7 @@ function isAboutWindow(window: BrowserWindow): boolean {
         return false;
     }
     // Check if this is the about window by checking the title
-    return window.getTitle() === 'About Preditor';
+    return window.getTitle() === 'About Nimbalyst';
 }
 
 // Helper to check if window is workspace manager window
@@ -1271,7 +1271,7 @@ function isWorkspaceManagerWindow(window: BrowserWindow): boolean {
         return false;
     }
     // Check if this is the workspace manager window by checking the title
-    return window.getTitle() === 'Workspace Manager - Preditor';
+    return window.getTitle() === 'Workspace Manager - Nimbalyst';
 }
 
 // Helper to check if window is session manager window

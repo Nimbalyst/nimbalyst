@@ -7,7 +7,7 @@ let isForceQuitting = false;
 
 function logToDebugFile(message: string) {
     try {
-        const debugLog = join(app.getPath('userData'), 'preditor-debug.log');
+        const debugLog = join(app.getPath('userData'), 'nimbalyst-debug.log');
         appendFileSync(debugLog, `[QUIT] ${new Date().toISOString()} - ${message}\n`);
     } catch (e) {
         // Ignore logging errors

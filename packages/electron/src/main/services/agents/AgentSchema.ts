@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import * as yaml from 'js-yaml';
-import type { Agent, AgentMetadata } from '@stravu/runtime/agents';
+import type { Agent, AgentMetadata } from '@nimbalyst/runtime/agents';
 
 const AgentParameterSchema = z.object({
   type: z.enum(['text', 'string', 'select', 'number', 'boolean']),

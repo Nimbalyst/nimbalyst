@@ -1,4 +1,4 @@
-import type { Agent, AgentExecutionOptions, AgentExecutionResult } from '@stravu/runtime/agents';
+import type { Agent, AgentExecutionOptions, AgentExecutionResult } from '@nimbalyst/runtime/agents';
 
 class AgentApi {
   private cache = new Map<string, Agent[]>();

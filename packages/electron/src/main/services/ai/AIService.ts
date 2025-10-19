@@ -4,8 +4,8 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import Store from 'electron-store';
-import { SessionManager, ProviderFactory, ModelRegistry, AIProvider } from '@stravu/runtime/ai/server';
-import type { SessionStore } from '@stravu/runtime';
+import { SessionManager, ProviderFactory, ModelRegistry, AIProvider } from '@nimbalyst/runtime/ai/server';
+import type { SessionStore } from '@nimbalyst/runtime';
 import type {
   DocumentContext,
   Message,
@@ -15,7 +15,7 @@ import type {
   DiffResult,
   AIProviderType,
   AIModel,
-} from '@stravu/runtime/ai/server/types';
+} from '@nimbalyst/runtime/ai/server/types';
 import { updateDocumentState } from '../../mcp/httpServer';
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 import { logger } from '../../utils/logger';
@@ -1148,7 +1148,7 @@ export class AIService {
           // Create provider with appropriate config
           const config: any = { apiKey };
 
-          const testProvider = new (await import('@stravu/runtime/ai/server/providers/ClaudeProvider')).ClaudeProvider();
+          const testProvider = new (await import('@nimbalyst/runtime/ai/server/providers/ClaudeProvider')).ClaudeProvider();
 
           // Use the provider's default model for testing (already includes prefix)
           const defaultModel = await ModelRegistry.getDefaultModel('claude');
@@ -1173,7 +1173,7 @@ export class AIService {
           console.log('[AIService] testConnection - Testing Claude Code provider');
 
           // Test using the regular Claude API to verify the key
-          const testProvider = new (await import('@stravu/runtime/ai/server/providers/ClaudeProvider')).ClaudeProvider();
+          const testProvider = new (await import('@nimbalyst/runtime/ai/server/providers/ClaudeProvider')).ClaudeProvider();
           const config: any = {
             apiKey,
             model: 'claude-3-5-sonnet-20241022'
@@ -1285,7 +1285,7 @@ export class AIService {
             // If commands array is empty, use the static fallback
             if (commands.length === 0) {
               console.log('[AIService] Provider returned empty commands, using static fallback');
-              const { ClaudeCodeProvider } = await import('@stravu/runtime/ai/server/providers/ClaudeCodeProvider');
+              const { ClaudeCodeProvider } = await import('@nimbalyst/runtime/ai/server/providers/ClaudeCodeProvider');
               const fallbackCommands = ClaudeCodeProvider.getKnownSlashCommands();
               console.log('[AIService] Using fallback commands:', fallbackCommands);
               return { success: true, commands: fallbackCommands };
@@ -1299,7 +1299,7 @@ export class AIService {
 
         // No provider found - return the known built-in commands as fallback
         console.log('[AIService] No provider found, using static Claude Code commands as fallback');
-        const { ClaudeCodeProvider } = await import('@stravu/runtime/ai/server/providers/ClaudeCodeProvider');
+        const { ClaudeCodeProvider } = await import('@nimbalyst/runtime/ai/server/providers/ClaudeCodeProvider');
         const fallbackCommands = ClaudeCodeProvider.getKnownSlashCommands();
         console.log('[AIService] Fallback commands:', fallbackCommands);
         return { success: true, commands: fallbackCommands };

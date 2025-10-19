@@ -3,7 +3,7 @@
  */
 
 import { pluginRegistry } from 'rexical';
-import { planStatusPluginPackage } from '@stravu/runtime';
+import { planStatusPluginPackage } from '@nimbalyst/runtime';
 import { getDocumentService } from '../services/RendererDocumentService';
 
 // Make document service and workspacePath globally available for the PlanTableComponent

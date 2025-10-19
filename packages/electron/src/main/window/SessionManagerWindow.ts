@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain, dialog, app } from 'electron';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { AISessionsRepository } from '@stravu/runtime';
+import { AISessionsRepository } from '@nimbalyst/runtime';
 import { getWorkspaceRepository } from '../services/RepositoryManager';
 import { database } from '../database/PGLiteDatabaseWorker';
 

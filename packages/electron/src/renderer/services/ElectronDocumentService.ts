@@ -1,4 +1,4 @@
-import { Document, DocumentService, DocumentOpenOptions } from '@stravu/runtime';
+import { Document, DocumentService, DocumentOpenOptions } from '@nimbalyst/runtime';
 
 // Access the electronAPI exposed by the preload script
 declare global {

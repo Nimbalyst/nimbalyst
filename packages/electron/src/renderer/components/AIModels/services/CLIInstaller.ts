@@ -59,7 +59,7 @@ export class CLIInstaller {
         options.onProgress?.({
           percent: 100,
           status: 'Node.js installation complete!',
-          log: 'Please restart Preditor to use Node.js'
+          log: 'Please restart Nimbalyst to use Node.js'
         });
       } finally {
         // Clean up listener

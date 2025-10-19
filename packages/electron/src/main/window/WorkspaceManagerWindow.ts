@@ -38,7 +38,7 @@ export function createWorkspaceManagerWindow() {
     height: 700,
     minWidth: 900,
     minHeight: 600,
-    title: 'Workspace Manager - Preditor',
+    title: 'Workspace Manager - Nimbalyst',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

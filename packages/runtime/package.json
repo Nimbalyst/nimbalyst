@@ -1,8 +1,8 @@
 {
-  "name": "@stravu/runtime",
+  "name": "@nimbalyst/runtime",
   "version": "0.1.0",
   "private": true,
-  "description": "Shared Preditor runtime: sessions, collab, AI hooks, plugins",
+  "description": "Shared Nimbalyst runtime: sessions, collab, AI hooks, plugins",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

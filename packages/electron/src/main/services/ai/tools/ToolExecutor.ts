@@ -4,7 +4,7 @@
 
 import { WebContents, ipcMain } from 'electron';
 import { EventEmitter } from 'events';
-import type { DiffArgs, DiffResult, ToolDefinition } from '@stravu/runtime/ai/server/types';
+import type { DiffArgs, DiffResult, ToolDefinition } from '@nimbalyst/runtime/ai/server/types';
 import { toolRegistry } from './ToolRegistry';
 import { logger } from '../../../utils/logger';
 import { sessionFileTracker } from '../../SessionFileTracker';

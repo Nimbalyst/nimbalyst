@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Codebase Overview
 
-This is Preditor - a rich text editor built with Meta's Lexical framework. Originally based on the Lexical playground, it's been adapted as the foundation for a new editor project with comprehensive features including rich text editing, tables, collaboration, code highlighting, and various plugins.
+This is Nimbalyst - a rich text editor built with Meta's Lexical framework. Originally based on the Lexical playground, it's been adapted as the foundation for a new editor project with comprehensive features including rich text editing, tables, collaboration, code highlighting, and various plugins.
 
 ## Development Commands
 
@@ -119,7 +119,7 @@ The Electron app supports notarized distribution for macOS:
 
 The Electron app (`packages/electron/`) includes a debug logging feature that captures all browser console messages in development mode. This is useful for debugging renderer-side issues and browser load problems.
 
-- **Log file location**: `~/Library/Application Support/@preditor/electron/preditor-debug.log` (macOS)
+- **Log file location**: `~/Library/Application Support/@nimbalyst/electron/nimbalyst-debug.log` (macOS)
 - **What's logged**: All browser console messages, main process logs, timestamps, source locations, and log levels
 - **When active**: Only in development mode (`NODE_ENV !== 'production'`)
 - **Implementation**: See `packages/electron/src/main/index.ts` - uses `webContents.on('console-message')` event
@@ -290,7 +290,7 @@ The application supports multiple AI providers, including two distinct ways to a
 
 ## Data Persistence
 
-The Preditor app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage, providing a robust database system that works both in development and packaged builds.
+The Nimbalyst app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage, providing a robust database system that works both in development and packaged builds.
 
 ### Database System
 - **Technology**: PGLite (PostgreSQL in WebAssembly) running in Node.js worker thread
@@ -306,10 +306,10 @@ The Preditor app uses **PGLite** (PostgreSQL in WebAssembly) for all data storag
 - **document\_history**: Compressed document edit history with binary content storage
 
 ### Data Locations
-- **Database**: `~/Library/Application Support/@preditor/electron/pglite-db/` (macOS)
-- **Logs**: `~/Library/Application Support/@preditor/electron/logs/` - Application logs
-- **Debug log**: `~/Library/Application Support/@preditor/electron/preditor-debug.log` - Debug console output
-- **Legacy files**: `~/Library/Application Support/@preditor/electron/history/` - Preserved file-based history (migrated to database)
+- **Database**: `~/Library/Application Support/@nimbalyst/electron/pglite-db/` (macOS)
+- **Logs**: `~/Library/Application Support/@nimbalyst/electron/logs/` - Application logs
+- **Debug log**: `~/Library/Application Support/@nimbalyst/electron/nimbalyst-debug.log` - Debug console output
+- **Legacy files**: `~/Library/Application Support/@nimbalyst/electron/history/` - Preserved file-based history (migrated to database)
 
 ### Migration System
 - **Automatic migration**: File-based data automatically migrates to database on first startup

@@ -10,7 +10,7 @@ import { getFolderContents } from '../utils/FileTree';
 import { getTitleBarColors } from '../theme/ThemeManager';
 import { ElectronDocumentService, setupDocumentServiceHandlers } from '../services/ElectronDocumentService';
 import { ElectronFileSystemService } from '../services/ElectronFileSystemService';
-import { setFileSystemService, clearFileSystemService } from '@stravu/runtime';
+import { setFileSystemService, clearFileSystemService } from '@nimbalyst/runtime';
 import { navigationHistoryService } from '../services/NavigationHistoryService';
 
 // Window management
@@ -162,7 +162,7 @@ export function createWindow(
             height,
             x,
             y,
-            title: isWorkspaceMode && workspacePath ? basename(workspacePath) : 'Preditor',
+            title: isWorkspaceMode && workspacePath ? basename(workspacePath) : 'Nimbalyst',
             backgroundColor,
             webPreferences: {
                 nodeIntegration: false,

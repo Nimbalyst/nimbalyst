@@ -3,7 +3,7 @@
  */
 
 import { pluginRegistry } from 'rexical';
-import { decisionStatusPluginPackage } from '@stravu/runtime';
+import { decisionStatusPluginPackage } from '@nimbalyst/runtime';
 import { getDocumentService } from '../services/RendererDocumentService';
 
 // Make document service and workspacePath globally available for the DecisionTableComponent

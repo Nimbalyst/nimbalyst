@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
-import { AgentTranscriptPanel, TodoItem, FileEditSummary } from '@stravu/runtime';
-import type { SessionData, ChatAttachment } from '@stravu/runtime/ai/server/types';
+import { AgentTranscriptPanel, TodoItem, FileEditSummary } from '@nimbalyst/runtime';
+import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AIInput } from './AIInput';
 import { FileGutter } from '../AIChat/FileGutter';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';

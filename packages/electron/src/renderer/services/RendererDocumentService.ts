@@ -7,7 +7,7 @@ import {
   TrackerItem,
   TrackerItemChangeEvent,
   TrackerItemType
-} from '@stravu/runtime';
+} from '@nimbalyst/runtime';
 
 /**
  * Renderer-side DocumentService that communicates with the main process

@@ -2,7 +2,7 @@
  * PGLite implementation of DocumentsRepository interface from runtime package
  */
 
-import type { DocumentsRepository, DocumentRecord } from '@stravu/runtime';
+import type { DocumentsRepository, DocumentRecord } from '@nimbalyst/runtime';
 
 type PGliteLike = {
   query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }>;

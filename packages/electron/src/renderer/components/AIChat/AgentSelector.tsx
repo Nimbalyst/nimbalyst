@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Agent } from '@stravu/runtime/agents';
+import { Agent } from '@nimbalyst/runtime/agents';
 import './AgentSelector.css';
 
 interface AgentSelectorProps {

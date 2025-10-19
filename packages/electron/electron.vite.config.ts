@@ -95,9 +95,9 @@ const resolveWorkspaceSubpaths = () => {
     resolveId(source: string, importer?: string) {
       if (isDev) return null; // Only apply in production
 
-      // Handle @stravu/runtime subpaths
-      if (source.startsWith('@stravu/runtime/')) {
-        const subpath = source.replace('@stravu/runtime/', '');
+      // Handle @nimbalyst/runtime subpaths
+      if (source.startsWith('@nimbalyst/runtime/')) {
+        const subpath = source.replace('@nimbalyst/runtime/', '');
         return resolve(runtimeDistDir, subpath, 'index.js');
       }
 
@@ -111,10 +111,11 @@ export default defineConfig({
     plugins: [resolveWorkspaceSubpaths()],
     resolve: {
       alias: {
-        // Normalize legacy name to current
-        '@stravu-editor/runtime': '@stravu/runtime',
+        // Normalize legacy names to current
+        '@stravu-editor/runtime': '@nimbalyst/runtime',
+        '@stravu/runtime': '@nimbalyst/runtime',
         // Always use src for bundling - simpler than dealing with ESM/CJS issues
-        '@stravu/runtime': runtimeSrcDir,
+        '@nimbalyst/runtime': runtimeSrcDir,
         'rexical': resolve(__dirname, '../rexical/src')
       }
     },
@@ -147,8 +148,9 @@ export default defineConfig({
   preload: {
     resolve: {
       alias: {
-        '@stravu-editor/runtime': '@stravu/runtime',
-        '@stravu/runtime': runtimeSrcDir,
+        '@stravu-editor/runtime': '@nimbalyst/runtime',
+        '@stravu/runtime': '@nimbalyst/runtime',
+        '@nimbalyst/runtime': runtimeSrcDir,
         'rexical': resolve(__dirname, '../rexical/src')
       }
     },
@@ -219,8 +221,9 @@ export default defineConfig({
         // Block mermaid imports to prevent large bundle
         '@excalidraw/mermaid-to-excalidraw': resolve(__dirname, '../rexical/src/mocks/mermaid-mock.ts'),
         // Ensure renderer also points runtime imports at source
-        '@stravu-editor/runtime': '@stravu/runtime',
-        '@stravu/runtime': runtimeSrcDir,
+        '@stravu-editor/runtime': '@nimbalyst/runtime',
+        '@stravu/runtime': '@nimbalyst/runtime',
+        '@nimbalyst/runtime': runtimeSrcDir,
         'rexical/styles': resolve(__dirname, '../rexical/src/themes/PlaygroundEditorTheme.css'),
         'rexical': resolve(__dirname, '../rexical/src')
       },
@@ -229,7 +232,7 @@ export default defineConfig({
         'react-dom',
         'lexical',
         '@lexical/react',
-        '@stravu/runtime'
+        '@nimbalyst/runtime'
       ]
     },
     optimizeDeps: {
@@ -242,6 +245,7 @@ export default defineConfig({
         '@shikijs/langs',
         'prettier',
         'rexical',
+        '@nimbalyst/runtime',
         '@stravu/runtime',
         '@stravu-editor/runtime'
       ],

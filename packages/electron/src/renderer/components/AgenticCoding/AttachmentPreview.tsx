@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ChatAttachment } from '@stravu/runtime';
+import type { ChatAttachment } from '@nimbalyst/runtime';
 import './AttachmentPreview.css';
 
 interface AttachmentPreviewProps {

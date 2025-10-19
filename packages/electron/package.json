@@ -1,11 +1,11 @@
 {
-  "name": "@preditor/electron",
+  "name": "@nimbalyst/electron",
   "version": "0.42.38",
   "private": true,
-  "description": "Electron app for Preditor",
+  "description": "Electron app for Nimbalyst",
   "main": "out/main/index.js",
   "bin": {
-    "preditor": "./bin/preditor"
+    "nimbalyst": "./bin/nimbalyst"
   },
   "scripts": {
     "start": "electron-vite preview",
@@ -40,7 +40,7 @@
     "@electric-sql/pglite": "^0.3.8",
     "@excalidraw/excalidraw": "0.17.6",
     "@modelcontextprotocol/sdk": "^1.20.0",
-    "@stravu/runtime": "*",
+    "@nimbalyst/runtime": "*",
     "@types/glob": "^8.1.0",
     "@types/js-yaml": "^4.0.9",
     "@types/marked": "^5.0.2",
@@ -99,8 +99,8 @@
     "vitest": "^3.2.4"
   },
   "build": {
-    "appId": "com.stravu.preditor",
-    "productName": "Preditor",
+    "appId": "com.nimbalyst.electron",
+    "productName": "Nimbalyst",
     "electronVersion": "37.2.6",
     "nodeGypRebuild": false,
     "buildDependenciesFromSource": false,
@@ -111,7 +111,7 @@
       {
         "provider": "github",
         "owner": "stravu",
-        "repo": "preditor-releases",
+        "repo": "nimbalyst-releases",
         "releaseType": "release"
       }
     ],

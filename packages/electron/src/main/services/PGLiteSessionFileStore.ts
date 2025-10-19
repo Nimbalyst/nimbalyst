@@ -3,7 +3,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import type { SessionFileStore, FileLink, FileLinkType } from '@stravu/runtime';
+import type { SessionFileStore, FileLink, FileLinkType } from '@nimbalyst/runtime';
 
 type PGliteLike = {
   query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }>;

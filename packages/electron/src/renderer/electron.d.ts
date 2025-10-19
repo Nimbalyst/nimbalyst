@@ -158,7 +158,7 @@ interface ElectronAPI {
   }
 
   // Document Service
-  documentService: import('@stravu/runtime').DocumentService;
+  documentService: import('@nimbalyst/runtime').DocumentService;
 
   // Open AI Models window
   openAIModels: () => Promise<void>;

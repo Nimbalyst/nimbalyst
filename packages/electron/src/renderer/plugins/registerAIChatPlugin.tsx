@@ -3,7 +3,7 @@
  */
 
 import { pluginRegistry, type PluginPackage } from 'rexical';
-import { AIChatIntegrationPlugin } from '@stravu/runtime/ai/plugins/AIChatIntegrationPlugin';
+import { AIChatIntegrationPlugin } from '@nimbalyst/runtime/ai/plugins/AIChatIntegrationPlugin';
 
 // Create plugin package for AI Chat Integration
 const aiChatPluginPackage: PluginPackage = {

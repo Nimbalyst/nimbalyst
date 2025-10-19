@@ -1,6 +1,6 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { join } from 'path';
-import { AISessionsRepository } from '@stravu/runtime';
+import { AISessionsRepository } from '@nimbalyst/runtime';
 import { getAgenticCodingWindowState, saveAgenticCodingWindowState } from '../utils/store';
 import { windows, windowStates, windowFocusOrder, windowDevToolsState, incrementFocusOrderCounter } from './WindowManager';
 

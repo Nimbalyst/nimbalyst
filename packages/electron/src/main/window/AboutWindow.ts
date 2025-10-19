@@ -20,7 +20,7 @@ export function createAboutWindow() {
         minimizable: false,
         maximizable: false,
         fullscreenable: false,
-        title: 'About Preditor',
+        title: 'About Nimbalyst',
         show: false,
         backgroundColor: isDarkTheme ? '#2a2a2a' : '#ffffff',
         titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',

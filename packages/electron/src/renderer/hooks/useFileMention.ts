@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getDocumentService } from '../services/RendererDocumentService';
-import type { Document } from '@stravu/runtime';
+import type { Document } from '@nimbalyst/runtime';
 import type { TypeaheadOption } from '../components/Typeahead/GenericTypeahead';
 
 export interface FileMentionReference {

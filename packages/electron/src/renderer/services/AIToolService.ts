@@ -6,8 +6,8 @@
  * executor and the actual tool implementations.
  */
 
-import { editorRegistry } from '@stravu/runtime/ai/EditorRegistry';
-import type { DiffResult } from '@stravu/runtime/ai/server/types';
+import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
+import type { DiffResult } from '@nimbalyst/runtime/ai/server/types';
 
 export interface ToolExecutionRequest {
   toolName: string;

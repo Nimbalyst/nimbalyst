@@ -3,8 +3,8 @@
  * Automatically tracks file interactions during AI sessions
  */
 
-import { SessionFilesRepository } from '@stravu/runtime';
-import type { FileLinkType, EditedFileMetadata, ReadFileMetadata, ReferencedFileMetadata } from '@stravu/runtime';
+import { SessionFilesRepository } from '@nimbalyst/runtime';
+import type { FileLinkType, EditedFileMetadata, ReadFileMetadata, ReferencedFileMetadata } from '@nimbalyst/runtime';
 import { logger } from '../utils/logger';
 
 /**

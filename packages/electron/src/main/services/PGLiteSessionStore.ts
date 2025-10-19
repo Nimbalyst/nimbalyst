@@ -9,7 +9,7 @@ import type {
   UpdateSessionMetadataPayload,
   ChatMessage,
   ChatSession
-} from '@stravu/runtime';
+} from '@nimbalyst/runtime';
 
 type PGliteLike = {
   query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }>;

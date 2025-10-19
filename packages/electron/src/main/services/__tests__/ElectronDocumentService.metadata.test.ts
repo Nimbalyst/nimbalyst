@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { ElectronDocumentService } from '../ElectronDocumentService';
-import type { MetadataChangeEvent } from '@stravu/runtime';
+import type { MetadataChangeEvent } from '@nimbalyst/runtime';
 
 describe('ElectronDocumentService - Metadata Cache', () => {
   let tempDir: string;

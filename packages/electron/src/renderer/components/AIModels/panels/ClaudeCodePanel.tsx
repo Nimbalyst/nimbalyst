@@ -290,7 +290,7 @@ export function ClaudeCodePanel({
 
       setInstallationProgress(prev => ({
         ...prev,
-        status: 'Node.js installed! Please restart Preditor.',
+        status: 'Node.js installed! Please restart Nimbalyst.',
         progress: 100
       }));
     } catch (error: any) {

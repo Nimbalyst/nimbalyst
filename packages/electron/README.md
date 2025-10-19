@@ -1,6 +1,6 @@
-# Stravu Editor - Electron App
+# Nimbalyst - Electron App
 
-This package contains the Electron desktop application for Stravu Editor - a rich text editor built with Meta's Lexical framework.
+This package contains the Electron desktop application for Nimbalyst - a rich text editor built with Meta's Lexical framework.
 
 ## Development
 
@@ -113,7 +113,7 @@ npm run build:mac:local
   - `ipc/` - IPC handlers for renderer communication
   - `mcp/` - Model Context Protocol server for Claude Code
 - `src/preload/` - Preload scripts for security
-- `src/renderer/` - Renderer process (uses the main stravu-editor library)
+- `src/renderer/` - Renderer process (uses the main nimbalyst library)
   - `components/AIChat/` - AI chat interface components
   - `components/AIModels/` - AI model configuration UI
 
@@ -134,9 +134,9 @@ For distribution on macOS without security warnings:
 In development mode (`NODE_ENV !== 'production'`), the Electron app automatically captures all browser console messages and writes them to a debug log file. This is useful for debugging browser load issues and renderer-side problems.
 
 The debug log file location:
-- **macOS**: `~/Library/Application Support/stravu-editor/stravu-editor-debug.log`
-- **Windows**: `%APPDATA%/stravu-editor/stravu-editor-debug.log`
-- **Linux**: `~/.config/stravu-editor/stravu-editor-debug.log`
+- **macOS**: `~/Library/Application Support/nimbalyst/nimbalyst-debug.log`
+- **Windows**: `%APPDATA%/nimbalyst/nimbalyst-debug.log`
+- **Linux**: `~/.config/nimbalyst/nimbalyst-debug.log`
 
 The log file includes:
 - All browser console messages (log, warn, error, info, debug)

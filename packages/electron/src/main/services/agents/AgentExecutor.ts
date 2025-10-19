@@ -2,7 +2,7 @@ import type {
   Agent,
   AgentExecutionOptions,
   AgentExecutionResult,
-} from '@stravu/runtime/agents';
+} from '@nimbalyst/runtime/agents';
 import { AgentValidator } from './AgentSchema';
 
 export interface AISessionInterface {

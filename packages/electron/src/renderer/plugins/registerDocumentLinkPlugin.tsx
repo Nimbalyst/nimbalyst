@@ -8,7 +8,7 @@ import {
   DocumentLinkPlugin,
   DocumentReferenceNode,
   DocumentReferenceTransformer
-} from '@stravu/runtime';
+} from '@nimbalyst/runtime';
 import { ElectronRendererDocumentService } from '../services/ElectronDocumentService';
 import { TypeaheadMenuPlugin, useAnchorElem } from 'rexical';
 

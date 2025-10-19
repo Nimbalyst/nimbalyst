@@ -145,7 +145,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
         {/* Header */}
         <div className="welcome-modal-header">
           <h2>
-            {currentStep === 'welcome' && 'Welcome to Preditor'}
+            {currentStep === 'welcome' && 'Welcome to Nimbalyst'}
             {currentStep === 'plans-location' && 'Configure Plans Location'}
             {currentStep === 'claude-code' && 'Configure Claude Code Integration'}
             {currentStep === 'first-plan' && 'Create Your First Plan'}
@@ -169,7 +169,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
             <div className="welcome-step">
               <h3>Welcome to {workspaceName}</h3>
               <p>
-                Preditor is a powerful editor with integrated planning, tracking, and AI features.
+                Nimbalyst is a powerful editor with integrated planning, tracking, and AI features.
                 This quick setup will help you get started.
               </p>
               <div className="welcome-features">
@@ -282,7 +282,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
           {currentStep === 'claude-code' && (
             <div className="claude-code-step">
               <p className="step-description">
-                Configure Claude Code to understand Preditor's extended markdown features for
+                Configure Claude Code to understand Nimbalyst's extended markdown features for
                 plans and tracking.
               </p>
 
@@ -330,7 +330,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
                       onChange={(e) => setConfigureCLAUDEmd(e.target.checked)}
                     />
                     <span>
-                      <strong>CLAUDE.md</strong> - Add Preditor-specific instructions
+                      <strong>CLAUDE.md</strong> - Add Nimbalyst-specific instructions
                     </span>
                   </label>
 
@@ -447,7 +447,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
                 <p>
                   <strong>Need help?</strong>
                 </p>
-                <p>Access documentation from the Help menu or visit the Preditor website.</p>
+                <p>Access documentation from the Help menu or visit the Nimbalyst website.</p>
               </div>
             </div>
           )}

@@ -21,7 +21,7 @@ export function WorkspaceWelcome({ workspaceName }: WorkspaceWelcomeProps) {
           {iconUrl && (
             <img
               src={iconUrl}
-              alt="Preditor"
+              alt="Nimbalyst"
               onError={(e) => {
                 // Hide the image if it fails to load
                 (e.target as HTMLImageElement).style.display = 'none';

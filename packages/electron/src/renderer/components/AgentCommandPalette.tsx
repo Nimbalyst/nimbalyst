@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { Agent } from '@stravu/runtime/agents';
+import type { Agent } from '@nimbalyst/runtime/agents';
 import { agentApi } from '../services/agentApi';
 import { aiApi } from '../services/aiApi';
 import './AgentCommandPalette.css';

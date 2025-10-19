@@ -218,8 +218,8 @@ export const WorkspaceManager: React.FC = () => {
       <div className="sidebar">
         <div className="sidebar-header">
           <div className="app-branding">
-            <img src="./icon.png" alt="Preditor" className="app-logo" />
-            <h2>Preditor</h2>
+            <img src="./icon.png" alt="Nimbalyst" className="app-logo" />
+            <h2>Nimbalyst</h2>
           </div>
           <div className="action-buttons">
             <button className="btn btn-primary" onClick={handleBrowse}>
@@ -329,9 +329,9 @@ export const WorkspaceManager: React.FC = () => {
           <div className="welcome-container">
             <div className="welcome-content">
               <div className="welcome-header">
-                <img src="./icon.png" alt="Preditor" className="welcome-logo" />
+                <img src="./icon.png" alt="Nimbalyst" className="welcome-logo" />
                 <div className="welcome-text">
-                  <h1 className="welcome-title">Preditor</h1>
+                  <h1 className="welcome-title">Nimbalyst</h1>
                   <p className="welcome-subtitle">AI-native markdown editor</p>
                 </div>
               </div>

@@ -3,7 +3,7 @@
  */
 
 import { ipcMain } from 'electron';
-import { SessionFilesRepository } from '@stravu/runtime';
+import { SessionFilesRepository } from '@nimbalyst/runtime';
 import { logger } from '../utils/logger';
 
 export function setupSessionFileHandlers(): void {

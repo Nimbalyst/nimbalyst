@@ -4,32 +4,54 @@ import { join, dirname, basename } from 'path';
 import { logger } from '../utils/logger';
 
 /**
- * Migrates user data from old app location to new location
- * Old: ~/Library/Application Support/@stravu-editor/electron/
- * New: ~/Library/Application Support/Preditor/
+ * Migrates user data from old app locations to new location
+ * Old paths to check (in order of precedence):
+ * 1. ~/Library/Application Support/@preditor/electron/
+ * 2. ~/Library/Application Support/@stravu-editor/electron/
+ * New: ~/Library/Application Support/@nimbalyst/electron/
  */
 export async function migrateUserData(): Promise<boolean> {
     try {
         const platform = process.platform;
         const homeDir = app.getPath('home');
-        
-        let oldPath: string;
+
+        let oldPaths: string[] = [];
         let newPath: string = app.getPath('userData');
-        
-        // Determine old path based on platform
+
+        // Determine old paths based on platform (check Nimbalyst first, then stravu-editor)
         if (platform === 'darwin') {
             // macOS
-            oldPath = join(homeDir, 'Library', 'Application Support', '@stravu-editor', 'electron');
+            oldPaths = [
+                join(homeDir, 'Library', 'Application Support', '@preditor', 'electron'),
+                join(homeDir, 'Library', 'Application Support', '@stravu-editor', 'electron')
+            ];
         } else if (platform === 'win32') {
             // Windows
-            oldPath = join(homeDir, 'AppData', 'Roaming', '@stravu-editor', 'electron');
+            oldPaths = [
+                join(homeDir, 'AppData', 'Roaming', '@preditor', 'electron'),
+                join(homeDir, 'AppData', 'Roaming', '@stravu-editor', 'electron')
+            ];
         } else {
             // Linux
-            oldPath = join(homeDir, '.config', '@stravu-editor', 'electron');
+            oldPaths = [
+                join(homeDir, '.config', '@preditor', 'electron'),
+                join(homeDir, '.config', '@stravu-editor', 'electron')
+            ];
+        }
+
+        // Find the first existing old path
+        let oldPath: string | undefined;
+        let migrationSource: string | undefined;
+        for (const path of oldPaths) {
+            if (existsSync(path)) {
+                oldPath = path;
+                migrationSource = path.includes('@preditor') ? 'preditor' : 'stravu-editor';
+                break;
+            }
         }
         
         // Check if old directory exists and new directory doesn't have data yet
-        if (!existsSync(oldPath)) {
+        if (!oldPath) {
             logger.main.info('No old user data found to migrate');
             return false;
         }
@@ -41,7 +63,7 @@ export async function migrateUserData(): Promise<boolean> {
             return false;
         }
         
-        logger.main.info(`Migrating user data from ${oldPath} to ${newPath}`);
+        logger.main.info(`Migrating user data from ${migrationSource} (${oldPath}) to ${newPath}`);
         
         // Create new directory if it doesn't exist
         if (!existsSync(newPath)) {
@@ -63,7 +85,8 @@ export async function migrateUserData(): Promise<boolean> {
         const dirsToMigrate = [
             'history',               // Document history
             'logs',                  // Application logs
-            'sessions'               // Session data
+            'sessions',              // Session data
+            'pglite-db'              // PGLite database
         ];
         
         // Migrate files
@@ -100,15 +123,16 @@ export async function migrateUserData(): Promise<boolean> {
         try {
             if (existsSync(newConfigPath)) {
                 const configContent = readFileSync(newConfigPath, 'utf8');
-                const updatedContent = configContent.replace(/stravu-editor-debug\.log/g, 'preditor-debug.log');
+                let updatedContent = configContent.replace(/stravu-editor-debug\.log/g, 'nimbalyst-debug.log');
+                updatedContent = updatedContent.replace(/preditor-debug\.log/g, 'nimbalyst-debug.log');
                 writeFileSync(newConfigPath, updatedContent);
             }
         } catch (error) {
             logger.main.error('Failed to update debug log references:', error);
         }
-        
+
         // Create a migration marker file
-        const migrationMarker = join(newPath, '.migrated-from-stravu-editor');
+        const migrationMarker = join(newPath, `.migrated-from-${migrationSource}`);
         writeFileSync(migrationMarker, new Date().toISOString());
         
         logger.main.info('User data migration completed successfully');
@@ -156,34 +180,49 @@ export function cleanupOldUserData(): void {
     try {
         const platform = process.platform;
         const homeDir = app.getPath('home');
-        
-        let oldPath: string;
-        
-        // Determine old path based on platform
+
+        let oldPaths: string[];
+
+        // Determine old paths based on platform
         if (platform === 'darwin') {
-            oldPath = join(homeDir, 'Library', 'Application Support', '@stravu-editor');
+            oldPaths = [
+                join(homeDir, 'Library', 'Application Support', '@preditor'),
+                join(homeDir, 'Library', 'Application Support', '@stravu-editor')
+            ];
         } else if (platform === 'win32') {
-            oldPath = join(homeDir, 'AppData', 'Roaming', '@stravu-editor');
+            oldPaths = [
+                join(homeDir, 'AppData', 'Roaming', '@preditor'),
+                join(homeDir, 'AppData', 'Roaming', '@stravu-editor')
+            ];
         } else {
-            oldPath = join(homeDir, '.config', '@stravu-editor');
+            oldPaths = [
+                join(homeDir, '.config', '@preditor'),
+                join(homeDir, '.config', '@stravu-editor')
+            ];
         }
-        
+
         // Check if migration marker exists in new location
         const newPath = app.getPath('userData');
-        const migrationMarker = join(newPath, '.migrated-from-stravu-editor');
-        
-        if (!existsSync(migrationMarker)) {
+        const migrationMarkers = [
+            join(newPath, '.migrated-from-preditor'),
+            join(newPath, '.migrated-from-stravu-editor')
+        ];
+
+        const hasMigrationMarker = migrationMarkers.some(marker => existsSync(marker));
+        if (!hasMigrationMarker) {
             logger.main.info('Migration marker not found, skipping cleanup');
             return;
         }
-        
-        // Rename old directory to backup instead of deleting
-        if (existsSync(oldPath)) {
-            const backupPath = `${oldPath}.backup-${Date.now()}`;
-            renameSync(oldPath, backupPath);
-            logger.main.info(`Moved old user data to backup: ${backupPath}`);
+
+        // Rename old directories to backup instead of deleting
+        for (const oldPath of oldPaths) {
+            if (existsSync(oldPath)) {
+                const backupPath = `${oldPath}.backup-${Date.now()}`;
+                renameSync(oldPath, backupPath);
+                logger.main.info(`Moved old user data to backup: ${backupPath}`);
+            }
         }
-        
+
     } catch (error) {
         logger.main.error('Failed to cleanup old user data:', error);
     }

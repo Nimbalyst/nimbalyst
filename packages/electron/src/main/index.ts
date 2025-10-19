@@ -1,5 +1,5 @@
 import { app, BrowserWindow, nativeTheme, nativeImage, ipcMain, globalShortcut, dialog } from 'electron';
-import type { SessionStore } from '@stravu/runtime';
+import type { SessionStore } from '@nimbalyst/runtime';
 import { join } from 'path';
 import * as path from 'path';
 import { existsSync, writeFileSync, appendFileSync, readFileSync } from 'fs';
@@ -97,7 +97,7 @@ function initializeLogging() {
     logger.main.info('Application logging initialized');
 
     // Always capture error logs for debugging
-    const debugLogPath = join(app.getPath('userData'), 'preditor-debug.log');
+    const debugLogPath = join(app.getPath('userData'), 'nimbalyst-debug.log');
 
     // Initialize or append to log
     try {

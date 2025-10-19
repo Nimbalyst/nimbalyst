@@ -247,9 +247,9 @@ export class OnboardingService {
           // File exists, append to it
           const content = result.content;
 
-          // Check if Preditor section already exists
-          if (content.includes('## Preditor Planning System')) {
-            console.log('CLAUDE.md already has Preditor section, skipping');
+          // Check if Nimbalyst section already exists
+          if (content.includes('## Nimbalyst Planning System')) {
+            console.log('CLAUDE.md already has Nimbalyst section, skipping');
             return;
           }
 
@@ -338,7 +338,7 @@ ${preditorSection}`;
     const directory = plansDirectory || config.plansLocation.split('/')[0];
 
     const gitignorePath = joinPath(workspacePath, '.gitignore');
-    const ignoreEntry = `\n# Preditor local plans (not checked into version control)\n${directory}/\n`;
+    const ignoreEntry = `\n# Nimbalyst local plans (not checked into version control)\n${directory}/\n`;
 
     try {
       // Try to read existing .gitignore
@@ -541,9 +541,9 @@ Example: "Fix login button not responding on mobile"
     const config = this.currentConfig;
     const plansLocation = config?.plansLocation || 'plans';
 
-    return `## Preditor Planning System
+    return `## Nimbalyst Planning System
 
-This project uses Preditor's structured markdown-based planning system for organizing development work.
+This project uses Nimbalyst's structured markdown-based planning system for organizing development work.
 
 ### Plan Documents
 - **Location**: All plans are stored in the \`${plansLocation}/\` directory
@@ -616,7 +616,7 @@ planStatus:
 
 ## Goals
 
-This is an example plan document to help you get started with Preditor's planning system.
+This is an example plan document to help you get started with Nimbalyst's planning system.
 
 Key objectives:
 1. Demonstrate the plan document structure
@@ -625,7 +625,7 @@ Key objectives:
 
 ## Overview
 
-Plans in Preditor are markdown documents with YAML frontmatter that track features, bugs, and other development work. The frontmatter includes metadata like status, priority, and progress that powers the plan view interface.
+Plans in Nimbalyst are markdown documents with YAML frontmatter that track features, bugs, and other development work. The frontmatter includes metadata like status, priority, and progress that powers the plan view interface.
 
 ## Implementation Details
 

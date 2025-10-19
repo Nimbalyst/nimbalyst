@@ -2,7 +2,7 @@
 
 set -e
 
-# Release script for Preditor Electron app
+# Release script for Nimbalyst Electron app
 # Usage: ./scripts/release.sh [patch|minor|major]
 
 BUMP_TYPE=$1

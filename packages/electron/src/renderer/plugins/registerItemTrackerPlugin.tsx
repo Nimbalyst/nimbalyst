@@ -3,7 +3,7 @@
  */
 
 import { pluginRegistry } from 'rexical';
-import { itemTrackerPluginPackage } from '@stravu/runtime';
+import { itemTrackerPluginPackage } from '@nimbalyst/runtime';
 
 // Register the plugin
 export function registerItemTrackerPlugin(): void {

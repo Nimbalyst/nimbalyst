@@ -7,7 +7,7 @@ import {
   serializeWithFrontmatter,
   type FrontmatterData,
 } from 'rexical';
-import { editorRegistry } from '@stravu/runtime/ai/EditorRegistry';
+import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 
 const PLAN_STATUS_KEYS = new Set([
   'planId',
@@ -433,7 +433,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       // NOTE: initialContentRef removed - TabEditor tracks this per-tab
       // Update the window title immediately
       if (window.electronAPI) {
-        window.electronAPI.setTitle(`${data.untitledName} • - Preditor`);
+        window.electronAPI.setTitle(`${data.untitledName} • - Nimbalyst`);
         window.electronAPI.setDocumentEdited(true);
       }
     }));

@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, KeyboardEvent, useState, useCallback } from 'react';
 import { GenericTypeahead, TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import { extractTriggerMatch, insertAtTrigger, TriggerMatch } from '../Typeahead/typeaheadUtils';
-import type { ChatAttachment } from '@stravu/runtime';
+import type { ChatAttachment } from '@nimbalyst/runtime';
 import { AttachmentPreviewList } from './AttachmentPreviewList';
 import '../AIChat/AIChat.css';
 

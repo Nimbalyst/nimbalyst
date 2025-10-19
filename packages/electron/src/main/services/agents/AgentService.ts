@@ -1,4 +1,4 @@
-import type { Agent } from '@stravu/runtime/agents';
+import type { Agent } from '@nimbalyst/runtime/agents';
 import { AgentRegistry } from './AgentRegistry';
 import { AgentExecutor } from './AgentExecutor';
 import { ipcMain, BrowserWindow } from 'electron';

@@ -8,7 +8,7 @@ export {
   BUILT_IN_TOOLS,
   toAnthropicTools,
   toOpenAITools,
-} from '@stravu/runtime/ai/tools';
+} from '@nimbalyst/runtime/ai/tools';
 
 // Re-export types for convenience
-export type { ToolDefinition } from '@stravu/runtime/ai/server/types';
+export type { ToolDefinition } from '@nimbalyst/runtime/ai/server/types';

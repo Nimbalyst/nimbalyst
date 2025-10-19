@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
-import { SessionManager } from '@stravu/runtime/ai/server';
-import { AISessionsRepository } from '@stravu/runtime';
-import type { AIProviderType } from '@stravu/runtime/ai/server/types';
+import { SessionManager } from '@nimbalyst/runtime/ai/server';
+import { AISessionsRepository } from '@nimbalyst/runtime';
+import type { AIProviderType } from '@nimbalyst/runtime/ai/server/types';
 
 // Initialize session manager
 const sessionManager = new SessionManager();

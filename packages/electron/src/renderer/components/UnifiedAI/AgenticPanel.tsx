@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { SessionData, ChatAttachment } from '@stravu/runtime/ai/server/types';
+import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AISessionView } from './AISessionView';
 import { SessionDropdown } from '../AIChat/SessionDropdown';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';

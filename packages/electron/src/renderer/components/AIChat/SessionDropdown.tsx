@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MaterialSymbol } from '../MaterialSymbol';
 import { parseModelInfo, getProviderLabel } from '../../utils/modelUtils';
-import type { SessionData } from '@stravu/runtime/ai/server/types';
-import { formatDate } from '@stravu/runtime';
+import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
+import { formatDate } from '@nimbalyst/runtime';
 import './SessionDropdown.css';
 
 // SessionDropdownItem extends SessionData with message count for display
