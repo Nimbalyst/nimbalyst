@@ -66,6 +66,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [lastSaveTime, setLastSaveTime] = useState<number | null>(null);
   const [lastSavedContent, setLastSavedContent] = useState(initialContent);
   const [reloadVersion, setReloadVersion] = useState(0);
+  const [showConflictDialog, setShowConflictDialog] = useState(false);
+  const [conflictDialogContent, setConflictDialogContent] = useState<string>('');
+  const [showBackgroundChangeDialog, setShowBackgroundChangeDialog] = useState(false);
+  const [backgroundChangeContent, setBackgroundChangeContent] = useState<string>('');
 
   // Refs for stable access in timers/callbacks
   const contentRef = useRef(content);
@@ -90,6 +94,66 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     isDirtyRef.current = isDirty;
   }, [isDirty]);
 
+  // Check if file changed on disk when tab becomes active
+  useEffect(() => {
+    if (!isActive || !window.electronAPI) return;
+
+    const checkDiskContent = async () => {
+      // Don't check if we're already showing a conflict dialog
+      if (showConflictDialog || showBackgroundChangeDialog) {
+        return;
+      }
+
+      try {
+        const result = await window.electronAPI.readFileContent(filePath);
+        if (!result || typeof result !== 'object' || !('content' in result)) {
+          return;
+        }
+
+        const diskContent = result.content || '';
+        const currentContent = contentRef.current;
+
+        if (diskContent !== currentContent && diskContent !== lastSavedContentRef.current) {
+          // If there are unsaved changes, show dialog
+          if (isDirtyRef.current) {
+            setBackgroundChangeContent(diskContent);
+            setShowBackgroundChangeDialog(true);
+          } else {
+            // No unsaved changes - just auto-reload
+            setContent(diskContent);
+            initialContentRef.current = diskContent;
+            setLastSavedContent(diskContent);
+            lastSavedContentRef.current = diskContent;
+            contentRef.current = diskContent;
+
+            // Update via Lexical API
+            if (editorRef.current) {
+              try {
+                const { $getRoot } = await import('lexical');
+                const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+                const transformers = getEditorTransformers();
+
+                editorRef.current.update(() => {
+                  const root = $getRoot();
+                  root.clear();
+                  $convertFromEnhancedMarkdownString(diskContent, transformers);
+                });
+              } catch (error) {
+                logger.ui.error(`[TabEditor] Failed to update editor:`, error);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`[TabEditor ${fileName}] Error checking disk content:`, error);
+      }
+    };
+
+    // Small delay to let the tab switch animation complete
+    const timer = setTimeout(checkDiskContent, 300);
+    return () => clearTimeout(timer);
+  }, [isActive, filePath, fileName, onDirtyChange, showConflictDialog, showBackgroundChangeDialog]);
+
   useEffect(() => {
     lastSaveTimeRef.current = lastSaveTime;
   }, [lastSaveTime]);
@@ -97,6 +161,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   useEffect(() => {
     lastSavedContentRef.current = lastSavedContent;
   }, [lastSavedContent]);
+
 
   // Helper: Save file with history snapshot
   const saveWithHistory = useCallback(async (
@@ -307,9 +372,20 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     return () => clearInterval(timer);
   }, [periodicSnapshotInterval, filePath, fileName]);
 
-  // File watching
+  // File watching - use ref to ensure we only register once
+  const fileWatcherRegisteredRef = useRef(false);
+
   useEffect(() => {
-    if (!window.electronAPI) return;
+    if (!window.electronAPI) {
+      return;
+    }
+
+    // Only register once per component instance
+    if (fileWatcherRegisteredRef.current) {
+      return;
+    }
+
+    fileWatcherRegisteredRef.current = true;
 
     const processingChangeRef = { current: false };
 
@@ -320,18 +396,17 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         return;
       }
 
-      // Skip if already processing
+      // Skip if already processing THIS SPECIFIC CHANGE
+      // Don't use a long timeout - we want to process subsequent changes
       if (processingChangeRef.current) {
-        logger.ui.info(`[TabEditor] Already processing file change for ${fileName}, skipping`);
         return;
       }
       processingChangeRef.current = true;
 
       try {
-        logger.ui.info(`[TabEditor] File changed on disk: ${fileName}`);
-
         const result = await window.electronAPI.readFileContent(data.path);
         if (!result || typeof result !== 'object' || !('content' in result)) {
+          processingChangeRef.current = false;
           return;
         }
 
@@ -340,7 +415,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         // Check if disk content matches current editor content
         if (newContent === currentContent) {
-          logger.ui.info(`[TabEditor] Disk content matches editor for ${fileName}, skipping reload`);
+          processingChangeRef.current = false;
           return;
         }
 
@@ -350,19 +425,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         const contentMatchesLastSave = newContent === lastSavedContentRef.current;
 
         if (contentMatchesLastSave) {
-          logger.ui.info(`[TabEditor] Disk content matches last save for ${fileName}, skipping reload`);
+          processingChangeRef.current = false;
           return;
         }
 
         // Also check time-based heuristic as a fallback
         const timeSinceLastSave = lastSaveTimeRef.current ? Date.now() - lastSaveTimeRef.current : Infinity;
-        if (timeSinceLastSave < 3000) {
-          logger.ui.info(`[TabEditor] File change within 3s of save for ${fileName}, assuming our own save`);
+        if (timeSinceLastSave < 2000) {
+          processingChangeRef.current = false;
           return;
         }
-
-        // External change detected
-        logger.ui.info(`[TabEditor] External change detected for ${fileName}`);
 
         const applyReload = async () => {
           // Create history snapshot of external change
@@ -379,11 +451,20 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             }
           }
 
+          // Update state
+          setContent(newContent);
+          initialContentRef.current = newContent;
+          setLastSavedContent(newContent);
+          lastSavedContentRef.current = newContent;
+          contentRef.current = newContent;
+          setIsDirty(false);
+          isDirtyRef.current = false;
+          onDirtyChange?.(false);
+
           // Update editor content programmatically using Lexical API
-          // This avoids remounting and preserves focus
+          // Works for both active and inactive tabs since editor is still mounted
           if (editorRef.current) {
             try {
-              // Import Lexical functions from 'lexical' and rexical functions from 'rexical'
               const { $getRoot } = await import('lexical');
               const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
               const transformers = getEditorTransformers();
@@ -397,49 +478,114 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
             }
           }
-
-          setContent(newContent);
-          initialContentRef.current = newContent;
-          setLastSavedContent(newContent);
-          setIsDirty(false);
-
-          onDirtyChange?.(false);
         };
 
         // Protect dirty files from being overwritten
         if (isDirtyRef.current) {
-          const shouldReload = window.confirm(
-              `The file "${fileName}" has been changed on disk but you have unsaved changes.\n\n` +
-              'Do you want to reload the file from disk and lose your changes?\n\n' +
-              'Click OK to reload from disk, or Cancel to keep your changes.'
-          );
-
-          if (shouldReload) {
-            await applyReload();
-          }
+          // Store the new content and show dialog
+          setConflictDialogContent(newContent);
+          setShowConflictDialog(true);
+          processingChangeRef.current = false;
           return;
         }
 
         await applyReload();
       } finally {
-        // Use a longer timeout to prevent rapid refires
-        setTimeout(() => {
-          processingChangeRef.current = false;
-        }, 1000);
+        // Release the lock immediately after processing
+        // This allows rapid successive changes to be processed
+        processingChangeRef.current = false;
       }
     };
 
-    logger.ui.info(`[TabEditor] Registering file watcher for: ${fileName} (${filePath})`);
     window.electronAPI.on('file-changed-on-disk', handleFileChanged);
 
     // Cleanup function - CRITICAL: This must remove the exact same function reference
     return () => {
-      logger.ui.info(`[TabEditor] Unregistering file watcher for: ${fileName} (${filePath})`);
       window.electronAPI.off('file-changed-on-disk', handleFileChanged);
+      // Reset the ref so it can be re-registered if needed
+      fileWatcherRegisteredRef.current = false;
     };
     // NOTE: onDirtyChange is NOT in dependencies to prevent re-registering listeners
     // We call it directly in handleFileChanged which captures the current value
   }, [filePath, fileName]);
+
+  // Handle conflict dialog actions
+  const handleReloadFromDisk = useCallback(async () => {
+    const newContent = conflictDialogContent;
+    setShowConflictDialog(false);
+    setConflictDialogContent('');
+
+    // Apply the reload
+    setContent(newContent);
+    initialContentRef.current = newContent;
+    setLastSavedContent(newContent);
+    lastSavedContentRef.current = newContent;
+    contentRef.current = newContent;
+    setIsDirty(false);
+    isDirtyRef.current = false;
+    onDirtyChange?.(false);
+
+    // Update editor content
+    if (editorRef.current) {
+      try {
+        const { $getRoot } = await import('lexical');
+        const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+        const transformers = getEditorTransformers();
+
+        editorRef.current.update(() => {
+          const root = $getRoot();
+          root.clear();
+          $convertFromEnhancedMarkdownString(newContent, transformers);
+        });
+      } catch (error) {
+        logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
+      }
+    }
+  }, [conflictDialogContent, fileName, onDirtyChange]);
+
+  const handleKeepLocalChanges = useCallback(() => {
+    setShowConflictDialog(false);
+    setConflictDialogContent('');
+  }, []);
+
+  // Handle background change dialog actions
+  const handleReloadFromBackground = useCallback(async () => {
+    const diskContent = backgroundChangeContent;
+    setShowBackgroundChangeDialog(false);
+    setBackgroundChangeContent('');
+
+    // Apply the reload
+    setContent(diskContent);
+    initialContentRef.current = diskContent;
+    setLastSavedContent(diskContent);
+    lastSavedContentRef.current = diskContent;
+    contentRef.current = diskContent;
+    setIsDirty(false);
+    isDirtyRef.current = false;
+    onDirtyChange?.(false);
+
+    // Update editor content
+    if (editorRef.current) {
+      try {
+        const { $getRoot } = await import('lexical');
+        const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+        const transformers = getEditorTransformers();
+
+        editorRef.current.update(() => {
+          const root = $getRoot();
+          root.clear();
+          $convertFromEnhancedMarkdownString(diskContent, transformers);
+        });
+      } catch (error) {
+        logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
+      }
+    }
+  }, [backgroundChangeContent, fileName, onDirtyChange]);
+
+  const handleKeepEditorContent = useCallback(() => {
+    setShowBackgroundChangeDialog(false);
+    setBackgroundChangeContent('');
+  }, []);
 
   return (
       <div
@@ -449,13 +595,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           style={{
             display: isActive ? 'block' : 'none',
             height: '100%',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            position: 'relative'
           }}
       >
         <StravuEditor
             key={`${filePath}-theme-${theme}`}
             config={{
-              initialContent: content,
+              initialContent,
               theme,
               onContentChange: handleContentChange,
               onGetContent: (getContentFn) => {
@@ -475,6 +622,138 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               textReplacements: isActive ? textReplacements : undefined,
             }}
         />
+
+        {showConflictDialog && (
+          <div
+            className="file-conflict-dialog-overlay"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000
+            }}
+          >
+            <div
+              className="file-conflict-dialog"
+              style={{
+                backgroundColor: 'var(--surface-primary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '8px',
+                padding: '24px',
+                maxWidth: '500px',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
+              }}
+            >
+              <h3 style={{ marginTop: 0, color: 'var(--text-primary)' }}>File Changed on Disk</h3>
+              <p style={{ color: 'var(--text-secondary)' }}>
+                The file "{fileName}" has been changed on disk but you have unsaved changes.
+              </p>
+              <p style={{ color: 'var(--text-secondary)' }}>
+                Do you want to reload the file from disk and lose your changes?
+              </p>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={handleKeepLocalChanges}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: 'var(--surface-secondary)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '4px',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Keep My Changes
+                </button>
+                <button
+                  onClick={handleReloadFromDisk}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: 'var(--primary-color)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Reload from Disk
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showBackgroundChangeDialog && (
+          <div
+            className="file-background-change-dialog-overlay"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000
+            }}
+          >
+            <div
+              className="file-background-change-dialog"
+              style={{
+                backgroundColor: 'var(--surface-primary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: '8px',
+                padding: '24px',
+                maxWidth: '500px',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
+              }}
+            >
+              <h3 style={{ marginTop: 0, color: 'var(--text-primary)' }}>File Changed While Inactive</h3>
+              <p style={{ color: 'var(--text-secondary)' }}>
+                The file "{fileName}" has changed on disk while this tab was in the background.
+              </p>
+              <p style={{ color: 'var(--text-secondary)' }}>
+                Do you want to reload the file from disk?
+              </p>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '24px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={handleKeepEditorContent}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: 'var(--surface-secondary)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '4px',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Keep Current Content
+                </button>
+                <button
+                  onClick={handleReloadFromBackground}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: 'var(--primary-color)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Reload from Disk
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
   );
 };

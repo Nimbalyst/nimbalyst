@@ -460,10 +460,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         if (tabToClose) {
           // console.log('[FILE_DELETED] Closing tab for deleted file:', data.filePath, 'tab id:', tabToClose.id);
 
-          // Show notification that file was deleted
-          const fileName = data.filePath.split('/').pop() || data.filePath;
-          alert(`The file "${fileName}" has been deleted from disk.`);
-
           // If this is the active tab, we need to immediately clear state to prevent autosave
           if (stateRef.current.tabs.activeTabId === tabToClose.id) {
             // console.log('[FILE_DELETED] This is the active tab, clearing file path immediately');
@@ -484,8 +480,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         handlersRef.current.setCurrentFilePath(null);
         isDirtyRef.current = true;
         handlersRef.current.setIsDirty(true);
-        // Optionally show a notification to the user
-        alert('The file has been deleted from disk.');
       }
     }));
 
