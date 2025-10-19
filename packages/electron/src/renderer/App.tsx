@@ -1173,7 +1173,7 @@ export default function App() {
                 activeTabId={tabs.activeTabId}
                 theme={theme}
                 onManualSaveReady={(saveFn) => {
-                  console.log('[App] onManualSaveReady called, storing save function');
+                  // console.log('[App] onManualSaveReady called, storing save function');
                   handleSaveRef.current = saveFn;
                 }}
                 onSaveComplete={(filePath) => {

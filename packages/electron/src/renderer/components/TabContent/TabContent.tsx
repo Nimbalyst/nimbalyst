@@ -142,9 +142,11 @@ export const TabContent: React.FC<TabContentProps> = ({
 
         // Mark as loading
         loadingRef.current.add(tab.id);
+        logger.ui.info(`[TabContent] Loading content for tab: ${tab.fileName} (${tab.filePath})`);
 
         // Load content
         const content = await loadContent(tab.filePath);
+        logger.ui.info(`[TabContent] Loaded content for ${tab.fileName}, length: ${content.length}`);
         setTabContents(prev => new Map(prev).set(tab.id, content));
 
         // Mark as done loading
@@ -229,7 +231,7 @@ export const TabContent: React.FC<TabContentProps> = ({
         // Don't render editor until we have content loaded
         // Check if content has been loaded (including empty files)
         // Use .has() to distinguish between "not loaded" vs "loaded but empty"
-        const hasContent = tabContents.has(tab.id) || tab.content !== undefined;
+        const hasContent = tabContents.has(tab.id);
         if (!hasContent) {
           return (
             <div
