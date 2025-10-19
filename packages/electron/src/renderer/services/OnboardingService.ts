@@ -79,7 +79,7 @@ export class OnboardingService {
    * Load onboarding configuration from project
    */
   async loadConfig(workspacePath: string): Promise<OnboardingConfig> {
-    const configPath = joinPath(workspacePath, '.preditor', 'config.json');
+    const configPath = joinPath(workspacePath, '.nimbalyst', 'config.json');
 
     try {
       const result = await window.electronAPI.readFileContent(configPath);
@@ -102,13 +102,13 @@ export class OnboardingService {
    * Save onboarding configuration to project
    */
   async saveConfig(workspacePath: string, config: OnboardingConfig): Promise<void> {
-    const preditorDir = joinPath(workspacePath, '.preditor');
-    const configPath = joinPath(preditorDir, 'config.json');
+    const nimbalystDir = joinPath(workspacePath, '.nimbalyst');
+    const configPath = joinPath(nimbalystDir, 'config.json');
 
     try {
-      // Ensure .preditor directory exists
+      // Ensure .nimbalyst directory exists
       try {
-        await window.electronAPI.createFolder(preditorDir);
+        await window.electronAPI.createFolder(nimbalystDir);
       } catch (err) {
         // Directory might already exist, that's okay
       }

@@ -196,7 +196,7 @@ export class ElectronDocumentService implements DocumentService {
 
       for (const item of items) {
         // Skip hidden files and excluded directories (including worktrees)
-        if (item.startsWith('.') && item !== '.preditor') {
+        if (item.startsWith('.') && item !== '.nimbalyst') {
           continue;
         }
 
@@ -759,8 +759,8 @@ export class ElectronDocumentService implements DocumentService {
     };
     const extension = extensionMap[mimeType] || 'png';
 
-    // Ensure .preditor/assets directory exists
-    const assetsDir = path.join(this.workspacePath, '.preditor', 'assets');
+    // Ensure .nimbalyst/assets directory exists
+    const assetsDir = path.join(this.workspacePath, '.nimbalyst', 'assets');
     await fs.mkdir(assetsDir, { recursive: true });
 
     // Write file with hash as name
@@ -780,7 +780,7 @@ export class ElectronDocumentService implements DocumentService {
   }
 
   async getAssetPath(hash: string): Promise<string | null> {
-    const assetsDir = path.join(this.workspacePath, '.preditor', 'assets');
+    const assetsDir = path.join(this.workspacePath, '.nimbalyst', 'assets');
 
     // Try common extensions
     const extensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
@@ -798,7 +798,7 @@ export class ElectronDocumentService implements DocumentService {
   }
 
   async garbageCollectAssets(): Promise<number> {
-    const assetsDir = path.join(this.workspacePath, '.preditor', 'assets');
+    const assetsDir = path.join(this.workspacePath, '.nimbalyst', 'assets');
 
     try {
       // Check if assets directory exists
@@ -810,7 +810,7 @@ export class ElectronDocumentService implements DocumentService {
 
     // Scan all markdown files for asset references
     const referencedHashes = new Set<string>();
-    const assetRegex = /\.preditor\/assets\/([a-f0-9]+)\./g;
+    const assetRegex = /\.nimbalyst\/assets\/([a-f0-9]+)\./g;
 
     for (const doc of this.documents) {
       const fullPath = path.join(this.workspacePath, doc.path);
