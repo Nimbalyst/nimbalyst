@@ -45,21 +45,21 @@ interface TabEditorProps {
 }
 
 export const TabEditor: React.FC<TabEditorProps> = ({
-  filePath,
-  fileName,
-  initialContent,
-  theme,
-  isActive,
-  textReplacements,
-  autosaveInterval = 2000,
-  autosaveDebounce = 200,
-  periodicSnapshotInterval = 300000,
-  onDirtyChange,
-  onSaveComplete,
-  onContentChange,
-  onManualSaveReady,
-  onGetContentReady,
-}) => {
+                                                      filePath,
+                                                      fileName,
+                                                      initialContent,
+                                                      theme,
+                                                      isActive,
+                                                      textReplacements,
+                                                      autosaveInterval = 2000,
+                                                      autosaveDebounce = 200,
+                                                      periodicSnapshotInterval = 300000,
+                                                      onDirtyChange,
+                                                      onSaveComplete,
+                                                      onContentChange,
+                                                      onManualSaveReady,
+                                                      onGetContentReady,
+                                                    }) => {
   // Internal state - fully owned by this component
   const [content, setContent] = useState(initialContent);
   const [isDirty, setIsDirty] = useState(false);
@@ -75,6 +75,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const initialContentRef = useRef(initialContent);
   const lastSaveTimeRef = useRef<number | null>(lastSaveTime);
   const lastSavedContentRef = useRef<string>(lastSavedContent);
+  const isSavingRef = useRef<boolean>(false);
+  const saveIdRef = useRef<number>(0);
+  const pendingSaveIdsRef = useRef<Set<number>>(new Set());
+  const instanceIdRef = useRef<number>(Math.floor(Math.random() * 10000));
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -95,12 +99,19 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
   // Helper: Save file with history snapshot
   const saveWithHistory = useCallback(async (
-    contentToSave: string,
-    snapshotType: 'auto' | 'manual' = 'auto'
+      contentToSave: string,
+      snapshotType: 'auto' | 'manual' = 'auto'
   ) => {
     if (!window.electronAPI) return;
 
     try {
+      // Generate a unique save ID to track this specific save operation
+      const thisSaveId = ++saveIdRef.current;
+      pendingSaveIdsRef.current.add(thisSaveId);
+
+      // Set saving flag BEFORE saving to prevent file watcher from reloading
+      isSavingRef.current = true;
+
       // Update refs BEFORE saving so file watcher can detect it's our own save
       // CRITICAL: Update both ref and state synchronously to ensure file watcher sees the change
       const saveTime = Date.now();
@@ -109,13 +120,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       setLastSaveTime(saveTime);
       setLastSavedContent(contentToSave);
 
-      logger.ui.info(`[TabEditor] Saving ${fileName}, set lastSaveTime to ${saveTime}`);
+      logger.ui.info(`[TabEditor] Saving ${fileName}, saveId=${thisSaveId}`);
 
       // Save to disk with conflict detection
       const result = await window.electronAPI.saveFile(
-        contentToSave,
-        filePath,
-        initialContentRef.current
+          contentToSave,
+          filePath,
+          initialContentRef.current
       );
 
       if (result) {
@@ -123,9 +134,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         if (result.conflict) {
           logger.ui.info('[TabEditor] Save conflict detected, prompting user');
           const shouldOverwrite = window.confirm(
-            'The file has been modified externally since you opened it.\n\n' +
-            'Do you want to overwrite the external changes with your edits?\n\n' +
-            'Click OK to overwrite, or Cancel to reload the file from disk.'
+              'The file has been modified externally since you opened it.\n\n' +
+              'Do you want to overwrite the external changes with your edits?\n\n' +
+              'Click OK to overwrite, or Cancel to reload the file from disk.'
           );
 
           if (shouldOverwrite) {
@@ -153,10 +164,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             const description = snapshotType === 'manual' ? 'Manual save' : 'Auto-save';
             const dbSnapshotType = snapshotType === 'manual' ? 'manual' : 'auto-save';
             await window.electronAPI.history.createSnapshot(
-              result.filePath,
-              contentToSave,
-              dbSnapshotType,
-              description
+                result.filePath,
+                contentToSave,
+                dbSnapshotType,
+                description
             );
           } catch (error) {
             logger.ui.error(`[TabEditor] Failed to create history snapshot for ${filePath}:`, error);
@@ -170,12 +181,23 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Notify parent
         onSaveComplete?.(result.filePath);
         onDirtyChange?.(false);
+
+        // Clear this save ID after a delay to ensure file watcher events are processed
+        // File watchers can be slow, especially on macOS, so use a generous timeout
+        setTimeout(() => {
+          pendingSaveIdsRef.current.delete(thisSaveId);
+          // Only clear isSaving if no pending saves
+          if (pendingSaveIdsRef.current.size === 0) {
+            isSavingRef.current = false;
+          }
+        }, 10000);
       }
     } catch (error) {
       logger.ui.error(`[TabEditor] Failed to save file ${filePath}:`, error);
       // Reset refs on error
       setLastSaveTime(null);
       lastSaveTimeRef.current = null;
+      isSavingRef.current = false;
       throw error;
     }
   }, [filePath, fileName, onSaveComplete, onDirtyChange]);
@@ -252,10 +274,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         if (currentContent && currentContent !== lastContent && currentContent !== '') {
           logger.ui.info(`[TabEditor] Creating periodic snapshot for: ${fileName}`);
           await window.electronAPI.history.createSnapshot(
-            filePath,
-            currentContent,
-            'auto-save',
-            'Periodic auto-save'
+              filePath,
+              currentContent,
+              'auto-save',
+              'Periodic auto-save'
           );
           lastSnapshotContentRef.current = currentContent;
         }
@@ -304,14 +326,20 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           return;
         }
 
-        // Check if this is our own recent save
-        // We check BOTH time-based and content-based matching to avoid false positives
-        const timeSinceLastSave = lastSaveTimeRef.current ? Date.now() - lastSaveTimeRef.current : Infinity;
+        // CRITICAL: Check if this is content we just saved
+        // If the disk content matches what we last saved, this is definitely our own save
+        // Don't reload even if the user has typed more since then
         const contentMatchesLastSave = newContent === lastSavedContentRef.current;
-        const contentMatchesEditor = newContent === currentContent;
 
-        if (timeSinceLastSave < 3000 && (contentMatchesLastSave || contentMatchesEditor)) {
-          logger.ui.info(`[TabEditor] Ignoring file change (our own save of ${fileName}), timeSince=${timeSinceLastSave}ms`);
+        if (contentMatchesLastSave) {
+          logger.ui.info(`[TabEditor] Disk content matches last save for ${fileName}, skipping reload`);
+          return;
+        }
+
+        // Also check time-based heuristic as a fallback
+        const timeSinceLastSave = lastSaveTimeRef.current ? Date.now() - lastSaveTimeRef.current : Infinity;
+        if (timeSinceLastSave < 3000) {
+          logger.ui.info(`[TabEditor] File change within 3s of save for ${fileName}, assuming our own save`);
           return;
         }
 
@@ -323,10 +351,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           if (window.electronAPI?.history && newContent) {
             try {
               await window.electronAPI.history.createSnapshot(
-                data.path,
-                newContent,
-                'external-change',
-                'File modified externally'
+                  data.path,
+                  newContent,
+                  'external-change',
+                  'File modified externally'
               );
             } catch (error) {
               logger.ui.error(`[TabEditor] Failed to create history snapshot:`, error);
@@ -345,9 +373,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Protect dirty files from being overwritten
         if (isDirtyRef.current) {
           const shouldReload = window.confirm(
-            `The file "${fileName}" has been changed on disk but you have unsaved changes.\n\n` +
-            'Do you want to reload the file from disk and lose your changes?\n\n' +
-            'Click OK to reload from disk, or Cancel to keep your changes.'
+              `The file "${fileName}" has been changed on disk but you have unsaved changes.\n\n` +
+              'Do you want to reload the file from disk and lose your changes?\n\n' +
+              'Click OK to reload from disk, or Cancel to keep your changes.'
           );
 
           if (shouldReload) {
@@ -378,36 +406,36 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   }, [filePath, fileName]);
 
   return (
-    <div
-      className={`tab-editor multi-editor-instance ${isActive ? 'active' : 'hidden'}`}
-      data-active={isActive ? 'true' : 'false'}
-      data-file-path={filePath}
-      style={{
-        display: isActive ? 'block' : 'none',
-        height: '100%',
-        overflow: 'hidden'
-      }}
-    >
-      <StravuEditor
-        key={`${filePath}-v${reloadVersion}-theme-${theme}`}
-        config={{
-          initialContent: content,
-          theme,
-          onContentChange: handleContentChange,
-          onGetContent: (getContentFn) => {
-            getContentFnRef.current = getContentFn;
-            if (onGetContentReady) {
-              onGetContentReady(getContentFn);
-            }
-            // Now that we have getContentFn, expose the manual save function
-            if (onManualSaveReady) {
-              onManualSaveReady(handleManualSave);
-            }
-          },
-          onSaveRequest: handleManualSave,
-          textReplacements: isActive ? textReplacements : undefined,
-        }}
-      />
-    </div>
+      <div
+          className={`tab-editor multi-editor-instance ${isActive ? 'active' : 'hidden'}`}
+          data-active={isActive ? 'true' : 'false'}
+          data-file-path={filePath}
+          style={{
+            display: isActive ? 'block' : 'none',
+            height: '100%',
+            overflow: 'hidden'
+          }}
+      >
+        <StravuEditor
+            key={`${filePath}-theme-${theme}`}
+            config={{
+              initialContent: content,
+              theme,
+              onContentChange: handleContentChange,
+              onGetContent: (getContentFn) => {
+                getContentFnRef.current = getContentFn;
+                if (onGetContentReady) {
+                  onGetContentReady(getContentFn);
+                }
+                // Now that we have getContentFn, expose the manual save function
+                if (onManualSaveReady) {
+                  onManualSaveReady(handleManualSave);
+                }
+              },
+              onSaveRequest: handleManualSave,
+              textReplacements: isActive ? textReplacements : undefined,
+            }}
+        />
+      </div>
   );
 };
