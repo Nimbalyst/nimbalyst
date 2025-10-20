@@ -56,34 +56,9 @@ let isAppQuitting = false;
 // Track app start time for memory monitoring
 const appStartTime = Date.now();
 
-// Single instance lock - prevent multiple instances from running
-const gotTheLock = app.requestSingleInstanceLock();
+// Single instance lock removed - allow multiple instances to run
 
 const analytics = AnalyticsService.getInstance();
-
-if (!gotTheLock) {
-    // Another instance is already running, quit immediately
-    logger.main.info('Another instance is already running, quitting...');
-    app.quit();
-} else {
-    // Handle second instance attempts
-    app.on('second-instance', (event, commandLine, workingDirectory) => {
-        logger.main.info('Second instance attempted to launch', { commandLine, workingDirectory });
-
-        // Focus the first window if we have any
-        const windows = BrowserWindow.getAllWindows();
-        if (windows.length > 0) {
-            const firstWindow = windows[0];
-            if (firstWindow.isMinimized()) {
-                firstWindow.restore();
-            }
-            firstWindow.focus();
-        } else {
-            // No windows open, show Workspace Manager
-            createWorkspaceManagerWindow();
-        }
-    });
-}
 
 // AI service instance
 let aiService: AIService | null = null;
