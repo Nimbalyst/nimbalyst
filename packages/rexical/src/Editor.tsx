@@ -114,6 +114,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
     listStrictIndent,
     markdownOnly,
     editable = true,
+    onSaveRequest,
   } = config;
 
 
@@ -226,6 +227,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         <ShortcutsPlugin
           editor={activeEditor}
           setIsLinkEditMode={setIsLinkEditMode}
+          onSaveRequest={onSaveRequest}
         />
       )}
       {isRichText && editable && <SearchReplacePlugin />}

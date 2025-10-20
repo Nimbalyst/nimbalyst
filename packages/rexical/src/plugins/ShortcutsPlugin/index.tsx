@@ -59,6 +59,7 @@ import {
   isLowercase,
   isOutdent,
   isRightAlign,
+  isSave,
   isStrikeThrough,
   isSubscript,
   isSuperscript,
@@ -68,9 +69,11 @@ import {
 export default function ShortcutsPlugin({
   editor,
   setIsLinkEditMode,
+  onSaveRequest,
 }: {
   editor: LexicalEditor;
   setIsLinkEditMode: Dispatch<boolean>;
+  onSaveRequest?: () => void;
 }): null {
   const {toolbarState} = useToolbarState();
 
@@ -87,7 +90,11 @@ export default function ShortcutsPlugin({
       }
 
       // === Markdown-compatible shortcuts ===
-      else if (isAcceptDiffs(event)) {
+      else if (isSave(event)) {
+        if (onSaveRequest) {
+          onSaveRequest();
+        }
+      } else if (isAcceptDiffs(event)) {
         editor.dispatchCommand(APPROVE_DIFF_COMMAND, undefined);
       } else if (isFormatParagraph(event)) {
         formatParagraph(editor);
@@ -175,6 +182,7 @@ export default function ShortcutsPlugin({
     toolbarState.blockType,
     toolbarState.fontSizeInputValue,
     setIsLinkEditMode,
+    onSaveRequest,
   ]);
 
   return null;

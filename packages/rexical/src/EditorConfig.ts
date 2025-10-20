@@ -88,6 +88,7 @@ export interface EditorConfig {
   onContentChange?: (content: string) => void;
   onGetContent?: (getContentFn: () => string) => void;
   onEditorReady?: (editor: any) => void;
+  onSaveRequest?: () => void;
   initialContent?: string; // Pre-loaded content to set in editor
 }
 

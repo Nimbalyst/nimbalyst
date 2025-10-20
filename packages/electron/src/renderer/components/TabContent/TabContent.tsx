@@ -60,6 +60,26 @@ export const TabContent: React.FC<TabContentProps> = ({
     }
   }, [activeTabId, tabs, onManualSaveReady]);
 
+  // Handle file-save IPC event from menu (Cmd+S)
+  useEffect(() => {
+    if (!window.electronAPI) return;
+
+    const handleFileSave = async () => {
+      if (!activeTabId) return;
+
+      const saveFn = saveFunctionsRef.current.get(activeTabId);
+      if (saveFn) {
+        await saveFn();
+      }
+    };
+
+    window.electronAPI.on('file-save', handleFileSave);
+
+    return () => {
+      window.electronAPI.off('file-save', handleFileSave);
+    };
+  }, [activeTabId]);
+
   // Handle manual save ready from TabEditor
   const handleManualSaveReady = useCallback((tabId: string, saveFn: () => Promise<void>) => {
     saveFunctionsRef.current.set(tabId, saveFn);
