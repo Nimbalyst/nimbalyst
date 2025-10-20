@@ -9,8 +9,8 @@ export function getFolderContents(dirPath: string): FileTreeItem[] {
         const items = readdirSync(dirPath);
         
         for (const item of items) {
-            // Skip hidden files and node_modules
-            if (item.startsWith('.') || item === 'node_modules') {
+            // Skip system files and node_modules, but allow dot directories like .claude
+            if (item === 'node_modules' || item === '.git' || item === '.DS_Store') {
                 continue;
             }
             
