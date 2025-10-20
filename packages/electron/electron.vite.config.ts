@@ -183,10 +183,14 @@ export default defineConfig({
         const toPosix = (p: string) => p.replace(/\\/g, '/');
         const targets: Array<{ src: string; dest: string; overwrite?: boolean }> = [];
         const icon = resolve(__dirname, 'icon.png');
+        const logo = resolve(__dirname, 'nimbalyst-logo.png');
         const about = resolve(__dirname, 'about.html');
 
         if (fs.existsSync(icon)) {
           targets.push({ src: toPosix(icon), dest: '', overwrite: true });
+        }
+        if (fs.existsSync(logo)) {
+          targets.push({ src: toPosix(logo), dest: '', overwrite: true });
         }
         if (fs.existsSync(about)) {
           targets.push({ src: toPosix(about), dest: '', overwrite: true });
