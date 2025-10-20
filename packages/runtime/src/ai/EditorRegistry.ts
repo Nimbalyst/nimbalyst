@@ -77,7 +77,7 @@ class EditorRegistry {
    */
   setActive(filePath: string): void {
     if (this.editors.has(filePath)) {
-      console.log('[EditorRegistry] Setting active editor:', filePath);
+      // console.log('[EditorRegistry] Setting active editor:', filePath);
       this.activeFilePath = filePath;
     } else {
       console.warn('[EditorRegistry] Attempted to set active editor for unregistered file:', filePath);

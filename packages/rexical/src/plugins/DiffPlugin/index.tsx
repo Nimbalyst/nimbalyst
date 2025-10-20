@@ -78,10 +78,13 @@ export function DiffPlugin(): JSX.Element | null {
         const diffRemoveClass = theme?.diffRemove;
         const diffModifyClass = theme?.diffModify;
 
+        // console.log('[DiffPlugin updateDiffStyling] theme classes:', { diffAddClass, diffRemoveClass, diffModifyClass });
+
         if (!diffAddClass && !diffRemoveClass && !diffModifyClass) {
           return; // No theme classes defined
         }
 
+        let diffNodesFound = 0;
         const traverseNodes = (node: LexicalNode) => {
           // Skip table row nodes as they don't have direct DOM elements in some implementations
           // But DO process table nodes and table cell nodes which have DOM elements
@@ -106,10 +109,16 @@ export function DiffPlugin(): JSX.Element | null {
               // Apply appropriate diff class based on state
               if (diffState === 'added' && diffAddClass) {
                 element.classList.add(diffAddClass);
+                diffNodesFound++;
+                // console.log('[DiffPlugin] Applied ADDED class to node:', node.getKey(), node.getType());
               } else if (diffState === 'removed' && diffRemoveClass) {
                 element.classList.add(diffRemoveClass);
+                diffNodesFound++;
+                // console.log('[DiffPlugin] Applied REMOVED class to node:', node.getKey(), node.getType());
               } else if (diffState === 'modified' && diffModifyClass) {
                 element.classList.add(diffModifyClass);
+                diffNodesFound++;
+                // console.log('[DiffPlugin] Applied MODIFIED class to node:', node.getKey(), node.getType());
               }
             }
           }
@@ -126,6 +135,7 @@ export function DiffPlugin(): JSX.Element | null {
         for (const child of root.getChildren()) {
           traverseNodes(child);
         }
+        // console.log('[DiffPlugin updateDiffStyling] Total diff nodes found:', diffNodesFound);
       });
     };
 
@@ -175,6 +185,7 @@ export function DiffPlugin(): JSX.Element | null {
     const applyMarkdownReplaceUnregister = editor.registerCommand<ApplyMarkdownReplacePayload>(
       APPLY_MARKDOWN_REPLACE_COMMAND,
       (payload) => {
+        // console.log('[DiffPlugin] APPLY_MARKDOWN_REPLACE_COMMAND handler called!', payload);
         // Handle both old format (array) and new format (object with replacements + requestId)
         const replacements = Array.isArray(payload) ? payload : payload?.replacements;
         const requestId = Array.isArray(payload) ? undefined : payload?.requestId;

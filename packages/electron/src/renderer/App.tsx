@@ -229,7 +229,7 @@ export default function App() {
     workspacePath, // Pass workspace path for unified state management
     getNavigationState: () => getNavigationStateRef.current?.(),
     onTabChange: async (tab) => {
-      console.log(`[App] onTabChange: switching to ${tab.fileName}, isDirty=${tab.isDirty}`);
+      // console.log(`[App] onTabChange: switching to ${tab.fileName}, isDirty=${tab.isDirty}`);
 
       // EditorContainer handles save-on-switch and all per-editor state
       // We just update global UI state here
@@ -1070,10 +1070,11 @@ export default function App() {
           }}
         />
       )}
-      {workspaceMode && workspaceName && sidebarView !== 'settings' && activeMode === 'files' && (
+      {workspaceMode && workspaceName && sidebarView !== 'settings' && (activeMode === 'files' || activeMode === 'plan') && (
         <>
           <div ref={sidebarRef} style={{ width: sidebarWidth, position: 'relative' }}>
-            <WorkspaceSidebar
+            {activeMode === 'files' ? (
+              <WorkspaceSidebar
               workspaceName={workspaceName}
               workspacePath={workspacePath || ''}
               fileTree={fileTree}
@@ -1098,6 +1099,12 @@ export default function App() {
               }}
               onOpenPlansTable={openPlansTab}
             />
+            ) : (
+              <PlansPanel
+                currentFilePath={currentFilePath}
+                onPlanSelect={handleWorkspaceFileSelect}
+              />
+            )}
           </div>
           <div
             style={{
@@ -1127,9 +1134,9 @@ export default function App() {
         </>
       )}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-        {/* Files Mode - always mounted, hidden when inactive */}
+        {/* Files/Plan Mode - shared editor area with different sidebars */}
         <div style={{
-          display: activeMode === 'files' ? 'flex' : 'none',
+          display: (activeMode === 'files' || activeMode === 'plan') ? 'flex' : 'none',
           flex: 1,
           flexDirection: 'column',
           overflow: 'hidden',
@@ -1165,7 +1172,7 @@ export default function App() {
                 }
               }}
               hideTabBar={!workspaceMode}
-              isActive={activeMode === 'files'}
+              isActive={activeMode === 'files' || activeMode === 'plan'}
             >
             {tabs.activeTab ? (
               <TabContent
@@ -1235,116 +1242,6 @@ export default function App() {
           )}
         </div>
 
-        {/* Plan Mode - uses editor with file tree for editing plan documents */}
-        <div style={{
-          display: activeMode === 'plan' ? 'flex' : 'none',
-          flex: 1,
-          flexDirection: 'row',
-          overflow: 'hidden',
-          position: 'absolute',
-          inset: 0
-        }}>
-          {workspaceMode && (
-            <>
-              <div style={{ width: sidebarWidth, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                <PlansPanel
-                  currentFilePath={currentFilePath}
-                  onPlanSelect={handleWorkspaceFileSelect}
-                />
-              </div>
-              <div
-                style={{
-                  width: '5px',
-                  cursor: 'col-resize',
-                  backgroundColor: 'transparent',
-                  position: 'relative',
-                  zIndex: 10,
-                  marginLeft: '-2.5px',
-                  marginRight: '-2.5px'
-                }}
-                onMouseDown={handleMouseDown}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    bottom: 0,
-                    left: '2px',
-                    width: '1px',
-                    backgroundColor: '#e5e7eb',
-                    transition: 'background-color 0.2s'
-                  }}
-                  className="sidebar-resize-handle"
-                />
-              </div>
-            </>
-          )}
-          {workspaceMode || tabs.activeTab ? (
-            <div className="plan-tabs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <TabManager
-              tabs={tabs.tabs}
-              activeTabId={tabs.activeTabId}
-              onTabSelect={tabs.switchTab}
-              onTabClose={tabs.removeTab}
-              onNewTab={() => {
-                setIsNewFileDialogOpen(true);
-              }}
-              onTogglePin={tabs.togglePin}
-              onTabReorder={tabs.reorderTabs}
-              onViewHistory={(tabId) => {
-                const tab = tabs.getTabState(tabId);
-                if (tab && tab.filePath) {
-                  setIsHistoryDialogOpen(true);
-                }
-              }}
-              hideTabBar={!workspaceMode}
-              isActive={activeMode === 'plan'}
-            >
-              {tabs.activeTab ? (
-                <TabContent
-                  tabs={tabs.tabs}
-                  activeTabId={tabs.activeTabId}
-                  theme={theme}
-                  onManualSaveReady={(saveFn) => {
-                    handleSaveRef.current = saveFn;
-                  }}
-                  onSaveComplete={(filePath) => {
-                    setCurrentFilePath(filePath);
-                    setCurrentFileName(filePath.split('/').pop() || filePath);
-                    setIsDirty(false);
-                    if (tabs.activeTabId) {
-                      tabs.updateTab(tabs.activeTabId, {
-                        isDirty: false,
-                        lastSaved: new Date()
-                      });
-                    }
-                  }}
-                  onGetContentReady={(tabId, getContentFn) => {
-                    if (tabId === tabs.activeTabId) {
-                      getContentRef.current = getContentFn;
-                      aiToolService.setGetContentFunction(getContentFn);
-                    }
-                  }}
-                  onTabDirtyChange={(changedTabId, changedIsDirty) => {
-                    const tab = tabs.getTabState(changedTabId);
-                    if (tab && tab.isDirty !== changedIsDirty) {
-                      tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
-                      if (changedTabId === tabs.activeTabId) {
-                        setIsDirty(changedIsDirty);
-                      }
-                    }
-                  }}
-                />
-              ) : (
-                <WorkspaceWelcome workspaceName={workspaceName || 'Open a plan to get started'} />
-              )}
-            </TabManager>
-            </div>
-          ) : (
-            <WorkspaceWelcome workspaceName="Open a plan to get started" />
-          )}
-        </div>
-
         {/* Tracker Mode - bug/task tracking view */}
         <div style={{
           display: activeMode === 'tracker' ? 'flex' : 'none',
@@ -1377,7 +1274,7 @@ export default function App() {
           />
         </div>
       </div>
-      {workspaceMode && sidebarView !== 'settings' && activeMode === 'files' && (
+      {workspaceMode && sidebarView !== 'settings' && (activeMode === 'files' || activeMode === 'plan') && (
         <AIChat
           isCollapsed={isAIChatCollapsed}
           onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}

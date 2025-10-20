@@ -197,7 +197,10 @@ export function AIChatIntegrationPlugin(): null {
 
             // Dispatch the command with requestId attached to the replacements
             const commandPayload = { replacements, requestId };
+            console.log('[AIChatIntegrationPlugin] Dispatching APPLY_MARKDOWN_REPLACE_COMMAND', commandPayload);
+            console.log('[AIChatIntegrationPlugin] Command object:', APPLY_MARKDOWN_REPLACE_COMMAND);
             const commandSuccess = editor.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, commandPayload);
+            console.log('[AIChatIntegrationPlugin] Command dispatch returned:', commandSuccess);
 
             if (!commandSuccess) {
               window.removeEventListener('diffApplyComplete', handleComplete as EventListener);

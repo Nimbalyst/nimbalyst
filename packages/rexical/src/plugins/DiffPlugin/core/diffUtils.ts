@@ -362,6 +362,7 @@ export function applyMarkdownReplace(
   replacements: TextReplacement[],
   transformers: Transformer[],
 ): void {
+  // console.log('[applyMarkdownReplace] CALLED with', replacements.length, 'replacements');
   const normalizedReplacements = replacements.map((replacement) => {
     const {oldText, newText} = resolveReplacementTexts(replacement);
     return {

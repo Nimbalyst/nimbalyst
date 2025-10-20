@@ -47,12 +47,15 @@ export async function simulateApplyDiff(
       // Access the already-loaded editorRegistry from window
       const editorRegistry = (window as any).__editorRegistry;
 
+      console.log('[simulateApplyDiff] editorRegistry:', !!editorRegistry);
       if (!editorRegistry) {
         throw new Error('EditorRegistry not found on window');
       }
 
       // Get the active file path if not specified
       const target = filePath || editorRegistry.getActiveFilePath();
+      console.log('[simulateApplyDiff] target:', target);
+      console.log('[simulateApplyDiff] replacements:', reps);
 
       if (!target) {
         return {
@@ -62,7 +65,10 @@ export async function simulateApplyDiff(
       }
 
       // Apply replacements directly
-      return await editorRegistry.applyReplacements(target, reps);
+      console.log('[simulateApplyDiff] About to call applyReplacements');
+      const result = await editorRegistry.applyReplacements(target, reps);
+      console.log('[simulateApplyDiff] applyReplacements returned:', result);
+      return result;
     },
     { filePath: targetFilePath, reps: replacements }
   );
@@ -194,6 +200,25 @@ export function createTestMarkdown(sections: Record<string, string>): string {
   return Object.entries(sections)
     .map(([heading, content]) => `# ${heading}\n\n${content}\n`)
     .join('\n');
+}
+
+/**
+ * Accept all pending diffs in the active editor
+ */
+export async function acceptDiffs(page: Page): Promise<void> {
+  // Click the Accept All button using Playwright locator
+  const acceptButton = page.locator('button:has-text("Accept All")').first();
+
+  try {
+    // Wait for the button to appear (it should already be there if there are diffs)
+    await acceptButton.waitFor({ state: 'visible', timeout: 2000 });
+    await acceptButton.click();
+  } catch (e) {
+    console.warn('[Test] Accept All button not found or not clickable');
+  }
+
+  // Wait for diffs to be processed
+  await page.waitForTimeout(300);
 }
 
 /**
