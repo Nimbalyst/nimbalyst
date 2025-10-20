@@ -35,6 +35,7 @@
   "devDependencies": {
     "@babel/plugin-transform-flow-strip-types": "^7.24.7",
     "@babel/preset-react": "^7.24.7",
+    "@electric-sql/pglite-tools": "^0.2.16",
     "@playwright/test": "^1.55.0",
     "@types/node": "^20.0.0",
     "concurrently": "^9.2.0",
