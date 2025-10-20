@@ -4,7 +4,7 @@ import {
   launchElectronApp,
   createTempWorkspace,
   TEST_TIMEOUTS,
-  configureAIModel,
+  configureAIProvider,
   sendAIPrompt as sendAIPromptHelper,
   getEditorContent
 } from '../helpers';
@@ -21,6 +21,9 @@ import * as path from 'path';
  * - Working with nested lists
  *
  * Using GPT-4 Turbo for consistent, reliable results.
+ *
+ * NOTE: These tests are currently configured and working correctly. They expose
+ * an issue where the AI's edit operations don't trigger the diff UI properly.
  */
 test.describe('AI List Editing', () => {
   let electronApp: ElectronApplication;
@@ -60,10 +63,10 @@ test.describe('AI List Editing', () => {
     await page.waitForLoadState('domcontentloaded');
     await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
 
-    // Configure AI model first (before opening file)
-    await configureAIModel(page, 'openai', 'GPT-4 Turbo');
+    // Preconfigure OpenAI provider with API key and models
+    await configureAIProvider(page, 'openai', process.env.OPENAI_API_KEY || '', ['gpt-4-turbo']);
 
-    // Then open the test file
+    // Open the test file
     await page.click(`text="list-test.md"`);
     await page.waitForTimeout(TEST_TIMEOUTS.EDITOR_LOAD);
   });
@@ -82,22 +85,25 @@ test.describe('AI List Editing', () => {
   }
 
   test('should add a new item to the end of a list', async () => {
-    // Send prompt to add an item
-    await sendAIPromptHelper(page, 'Add "Grapes" to the end of the shopping list', { timeout: 30000 });
+    test.setTimeout(60000); // Increase test timeout to 60 seconds for AI response
 
-    // Accept the diff
+    // Send prompt - helper will open AI chat and start session if needed
+    await sendAIPromptHelper(page, 'Add "Grapes" to the end of the shopping list', {
+      timeout: 45000, // Increased timeout for AI response
+      waitForCompletion: true
+    });
+
+    // Wait for diff to appear and accept it
+    await page.waitForTimeout(2000);
     const acceptButton = page.locator('button:has-text("Accept All")').first();
-    await acceptButton.waitFor({ state: 'visible', timeout: 5000 });
+    await acceptButton.waitFor({ state: 'visible', timeout: 10000 });
     await acceptButton.click();
 
     // Wait for changes to be applied and saved
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(3000);
 
     // Verify the content was updated
     const content = await getDocumentContent();
-    console.log('Document content:', content);
-    console.log('Grapes index:', content.indexOf('Grapes'));
-    console.log('Oranges index:', content.indexOf('Oranges'));
 
     expect(content).toContain('Grapes');
     expect(content).toContain('Apples');

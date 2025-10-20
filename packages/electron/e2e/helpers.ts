@@ -96,7 +96,53 @@ export function getKeyboardShortcut(key: string): string {
 }
 
 /**
+ * Helper to preconfigure AI provider settings via IPC
+ * This configures the provider at the app level before any UI interaction
+ * @param page The Playwright page
+ * @param provider The provider name (e.g., 'openai', 'claude')
+ * @param apiKey The API key for the provider
+ * @param models Array of model IDs to enable (e.g., ['gpt-4-turbo', 'gpt-3.5-turbo'])
+ */
+export async function configureAIProvider(
+  page: Page,
+  provider: string,
+  apiKey: string,
+  models: string[]
+): Promise<void> {
+  // Configure settings via IPC
+  await page.evaluate(async ({ provider, apiKey, models }) => {
+    // Save API key
+    const apiKeyField = provider === 'openai' ? 'openai' : provider === 'claude' ? 'anthropic' : provider;
+    await window.electronAPI.aiSaveSettings({
+      apiKeys: {
+        [apiKeyField]: apiKey
+      }
+    });
+
+    // Save provider settings (enabled models)
+    await window.electronAPI.aiSaveSettings({
+      providerSettings: {
+        [provider]: {
+          enabled: true,
+          models: models
+        }
+      }
+    });
+
+    // Set as default provider
+    const defaultProvider = `${provider}:${models[0]}`;
+    await window.electronAPI.aiSaveSettings({
+      defaultProvider: defaultProvider
+    });
+  }, { provider, apiKey, models });
+
+  // Wait for settings to be saved and propagated
+  await page.waitForTimeout(1000);
+}
+
+/**
  * Helper to configure AI model via the model picker dropdown
+ * @deprecated Use configureAIProvider instead for more reliable setup
  * @param page The Playwright page
  * @param provider The provider name (e.g., 'openai', 'claude')
  * @param model The model display name (e.g., 'GPT-4 Turbo', 'Claude Sonnet 4')
@@ -145,13 +191,14 @@ export async function sendAIPrompt(page: Page, prompt: string, options?: {
     await page.waitForTimeout(200);
   }
 
-  // Check if we need to start a session (look for "No session" text or + button)
-  const noSessionText = await page.locator('text="No session"').isVisible().catch(() => false);
+  // Check if we need to start a session (look for "No session selected" text)
+  const noSessionText = await page.locator('text="No session selected"').isVisible().catch(() => false);
   if (noSessionText) {
-    // Click the + button to start a new session
-    const plusButton = page.locator('.new-session-button-main').first();
-    await plusButton.click();
-    await page.waitForTimeout(100);
+    // Click the large "New Session" button (appears when no session is active)
+    const newSessionButton = page.locator('button:has-text("New Session")').first();
+    await newSessionButton.waitFor({ state: 'visible', timeout: 3000 });
+    await newSessionButton.click();
+    await page.waitForTimeout(2000); // Wait for session to initialize
   }
 
   // Find and click the chat input - try multiple selectors
