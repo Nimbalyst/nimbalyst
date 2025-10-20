@@ -141,32 +141,43 @@ export async function configureAIProvider(
 }
 
 /**
- * Helper to configure AI model via the model picker dropdown
- * @deprecated Use configureAIProvider instead for more reliable setup
+ * Configure AI model - simplified for new UI architecture
+ *
+ * Note: This function now assumes the provider is already configured via:
+ * - Environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
+ * - App settings/preferences
+ *
+ * It opens the AI panel and creates a new session ready for use.
+ *
  * @param page The Playwright page
- * @param provider The provider name (e.g., 'openai', 'claude')
- * @param model The model display name (e.g., 'GPT-4 Turbo', 'Claude Sonnet 4')
+ * @param provider The provider name (optional, for backwards compatibility)
+ * @param model The model display name (optional, for backwards compatibility)
  */
-export async function configureAIModel(page: Page, provider: string, model: string): Promise<void> {
+export async function configureAIModel(page: Page, provider?: string, model?: string): Promise<void> {
   // Open AI Chat if not already open
   const aiChatVisible = await page.locator('[data-testid="ai-chat-panel"]').isVisible().catch(() => false);
   if (!aiChatVisible) {
     await page.keyboard.press('Meta+Shift+A');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
   }
 
-  // Click the dropdown arrow button (part of new-session-button)
-  const dropdownButton = page.locator('.new-session-button-dropdown').first();
-  await dropdownButton.waitFor({ state: 'visible', timeout: 5000 });
-  await dropdownButton.click();
+  // Wait for AI panel to be ready
+  await page.waitForTimeout(500);
 
-  // Wait for dropdown to open
-  await page.waitForSelector('.new-session-dropdown', { timeout: 5000 });
+  // Check if we need to create a new session
+  const noSessionText = await page.locator('text="No session selected"').isVisible().catch(() => false);
+  const hasNoMessages = await page.locator('text="No messages to display"').isVisible().catch(() => false);
 
-  // Click on the model option (use partial text match for flexibility)
-  const modelOption = page.locator(`.new-session-option:has-text("${model}")`).first();
-  await modelOption.waitFor({ state: 'visible', timeout: 5000 });
-  await modelOption.click();
+  if (noSessionText || hasNoMessages) {
+    // Click "New Session" button
+    const newSessionButton = page.locator('button:has-text("New Session")').first();
+    const buttonExists = await newSessionButton.count() > 0;
+
+    if (buttonExists) {
+      await newSessionButton.click();
+      await page.waitForTimeout(1000); // Wait for session to initialize
+    }
+  }
 }
 
 /**
