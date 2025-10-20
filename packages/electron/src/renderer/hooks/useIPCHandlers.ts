@@ -509,63 +509,13 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     cleanupFns.push(window.electronAPI.onThemeChange((newTheme) => {
       const editorTheme = newTheme === 'system' ? 'auto' : newTheme;
 
-      // Apply theme immediately for instant visual feedback
+      // Apply theme immediately - theme changes are purely visual and don't affect content
       if (handlersRef.current.setTheme) {
         handlersRef.current.setTheme(editorTheme);
       }
 
-      // Flush unsaved changes to disk before visual reset, when possible
-      const flushAndReload = async () => {
-        try {
-          if (stateRef.current.currentFilePath && getContentRef.current) {
-            if (isDirtyRef.current) {
-              const content = getContentRef.current();
-              if (LOG_CONFIG.THEME) console.log('[THEME] Dirty before theme switch. Saving to disk...');
-              const result = await window.electronAPI?.saveFile(content, stateRef.current.currentFilePath);
-              if (result?.success) {
-                // NOTE: lastSaveTime now tracked in TabEditor per-tab
-                isDirtyRef.current = false;
-                handlersRef.current.setIsDirty(false);
-                // NOTE: initialContentRef removed - TabEditor tracks this per-tab
-                // Reflect clean state in active tab UI
-                if (stateRef.current.tabs && stateRef.current.tabs.activeTabId) {
-                  stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { isDirty: false });
-                }
-                if (LOG_CONFIG.THEME) console.log('[THEME] Saved successfully before theme switch');
-              } else if (LOG_CONFIG.THEME) {
-                console.warn('[THEME] Save before theme switch did not succeed:', result);
-              }
-            }
-
-            // Reload from disk to ensure we rehydrate with canonical content
-            if (window.electronAPI?.readFileContent) {
-              const res = await window.electronAPI.readFileContent(stateRef.current.currentFilePath);
-              if (res?.content !== undefined) {
-                // NOTE: initialContentRef removed - TabEditor tracks this per-tab
-                // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
-                // Keep tab content in sync
-                if (stateRef.current.tabs && stateRef.current.tabs.activeTabId) {
-                  stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { content: res.content });
-                }
-              }
-            } else if (window.electronAPI?.switchWorkspaceFile) {
-              const res = await window.electronAPI.switchWorkspaceFile(stateRef.current.currentFilePath);
-              if (res?.content !== undefined) {
-                // NOTE: initialContentRef removed - TabEditor tracks this per-tab
-                // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
-                if (stateRef.current.tabs && stateRef.current.tabs.activeTabId) {
-                  stateRef.current.tabs.updateTab(stateRef.current.tabs.activeTabId, { content: res.content });
-                }
-              }
-            }
-          }
-        } catch (err) {
-          console.error('[THEME] Error flushing/reloading content on theme change:', err);
-        }
-      };
-
-      // Kick off the async workflow without blocking
-      flushAndReload();
+      // NOTE: We do NOT reload from disk on theme change. Theme is purely CSS.
+      // The TabEditor component manages its own content state and will preserve it across theme changes.
     }));
 
     // Listen for show preferences event

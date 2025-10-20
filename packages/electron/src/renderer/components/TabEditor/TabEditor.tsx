@@ -600,7 +600,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           }}
       >
         <StravuEditor
-            key={`${filePath}-theme-${theme}`}
+            key={filePath}
             config={{
               initialContent,
               theme,

@@ -176,4 +176,70 @@ test.describe('Theme Switching', () => {
       expect(themeAttr).toBe('dark');
     }
   });
+
+  test('should preserve edited content after theme switch', async () => {
+    console.log('[TEST] Starting content preservation test...');
+
+    // Wait for editor to be ready
+    const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
+    await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.medium });
+
+    // Get initial content
+    const initialContent = await editor.textContent();
+    console.log('[TEST] Initial content:', initialContent?.substring(0, 50));
+
+    // Edit the document - click and type new content
+    await editor.click();
+    await page.keyboard.press('End'); // Go to end
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('This is new content added by the test.');
+
+    console.log('[TEST] Typed new content, waiting for change to register...');
+    await page.waitForTimeout(500);
+
+    // Get content after edit
+    const contentAfterEdit = await editor.textContent();
+    console.log('[TEST] Content after edit:', contentAfterEdit?.substring(0, 100));
+
+    // Verify content was actually changed
+    expect(contentAfterEdit).toContain('This is new content added by the test.');
+
+    // Wait for autosave to kick in (autosave interval is 2000ms by default)
+    console.log('[TEST] Waiting for autosave...');
+    await page.waitForTimeout(3000);
+
+    // Read the file from disk to verify autosave worked
+    const testFilePath = path.join(workspacePath, 'test.md');
+    const diskContentAfterAutosave = await fs.readFile(testFilePath, 'utf-8');
+    console.log('[TEST] Disk content after autosave:', diskContentAfterAutosave);
+    expect(diskContentAfterAutosave).toContain('This is new content added by the test.');
+
+    // Now switch theme from light to dark
+    console.log('[TEST] Switching theme from light to dark...');
+    await electronApp.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows().forEach(window => {
+        window.webContents.send('theme-change', 'dark');
+      });
+    });
+
+    // Wait for theme change to complete
+    await page.waitForTimeout(2000);
+
+    // Verify theme changed on the stravu-editor container (not the contenteditable)
+    const stravuEditor = page.locator('.stravu-editor').first();
+    const darkClasses = await stravuEditor.getAttribute('class');
+    expect(darkClasses).toContain('dark-theme');
+
+    // CRITICAL: Verify content is still there after theme switch
+    const contentAfterThemeSwitch = await editor.textContent();
+    console.log('[TEST] Content after theme switch:', contentAfterThemeSwitch);
+
+    // This should NOT fail - content must be preserved
+    expect(contentAfterThemeSwitch).toContain('This is new content added by the test.');
+
+    // Also verify file on disk still has the content
+    const diskContentAfterThemeSwitch = await fs.readFile(testFilePath, 'utf-8');
+    console.log('[TEST] Disk content after theme switch:', diskContentAfterThemeSwitch);
+    expect(diskContentAfterThemeSwitch).toContain('This is new content added by the test.');
+  });
 });
