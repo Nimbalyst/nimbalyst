@@ -20,7 +20,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Get database path (same as the app uses)
-const userDataPath = join(homedir(), 'Library', 'Application Support', '@preditor', 'electron');
+const userDataPath = join(homedir(), 'Library', 'Application Support', '@nimbalyst', 'electron');
 const dbPath = join(userDataPath, 'pglite-db');
 
 async function main() {
