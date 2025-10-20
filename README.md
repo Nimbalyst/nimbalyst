@@ -32,7 +32,7 @@ With agentic workflows and deep ties into your AI coding copilots, Preditor enab
 
 ```bash
 # Install dependencies
-npm install --legacy-peer-deps
+npm install
 
 # Start Electron app development
 cd packages/electron && npm run dev

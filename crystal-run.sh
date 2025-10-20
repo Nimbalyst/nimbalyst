@@ -12,7 +12,7 @@ sleep 2
 # Install dependencies if node_modules doesn't exist
 if [ ! -d "node_modules" ]; then
   echo "Installing dependencies..."
-  npm install --legacy-peer-deps
+  npm install
 fi
 
 # Build rexical package first (required dependency)

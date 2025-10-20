@@ -14,7 +14,7 @@ This is Nimbalyst - a rich text editor built with Meta's Lexical framework. Orig
 - **Build for Mac (notarized)**: `cd packages/electron && npm run build:mac:notarized` - Creates notarized Mac build
 
 ### Monorepo Setup
-- **Install dependencies**: `npm install --legacy-peer-deps` - Install all dependencies
+- **Install dependencies**: `npm install` - Install all dependencies
 - **Package management**: Uses npm workspaces (not pnpm)
 
 ## Releases
