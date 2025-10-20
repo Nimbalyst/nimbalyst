@@ -77,6 +77,13 @@ test.describe('AI Tool Simulator', () => {
       }
     });
 
+    // Prevent Playwright from auto-handling dialogs
+    // The app uses custom React modals, not native dialogs
+    page.on('dialog', dialog => {
+      // Just dismiss it - should never actually be called since we use custom modals
+      dialog.dismiss().catch(() => {});
+    });
+
     await page.waitForLoadState('domcontentloaded');
     await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
 
@@ -92,7 +99,11 @@ test.describe('AI Tool Simulator', () => {
   });
 
   test.afterEach(async () => {
-    await electronApp.close();
+    // Force close without waiting for unsaved changes dialog
+    // The app uses a custom modal (not native dialog), so we can just force close
+    await electronApp.close().catch(() => {
+      // Ignore any errors during close (e.g., dialog handling errors)
+    });
   });
 
   test('should apply diff edits to the correct tab when switching', async () => {
