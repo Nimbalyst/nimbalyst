@@ -8,6 +8,7 @@ import {
   type FrontmatterData,
 } from 'rexical';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
+import { aiApi } from '../services/aiApi';
 
 const PLAN_STATUS_KEYS = new Set([
   'planId',
@@ -997,10 +998,60 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       updateDocumentState();
     }
 
+    // Set up AI streaming event listeners
+    // These connect the aiApi events to the editorRegistry methods
+    const handleStreamEditStart = (config: any) => {
+      console.log('[AI Streaming] Stream edit started:', config);
+      const filePath = editorRegistry.getActiveFilePath();
+      if (!filePath) {
+        console.error('[AI Streaming] No active editor for streaming');
+        return;
+      }
+
+      editorRegistry.startStreaming(filePath, {
+        id: config.id || 'ai-stream',
+        position: config.position || 'end',
+        mode: config.mode,
+        insertAfter: config.insertAfter,
+        insertAtEnd: config.insertAtEnd ?? true
+      });
+    };
+
+    const handleStreamEditContent = (content: string) => {
+      console.log('[AI Streaming] Stream edit content:', content.substring(0, 50));
+      const filePath = editorRegistry.getActiveFilePath();
+      if (!filePath) {
+        console.error('[AI Streaming] No active editor for streaming');
+        return;
+      }
+
+      editorRegistry.streamContent(filePath, 'ai-stream', content);
+    };
+
+    const handleStreamEditEnd = (data: any) => {
+      console.log('[AI Streaming] Stream edit ended:', data);
+      const filePath = editorRegistry.getActiveFilePath();
+      if (!filePath) {
+        console.error('[AI Streaming] No active editor for streaming');
+        return;
+      }
+
+      editorRegistry.endStreaming(filePath, 'ai-stream');
+    };
+
+    aiApi.on('streamEditStart', handleStreamEditStart);
+    aiApi.on('streamEditContent', handleStreamEditContent);
+    aiApi.on('streamEditEnd', handleStreamEditEnd);
+
     // Clean up listeners when dependencies change
     return () => {
       // console.log('Cleaning up IPC listeners');
       cleanupFns.forEach(cleanup => cleanup());
+
+      // Clean up AI streaming listeners
+      aiApi.off('streamEditStart', handleStreamEditStart);
+      aiApi.off('streamEditContent', handleStreamEditContent);
+      aiApi.off('streamEditEnd', handleStreamEditEnd);
     };
   }, []); // Empty dependency array - handlers use refs to access current values
 }
