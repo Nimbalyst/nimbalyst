@@ -215,6 +215,24 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       console.log('[CLAUDE-CODE] Calling query with prompt length:', message.length);
       console.log('[CLAUDE-CODE] Creating query iterator...');
 
+      // Log the raw input to the SDK
+      if (sessionId) {
+        this.logAgentMessage(sessionId, 'claude-code', 'input', JSON.stringify({
+          prompt: message,
+          options: {
+            model: options.model,
+            cwd: options.cwd,
+            resume: options.resume,
+            systemPrompt: options.systemPrompt,
+            settingSources: options.settingSources,
+            mcpServers: options.mcpServers ? Object.keys(options.mcpServers) : [],
+            allowedTools: options.allowedTools,
+            disallowedTools: options.disallowedTools,
+            permissionMode: options.permissionMode
+          }
+        }));
+      }
+
       const queryIterator = query({
         prompt: message,
         options
@@ -237,6 +255,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         for await (const rawChunk of queryIterator) {
           const chunk = rawChunk as any;
           chunkCount++;
+
+          // Log raw SDK chunks to database
+          if (sessionId) {
+            const rawChunkJson = typeof chunk === 'string'
+              ? JSON.stringify({ type: 'text', content: chunk })
+              : JSON.stringify(chunk);
+            this.logAgentMessage(sessionId, 'claude-code', 'output', rawChunkJson);
+          }
 
           if (chunkCount <= 5) {
             console.log(`[CLAUDE-CODE] Chunk #${chunkCount}:`,

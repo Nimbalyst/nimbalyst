@@ -337,6 +337,34 @@ class PGLiteWorker {
       console.error('[PGLite Worker] Failed to create tracker_items table:', error);
       throw error;
     }
+
+    // AI Agent Messages table - write-only raw storage for AI interactions
+    console.log('[PGLite Worker] Creating ai_agent_messages table...');
+    try {
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS ai_agent_messages (
+          id BIGSERIAL PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+          source TEXT NOT NULL,
+          direction TEXT NOT NULL CHECK (direction IN ('input', 'output')),
+          content TEXT NOT NULL,
+          metadata JSONB,
+          CONSTRAINT fk_ai_agent_messages_session
+            FOREIGN KEY (session_id)
+            REFERENCES ai_sessions(id)
+            ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_ai_agent_messages_session ON ai_agent_messages(session_id, id);
+        CREATE INDEX IF NOT EXISTS idx_ai_agent_messages_created ON ai_agent_messages(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_ai_agent_messages_source_direction ON ai_agent_messages(source, direction);
+      `);
+      console.log('[PGLite Worker] ai_agent_messages table created successfully');
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to create ai_agent_messages table:', error);
+      throw error;
+    }
   }
 
   async query(message) {

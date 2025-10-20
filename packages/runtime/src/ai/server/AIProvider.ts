@@ -14,6 +14,7 @@ import {
 } from './types';
 import { toolRegistry, toAnthropicTools, toOpenAITools } from '../tools';
 import { buildSystemPrompt } from '../prompt';
+import { AgentMessagesRepository } from '../../storage/repositories/AgentMessagesRepository';
 
 export interface AIProvider extends EventEmitter {
   /**
@@ -169,5 +170,31 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
    */
   protected buildSystemPrompt(documentContext?: DocumentContext): string {
     return buildSystemPrompt(documentContext);
+  }
+
+  /**
+   * Log an agent message to the audit table
+   * This should be called for both input (user/system to AI) and output (AI response) messages
+   *
+   * IMPORTANT: This is a fire-and-forget operation - it does NOT block the AI request
+   */
+  protected logAgentMessage(
+    sessionId: string,
+    source: string, // Provider name (e.g., 'claude', 'claude-code', 'openai')
+    direction: 'input' | 'output',
+    content: string,
+    metadata?: Record<string, unknown>
+  ): void {
+    // Fire and forget - don't block the AI request
+    AgentMessagesRepository.create({
+      sessionId,
+      source,
+      direction,
+      content,
+      metadata
+    }).catch(error => {
+      // Don't fail the request if logging fails - just log the error
+      console.error('[BaseAIProvider] Failed to log agent message:', error);
+    });
   }
 }

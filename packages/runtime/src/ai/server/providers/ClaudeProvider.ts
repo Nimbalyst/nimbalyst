@@ -131,6 +131,11 @@ export class ClaudeProvider extends BaseAIProvider {
       throw new Error('Cannot send empty message to Claude API');
     }
 
+    // Log the input message
+    if (sessionId) {
+      this.logAgentMessage(sessionId, 'claude', 'input', message);
+    }
+
     // Check if current message has attachments
     if (attachments && attachments.length > 0) {
       const content: any[] = [];
@@ -680,6 +685,13 @@ export class ClaudeProvider extends BaseAIProvider {
         } else {
           // No tool uses, conversation is complete
           conversationComplete = true;
+
+          // Log the output message
+          if (sessionId && fullContent) {
+            this.logAgentMessage(sessionId, 'claude', 'output', fullContent, {
+              usage: totalUsageData
+            });
+          }
 
           // Yield the complete chunk with usage data if available
           yield {

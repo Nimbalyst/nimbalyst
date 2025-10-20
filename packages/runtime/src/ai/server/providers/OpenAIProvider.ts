@@ -106,6 +106,11 @@ export class OpenAIProvider extends BaseAIProvider {
     }
     apiMessages.push({ role: 'user', content: message });
 
+    // Log the input message
+    if (sessionId) {
+      this.logAgentMessage(sessionId, 'openai', 'input', message);
+    }
+
     try {
       // Use the centralized tool system
       const tools: OpenAI.Chat.ChatCompletionTool[] = this.getToolsInOpenAIFormat();
@@ -411,7 +416,14 @@ export class OpenAIProvider extends BaseAIProvider {
           console.log('[OpenAIProvider] Usage data from x_groq:', usageData);
         }
       }
-      
+
+      // Log the output message
+      if (sessionId && fullContent) {
+        this.logAgentMessage(sessionId, 'openai', 'output', fullContent, {
+          usage: usageData
+        });
+      }
+
       // Yield complete AFTER the loop ends with usage data if available
       yield {
         type: 'complete',

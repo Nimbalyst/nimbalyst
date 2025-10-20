@@ -91,6 +91,11 @@ export class LMStudioProvider extends BaseAIProvider {
     }
     apiMessages.push({ role: 'user', content: message });
 
+    // Log the input message
+    if (sessionId) {
+      this.logAgentMessage(sessionId, 'lmstudio', 'input', message);
+    }
+
     // Use the centralized tool system (OpenAI-compatible format)
     const tools = this.getToolsInOpenAIFormat();
 
@@ -461,6 +466,11 @@ export class LMStudioProvider extends BaseAIProvider {
             console.error('Error parsing final SSE data:', error);
           }
         }
+      }
+
+      // Log the output message
+      if (sessionId && fullContent) {
+        this.logAgentMessage(sessionId, 'lmstudio', 'output', fullContent);
       }
 
       // Ensure we send a complete event
