@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
+import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, pressKeyboardShortcut, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
@@ -111,7 +111,7 @@ test.describe('History - Manual and Auto Save Entries', () => {
     // Make sure we're not focused in the editor (which might capture the shortcut)
     await page.click('body');
     await page.waitForTimeout(100);
-    await page.keyboard.press(getKeyboardShortcut('Mod+Y'));
+    await pressKeyboardShortcut(page, 'Mod+Y');
     await page.waitForSelector('.history-dialog', { timeout: 5000 });
 
     // Get all history items
@@ -164,7 +164,7 @@ test.describe('History - Manual and Auto Save Entries', () => {
     // Open history using keyboard shortcut
     await page.click('body');
     await page.waitForTimeout(100);
-    await page.keyboard.press(getKeyboardShortcut('Mod+Y'));
+    await pressKeyboardShortcut(page, 'Mod+Y');
     await page.waitForSelector('.history-dialog', { timeout: 5000 });
 
     // Find the auto save entry by clicking through items and checking preview
@@ -224,7 +224,7 @@ test.describe('History - Manual and Auto Save Entries', () => {
     // Open history and restore manual save
     await page.click('body');
     await page.waitForTimeout(100);
-    await page.keyboard.press(getKeyboardShortcut('Mod+Y'));
+    await pressKeyboardShortcut(page, 'Mod+Y');
     await page.waitForSelector('.history-dialog', { timeout: 5000 });
 
     // Find the manual save entry

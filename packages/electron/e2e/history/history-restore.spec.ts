@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, getEditorContent, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
+import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, pressKeyboardShortcut, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, getEditorContent, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
@@ -17,6 +17,18 @@ test.describe('History restore functionality', () => {
 
     try {
       const page = await electronApp.firstWindow();
+
+      // Handle any JavaScript dialogs that might appear
+      page.on('dialog', async dialog => {
+        console.log(`[TEST] Dialog appeared: ${dialog.type()} - ${dialog.message()}`);
+        // Dismiss beforeunload dialogs (they're already shown when dialog event fires)
+        if (dialog.type() === 'beforeunload') {
+          // Can't accept beforeunload - it's auto-handled
+          return;
+        }
+        await dialog.accept();
+      });
+
       await page.waitForLoadState('domcontentloaded');
 
       // Dismiss API key dialog if present
@@ -67,15 +79,10 @@ test.describe('History restore functionality', () => {
       const secondEditContent = await fs.readFile(testFile, 'utf8');
       expect(secondEditContent).toContain('Second Edit');
 
-      // Open history dialog by clicking on the history button in the toolbar
-      const historyButton = page.locator('button[aria-label*="history" i], button[title*="history" i], .history-button').first();
-      if (await historyButton.isVisible().catch(() => false)) {
-        await historyButton.click();
-      } else {
-        // Fallback: try keyboard shortcut with better focus
-        await page.click('body'); // Ensure not in editor
-        await page.keyboard.press(getKeyboardShortcut('Mod+Y'));
-      }
+      // Open history dialog using keyboard shortcut
+      await page.click('body'); // Ensure not in editor
+      await page.waitForTimeout(200);
+      await pressKeyboardShortcut(page, 'Mod+Y');
       await page.waitForSelector('.history-dialog', { timeout: 5000 });
 
       // Verify we have multiple snapshots listed
@@ -101,19 +108,18 @@ test.describe('History restore functionality', () => {
       // History dialog should close
       await expect(page.locator('.history-dialog')).toHaveCount(0);
 
+      // Wait a bit more for the content to update
+      await page.waitForTimeout(1000);
+
       // Verify editor now shows the restored content (First Edit)
       editorText = await editor.innerText();
       expect(editorText).toContain('First Edit');
       expect(editorText).not.toContain('Second Edit');
 
-      // Document should be marked as dirty (unsaved changes)
-      await expect(page.locator('.file-tabs-container .tab.active .tab-dirty-indicator')).toBeVisible();
+      // Document should NOT be marked as dirty (restore writes to disk immediately)
+      await expect(page.locator('.file-tabs-container .tab.active .tab-dirty-indicator')).not.toBeVisible();
 
-      // Save the restored version
-      await page.keyboard.press(getKeyboardShortcut('Mod+S'));
-      await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
-
-      // Verify the file on disk now contains the restored content
+      // Verify the file on disk now contains the restored content (already written by restore)
       const restoredFileContent = await fs.readFile(testFile, 'utf8');
       expect(restoredFileContent).toContain('First Edit');
       expect(restoredFileContent).not.toContain('Second Edit');
@@ -172,15 +178,10 @@ test.describe('History restore functionality', () => {
       await page.keyboard.press(getKeyboardShortcut('Mod+S'));
       await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
 
-      // Open history dialog by clicking on the history button in the toolbar
-      const historyButton = page.locator('button[aria-label*="history" i], button[title*="history" i], .history-button').first();
-      if (await historyButton.isVisible().catch(() => false)) {
-        await historyButton.click();
-      } else {
-        // Fallback: try keyboard shortcut with better focus
-        await page.click('body'); // Ensure not in editor
-        await page.keyboard.press(getKeyboardShortcut('Mod+Y'));
-      }
+      // Open history dialog using keyboard shortcut
+      await page.click('body'); // Ensure not in editor
+      await page.waitForTimeout(200);
+      await pressKeyboardShortcut(page, 'Mod+Y');
       await page.waitForSelector('.history-dialog', { timeout: 5000 });
 
       const snapshotItems = page.locator('.history-item');

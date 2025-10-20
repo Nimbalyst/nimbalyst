@@ -96,6 +96,34 @@ export function getKeyboardShortcut(key: string): string {
 }
 
 /**
+ * Dispatch a keyboard shortcut using native KeyboardEvent
+ * This is necessary because page.keyboard.press() doesn't work reliably in Electron
+ * @param page The Playwright page
+ * @param shortcut The shortcut string (e.g., 'Mod+Y', 'Mod+S')
+ */
+export async function pressKeyboardShortcut(page: Page, shortcut: string): Promise<void> {
+  // Parse the shortcut string
+  const parts = shortcut.split('+');
+  const modifiers = parts.slice(0, -1);
+  const key = parts[parts.length - 1].toLowerCase();
+
+  await page.evaluate(({ key: keyChar, modifiers: mods }) => {
+    const isMac = navigator.platform.includes('Mac');
+    const event = new KeyboardEvent('keydown', {
+      key: keyChar,
+      code: `Key${keyChar.toUpperCase()}`,
+      metaKey: mods.includes('Mod') ? isMac : mods.includes('Meta'),
+      ctrlKey: mods.includes('Mod') ? !isMac : mods.includes('Control') || mods.includes('Ctrl'),
+      shiftKey: mods.includes('Shift'),
+      altKey: mods.includes('Alt') || mods.includes('Option'),
+      bubbles: true,
+      cancelable: true
+    });
+    document.dispatchEvent(event);
+  }, { key, modifiers });
+}
+
+/**
  * Helper to preconfigure AI provider settings via IPC
  * This configures the provider at the app level before any UI interaction
  * @param page The Playwright page

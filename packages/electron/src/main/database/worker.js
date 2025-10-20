@@ -22,11 +22,21 @@ class PGLiteWorker {
       throw new Error('This module must be run in a Worker thread');
     }
 
+    // Global error handlers for the worker
+    process.on('uncaughtException', (error) => {
+      console.error('[PGLite Worker] Uncaught exception:', error);
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('[PGLite Worker] Unhandled rejection at:', promise, 'reason:', reason);
+    });
+
     parentPort.on('message', async (message) => {
       try {
         const response = await this.handleMessage(message);
         parentPort.postMessage(response);
       } catch (error) {
+        console.error('[PGLite Worker] Error handling message:', error);
         parentPort.postMessage({
           id: message.id,
           success: false,

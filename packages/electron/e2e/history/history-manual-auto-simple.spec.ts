@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
+import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, pressKeyboardShortcut, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
@@ -16,6 +16,7 @@ test.describe('History - Simple Manual/Auto Test', () => {
 
     try {
       const page = await electronApp.firstWindow();
+
       await page.waitForLoadState('domcontentloaded');
 
       // Dismiss API key dialog
@@ -48,19 +49,11 @@ test.describe('History - Simple Manual/Auto Test', () => {
 
       console.log('[TEST] Saved content verified, attempting to open history dialog');
 
-      // Try to open history - click the history icon in the toolbar
-      // Look for a button with title or aria-label containing "history"
-      const historyButton = page.locator('button[title*="istory"], button[aria-label*="istory"]').first();
-
-      if (await historyButton.isVisible().catch(() => false)) {
-        console.log('[TEST] Found history button, clicking it');
-        await historyButton.click();
-      } else {
-        console.log('[TEST] History button not found, trying keyboard shortcut');
-        await page.click('body');
-        await page.waitForTimeout(200);
-        await page.keyboard.press(getKeyboardShortcut('Mod+Y'));
-      }
+      // Open file history dialog using Cmd+Y keyboard shortcut
+      await page.click('body');
+      await page.waitForTimeout(200);
+      console.log('[TEST] Pressing Mod+Y to open file history');
+      await pressKeyboardShortcut(page, 'Mod+Y');
 
       // Wait for dialog
       await page.waitForSelector('.history-dialog', { timeout: 5000 });

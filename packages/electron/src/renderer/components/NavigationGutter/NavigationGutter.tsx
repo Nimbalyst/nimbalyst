@@ -63,12 +63,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 
   // Quick access buttons - secondary actions (middle)
   const quickAccessButtons: NavButton[] = [
-    {
-      id: 'history',
-      icon: 'history',
-      label: 'Session History',
-      onClick: onOpenHistory,
-    },
+    // Session History removed - use Cmd+Y for file history instead
   ];
 
   // Settings button - always at bottom

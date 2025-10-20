@@ -10,7 +10,12 @@ export async function registerHistoryHandlers() {
 
     // Create snapshot
     ipcMain.handle('history:create-snapshot', async (event, filePath: string, state: string, type: string, description?: string) => {
-        await historyManager.createSnapshot(filePath, state, type as any, description);
+        try {
+            await historyManager.createSnapshot(filePath, state, type as any, description);
+        } catch (error) {
+            console.error('[HistoryHandlers] Failed to create snapshot:', error);
+            throw error;
+        }
     });
 
     // List snapshots

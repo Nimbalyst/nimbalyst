@@ -659,6 +659,18 @@ export default function App() {
     window.electronAPI.setDocumentEdited(isDirty);
   }, [currentFileName, isDirty, workspaceMode, workspaceName]);
 
+  // Create refs to hold current values without triggering re-setup of event listeners
+  const isDirtyRefForKeyboard = useRef(isDirty);
+  const currentFilePathRefForKeyboard = useRef(currentFilePath);
+
+  useEffect(() => {
+    isDirtyRefForKeyboard.current = isDirty;
+  }, [isDirty]);
+
+  useEffect(() => {
+    currentFilePathRefForKeyboard.current = currentFilePath;
+  }, [currentFilePath]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -725,24 +737,35 @@ export default function App() {
       // Cmd+Y (Mac) or Ctrl+Y (Windows/Linux) for History
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
         e.preventDefault();
+        // Use refs to get current values
+        const currentIsDirty = isDirtyRefForKeyboard.current;
+        const currentPath = currentFilePathRefForKeyboard.current;
         // Save current state as manual snapshot before opening history (only if dirty)
-        if (isDirty && currentFilePath && getContentRef.current && window.electronAPI?.history) {
-          const content = getContentRef.current();
-          window.electronAPI.history.createSnapshot(
-            currentFilePath,
-            content,
-            'manual',
-            'Before viewing history'
-          );
-        }
-        setIsHistoryDialogOpen(true);
+        const openHistoryDialog = async () => {
+          if (currentIsDirty && currentPath && getContentRef.current && window.electronAPI?.history) {
+            try {
+              const content = getContentRef.current();
+              // Wait for snapshot to be created before opening dialog to avoid race conditions
+              await window.electronAPI.history.createSnapshot(
+                currentPath,
+                content,
+                'manual',
+                'Before viewing history'
+              );
+            } catch (error) {
+              console.error('[App] Failed to create history snapshot before opening dialog:', error);
+            }
+          }
+          setIsHistoryDialogOpen(true);
+        };
+        openHistoryDialog();
       }
     };
 
     // Use capture phase to intercept before any other handlers (like Lexical's)
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [workspaceMode, currentFilePath, tabs.reopenLastClosedTab]);
+  }, [workspaceMode, tabs.reopenLastClosedTab]);
 
   // Save AI Chat state when it changes (but only after initial load)
   useEffect(() => {
@@ -806,32 +829,22 @@ export default function App() {
   }, [newFileDirectory, workspacePath, handleWorkspaceFileSelect]);
 
   // Handle restoring content from history
-  const handleRestoreFromHistory = useCallback((content: string) => {
-    console.log('[App] handleRestoreFromHistory called', {
-      contentLength: content?.length,
-      tabsEnabled: true,
-      activeTabId: tabs.activeTabId
-    });
-
-    // Update the content based on tab mode
-    if (tabs.activeTabId && tabs.activeTab) {
-      const activeTab = tabs.activeTab;
-
-      // 1. Update the tab's content first
-      tabs.updateTab(tabs.activeTabId, { content, isDirty: true });
-      console.log('[App] Updated tab content for tab:', tabs.activeTabId);
-
-      // 2. Note: EditorContainer will handle the reload when tab content changes
-
-      // 3. Update global UI state
-      setIsDirty(true);
-    } else {
-      console.warn('[App] No active tab to restore content to');
+  const handleRestoreFromHistory = useCallback(async (content: string) => {
+    if (!currentFilePath) {
+      return;
     }
+
+    try {
+      // Simple approach: Just write the restored content to disk
+      // The file watcher will detect the change and reload the editor automatically
+      await window.electronAPI.saveFile(content, currentFilePath);
+    } catch (error) {
+      console.error('[App] Failed to restore content from history:', error);
+    }
+
     // Close the history dialog
     setIsHistoryDialogOpen(false);
-    console.log('[App] Content restored from history');
-  }, [tabs]);
+  }, [currentFilePath]);
 
   // Sync current file path with backend whenever it changes
   useEffect(() => {

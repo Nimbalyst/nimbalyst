@@ -78,6 +78,20 @@ export class PGLiteDatabaseWorker {
         this.pendingRequests.clear();
       });
 
+      // Set up exit handler
+      this.worker.on('exit', (code) => {
+        if (code !== 0) {
+          logger.main.error(`[PGLite Worker] Worker exited with code ${code}`);
+          // Reject all pending requests
+          this.pendingRequests.forEach((pending) => {
+            pending.reject(new Error(`Worker exited with code ${code}`));
+          });
+          this.pendingRequests.clear();
+          this.initialized = false;
+          this.worker = null;
+        }
+      });
+
       // Initialize database in worker
       await this.sendMessage('init');
 
