@@ -1,0 +1,78 @@
+.confirm-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.confirm-dialog {
+  background-color: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 24px;
+  min-width: 400px;
+  max-width: 500px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.confirm-dialog-title {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.confirm-dialog-message {
+  margin: 0 0 24px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.confirm-dialog-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.confirm-dialog-button {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.confirm-dialog-button-cancel {
+  background-color: var(--surface-secondary);
+  color: var(--text-primary);
+}
+
+.confirm-dialog-button-cancel:hover {
+  background-color: var(--surface-hover);
+}
+
+.confirm-dialog-button-confirm {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.confirm-dialog-button-confirm:hover {
+  opacity: 0.9;
+}
+
+.confirm-dialog-button-destructive {
+  background-color: #dc2626;
+  color: white;
+}
+
+.confirm-dialog-button-destructive:hover {
+  background-color: #b91c1c;
+}

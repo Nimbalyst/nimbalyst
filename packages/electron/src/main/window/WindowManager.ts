@@ -244,54 +244,18 @@ export function createWindow(
             });
         }
 
-        // Handle window close with unsaved changes (skip prompts when quitting or in test mode)
+        // Handle window close with unsaved changes
         window.on('close', (event) => {
             if (isQuitting) {
                 // Allow close to proceed without prompts during app quit
                 return;
             }
 
-            // Skip dialog in test mode to allow tests to close windows cleanly
-            if (process.env.NODE_ENV === 'test') {
-                return;
-            }
-
             const state = windowStates.get(windowId);
             if (state?.documentEdited) {
                 event.preventDefault();
-                // TODO: Send message to renderer to show custom dialog
-                // For now, just close without prompting in test mode
-                // window.webContents.send('confirm-close-unsaved');
-
-                // Temporary: Use native dialog (not test-friendly)
-                const choice = dialog.showMessageBoxSync(window, {
-                    type: 'question',
-                    buttons: ['Save', 'Don\'t Save', 'Cancel'],
-                    defaultId: 0,
-                    cancelId: 2,
-                    message: 'Do you want to save the changes you made?',
-                    detail: 'Your changes will be lost if you don\'t save them.'
-                });
-
-                if (choice === 0) {
-                    // Save - trigger manual save
-                    const windowId = getWindowId(window);
-                    if (windowId !== null) {
-                        // Request save from active tab
-                        window.webContents.send('save-before-close');
-                        // Wait for save to complete
-                        setTimeout(() => {
-                            const currentState = windowStates.get(windowId);
-                            if (!currentState?.documentEdited && !window.isDestroyed()) {
-                                window.destroy();
-                            }
-                        }, 100);
-                    }
-                } else if (choice === 1) {
-                    // Don't save
-                    window.destroy();
-                }
-                // choice === 2: Cancel, do nothing
+                // Send message to renderer to show custom dialog
+                window.webContents.send('confirm-close-unsaved');
             }
         });
 

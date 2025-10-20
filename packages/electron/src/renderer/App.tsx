@@ -9,6 +9,7 @@ import 'rexical/styles';
 import { useIPCHandlers } from './hooks/useIPCHandlers';
 import { useWindowLifecycle } from './hooks/useWindowLifecycle';
 import { useTheme } from './hooks/useTheme';
+import { useConfirmDialog } from './hooks/useConfirmDialog';
 import { useDocumentContext } from './hooks/useDocumentContext';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from './utils/workspaceFileOperations';
 import { aiToolService } from './services/AIToolService';
@@ -17,6 +18,7 @@ import { WorkspaceWelcome } from './components/WorkspaceWelcome.tsx';
 import { QuickOpen } from './components/QuickOpen';
 import { AgentCommandPalette } from './components/AgentCommandPalette';
 import { AIChat } from './components/AIChat';
+import { ConfirmDialog } from './components/ConfirmDialog/ConfirmDialog';
 import { HistoryDialog } from './components/HistoryDialog';
 import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
@@ -89,6 +91,9 @@ export default function App() {
 
   // Apply theme for ALL window modes (must run before early returns)
   const { theme, setTheme } = useTheme();
+
+  // General confirm dialog
+  const confirmDialog = useConfirmDialog();
 
   // Document context hook needs to be after tabs - will declare after special window modes
 
@@ -1038,6 +1043,39 @@ export default function App() {
     }
   }, [tabs]);
 
+  // Handle close confirmation from main process
+  useEffect(() => {
+    if (!window.electronAPI) return;
+
+    const handleConfirmClose = async () => {
+      console.log('[WINDOW CLOSE] Has unsaved changes');
+      const confirmed = await confirmDialog.confirm({
+        title: 'Unsaved Changes',
+        message: 'Do you want to save the changes you made? Your changes will be lost if you don\'t save them.',
+        confirmLabel: 'Save',
+        cancelLabel: 'Don\'t Save',
+        destructive: false
+      });
+
+      if (confirmed) {
+        // Save
+        if (handleSaveRef.current) {
+          await handleSaveRef.current();
+        }
+        window.electronAPI?.send?.('close-window-save');
+      } else {
+        // Discard
+        window.electronAPI?.send?.('close-window-discard');
+      }
+    };
+
+    window.electronAPI.on('confirm-close-unsaved', handleConfirmClose);
+
+    return () => {
+      window.electronAPI?.off?.('confirm-close-unsaved', handleConfirmClose);
+    };
+  }, [confirmDialog]);
+
   // Show nothing while initializing to prevent flash
   if (isInitializing) {
     return <div style={{ height: '100vh', backgroundColor: '#1e1e1e' }} />;
@@ -1358,6 +1396,16 @@ export default function App() {
         title={diffError.title}
         message={diffError.message}
         details={diffError.details}
+      />
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.options.title}
+        message={confirmDialog.options.message}
+        confirmLabel={confirmDialog.options.confirmLabel}
+        cancelLabel={confirmDialog.options.cancelLabel}
+        destructive={confirmDialog.options.destructive}
+        onConfirm={confirmDialog.handleConfirm}
+        onCancel={confirmDialog.handleCancel}
       />
       <ErrorToastContainer />
     </div>
