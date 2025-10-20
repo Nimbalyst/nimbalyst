@@ -206,13 +206,10 @@ export const TabContent: React.FC<TabContentProps> = ({
     }
   }, [tabs]);
 
-  console.log('[TabContent] Rendering with', tabs.length, 'tabs, active:', activeTabId);
-
   return (
     <div className="tab-content-container" style={{ height: '100%', overflow: 'hidden' }}>
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
-        console.log('[TabContent] Rendering tab', tab.id, 'isActive:', isActive, 'filePath:', tab.filePath);
 
         // Check for virtual tabs
         const isPlanTab = tab.isVirtual && tab.filePath === 'virtual://plans';

@@ -94,32 +94,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     isDirtyRef.current = isDirty;
   }, [isDirty]);
 
-  // Debug logging for mount/unmount
-  useEffect(() => {
-    console.log(`[TabEditor] MOUNTED for ${filePath} (instance ${instanceIdRef.current})`);
-
-    // Check how many editor instances exist in DOM
-    const checkDOM = () => {
-      const editors = document.querySelectorAll('.multi-editor-instance');
-      console.log(`[TabEditor] DOM check: ${editors.length} editor instances exist`);
-      editors.forEach((ed, i) => {
-        console.log(`  Editor ${i}: filePath=${ed.getAttribute('data-file-path')}`);
-      });
-    };
-
-    // Check immediately after mount
-    setTimeout(checkDOM, 0);
-
-    return () => {
-      console.log(`[TabEditor] UNMOUNTED for ${filePath} (instance ${instanceIdRef.current})`);
-      // Check DOM after unmount
-      setTimeout(() => {
-        const editors = document.querySelectorAll('.multi-editor-instance');
-        console.log(`[TabEditor] After unmount: ${editors.length} editor instances remain in DOM`);
-      }, 0);
-    };
-  }, []);
-
   // Check if file changed on disk when tab becomes active
   useEffect(() => {
     if (!isActive || !window.electronAPI) return;

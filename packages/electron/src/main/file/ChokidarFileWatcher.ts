@@ -36,21 +36,18 @@ export class ChokidarFileWatcher {
     private emitFileChanged(window: BrowserWindow, filePath: string) {
         try {
             if (!window || window.isDestroyed()) {
-                console.log(`[ChokidarFileWatcher] Window destroyed, skipping event for: ${filePath}`);
                 return;
             }
 
             const contents = window.webContents;
             if (!contents || contents.isDestroyed()) {
-                console.log(`[ChokidarFileWatcher] webContents destroyed, skipping event for: ${filePath}`);
                 return;
             }
 
             logger.fileWatcher.info(`File changed: ${filePath}`);
-            console.log(`[ChokidarFileWatcher] Sending file-changed-on-disk event for: ${filePath}`);
             contents.send('file-changed-on-disk', { path: filePath });
         } catch (error) {
-            console.error(`[ChokidarFileWatcher] Error sending event:`, error);
+            logger.fileWatcher.error(`Error sending event:`, error);
         }
     }
 
@@ -72,59 +69,48 @@ export class ChokidarFileWatcher {
 
             // Check if we're already watching this exact file for this window
             if (windowWatchers.has(filePath)) {
-                console.log(`[ChokidarFileWatcher] Already watching ${filePath} for window ${windowId}, skipping`);
                 resolve();
                 return;
             }
 
             try {
-                // console.log(`[ChokidarFileWatcher] Setting up watcher for: ${filePath} (window ${windowId})`);
-                // console.log(`[ChokidarFileWatcher] Current watched files for window ${windowId}:`, Array.from(windowWatchers.keys()));
-
                 // Create a watcher for this specific file only (not a directory!)
                 const watcher = chokidar.watch(filePath, {
-                    ignoreInitial: true,  // Don't fire events for initial file state
+                    ignoreInitial: true,   // Don't fire events for initial file state
                     persistent: true,      // Keep the process running
-                    awaitWriteFinish: {    // Wait for writes to finish (handles atomic saves)
-                        stabilityThreshold: 100,  // Wait 100ms after last change
-                        pollInterval: 50          // Check every 50ms
-                    },
-                    usePolling: false,     // Use native fs.watch (faster)
                     atomic: true,          // Handle atomic writes (vim-style saves)
+                    usePolling: false,     // Use native fs.watch
+                    awaitWriteFinish: {
+                        stabilityThreshold: 100,
+                        pollInterval: 50
+                    }
                 });
 
                 // Wait for watcher to be ready before resolving
                 watcher.on('ready', () => {
-                    // console.log(`[ChokidarFileWatcher] Watcher ready for: ${filePath}`);
                     resolve();
                 });
 
                 // Handle file changes
-                watcher.on('change', (path) => {
-                    console.log(`[ChokidarFileWatcher] *** CHANGE EVENT ***: ${path}`);
-                    console.log(`[ChokidarFileWatcher] Window ID: ${windowId}, Expected path: ${filePath}`);
+                watcher.on('change', () => {
                     this.emitFileChanged(window, filePath);
                 });
 
                 // Handle file deletion
-                watcher.on('unlink', (path) => {
-                    console.log(`[ChokidarFileWatcher] File deleted: ${path}`);
+                watcher.on('unlink', () => {
                     this.notifyFileDeleted(window, filePath);
                     this.stopFile(windowId, filePath);
                 });
 
                 // Handle errors
                 watcher.on('error', (error) => {
-                    console.error(`[ChokidarFileWatcher] Watcher error for ${filePath}:`, error);
+                    logger.fileWatcher.error(`Watcher error for ${filePath}:`, error);
                     reject(error);
                 });
 
                 windowWatchers.set(filePath, watcher);
-                // logger.fileWatcher.info(`Started chokidar watcher for: ${filePath}`);
-                // console.log(`[ChokidarFileWatcher] Watcher successfully created for window ${windowId}, file: ${filePath}`);
             } catch (error) {
                 logger.fileWatcher.error('Failed to start watcher:', error);
-                console.error(`[ChokidarFileWatcher] Failed to start watcher:`, error);
                 reject(error);
             }
         });
@@ -139,7 +125,6 @@ export class ChokidarFileWatcher {
 
         const watcher = windowWatchers.get(filePath);
         if (watcher) {
-            console.log(`[ChokidarFileWatcher] Stopping watcher for window ${windowId}, file: ${filePath}`);
             watcher.close();
             windowWatchers.delete(filePath);
 

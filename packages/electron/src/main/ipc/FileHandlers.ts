@@ -349,15 +349,12 @@ export function registerFileHandlers() {
             return { success: false };
         }
 
-        // console.log('[START_WATCH] Starting file watcher for:', filePath);
-
         try {
             // Wait for the watcher to be ready before returning
             await startFileWatcher(window, filePath);
-            // console.log('[START_WATCH] File watcher ready for:', filePath);
             return { success: true };
         } catch (error) {
-            console.error('[START_WATCH] Failed to start watcher:', error);
+            logger.error('[START_WATCH] Failed to start watcher:', error);
             return { success: false, error: String(error) };
         }
     });
