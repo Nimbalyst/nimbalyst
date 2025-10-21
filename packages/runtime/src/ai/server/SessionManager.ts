@@ -4,6 +4,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { AISessionsRepository } from '../../storage/repositories/AISessionsRepository';
+import { AgentMessagesRepository } from '../../storage/repositories/AgentMessagesRepository';
 import { getSessionStore, hasSessionStore, setSessionStore, type SessionStore } from '../adapters/sessionStore';
 import { SessionData, Message, DocumentContext, AIProviderType } from './types';
 import type { SessionData as ChatSession } from './types';
@@ -55,13 +56,148 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
   } satisfies SessionData;
 }
 
+/**
+ * Transform raw agent messages from database into UI-friendly format
+ * This processes the raw input/output logs and reconstructs the conversation
+ */
+function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
+  const uiMessages: Message[] = [];
+
+  // Process messages in order
+  for (const agentMsg of agentMessages) {
+    const timestamp = agentMsg.createdAt ? new Date(agentMsg.createdAt).getTime() : Date.now();
+
+    try {
+      // Handle different message types based on direction and content
+      if (agentMsg.direction === 'input') {
+        // Try to parse as JSON first (Claude Code format)
+        try {
+          const parsed = JSON.parse(agentMsg.content);
+          if (parsed.prompt) {
+            // Claude Code format: { prompt: "...", options: {...} }
+            uiMessages.push({
+              role: 'user',
+              content: parsed.prompt,
+              timestamp
+            });
+          }
+        } catch (parseError) {
+          // Not JSON - treat as raw text (regular Claude SDK format)
+          uiMessages.push({
+            role: 'user',
+            content: agentMsg.content,
+            timestamp
+          });
+        }
+      } else if (agentMsg.direction === 'output') {
+        // Try to parse as JSON
+        try {
+          const parsed = JSON.parse(agentMsg.content);
+
+          if (parsed.type === 'text' && parsed.content !== undefined) {
+            // Claude Code text chunk: { type: 'text', content: '...' }
+            const lastMsg = uiMessages[uiMessages.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
+              lastMsg.content += parsed.content;
+            } else {
+              uiMessages.push({
+                role: 'assistant',
+                content: parsed.content,
+                timestamp
+              });
+            }
+          } else if (parsed.type === 'assistant' && parsed.message) {
+            // Full assistant message with structured content
+            if (Array.isArray(parsed.message.content)) {
+              for (const block of parsed.message.content) {
+                if (block.type === 'text') {
+                  const lastMsg = uiMessages[uiMessages.length - 1];
+                  if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
+                    lastMsg.content += block.text || '';
+                  } else {
+                    uiMessages.push({
+                      role: 'assistant',
+                      content: block.text || '',
+                      timestamp
+                    });
+                  }
+                } else if (block.type === 'tool_use') {
+                  // Tool call - add as a tool message
+                  uiMessages.push({
+                    role: 'tool',
+                    content: '',
+                    timestamp,
+                    toolCall: {
+                      id: block.id,
+                      name: block.name,
+                      arguments: block.input || block.arguments
+                    }
+                  });
+                }
+              }
+            }
+          } else if (parsed.usage) {
+            // This is metadata (usage stats), mark last message as complete
+            const lastMsg = uiMessages[uiMessages.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant') {
+              (lastMsg as any).isComplete = true;
+            }
+          }
+        } catch (parseError) {
+          // Not valid JSON - treat as raw text output (regular Claude SDK)
+          // This is the final output from ClaudeProvider.logAgentMessage()
+          const content = agentMsg.content;
+          if (content && content.trim()) {
+            const lastMsg = uiMessages[uiMessages.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant' && !(lastMsg as any).isComplete) {
+              // Shouldn't happen with Claude SDK (logs complete messages), but handle it
+              lastMsg.content += content;
+              (lastMsg as any).isComplete = true;
+            } else {
+              // Create new complete assistant message
+              uiMessages.push({
+                role: 'assistant',
+                content: content,
+                timestamp
+              });
+              (uiMessages[uiMessages.length - 1] as any).isComplete = true;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[SessionManager] Failed to process agent message:', error);
+    }
+  }
+
+  // Mark the last message as complete if it's an assistant message and not already marked
+  if (uiMessages.length > 0 && uiMessages[uiMessages.length - 1].role === 'assistant') {
+    (uiMessages[uiMessages.length - 1] as any).isComplete = true;
+  }
+
+  return uiMessages;
+}
+
 async function fetchSessionsForWorkspace(workspace: string): Promise<SessionData[]> {
   const items = await AISessionsRepository.list(workspace);
   const sessions = await Promise.all(
     items.map(async item => {
       const session = await AISessionsRepository.get(item.id);
       if (!session) return null;
-      return sessionDataFromChatSession(session, workspace);
+
+      // Fetch raw agent messages from the database
+      const agentMessages = await AgentMessagesRepository.list(item.id);
+
+      // Transform raw messages into UI format
+      const uiMessages = transformAgentMessagesToUI(agentMessages);
+
+      // Create session with transformed messages
+      const normalized: ChatSession = {
+        ...session,
+        messages: uiMessages,
+      };
+
+      return sessionDataFromChatSession(normalized, workspace);
     })
   );
 
@@ -167,20 +303,16 @@ export class SessionManager {
       return null;
     }
 
-    const cleanedMessages = session.messages.filter(msg => {
-      if (!msg) return false;
-      if ((msg as any).toolCall) return true;
-      if ((msg as any).isStreamingStatus) return true;
-      return Boolean(msg.content && msg.content.trim() !== '');
-    });
+    // Fetch raw agent messages from the database
+    const agentMessages = await AgentMessagesRepository.list(sessionId);
 
-    if (cleanedMessages.length !== session.messages.length) {
-      await AISessionsRepository.replaceMessages(sessionId, cleanedMessages);
-    }
+    // Transform raw messages into UI format
+    const uiMessages = transformAgentMessagesToUI(agentMessages);
 
+    // Create session data with transformed messages
     const normalized: ChatSession = {
       ...session,
-      messages: cleanedMessages,
+      messages: uiMessages,
     };
 
     const sessionData = sessionDataFromChatSession(normalized, workspace);
@@ -208,7 +340,9 @@ export class SessionManager {
     if (!targetId) {
       throw new Error('No session ID provided and no current session loaded');
     }
-    await AISessionsRepository.appendMessage(targetId, message);
+
+    // Messages are now stored in ai_agent_messages table via provider logAgentMessage()
+    // Only update in-memory session state for backward compatibility
     if (this.currentSession?.id === targetId) {
       this.currentSession = {
         ...this.currentSession,
@@ -219,7 +353,8 @@ export class SessionManager {
   }
 
   async updateSessionMessages(sessionId: string, messages: Message[], workspacePath?: string): Promise<boolean> {
-    await AISessionsRepository.replaceMessages(sessionId, messages);
+    // Messages are now stored in ai_agent_messages table via provider logAgentMessage()
+    // Only update in-memory session state for backward compatibility
     if (this.currentSession?.id === sessionId) {
       this.currentSession = {
         ...this.currentSession,
