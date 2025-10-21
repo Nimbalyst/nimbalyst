@@ -1,8 +1,8 @@
 /* Workspace Sidebar Styles */
 .workspace-sidebar {
   width: 100%;
-  background-color: #f3f4f6;
-  border-right: 1px solid #e5e7eb;
+  background-color: var(--surface-secondary, #f3f4f6);
+  border-right: 1px solid var(--border-primary, #e5e7eb);
   display: flex;
   flex-direction: column;
   height: 100vh;

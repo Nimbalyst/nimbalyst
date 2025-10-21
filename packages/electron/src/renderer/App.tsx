@@ -1089,9 +1089,9 @@ export default function App() {
     };
   }, [confirmDialog]);
 
-  // Show nothing while initializing to prevent flash
+  // Show nothing while initializing - let HTML/CSS background show through
   if (isInitializing) {
-    return <div style={{ height: '100vh', backgroundColor: '#1e1e1e' }} />;
+    return <div style={{ height: '100vh' }} />;
   }
 
   return (

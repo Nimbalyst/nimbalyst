@@ -155,6 +155,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Theme operations
   getTheme: () => ipcRenderer.invoke('get-theme'),
+  getThemeSync: () => ipcRenderer.sendSync('get-theme-sync'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   setTheme: (theme: string) => ipcRenderer.invoke('set-theme', theme),
 

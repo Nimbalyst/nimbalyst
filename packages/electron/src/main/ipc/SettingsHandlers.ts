@@ -22,9 +22,14 @@ export function registerSettingsHandlers() {
         });
     });
 
-    // Get theme
+    // Get theme (async)
     ipcMain.handle('get-theme', () => {
         return getTheme();
+    });
+
+    // Get theme (sync) - for immediate HTML script use
+    ipcMain.on('get-theme-sync', (event) => {
+        event.returnValue = getTheme();
     });
 
     // Get app version (from app.getVersion)
