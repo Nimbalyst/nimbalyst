@@ -146,16 +146,22 @@ export function createWindow(
         }
 
         // Determine the current theme and set appropriate background color
+        // IMPORTANT: This must match the HTML script logic exactly to prevent flash
         const currentTheme = getTheme();
+        console.log('[WINDOW-MANAGER] Creating window with theme:', currentTheme);
         let backgroundColor = '#ffffff'; // Default to white for light theme
 
-        if (currentTheme === 'dark' || currentTheme === 'crystal-dark') {
+        if (currentTheme === 'dark') {
             backgroundColor = '#1e1e1e';
-        } else if (currentTheme === 'system') {
-            if (nativeTheme.shouldUseDarkColors) {
-                backgroundColor = '#1e1e1e';
-            }
+        } else if (currentTheme === 'crystal-dark') {
+            backgroundColor = '#020617'; // Crystal dark uses darker background
+        } else if (currentTheme === 'light') {
+            backgroundColor = '#ffffff';
+        } else {
+            // system/auto - use nativeTheme which should match prefers-color-scheme
+            backgroundColor = nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#ffffff';
         }
+        console.log('[WINDOW-MANAGER] Background color:', backgroundColor);
 
         const windowOptions: Electron.BrowserWindowConstructorOptions = {
             width,
@@ -354,18 +360,25 @@ export function createWindow(
 
         // Load the HTML file with error handling
         const loadContent = () => {
+            // Add theme to URL query params to prevent flash
+            const themeParam = `theme=${currentTheme}`;
+            console.log('[WINDOW-MANAGER] Loading window with theme param:', themeParam);
+
             // Check for explicit renderer URL from environment (for Playwright tests)
             if (process.env.ELECTRON_RENDERER_URL) {
-                console.log('[MAIN] Loading from ELECTRON_RENDERER_URL:', process.env.ELECTRON_RENDERER_URL);
-                return window.loadURL(process.env.ELECTRON_RENDERER_URL);
+                const url = new URL(process.env.ELECTRON_RENDERER_URL);
+                url.searchParams.set('theme', currentTheme);
+                console.log('[MAIN] Loading from ELECTRON_RENDERER_URL:', url.toString());
+                return window.loadURL(url.toString());
             } else if (process.env.NODE_ENV === 'development') {
-                console.log('[MAIN] Loading from dev server');
-                return window.loadURL('http://localhost:5273');
+                const url = `http://localhost:5273?${themeParam}`;
+                console.log('[MAIN] Loading from dev server:', url);
+                return window.loadURL(url);
             } else {
-                console.log('[MAIN] Loading from built files');
+                console.log('[MAIN] Loading from built files with theme:', currentTheme);
                 // Use loadFile which handles App Translocation properly
                 const htmlPath = join(__dirname, '../renderer/index.html');
-                return window.loadFile(htmlPath);
+                return window.loadFile(htmlPath, { query: { theme: currentTheme } });
             }
         };
 

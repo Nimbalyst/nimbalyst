@@ -31,23 +31,14 @@ export function createAIModelsWindow() {
     });
 
     // Load the main app with a query parameter to indicate AI Models mode
+    const currentTheme = getTheme();
     if (process.env.NODE_ENV === 'development') {
-        aiModelsWindow.loadURL('http://localhost:5273/?mode=ai-models');
+        aiModelsWindow.loadURL(`http://localhost:5273/?mode=ai-models&theme=${currentTheme}`);
     } else {
         aiModelsWindow.loadFile(join(__dirname, '../renderer/index.html'), {
-            query: { mode: 'ai-models' }
+            query: { mode: 'ai-models', theme: currentTheme }
         });
     }
-
-    // Inject theme before showing window
-    aiModelsWindow.webContents.once('dom-ready', () => {
-        const currentTheme = getTheme();
-        // Inject the theme into localStorage before the React app loads
-        aiModelsWindow?.webContents.executeJavaScript(`
-            localStorage.setItem('theme', '${currentTheme}');
-            console.log('[AIModelsWindow] Injected theme:', '${currentTheme}');
-        `);
-    });
 
     // Show window when ready
     aiModelsWindow.once('ready-to-show', () => {

@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain, dialog, app } from 'electron';
 import { join, basename } from 'path';
 import { existsSync, mkdirSync, statSync, readdirSync } from 'fs';
-import { getRecentItems, addToRecentItems, store, getWorkspaceWindowState } from '../utils/store';
+import { getRecentItems, addToRecentItems, store, getWorkspaceWindowState, getTheme } from '../utils/store';
 import { createWindow } from './WindowManager';
 
 let workspaceManagerWindow: BrowserWindow | null = null;
@@ -54,11 +54,12 @@ export function createWorkspaceManagerWindow() {
 
   // Load the main app with a query parameter to indicate Workspace Manager mode
   const loadContent = () => {
+    const currentTheme = getTheme();
     if (process.env.NODE_ENV === 'development') {
-      return workspaceManagerWindow!.loadURL('http://localhost:5273/?mode=workspace-manager');
+      return workspaceManagerWindow!.loadURL(`http://localhost:5273/?mode=workspace-manager&theme=${currentTheme}`);
     } else {
       return workspaceManagerWindow!.loadFile(join(__dirname, '../renderer/index.html'), {
-        query: { mode: 'workspace-manager' }
+        query: { mode: 'workspace-manager', theme: currentTheme }
       });
     }
   };

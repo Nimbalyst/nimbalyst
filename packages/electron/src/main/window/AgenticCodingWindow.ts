@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { join } from 'path';
 import { AISessionsRepository } from '@nimbalyst/runtime';
-import { getAgenticCodingWindowState, saveAgenticCodingWindowState } from '../utils/store';
+import { getAgenticCodingWindowState, saveAgenticCodingWindowState, getTheme } from '../utils/store';
 import { windows, windowStates, windowFocusOrder, windowDevToolsState, incrementFocusOrderCounter } from './WindowManager';
 
 const agenticCodingWindows = new Map<string, BrowserWindow>();
@@ -64,9 +64,11 @@ export function createAgenticCodingWindow(options: AgenticCodingWindowOptions) {
 
   // Load the content
   const loadContent = () => {
+    const currentTheme = getTheme();
     const params = new URLSearchParams({
       mode: 'agentic-coding',
-      workspacePath
+      workspacePath,
+      theme: currentTheme
     });
 
     if (sessionId) {

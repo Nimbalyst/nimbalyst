@@ -4,6 +4,7 @@ import { writeFileSync } from 'fs';
 import { AISessionsRepository } from '@nimbalyst/runtime';
 import { getWorkspaceRepository } from '../services/RepositoryManager';
 import { database } from '../database/PGLiteDatabaseWorker';
+import { getTheme } from '../utils/store';
 
 let sessionManagerWindow: BrowserWindow | null = null;
 
@@ -59,13 +60,15 @@ export function createSessionManagerWindow(filterWorkspace?: string) {
 
   // Load the main app with a query parameter to indicate Session Manager mode
   const loadContent = () => {
+    const currentTheme = getTheme();
     if (process.env.NODE_ENV === 'development') {
-      const url = filterWorkspace
-        ? `http://localhost:5273/?mode=session-manager&filterWorkspace=${encodeURIComponent(filterWorkspace)}`
-        : 'http://localhost:5273/?mode=session-manager';
-      return sessionManagerWindow!.loadURL(url);
+      const params = new URLSearchParams({ mode: 'session-manager', theme: currentTheme });
+      if (filterWorkspace) {
+        params.set('filterWorkspace', filterWorkspace);
+      }
+      return sessionManagerWindow!.loadURL(`http://localhost:5273/?${params.toString()}`);
     } else {
-      const query: any = { mode: 'session-manager' };
+      const query: any = { mode: 'session-manager', theme: currentTheme };
       if (filterWorkspace) {
         query.filterWorkspace = filterWorkspace;
       }
