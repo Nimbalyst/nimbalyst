@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { getCursorCoordinates } from './typeaheadUtils';
 import './GenericTypeahead.css';
 
@@ -55,7 +56,7 @@ export function GenericTypeahead({
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
-  // Calculate menu position based on cursor
+  // Calculate menu position based on cursor (viewport coordinates for portal)
   useEffect(() => {
     if (!anchorElement) return;
 
@@ -71,49 +72,45 @@ export function GenericTypeahead({
         const menuHeight = menuRef.current?.offsetHeight || maxHeight;
         const menuWidth = menuRef.current?.offsetWidth || minWidth;
 
-        // Get textarea and viewport bounds
+        // Get textarea position in viewport
         const textareaRect = anchorElement.getBoundingClientRect();
         const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
 
-        // Calculate absolute position of the menu
-        const absoluteLeft = textareaRect.left + coords.left;
-        const absoluteRight = absoluteLeft + menuWidth;
+        // Calculate absolute viewport position
+        // coords.left and coords.top are relative to textarea, so add textarea position
+        let absoluteLeft = textareaRect.left + coords.left;
+        let absoluteTop = textareaRect.top + coords.top - menuHeight - 2; // 2px gap above cursor
 
-        // Check if menu would overflow the right side of viewport
-        let left = coords.left;
-        if (absoluteRight > viewportWidth) {
-          // Shift menu left to fit in viewport
-          const overflow = absoluteRight - viewportWidth + 10; // 10px padding
-          left = coords.left - overflow;
-
-          // Make sure we don't go negative
-          if (left < -textareaRect.left) {
-            left = -textareaRect.left + 10; // 10px padding from left edge
-          }
+        // Ensure menu fits horizontally in viewport
+        const padding = 10;
+        if (absoluteLeft + menuWidth > viewportWidth - padding) {
+          // Shift left to fit
+          absoluteLeft = viewportWidth - menuWidth - padding;
+        }
+        if (absoluteLeft < padding) {
+          // Ensure minimum padding from left edge
+          absoluteLeft = padding;
         }
 
-        // Position menu above cursor (coords are already relative to textarea)
-        // Add a minimal offset (2px) above the cursor line
-        const top = coords.top - menuHeight - 2;
+        // Ensure menu fits vertically in viewport
+        if (absoluteTop < padding) {
+          // Not enough space above, position below cursor
+          absoluteTop = textareaRect.top + coords.top + 20; // 20px below cursor
+        }
+        if (absoluteTop + menuHeight > viewportHeight - padding) {
+          // Shift up to fit
+          absoluteTop = viewportHeight - menuHeight - padding;
+        }
 
-        // console.log('[GenericTypeahead] Position calculated:', {
-        //   top,
-        //   left,
-        //   coords,
-        //   menuHeight,
-        //   menuWidth,
-        //   absoluteLeft,
-        //   absoluteRight,
-        //   viewportWidth,
-        //   overflow: absoluteRight - viewportWidth
-        // });
-        setPosition({ top, left });
+        setPosition({ top: absoluteTop, left: absoluteLeft });
       } catch (err) {
         console.error('[GenericTypeahead] Failed to calculate position:', err);
-        // Fallback to above textarea
+        // Fallback to below textarea
+        const textareaRect = anchorElement.getBoundingClientRect();
         setPosition({
-          top: -maxHeight,
-          left: 0
+          top: textareaRect.bottom + 2,
+          left: textareaRect.left
         });
       }
     };
@@ -190,12 +187,12 @@ export function GenericTypeahead({
     return null;
   }
 
-  return (
+  const menuElement = (
     <div
       ref={menuRef}
       className={`generic-typeahead ${className}`}
       style={{
-        position: 'absolute',
+        position: 'fixed',
         top: `${position.top}px`,
         left: `${position.left}px`,
         maxHeight: `${maxHeight}px`,
@@ -240,4 +237,6 @@ export function GenericTypeahead({
       </div>
     </div>
   );
+
+  return createPortal(menuElement, document.body);
 }
