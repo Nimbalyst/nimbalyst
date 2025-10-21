@@ -1,10 +1,6 @@
 # Release Notes
 
 ## Features
-- Add mermaid diagram rendering support
-
-## Improvements
-- Move sidebar view controls to navigation gutter
-
-## Documentation
-- Database schema and planning system documentation
+- AI chat messages now persist to database for session continuity
+  - Sidebar and agent panel read from ai_agent_messages table
+  - Chat history preserved across app restarts
