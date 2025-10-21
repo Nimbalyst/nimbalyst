@@ -313,8 +313,8 @@
 
 /* Context Menu */
 .tab-context-menu {
-  background: var(--menu-bg, #ffffff);
-  border: 1px solid var(--menu-border, #e5e7eb);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
   border-radius: 6px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   padding: 4px 0;
@@ -325,18 +325,18 @@
 .context-menu-item {
   padding: 8px 16px;
   font-size: 13px;
-  color: var(--menu-text, #374151);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: background-color 0.15s;
 }
 
 .context-menu-item:hover {
-  background: var(--menu-hover-bg, #f3f4f6);
+  background: var(--surface-hover);
 }
 
 .context-menu-separator {
   height: 1px;
-  background: var(--menu-border, #e5e7eb);
+  background: var(--border-primary);
   margin: 4px 0;
 }
 
