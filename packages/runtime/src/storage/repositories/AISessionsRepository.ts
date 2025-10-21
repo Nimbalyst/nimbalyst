@@ -41,14 +41,6 @@ export const AISessionsRepository = {
     await requireStore().create(payload);
   },
 
-  async appendMessage(sessionId: string, message: Message): Promise<void> {
-    await requireStore().appendMessage(sessionId, message);
-  },
-
-  async replaceMessages(sessionId: string, messages: Message[]): Promise<void> {
-    await requireStore().replaceMessages(sessionId, messages);
-  },
-
   async updateMetadata(sessionId: string, metadata: UpdateSessionMetadataPayload): Promise<void> {
     await requireStore().updateMetadata(sessionId, metadata);
   },

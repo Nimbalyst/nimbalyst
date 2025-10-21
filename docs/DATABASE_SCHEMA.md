@@ -102,7 +102,6 @@ Stores AI chat conversation sessions with complete message history and provider 
 - `model` (TEXT): AI model identifier
 - `title` (TEXT): Human-readable session title
 - `session_type` (TEXT): Type of session (default: 'chat')
-- `messages` (JSONB): Full message history as JSON array
 - `document_context` (JSONB): Document context sent with messages
 - `provider_config` (JSONB): Provider-specific configuration
 - `provider_session_id` (TEXT): External provider session ID
@@ -112,6 +111,8 @@ Stores AI chat conversation sessions with complete message history and provider 
 - `metadata` (JSONB): Additional metadata
 - `created_at` (TIMESTAMP): Creation timestamp
 - `updated_at` (TIMESTAMP): Last update timestamp
+
+**Note:** Message history is now stored in the `ai_agent_messages` table, not as a JSONB column in this table.
 
 **Indexes:**
 - `idx_ai_sessions_workspace` on `workspace_id`

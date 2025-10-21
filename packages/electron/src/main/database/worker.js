@@ -250,7 +250,6 @@ class PGLiteWorker {
         model TEXT,
         title TEXT NOT NULL DEFAULT 'New conversation',
         session_type TEXT DEFAULT 'chat',
-        messages JSONB NOT NULL DEFAULT '[]',
         document_context JSONB,
         provider_config JSONB,
         provider_session_id TEXT,

@@ -36,8 +36,6 @@ export interface UpdateSessionMetadataPayload extends Partial<CreateSessionPaylo
 export interface SessionStore {
   ensureReady(): Promise<void>;
   create(payload: CreateSessionPayload): Promise<void>;
-  appendMessage(sessionId: string, message: Message): Promise<void>;
-  replaceMessages(sessionId: string, messages: Message[]): Promise<void>;
   updateMetadata(sessionId: string, metadata: UpdateSessionMetadataPayload): Promise<void>;
   get(sessionId: string): Promise<SessionData | null>;
   list(workspaceId: string): Promise<SessionListItem[]>;

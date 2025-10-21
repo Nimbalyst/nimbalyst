@@ -25,23 +25,6 @@ function toMillis(value: unknown): number {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 }
 
-function normaliseMessages(raw: unknown): ChatMessage[] {
-  if (Array.isArray(raw)) {
-    return raw as ChatMessage[];
-  }
-  if (!raw) return [];
-  try {
-    if (typeof raw === 'string') {
-      return JSON.parse(raw) as ChatMessage[];
-    }
-    if (typeof raw === 'object') {
-      return JSON.parse(JSON.stringify(raw)) as ChatMessage[];
-    }
-  } catch (error) {
-    console.warn('[PGLiteSessionStore] Failed to parse messages payload', error);
-  }
-  return [];
-}
 
 export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureReadyFn): SessionStore {
   const ensureReady = async () => {
@@ -100,31 +83,6 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       );
     },
 
-    async appendMessage(sessionId: string, message: ChatMessage): Promise<void> {
-      await ensureReady();
-      const result = await db.query<{ messages: any }>(
-        'SELECT messages FROM ai_sessions WHERE id=$1 LIMIT 1',
-        [sessionId]
-      );
-      const existing = normaliseMessages(result.rows[0]?.messages);
-      existing.push(message);
-      await db.query(
-        `UPDATE ai_sessions
-         SET messages=$2, updated_at=CURRENT_TIMESTAMP
-         WHERE id=$1`,
-        [sessionId, existing]
-      );
-    },
-
-    async replaceMessages(sessionId: string, messages: ChatMessage[]): Promise<void> {
-      await ensureReady();
-      await db.query(
-        `UPDATE ai_sessions
-         SET messages=$2, updated_at=CURRENT_TIMESTAMP
-         WHERE id=$1`,
-        [sessionId, messages]
-      );
-    },
 
     async updateMetadata(sessionId: string, metadata: UpdateSessionMetadataPayload): Promise<void> {
       await ensureReady();
@@ -180,7 +138,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         sessionType: row.session_type ?? undefined,
         title: row.title ?? undefined,
         draftInput: row.draft_input ?? undefined,
-        messages: normaliseMessages(row.messages),
+        messages: [], // Messages are now stored in ai_agent_messages table
         workspacePath: row.workspace_id,
         createdAt: toMillis(row.created_at),
         updatedAt: toMillis(row.updated_at),

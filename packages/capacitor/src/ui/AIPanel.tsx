@@ -97,7 +97,7 @@ export function AIPanel({ open, onClose, document, workspaceId }: AIPanelProps) 
         workspaceId,
         documentContext: document ? { filePath: document.filePath, fileType: document.fileType, content: document.content } : undefined,
       }).catch(() => {});
-      await AISessionsRepository.appendMessage(sessionId, { role: 'user', content: prompt, timestamp: Date.now() });
+      // Messages are now stored in ai_agent_messages table via provider logAgentMessage()
       const userMsgId = `m_${Date.now()}_u`;
       const asstMsgId = `m_${Date.now()}_a`;
       setMessages((m) => [...m, { role: 'user', id: userMsgId, content: prompt }, { role: 'assistant', id: asstMsgId, content: '' }]);
@@ -110,7 +110,7 @@ export function AIPanel({ open, onClose, document, workspaceId }: AIPanelProps) 
         },
         onEnd: async () => {
           const assistant = assistantBuffer.current; assistantBuffer.current = '';
-          if (assistant) await AISessionsRepository.appendMessage(sessionId, { role: 'assistant', content: assistant, timestamp: Date.now() });
+          // Messages are now stored in ai_agent_messages table via provider logAgentMessage()
         }
       };
       if (provider === 'lmstudio') {
