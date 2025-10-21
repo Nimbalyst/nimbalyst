@@ -95,9 +95,7 @@ export const WorkspaceManager: React.FC = () => {
       const recentWorkspaces = await window.electronAPI.workspaceManager.getRecentWorkspaces();
       console.log('Loaded workspaces:', recentWorkspaces);
       setWorkspaces(recentWorkspaces);
-      if (recentWorkspaces.length > 0) {
-        setSelectedWorkspace(recentWorkspaces[0]);
-      }
+      // Don't auto-select first workspace - show welcome pane instead
     } catch (error) {
       console.error('Failed to load workspaces:', error);
     } finally {
@@ -242,7 +240,16 @@ export const WorkspaceManager: React.FC = () => {
               <div
                 key={workspace.path}
                 className={`workspace-item ${selectedWorkspace?.path === workspace.path ? 'selected' : ''}`}
-                onClick={() => setSelectedWorkspace(workspace)}
+                onClick={(e) => {
+                  // Command/Ctrl + click to deselect
+                  if (e.metaKey || e.ctrlKey) {
+                    if (selectedWorkspace?.path === workspace.path) {
+                      setSelectedWorkspace(null);
+                    }
+                  } else {
+                    setSelectedWorkspace(workspace);
+                  }
+                }}
                 onDoubleClick={handleOpenWorkspace}
               >
                 <div className="workspace-icon">
