@@ -104,13 +104,13 @@
 }
 
 .rich-transcript-message-avatar.user {
-  background-color: rgba(16, 185, 129, 0.2);
-  color: #10b981;
+  background-color: color-mix(in srgb, var(--status-success) 20%, transparent);
+  color: var(--status-success);
 }
 
 .rich-transcript-message-avatar.assistant {
-  background-color: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
+  background-color: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  color: var(--accent-primary);
 }
 
 .rich-transcript-message-avatar svg {
@@ -329,8 +329,8 @@
   border-radius: 9999px;
   padding: 0.25rem;
   flex-shrink: 0;
-  background-color: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
+  background-color: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  color: var(--accent-primary);
 }
 
 .rich-transcript-streaming-sender {
