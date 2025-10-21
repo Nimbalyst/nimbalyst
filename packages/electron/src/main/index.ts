@@ -200,11 +200,15 @@ app.whenReady().then(async () => {
 
     // Set dock icon for macOS
     if (process.platform === 'darwin' && app.dock) {
-        const iconPath = join(__dirname, '../../resources/icon.png');
+        // In dev mode, use icon from root; in production, use from resources
+        const iconPath = app.isPackaged
+            ? join(__dirname, '../../resources/icon.png')
+            : join(__dirname, '../../icon.png');
+
         if (existsSync(iconPath)) {
             const dockIcon = nativeImage.createFromPath(iconPath);
             app.dock.setIcon(dockIcon);
-            logger.main.info('Dock icon set successfully from resources');
+            logger.main.info('Dock icon set successfully from:', iconPath);
         } else {
             logger.main.warn(`icon not found at: ${iconPath}`);
         }

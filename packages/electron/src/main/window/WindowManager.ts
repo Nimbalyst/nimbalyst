@@ -94,14 +94,21 @@ export function createWindow(
         console.log('[MAIN] Creating window at', new Date().toISOString());
 
         // Set up icon path based on platform
+        // In dev mode, use icon from root; in production, use from resources
         let iconPath: string | undefined;
 
         if (process.platform === 'darwin') {
-            iconPath = join(__dirname, '../../resources/icon.png');
+            iconPath = app.isPackaged
+                ? join(__dirname, '../../resources/icon.png')
+                : join(__dirname, '../../icon.png');
         } else if (process.platform === 'win32') {
-            iconPath = join(__dirname, '../../resources/icon.png');
+            iconPath = app.isPackaged
+                ? join(__dirname, '../../resources/icon.png')
+                : join(__dirname, '../../icon.png');
         } else {
-            iconPath = join(__dirname, '../../resources/icon.png');
+            iconPath = app.isPackaged
+                ? join(__dirname, '../../resources/icon.png')
+                : join(__dirname, '../../icon.png');
         }
 
         // Check if icon exists
