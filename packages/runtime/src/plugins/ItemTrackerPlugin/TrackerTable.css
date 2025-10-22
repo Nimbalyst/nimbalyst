@@ -145,7 +145,7 @@
 }
 
 .tracker-table-cell {
-  padding: 8px;
+  padding: 5px;
   color: var(--text-primary);
   vertical-align: middle;
 }

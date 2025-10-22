@@ -522,13 +522,13 @@ export function TrackerTable({
               <td className="tracker-table-cell title">
                 <div className="title-info">
                   <div className="title-text">{item.title}</div>
-                  {item.tags && item.tags.length > 0 && (
-                    <div className="tags">
-                      {item.tags.map((tag, i) => (
-                        <span key={i} className="tag">{tag}</span>
-                      ))}
-                    </div>
-                  )}
+                  {/*{item.tags && item.tags.length > 0 && (*/}
+                  {/*  <div className="tags">*/}
+                  {/*    {item.tags.map((tag, i) => (*/}
+                  {/*      <span key={i} className="tag">{tag}</span>*/}
+                  {/*    ))}*/}
+                  {/*  </div>*/}
+                  {/*)}*/}
                 </div>
               </td>
               <td className="tracker-table-cell status">
