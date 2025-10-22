@@ -80,12 +80,13 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
   const searchInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
-  
+
   const [showSearchHistory, setShowSearchHistory] = useState(false);
   const [showReplaceHistory, setShowReplaceHistory] = useState(false);
   const [searchHistoryIndex, setSearchHistoryIndex] = useState(-1);
   const [replaceHistoryIndex, setReplaceHistoryIndex] = useState(-1);
-  
+  const [theme, setTheme] = useState<string>('light');
+
   // Dragging state
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -97,6 +98,27 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
   useEffect(() => {
     searchInputRef.current?.focus();
     searchInputRef.current?.select();
+
+    // Detect theme from .stravu-editor element
+    const editorElement = document.querySelector('.stravu-editor');
+    if (editorElement) {
+      const currentTheme = editorElement.getAttribute('data-theme') || 'light';
+      setTheme(currentTheme);
+
+      // Watch for theme changes
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+            const newTheme = editorElement.getAttribute('data-theme') || 'light';
+            setTheme(newTheme);
+          }
+        });
+      });
+
+      observer.observe(editorElement, { attributes: true });
+
+      return () => observer.disconnect();
+    }
   }, []);
   
   // Expose focus method to parent
@@ -275,9 +297,10 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
   return (
-    <div 
-      ref={dialogRef} 
+    <div
+      ref={dialogRef}
       className={`search-replace-dialog ${isDragging ? 'is-dragging' : ''}`}
+      data-theme={theme}
       style={{
         transform: `translate(${position.x}px, ${position.y}px)`,
         cursor: isDragging ? 'grabbing' : 'auto'
@@ -286,6 +309,15 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
     >
       <div className="search-replace-header" style={{ cursor: 'grab' }}>
         <span className="search-replace-title">Find and Replace</span>
+        <span className={'search-replace-count'}>
+          {matches.length > 0 ? (
+            <>
+              {currentMatchIndex + 1} of {matches.length}
+            </>
+          ) : searchString ? (
+            'No results'
+          ) : null}
+        </span>
         <button
           className="search-replace-close"
           onClick={onClose}
@@ -328,16 +360,6 @@ export const SearchReplaceDialog = forwardRef<SearchReplaceDialogHandle, SearchR
                 ))}
               </div>
             )}
-          </div>
-
-          <div className="search-replace-count">
-            {matches.length > 0 ? (
-              <>
-                {currentMatchIndex + 1} of {matches.length}
-              </>
-            ) : searchString ? (
-              'No results'
-            ) : null}
           </div>
 
           <div className="search-replace-options">
