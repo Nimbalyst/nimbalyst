@@ -1,13 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import './BottomPanel.css';
+import './TrackerBottomPanel.css';
 import { TrackerTable, SortColumn as TrackerSortColumn, SortDirection as TrackerSortDirection } from '@nimbalyst/runtime/plugins/ItemTrackerPlugin/TrackerTable';
 import { MaterialSymbol } from '../MaterialSymbol';
 
-export type BottomPanelType = 'plans' | 'bugs' | 'tasks' | 'ideas' | 'decisions';
+export type TrackerBottomPanelType = 'plans' | 'bugs' | 'tasks' | 'ideas' | 'decisions';
 
 interface BottomPanelProps {
-  activePanel: BottomPanelType | null;
-  onPanelChange: (panel: BottomPanelType | null) => void;
+  activePanel: TrackerBottomPanelType | null;
+  onPanelChange: (panel: TrackerBottomPanelType | null) => void;
   height: number;
   onHeightChange: (height: number) => void;
   minHeight?: number;
@@ -23,7 +23,7 @@ interface ItemCounts {
   decisions: number;
 }
 
-export const  BottomPanel: React.FC<BottomPanelProps> = ({
+export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
   activePanel,
   onPanelChange,
   height,
@@ -37,7 +37,7 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
 
   // Debug logging
   useEffect(() => {
-    console.log('[BottomPanel Component] activePanel:', activePanel, 'height:', height, 'visible:', activePanel !== null);
+    console.log('[TrackerBottomPanel Component] activePanel:', activePanel, 'height:', height, 'visible:', activePanel !== null);
   }, [activePanel, height]);
 
   // Load item counts
@@ -49,7 +49,7 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
       const documentService = (window as any).documentService;
 
       if (!documentService) {
-        console.log('[BottomPanel] documentService not available, will retry...');
+        console.log('[TrackerBottomPanel] documentService not available, will retry...');
         if (mounted) {
           retryTimer = setTimeout(() => loadCounts(), 500);
         }
@@ -57,7 +57,7 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
       }
 
       if (!documentService.listTrackerItems) {
-        console.log('[BottomPanel] listTrackerItems not available, will retry...');
+        console.log('[TrackerBottomPanel] listTrackerItems not available, will retry...');
         // Retry after a delay
         if (mounted) {
           retryTimer = setTimeout(() => loadCounts(), 500);
@@ -69,7 +69,7 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
         const items = await documentService.listTrackerItems();
         if (!mounted) return;
 
-        console.log('[BottomPanel] Loaded tracker items:', items.length);
+        console.log('[TrackerBottomPanel] Loaded tracker items:', items.length);
 
         // Count tracker items
         let planCount = items.filter((i: any) => i.type === 'plan' && i.status !== 'done').length;
@@ -102,10 +102,10 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
           ideas: ideaCount,
           decisions: decisionCount,
         };
-        console.log('[BottomPanel] Counts:', counts);
+        console.log('[TrackerBottomPanel] Counts:', counts);
         setItemCounts(counts);
       } catch (error) {
-        console.error('[BottomPanel] Failed to load item counts:', error);
+        console.error('[TrackerBottomPanel] Failed to load item counts:', error);
       }
     }
 
@@ -179,7 +179,7 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
     }
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
-  const handlePanelClick = (panel: BottomPanelType) => {
+  const handlePanelClick = (panel: TrackerBottomPanelType) => {
     if (activePanel === panel) {
       onPanelChange(null);
     } else {

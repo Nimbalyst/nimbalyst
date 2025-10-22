@@ -38,7 +38,7 @@ import { useTabs } from './hooks/useTabs';
 import { useTabNavigation } from './hooks/useTabNavigation';
 import type { ContentMode } from './types/WindowModeTypes';
 import { PlansPanel } from './components/PlansPanel/PlansPanel';
-import { BottomPanel, BottomPanelType } from './components/BottomPanel/BottomPanel';
+import { TrackerBottomPanel, TrackerBottomPanelType } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
 import { registerDecisionStatusPlugin } from './plugins/registerDecisionStatusPlugin';
@@ -194,7 +194,7 @@ export default function App() {
   const [activeMode, setActiveMode] = useState<ContentMode>('files');
 
   // Bottom panel state (shared across all modes)
-  const [bottomPanel, setBottomPanel] = useState<BottomPanelType | null>(null);
+  const [bottomPanel, setBottomPanel] = useState<TrackerBottomPanelType | null>(null);
   const [bottomPanelHeight, setBottomPanelHeight] = useState<number>(300);
 
   // Load active mode from workspace state
@@ -238,7 +238,7 @@ export default function App() {
         }
       })
       .catch(error => {
-        console.error('[BottomPanel] Failed to load bottom panel state:', error);
+        console.error('[TrackerBottomPanel] Failed to load bottom panel state:', error);
       });
   }, [workspacePath]);
 
@@ -257,7 +257,7 @@ export default function App() {
       bottomPanelHeight
     })
       .catch(error => {
-        console.error('[BottomPanel] Failed to save bottom panel state:', error);
+        console.error('[TrackerBottomPanel] Failed to save bottom panel state:', error);
       });
   }, [bottomPanel, bottomPanelHeight, workspacePath, activeMode]);
 
@@ -1414,7 +1414,7 @@ export default function App() {
 
         {/* Bottom: Bottom Panel - spans width after nav gutter */}
         {bottomPanel && (
-          <BottomPanel
+          <TrackerBottomPanel
             activePanel={bottomPanel}
             onPanelChange={setBottomPanel}
             height={bottomPanelHeight}
