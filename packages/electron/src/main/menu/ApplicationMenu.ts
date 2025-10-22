@@ -633,8 +633,11 @@ export async function createApplicationMenu() {
                     label: 'Agent Mode',
                     accelerator: KeyboardShortcuts.view.agentMode,
                     click: async () => {
+                        console.log('[Menu] Agent Mode clicked');
                         const focused = BrowserWindow.getFocusedWindow();
+                        console.log('[Menu] Focused window:', focused ? 'exists' : 'null');
                         if (focused) {
+                            console.log('[Menu] Sending set-content-mode event with agent');
                             focused.webContents.send('set-content-mode', 'agent');
                         }
                     }
@@ -824,38 +827,38 @@ export async function createApplicationMenu() {
                         createWorkspaceManagerWindow();
                     }
                 },
-                {
-                    label: 'Session Manager',
-                    accelerator: KeyboardShortcuts.window.sessionManager,
-                    click: async () => {
-                        createSessionManagerWindow();
-                    }
-                },
-                {
-                    label: 'Agentic Coding...',
-                    accelerator: KeyboardShortcuts.window.agenticCoding,
-                    click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
-                        if (!focused) return;
-
-                        const windowId = getWindowId(focused);
-                        const state = windowId !== null ? windowStates.get(windowId) : undefined;
-
-                        if (!state || !state.workspacePath) {
-                            dialog.showMessageBox(focused, {
-                                type: 'info',
-                                title: 'No Workspace',
-                                message: 'Please open a workspace to use agentic coding.'
-                            });
-                            return;
-                        }
-
-                        createAgenticCodingWindow({
-                            workspacePath: state.workspacePath,
-                            planDocumentPath: state.filePath && state.filePath.endsWith('.md') ? state.filePath : undefined
-                        });
-                    }
-                },
+                // {
+                //     label: 'Session Manager',
+                //     accelerator: KeyboardShortcuts.window.sessionManager,
+                //     click: async () => {
+                //         createSessionManagerWindow();
+                //     }
+                // },
+                // {
+                //     label: 'Agentic Coding...',
+                //     accelerator: KeyboardShortcuts.window.agenticCoding,
+                //     click: async () => {
+                //         const focused = BrowserWindow.getFocusedWindow();
+                //         if (!focused) return;
+                //
+                //         const windowId = getWindowId(focused);
+                //         const state = windowId !== null ? windowStates.get(windowId) : undefined;
+                //
+                //         if (!state || !state.workspacePath) {
+                //             dialog.showMessageBox(focused, {
+                //                 type: 'info',
+                //                 title: 'No Workspace',
+                //                 message: 'Please open a workspace to use agentic coding.'
+                //             });
+                //             return;
+                //         }
+                //
+                //         createAgenticCodingWindow({
+                //             workspacePath: state.workspacePath,
+                //             planDocumentPath: state.filePath && state.filePath.endsWith('.md') ? state.filePath : undefined
+                //         });
+                //     }
+                // },
                 { type: 'separator' },
                 { label: 'Minimize', accelerator: KeyboardShortcuts.window.minimize, role: 'minimize' },
                 { label: 'Close', role: 'close' },

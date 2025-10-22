@@ -191,7 +191,11 @@ export default function App() {
   const [sidebarView, setSidebarView] = useState<SidebarView>('files');
 
   // Content mode management - simple state, no manager needed
-  const [activeMode, setActiveMode] = useState<ContentMode>('files');
+  const [activeMode, setActiveModeRaw] = useState<ContentMode>('files');
+  const setActiveMode = (mode: ContentMode) => {
+    console.log('[App] setActiveMode called with:', mode, 'current:', activeMode);
+    setActiveModeRaw(mode);
+  };
 
   // Bottom panel state (shared across all modes)
   const [bottomPanel, setBottomPanel] = useState<TrackerBottomPanelType | null>(null);
@@ -694,21 +698,22 @@ export default function App() {
       setIsAgentPaletteVisible(prev => !prev);
     };
 
-    const handleSetContentMode = (_event: any, mode: ContentMode) => {
-      if (workspaceMode) {
-        setActiveMode(mode);
-      }
+    const handleSetContentMode = (mode: ContentMode) => {
+      console.log('[App] handleSetContentMode called with mode:', mode);
+      setActiveMode(mode);
     };
 
+    console.log('[App] Setting up IPC listener for set-content-mode');
     window.electronAPI.on('set-content-mode', handleSetContentMode);
     // COMMENTED OUT - Cmd+K now switches to Agent mode
     // window.electronAPI.on('toggle-agent-palette', handleToggleAgentPalette);
 
     return () => {
+      console.log('[App] Removing IPC listener for set-content-mode');
       window.electronAPI.off?.('set-content-mode', handleSetContentMode);
       // window.electronAPI.off?.('toggle-agent-palette', handleToggleAgentPalette);
     };
-  }, [workspaceMode]);
+  }, []); // Remove workspaceMode dependency - listener should always be active
 
   // Update window title and dirty state
   useEffect(() => {
@@ -749,9 +754,7 @@ export default function App() {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        if (workspaceMode) {
-          setActiveMode('files');
-        }
+        setActiveMode('files');
         return false;
       }
       // Cmd+K for Agent mode
@@ -759,9 +762,7 @@ export default function App() {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        if (workspaceMode) {
-          setActiveMode('agent');
-        }
+        setActiveMode('agent');
         return false;
       }
       // Cmd+L for Plans mode
@@ -769,9 +770,7 @@ export default function App() {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        if (workspaceMode) {
-          setActiveMode('plan');
-        }
+        setActiveMode('plan');
         return false;
       }
       // Cmd+K (Mac) or Ctrl+K (Windows/Linux) for Agent Command Palette - COMMENTED OUT
@@ -1356,15 +1355,24 @@ export default function App() {
               </div>
             )}
 
-            {activeMode === 'agent' && workspacePath && (
+            {activeMode === 'agent' && (
               <div data-layout="agent-mode-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-                <AgenticPanel
-                  mode="agent"
-                  workspacePath={workspacePath}
-                  documentContext={documentContext}
-                  onContentModeChange={setActiveMode}
-                  isActive={true}
-                />
+                {workspacePath ? (
+                  <AgenticPanel
+                    mode="agent"
+                    workspacePath={workspacePath}
+                    documentContext={documentContext}
+                    onContentModeChange={setActiveMode}
+                    isActive={true}
+                  />
+                ) : (
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <p>Agent mode requires a workspace</p>
+                      <p style={{ marginTop: '8px', fontSize: '14px' }}>Open a workspace to use agent features</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
