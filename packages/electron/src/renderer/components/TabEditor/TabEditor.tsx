@@ -129,7 +129,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             // Update via Lexical API
             if (editorRef.current) {
               try {
-                const { $getRoot } = await import('lexical');
+                const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
                 const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
                 const transformers = getEditorTransformers();
 
@@ -137,7 +137,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   const root = $getRoot();
                   root.clear();
                   $convertFromEnhancedMarkdownString(diskContent, transformers);
-                });
+                }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
               } catch (error) {
                 logger.ui.error(`[TabEditor] Failed to update editor:`, error);
               }
@@ -219,7 +219,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             if (editorRef.current) {
               try {
                 // Import Lexical functions from 'lexical' and rexical functions from 'rexical'
-                const { $getRoot } = await import('lexical');
+                const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
                 const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
                 const transformers = getEditorTransformers();
 
@@ -227,7 +227,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   const root = $getRoot();
                   root.clear();
                   $convertFromEnhancedMarkdownString(result.diskContent, transformers);
-                });
+                }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
               } catch (error) {
                 logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
               }
@@ -465,7 +465,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // Works for both active and inactive tabs since editor is still mounted
           if (editorRef.current) {
             try {
-              const { $getRoot } = await import('lexical');
+              const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
               const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
               const transformers = getEditorTransformers();
 
@@ -473,7 +473,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 const root = $getRoot();
                 root.clear();
                 $convertFromEnhancedMarkdownString(newContent, transformers);
-              });
+              }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
             } catch (error) {
               logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
             }
@@ -528,7 +528,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     // Update editor content
     if (editorRef.current) {
       try {
-        const { $getRoot } = await import('lexical');
+        const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
         const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
         const transformers = getEditorTransformers();
 
@@ -536,7 +536,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           const root = $getRoot();
           root.clear();
           $convertFromEnhancedMarkdownString(newContent, transformers);
-        });
+        }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
       } catch (error) {
         logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
       }
@@ -567,7 +567,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     // Update editor content
     if (editorRef.current) {
       try {
-        const { $getRoot } = await import('lexical');
+        const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
         const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
         const transformers = getEditorTransformers();
 
@@ -575,7 +575,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           const root = $getRoot();
           root.clear();
           $convertFromEnhancedMarkdownString(diskContent, transformers);
-        });
+        }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
       } catch (error) {
         logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
       }

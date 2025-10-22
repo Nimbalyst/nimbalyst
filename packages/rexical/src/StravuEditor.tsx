@@ -54,7 +54,8 @@ function StravuEditorInner({config}: {config: EditorConfig}): JSX.Element {
                     const root = $getRoot();
                     root.clear();
                     $convertFromEnhancedMarkdownString(config.initialContent!, markdownTransformers);
-                    root.selectStart();
+                    // Don't call root.selectStart() here - it triggers auto-scroll behavior
+                    // The selection will be set naturally when the user interacts with the editor
                 };
             } else if (!config.emptyEditor) {
                 // Create an empty editor with a paragraph
