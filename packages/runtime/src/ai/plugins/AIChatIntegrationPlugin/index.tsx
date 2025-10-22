@@ -314,7 +314,7 @@ export function AIChatIntegrationPlugin(): null {
     // Check if this editor is currently active (data-active="true")
     const isActive = editorContainer?.getAttribute('data-active') === 'true';
     if (isActive) {
-      console.log('[AIChatIntegrationPlugin] Registering as active editor:', filePath);
+      // console.log('[AIChatIntegrationPlugin] Registering as active editor:', filePath);
       editorRegistry.setActive(filePath);
     }
 

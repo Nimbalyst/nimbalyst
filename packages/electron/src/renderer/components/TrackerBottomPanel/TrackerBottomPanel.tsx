@@ -49,7 +49,7 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
       const documentService = (window as any).documentService;
 
       if (!documentService) {
-        console.log('[TrackerBottomPanel] documentService not available, will retry...');
+        // console.log('[TrackerBottomPanel] documentService not available, will retry...');
         if (mounted) {
           retryTimer = setTimeout(() => loadCounts(), 500);
         }
@@ -57,7 +57,7 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
       }
 
       if (!documentService.listTrackerItems) {
-        console.log('[TrackerBottomPanel] listTrackerItems not available, will retry...');
+        // console.log('[TrackerBottomPanel] listTrackerItems not available, will retry...');
         // Retry after a delay
         if (mounted) {
           retryTimer = setTimeout(() => loadCounts(), 500);
@@ -69,7 +69,7 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
         const items = await documentService.listTrackerItems();
         if (!mounted) return;
 
-        console.log('[TrackerBottomPanel] Loaded tracker items:', items.length);
+        // console.log('[TrackerBottomPanel] Loaded tracker items:', items.length);
 
         // Count tracker items
         let planCount = items.filter((i: any) => i.type === 'plan' && i.status !== 'done').length;
@@ -102,7 +102,7 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
           ideas: ideaCount,
           decisions: decisionCount,
         };
-        console.log('[TrackerBottomPanel] Counts:', counts);
+        // console.log('[TrackerBottomPanel] Counts:', counts);
         setItemCounts(counts);
       } catch (error) {
         console.error('[TrackerBottomPanel] Failed to load item counts:', error);

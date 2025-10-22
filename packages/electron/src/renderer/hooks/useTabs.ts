@@ -132,30 +132,30 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
       contentLoadedAt: new Date()
     };
 
-    console.log('[useTabs] Creating new tab:', { tabId, fileName, filePath });
+    // console.log('[useTabs] Creating new tab:', { tabId, fileName, filePath });
     setTabs(prev => new Map(prev).set(tabId, newTab));
     setTabOrder(prev => [...prev, tabId]);
     setActiveTabId(tabId);
-    console.log('[useTabs] Set activeTabId to:', tabId);
-    console.log('[useTabs] About to check file watcher condition');
+    // console.log('[useTabs] Set activeTabId to:', tabId);
+    // console.log('[useTabs] About to check file watcher condition');
 
     // Start watching the file for external changes (skip virtual files)
     // Access window.electronAPI directly to avoid stale closure
     const electronAPI = (window as any).electronAPI;
-    console.log('[useTabs] electronAPI exists?', !!electronAPI, 'filePath:', filePath);
+    // console.log('[useTabs] electronAPI exists?', !!electronAPI, 'filePath:', filePath);
 
     if (electronAPI && !filePath.startsWith('virtual://')) {
-      console.log('[useTabs] Calling start-watching-file for:', filePath);
+      // console.log('[useTabs] Calling start-watching-file for:', filePath);
       electronAPI.invoke('start-watching-file', filePath).then((result: any) => {
-        console.log('[useTabs] start-watching-file result:', result);
+        // console.log('[useTabs] start-watching-file result:', result);
       }).catch((err: Error) => {
         console.error('[useTabs] Failed to start watching file:', err);
       });
     } else {
-      console.log('[useTabs] NOT calling start-watching-file - electronAPI:', !!electronAPI, 'isVirtual:', filePath.startsWith('virtual://'));
+      // console.log('[useTabs] NOT calling start-watching-file - electronAPI:', !!electronAPI, 'isVirtual:', filePath.startsWith('virtual://'));
     }
 
-    console.log('[useTabs] After file watcher code');
+    // console.log('[useTabs] After file watcher code');
     return tabId;
   }, [enabled, tabs, maxTabs, generateTabId, onTabChange]);
 
@@ -422,9 +422,9 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
 
     prevActiveTabIdRef.current = activeTabId;
     const currentActiveTab = activeTabId ? tabsRef.current.get(activeTabId) || null : null;
-    // console.log('[useTabs] activeTabId changed:', activeTabId, 'activeTab:', currentActiveTab?.fileName);
+    // // console.log('[useTabs] activeTabId changed:', activeTabId, 'activeTab:', currentActiveTab?.fileName);
     if (activeTabId && currentActiveTab && onTabChangeRef.current) {
-      // console.log('[useTabs] Calling onTabChange for:', currentActiveTab.fileName);
+      // // console.log('[useTabs] Calling onTabChange for:', currentActiveTab.fileName);
       onTabChangeRef.current(currentActiveTab);
     }
   }, [activeTabId]);

@@ -345,7 +345,7 @@ export const WorkspaceManager: React.FC = () => {
 
               <div className="welcome-info-compact">
                 <p className="welcome-description">
-                  Workspaces are local folders on your computer. Open any folder to view and edit all markdown files within it.
+                  Projects are local folders on your computer. Open any folder to view and edit all markdown files within it.
                 </p>
               </div>
 
