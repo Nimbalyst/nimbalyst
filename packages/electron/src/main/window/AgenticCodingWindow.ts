@@ -3,6 +3,7 @@ import { join } from 'path';
 import { AISessionsRepository } from '@nimbalyst/runtime';
 import { getAgenticCodingWindowState, saveAgenticCodingWindowState, getTheme } from '../utils/store';
 import { windows, windowStates, windowFocusOrder, windowDevToolsState, incrementFocusOrderCounter } from './WindowManager';
+import { getBackgroundColor } from '../theme/ThemeManager';
 
 const agenticCodingWindows = new Map<string, BrowserWindow>();
 
@@ -43,7 +44,7 @@ export function createAgenticCodingWindow(options: AgenticCodingWindowOptions) {
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 10, y: 10 },
     vibrancy: 'sidebar',
-    backgroundColor: '#1e1e1e'
+    backgroundColor: getBackgroundColor()
   });
 
   // Store the window

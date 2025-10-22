@@ -153,20 +153,20 @@ export function createWindow(
         }
 
         // Determine the current theme and set appropriate background color
-        // IMPORTANT: This must match the HTML script logic exactly to prevent flash
+        // IMPORTANT: These colors MUST match the CSS theme files exactly to prevent flash
         const currentTheme = getTheme();
         console.log('[WINDOW-MANAGER] Creating window with theme:', currentTheme);
         let backgroundColor = '#ffffff'; // Default to white for light theme
 
         if (currentTheme === 'dark') {
-            backgroundColor = '#1e1e1e';
+            backgroundColor = '#2d2d2d'; // Matches --surface-primary in DarkEditorTheme.css
         } else if (currentTheme === 'crystal-dark') {
-            backgroundColor = '#020617'; // Crystal dark uses darker background
+            backgroundColor = '#0f172a'; // Matches --surface-primary in CrystalDarkTheme.css
         } else if (currentTheme === 'light') {
-            backgroundColor = '#ffffff';
+            backgroundColor = '#ffffff'; // Matches --surface-primary in PlaygroundEditorTheme.css
         } else {
             // system/auto - use nativeTheme which should match prefers-color-scheme
-            backgroundColor = nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#ffffff';
+            backgroundColor = nativeTheme.shouldUseDarkColors ? '#2d2d2d' : '#ffffff';
         }
         console.log('[WINDOW-MANAGER] Background color:', backgroundColor);
 
@@ -441,9 +441,9 @@ export function createWindow(
         window.webContents.once('did-finish-load', () => {
             console.log('[MAIN] did-finish-load at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
 
-            // Send the current theme to the new window
-            const theme = getTheme();
-            window.webContents.send('theme-change', theme);
+            // DO NOT send theme-change here - the window already got the theme via getThemeSync()
+            // Sending it again causes a flash as React re-applies the same theme
+            // Only send theme-change when user actually changes theme from menu
 
             if (isWorkspaceMode && workspacePath) {
                 // Don't send 'workspace-opened' here - the renderer already knows it's in workspace mode

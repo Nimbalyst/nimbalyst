@@ -35,7 +35,7 @@ export function createUpdateWindow() {
     fullscreenable: false,
     title: 'Update Available',
     show: false,
-    backgroundColor: isDarkTheme ? '#2a2a2a' : '#ffffff',
+    backgroundColor: isDarkTheme ? '#2d2d2d' : '#ffffff',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

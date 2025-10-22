@@ -3,6 +3,7 @@ import { join, basename } from 'path';
 import { existsSync, mkdirSync, statSync, readdirSync } from 'fs';
 import { getRecentItems, addToRecentItems, store, getWorkspaceWindowState, getTheme } from '../utils/store';
 import { createWindow } from './WindowManager';
+import { getBackgroundColor } from '../theme/ThemeManager';
 
 let workspaceManagerWindow: BrowserWindow | null = null;
 
@@ -49,7 +50,7 @@ export function createWorkspaceManagerWindow() {
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 10, y: 10 },
     vibrancy: 'sidebar',
-    backgroundColor: '#1e1e1e'
+    backgroundColor: getBackgroundColor()
   });
 
   // Load the main app with a query parameter to indicate Workspace Manager mode

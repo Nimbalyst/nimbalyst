@@ -33,15 +33,16 @@ export function updateWindowTitleBars() {
     };
 
     // Select appropriate colors based on theme
+    // IMPORTANT: Background colors MUST match CSS theme files exactly to prevent flash
     let titleBarColor = titleBarColors.light;
-    let backgroundColor = '#ffffff';
+    let backgroundColor = '#ffffff'; // Matches --surface-primary in PlaygroundEditorTheme.css
 
     if (currentTheme === 'crystal-dark') {
         titleBarColor = titleBarColors.crystalDark;
-        backgroundColor = '#1F2837';
+        backgroundColor = '#0f172a'; // Matches --surface-primary in CrystalDarkTheme.css
     } else if (isDarkTheme) {
         titleBarColor = titleBarColors.dark;
-        backgroundColor = '#1a1a1a';
+        backgroundColor = '#2d2d2d'; // Matches --surface-primary in DarkEditorTheme.css
     }
 
     // Update all windows
@@ -84,18 +85,18 @@ export function getTitleBarColors() {
 }
 
 // Get background color for current theme
+// IMPORTANT: These colors MUST match the CSS theme files exactly to prevent flash
 export function getBackgroundColor() {
     const currentTheme = getTheme();
     const systemDarkMode = nativeTheme.shouldUseDarkColors;
     const isDarkTheme = currentTheme === 'dark' ||
-                      currentTheme === 'crystal-dark' ||
                       (currentTheme === 'system' && systemDarkMode);
 
     if (currentTheme === 'crystal-dark') {
-        return '#1F2837';
+        return '#0f172a'; // Matches --surface-primary in CrystalDarkTheme.css
     } else if (isDarkTheme) {
-        return '#1a1a1a';
+        return '#2d2d2d'; // Matches --surface-primary in DarkEditorTheme.css
     } else {
-        return '#ffffff';
+        return '#ffffff'; // Matches --surface-primary in PlaygroundEditorTheme.css
     }
 }

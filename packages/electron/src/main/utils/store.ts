@@ -347,7 +347,20 @@ export function setTheme(theme: AppTheme): void {
   appStore.set('theme', theme);
 }
 
-export const getThemeSync = getTheme;
+// getThemeSync resolves 'system'/'auto' to the actual theme for the renderer
+// This prevents flash by ensuring renderer gets 'dark' or 'light', not 'system'
+export function getThemeSync(): AppTheme {
+  const { nativeTheme } = require('electron');
+  const storedTheme = appStore.get('theme');
+
+  // Resolve system/auto to actual theme based on OS preference
+  if (storedTheme === 'system' || storedTheme === 'auto') {
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+  }
+
+  return storedTheme;
+}
+
 export const setThemeSync = setTheme;
 
 export function getWorkspaceState(workspacePath: string): WorkspaceState {

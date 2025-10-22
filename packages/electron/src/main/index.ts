@@ -372,9 +372,10 @@ app.whenReady().then(async () => {
             lastNativeDark = isDark;
             // Update windows when system theme changes
             updateWindowTitleBars();
-            // Send theme change to all windows
+            // Send RESOLVED theme (light or dark) to all windows
+            const resolvedTheme = isDark ? 'dark' : 'light';
             BrowserWindow.getAllWindows().forEach(window => {
-                window.webContents.send('theme-change', 'system');
+                window.webContents.send('theme-change', resolvedTheme);
             });
         }
     });

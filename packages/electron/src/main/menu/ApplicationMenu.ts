@@ -794,8 +794,10 @@ export async function createApplicationMenu() {
                             click: async () => {
                                 setTheme('system');
                                 updateNativeTheme();
+                                // Send resolved theme (light or dark) to renderers
+                                const resolvedTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
                                 BrowserWindow.getAllWindows().forEach(window => {
-                                    window.webContents.send('theme-change', 'system');
+                                    window.webContents.send('theme-change', resolvedTheme);
                                 });
                                 updateWindowTitleBars();
                                 await createApplicationMenu();

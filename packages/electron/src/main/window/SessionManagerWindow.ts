@@ -5,6 +5,7 @@ import { AISessionsRepository } from '@nimbalyst/runtime';
 import { getWorkspaceRepository } from '../services/RepositoryManager';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { getTheme } from '../utils/store';
+import { getBackgroundColor } from '../theme/ThemeManager';
 
 let sessionManagerWindow: BrowserWindow | null = null;
 
@@ -55,7 +56,7 @@ export function createSessionManagerWindow(filterWorkspace?: string) {
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 10, y: 10 },
     vibrancy: 'sidebar',
-    backgroundColor: '#1e1e1e'
+    backgroundColor: getBackgroundColor()
   });
 
   // Load the main app with a query parameter to indicate Session Manager mode

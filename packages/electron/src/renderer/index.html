@@ -4,30 +4,52 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nimbalyst</title>
+    <style>
+        /* Critical CSS to prevent flash - inline styles applied IMMEDIATELY */
+        /* These match the theme CSS but are inlined to load instantly */
+        :root,
+        .light-theme {
+            --surface-primary: #ffffff;
+            --surface-secondary: #f9fafb;
+            background-color: #ffffff;
+            color: #111827;
+        }
+
+        .dark-theme {
+            --surface-primary: #2d2d2d;
+            --surface-secondary: #1a1a1a;
+            background-color: #2d2d2d;
+            color: #ffffff;
+        }
+
+        .crystal-dark-theme {
+            --surface-primary: #0f172a;
+            --surface-secondary: #020617;
+            background-color: #0f172a;
+            color: #f1f5f9;
+        }
+
+        /* Apply background immediately to body and root */
+        html, body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--surface-primary);
+            color: inherit;
+        }
+    </style>
     <script>
         // Determine theme FIRST, before any CSS - using SYNC API to prevent flash
+        // IMPORTANT: getThemeSync() resolves 'system' to actual theme, so we get 'light' or 'dark' directly
         (function() {
-            // Get theme SYNCHRONOUSLY from main process - this is the KEY to no flash
-            let theme = 'auto';
-            try {
-                if (window.electronAPI && window.electronAPI.getThemeSync) {
-                    theme = window.electronAPI.getThemeSync();
-                } else {
-                    theme = localStorage.getItem('theme') || 'auto';
-                }
-            } catch (e) {
-                console.error('[THEME] Error getting theme:', e);
-                theme = localStorage.getItem('theme') || 'auto';
-            }
+            // Get theme SYNCHRONOUSLY from main process - already resolved!
+            const theme = window.electronAPI?.getThemeSync?.() || 'light';
 
-            // Normalize 'system' to 'auto'
-            if (theme === 'system') {
-                theme = 'auto';
-            }
+            console.log('[THEME-INIT] Resolved theme from main process:', theme);
 
             const root = document.documentElement;
-            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 
+            // Apply theme directly - no need to check prefers-color-scheme
+            // because getThemeSync() already did that for us
             if (theme === 'dark') {
                 root.classList.add('dark-theme');
                 root.setAttribute('data-theme', 'dark');
@@ -38,15 +60,13 @@
                 root.classList.add('crystal-dark-theme');
                 root.setAttribute('data-theme', 'crystal-dark');
             } else {
-                // Auto theme - apply system preference immediately to prevent flash
-                if (prefersDark) {
-                    root.classList.add('dark-theme');
-                    root.setAttribute('data-theme', 'dark');
-                } else {
-                    root.classList.add('light-theme');
-                    root.setAttribute('data-theme', 'light');
-                }
+                // Fallback to light (shouldn't happen)
+                console.warn('[THEME-INIT] Unexpected theme:', theme, 'falling back to light');
+                root.classList.add('light-theme');
+                root.setAttribute('data-theme', 'light');
             }
+
+            console.log('[THEME-INIT] Applied class:', theme + '-theme');
         })();
     </script>
 </head>
