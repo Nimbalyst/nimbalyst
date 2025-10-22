@@ -12,7 +12,6 @@ interface RichTranscriptViewProps {
   sessionStatus?: string;
   messages: Message[];
   provider?: string;
-  streamingContent?: string;
   settings?: TranscriptSettings;
   onSettingsChange?: (settings: TranscriptSettings) => void;
   showSettings?: boolean;
@@ -30,7 +29,7 @@ const defaultSettings: TranscriptSettings = {
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, messages, provider, streamingContent, settings: propsSettings, onSettingsChange, showSettings, documentContext }, ref) => {
+>(({ sessionId, sessionStatus, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -59,14 +58,14 @@ export const RichTranscriptView = React.forwardRef<
     }
   }), []);
 
-  // Auto-scroll to bottom when messages or streaming content changes
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
     if (messagesEndRef.current && wasAtBottomRef.current) {
       requestAnimationFrame(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
       });
     }
-  }, [messages, streamingContent]);
+  }, [messages]);
 
   // Handle scroll events
   useEffect(() => {
@@ -173,7 +172,7 @@ export const RichTranscriptView = React.forwardRef<
       {/* Messages */}
       <div ref={scrollContainerRef} className="rich-transcript-scroll-container">
         <div className={`rich-transcript-content ${settings.compactMode ? 'compact' : 'normal'}`}>
-          {messages.length === 0 && !isWaitingForResponse && !streamingContent ? (
+          {messages.length === 0 && !isWaitingForResponse ? (
             <div className="rich-transcript-empty">
               No messages to display
             </div>
@@ -457,31 +456,7 @@ export const RichTranscriptView = React.forwardRef<
                 );
               })}
 
-              {/* Streaming content - shown after all persisted messages */}
-              {streamingContent && (
-                <div className={`rich-transcript-streaming ${settings.compactMode ? 'compact' : 'normal'}`}>
-                  <div className="rich-transcript-streaming-header">
-                    <span className="rich-transcript-streaming-indicator">
-                      streaming...
-                    </span>
-                  </div>
-                  <div className="rich-transcript-streaming-content">
-                    <MessageSegment
-                      message={{ role: 'assistant', content: streamingContent, timestamp: Date.now() }}
-                      isUser={false}
-                      isCollapsed={false}
-                      showToolCalls={false}
-                      showThinking={false}
-                      expandedTools={new Set()}
-                      onToggleToolExpand={() => {}}
-                    />
-                    {/* Pulsing cursor indicator */}
-                    <span className="rich-transcript-cursor" />
-                  </div>
-                </div>
-              )}
-
-              {isWaitingForResponse && !streamingContent && (
+              {isWaitingForResponse && (
                 <div className="rich-transcript-waiting">
                   <div className="rich-transcript-waiting-text">Thinking...</div>
                 </div>

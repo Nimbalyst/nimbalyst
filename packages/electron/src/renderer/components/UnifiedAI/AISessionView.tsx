@@ -41,12 +41,6 @@ export interface AISessionViewProps {
   // Loading state (passed from parent)
   isLoading?: boolean;
 
-  // Streaming content (passed from parent)
-  streamingContent?: string;
-
-  // Test streaming support (for e2e tests)
-  testStreamingContent?: string | null;
-
   // History navigation (chat mode only)
   onNavigateHistory?: (direction: 'up' | 'down') => void;
 
@@ -91,8 +85,6 @@ export function AISessionView({
   onFileClick,
   onTodoClick,
   isLoading = false,
-  streamingContent,
-  testStreamingContent,
   onNavigateHistory,
   aiMode = 'plan',
   onAIModeChange,
@@ -160,11 +152,6 @@ export function AISessionView({
     }
   }, [onTodoClick]);
 
-  // Determine effective streaming content (test mode overrides real streaming)
-  const effectiveStreamingContent = testStreamingContent !== null
-    ? testStreamingContent
-    : (streamingContent || undefined);
-
   // All features enabled in both modes
   const enableSlashCommands = true; // Available in both chat and agent modes
   const enableAttachments = true; // Available in both chat and agent modes
@@ -194,7 +181,6 @@ export function AISessionView({
         <AgentTranscriptPanel
           sessionId={sessionId}
           sessionData={sessionData}
-          streamingContent={effectiveStreamingContent}
           onFileClick={handleFileClick}
           onTodoClick={handleTodoClick}
           hideSidebar={mode === 'chat'} // Hide sidebar in chat mode

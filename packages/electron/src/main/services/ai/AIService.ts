@@ -528,6 +528,14 @@ export class AIService {
       const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, workspacePath);
       provider.registerToolHandler(toolHandler);
 
+      // Listen for message:logged events and forward to renderer to trigger UI updates
+      const onMessageLogged = (data: { sessionId: string; direction: string }) => {
+        event.sender.send('ai:message-logged', data);
+      };
+      // Remove all previous listeners to avoid duplicates
+      provider.removeAllListeners('message:logged');
+      provider.on('message:logged', onMessageLogged);
+
       // Track user @ mentions in the message
       try {
         await sessionFileTracker.trackUserMessage(

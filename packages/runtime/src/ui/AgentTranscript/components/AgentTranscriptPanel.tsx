@@ -12,7 +12,6 @@ type SidebarTab = 'prompts' | 'files' | 'todos';
 interface AgentTranscriptPanelProps {
   sessionId: string;
   sessionData: SessionData;
-  streamingContent?: string;
   onSettingsChange?: (settings: TranscriptSettings) => void;
   showSettings?: boolean;
   initialSettings?: TranscriptSettings;
@@ -24,7 +23,6 @@ interface AgentTranscriptPanelProps {
 export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   sessionId,
   sessionData,
-  streamingContent,
   onSettingsChange,
   showSettings,
   initialSettings,
@@ -214,7 +212,6 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
           messages={sessionData.messages}
           provider={sessionData.provider}
           settings={initialSettings}
-          streamingContent={streamingContent}
           onSettingsChange={onSettingsChange}
           showSettings={showSettings}
           documentContext={sessionData.documentContext}

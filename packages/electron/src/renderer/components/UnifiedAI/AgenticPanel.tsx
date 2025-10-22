@@ -86,13 +86,8 @@ export function AgenticPanel({
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
   const [sessionHistoryRefreshTrigger, setSessionHistoryRefreshTrigger] = useState(0);
 
-  // Streaming state
-  const [streamingContent, setStreamingContent] = useState<{
-    sessionId: string;
-    content: string;
-  } | null>(null);
-  const [testStreamingContent, setTestStreamingContent] = useState<string | null>(null);
-  const streamingTimeoutRef = useRef<NodeJS.Timeout>();
+  // Debounce timer for database reloads
+  const reloadDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialization
   const initializedRef = useRef(false);
@@ -156,25 +151,6 @@ export function AgenticPanel({
     return () => clearTimeout(timer);
   }, [workspacePath, sessionHistoryWidth, sessionHistoryCollapsed, collapsedGroups, mode]);
 
-  // Test mode: listen for test streaming events
-  useEffect(() => {
-    const handleTestStreaming = () => {
-      const content = (window as any).__testStreamingContent;
-      console.log('[AgenticPanel] Test streaming event fired, content:', content);
-      setTestStreamingContent(content);
-    };
-
-    (window as any).__agenticSetTestStreaming = (content: string | null) => {
-      console.log('[AgenticPanel] Direct test function called with:', content);
-      setTestStreamingContent(content);
-    };
-
-    window.addEventListener('test-streaming-updated', handleTestStreaming);
-    return () => {
-      window.removeEventListener('test-streaming-updated', handleTestStreaming);
-      delete (window as any).__agenticSetTestStreaming;
-    };
-  }, []);
 
   // Load all sessions for the workspace
   const loadSessions = useCallback(async () => {
@@ -533,48 +509,71 @@ export function AgenticPanel({
     return () => clearTimeout(timer);
   }, [sessionTabs, activeTabId, closedSessions, mode, workspacePath]);
 
-  // Listen for AI streaming responses
+  // Listen for database updates and reload session (debounced)
+  useEffect(() => {
+    const handleMessageLogged = async (data: { sessionId: string; direction: string }) => {
+      // Only reload if this is for one of our open sessions
+      const isRelevantSession = sessionTabs.some(tab => tab.id === data.sessionId);
+      if (!isRelevantSession) return;
+
+      // Debounce reloads to avoid excessive database queries
+      if (reloadDebounceRef.current) {
+        clearTimeout(reloadDebounceRef.current);
+      }
+
+      reloadDebounceRef.current = setTimeout(async () => {
+        try {
+          const sessionData = await window.electronAPI.aiLoadSession(data.sessionId, workspacePath);
+          if (sessionData) {
+            setSessionTabs(prev => prev.map(tab => {
+              if (tab.id === data.sessionId) {
+                return { ...tab, sessionData };
+              }
+              return tab;
+            }));
+          }
+        } catch (err) {
+          console.error('[AgenticPanel] Failed to reload session after message logged:', err);
+        }
+      }, 50); // Debounce by 50ms - will batch rapid writes together
+    };
+
+    // Listen for message:logged events from main process
+    const cleanup = window.electronAPI.on('ai:message-logged', handleMessageLogged);
+
+    return () => {
+      if (reloadDebounceRef.current) {
+        clearTimeout(reloadDebounceRef.current);
+      }
+      if (cleanup) cleanup();
+    };
+  }, [sessionTabs, workspacePath]);
+
+  // Remove thinking placeholder when sending starts
+  useEffect(() => {
+    if (isSending && activeTabId) {
+      setSessionTabs(prev => prev.map(tab => {
+        if (tab.id === activeTabId) {
+          return {
+            ...tab,
+            sessionData: {
+              ...tab.sessionData,
+              messages: tab.sessionData.messages.filter(m => !m.isThinking)
+            }
+          };
+        }
+        return tab;
+      }));
+    }
+  }, [isSending, activeTabId]);
+
+  // Listen for completion and errors
   useEffect(() => {
     const handleStreamResponse = async (data: any) => {
       if (!activeTabId) return;
 
-      // Handle streaming text content
-      if (data.partial && !data.isComplete) {
-        if (streamingTimeoutRef.current) {
-          clearTimeout(streamingTimeoutRef.current);
-        }
-
-        // Remove thinking placeholder when streaming starts
-        if (!streamingContent) {
-          setSessionTabs(prev => prev.map(tab => {
-            if (tab.id === activeTabId) {
-              return {
-                ...tab,
-                sessionData: {
-                  ...tab.sessionData,
-                  messages: tab.sessionData.messages.filter(m => !m.isThinking)
-                }
-              };
-            }
-            return tab;
-          }));
-        }
-
-        streamingTimeoutRef.current = setTimeout(() => {
-          setStreamingContent({
-            sessionId: activeTabId,
-            content: data.partial
-          });
-        }, 50);
-      }
-
       // Handle completion
       if (data.isComplete) {
-        setStreamingContent(null);
-        if (streamingTimeoutRef.current) {
-          clearTimeout(streamingTimeoutRef.current);
-        }
-
         try {
           const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
           if (sessionData) {
@@ -597,21 +596,11 @@ export function AgenticPanel({
       console.error('[AgenticPanel] AI error:', error);
       setError(error.message || 'An error occurred');
       setIsSending(false);
-      setStreamingContent(null);
-      if (streamingTimeoutRef.current) {
-        clearTimeout(streamingTimeoutRef.current);
-      }
     };
 
     window.electronAPI.onAIStreamResponse(handleStreamResponse);
     window.electronAPI.onAIError(handleStreamError);
-
-    return () => {
-      if (streamingTimeoutRef.current) {
-        clearTimeout(streamingTimeoutRef.current);
-      }
-    };
-  }, [activeTabId, workspacePath, streamingContent]);
+  }, [activeTabId, workspacePath]);
 
   // Handle draft input change
   const handleDraftInputChange = useCallback((sessionId: string, value: string) => {
@@ -1021,8 +1010,6 @@ export function AgenticPanel({
             onFileMentionSelect={handleFileMentionSelect}
             onFileClick={handleFileClick}
             isLoading={isSending}
-            streamingContent={streamingContent?.sessionId === activeTab.id ? streamingContent.content : undefined}
-            testStreamingContent={testStreamingContent}
             aiMode={activeTab.mode || 'plan'}
             onAIModeChange={(newMode) => handleModeChange(activeTab.id, newMode)}
             currentModel={activeTab.model || activeTab.sessionData.model || 'claude-code'}
@@ -1121,8 +1108,6 @@ export function AgenticPanel({
                 onFileMentionSelect={handleFileMentionSelect}
                 onFileClick={handleFileClick}
                 isLoading={isSending && tab.id === activeTabId}
-                streamingContent={streamingContent?.sessionId === tab.id ? streamingContent.content : undefined}
-                testStreamingContent={testStreamingContent}
                 aiMode={tab.mode || 'plan'}
                 onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
                 currentModel={tab.model || tab.sessionData.model || 'claude-code'}
