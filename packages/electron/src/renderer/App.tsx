@@ -230,11 +230,11 @@ export default function App() {
 
     window.electronAPI.invoke('workspace:get-state', workspacePath)
       .then(state => {
-        if (state?.bottomPanel !== undefined) {
-          setBottomPanel(state.bottomPanel);
+        if (state?.trackerBottomPanel !== undefined) {
+          setBottomPanel(state.trackerBottomPanel);
         }
-        if (state?.bottomPanelHeight !== undefined) {
-          setBottomPanelHeight(state.bottomPanelHeight);
+        if (state?.trackerBottomPanelHeight !== undefined) {
+          setBottomPanelHeight(state.trackerBottomPanelHeight);
         }
       })
       .catch(error => {
@@ -253,8 +253,8 @@ export default function App() {
     if (!workspacePath || !window.electronAPI?.invoke) return;
 
     window.electronAPI.invoke('workspace:update-state', workspacePath, {
-      bottomPanel,
-      bottomPanelHeight
+      trackerBottomPanel: bottomPanel,
+      trackerBottomPanelHeight: bottomPanelHeight
     })
       .catch(error => {
         console.error('[TrackerBottomPanel] Failed to save bottom panel state:', error);

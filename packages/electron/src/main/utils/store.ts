@@ -83,6 +83,9 @@ export interface WorkspaceState {
   agenticTabs?: TabManagerState; // Tab state for agentic coding window (separate storage)
   aiPanel: WorkspaceAIPanelState;
   navigationHistory?: NavigationHistoryState;
+  // Tracker bottom panel state
+  trackerBottomPanel?: 'plans' | 'bugs' | 'tasks' | 'ideas' | 'decisions' | null;
+  trackerBottomPanelHeight?: number;
   lastUpdated: number;
 }
 
@@ -145,6 +148,8 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       agenticTabs: undefined,
       aiPanel: { ...DEFAULT_AI_PANEL_STATE },
       navigationHistory: undefined,
+      trackerBottomPanel: null,
+      trackerBottomPanelHeight: 300,
       lastUpdated: Date.now(),
     };
   }
@@ -214,6 +219,8 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       planningModeEnabled: aiPanelRaw.planningModeEnabled ?? true,
     },
     navigationHistory,
+    trackerBottomPanel: raw.trackerBottomPanel ?? raw.bottomPanel ?? null,
+    trackerBottomPanelHeight: raw.trackerBottomPanelHeight ?? raw.bottomPanelHeight ?? 300,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),
   };
 }
@@ -259,6 +266,8 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
       history: [...state.navigationHistory.history],
       currentIndex: state.navigationHistory.currentIndex
     } : undefined,
+    trackerBottomPanel: state.trackerBottomPanel,
+    trackerBottomPanelHeight: state.trackerBottomPanelHeight,
     lastUpdated: state.lastUpdated,
   };
 }
