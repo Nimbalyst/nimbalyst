@@ -2,6 +2,7 @@ import React from 'react';
 import { MaterialSymbol } from '../MaterialSymbol';
 import './NavigationGutter.css';
 import type { ContentMode } from '../../types/WindowModeTypes';
+import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
 
 export type NavigationMode = 'planning' | 'coding';
 export type SidebarView = 'files' | 'plans' | 'settings';
@@ -40,7 +41,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
     {
       id: 'files',
       icon: 'account_tree',
-      label: 'Files (Cmd+E)',
+      label: `Files (${getShortcutDisplay(KeyboardShortcuts.view.filesMode)})`,
       contentMode: 'files',
     },
   ];
@@ -50,7 +51,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
     {
       id: 'agent',
       icon: 'code',
-      label: 'Agent (Cmd+K)',
+      label: `Agent (${getShortcutDisplay(KeyboardShortcuts.view.agentMode)})`,
       contentMode: 'agent',
     },
   ];

@@ -20,6 +20,7 @@ import { AgentCommandPalette } from './components/AgentCommandPalette';
 import { AIChat } from './components/AIChat';
 import { ConfirmDialog } from './components/ConfirmDialog/ConfirmDialog';
 import { HistoryDialog } from './components/HistoryDialog';
+import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog/KeyboardShortcutsDialog';
 import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
 import { ApiKeyDialog } from './components/ApiKeyDialog';
@@ -172,6 +173,7 @@ export default function App() {
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
+  const [isKeyboardShortcutsDialogOpen, setIsKeyboardShortcutsDialogOpen] = useState(false);
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
   // Planning mode for AI sidebar (Claude Code safety). Default ON
   const [aiPlanningModeEnabled, setAIPlanningModeEnabled] = useState<boolean>(true);
@@ -1035,6 +1037,7 @@ export default function App() {
     setIsAIChatStateLoaded,
     setSessionToLoad,
     setIsHistoryDialogOpen,
+    setIsKeyboardShortcutsDialogOpen,
     setIsAgentPaletteVisible,
     setAIPlanningMode: setAIPlanningModeEnabled,
     setTheme,
@@ -1456,6 +1459,10 @@ export default function App() {
         onClose={() => setIsHistoryDialogOpen(false)}
         filePath={currentFilePath}
         onRestore={handleRestoreFromHistory}
+      />
+      <KeyboardShortcutsDialog
+        isOpen={isKeyboardShortcutsDialogOpen}
+        onClose={() => setIsKeyboardShortcutsDialogOpen(false)}
       />
       <ApiKeyDialog
         isOpen={isApiKeyDialogOpen}

@@ -84,6 +84,7 @@ interface UseIPCHandlersProps {
   setIsAIChatStateLoaded: (loaded: boolean) => void;
   setSessionToLoad: (session: { sessionId: string; workspacePath?: string } | null) => void;
   setIsHistoryDialogOpen: (open: boolean) => void;
+  setIsKeyboardShortcutsDialogOpen: (open: boolean) => void;
   setIsAgentPaletteVisible: (visible: boolean) => void;
   setTheme: (theme: any) => void;
   setAIPlanningMode?: (enabled: boolean) => void;
@@ -148,6 +149,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setIsAIChatStateLoaded,
     setSessionToLoad,
     setIsHistoryDialogOpen,
+    setIsKeyboardShortcutsDialogOpen,
     setIsAgentPaletteVisible,
     setAIPlanningMode,
     setTheme,
@@ -232,6 +234,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setIsAIChatStateLoaded,
     setSessionToLoad,
     setIsHistoryDialogOpen,
+    setIsKeyboardShortcutsDialogOpen,
     setIsAgentPaletteVisible,
     setAIPlanningMode,
     setTheme,
@@ -912,6 +915,14 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       cleanupFns.push(window.electronAPI.onOpenWelcomeTab(() => {
         console.log('Open welcome tab command received from menu');
         handlersRef.current.openWelcomeTab();
+      }));
+    }
+
+    // Handle open keyboard shortcuts dialog from menu
+    if ((window.electronAPI as any).onOpenKeyboardShortcuts) {
+      cleanupFns.push((window.electronAPI as any).onOpenKeyboardShortcuts(() => {
+        console.log('Open keyboard shortcuts dialog command received from menu');
+        handlersRef.current.setIsKeyboardShortcutsDialogOpen(true);
       }));
     }
 

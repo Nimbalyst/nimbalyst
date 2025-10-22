@@ -16,6 +16,7 @@ import { getFileWatcherStatus, refreshWorkspaceFileTree, getGlobalFileWatcherSta
 import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
 import { autoUpdaterService } from '../services/autoUpdater';
+import { KeyboardShortcuts } from './KeyboardShortcuts';
 
 // Create window list menu items
 function createWindowListMenu(): any[] {
@@ -366,7 +367,7 @@ export async function createApplicationMenu() {
             submenu: [
                 {
                     label: 'New',
-                    accelerator: 'CmdOrCtrl+N',
+                    accelerator: KeyboardShortcuts.file.new,
                     click: async () => {
                         console.log('[File->New] Menu clicked');
                         const focusedWindow = BrowserWindow.getFocusedWindow();
@@ -404,10 +405,17 @@ export async function createApplicationMenu() {
                         }
                     }
                 },
+                {
+                    label: 'New Window',
+                    accelerator: KeyboardShortcuts.file.newWindow,
+                    click: async () => {
+                        createWindow();
+                    }
+                },
                 { type: 'separator' },
                 {
                     label: 'Open...',
-                    accelerator: 'CmdOrCtrl+O',
+                    accelerator: KeyboardShortcuts.file.open,
                     click: async () => {
                         const result = await dialog.showOpenDialog({
                             properties: ['openFile'],
@@ -436,7 +444,7 @@ export async function createApplicationMenu() {
                 },
                 {
                     label: 'Open Folder...',
-                    accelerator: 'CmdOrCtrl+Shift+O',
+                    accelerator: KeyboardShortcuts.file.openFolder,
                     click: async () => {
                         const result = await dialog.showOpenDialog({
                             properties: ['openDirectory']
@@ -462,14 +470,15 @@ export async function createApplicationMenu() {
                         }
                     }
                 },
+                { type: 'separator' },
                 {
-                    label: 'Open Recent',
+                    label: 'Recent Files',
                     submenu: await createRecentSubmenu()
                 },
                 { type: 'separator' },
                 {
                     label: 'Save',
-                    accelerator: 'CmdOrCtrl+S',
+                    accelerator: KeyboardShortcuts.file.save,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused && !isAboutWindow(focused)) {
@@ -477,20 +486,10 @@ export async function createApplicationMenu() {
                         }
                     }
                 },
-                // {
-                //     label: 'Save As',
-                //     accelerator: 'CmdOrCtrl+Shift+S',
-                //     click: async () => {
-                //         const focused = BrowserWindow.getFocusedWindow();
-                //         if (focused && !isAboutWindow(focused)) {
-                //             focused.webContents.send('file-save-as');
-                //         }
-                //     }
-                // },
                 { type: 'separator' },
                 {
-                    label: 'Close',
-                    accelerator: 'CmdOrCtrl+W',
+                    label: 'Close Tab',
+                    accelerator: KeyboardShortcuts.file.closeTab,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -512,7 +511,7 @@ export async function createApplicationMenu() {
                 },
                 {
                     label: 'Close Project',
-                    accelerator: 'CmdOrCtrl+Shift+W',
+                    accelerator: KeyboardShortcuts.file.closeProject,
                     enabled: (() => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (!focused) return false;
@@ -537,7 +536,7 @@ export async function createApplicationMenu() {
                 { type: 'separator' },
                 {
                     label: 'Quit',
-                    accelerator: 'CmdOrCtrl+Q',
+                    accelerator: KeyboardShortcuts.file.quit,
                     click: async () => {
                         try {
                             console.log('Quit menu item clicked');
@@ -554,17 +553,38 @@ export async function createApplicationMenu() {
         {
             label: 'Edit',
             submenu: [
-                { label: 'Undo', accelerator: 'CmdOrCtrl+Z', role: 'undo' },
-                { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', role: 'redo' },
+                { label: 'Undo', accelerator: KeyboardShortcuts.edit.undo, role: 'undo' },
+                { label: 'Redo', accelerator: KeyboardShortcuts.edit.redo, role: 'redo' },
                 { type: 'separator' },
-                { label: 'Cut', accelerator: 'CmdOrCtrl+X', role: 'cut' },
-                { label: 'Copy', accelerator: 'CmdOrCtrl+C', role: 'copy' },
-                { label: 'Paste', accelerator: 'CmdOrCtrl+V', role: 'paste' },
-                { label: 'Select All', accelerator: 'CmdOrCtrl+A', role: 'selectAll' },
+                { label: 'Cut', accelerator: KeyboardShortcuts.edit.cut, role: 'cut' },
+                { label: 'Copy', accelerator: KeyboardShortcuts.edit.copy, role: 'copy' },
+                { label: 'Paste', accelerator: KeyboardShortcuts.edit.paste, role: 'paste' },
+                { label: 'Select All', accelerator: KeyboardShortcuts.edit.selectAll, role: 'selectAll' },
                 { type: 'separator' },
                 {
-                    label: 'View History...',
-                    accelerator: 'CmdOrCtrl+Y',
+                    label: 'Find...',
+                    accelerator: KeyboardShortcuts.edit.find,
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('find');
+                        }
+                    }
+                },
+                {
+                    label: 'Find and Replace...',
+                    accelerator: KeyboardShortcuts.edit.findAndReplace,
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('find-and-replace');
+                        }
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'View Local History...',
+                    accelerator: KeyboardShortcuts.edit.viewHistory,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -574,29 +594,8 @@ export async function createApplicationMenu() {
                 },
                 { type: 'separator' },
                 {
-                    label: 'Next Tab',
-                    accelerator: 'CmdOrCtrl+Alt+Right',
-                    click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
-                        if (focused) {
-                            focused.webContents.send('next-tab');
-                        }
-                    }
-                },
-                {
-                    label: 'Previous Tab',
-                    accelerator: 'CmdOrCtrl+Alt+Left',
-                    click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
-                        if (focused) {
-                            focused.webContents.send('previous-tab');
-                        }
-                    }
-                },
-                { type: 'separator' },
-                {
-                    label: 'Approve',
-                    accelerator: 'CmdOrCtrl+Enter',
+                    label: 'Approve Current Action',
+                    accelerator: KeyboardShortcuts.edit.approve,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -605,8 +604,8 @@ export async function createApplicationMenu() {
                     }
                 },
                 {
-                    label: 'Reject',
-                    accelerator: 'CmdOrCtrl+Shift+N',
+                    label: 'Reject Current Action',
+                    accelerator: KeyboardShortcuts.edit.reject,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -619,9 +618,10 @@ export async function createApplicationMenu() {
         {
             label: 'View',
             submenu: [
+                // View Modes
                 {
                     label: 'Files Mode',
-                    accelerator: 'CmdOrCtrl+E',
+                    accelerator: KeyboardShortcuts.view.filesMode,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -631,7 +631,7 @@ export async function createApplicationMenu() {
                 },
                 {
                     label: 'Agent Mode',
-                    accelerator: 'CmdOrCtrl+K',
+                    accelerator: KeyboardShortcuts.view.agentMode,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -639,20 +639,33 @@ export async function createApplicationMenu() {
                         }
                     }
                 },
+                { type: 'separator' },
+                // Panels
                 {
-                    label: 'Plans Mode',
-                    accelerator: 'CmdOrCtrl+L',
+                    label: 'Toggle AI Chat Panel',
+                    accelerator: KeyboardShortcuts.view.toggleAIChat,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
-                            focused.webContents.send('set-content-mode', 'plan');
+                            focused.webContents.send('toggle-ai-chat-panel');
+                        }
+                    }
+                },
+                {
+                    label: 'Toggle Bottom Panel',
+                    accelerator: KeyboardShortcuts.view.toggleBottomPanel,
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('toggle-bottom-panel');
                         }
                     }
                 },
                 { type: 'separator' },
+                // Navigation
                 {
                     label: 'Navigate Back',
-                    accelerator: process.platform === 'darwin' ? 'Cmd+Alt+Left' : 'Ctrl+Alt+Left',
+                    accelerator: KeyboardShortcuts.view.navigateBack,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -662,7 +675,7 @@ export async function createApplicationMenu() {
                 },
                 {
                     label: 'Navigate Forward',
-                    accelerator: process.platform === 'darwin' ? 'Cmd+Alt+Right' : 'Ctrl+Alt+Right',
+                    accelerator: KeyboardShortcuts.view.navigateForward,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -671,105 +684,32 @@ export async function createApplicationMenu() {
                     }
                 },
                 { type: 'separator' },
+                // Tab Navigation
                 {
-                    label: 'All Plans',
+                    label: 'Next Tab',
+                    accelerator: KeyboardShortcuts.view.nextTab,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
-                            focused.webContents.send('open-plans-tab');
+                            focused.webContents.send('next-tab');
+                        }
+                    }
+                },
+                {
+                    label: 'Previous Tab',
+                    accelerator: KeyboardShortcuts.view.prevTab,
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('previous-tab');
                         }
                     }
                 },
                 { type: 'separator' },
-                {
-                    label: 'Agents',
-                    submenu: [
-                        // COMMENTED OUT - Cmd+K now switches to Agent mode
-                        // {
-                        //     label: 'Open Agent Command Palette',
-                        //     accelerator: 'CmdOrCtrl+K',
-                        //     click: async () => {
-                        //         const focused = BrowserWindow.getFocusedWindow();
-                        //         if (focused) {
-                        //             focused.webContents.send('toggle-agent-palette');
-                        //         }
-                        //     }
-                        // },
-                        // { type: 'separator' },
-                        {
-                            label: 'Install Built-in Agents',
-                            submenu: [
-                                {
-                                    label: 'Plan Document Manager',
-                                    click: async () => {
-                                        const focused = BrowserWindow.getFocusedWindow();
-                                        if (focused) {
-                                            await installBuiltinAgent(focused, 'plan-document-manager.md');
-                                        }
-                                    }
-                                },
-                                {
-                                    label: 'Security Quick Scan',
-                                    click: async () => {
-                                        const focused = BrowserWindow.getFocusedWindow();
-                                        if (focused) {
-                                            await installBuiltinAgent(focused, 'security-quick-scan.md');
-                                        }
-                                    }
-                                },
-                                {
-                                    label: 'User Documentation Writer',
-                                    click: async () => {
-                                        const focused = BrowserWindow.getFocusedWindow();
-                                        if (focused) {
-                                            await installBuiltinAgent(focused, 'documentation-writer.md');
-                                        }
-                                    }
-                                },
-                                { type: 'separator' },
-                                {
-                                    label: '[TEST] Document Creator',
-                                    click: async () => {
-                                        const focused = BrowserWindow.getFocusedWindow();
-                                        if (focused) {
-                                            await installBuiltinAgent(focused, 'test-document-creator.md');
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    ]
-                },
-                { type: 'separator' },
-                {
-                    label: 'Toggle Developer Tools',
-                    accelerator: 'CmdOrCtrl+Shift+I',
-                    click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
-                        if (focused) focused.webContents.toggleDevTools();
-                    }
-                },
-                { type: 'separator' },
-                {
-                    label: 'Reload',
-                    accelerator: 'CmdOrCtrl+R',
-                    click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
-                        if (focused) focused.webContents.reload();
-                    }
-                },
-                {
-                    label: 'Force Reload',
-                    accelerator: 'CmdOrCtrl+Shift+R',
-                    click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
-                        if (focused) focused.webContents.reloadIgnoringCache();
-                    }
-                },
-                { type: 'separator' },
+                // Zoom
                 {
                     label: 'Actual Size',
-                    accelerator: 'CmdOrCtrl+0',
+                    accelerator: KeyboardShortcuts.view.actualSize,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) focused.webContents.setZoomFactor(1);
@@ -777,7 +717,7 @@ export async function createApplicationMenu() {
                 },
                 {
                     label: 'Zoom In',
-                    accelerator: 'CmdOrCtrl+Plus',
+                    accelerator: KeyboardShortcuts.view.zoomIn,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -788,7 +728,7 @@ export async function createApplicationMenu() {
                 },
                 {
                     label: 'Zoom Out',
-                    accelerator: 'CmdOrCtrl+-',
+                    accelerator: KeyboardShortcuts.view.zoomOut,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -796,12 +736,9 @@ export async function createApplicationMenu() {
                             focused.webContents.setZoomFactor(Math.max(0.5, currentZoom - 0.1));
                         }
                     }
-                }
-            ]
-        },
-        {
-            label: 'Window',
-            submenu: [
+                },
+                { type: 'separator' },
+                // Appearance
                 {
                     label: 'Theme',
                     submenu: [
@@ -812,13 +749,10 @@ export async function createApplicationMenu() {
                             click: async () => {
                                 setTheme('light');
                                 updateNativeTheme();
-                                // Send to all windows
                                 BrowserWindow.getAllWindows().forEach(window => {
                                     window.webContents.send('theme-change', 'light');
                                 });
-                                // Update window title bars
                                 updateWindowTitleBars();
-                                // Recreate menu to update checkmarks
                                 await createApplicationMenu();
                             }
                         },
@@ -829,13 +763,10 @@ export async function createApplicationMenu() {
                             click: async () => {
                                 setTheme('dark');
                                 updateNativeTheme();
-                                // Send to all windows
                                 BrowserWindow.getAllWindows().forEach(window => {
                                     window.webContents.send('theme-change', 'dark');
                                 });
-                                // Update window title bars
                                 updateWindowTitleBars();
-                                // Recreate menu to update checkmarks
                                 await createApplicationMenu();
                             }
                         },
@@ -846,13 +777,10 @@ export async function createApplicationMenu() {
                             click: async () => {
                                 setTheme('crystal-dark');
                                 updateNativeTheme();
-                                // Send to all windows
                                 BrowserWindow.getAllWindows().forEach(window => {
                                     window.webContents.send('theme-change', 'crystal-dark');
                                 });
-                                // Update window title bars
                                 updateWindowTitleBars();
-                                // Recreate menu to update checkmarks
                                 await createApplicationMenu();
                             }
                         },
@@ -863,43 +791,49 @@ export async function createApplicationMenu() {
                             click: async () => {
                                 setTheme('system');
                                 updateNativeTheme();
-                                // Send to all windows
                                 BrowserWindow.getAllWindows().forEach(window => {
                                     window.webContents.send('theme-change', 'system');
                                 });
-                                // Update window title bars
                                 updateWindowTitleBars();
-                                // Recreate menu to update checkmarks
                                 await createApplicationMenu();
                             }
                         }
                     ]
                 },
                 { type: 'separator' },
+                // Full screen
+                {
+                    label: 'Toggle Full Screen',
+                    accelerator: KeyboardShortcuts.view.toggleFullScreen,
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.setFullScreen(!focused.isFullScreen());
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            label: 'Window',
+            submenu: [
                 {
                     label: 'Workspace Manager',
-                    accelerator: 'CmdOrCtrl+P',
+                    accelerator: KeyboardShortcuts.window.workspaceManager,
                     click: async () => {
                         createWorkspaceManagerWindow();
                     }
                 },
                 {
                     label: 'Session Manager',
-                    accelerator: 'CmdOrCtrl+Alt+S',
+                    accelerator: KeyboardShortcuts.window.sessionManager,
                     click: async () => {
                         createSessionManagerWindow();
                     }
                 },
                 {
-                    label: 'AI Models...',
-                    accelerator: 'CmdOrCtrl+Alt+M',
-                    click: async () => {
-                        createAIModelsWindow();
-                    }
-                },
-                {
                     label: 'Agentic Coding...',
-                    accelerator: 'CmdOrCtrl+Alt+A',
+                    accelerator: KeyboardShortcuts.window.agenticCoding,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (!focused) return;
@@ -923,17 +857,56 @@ export async function createApplicationMenu() {
                     }
                 },
                 { type: 'separator' },
-                { label: 'Minimize', role: 'minimize' },
+                { label: 'Minimize', accelerator: KeyboardShortcuts.window.minimize, role: 'minimize' },
                 { label: 'Close', role: 'close' },
+                { type: 'separator' },
+                { label: 'Bring All to Front', role: 'front' },
                 { type: 'separator' },
                 ...createWindowListMenu()
             ]
         },
         {
-            label: 'Debug',
+            label: 'Developer',
             submenu: [
                 {
-                    label: 'Show File Watcher Status',
+                    label: 'Toggle Developer Tools',
+                    accelerator: KeyboardShortcuts.view.toggleDevTools,
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) focused.webContents.toggleDevTools();
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Reload',
+                    accelerator: KeyboardShortcuts.view.reload,
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) focused.webContents.reload();
+                    }
+                },
+                {
+                    label: 'Force Reload',
+                    accelerator: KeyboardShortcuts.view.forceReload,
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) focused.webContents.reloadIgnoringCache();
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Toggle Debug Console',
+                    accelerator: KeyboardShortcuts.developer.toggleDebugConsole,
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('toggle-debug-console');
+                        }
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'File Watcher Status',
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -949,7 +922,7 @@ export async function createApplicationMenu() {
                     }
                 },
                 {
-                    label: 'Show Global Watcher Stats',
+                    label: 'Global Watcher Stats',
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -966,7 +939,7 @@ export async function createApplicationMenu() {
                 },
                 {
                     label: 'Refresh File Tree',
-                    accelerator: 'CmdOrCtrl+Shift+F5',
+                    accelerator: KeyboardShortcuts.developer.refreshFileTree,
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
@@ -1012,16 +985,6 @@ export async function createApplicationMenu() {
                     }
                 },
                 { type: 'separator' },
-                {
-                    label: 'Toggle Debug Console',
-                    accelerator: 'CmdOrCtrl+Shift+D',
-                    click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
-                        if (focused) {
-                            focused.webContents.send('toggle-debug-console');
-                        }
-                    }
-                },
                 // Database menu items - only show in development mode
                 ...(isDev ? [
                     { type: 'separator' },
@@ -1164,10 +1127,9 @@ Note: Only one connection at a time is supported.`,
                 { type: 'separator' },
                 {
                     label: 'Settings...',
-                    accelerator: 'CmdOrCtrl+,',
+                    accelerator: KeyboardShortcuts.window.aiModels,
                     click: async () => {
                         createAIModelsWindow();
-
                     }
                 },
                 { type: 'separator' },
@@ -1207,6 +1169,16 @@ Note: Only one connection at a time is supported.`,
                             focusedWindow.webContents.send('open-welcome-tab');
                         }
                     }
+                },
+                {
+                    label: 'Keyboard Shortcuts',
+                    accelerator: 'CmdOrCtrl+/',
+                    click: async () => {
+                        const focusedWindow = BrowserWindow.getFocusedWindow();
+                        if (focusedWindow) {
+                            focusedWindow.webContents.send('open-keyboard-shortcuts');
+                        }
+                    }
                 }
             ]
         });
@@ -1222,6 +1194,16 @@ Note: Only one connection at a time is supported.`,
                         const focusedWindow = BrowserWindow.getFocusedWindow();
                         if (focusedWindow) {
                             focusedWindow.webContents.send('open-welcome-tab');
+                        }
+                    }
+                },
+                {
+                    label: 'Keyboard Shortcuts',
+                    accelerator: 'CmdOrCtrl+/',
+                    click: async () => {
+                        const focusedWindow = BrowserWindow.getFocusedWindow();
+                        if (focusedWindow) {
+                            focusedWindow.webContents.send('open-keyboard-shortcuts');
                         }
                     }
                 },
