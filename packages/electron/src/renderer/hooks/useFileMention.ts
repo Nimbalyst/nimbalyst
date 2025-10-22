@@ -26,83 +26,44 @@ export function useFileMention({
   onInsertReference
 }: UseFileMentionOptions): UseFileMentionReturn {
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const previousDocCountRef = useRef<number>(0);
+  const lastFetchTimeRef = useRef<number>(0);
+  const CACHE_DURATION_MS = 5000; // 5 second cache
 
   const documentService = useMemo(() => getDocumentService(), []);
 
-  // Load initial documents
-  useEffect(() => {
-    let mounted = true;
+  // Load documents with cache
+  const loadDocuments = useCallback(async () => {
+    const now = Date.now();
+    const timeSinceLastFetch = now - lastFetchTimeRef.current;
 
-    const loadDocuments = async () => {
-      try {
-        // console.log('[useFileMention] Loading documents...');
-        // console.log('[useFileMention] window.electronAPI available:', !!window.electronAPI);
-        setIsLoading(true);
-        const docs = await documentService.listDocuments();
-        // console.log('[useFileMention] Loaded documents:', docs.length, docs);
+    // Skip fetch if cache is still valid
+    if (timeSinceLastFetch < CACHE_DURATION_MS && documents.length > 0) {
+      return documents;
+    }
 
-        // If no documents, check if we have a workspace
-        if (docs.length === 0) {
-          // console.warn('[useFileMention] No documents found. This could mean:');
-          // console.warn('  1. No workspace is open');
-          // console.warn('  2. DocumentService is not initialized for this window');
-          // console.warn('  3. No markdown files exist in the workspace');
-
-          // Try to get more info
-          if (window.electronAPI) {
-            try {
-              const result = await window.electronAPI.invoke('document-service:list');
-              // console.log('[useFileMention] Direct IPC call result:', result);
-            } catch (ipcErr) {
-              console.error('[useFileMention] Direct IPC call failed:', ipcErr);
-            }
-          }
-        }
-
-        if (mounted) {
-          previousDocCountRef.current = docs.length;
-          setDocuments(docs);
-        }
-      } catch (err) {
-        console.error('[useFileMention] Failed to load documents:', err);
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    loadDocuments();
-
-    // Watch for document changes
-    const unsubscribe = documentService.watchDocuments((docs) => {
-      if (!mounted) return;
-
-      // Only update if the count changed to avoid unnecessary re-renders
-      if (docs.length !== previousDocCountRef.current) {
-        // console.log('[useFileMention] Documents changed:', previousDocCountRef.current, '->', docs.length);
-        previousDocCountRef.current = docs.length;
-        setDocuments(docs);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      unsubscribe();
-    };
-  }, [documentService]);
+    try {
+      setIsLoading(true);
+      const docs = await documentService.listDocuments();
+      setDocuments(docs);
+      lastFetchTimeRef.current = now;
+      return docs;
+    } catch (err) {
+      console.error('[useFileMention] Failed to load documents:', err);
+      return documents;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [documentService, documents]);
 
   // Handle search query changes
   const handleSearch = useCallback(async (query: string) => {
     setSearchQuery(query);
 
     if (!query.trim()) {
-      // Empty query - show all documents
-      const docs = await documentService.listDocuments();
-      setDocuments(docs);
+      // Empty query - load all documents (with cache)
+      await loadDocuments();
       return;
     }
 
@@ -113,7 +74,7 @@ export function useFileMention({
     } catch (err) {
       console.error('[useFileMention] Search failed:', err);
     }
-  }, [documentService]);
+  }, [documentService, loadDocuments]);
 
   // Convert documents to typeahead options
   const options = useMemo<TypeaheadOption[]>(() => {

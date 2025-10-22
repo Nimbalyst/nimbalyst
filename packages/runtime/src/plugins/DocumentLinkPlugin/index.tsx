@@ -54,7 +54,8 @@ export function DocumentLinkPlugin({
   const [queryString, setQueryString] = useState<string>('');
   const [documents, setDocuments] = useState<any[]>([]);
   const menuOpenRef = useRef(false);
-  const pendingDocsRef = useRef<any[] | null>(null);
+  const lastFetchTimeRef = useRef<number>(0);
+  const CACHE_DURATION_MS = 5000; // 5 second cache
 
   useEffect(() => {
     const handleDocumentReferenceClick = (event: MouseEvent, allowButton: (button: number) => boolean) => {
@@ -126,20 +127,20 @@ export function DocumentLinkPlugin({
     });
   }, [editor, documentService]);
 
-  // Load documents when component mounts
-  useEffect(() => {
-    documentService.listDocuments().then(setDocuments);
+  // Load documents only when menu opens, with cache
+  const loadDocuments = useCallback(async () => {
+    const now = Date.now();
+    const timeSinceLastFetch = now - lastFetchTimeRef.current;
 
-    // Watch for document changes, but avoid updating while the menu is open
-    const unsubscribe = documentService.watchDocuments((docs) => {
-      if (menuOpenRef.current) {
-        pendingDocsRef.current = docs;
-      } else {
-        setDocuments(docs);
-      }
-    });
-    return unsubscribe;
-  }, [documentService]);
+    // Skip fetch if cache is still valid
+    if (timeSinceLastFetch < CACHE_DURATION_MS && documents.length > 0) {
+      return;
+    }
+
+    const docs = await documentService.listDocuments();
+    setDocuments(docs);
+    lastFetchTimeRef.current = now;
+  }, [documentService, documents.length]);
 
   // triggerFn is provided by the host; ensure stable reference via useMemo
   const resolvedTriggerFn = useMemo(() => triggerFn, [triggerFn]);
@@ -214,13 +215,12 @@ export function DocumentLinkPlugin({
       onQueryChange={handleQueryChange}
       onSelectOption={handleSelectOption}
       anchorElem={anchorElem}
-      onOpen={() => { menuOpenRef.current = true; }}
+      onOpen={() => {
+        menuOpenRef.current = true;
+        loadDocuments();
+      }}
       onClose={() => {
         menuOpenRef.current = false;
-        if (pendingDocsRef.current) {
-          setDocuments(pendingDocsRef.current);
-          pendingDocsRef.current = null;
-        }
       }}
     />
   );
