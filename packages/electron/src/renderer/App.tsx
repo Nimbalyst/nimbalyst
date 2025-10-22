@@ -214,7 +214,7 @@ export default function App() {
 
   // Save active mode when it changes
   useEffect(() => {
-    console.log('[App Layout] Active mode changed to:', activeMode, 'bottomPanel:', bottomPanel);
+    // console.log('[App Layout] Active mode changed to:', activeMode, 'bottomPanel:', bottomPanel);
 
     if (!workspacePath || !window.electronAPI?.invoke) return;
 
@@ -244,11 +244,11 @@ export default function App() {
 
   // Save bottom panel state when it changes
   useEffect(() => {
-    console.log('[App Layout] Bottom panel state changed:', {
-      bottomPanel,
-      bottomPanelHeight,
-      activeMode
-    });
+    // console.log('[App Layout] Bottom panel state changed:', {
+    //   bottomPanel,
+    //   bottomPanelHeight,
+    //   activeMode
+    // });
 
     if (!workspacePath || !window.electronAPI?.invoke) return;
 
@@ -300,19 +300,19 @@ export default function App() {
         };
       };
 
-      console.log('[App Layout] === FULL LAYOUT DIMENSIONS ===');
-      console.log('[App Layout] Window height:', window.innerHeight);
-      console.log('[App Layout] Active mode:', activeMode, '| Bottom panel:', bottomPanel);
-      console.log('[App Layout] ---');
-      console.log('[App Layout] root-container:', logDimensions('root', rootContainer));
-      console.log('[App Layout] navigation-gutter:', logDimensions('nav', navGutter));
-      console.log('[App Layout] main-column-container:', logDimensions('main-col', mainColumnContainer));
-      console.log('[App Layout] top-content-row:', logDimensions('top-row', topContentRow));
-      console.log('[App Layout] center-content-wrapper:', logDimensions('center', centerContentWrapper));
-      console.log('[App Layout] files-mode-wrapper:', logDimensions('files-wrapper', filesModeWrapper));
-      console.log('[App Layout] agent-mode-wrapper:', logDimensions('agent-wrapper', agentModeWrapper));
-      console.log('[App Layout] file-tabs-container:', logDimensions('tabs', fileTabsContainer));
-      console.log('[App Layout] bottom-panel-container:', logDimensions('bottom', bottomPanelContainer));
+      // console.log('[App Layout] === FULL LAYOUT DIMENSIONS ===');
+      // console.log('[App Layout] Window height:', window.innerHeight);
+      // console.log('[App Layout] Active mode:', activeMode, '| Bottom panel:', bottomPanel);
+      // console.log('[App Layout] ---');
+      // console.log('[App Layout] root-container:', logDimensions('root', rootContainer));
+      // console.log('[App Layout] navigation-gutter:', logDimensions('nav', navGutter));
+      // console.log('[App Layout] main-column-container:', logDimensions('main-col', mainColumnContainer));
+      // console.log('[App Layout] top-content-row:', logDimensions('top-row', topContentRow));
+      // console.log('[App Layout] center-content-wrapper:', logDimensions('center', centerContentWrapper));
+      // console.log('[App Layout] files-mode-wrapper:', logDimensions('files-wrapper', filesModeWrapper));
+      // console.log('[App Layout] agent-mode-wrapper:', logDimensions('agent-wrapper', agentModeWrapper));
+      // console.log('[App Layout] file-tabs-container:', logDimensions('tabs', fileTabsContainer));
+      // console.log('[App Layout] bottom-panel-container:', logDimensions('bottom', bottomPanelContainer));
 
       // Calculate totals
       const topRowHeight = topContentRow?.clientHeight || 0;
@@ -320,26 +320,26 @@ export default function App() {
       const total = topRowHeight + bottomPanelHeight;
       const mainColHeight = mainColumnContainer?.clientHeight || 0;
 
-      console.log('[App Layout] ---');
-      console.log('[App Layout] MATH CHECK:');
-      console.log('[App Layout]   top-content-row height:', topRowHeight);
-      console.log('[App Layout]   bottom-panel height:', bottomPanelHeight);
-      console.log('[App Layout]   TOTAL:', total);
-      console.log('[App Layout]   main-column-container height:', mainColHeight);
-      console.log('[App Layout]   DIFFERENCE:', total - mainColHeight, (total === mainColHeight ? '✓ OK' : '✗ MISMATCH!'));
-
-      // Check viewport positions
-      console.log('[App Layout] ---');
-      console.log('[App Layout] VIEWPORT POSITIONS (getBoundingClientRect):');
+      // console.log('[App Layout] ---');
+      // console.log('[App Layout] MATH CHECK:');
+      // console.log('[App Layout]   top-content-row height:', topRowHeight);
+      // console.log('[App Layout]   bottom-panel height:', bottomPanelHeight);
+      // console.log('[App Layout]   TOTAL:', total);
+      // console.log('[App Layout]   main-column-container height:', mainColHeight);
+      // console.log('[App Layout]   DIFFERENCE:', total - mainColHeight, (total === mainColHeight ? '✓ OK' : '✗ MISMATCH!'));
+      //
+      // // Check viewport positions
+      // console.log('[App Layout] ---');
+      // console.log('[App Layout] VIEWPORT POSITIONS (getBoundingClientRect):');
       if (fileTabsContainer) {
         const rect = fileTabsContainer.getBoundingClientRect();
-        console.log('[App Layout]   file-tabs-container: top=' + rect.top + ', visible=' + (rect.top >= 0));
+        // console.log('[App Layout]   file-tabs-container: top=' + rect.top + ', visible=' + (rect.top >= 0));
       }
       if (topContentRow) {
         const rect = topContentRow.getBoundingClientRect();
-        console.log('[App Layout]   top-content-row: top=' + rect.top + ', visible=' + (rect.top >= 0));
+        // console.log('[App Layout]   top-content-row: top=' + rect.top + ', visible=' + (rect.top >= 0));
       }
-      console.log('[App Layout] ================================');
+      // console.log('[App Layout] ================================');
     }, 100);
 
     return () => clearTimeout(timeout);
@@ -1194,6 +1194,7 @@ export default function App() {
         onTogglePlansPanel={() => {
           setBottomPanel(prev => prev === 'plans' ? null : 'plans');
         }}
+        bottomPanel={bottomPanel}
         onToggleBugsPanel={() => {
           setBottomPanel(prev => prev === 'bugs' ? null : 'bugs');
         }}

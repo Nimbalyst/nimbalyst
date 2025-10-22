@@ -8,6 +8,8 @@ import { ThemeToggleButton } from '../ThemeToggleButton/ThemeToggleButton';
 export type NavigationMode = 'planning' | 'coding';
 export type SidebarView = 'files' | 'plans' | 'settings';
 
+export type TrackerBottomPanelType = 'plans' | 'bugs' | 'tasks' | 'ideas' | 'decisions';
+
 interface NavigationGutterProps {
   contentMode: ContentMode;
   onContentModeChange: (mode: ContentMode) => void;
@@ -17,6 +19,7 @@ interface NavigationGutterProps {
   onToggleBugsPanel?: () => void;
   onToggleTasksPanel?: () => void;
   onToggleIdeasPanel?: () => void;
+  bottomPanel?: TrackerBottomPanelType | null;
 }
 
 interface NavButton {
@@ -36,6 +39,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   onToggleBugsPanel,
   onToggleTasksPanel,
   onToggleIdeasPanel,
+  bottomPanel,
 }) => {
   // Content mode buttons - primary navigation (top)
   const contentModeButtonsTop: NavButton[] = [
@@ -81,18 +85,18 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   };
 
   const handleButtonClick = (button: NavButton) => {
-    console.log('[NavigationGutter] Button clicked:', button.id, {
-      hasOnClick: !!button.onClick,
-      hasContentMode: !!button.contentMode,
-      currentContentMode: contentMode,
-      targetContentMode: button.contentMode
-    });
+    // console.log('[NavigationGutter] Button clicked:', button.id, {
+    //   hasOnClick: !!button.onClick,
+    //   hasContentMode: !!button.contentMode,
+    //   currentContentMode: contentMode,
+    //   targetContentMode: button.contentMode
+    // });
 
     if (button.contentMode) {
-      console.log('[NavigationGutter] Changing content mode from', contentMode, 'to', button.contentMode);
+      // console.log('[NavigationGutter] Changing content mode from', contentMode, 'to', button.contentMode);
       onContentModeChange(button.contentMode);
     } else if (button.onClick) {
-      console.log('[NavigationGutter] Calling onClick for:', button.id);
+      // console.log('[NavigationGutter] Calling onClick for:', button.id);
       button.onClick();
     } else {
       console.warn('[NavigationGutter] No action defined for button:', button.id);
@@ -125,7 +129,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
       </div>
 
       {/* Spacer */}
-      <div className="nav-spacer" />
+      {/*<div className="nav-spacer" />*/}
 
       {/* Content Mode Switcher - Agent Group (Agent, Tracker) */}
       <div className="nav-section nav-content-modes">
@@ -173,12 +177,12 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         {bottomPanelButtons.map((button) => (
           <button
             key={button.id}
-            className="nav-button"
+            className={`nav-button ${bottomPanel === button.id ? 'active' : ''}`}
             onClick={() => handleButtonClick(button)}
             title={button.label}
             aria-label={button.label}
           >
-            <MaterialSymbol icon={button.icon} size={20} />
+            <MaterialSymbol icon={button.icon} size={20} fill={bottomPanel === button.id} />
           </button>
         ))}
       </div>
