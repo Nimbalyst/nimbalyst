@@ -891,7 +891,12 @@ export default function App() {
   const handleQuickOpenFileSelect = useCallback(async (filePath: string) => {
     await handleWorkspaceFileSelect(filePath);
     // Recent files are now added inside handleWorkspaceFileSelect
-  }, [handleWorkspaceFileSelect]);
+
+    // Switch to files mode if we're in a different mode (e.g., settings, agent, etc.)
+    if (activeMode !== 'files' && activeMode !== 'plan') {
+      setActiveMode('files');
+    }
+  }, [handleWorkspaceFileSelect, activeMode]);
 
   // Handle creating a new file in workspace
   const handleCreateNewFile = useCallback(async (fileName: string) => {
@@ -1274,7 +1279,7 @@ export default function App() {
                 top: 0,
                 bottom: 0,
                 left: '2px',
-                width: '1px',
+                width: '2px',
                 backgroundColor: '#e5e7eb',
                 transition: 'background-color 0.2s'
               }}
