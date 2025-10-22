@@ -69,13 +69,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
       icon: 'edit_note',
       label: 'Plans (Cmd+Shift+P)',
       onClick: onTogglePlansPanel,
-    },
-    {
-      id: 'tracker',
-      icon: 'fact_check',
-      label: 'Tracker (Cmd+Shift+B)',
-      onClick: onToggleBugsPanel,
-    },
+    }
   ];
 
   // Settings button - always at bottom
@@ -189,13 +183,16 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         ))}
       </div>
 
-      {/* Theme Toggle - Above Settings */}
-      <div className="nav-section nav-theme">
-        <ThemeToggleButton />
-      </div>
+
 
       {/* Settings (bottom) */}
       <div className="nav-section nav-settings">
+
+        {/* Theme Toggle - Above Settings */}
+        <div className="nav-section nav-theme">
+          <ThemeToggleButton />
+        </div>
+
         <button
           className="nav-button"
           onClick={() => handleButtonClick(settingsButton)}
