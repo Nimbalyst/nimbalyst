@@ -38,7 +38,7 @@ export function createWorkspaceManagerWindow() {
     height: 700,
     minWidth: 900,
     minHeight: 600,
-    title: 'Workspace Manager - Nimbalyst',
+    title: 'Project Manager - Nimbalyst',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -97,7 +97,7 @@ export function createWorkspaceManagerWindow() {
       type: 'warning',
       buttons: ['Reload', 'Keep Waiting'],
       defaultId: 0,
-      message: 'Workspace Manager is not responding',
+      message: 'Project Manager is not responding',
       detail: 'Would you like to reload the window?'
     });
 

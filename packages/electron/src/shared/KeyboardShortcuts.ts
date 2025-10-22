@@ -66,7 +66,7 @@ export const KeyboardShortcuts = {
 
   // Window Menu
   window: {
-    workspaceManager: 'Cmd+Shift+P',
+    workspaceManager: 'Cmd+P',
     sessionManager: 'Cmd+Shift+H',
     agenticCoding: 'Cmd+Shift+K',
     aiModels: 'Cmd+,',

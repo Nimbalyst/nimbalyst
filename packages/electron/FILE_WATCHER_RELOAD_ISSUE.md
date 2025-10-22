@@ -1,12 +1,14 @@
 # File Watcher Reload Issue
 
-## Status: RESOLVED ✅
+## Status: RESOLVED WITH WORKAROUND ✅
 
-The issue has been fixed. Both requirements are now satisfied:
-- ✅ External file changes reload the editor content without remounting
+The original issue (external file changes not reloading in active tabs) has been fixed. However, a related issue was discovered with inactive tabs. A workaround has been implemented.
+
+- ✅ External file changes reload the editor content without remounting (ACTIVE TABS)
 - ✅ Autosave does not cause editor repaint or focus loss
+- ⚠️ Inactive tabs require manual reload via dialog when becoming active (workaround)
 
-See [Resolution](#resolution) section below for details.
+See [Resolution](#resolution) and [Inactive Tab Workaround](#inactive-tab-workaround) sections below for details.
 
 ---
 
@@ -236,3 +238,30 @@ The programmatic update approach works correctly:
 - `/packages/electron/src/renderer/components/TabEditor/TabEditor.tsx` (lines 157, 387-388)
   - Fixed `$getRoot` import in conflict resolution handler
   - Fixed `$getRoot` import in external change reload handler
+
+## Inactive Tab Workaround
+
+### Problem
+
+While fixing the active tab file watcher issue, a second issue was discovered: **inactive tabs do not receive file watcher events in development mode**.
+
+**Root Cause:** React StrictMode causes rapid component re-mounting and cleanup cycles. IPC event listeners are registered, then immediately cleaned up, then re-registered. During this dance, file change events can be sent by the main process but have no listener to receive them (timing issue).
+
+**Test vs Reality:** Playwright tests pass because they don't exhibit the same re-mounting behavior. In tests, components mount once and listeners stay registered.
+
+### Solution
+
+Implemented a safety net check (TabEditor.tsx lines 95-153):
+
+**When a tab becomes active:**
+1. Read the current file content from disk
+2. Compare disk content with editor content
+3. If they differ, show a dialog asking if user wants to reload
+4. If user confirms, update the editor content from disk
+
+**Benefits:**
+- Catches ALL missed file watcher events
+- Works regardless of React lifecycle timing issues
+- Provides user control over whether to reload
+
+**Implementation:** See `INACTIVE_TAB_FILE_WATCHER_BUG.md` for full analysis

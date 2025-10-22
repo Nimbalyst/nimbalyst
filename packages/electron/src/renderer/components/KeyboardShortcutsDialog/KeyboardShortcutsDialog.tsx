@@ -68,7 +68,7 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
     {
       title: 'Window',
       shortcuts: [
-        { label: 'Workspace Manager', shortcut: KeyboardShortcuts.window.workspaceManager },
+        { label: 'Project Manager', shortcut: KeyboardShortcuts.window.workspaceManager },
         { label: 'Session Manager', shortcut: KeyboardShortcuts.window.sessionManager },
         { label: 'Agentic Coding', shortcut: KeyboardShortcuts.window.agenticCoding },
         { label: 'Settings', shortcut: KeyboardShortcuts.window.aiModels },

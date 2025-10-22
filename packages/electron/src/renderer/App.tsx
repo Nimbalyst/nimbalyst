@@ -147,7 +147,7 @@ export default function App() {
     // Set window title for Workspace Manager
     React.useEffect(() => {
       if (window.electronAPI) {
-        window.electronAPI.setTitle('Workspace Manager - Nimbalyst');
+        window.electronAPI.setTitle('Project Manager - Nimbalyst');
       }
     }, []);
     return <WorkspaceManager />;

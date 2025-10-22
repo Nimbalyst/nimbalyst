@@ -45,7 +45,7 @@ function createWindowListMenu(): any[] {
 
         // Check for special windows first
         if (isWorkspaceManagerWindow(window)) {
-            title = 'Workspace Manager';
+            title = 'Project Manager';
             category = 'other';
         } else if (isSessionManagerWindow(window)) {
             title = 'Session Manager';
@@ -818,7 +818,7 @@ export async function createApplicationMenu() {
             label: 'Window',
             submenu: [
                 {
-                    label: 'Workspace Manager',
+                    label: 'Project Manager',
                     accelerator: KeyboardShortcuts.window.workspaceManager,
                     click: async () => {
                         createWorkspaceManagerWindow();
@@ -1253,7 +1253,7 @@ function isWorkspaceManagerWindow(window: BrowserWindow): boolean {
         return false;
     }
     // Check if this is the workspace manager window by checking the title
-    return window.getTitle() === 'Workspace Manager - Nimbalyst';
+    return window.getTitle() === 'Project Manager - Nimbalyst';
 }
 
 // Helper to check if window is session manager window
