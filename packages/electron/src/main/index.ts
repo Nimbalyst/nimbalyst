@@ -24,7 +24,7 @@ import { registerAttachmentHandlers } from './ipc/AttachmentHandlers';
 import { registerWorkspaceWatcherHandlers } from './file/WorkspaceWatcher';
 import { setupSessionFileHandlers } from './ipc/SessionFileHandlers';
 import { registerSlashCommandHandlers } from './ipc/SlashCommandHandlers';
-import { getTheme } from './utils/store';
+import { getTheme, setTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
 import { AgentService } from './services/agents/AgentService';
 import { cliManager } from './services/CLIManager';
@@ -250,6 +250,16 @@ app.whenReady().then(async () => {
     // Set up IPC handler to update document state for MCP
     ipcMain.on('mcp:updateDocumentState', (event, state) => {
         updateDocumentState(state);
+    });
+
+    // Set up IPC handler for theme changes from renderer
+    ipcMain.on('set-theme', (event, theme: string) => {
+        setTheme(theme);
+        updateNativeTheme();
+        BrowserWindow.getAllWindows().forEach(window => {
+            window.webContents.send('theme-change', theme);
+        });
+        updateWindowTitleBars();
     });
 
     // Try to restore session, otherwise show Workspace Manager

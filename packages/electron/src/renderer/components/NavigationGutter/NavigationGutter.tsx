@@ -3,6 +3,7 @@ import { MaterialSymbol } from '../MaterialSymbol';
 import './NavigationGutter.css';
 import type { ContentMode } from '../../types/WindowModeTypes';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
+import { ThemeToggleButton } from '../ThemeToggleButton/ThemeToggleButton';
 
 export type NavigationMode = 'planning' | 'coding';
 export type SidebarView = 'files' | 'plans' | 'settings';
@@ -186,6 +187,11 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
             <MaterialSymbol icon={button.icon} size={20} />
           </button>
         ))}
+      </div>
+
+      {/* Theme Toggle - Above Settings */}
+      <div className="nav-section nav-theme">
+        <ThemeToggleButton />
       </div>
 
       {/* Settings (bottom) */}
