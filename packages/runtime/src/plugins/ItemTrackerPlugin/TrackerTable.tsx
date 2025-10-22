@@ -139,6 +139,7 @@ export function TrackerTable({
   useEffect(() => {
     let unsubscribeTracker: (() => void) | null = null;
     let unsubscribeMetadata: (() => void) | null = null;
+    let isSubscribed = true;
 
     async function loadItems() {
       try {
@@ -173,32 +174,47 @@ export function TrackerTable({
           }
         }
 
-        setItems(allItems);
-        setLoading(false);
-
-        // Subscribe to tracker item changes
-        if (documentService.watchTrackerItems) {
-          unsubscribeTracker = documentService.watchTrackerItems((change: TrackerItemChangeEvent) => {
-            loadItems();
-          });
-        }
-
-        // Subscribe to metadata changes (for plan status documents)
-        if (documentService.watchDocumentMetadata && (typeFilter === 'plan' || typeFilter === 'all')) {
-          unsubscribeMetadata = documentService.watchDocumentMetadata(() => {
-            loadItems();
-          });
+        if (isSubscribed) {
+          setItems(allItems);
+          setLoading(false);
         }
       } catch (err) {
         console.error('Failed to load tracker items:', err);
-        setError('Failed to load tracker items');
-        setLoading(false);
+        if (isSubscribed) {
+          setError('Failed to load tracker items');
+          setLoading(false);
+        }
       }
     }
 
+    async function setupWatchers() {
+      const documentService = (window as any).documentService;
+      if (!documentService) return;
+
+      // Subscribe to tracker item changes
+      if (documentService.watchTrackerItems) {
+        unsubscribeTracker = documentService.watchTrackerItems((change: TrackerItemChangeEvent) => {
+          // Only reload items, don't re-register watchers
+          loadItems();
+        });
+      }
+
+      // Subscribe to metadata changes (for plan status documents)
+      if (documentService.watchDocumentMetadata && (typeFilter === 'plan' || typeFilter === 'all')) {
+        unsubscribeMetadata = documentService.watchDocumentMetadata(() => {
+          // Only reload items, don't re-register watchers
+          loadItems();
+        });
+      }
+    }
+
+    // Initial load
     loadItems();
+    // Setup watchers once
+    setupWatchers();
 
     return () => {
+      isSubscribed = false;
       if (unsubscribeTracker) {
         unsubscribeTracker();
       }

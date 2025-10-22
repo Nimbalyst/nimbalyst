@@ -163,10 +163,10 @@ export class ElectronDocumentService implements DocumentService {
             } else {
               updated.push(metadata);
             }
-          }
 
-          // Update tracker items cache for this file
-          await this.updateTrackerItemsCache(newDoc.path);
+            // Update tracker items cache for this file (only when content changed)
+            await this.updateTrackerItemsCache(newDoc.path);
+          }
         } catch (error) {
           console.error(`[DocumentService] Failed to extract metadata for ${newDoc.path}:`, error);
         }
