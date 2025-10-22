@@ -33,7 +33,6 @@ import {
 import useModal from '../../hooks/useModal';
 import {EmbedConfigs} from '../AutoEmbedPlugin';
 import {INSERT_COLLAPSIBLE_COMMAND} from '../CollapsiblePlugin';
-import {INSERT_EXCALIDRAW_COMMAND} from '../ExcalidrawPlugin/ExcalidrawCommands';
 import InsertLayoutDialog from '../LayoutPlugin/InsertLayoutDialog';
 import {INSERT_PAGE_BREAK} from '../PageBreakPlugin';
 import {InsertTableDialog} from '../TablePlugin/TablePlugin';
@@ -283,15 +282,6 @@ function getBaseOptions(editor: LexicalEditor, showModal: ShowModal): TypeaheadM
       keywords: ['page break', 'divider'],
       section: 'Layout',
       onSelect: () => editor.dispatchCommand(INSERT_PAGE_BREAK, undefined),
-    },
-    {
-      id: 'excalidraw',
-      label: 'Excalidraw',
-      icon: <MaterialIcon name="draw" />,
-      keywords: ['excalidraw', 'diagram', 'drawing'],
-      section: 'Media',
-      onSelect: () =>
-        editor.dispatchCommand(INSERT_EXCALIDRAW_COMMAND, undefined),
     },
     ...EmbedConfigs.map(
       (embedConfig) => ({
