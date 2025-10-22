@@ -1286,113 +1286,131 @@ export default function App() {
 
           {/* Center: Editor/Agent/Settings area */}
           <div data-layout="center-content-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-            {(activeMode === 'files' || activeMode === 'plan') && (
-              <div data-layout="files-mode-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-                {sidebarView === 'settings' ? (
-                  <SettingsScreen
-                    workspacePath={workspacePath || ''}
-                    workspaceName={workspaceName || ''}
-                    onClose={() => {
-                      setSidebarView('files');
-                    }}
-                    isFirstTime={false}
-                  />
-                ) : tabs.activeTab ? (
-                  <div className="file-tabs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    <TabManager
-                    tabs={tabs.tabs}
-                    activeTabId={tabs.activeTabId}
-                    onTabSelect={tabs.switchTab}
-                    onTabClose={tabs.removeTab}
-                    onNewTab={() => {
-                      setIsNewFileDialogOpen(true);
-                    }}
-                    onTogglePin={tabs.togglePin}
-                    onTabReorder={tabs.reorderTabs}
-                    onViewHistory={(tabId) => {
-                      const tab = tabs.getTabState(tabId);
-                      if (tab && tab.filePath) {
-                        setIsHistoryDialogOpen(true);
-                      }
-                    }}
-                    hideTabBar={false}
-                    isActive={true}
-                  >
-                    {tabs.activeTab ? (
-                      <TabContent
-                        tabs={tabs.tabs}
-                        activeTabId={tabs.activeTabId}
-                        theme={theme}
-                        onManualSaveReady={(saveFn) => {
-                          handleSaveRef.current = saveFn;
-                        }}
-                        onSaveComplete={(filePath) => {
-                          setCurrentFilePath(filePath);
-                          setCurrentFileName(filePath.split('/').pop() || filePath);
-                          setIsDirty(false);
+            {/* Files/Plan Mode - always mounted, visibility controlled by display */}
+            <div
+              data-layout="files-mode-wrapper"
+              style={{
+                flex: 1,
+                display: (activeMode === 'files' || activeMode === 'plan') ? 'flex' : 'none',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                minHeight: 0
+              }}
+            >
+              {sidebarView === 'settings' ? (
+                <SettingsScreen
+                  workspacePath={workspacePath || ''}
+                  workspaceName={workspaceName || ''}
+                  onClose={() => {
+                    setSidebarView('files');
+                  }}
+                  isFirstTime={false}
+                />
+              ) : tabs.activeTab ? (
+                <div className="file-tabs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  <TabManager
+                  tabs={tabs.tabs}
+                  activeTabId={tabs.activeTabId}
+                  onTabSelect={tabs.switchTab}
+                  onTabClose={tabs.removeTab}
+                  onNewTab={() => {
+                    setIsNewFileDialogOpen(true);
+                  }}
+                  onTogglePin={tabs.togglePin}
+                  onTabReorder={tabs.reorderTabs}
+                  onViewHistory={(tabId) => {
+                    const tab = tabs.getTabState(tabId);
+                    if (tab && tab.filePath) {
+                      setIsHistoryDialogOpen(true);
+                    }
+                  }}
+                  hideTabBar={false}
+                  isActive={activeMode === 'files' || activeMode === 'plan'}
+                >
+                  {tabs.activeTab ? (
+                    <TabContent
+                      tabs={tabs.tabs}
+                      activeTabId={tabs.activeTabId}
+                      theme={theme}
+                      onManualSaveReady={(saveFn) => {
+                        handleSaveRef.current = saveFn;
+                      }}
+                      onSaveComplete={(filePath) => {
+                        setCurrentFilePath(filePath);
+                        setCurrentFileName(filePath.split('/').pop() || filePath);
+                        setIsDirty(false);
 
-                          if (tabs.activeTabId) {
-                            tabs.updateTab(tabs.activeTabId, {
-                              isDirty: false,
-                              lastSaved: new Date()
-                            });
+                        if (tabs.activeTabId) {
+                          tabs.updateTab(tabs.activeTabId, {
+                            isDirty: false,
+                            lastSaved: new Date()
+                          });
+                        }
+                      }}
+                      onGetContentReady={(tabId, getContentFn) => {
+                        if (tabId === tabs.activeTabId) {
+                          getContentRef.current = getContentFn;
+                          aiToolService.setGetContentFunction(getContentFn);
+                        }
+                      }}
+                      onTabDirtyChange={(changedTabId, changedIsDirty) => {
+                        const tab = tabs.getTabState(changedTabId);
+                        if (tab && tab.isDirty !== changedIsDirty) {
+                          tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
+                          if (changedTabId === tabs.activeTabId) {
+                            setIsDirty(changedIsDirty);
                           }
-                        }}
-                        onGetContentReady={(tabId, getContentFn) => {
-                          if (tabId === tabs.activeTabId) {
-                            getContentRef.current = getContentFn;
-                            aiToolService.setGetContentFunction(getContentFn);
-                          }
-                        }}
-                        onTabDirtyChange={(changedTabId, changedIsDirty) => {
-                          const tab = tabs.getTabState(changedTabId);
-                          if (tab && tab.isDirty !== changedIsDirty) {
-                            tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
-                            if (changedTabId === tabs.activeTabId) {
-                              setIsDirty(changedIsDirty);
-                            }
-                          }
-                        }}
-                      />
-                    ) : (
-                      <WorkspaceWelcome workspaceName={workspaceName || 'Workspace'} />
-                    )}
-                  </TabManager>
-                </div>
+                        }
+                      }}
+                    />
+                  ) : (
+                    <WorkspaceWelcome workspaceName={workspaceName || 'Workspace'} />
+                  )}
+                </TabManager>
+              </div>
+            ) : (
+              <WorkspaceWelcome workspaceName={workspaceName || 'Open a file to get started'} />
+            )}
+            </div>
+
+            {/* Agent Mode - always mounted, visibility controlled by display */}
+            <div
+              data-layout="agent-mode-wrapper"
+              style={{
+                flex: 1,
+                display: activeMode === 'agent' ? 'flex' : 'none',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                minHeight: 0
+              }}
+            >
+              {workspacePath ? (
+                <AgenticPanel
+                  mode="agent"
+                  workspacePath={workspacePath}
+                  documentContext={documentContext}
+                  planDocumentPath={agentPlanReference || undefined}
+                  onContentModeChange={setActiveMode}
+                  isActive={activeMode === 'agent'}
+                />
               ) : (
-                <WorkspaceWelcome workspaceName={workspaceName || 'Open a file to get started'} />
-              )}
-              </div>
-            )}
-
-            {activeMode === 'agent' && (
-              <div data-layout="agent-mode-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-                {workspacePath ? (
-                  <AgenticPanel
-                    mode="agent"
-                    workspacePath={workspacePath}
-                    documentContext={documentContext}
-                    planDocumentPath={agentPlanReference || undefined}
-                    onContentModeChange={setActiveMode}
-                    isActive={true}
-                  />
-                ) : (
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-                    <div style={{ textAlign: 'center' }}>
-                      <p>Agent mode requires a workspace</p>
-                      <p style={{ marginTop: '8px', fontSize: '14px' }}>Open a workspace to use agent features</p>
-                    </div>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <p>Agent mode requires a workspace</p>
+                    <p style={{ marginTop: '8px', fontSize: '14px' }}>Open a workspace to use agent features</p>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
 
+            {/* Tracker Mode - conditionally rendered for now */}
             {activeMode === 'tracker' && (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
                 <BugsScreen />
               </div>
             )}
 
+            {/* Settings Mode - conditionally rendered for now */}
             {activeMode === 'settings' && (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
                 <SettingsScreen
