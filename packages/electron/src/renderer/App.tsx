@@ -201,6 +201,9 @@ export default function App() {
   const [bottomPanel, setBottomPanel] = useState<TrackerBottomPanelType | null>(null);
   const [bottomPanelHeight, setBottomPanelHeight] = useState<number>(300);
 
+  // Agent panel plan reference (for launching from plan status)
+  const [agentPlanReference, setAgentPlanReference] = useState<string | null>(null);
+
   // Load active mode from workspace state
   useEffect(() => {
     if (!workspacePath || !window.electronAPI?.invoke) return;
@@ -703,14 +706,21 @@ export default function App() {
       setActiveMode(mode);
     };
 
+    const handleInsertPlanReference = (planPath: string) => {
+      console.log('[App] handleInsertPlanReference called with path:', planPath);
+      setAgentPlanReference(planPath);
+    };
+
     console.log('[App] Setting up IPC listener for set-content-mode');
     window.electronAPI.on('set-content-mode', handleSetContentMode);
+    window.electronAPI.on('agent:insert-plan-reference', handleInsertPlanReference);
     // COMMENTED OUT - Cmd+K now switches to Agent mode
     // window.electronAPI.on('toggle-agent-palette', handleToggleAgentPalette);
 
     return () => {
       console.log('[App] Removing IPC listener for set-content-mode');
       window.electronAPI.off?.('set-content-mode', handleSetContentMode);
+      window.electronAPI.off?.('agent:insert-plan-reference', handleInsertPlanReference);
       // window.electronAPI.off?.('toggle-agent-palette', handleToggleAgentPalette);
     };
   }, []); // Remove workspaceMode dependency - listener should always be active
@@ -1362,6 +1372,7 @@ export default function App() {
                     mode="agent"
                     workspacePath={workspacePath}
                     documentContext={documentContext}
+                    planDocumentPath={agentPlanReference || undefined}
                     onContentModeChange={setActiveMode}
                     isActive={true}
                   />

@@ -828,23 +828,37 @@ export function registerWorkspaceHandlers() {
         try {
             const { workspacePath, planDocumentPath } = options;
 
-            // Check if there's already an agentic coding window for this workspace
-            const existingWindow = getAgenticCodingWindow(workspacePath);
-            if (existingWindow && !existingWindow.isDestroyed()) {
-                // Focus the existing window and create a new session tab
-                existingWindow.focus();
-                // The window will handle creating a new session
-                return { success: true, sessionId: null };
+            // Find the workspace window for this workspace path
+            let targetWindow: BrowserWindow | null = null;
+            for (const [windowId, state] of windowStates) {
+                if (state?.workspacePath === workspacePath && state.mode === 'workspace') {
+                    const window = BrowserWindow.getAllWindows().find(w => getWindowId(w) === windowId);
+                    if (window && !window.isDestroyed()) {
+                        targetWindow = window;
+                        break;
+                    }
+                }
             }
 
-            // Create a new agentic coding window with the plan document attached
-            const window = createAgenticCodingWindow({
-                workspacePath,
-                planDocumentPath
-            });
+            // If no workspace window found, use the current window
+            if (!targetWindow) {
+                targetWindow = BrowserWindow.fromWebContents(event.sender);
+            }
 
-            // The window will create its own session, but we need to return a session ID
-            // For now, return success and let the window manage the session
+            if (!targetWindow) {
+                console.error('[PlanStatus] No window found to launch agent session');
+                return { success: false, error: 'No window found' };
+            }
+
+            // Switch to agent mode in the project window
+            targetWindow.focus();
+            targetWindow.webContents.send('set-content-mode', 'agent');
+
+            // Insert the plan file reference into the agent input
+            if (planDocumentPath) {
+                targetWindow.webContents.send('agent:insert-plan-reference', planDocumentPath);
+            }
+
             return { success: true, sessionId: null };
         } catch (error: any) {
             console.error('[PlanStatus] Error launching agent session:', error);
@@ -856,21 +870,33 @@ export function registerWorkspaceHandlers() {
         try {
             const { sessionId, workspacePath, planDocumentPath } = options;
 
-            // Check if there's already an agentic coding window for this workspace
-            const existingWindow = getAgenticCodingWindow(workspacePath);
-            if (existingWindow && !existingWindow.isDestroyed()) {
-                // Focus the window and tell it to open the session
-                existingWindow.focus();
-                existingWindow.webContents.send('agentic-coding:open-session', sessionId);
-                return { success: true };
+            // Find the workspace window for this workspace path
+            let targetWindow: BrowserWindow | null = null;
+            for (const [windowId, state] of windowStates) {
+                if (state?.workspacePath === workspacePath && state.mode === 'workspace') {
+                    const window = BrowserWindow.getAllWindows().find(w => getWindowId(w) === windowId);
+                    if (window && !window.isDestroyed()) {
+                        targetWindow = window;
+                        break;
+                    }
+                }
             }
 
-            // Create a new window with the session
-            createAgenticCodingWindow({
-                sessionId,
-                workspacePath,
-                planDocumentPath
-            });
+            // If no workspace window found, use the current window
+            if (!targetWindow) {
+                targetWindow = BrowserWindow.fromWebContents(event.sender);
+            }
+
+            if (!targetWindow) {
+                console.error('[PlanStatus] No window found to open agent session');
+                return { success: false, error: 'No window found' };
+            }
+
+            // Switch to agent mode in the project window
+            targetWindow.focus();
+            targetWindow.webContents.send('set-content-mode', 'agent');
+            // TODO: Load the specific session ID once agent panel supports it
+            // targetWindow.webContents.send('agent:load-session', sessionId);
 
             return { success: true };
         } catch (error: any) {

@@ -465,6 +465,25 @@ export function AgenticPanel({
     loadOrCreateSession();
   }, []); // Only run once
 
+  // Insert plan document reference when provided
+  useEffect(() => {
+    if (!planDocumentPath || !activeTabId || !workspacePath) return;
+
+    // Convert absolute path to workspace-relative path
+    let relativePath = planDocumentPath;
+    if (planDocumentPath.startsWith(workspacePath)) {
+      relativePath = planDocumentPath.substring(workspacePath.length);
+      // Remove leading slash if present
+      if (relativePath.startsWith('/')) {
+        relativePath = relativePath.substring(1);
+      }
+    }
+
+    // Set the draft input with the file reference
+    const fileRef = `@${relativePath} `;
+    handleDraftInputChange(activeTabId, fileRef);
+  }, [planDocumentPath, activeTabId, workspacePath]);
+
   // Save to workspace state when tabs/session changes
   useEffect(() => {
     if (sessionTabs.length === 0 && !activeTabId) return;
