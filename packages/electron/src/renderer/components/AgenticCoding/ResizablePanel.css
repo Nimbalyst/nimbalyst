@@ -15,7 +15,7 @@
 
 .resizable-panel-divider {
   position: relative;
-  width: 4px;
+  width: 2px;
   cursor: ew-resize;
   background: var(--border-primary);
   transition: background-color 0.15s ease;
@@ -24,7 +24,7 @@
 
 .resizable-panel-divider:hover,
 .resizable-panel-divider.dragging {
-  background: var(--border-focus);
+  background: var(--primary-color);
 }
 
 .resizable-panel-divider-handle {

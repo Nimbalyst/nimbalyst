@@ -134,13 +134,17 @@
   z-index: 10;
 }
 
-.ai-chat-resize-handle:hover::after {
+.ai-chat-resize-handle::before {
   content: '';
   position: absolute;
   left: 2px;
   top: 0;
   bottom: 0;
-  width: 1px;
+  width: 2px;
+  background: var(--border-primary);
+}
+
+.ai-chat-resize-handle:hover::before {
   background: var(--primary-color);
 }
 
