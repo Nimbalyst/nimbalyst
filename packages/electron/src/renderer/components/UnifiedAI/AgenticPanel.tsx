@@ -1050,6 +1050,7 @@ export function AgenticPanel({
           <SessionHistory
             workspacePath={workspacePath}
             activeSessionId={activeTabId}
+            loadedSessionIds={sessionTabs.map(tab => tab.id)}
             onSessionSelect={openSessionInTab}
             onSessionDelete={deleteSession}
             onNewSession={() => createNewSession()}

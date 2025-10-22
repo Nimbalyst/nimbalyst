@@ -8,11 +8,16 @@ interface SessionItem {
   id: string;
   title?: string;
   createdAt: number;
+  provider: string;
+  model?: string;
+  sessionType?: 'chat' | 'planning' | 'coding';
+  messageCount: number;
 }
 
 interface SessionHistoryProps {
   workspacePath: string;
   activeSessionId: string | null;
+  loadedSessionIds?: string[]; // IDs of sessions loaded in tabs
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete?: (sessionId: string) => void;
   onNewSession?: () => void;
@@ -24,6 +29,7 @@ interface SessionHistoryProps {
 export const SessionHistory: React.FC<SessionHistoryProps> = ({
   workspacePath,
   activeSessionId,
+  loadedSessionIds = [],
   onSessionSelect,
   onSessionDelete,
   onNewSession,
@@ -35,6 +41,9 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sessionTypeFilters, setSessionTypeFilters] = useState<Set<'chat' | 'planning' | 'coding'>>(
+    new Set(['chat', 'planning', 'coding'])
+  );
 
   // Load sessions from database
   const loadSessions = useCallback(async () => {
@@ -44,15 +53,17 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       const result = await window.electronAPI.invoke('sessions:list', workspacePath);
 
       if (result.success && Array.isArray(result.sessions)) {
-        // Filter to only coding sessions
-        const codingSessions = result.sessions
-          .filter((s: any) => s.sessionType === 'coding')
-          .map((s: any) => ({
-            id: s.id,
-            title: s.title || s.name || 'Untitled Session',
-            createdAt: s.createdAt
-          }));
-        setSessions(codingSessions);
+        // Map all sessions with full data
+        const allSessions = result.sessions.map((s: any) => ({
+          id: s.id,
+          title: s.title || s.name || 'Untitled Session',
+          createdAt: s.createdAt,
+          provider: s.provider || 'claude',
+          model: s.model,
+          sessionType: s.sessionType || 'chat',
+          messageCount: Array.isArray(s.messages) ? s.messages.length : 0
+        }));
+        setSessions(allSessions);
       }
     } catch (err) {
       console.error('[SessionHistory] Failed to load sessions:', err);
@@ -82,12 +93,34 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     }
   };
 
-  // Filter sessions by search query
-  const filteredSessions = searchQuery
-    ? sessions.filter(session =>
-        session.title?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : sessions;
+  const toggleSessionTypeFilter = (type: 'chat' | 'planning' | 'coding') => {
+    const newFilters = new Set(sessionTypeFilters);
+    if (newFilters.has(type)) {
+      // Don't allow unchecking the last filter
+      if (newFilters.size > 1) {
+        newFilters.delete(type);
+      }
+    } else {
+      newFilters.add(type);
+    }
+    setSessionTypeFilters(newFilters);
+  };
+
+  // Filter sessions by session type and search query
+  const filteredSessions = sessions.filter(session => {
+    // Apply session type filter
+    const sessionType = session.sessionType || 'chat';
+    if (!sessionTypeFilters.has(sessionType)) {
+      return false;
+    }
+
+    // Apply search filter
+    if (searchQuery) {
+      return session.title?.toLowerCase().includes(searchQuery.toLowerCase());
+    }
+
+    return true;
+  });
 
   // Group sessions by time
   const groupedSessions = groupSessionsByTime(filteredSessions);
@@ -174,7 +207,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           )}
         </div>
         <div className="session-history-empty">
-          <p>No coding sessions yet</p>
+          <p>No sessions yet</p>
           <p className="session-history-empty-hint">
             Create a new session to get started
           </p>
@@ -188,7 +221,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       <div className="session-history-header">
         <div className="session-history-header-left">
           <h3 className="session-history-title">Sessions</h3>
-          <span className="session-history-count">{sessions.length}</span>
+          <span className="session-history-count">{filteredSessions.length}</span>
         </div>
         {onNewSession && (
           <button
@@ -213,6 +246,29 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           aria-label="Search sessions"
         />
       </div>
+      <div className="session-history-filters">
+        <button
+          className={`session-history-filter-button chat ${sessionTypeFilters.has('chat') ? 'active' : ''}`}
+          onClick={() => toggleSessionTypeFilter('chat')}
+          title="Toggle chat sessions"
+        >
+          Chat
+        </button>
+        <button
+          className={`session-history-filter-button planning ${sessionTypeFilters.has('planning') ? 'active' : ''}`}
+          onClick={() => toggleSessionTypeFilter('planning')}
+          title="Toggle planning sessions"
+        >
+          Planning
+        </button>
+        <button
+          className={`session-history-filter-button coding ${sessionTypeFilters.has('coding') ? 'active' : ''}`}
+          onClick={() => toggleSessionTypeFilter('coding')}
+          title="Toggle coding sessions"
+        >
+          Coding
+        </button>
+      </div>
       <div className="session-history-list">
         {groupKeys.map(groupKey => {
           const groupSessions = groupedSessions[groupKey];
@@ -233,8 +289,12 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
                   title={session.title || 'Untitled Session'}
                   createdAt={session.createdAt}
                   isActive={session.id === activeSessionId}
+                  isLoaded={loadedSessionIds.includes(session.id)}
                   onClick={() => onSessionSelect(session.id)}
                   onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
+                  provider={session.provider}
+                  model={session.model}
+                  messageCount={session.messageCount}
                 />
               ))}
             </CollapsibleGroup>

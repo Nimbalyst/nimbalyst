@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
+import { ProviderIcon } from '../icons/ProviderIcons';
 import './SessionListItem.css';
 
 interface SessionListItemProps {
@@ -7,8 +8,12 @@ interface SessionListItemProps {
   title: string;
   createdAt: number;
   isActive: boolean;
+  isLoaded?: boolean; // Whether session is loaded in a tab
   onClick: () => void;
   onDelete?: () => void;
+  provider?: string;
+  model?: string;
+  messageCount?: number;
 }
 
 export const SessionListItem: React.FC<SessionListItemProps> = ({
@@ -16,8 +21,12 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   title,
   createdAt,
   isActive,
+  isLoaded = false,
   onClick,
-  onDelete
+  onDelete,
+  provider,
+  model,
+  messageCount
 }) => {
   const [isHovering, setIsHovering] = useState(false);
 
@@ -36,9 +45,12 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
 
   const relativeTime = getRelativeTimeString(createdAt);
 
+  // Extract model ID from provider:model format
+  const displayModel = model?.includes(':') ? model.split(':')[1] : model;
+
   return (
     <div
-      className={`session-list-item ${isActive ? 'active' : ''}`}
+      className={`session-list-item ${isActive ? 'active' : ''} ${isLoaded ? 'loaded' : ''}`}
       onClick={onClick}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
@@ -50,37 +62,49 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
           onClick();
         }
       }}
-      aria-label={`Session: ${truncatedTitle}, created ${relativeTime}`}
+      aria-label={`Session: ${truncatedTitle}, created ${relativeTime}${isLoaded ? ' (loaded in tab)' : ''}`}
       aria-current={isActive ? 'page' : undefined}
     >
+      <div className="session-list-item-icon">
+        <ProviderIcon provider={provider || 'claude'} size={16} />
+        {isLoaded && !isActive && <div className="session-list-item-loaded-indicator" title="Loaded in tab" />}
+      </div>
       <div className="session-list-item-content">
         <div className="session-list-item-title">{truncatedTitle}</div>
-        <div className="session-list-item-timestamp">{relativeTime}</div>
+        <div className="session-list-item-meta">
+          {displayModel && <span className="session-list-item-model">{displayModel}</span>}
+        </div>
       </div>
-      {isHovering && onDelete && !isActive && (
-        <button
-          className="session-list-item-delete"
-          onClick={handleDelete}
-          aria-label="Delete session"
-          title="Delete session"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 14 14"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
+      <div className="session-list-item-right">
+        {messageCount !== undefined && (
+          <span className="session-list-item-message-count">{messageCount}</span>
+        )}
+        {onDelete && (
+          <button
+            className={`session-list-item-delete ${isHovering && !isActive ? 'visible' : ''}`}
+            onClick={handleDelete}
+            aria-label="Delete session"
+            title="Delete session"
+            disabled={isActive}
           >
-            <path
-              d="M10.5 3.5L3.5 10.5M3.5 3.5L10.5 10.5"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-      )}
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M10.5 3.5L3.5 10.5M3.5 3.5L10.5 10.5"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 };
