@@ -77,8 +77,27 @@ export class ElectronDocumentService implements DocumentService {
     // Update metadata cache
     await this.updateMetadataCache(oldDocuments, this.documents);
 
-    // Notify all watchers
-    this.watchers.forEach(callback => callback(this.documents));
+    // Only notify watchers if the document list actually changed
+    if (this.hasDocumentListChanged(oldDocuments, this.documents)) {
+      this.watchers.forEach(callback => callback(this.documents));
+    }
+  }
+
+  private hasDocumentListChanged(oldDocs: Document[], newDocs: Document[]): boolean {
+    if (oldDocs.length !== newDocs.length) return true;
+
+    // Create a Set of document IDs for fast lookup
+    const oldIds = new Set(oldDocs.map(d => d.id));
+    const newIds = new Set(newDocs.map(d => d.id));
+
+    // Check if any documents were added or removed
+    if (oldIds.size !== newIds.size) return true;
+
+    for (const id of newIds) {
+      if (!oldIds.has(id)) return true;
+    }
+
+    return false;
   }
 
   private async updateMetadataCache(oldDocs: Document[], newDocs: Document[]) {
