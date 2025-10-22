@@ -860,13 +860,15 @@ export default function ToolbarPlugin({
 
     return (
     <div className="toolbar">
-      <button
-        className="toolbar-item spaced"
-        onClick={handleMarkdownToggle}
-        title="Toggle Markdown View"
-        aria-label="Toggle markdown view">
-        <i className="format markdown" />
-      </button>
+      {import.meta.env?.DEV && (
+        <button
+          className="toolbar-item spaced"
+          onClick={handleMarkdownToggle}
+          title="Toggle Markdown View"
+          aria-label="Toggle markdown view">
+          <i className="format markdown" />
+        </button>
+      )}
       {import.meta.env?.DEV && (
         <button
           onClick={() => {
