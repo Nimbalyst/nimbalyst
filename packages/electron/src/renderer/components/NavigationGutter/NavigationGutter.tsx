@@ -9,9 +9,12 @@ export type SidebarView = 'files' | 'plans' | 'settings';
 interface NavigationGutterProps {
   contentMode: ContentMode;
   onContentModeChange: (mode: ContentMode) => void;
-  onOpenBugs?: () => void;
   onOpenHistory?: () => void;
   onOpenSettings?: () => void;
+  onTogglePlansPanel?: () => void;
+  onToggleBugsPanel?: () => void;
+  onToggleTasksPanel?: () => void;
+  onToggleIdeasPanel?: () => void;
 }
 
 interface NavButton {
@@ -26,8 +29,11 @@ interface NavButton {
 export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   contentMode,
   onContentModeChange,
-  onOpenBugs,
   onOpenHistory,
+  onTogglePlansPanel,
+  onToggleBugsPanel,
+  onToggleTasksPanel,
+  onToggleIdeasPanel,
 }) => {
   // Content mode buttons - primary navigation (top)
   const contentModeButtonsTop: NavButton[] = [
@@ -36,12 +42,6 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
       icon: 'account_tree',
       label: 'Files (Cmd+E)',
       contentMode: 'files',
-    },
-    {
-      id: 'plan',
-      icon: 'edit_note',
-      label: 'Plans (Cmd+L)',
-      contentMode: 'plan',
     },
   ];
 
@@ -53,17 +53,27 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
       label: 'Agent (Cmd+K)',
       contentMode: 'agent',
     },
-    {
-      id: 'tracker',
-      icon: 'fact_check',
-      label: 'Tracker',
-      contentMode: 'tracker',
-    },
   ];
 
   // Quick access buttons - secondary actions (middle)
   const quickAccessButtons: NavButton[] = [
     // Session History removed - use Cmd+Y for file history instead
+  ];
+
+  // Bottom panel buttons - positioned above settings
+  const bottomPanelButtons: NavButton[] = [
+    {
+      id: 'plans',
+      icon: 'edit_note',
+      label: 'Plans (Cmd+Shift+P)',
+      onClick: onTogglePlansPanel,
+    },
+    {
+      id: 'tracker',
+      icon: 'fact_check',
+      label: 'Tracker (Cmd+Shift+B)',
+      onClick: onToggleBugsPanel,
+    },
   ];
 
   // Settings button - always at bottom
@@ -75,10 +85,21 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   };
 
   const handleButtonClick = (button: NavButton) => {
+    console.log('[NavigationGutter] Button clicked:', button.id, {
+      hasOnClick: !!button.onClick,
+      hasContentMode: !!button.contentMode,
+      currentContentMode: contentMode,
+      targetContentMode: button.contentMode
+    });
+
     if (button.contentMode) {
+      console.log('[NavigationGutter] Changing content mode from', contentMode, 'to', button.contentMode);
       onContentModeChange(button.contentMode);
     } else if (button.onClick) {
+      console.log('[NavigationGutter] Calling onClick for:', button.id);
       button.onClick();
+    } else {
+      console.warn('[NavigationGutter] No action defined for button:', button.id);
     }
   };
 
@@ -147,6 +168,21 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
             {button.badge !== undefined && button.badge > 0 && (
               <span className="nav-badge">{button.badge}</span>
             )}
+          </button>
+        ))}
+      </div>
+
+      {/* Bottom Panel Toggles - Above Settings */}
+      <div className="nav-section nav-bottom-panels">
+        {bottomPanelButtons.map((button) => (
+          <button
+            key={button.id}
+            className="nav-button"
+            onClick={() => handleButtonClick(button)}
+            title={button.label}
+            aria-label={button.label}
+          >
+            <MaterialSymbol icon={button.icon} size={20} />
           </button>
         ))}
       </div>

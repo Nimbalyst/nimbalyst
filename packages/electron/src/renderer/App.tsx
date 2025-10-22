@@ -37,6 +37,7 @@ import { useTabs } from './hooks/useTabs';
 import { useTabNavigation } from './hooks/useTabNavigation';
 import type { ContentMode } from './types/WindowModeTypes';
 import { PlansPanel } from './components/PlansPanel/PlansPanel';
+import { BottomPanel, BottomPanelType } from './components/BottomPanel/BottomPanel';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
 import { registerDecisionStatusPlugin } from './plugins/registerDecisionStatusPlugin';
@@ -190,6 +191,10 @@ export default function App() {
   // Content mode management - simple state, no manager needed
   const [activeMode, setActiveMode] = useState<ContentMode>('files');
 
+  // Bottom panel state (shared across all modes)
+  const [bottomPanel, setBottomPanel] = useState<BottomPanelType | null>(null);
+  const [bottomPanelHeight, setBottomPanelHeight] = useState<number>(300);
+
   // Load active mode from workspace state
   useEffect(() => {
     if (!workspacePath || !window.electronAPI?.invoke) return;
@@ -207,19 +212,136 @@ export default function App() {
 
   // Save active mode when it changes
   useEffect(() => {
+    console.log('[App Layout] Active mode changed to:', activeMode, 'bottomPanel:', bottomPanel);
+
     if (!workspacePath || !window.electronAPI?.invoke) return;
 
     window.electronAPI.invoke('workspace:update-state', workspacePath, { activeMode })
       .catch(error => {
         console.error('[ContentMode] Failed to save active mode:', error);
       });
-  }, [activeMode, workspacePath]);
+  }, [activeMode, workspacePath, bottomPanel]);
+
+  // Load bottom panel state from workspace state
+  useEffect(() => {
+    if (!workspacePath || !window.electronAPI?.invoke) return;
+
+    window.electronAPI.invoke('workspace:get-state', workspacePath)
+      .then(state => {
+        if (state?.bottomPanel !== undefined) {
+          setBottomPanel(state.bottomPanel);
+        }
+        if (state?.bottomPanelHeight !== undefined) {
+          setBottomPanelHeight(state.bottomPanelHeight);
+        }
+      })
+      .catch(error => {
+        console.error('[BottomPanel] Failed to load bottom panel state:', error);
+      });
+  }, [workspacePath]);
+
+  // Save bottom panel state when it changes
+  useEffect(() => {
+    console.log('[App Layout] Bottom panel state changed:', {
+      bottomPanel,
+      bottomPanelHeight,
+      activeMode
+    });
+
+    if (!workspacePath || !window.electronAPI?.invoke) return;
+
+    window.electronAPI.invoke('workspace:update-state', workspacePath, {
+      bottomPanel,
+      bottomPanelHeight
+    })
+      .catch(error => {
+        console.error('[BottomPanel] Failed to save bottom panel state:', error);
+      });
+  }, [bottomPanel, bottomPanelHeight, workspacePath, activeMode]);
 
 
   // Register aiToolService methods on aiChatBridge for runtime to use
   useEffect(() => {
     aiToolService.registerBridgeMethods();
   }, []);
+
+  // Debug: Log computed layout dimensions after render
+  useEffect(() => {
+    // Use setTimeout to ensure DOM has updated
+    const timeout = setTimeout(() => {
+      const rootContainer = document.querySelector('[data-layout="root-container"]') as HTMLElement;
+      const navGutter = document.querySelector('.navigation-gutter') as HTMLElement;
+      const mainColumnContainer = document.querySelector('[data-layout="main-column-container"]') as HTMLElement;
+      const topContentRow = document.querySelector('[data-layout="top-content-row"]') as HTMLElement;
+      const centerContentWrapper = document.querySelector('[data-layout="center-content-wrapper"]') as HTMLElement;
+      const filesModeWrapper = document.querySelector('[data-layout="files-mode-wrapper"]') as HTMLElement;
+      const agentModeWrapper = document.querySelector('[data-layout="agent-mode-wrapper"]') as HTMLElement;
+      const fileTabsContainer = document.querySelector('.file-tabs-container') as HTMLElement;
+      const bottomPanelContainer = document.querySelector('.bottom-panel-container') as HTMLElement;
+
+      const logDimensions = (name: string, el: HTMLElement | null) => {
+        if (!el) return { found: false };
+        const styles = window.getComputedStyle(el);
+        return {
+          found: true,
+          height: el.clientHeight,
+          offsetTop: el.offsetTop,
+          scrollTop: el.scrollTop,
+          scrollHeight: el.scrollHeight,
+          flex: styles.flex,
+          overflow: styles.overflow,
+          minHeight: styles.minHeight,
+          position: styles.position,
+          top: styles.top,
+          transform: styles.transform,
+          margin: styles.margin
+        };
+      };
+
+      console.log('[App Layout] === FULL LAYOUT DIMENSIONS ===');
+      console.log('[App Layout] Window height:', window.innerHeight);
+      console.log('[App Layout] Active mode:', activeMode, '| Bottom panel:', bottomPanel);
+      console.log('[App Layout] ---');
+      console.log('[App Layout] root-container:', logDimensions('root', rootContainer));
+      console.log('[App Layout] navigation-gutter:', logDimensions('nav', navGutter));
+      console.log('[App Layout] main-column-container:', logDimensions('main-col', mainColumnContainer));
+      console.log('[App Layout] top-content-row:', logDimensions('top-row', topContentRow));
+      console.log('[App Layout] center-content-wrapper:', logDimensions('center', centerContentWrapper));
+      console.log('[App Layout] files-mode-wrapper:', logDimensions('files-wrapper', filesModeWrapper));
+      console.log('[App Layout] agent-mode-wrapper:', logDimensions('agent-wrapper', agentModeWrapper));
+      console.log('[App Layout] file-tabs-container:', logDimensions('tabs', fileTabsContainer));
+      console.log('[App Layout] bottom-panel-container:', logDimensions('bottom', bottomPanelContainer));
+
+      // Calculate totals
+      const topRowHeight = topContentRow?.clientHeight || 0;
+      const bottomPanelHeight = bottomPanelContainer?.clientHeight || 0;
+      const total = topRowHeight + bottomPanelHeight;
+      const mainColHeight = mainColumnContainer?.clientHeight || 0;
+
+      console.log('[App Layout] ---');
+      console.log('[App Layout] MATH CHECK:');
+      console.log('[App Layout]   top-content-row height:', topRowHeight);
+      console.log('[App Layout]   bottom-panel height:', bottomPanelHeight);
+      console.log('[App Layout]   TOTAL:', total);
+      console.log('[App Layout]   main-column-container height:', mainColHeight);
+      console.log('[App Layout]   DIFFERENCE:', total - mainColHeight, (total === mainColHeight ? '✓ OK' : '✗ MISMATCH!'));
+
+      // Check viewport positions
+      console.log('[App Layout] ---');
+      console.log('[App Layout] VIEWPORT POSITIONS (getBoundingClientRect):');
+      if (fileTabsContainer) {
+        const rect = fileTabsContainer.getBoundingClientRect();
+        console.log('[App Layout]   file-tabs-container: top=' + rect.top + ', visible=' + (rect.top >= 0));
+      }
+      if (topContentRow) {
+        const rect = topContentRow.getBoundingClientRect();
+        console.log('[App Layout]   top-content-row: top=' + rect.top + ', visible=' + (rect.top >= 0));
+      }
+      console.log('[App Layout] ================================');
+    }, 100);
+
+    return () => clearTimeout(timeout);
+  }, [activeMode, bottomPanel, bottomPanelHeight]);
 
   // Tab management state
   // Tabs are always enabled - removed tabPreferences
@@ -561,62 +683,10 @@ export default function App() {
     }
   }, [tabs, setIsDirty, setCurrentFileName, setCurrentFilePath]);
 
-  // Open the plans tab - virtual document
-  const openPlansTab = useCallback(async () => {
-    const virtualPath = 'virtual://plans';
-
-    // Check if plans tab is already open
-    const existingTab = tabs.findTabByPath(virtualPath);
-    if (existingTab) {
-      tabs.switchTab(existingTab.id);
-      return;
-    }
-
-    try {
-      const content = await (window.electronAPI.documentService as any).loadVirtual(virtualPath);
-
-      if (!content) {
-        console.error('[PLANS] Failed to load plans document - content is null or undefined');
-        return;
-      }
-
-      // Add the plans tab
-      const tabId = tabs.addTab(virtualPath, content);
-      if (tabId) {
-        // Mark the tab as virtual
-        tabs.updateTab(tabId, { isVirtual: true });
-      }
-    } catch (error) {
-      console.error('[PLANS] Failed to open plans tab:', error);
-    }
-  }, [tabs]);
-
-  // Open the bugs tab - virtual screen
-  const openBugsTab = useCallback(() => {
-    const virtualPath = 'virtual://tracker-bugs';
-
-    // Check if bugs tab is already open
-    const existingTab = tabs.findTabByPath(virtualPath);
-    if (existingTab) {
-      tabs.switchTab(existingTab.id);
-      return;
-    }
-
-    // Add the bugs tab (no content needed - BugsScreen renders directly)
-    const tabId = tabs.addTab(virtualPath, '');
-    if (tabId) {
-      // Mark the tab as virtual
-      tabs.updateTab(tabId, { isVirtual: true });
-    }
-  }, [tabs]);
 
   // Listen for IPC events from menu
   useEffect(() => {
     if (!window.electronAPI?.on) return;
-
-    const handleOpenPlansTab = () => {
-      openPlansTab();
-    };
 
     const handleToggleAgentPalette = () => {
       setIsAgentPaletteVisible(prev => !prev);
@@ -628,17 +698,15 @@ export default function App() {
       }
     };
 
-    window.electronAPI.on('open-plans-tab', handleOpenPlansTab);
     window.electronAPI.on('set-content-mode', handleSetContentMode);
     // COMMENTED OUT - Cmd+K now switches to Agent mode
     // window.electronAPI.on('toggle-agent-palette', handleToggleAgentPalette);
 
     return () => {
-      window.electronAPI.off?.('open-plans-tab', handleOpenPlansTab);
       window.electronAPI.off?.('set-content-mode', handleSetContentMode);
       // window.electronAPI.off?.('toggle-agent-palette', handleToggleAgentPalette);
     };
-  }, [openPlansTab, workspaceMode]);
+  }, [workspaceMode]);
 
   // Update window title and dirty state
   useEffect(() => {
@@ -760,12 +828,28 @@ export default function App() {
         };
         openHistoryDialog();
       }
+      // Bottom panel keyboard shortcuts
+      // Cmd+Shift+P for Plans panel
+      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'p') {
+        e.preventDefault();
+        setBottomPanel(prev => prev === 'plans' ? null : 'plans');
+      }
+      // Cmd+Shift+B for Bugs panel
+      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'b') {
+        e.preventDefault();
+        setBottomPanel(prev => prev === 'bugs' ? null : 'bugs');
+      }
+      // Cmd+Shift+K for Tasks panel
+      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'k') {
+        e.preventDefault();
+        setBottomPanel(prev => prev === 'tasks' ? null : 'tasks');
+      }
     };
 
     // Use capture phase to intercept before any other handlers (like Lexical's)
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [workspaceMode, tabs.reopenLastClosedTab]);
+  }, [workspaceMode, tabs.reopenLastClosedTab, activeMode]);
 
   // Save AI Chat state when it changes (but only after initial load)
   useEffect(() => {
@@ -935,7 +1019,6 @@ export default function App() {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
-    openPlansTab,
 
     // State setters
     setIsApiKeyDialogOpen,
@@ -1095,33 +1178,36 @@ export default function App() {
   }
 
   return (
-    <div
-      style={{ height: '100vh', display: 'flex', flexDirection: workspaceMode ? 'row' : 'column' }}
-      onKeyDown={(e) => {
-        // Intercept Cmd+K/Ctrl+K before it reaches Lexical editor
-        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-          e.preventDefault();
-          e.stopPropagation();
-          if (workspaceMode) {
-            setIsQuickOpenVisible(true);
+    <div data-layout="root-container" style={{ height: '100vh', display: 'flex', flexDirection: 'row' }}>
+      {/* Left: Navigation Gutter - full height */}
+      <NavigationGutter
+        contentMode={activeMode}
+        onContentModeChange={setActiveMode}
+        onOpenHistory={() => {
+          if (window.electronAPI) {
+            window.electronAPI.invoke('open-session-manager', workspacePath);
           }
-        }
-      }}
-    >
-      {workspaceMode && (
-        <NavigationGutter
-          contentMode={activeMode}
-          onContentModeChange={setActiveMode}
-          onOpenBugs={openBugsTab}
-          onOpenHistory={() => {
-            // Open session manager
-            if (window.electronAPI) {
-              window.electronAPI.invoke('open-session-manager', workspacePath);
-            }
-          }}
-        />
-      )}
-      {workspaceMode && workspaceName && sidebarView !== 'settings' && (activeMode === 'files' || activeMode === 'plan') && (
+        }}
+        onTogglePlansPanel={() => {
+          setBottomPanel(prev => prev === 'plans' ? null : 'plans');
+        }}
+        onToggleBugsPanel={() => {
+          setBottomPanel(prev => prev === 'bugs' ? null : 'bugs');
+        }}
+        onToggleTasksPanel={() => {
+          setBottomPanel(prev => prev === 'tasks' ? null : 'tasks');
+        }}
+        onToggleIdeasPanel={() => {
+          setBottomPanel(prev => prev === 'ideas' ? null : 'ideas');
+        }}
+      />
+
+      {/* Right: Main content area + Bottom Panel */}
+      <div data-layout="main-column-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Top: Main content (sidebar + editor/agent + AI chat) */}
+        <div data-layout="top-content-row" style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0 }}>
+          {/* Left Sidebar (Files or Plans) */}
+          {workspaceName && sidebarView !== 'settings' && (activeMode === 'files' || activeMode === 'plan') && (
         <>
           <div ref={sidebarRef} style={{ width: sidebarWidth, position: 'relative' }}>
             {activeMode === 'files' ? (
@@ -1148,7 +1234,7 @@ export default function App() {
                 setIsNewFileDialogOpen(true);
                 setNewFileDirectory(workspacePath ? `${workspacePath}/plans` : null);
               }}
-              onOpenPlansTable={openPlansTab}
+              onOpenPlansTable={() => setBottomPanel(prev => prev === 'plans' ? null : 'plans')}
             />
             ) : (
               <PlansPanel
@@ -1182,183 +1268,160 @@ export default function App() {
               className="sidebar-resize-handle"
             />
           </div>
-        </>
-      )}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-        {/* Files/Plan Mode - shared editor area with different sidebars */}
-        <div style={{
-          display: (activeMode === 'files' || activeMode === 'plan') ? 'flex' : 'none',
-          flex: 1,
-          flexDirection: 'column',
-          overflow: 'hidden',
-          position: 'absolute',
-          inset: 0
-        }}>
-          {sidebarView === 'settings' ? (
-            <SettingsScreen
-              workspacePath={workspacePath || ''}
-              workspaceName={workspaceName || ''}
-              onClose={() => {
-                setSidebarView('files');
-              }}
-              isFirstTime={false}
-            />
-          ) : workspaceMode || tabs.activeTab ? (
-          <div className="file-tabs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <TabManager
-              tabs={tabs.tabs}
-              activeTabId={tabs.activeTabId}
-              onTabSelect={tabs.switchTab}
-              onTabClose={tabs.removeTab}
-              onNewTab={() => {
-                // Open file dialog or create untitled tab
-                setIsNewFileDialogOpen(true);
-              }}
-              onTogglePin={tabs.togglePin}
-              onTabReorder={tabs.reorderTabs}
-              onViewHistory={(tabId) => {
-                const tab = tabs.getTabState(tabId);
-                if (tab && tab.filePath) {
-                  setIsHistoryDialogOpen(true);
+          </>
+          )}
+
+          {/* Center: Editor/Agent/Settings area */}
+          <div data-layout="center-content-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+            {(activeMode === 'files' || activeMode === 'plan') && (
+              <div data-layout="files-mode-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+                {sidebarView === 'settings' ? (
+                  <SettingsScreen
+                    workspacePath={workspacePath || ''}
+                    workspaceName={workspaceName || ''}
+                    onClose={() => {
+                      setSidebarView('files');
+                    }}
+                    isFirstTime={false}
+                  />
+                ) : tabs.activeTab ? (
+                  <div className="file-tabs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    <TabManager
+                    tabs={tabs.tabs}
+                    activeTabId={tabs.activeTabId}
+                    onTabSelect={tabs.switchTab}
+                    onTabClose={tabs.removeTab}
+                    onNewTab={() => {
+                      setIsNewFileDialogOpen(true);
+                    }}
+                    onTogglePin={tabs.togglePin}
+                    onTabReorder={tabs.reorderTabs}
+                    onViewHistory={(tabId) => {
+                      const tab = tabs.getTabState(tabId);
+                      if (tab && tab.filePath) {
+                        setIsHistoryDialogOpen(true);
+                      }
+                    }}
+                    hideTabBar={false}
+                    isActive={true}
+                  >
+                    {tabs.activeTab ? (
+                      <TabContent
+                        tabs={tabs.tabs}
+                        activeTabId={tabs.activeTabId}
+                        theme={theme}
+                        onManualSaveReady={(saveFn) => {
+                          handleSaveRef.current = saveFn;
+                        }}
+                        onSaveComplete={(filePath) => {
+                          setCurrentFilePath(filePath);
+                          setCurrentFileName(filePath.split('/').pop() || filePath);
+                          setIsDirty(false);
+
+                          if (tabs.activeTabId) {
+                            tabs.updateTab(tabs.activeTabId, {
+                              isDirty: false,
+                              lastSaved: new Date()
+                            });
+                          }
+                        }}
+                        onGetContentReady={(tabId, getContentFn) => {
+                          if (tabId === tabs.activeTabId) {
+                            getContentRef.current = getContentFn;
+                            aiToolService.setGetContentFunction(getContentFn);
+                          }
+                        }}
+                        onTabDirtyChange={(changedTabId, changedIsDirty) => {
+                          const tab = tabs.getTabState(changedTabId);
+                          if (tab && tab.isDirty !== changedIsDirty) {
+                            tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
+                            if (changedTabId === tabs.activeTabId) {
+                              setIsDirty(changedIsDirty);
+                            }
+                          }
+                        }}
+                      />
+                    ) : (
+                      <WorkspaceWelcome workspaceName={workspaceName || 'Workspace'} />
+                    )}
+                  </TabManager>
+                </div>
+              ) : (
+                <WorkspaceWelcome workspaceName={workspaceName || 'Open a file to get started'} />
+              )}
+              </div>
+            )}
+
+            {activeMode === 'agent' && workspacePath && (
+              <div data-layout="agent-mode-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+                <AgenticPanel
+                  mode="agent"
+                  workspacePath={workspacePath}
+                  documentContext={documentContext}
+                  onContentModeChange={setActiveMode}
+                  isActive={true}
+                />
+              </div>
+            )}
+
+            {activeMode === 'tracker' && (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+                <BugsScreen />
+              </div>
+            )}
+
+            {activeMode === 'settings' && (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+                <SettingsScreen
+                  workspacePath={workspacePath || ''}
+                  workspaceName={workspaceName || ''}
+                  onClose={() => {
+                    setActiveMode('files');
+                  }}
+                  isFirstTime={false}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Right: AI Chat */}
+          {sidebarView !== 'settings' && (activeMode === 'files' || activeMode === 'plan') && (
+            <AIChat
+              isCollapsed={isAIChatCollapsed}
+              onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}
+              width={aiChatWidth}
+              onWidthChange={setAIChatWidth}
+              planningModeEnabled={aiPlanningModeEnabled}
+              onTogglePlanningMode={setAIPlanningModeEnabled}
+              workspacePath={workspacePath || undefined}
+              sessionToLoad={sessionToLoad}
+              onSessionLoaded={() => setSessionToLoad(null)}
+              onSessionIdChange={setCurrentAISessionId}
+              onShowApiKeyError={() => setIsApiKeyDialogOpen(true)}
+              documentContext={documentContext}
+              onApplyEdit={(edit, prompt, aiResponse) => {
+                console.log('Edit already applied by AIChat component, updating UI state');
+                if (edit.type === 'diff' && edit.replacements) {
+                  console.log('Diff applied successfully - showing red/green preview');
                 }
               }}
-              hideTabBar={!workspaceMode}
-              isActive={activeMode === 'files' || activeMode === 'plan'}
-            >
-            {tabs.activeTab ? (
-              <TabContent
-                tabs={tabs.tabs}
-                activeTabId={tabs.activeTabId}
-                theme={theme}
-                onManualSaveReady={(saveFn) => {
-                  // console.log('[App] onManualSaveReady called, storing save function');
-                  handleSaveRef.current = saveFn;
-                }}
-                onSaveComplete={(filePath) => {
-                  setCurrentFilePath(filePath);
-                  setCurrentFileName(filePath.split('/').pop() || filePath);
-                  setIsDirty(false);
-
-                  if (tabs.activeTabId) {
-                    tabs.updateTab(tabs.activeTabId, {
-                      isDirty: false,
-                      lastSaved: new Date()
-                    });
-                  }
-                }}
-                onGetContentReady={(tabId, getContentFn) => {
-                  // Store getContent for AI tools (use active tab's function)
-                  if (tabId === tabs.activeTabId) {
-                    getContentRef.current = getContentFn;
-                    aiToolService.setGetContentFunction(getContentFn);
-                  }
-                }}
-                onTabDirtyChange={(changedTabId, changedIsDirty) => {
-                  const tab = tabs.getTabState(changedTabId);
-                  if (tab && tab.isDirty !== changedIsDirty) {
-                    tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
-                    if (changedTabId === tabs.activeTabId) {
-                      setIsDirty(changedIsDirty);
-                    }
-                  }
-                }}
-              />
-            ) : (
-              <WorkspaceWelcome workspaceName={workspaceName || 'Workspace'} />
-            )}
-          </TabManager>
-          </div>
-        ) : (
-          <WorkspaceWelcome workspaceName={workspaceName || 'Open a file to get started'} />
-        )}
-        </div>
-
-        {/* Agent Mode - always mounted, hidden when inactive */}
-        <div style={{
-          display: activeMode === 'agent' ? 'flex' : 'none',
-          flex: 1,
-          flexDirection: 'column',
-          overflow: 'hidden',
-          position: 'absolute',
-          inset: 0
-        }}>
-          {workspaceMode && workspacePath && (
-            <AgenticPanel
-              mode="agent"
-              workspacePath={workspacePath}
-              documentContext={documentContext}
-              onContentModeChange={setActiveMode}
-              isActive={activeMode === 'agent'}
             />
           )}
         </div>
 
-        {/* Tracker Mode - bug/task tracking view */}
-        <div style={{
-          display: activeMode === 'tracker' ? 'flex' : 'none',
-          flex: 1,
-          flexDirection: 'column',
-          overflow: 'hidden',
-          position: 'absolute',
-          inset: 0
-        }}>
-          <BugsScreen />
-        </div>
-
-        {/* Settings Mode - settings screen */}
-        <div style={{
-          display: activeMode === 'settings' ? 'flex' : 'none',
-          flex: 1,
-          flexDirection: 'column',
-          overflow: 'hidden',
-          position: 'absolute',
-          inset: 0
-        }}>
-          <SettingsScreen
-            workspacePath={workspacePath || ''}
-            workspaceName={workspaceName || ''}
-            onClose={() => {
-              // Switch back to files mode when closing settings
-              setActiveMode('files');
-            }}
-            isFirstTime={false}
+        {/* Bottom: Bottom Panel - spans width after nav gutter */}
+        {bottomPanel && (
+          <BottomPanel
+            activePanel={bottomPanel}
+            onPanelChange={setBottomPanel}
+            height={bottomPanelHeight}
+            onHeightChange={setBottomPanelHeight}
           />
-        </div>
+        )}
       </div>
-      {workspaceMode && sidebarView !== 'settings' && (activeMode === 'files' || activeMode === 'plan') && (
-        <AIChat
-          isCollapsed={isAIChatCollapsed}
-          onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}
-          width={aiChatWidth}
-          onWidthChange={setAIChatWidth}
-          planningModeEnabled={aiPlanningModeEnabled}
-          onTogglePlanningMode={setAIPlanningModeEnabled}
-          workspacePath={workspacePath || undefined}
-          sessionToLoad={sessionToLoad}
-          onSessionLoaded={() => setSessionToLoad(null)}
-          onSessionIdChange={setCurrentAISessionId}
-          onShowApiKeyError={() => setIsApiKeyDialogOpen(true)}
-          documentContext={documentContext}
-          onApplyEdit={(edit, prompt, aiResponse) => {
-            console.log('Edit already applied by AIChat component, updating UI state');
 
-            // The edit has already been applied by AIChat.tsx through aiApi.applyEdit()
-            // This callback is just for UI state updates, not for applying the edit
-            // We just need to handle any UI updates or error display
-
-            if (edit.type === 'diff' && edit.replacements) {
-              // The edit was already applied, just log for debugging
-              console.log('Diff applied successfully - showing red/green preview');
-              // Document will show diffs but not marked as dirty yet
-              // User needs to approve/reject the diffs
-
-              // Note: Error handling is done in AIChat.tsx now
-              // If there was an error, AIChat.tsx will handle the retry and show error messages
-            }
-          }}
-        />
-      )}
-      {workspaceMode && workspacePath && (
+      {/* Dialogs - rendered at root level */}
+      {workspacePath && (
         <>
           <QuickOpen
             isOpen={isQuickOpenVisible}
@@ -1399,7 +1462,6 @@ export default function App() {
         onClose={() => setIsApiKeyDialogOpen(false)}
         onOpenPreferences={() => {
           setIsApiKeyDialogOpen(false);
-          // Open AI Models window for settings
           window.electronAPI.openAIModels();
         }}
       />

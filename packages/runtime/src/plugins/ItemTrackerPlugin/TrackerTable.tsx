@@ -21,6 +21,7 @@ interface TrackerTableProps {
   sortBy?: SortColumn;
   sortDirection?: SortDirection;
   onSortChange?: (column: SortColumn, direction: SortDirection) => void;
+  hideTypeTabs?: boolean;
 }
 
 function getStatusColor(status: TrackerItemStatus): string {
@@ -77,6 +78,7 @@ export function TrackerTable({
   sortBy = 'lastIndexed',
   sortDirection = 'desc',
   onSortChange,
+  hideTypeTabs = false,
 }: TrackerTableProps): JSX.Element {
   const [items, setItems] = useState<TrackerItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -304,22 +306,24 @@ export function TrackerTable({
   return (
     <div className="tracker-table-wrapper">
       {/* Type filter tabs */}
-      <div className="tracker-type-tabs">
-        {typeOptions.map(option => (
-          <button
-            key={option.value}
-            className={`tracker-type-tab ${typeFilter === option.value ? 'active' : ''}`}
-            onClick={() => setTypeFilter(option.value as TrackerItemType | 'all')}
-          >
-            <span className="material-symbols-outlined">{option.icon}</span>
-            <span>{option.label}</span>
-            {option.value === 'all' && <span className="count">{items.length}</span>}
-            {option.value !== 'all' && (
-              <span className="count">{items.filter(i => i.type === option.value).length}</span>
-            )}
-          </button>
-        ))}
-      </div>
+      {!hideTypeTabs && (
+        <div className="tracker-type-tabs">
+          {typeOptions.map(option => (
+            <button
+              key={option.value}
+              className={`tracker-type-tab ${typeFilter === option.value ? 'active' : ''}`}
+              onClick={() => setTypeFilter(option.value as TrackerItemType | 'all')}
+            >
+              <span className="material-symbols-outlined">{option.icon}</span>
+              <span>{option.label}</span>
+              {option.value === 'all' && <span className="count">{items.length}</span>}
+              {option.value !== 'all' && (
+                <span className="count">{items.filter(i => i.type === option.value).length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="tracker-table-container">
         <table className="tracker-table">
