@@ -314,25 +314,28 @@ export function WorkspaceSidebar({
       </div>
 
       {currentView === 'files' ? (
-        <div className={`workspace-file-tree ${isDragOverRoot ? 'drag-over-root' : ''}`}>
-          <FileTree
-            items={fileTree}
-            currentFilePath={currentFilePath}
-            onFileSelect={handleFileSelect}
-            level={0}
-            onNewFile={handleNewFileInFolder}
-            onNewFolder={handleNewFolderInFolder}
-            onRefreshFileTree={onRefreshFileTree}
-            onViewHistory={onViewHistory}
-            selectedFolder={selectedFolder}
-            onFolderSelect={setSelectedFolder}
-          />
-          {isDragOverRoot && (
-            <div className="root-drop-indicator">
-              Drop here to move to workspace root
-            </div>
-          )}
-        </div>
+        <>
+          <div className="workspace-section-label">Files</div>
+          <div className={`workspace-file-tree ${isDragOverRoot ? 'drag-over-root' : ''}`}>
+            <FileTree
+              items={fileTree}
+              currentFilePath={currentFilePath}
+              onFileSelect={handleFileSelect}
+              level={0}
+              onNewFile={handleNewFileInFolder}
+              onNewFolder={handleNewFolderInFolder}
+              onRefreshFileTree={onRefreshFileTree}
+              onViewHistory={onViewHistory}
+              selectedFolder={selectedFolder}
+              onFolderSelect={setSelectedFolder}
+            />
+            {isDragOverRoot && (
+              <div className="root-drop-indicator">
+                Drop here to move to workspace root
+              </div>
+            )}
+          </div>
+        </>
       ) : (
         <PlansPanel
           currentFilePath={currentFilePath}

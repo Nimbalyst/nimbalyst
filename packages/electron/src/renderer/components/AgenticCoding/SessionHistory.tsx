@@ -26,6 +26,20 @@ interface SessionHistoryProps {
   refreshTrigger?: number; // Optional trigger to force refresh
 }
 
+// Generate a consistent color based on workspace path
+function generateWorkspaceColor(path: string): string {
+  let hash = 0;
+  for (let i = 0; i < path.length; i++) {
+    hash = ((hash << 5) - hash) + path.charCodeAt(i);
+    hash = hash & hash;
+  }
+
+  // Generate a hue value (0-360)
+  const hue = Math.abs(hash) % 360;
+  // Use consistent saturation and lightness for pleasant colors
+  return `hsl(${hue}, 65%, 55%)`;
+}
+
 export const SessionHistory: React.FC<SessionHistoryProps> = ({
   workspacePath,
   activeSessionId,
@@ -44,6 +58,10 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   const [sessionTypeFilters, setSessionTypeFilters] = useState<Set<'chat' | 'planning' | 'coding'>>(
     new Set(['chat', 'planning', 'coding'])
   );
+
+  // Extract workspace name from path
+  const workspaceName = workspacePath.split('/').filter(Boolean).pop() || 'Workspace';
+  const workspaceColor = generateWorkspaceColor(workspacePath);
 
   // Load sessions from database
   const loadSessions = useCallback(async () => {
@@ -129,8 +147,12 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   if (loading) {
     return (
       <div className="session-history">
+        <div className="workspace-color-accent" style={{ backgroundColor: workspaceColor }} />
         <div className="session-history-header">
-          <h3 className="session-history-title">Sessions</h3>
+          <div className="session-history-header-identity">
+            <h3 className="session-history-header-name">{workspaceName}</h3>
+            <div className="session-history-header-path">{workspacePath}</div>
+          </div>
           {onNewSession && (
             <button
               className="session-history-new-button"
@@ -148,6 +170,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
             </button>
           )}
         </div>
+        <div className="session-history-section-label">Agent Sessions</div>
         <div className="session-history-loading">
           <span>Loading sessions...</span>
         </div>
@@ -158,8 +181,12 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   if (error) {
     return (
       <div className="session-history">
+        <div className="workspace-color-accent" style={{ backgroundColor: workspaceColor }} />
         <div className="session-history-header">
-          <h3 className="session-history-title">Sessions</h3>
+          <div className="session-history-header-identity">
+            <h3 className="session-history-header-name">{workspaceName}</h3>
+            <div className="session-history-header-path">{workspacePath}</div>
+          </div>
           {onNewSession && (
             <button
               className="session-history-new-button"
@@ -177,6 +204,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
             </button>
           )}
         </div>
+        <div className="session-history-section-label">Agent Sessions</div>
         <div className="session-history-error">
           <span>{error}</span>
         </div>
@@ -187,8 +215,12 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   if (sessions.length === 0) {
     return (
       <div className="session-history">
+        <div className="workspace-color-accent" style={{ backgroundColor: workspaceColor }} />
         <div className="session-history-header">
-          <h3 className="session-history-title">Sessions</h3>
+          <div className="session-history-header-identity">
+            <h3 className="session-history-header-name">{workspaceName}</h3>
+            <div className="session-history-header-path">{workspacePath}</div>
+          </div>
           {onNewSession && (
             <button
               className="session-history-new-button"
@@ -206,6 +238,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
             </button>
           )}
         </div>
+        <div className="session-history-section-label">Agent Sessions</div>
         <div className="session-history-empty">
           <p>No sessions yet</p>
           <p className="session-history-empty-hint">
@@ -218,10 +251,11 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
 
   return (
     <div className="session-history">
+      <div className="workspace-color-accent" style={{ backgroundColor: workspaceColor }} />
       <div className="session-history-header">
-        <div className="session-history-header-left">
-          <h3 className="session-history-title">Sessions</h3>
-          <span className="session-history-count">{filteredSessions.length}</span>
+        <div className="session-history-header-identity">
+          <h3 className="session-history-header-name">{workspaceName}</h3>
+          <div className="session-history-header-path">{workspacePath}</div>
         </div>
         {onNewSession && (
           <button
@@ -236,6 +270,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           </button>
         )}
       </div>
+      <div className="session-history-section-label">Agent Sessions</div>
       <div className="session-history-search">
         <input
           type="text"
