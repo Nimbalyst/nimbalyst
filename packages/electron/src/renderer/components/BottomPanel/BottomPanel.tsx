@@ -68,12 +68,37 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
         if (!mounted) return;
 
         console.log('[BottomPanel] Loaded tracker items:', items.length);
+
+        // Count tracker items
+        let planCount = items.filter((i: any) => i.type === 'plan' && i.status !== 'done').length;
+        const bugCount = items.filter((i: any) => i.type === 'bug' && i.status !== 'done').length;
+        const taskCount = items.filter((i: any) => i.type === 'task' && i.status !== 'done').length;
+        const ideaCount = items.filter((i: any) => i.type === 'idea').length;
+        const decisionCount = items.filter((i: any) => i.type === 'decision').length;
+
+        // Also count plan status documents
+        if (documentService.listDocumentMetadata) {
+          const metadata = await documentService.listDocumentMetadata();
+          const planStatusCount = metadata.filter((doc: any) => {
+            if (!doc.frontmatter || !doc.frontmatter.planStatus) return false;
+
+            const pathLower = doc.path.toLowerCase();
+            const isAgentFile = pathLower.includes('/agents/') || pathLower.includes('\\agents\\');
+            if (isAgentFile) return false;
+
+            const status = (doc.frontmatter.planStatus.status || '').toLowerCase();
+            return status !== 'completed' && status !== 'done';
+          }).length;
+
+          planCount += planStatusCount;
+        }
+
         const counts: ItemCounts = {
-          plans: items.filter((i: any) => i.type === 'plan' && i.status !== 'done').length,
-          bugs: items.filter((i: any) => i.type === 'bug' && i.status !== 'done').length,
-          tasks: items.filter((i: any) => i.type === 'task' && i.status !== 'done').length,
-          ideas: items.filter((i: any) => i.type === 'idea').length,
-          decisions: items.filter((i: any) => i.type === 'decision').length,
+          plans: planCount,
+          bugs: bugCount,
+          tasks: taskCount,
+          ideas: ideaCount,
+          decisions: decisionCount,
         };
         console.log('[BottomPanel] Counts:', counts);
         setItemCounts(counts);
@@ -86,9 +111,17 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
 
     // Subscribe to changes
     const documentService = (window as any).documentService;
-    let unsubscribe: (() => void) | undefined;
+    let unsubscribeTracker: (() => void) | undefined;
+    let unsubscribeMetadata: (() => void) | undefined;
+
     if (documentService && documentService.watchTrackerItems) {
-      unsubscribe = documentService.watchTrackerItems(() => {
+      unsubscribeTracker = documentService.watchTrackerItems(() => {
+        if (mounted) loadCounts();
+      });
+    }
+
+    if (documentService && documentService.watchDocumentMetadata) {
+      unsubscribeMetadata = documentService.watchDocumentMetadata(() => {
         if (mounted) loadCounts();
       });
     }
@@ -96,7 +129,8 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
     return () => {
       mounted = false;
       if (retryTimer) clearTimeout(retryTimer);
-      if (unsubscribe) unsubscribe();
+      if (unsubscribeTracker) unsubscribeTracker();
+      if (unsubscribeMetadata) unsubscribeMetadata();
     };
   }, []);
 

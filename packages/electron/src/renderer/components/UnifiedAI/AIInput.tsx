@@ -108,7 +108,7 @@ export const AIInput = forwardRef<HTMLTextAreaElement, AIInputProps>(
             const sdkResult = await window.electronAPI.invoke('ai:getSlashCommands', sessionId);
             if (sdkResult?.success && Array.isArray(sdkResult.commands)) {
               sdkCommands = sdkResult.commands;
-              console.log('[AIInput] Got SDK commands from provider:', sdkCommands);
+              // console.log('[AIInput] Got SDK commands from provider:', sdkCommands);
             }
           } catch (sdkError) {
             console.warn('[AIInput] Failed to get SDK commands:', sdkError);
@@ -121,7 +121,7 @@ export const AIInput = forwardRef<HTMLTextAreaElement, AIInputProps>(
           });
 
           setAllSlashCommands(commands || []);
-          console.log('[AIInput] Loaded slash commands:', commands);
+          // console.log('[AIInput] Loaded slash commands:', commands);
         } catch (error) {
           console.error('[AIInput] Failed to load slash commands:', error);
           setAllSlashCommands([]);

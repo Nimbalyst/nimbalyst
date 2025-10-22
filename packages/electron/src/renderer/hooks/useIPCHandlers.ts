@@ -67,7 +67,6 @@ interface UseIPCHandlersProps {
   handleSaveAs: () => Promise<void>;
   handleWorkspaceFileSelect: (filePath: string) => Promise<void>;
   openWelcomeTab: () => Promise<void>;
-  openPlansTab: () => Promise<void>;
 
   // State setters
   setIsApiKeyDialogOpen: (open: boolean) => void;
@@ -132,7 +131,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
-    openPlansTab,
 
     // State setters
     setIsApiKeyDialogOpen,
@@ -184,7 +182,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
-    openPlansTab,
     setIsApiKeyDialogOpen,
     setWorkspaceMode,
     setWorkspacePath,
@@ -221,7 +218,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
-    openPlansTab,
     setIsApiKeyDialogOpen,
     setWorkspaceMode,
     setWorkspacePath,
@@ -921,10 +917,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     // Handle open plans tab from menu
     if ((window.electronAPI as any).onOpenPlansTab) {
-      cleanupFns.push((window.electronAPI as any).onOpenPlansTab(() => {
-        console.log('Open plans tab command received from menu');
-        handlersRef.current.openPlansTab();
-      }));
+      // Open plans tab handler removed - use bottom panel instead
     }
 
     // Update MCP document state whenever content or selection changes

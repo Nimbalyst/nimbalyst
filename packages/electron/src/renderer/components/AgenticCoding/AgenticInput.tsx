@@ -72,7 +72,7 @@ export function AgenticInput({
           const sdkResult = await window.electronAPI.invoke('ai:getSlashCommands', sessionId);
           if (sdkResult?.success && Array.isArray(sdkResult.commands)) {
             sdkCommands = sdkResult.commands;
-            console.log('[AgenticInput] Got SDK commands from provider:', sdkCommands);
+            // console.log('[AgenticInput] Got SDK commands from provider:', sdkCommands);
           }
         } catch (sdkError) {
           console.warn('[AgenticInput] Failed to get SDK commands:', sdkError);
@@ -85,7 +85,7 @@ export function AgenticInput({
         });
 
         setAllSlashCommands(commands || []);
-        console.log('[AgenticInput] Loaded slash commands:', commands);
+        // console.log('[AgenticInput] Loaded slash commands:', commands);
       } catch (error) {
         console.error('[AgenticInput] Failed to load slash commands:', error);
         setAllSlashCommands([]);

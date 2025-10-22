@@ -14,8 +14,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConfigTheme, TextReplacement } from 'rexical';
 import type { Tab } from '../TabManager/TabManager';
 import { TabEditor } from '../TabEditor/TabEditor';
-import { PlanScreen } from '../PlanScreen/PlanScreen';
-import { BugsScreen } from '../BugsScreen/BugsScreen';
 import { logger } from '../../utils/logger';
 
 interface TabContentProps {
@@ -210,40 +208,6 @@ export const TabContent: React.FC<TabContentProps> = ({
     <div className="tab-content-container" style={{ height: '100%', overflow: 'hidden' }}>
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
-
-        // Check for virtual tabs
-        const isPlanTab = tab.isVirtual && tab.filePath === 'virtual://plans';
-        const isBugsTab = tab.isVirtual && tab.filePath === 'virtual://tracker-bugs';
-
-        if (isPlanTab) {
-          return (
-            <div
-              key={tab.id}
-              className="virtual-tab-content"
-              style={{
-                display: isActive ? 'block' : 'none',
-                height: '100%'
-              }}
-            >
-              <PlanScreen />
-            </div>
-          );
-        }
-
-        if (isBugsTab) {
-          return (
-            <div
-              key={tab.id}
-              className="virtual-tab-content"
-              style={{
-                display: isActive ? 'block' : 'none',
-                height: '100%'
-              }}
-            >
-              <BugsScreen />
-            </div>
-          );
-        }
 
         // Regular editor tab
         const content = tabContents.get(tab.id) ?? tab.content ?? '';

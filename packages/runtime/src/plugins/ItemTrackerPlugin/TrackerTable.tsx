@@ -73,6 +73,50 @@ function formatDate(date: Date): string {
   return date.toLocaleDateString();
 }
 
+function convertPlanStatusToTrackerItems(metadata: any[]): TrackerItem[] {
+  return metadata
+    .filter(doc => {
+      // Only include documents that have planStatus in their frontmatter
+      const hasPlanStatus = !!(doc.frontmatter && doc.frontmatter.planStatus);
+
+      // Exclude agent files
+      const pathLower = doc.path.toLowerCase();
+      const isAgentFile = pathLower.includes('/agents/') || pathLower.includes('\\agents\\');
+
+      return hasPlanStatus && !isAgentFile;
+    })
+    .map(doc => {
+      const planStatus = doc.frontmatter.planStatus as any || {};
+      const frontmatter = doc.frontmatter;
+
+      // Map plan status to tracker item status
+      let status: TrackerItemStatus = 'to-do';
+      const planStatusValue = (planStatus.status || frontmatter.status || 'draft').toLowerCase();
+
+      if (planStatusValue === 'completed' || planStatusValue === 'done') {
+        status = 'done';
+      } else if (planStatusValue === 'in-progress' || planStatusValue === 'in-development') {
+        status = 'in-progress';
+      } else if (planStatusValue === 'in-review') {
+        status = 'in-review';
+      } else if (planStatusValue === 'blocked') {
+        status = 'blocked';
+      }
+
+      return {
+        type: 'plan' as TrackerItemType,
+        title: planStatus.title || frontmatter.title || doc.path.split('/').pop()?.replace('.md', '') || 'Untitled',
+        status,
+        priority: (planStatus.priority || frontmatter.priority || 'medium') as TrackerItemPriority,
+        module: doc.path,
+        lineNumber: 0,
+        owner: planStatus.owner || frontmatter.owner,
+        tags: planStatus.tags || frontmatter.tags,
+        lastIndexed: doc.lastModified || new Date(),
+      } as TrackerItem;
+    });
+}
+
 export function TrackerTable({
   filterType = 'all',
   sortBy = 'lastIndexed',
@@ -91,7 +135,8 @@ export function TrackerTable({
   const [typeFilter, setTypeFilter] = useState<TrackerItemType | 'all'>(filterType);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | null = null;
+    let unsubscribeTracker: (() => void) | null = null;
+    let unsubscribeMetadata: (() => void) | null = null;
 
     async function loadItems() {
       try {
@@ -110,25 +155,36 @@ export function TrackerTable({
           return;
         }
 
-        // Load initial items
+        // Load tracker items
         const trackerItems = typeFilter !== 'all' && documentService.getTrackerItemsByType
           ? await documentService.getTrackerItemsByType(typeFilter)
           : await documentService.listTrackerItems();
 
-        setItems(trackerItems || []);
+        let allItems = trackerItems || [];
+
+        // If showing plans, also load plan status documents
+        if (typeFilter === 'plan' || typeFilter === 'all') {
+          if (documentService.listDocumentMetadata) {
+            const metadata = await documentService.listDocumentMetadata();
+            const planStatusItems = convertPlanStatusToTrackerItems(metadata || []);
+            allItems = [...allItems, ...planStatusItems];
+          }
+        }
+
+        setItems(allItems);
         setLoading(false);
 
-        // Subscribe to changes
+        // Subscribe to tracker item changes
         if (documentService.watchTrackerItems) {
-          unsubscribe = documentService.watchTrackerItems((change: TrackerItemChangeEvent) => {
-            // Re-fetch all items on change for simplicity
-            const fetchItems = typeFilter !== 'all' && documentService.getTrackerItemsByType
-              ? () => documentService.getTrackerItemsByType(typeFilter)
-              : () => documentService.listTrackerItems();
+          unsubscribeTracker = documentService.watchTrackerItems((change: TrackerItemChangeEvent) => {
+            loadItems();
+          });
+        }
 
-            fetchItems().then((updatedItems: TrackerItem[]) => {
-              setItems(updatedItems);
-            });
+        // Subscribe to metadata changes (for plan status documents)
+        if (documentService.watchDocumentMetadata && (typeFilter === 'plan' || typeFilter === 'all')) {
+          unsubscribeMetadata = documentService.watchDocumentMetadata(() => {
+            loadItems();
           });
         }
       } catch (err) {
@@ -141,8 +197,11 @@ export function TrackerTable({
     loadItems();
 
     return () => {
-      if (unsubscribe) {
-        unsubscribe();
+      if (unsubscribeTracker) {
+        unsubscribeTracker();
+      }
+      if (unsubscribeMetadata) {
+        unsubscribeMetadata();
       }
     };
   }, [typeFilter]);
@@ -333,43 +392,55 @@ export function TrackerTable({
                 className="tracker-table-header type sortable"
                 onClick={() => handleColumnClick('type')}
               >
-                <span>TYPE</span>
-                {getSortIndicator('type')}
+                <span className="header-content">
+                  <span>TYPE</span>
+                  {getSortIndicator('type')}
+                </span>
               </th>
               <th
                 className="tracker-table-header title sortable"
                 onClick={() => handleColumnClick('title')}
               >
-                <span>TITLE</span>
-                {getSortIndicator('title')}
+                <span className="header-content">
+                  <span>TITLE</span>
+                  {getSortIndicator('title')}
+                </span>
               </th>
               <th
                 className="tracker-table-header status sortable"
                 onClick={() => handleColumnClick('status')}
               >
-                <span>STATUS</span>
-                {getSortIndicator('status')}
+                <span className="header-content">
+                  <span>STATUS</span>
+                  {getSortIndicator('status')}
+                </span>
               </th>
               <th
                 className="tracker-table-header priority sortable"
                 onClick={() => handleColumnClick('priority')}
               >
-                <span>PRIORITY</span>
-                {getSortIndicator('priority')}
+                <span className="header-content">
+                  <span>PRIORITY</span>
+                  {getSortIndicator('priority')}
+                </span>
               </th>
               <th
                 className="tracker-table-header module sortable"
                 onClick={() => handleColumnClick('module')}
               >
-                <span>MODULE</span>
-                {getSortIndicator('module')}
+                <span className="header-content">
+                  <span>MODULE</span>
+                  {getSortIndicator('module')}
+                </span>
               </th>
               <th
                 className="tracker-table-header updated sortable"
                 onClick={() => handleColumnClick('lastIndexed')}
               >
-                <span>UPDATED</span>
-                {getSortIndicator('lastIndexed')}
+                <span className="header-content">
+                  <span>UPDATED</span>
+                  {getSortIndicator('lastIndexed')}
+                </span>
               </th>
             </tr>
             <tr className="filter-row">

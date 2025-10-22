@@ -81,7 +81,7 @@ export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
   importRegExp: /^(.+?)\s+@(bug|task|plan|idea|decision)\[.+?\]$/,
   regExp: /^(.+?)\s+@(bug|task|plan|idea|decision)\[.+?\]$/,
   replace: (textNode: TextNode, match: RegExpMatchArray) => {
-    console.log('TrackerItem transformer matched:', match[0]);
+    // console.log('TrackerItem transformer matched:', match[0]);
     const fullMatch = match[0];
 
     // Extract text content and metadata
@@ -92,7 +92,7 @@ export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
     }
 
     const [, textContent, type, propsStr] = contentMatch;
-    console.log('Text:', textContent, 'Type:', type, 'Props:', propsStr);
+    // console.log('Text:', textContent, 'Type:', type, 'Props:', propsStr);
 
     try {
       // Parse key:value pairs
@@ -136,14 +136,14 @@ export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
         dueDate: metadata.dueDate,
       };
 
-      console.log('Creating TrackerItemNode with data:', data);
+      // console.log('Creating TrackerItemNode with data:', data);
       const node = $createTrackerItemNode(data);
 
       // Add text content as children
       const childTextNode = $createTextNode(textContent.trim());
       node.append(childTextNode);
 
-      console.log('Created node:', node);
+      // console.log('Created node:', node);
       textNode.replace(node);
     } catch (e) {
       // If parsing fails, leave as text
