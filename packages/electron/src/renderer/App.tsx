@@ -1419,6 +1419,7 @@ export default function App() {
             onPanelChange={setBottomPanel}
             height={bottomPanelHeight}
             onHeightChange={setBottomPanelHeight}
+            onSwitchToFilesMode={() => setActiveMode('files')}
           />
         )}
       </div>

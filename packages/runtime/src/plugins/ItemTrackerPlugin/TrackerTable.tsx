@@ -22,6 +22,7 @@ interface TrackerTableProps {
   sortDirection?: SortDirection;
   onSortChange?: (column: SortColumn, direction: SortDirection) => void;
   hideTypeTabs?: boolean;
+  onSwitchToFilesMode?: () => void;
 }
 
 function getStatusColor(status: TrackerItemStatus): string {
@@ -123,6 +124,7 @@ export function TrackerTable({
   sortDirection = 'desc',
   onSortChange,
   hideTypeTabs = false,
+  onSwitchToFilesMode,
 }: TrackerTableProps): JSX.Element {
   const [items, setItems] = useState<TrackerItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -276,6 +278,11 @@ export function TrackerTable({
   const sortedItems = sortItems(filteredItems, currentSortBy, currentSortDirection);
 
   const handleRowClick = (item: TrackerItem) => {
+    // Switch to files mode first if we're in agent mode
+    if (onSwitchToFilesMode) {
+      onSwitchToFilesMode();
+    }
+
     // Open the document at the specific line
     const documentService = (window as any).documentService;
     if (documentService && documentService.openDocument) {

@@ -12,6 +12,7 @@ interface BottomPanelProps {
   onHeightChange: (height: number) => void;
   minHeight?: number;
   maxHeight?: number;
+  onSwitchToFilesMode?: () => void;
 }
 
 interface ItemCounts {
@@ -29,6 +30,7 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
   onHeightChange,
   minHeight = 200,
   maxHeight = 800,
+  onSwitchToFilesMode,
 }) => {
   const [isResizing, setIsResizing] = useState(false);
   const [itemCounts, setItemCounts] = useState<ItemCounts>({ plans: 0, bugs: 0, tasks: 0, ideas: 0, decisions: 0 });
@@ -258,6 +260,7 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
                     setTrackerSortBy(column);
                     setTrackerSortDirection(direction);
                   }}
+                  onSwitchToFilesMode={onSwitchToFilesMode}
                 />
               )}
               {activePanel === 'bugs' && (
@@ -270,6 +273,7 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
                     setTrackerSortBy(column);
                     setTrackerSortDirection(direction);
                   }}
+                  onSwitchToFilesMode={onSwitchToFilesMode}
                 />
               )}
               {activePanel === 'tasks' && (
@@ -282,6 +286,7 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
                     setTrackerSortBy(column);
                     setTrackerSortDirection(direction);
                   }}
+                  onSwitchToFilesMode={onSwitchToFilesMode}
                 />
               )}
               {activePanel === 'ideas' && (
@@ -294,6 +299,7 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
                     setTrackerSortBy(column);
                     setTrackerSortDirection(direction);
                   }}
+                  onSwitchToFilesMode={onSwitchToFilesMode}
                 />
               )}
               {activePanel === 'decisions' && (
@@ -306,6 +312,7 @@ export const  BottomPanel: React.FC<BottomPanelProps> = ({
                     setTrackerSortBy(column);
                     setTrackerSortDirection(direction);
                   }}
+                  onSwitchToFilesMode={onSwitchToFilesMode}
                 />
               )}
             </div>
