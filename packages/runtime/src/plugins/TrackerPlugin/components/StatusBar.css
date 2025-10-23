@@ -3,8 +3,10 @@
   border: 1px solid var(--border-primary);
   border-radius: 6px;
   padding: 12px;
-  margin-bottom: 16px;
+  /*margin-bottom: 16px;*/
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  position: relative;
+  z-index: 1;
 }
 
 .status-bar-collapsed {
@@ -16,6 +18,14 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
+  padding: 4px 8px;
+  margin: -4px -8px 12px -8px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+.status-bar-header:hover {
+  background: var(--surface-hover);
 }
 
 .status-bar-title {
@@ -36,7 +46,6 @@
   gap: 4px;
 }
 
-.status-bar-collapse-btn,
 .status-bar-close-btn,
 .status-bar-toggle {
   background: transparent;
@@ -49,18 +58,21 @@
   align-items: center;
   gap: 4px;
   transition: all 0.2s;
+  position: relative;
+  z-index: 1;
 }
 
-.status-bar-collapse-btn:hover,
 .status-bar-close-btn:hover,
 .status-bar-toggle:hover {
-  background: var(--surface-hover);
+  background: var(--surface-tertiary);
   color: var(--text-primary);
 }
 
 .status-bar-toggle {
   padding: 6px 12px;
   font-size: 13px;
+  width: 100%;
+  justify-content: space-between;
 }
 
 .status-bar-content {

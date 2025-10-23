@@ -14,6 +14,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConfigTheme, TextReplacement } from 'rexical';
 import { StravuEditor } from 'rexical';
+import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
 import { logger } from '../../utils/logger';
 
 interface TabEditorProps {
@@ -587,13 +588,43 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     setBackgroundChangeContent('');
   }, []);
 
+  // Handle content change from document header
+  const handleDocumentHeaderContentChange = useCallback((newContent: string) => {
+    // Update editor content programmatically
+    if (editorRef.current) {
+      (async () => {
+        try {
+          const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+          const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+          const transformers = getEditorTransformers();
+
+          editorRef.current.update(() => {
+            const root = $getRoot();
+            root.clear();
+            $convertFromEnhancedMarkdownString(newContent, transformers);
+          }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+
+          // Update internal state
+          setContent(newContent);
+          initialContentRef.current = newContent;
+          setLastSavedContent(newContent);
+          lastSavedContentRef.current = newContent;
+          contentRef.current = newContent;
+        } catch (error) {
+          logger.ui.error(`[TabEditor] Failed to update content from document header:`, error);
+        }
+      })();
+    }
+  }, []);
+
   return (
       <div
           className={`tab-editor multi-editor-instance ${isActive ? 'active' : 'hidden'}`}
           data-active={isActive ? 'true' : 'false'}
           data-file-path={filePath}
           style={{
-            display: isActive ? 'block' : 'none',
+            display: isActive ? 'flex' : 'none',
+            flexDirection: 'column',
             height: '100%',
             overflow: 'hidden',
             position: 'relative'
@@ -620,6 +651,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               },
               onSaveRequest: handleManualSave,
               textReplacements: isActive ? textReplacements : undefined,
+              documentHeader: (
+                <DocumentHeaderContainer
+                  filePath={filePath}
+                  fileName={fileName}
+                  content={content}
+                  onContentChange={handleDocumentHeaderContentChange}
+                  editor={editorRef.current}
+                />
+              ),
             }}
         />
 

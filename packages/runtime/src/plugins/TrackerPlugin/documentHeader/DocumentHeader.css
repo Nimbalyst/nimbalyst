@@ -1,0 +1,13 @@
+/**
+ * Document Header Styles
+ */
+
+.document-header-container {
+  width: 100%;
+  background-color: var(--surface-primary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.document-header-tracker {
+  /* Tracker-specific header styles */
+}

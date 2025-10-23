@@ -266,8 +266,9 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             {/* )} */}
             <RichTextPlugin
               contentEditable={
-                <div className="editor-scroller">
-                  <div className="editor" ref={onRef}>
+                <div className="editor-scroller" ref={onRef}>
+                  {config.documentHeader}
+                  <div className="editor">
                     <ContentEditable placeholder={placeholder} />
                   </div>
                 </div>

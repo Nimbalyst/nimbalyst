@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { TrackerDataModel, FieldDefinition } from '../models/TrackerDataModel';
 import { MaterialSymbol } from './MaterialSymbol';
+import { CustomSelect } from './CustomSelect';
 import './StatusBar.css';
 
 export interface StatusBarProps {
@@ -43,19 +44,12 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
         return (
           <div key={field.name} className="status-bar-field" style={fieldStyle}>
             <label htmlFor={fieldId}>{field.name}</label>
-            <select
-              id={fieldId}
+            <CustomSelect
               value={value || field.default || ''}
-              onChange={(e) => handleFieldChange(field.name, e.target.value)}
-            >
-              {!field.required && <option value="">None</option>}
-              {field.options?.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.icon && <span className="material-symbols-outlined">{option.icon}</span>}
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              options={field.options || []}
+              onChange={(newValue) => handleFieldChange(field.name, newValue)}
+              required={field.required}
+            />
           </div>
         );
 
@@ -152,8 +146,10 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
           onClick={() => setIsCollapsed(false)}
           title="Expand status bar"
         >
-          <MaterialSymbol icon={model.icon} size={18} />
-          <span>{model.displayName}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <MaterialSymbol icon={model.icon} size={18} />
+            <span>{model.displayName}</span>
+          </div>
           <MaterialSymbol icon="expand_more" size={18} />
         </button>
       </div>
@@ -161,24 +157,26 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
   }
 
   return (
-    <div className="status-bar" style={{ borderLeft: `4px solid ${model.color}` }}>
-      <div className="status-bar-header">
+    <div className="status-bar" >
+      <div
+        className="status-bar-header"
+        onClick={() => setIsCollapsed(true)}
+        style={{ cursor: 'pointer' }}
+        title="Click to collapse"
+      >
         <div className="status-bar-title">
           <MaterialSymbol icon={model.icon} size={20} />
           <span>{model.displayName}</span>
         </div>
         <div className="status-bar-actions">
-          <button
-            className="status-bar-collapse-btn"
-            onClick={() => setIsCollapsed(true)}
-            title="Collapse status bar"
-          >
-            <MaterialSymbol icon="expand_less" size={18} />
-          </button>
+          <MaterialSymbol icon="expand_less" size={18} />
           {onClose && (
             <button
               className="status-bar-close-btn"
-              onClick={onClose}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
               title="Remove tracker"
             >
               <MaterialSymbol icon="close" size={18} />
@@ -212,19 +210,3 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
   );
 };
 
-// Material Symbol helper component (if not already available globally)
-function MaterialSymbolComponent({ icon, size = 20 }: { icon: string; size?: number }) {
-  return (
-    <span className="material-symbols-outlined" style={{ fontSize: size }}>
-      {icon}
-    </span>
-  );
-}
-
-// Use global MaterialSymbol if available, otherwise use local implementation
-const MaterialSymbolFallback =
-  typeof window !== 'undefined' && (window as any).MaterialSymbol
-    ? (window as any).MaterialSymbol
-    : MaterialSymbolComponent;
-
-export { MaterialSymbolFallback as MaterialSymbol };

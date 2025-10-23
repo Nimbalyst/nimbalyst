@@ -1,4 +1,5 @@
 import type { Transformer } from '@lexical/markdown';
+import type { ReactNode } from 'react';
 
 /**
  * Configuration interface for the Stravu Editor component.
@@ -90,6 +91,9 @@ export interface EditorConfig {
   onEditorReady?: (editor: any) => void;
   onSaveRequest?: () => void;
   initialContent?: string; // Pre-loaded content to set in editor
+
+  // Document header - renders at the top of the editor scroll pane
+  documentHeader?: ReactNode;
 }
 
 export const DEFAULT_EDITOR_CONFIG: EditorConfig = {

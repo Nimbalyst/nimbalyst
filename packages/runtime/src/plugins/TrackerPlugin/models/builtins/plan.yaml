@@ -31,9 +31,13 @@ fields:
         icon: check_circle
         color: "#22c55e"
       - value: in-development
-        label: In Progress
+        label: Development
         icon: construction
         color: "#f59e0b"
+      - value: in-review
+        label: Review
+        icon: rate_review
+        color: "#8b5cf6"
       - value: completed
         label: Completed
         icon: task_alt
