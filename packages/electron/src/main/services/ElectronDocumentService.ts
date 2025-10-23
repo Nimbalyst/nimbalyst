@@ -182,10 +182,18 @@ export class ElectronDocumentService implements DocumentService {
             } else {
               updated.push(metadata);
             }
-
-            // Update tracker items cache for this file (only when content changed)
-            await this.updateTrackerItemsCache(newDoc.path);
+          } else {
+            // Frontmatter didn't change, but file mtime did - update mtime in cache
+            this.fileStateCache.set(newDoc.path, {
+              mtime: stats.mtime,
+              size: stats.size || 0,
+              hash: hash || undefined
+            });
           }
+
+          // Update tracker items cache whenever file content changes (mtime changed)
+          // This ensures tracker items are updated even if frontmatter didn't change
+          await this.updateTrackerItemsCache(newDoc.path);
         } catch (error) {
           console.error(`[DocumentService] Failed to extract metadata for ${newDoc.path}:`, error);
         }
