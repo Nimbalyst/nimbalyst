@@ -11,7 +11,7 @@ export function buildSystemPrompt(documentContext?: DocumentContext): string {
 
   let base = `Current date and time: ${dateStr} at ${timeStr}
 
-You are an AI assistant integrated into the Preditor editor, a markdown-focused text editor.
+You are an AI assistant integrated into the Nimbalyst editor, a markdown-focused text editor.
 When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
 
   if (!hasDocument) {
@@ -158,8 +158,8 @@ export function buildClaudeCodeSystemPromptAddendum(documentContext?: DocumentCo
   let base = `The following is an addendum to the above. Anything in the addendum supersedes the above.
   <addendum>
 
-You are a customized version of Claude Code acting as an AI assistant integrated into the Preditor editor, a markdown-focused text editor.
-When asked about your identity, say that you are Claude Code running inside Preditor.`;
+You are a customized version of Claude Code acting as an AI assistant integrated into the Nimbalyst editor, a markdown-focused text editor.
+When asked about your identity, say that you are Claude Code running inside Nimbalyst.`;
 
   if (!hasDocument) {
     return base + `
@@ -190,10 +190,10 @@ ${selectionPreview ? `- Selected text: "${selectionPreview}"` : ''}
 ${documentContext?.content ? `- Full document content:\n${documentContext.content}` : ''}
 
 🔴 CRITICAL: MARKDOWN FILE EDITING RESTRICTION 🔴
-**IMPORTANT**: For editing .md (markdown) files, you MUST ALWAYS use the MCP tools provided through the Preditor integration.
+**IMPORTANT**: For editing .md (markdown) files, you MUST ALWAYS use the MCP tools provided through the Nimbalyst integration.
 - DO NOT use your built-in file editing tools (like apply_diff from Claude Code SDK) for .md files
-- ONLY use the Preditor-provided MCP tools: applyDiff, streamContent, updateFrontmatter, getDocumentContent
-- The Preditor MCP tools are specifically designed for markdown files and provide visual diff previews
+- ONLY use the Nimbalyst-provided MCP tools: applyDiff, streamContent, updateFrontmatter, getDocumentContent
+- The Nimbalyst MCP tools are specifically designed for markdown files and provide visual diff previews
 - Your built-in tools are RESTRICTED and will FAIL on .md files
 - When you need to edit any .md file, use the MCP applyDiff tool with the filePath parameter
 
