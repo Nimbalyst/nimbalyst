@@ -8,6 +8,8 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import {
   $getSelection,
+  $getRoot,
+  $isRangeSelection,
   COMMAND_PRIORITY_EDITOR,
   createCommand,
   LexicalCommand,
@@ -16,6 +18,7 @@ import {
 import { useEffect } from 'react';
 import { mergeRegister } from '@lexical/utils';
 import { $convertSelectionToEnhancedMarkdownString } from '../../markdown/EnhancedMarkdownExport';
+import { $getFrontmatter, serializeWithFrontmatter } from '../../markdown/FrontmatterUtils';
 import type { Transformer } from '@lexical/markdown';
 
 export interface MarkdownCopyPluginProps {
@@ -73,11 +76,44 @@ export default function MarkdownCopyPlugin({
                 return;
               }
 
+              // Convert selection to markdown
               markdown = $convertSelectionToEnhancedMarkdownString(
                 transformers,
                 selection,
                 true,
               );
+
+              // Check if everything is selected (select all was used)
+              // If so, include frontmatter in the copied markdown
+              if ($isRangeSelection(selection)) {
+                const root = $getRoot();
+
+                // Get all root-level nodes that are in the selection
+                const selectedRootNodes = new Set();
+                nodes.forEach(node => {
+                  // Find the top-level parent (direct child of root)
+                  let topNode = node;
+                  while (topNode.getParent() !== null && topNode.getParent() !== root) {
+                    topNode = topNode.getParent();
+                  }
+                  if (topNode.getParent() === root) {
+                    selectedRootNodes.add(topNode.getKey());
+                  }
+                });
+
+                // Check if all root children are selected
+                const rootChildren = root.getChildren();
+                const allRootChildrenSelected = rootChildren.length > 0 &&
+                  rootChildren.every(child => selectedRootNodes.has(child.getKey()));
+
+                // If everything is selected, include frontmatter
+                if (allRootChildrenSelected) {
+                  const frontmatter = $getFrontmatter();
+                  if (frontmatter) {
+                    markdown = serializeWithFrontmatter(markdown, frontmatter);
+                  }
+                }
+              }
             });
 
             // Copy markdown to clipboard
