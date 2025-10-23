@@ -194,15 +194,13 @@ export function AISessionView({
         />
       </div>
 
-      {/* Edited files gutter at bottom (agent mode only) */}
-      {mode === 'agent' && (
-        <FileGutter
-          sessionId={sessionId}
-          workspacePath={workspacePath}
-          type="edited"
-          onFileClick={handleFileClick}
-        />
-      )}
+      {/* Edited files gutter at bottom */}
+      <FileGutter
+        sessionId={sessionId}
+        workspacePath={workspacePath}
+        type="edited"
+        onFileClick={handleFileClick}
+      />
 
       {/* Input area */}
       <AIInput
