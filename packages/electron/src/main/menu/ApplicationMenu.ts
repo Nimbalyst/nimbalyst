@@ -558,6 +558,16 @@ export async function createApplicationMenu() {
                 { type: 'separator' },
                 { label: 'Cut', accelerator: KeyboardShortcuts.edit.cut, role: 'cut' },
                 { label: 'Copy', accelerator: KeyboardShortcuts.edit.copy, role: 'copy' },
+                {
+                    label: 'Copy as Markdown',
+                    accelerator: KeyboardShortcuts.edit.copyMarkdown,
+                    click: async () => {
+                        const focused = BrowserWindow.getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('copy-as-markdown');
+                        }
+                    }
+                },
                 { label: 'Paste', accelerator: KeyboardShortcuts.edit.paste, role: 'paste' },
                 { label: 'Select All', accelerator: KeyboardShortcuts.edit.selectAll, role: 'selectAll' },
                 { type: 'separator' },

@@ -151,6 +151,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('reject-action', callback);
   },
 
+  onCopyAsMarkdown: (callback: () => void) => {
+    ipcRenderer.on('copy-as-markdown', callback);
+    return () => ipcRenderer.removeListener('copy-as-markdown', callback);
+  },
+
   onLoadSessionFromManager: (callback: (data: { sessionId: string; workspacePath?: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('load-session-from-manager', handler);

@@ -22,6 +22,7 @@ export const KeyboardShortcuts = {
     redo: 'Cmd+Shift+Z',
     cut: 'Cmd+X',
     copy: 'Cmd+C',
+    copyMarkdown: 'Cmd+Shift+C',
     paste: 'Cmd+V',
     selectAll: 'Cmd+A',
     find: 'Cmd+F',

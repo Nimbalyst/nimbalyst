@@ -36,6 +36,9 @@ interface ElectronAPI {
   onShowAbout: (callback: () => void) => () => void;
   onViewHistory?: (callback: () => void) => () => void;
   onShowPreferences?: (callback: () => void) => () => void;
+  onApproveAction?: (callback: () => void) => () => void;
+  onRejectAction?: (callback: () => void) => () => void;
+  onCopyAsMarkdown?: (callback: () => void) => () => void;
 
   // Tab callbacks
   onNextTab?: (callback: () => void) => () => void;
