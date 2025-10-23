@@ -133,9 +133,33 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                       arguments: block.input || block.arguments
                     }
                   });
+                } else if (block.type === 'tool_result') {
+                  // Tool result - find the corresponding tool_use message and add result
+                  const toolUseId = block.tool_use_id || block.id;
+                  // Search backwards for the tool message with this ID
+                  for (let i = uiMessages.length - 1; i >= 0; i--) {
+                    const msg = uiMessages[i];
+                    if (msg.role === 'tool' && msg.toolCall?.id === toolUseId) {
+                      // Add the result to this tool call
+                      msg.toolCall.result = block.content;
+                      if (block.is_error) {
+                        msg.isError = true;
+                      }
+                      break;
+                    }
+                  }
                 }
               }
             }
+          } else if (parsed.type === 'error' && parsed.error) {
+            // Error message from SDK or API
+            uiMessages.push({
+              role: 'assistant',
+              content: typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error),
+              timestamp,
+              isError: true,
+              errorMessage: typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error)
+            });
           } else if (parsed.usage) {
             // This is metadata (usage stats), mark last message as complete
             const lastMsg = uiMessages[uiMessages.length - 1];

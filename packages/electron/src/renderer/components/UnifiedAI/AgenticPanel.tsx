@@ -594,7 +594,8 @@ export function AgenticPanel({
 
     const handleStreamError = (error: any) => {
       console.error('[AgenticPanel] AI error:', error);
-      setError(error.message || 'An error occurred');
+      // Don't set panel-level error state - that's for session loading errors
+      // Streaming errors are saved to the database and will appear via message-logged event
       setIsSending(false);
     };
 

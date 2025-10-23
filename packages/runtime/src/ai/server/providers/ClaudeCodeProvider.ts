@@ -389,6 +389,35 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   // Only emit tool call if we executed it ourselves and have a result
                   // SDK-native tools will be emitted when their result arrives
                   if (executionResult !== undefined) {
+                    // Log tool call and result to database in format that UI can reconstruct
+                    if (sessionId) {
+                      // Log the tool_use block
+                      this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                        type: 'assistant',
+                        message: {
+                          content: [{
+                            type: 'tool_use',
+                            id: toolId,
+                            name: toolName || 'unknown',
+                            input: toolArgs
+                          }]
+                        }
+                      }));
+
+                      // Log the tool_result block
+                      this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                        type: 'assistant',
+                        message: {
+                          content: [{
+                            type: 'tool_result',
+                            tool_use_id: toolId,
+                            content: executionResult,
+                            is_error: false
+                          }]
+                        }
+                      }));
+                    }
+
                     yield {
                       type: 'tool_call',
                       toolCall
@@ -431,6 +460,35 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                     }
 
                     console.log(`[CLAUDE-CODE] Updated tool call ${toolResultId} with result (isError: ${toolCall.isError || false})`);
+
+                    // Log tool call and result to database in format that UI can reconstruct
+                    if (sessionId) {
+                      // Log the tool_use block
+                      this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                        type: 'assistant',
+                        message: {
+                          content: [{
+                            type: 'tool_use',
+                            id: toolCall.id,
+                            name: toolCall.name,
+                            input: toolCall.arguments
+                          }]
+                        }
+                      }));
+
+                      // Log the tool_result block
+                      this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                        type: 'assistant',
+                        message: {
+                          content: [{
+                            type: 'tool_result',
+                            tool_use_id: toolCall.id,
+                            content: toolCall.result,
+                            is_error: toolCall.isError || false
+                          }]
+                        }
+                      }));
+                    }
 
                     // Re-emit the tool call with the result
                     yield {
@@ -520,6 +578,35 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             // Only emit tool call if we executed it ourselves and have a result
             // SDK-native tools will be emitted when their result arrives
             if (executionResult !== undefined) {
+              // Log tool call and result to database in format that UI can reconstruct
+              if (sessionId) {
+                // Log the tool_use block
+                this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                  type: 'assistant',
+                  message: {
+                    content: [{
+                      type: 'tool_use',
+                      id: toolId,
+                      name: toolName,
+                      input: toolArgs
+                    }]
+                  }
+                }));
+
+                // Log the tool_result block
+                this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                  type: 'assistant',
+                  message: {
+                    content: [{
+                      type: 'tool_result',
+                      tool_use_id: toolId,
+                      content: executionResult,
+                      is_error: false
+                    }]
+                  }
+                }));
+              }
+
               yield {
                 type: 'tool_call',
                 toolCall
@@ -564,6 +651,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 // Fallback to JSON stringify
                 errorMessage = JSON.stringify(chunk, null, 2);
               }
+
+              // Log error to database (as 'output' since errors are provider responses)
+              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', 'api_error');
 
               // Yield error to UI
               yield {
@@ -751,6 +841,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                             `Please ensure your Anthropic API key is correctly configured in Settings.`;
               }
 
+              // Log error to database (as 'output' since errors are provider responses)
+              this.logError(sessionId, 'claude-code', new Error(userMessage), 'summary_chunk', 'authentication_error');
+
               // Yield both as error and as text to ensure visibility
               yield {
                 type: 'error',
@@ -894,6 +987,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         };
       } else {
         console.error(`[CLAUDE-CODE] Yielding error to client`);
+
+        // Log error to database (as 'output' since errors are provider responses)
+        this.logError(sessionId, 'claude-code', error, 'catch_block', 'exception');
+
         yield {
           type: 'error',
           error: error.message

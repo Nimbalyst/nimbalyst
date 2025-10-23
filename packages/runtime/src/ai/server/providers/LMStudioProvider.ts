@@ -489,6 +489,10 @@ export class LMStudioProvider extends BaseAIProvider {
         };
       } else {
         console.error('LMStudio error:', error);
+
+        // Log error to database
+        this.logError(sessionId, 'lmstudio', error, 'catch_block');
+
         yield {
           type: 'error',
           error: error.message

@@ -718,6 +718,10 @@ export class ClaudeProvider extends BaseAIProvider {
         };
       } else {
         console.error('Claude API error:', error);
+
+        // Log error to database
+        this.logError(sessionId, 'claude', error, 'catch_block');
+
         yield {
           type: 'error',
           error: error.message

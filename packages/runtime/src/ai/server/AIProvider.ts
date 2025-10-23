@@ -201,4 +201,31 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
       console.error('[BaseAIProvider] Failed to log agent message:', error);
     });
   }
+
+  /**
+   * Log an error to the database
+   * Helper method to reduce duplication across provider implementations
+   */
+  protected logError(
+    sessionId: string | undefined,
+    providerName: string,
+    error: Error,
+    source: string,
+    errorType: string = 'api_error'
+  ): void {
+    if (!sessionId) return;
+
+    this.logAgentMessage(sessionId, providerName, 'output', JSON.stringify({
+      type: 'error',
+      error: error.message,
+      source,
+      is_error: true,
+      error_name: error.name,
+      error_stack: error.stack
+    }), {
+      isError: true,
+      errorType,
+      errorName: error.name
+    });
+  }
 }

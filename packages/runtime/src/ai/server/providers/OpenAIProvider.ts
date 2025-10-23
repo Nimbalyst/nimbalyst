@@ -448,6 +448,10 @@ export class OpenAIProvider extends BaseAIProvider {
         };
       } else {
         console.error(`[OpenAIProvider] Error after ${errorTime}ms:`, error);
+
+        // Log error to database
+        this.logError(sessionId, 'openai', error, 'catch_block');
+
         yield {
           type: 'error',
           error: error.message
