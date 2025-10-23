@@ -24,7 +24,7 @@ import { registerAttachmentHandlers } from './ipc/AttachmentHandlers';
 import { registerWorkspaceWatcherHandlers } from './file/WorkspaceWatcher';
 import { setupSessionFileHandlers } from './ipc/SessionFileHandlers';
 import { registerSlashCommandHandlers } from './ipc/SlashCommandHandlers';
-import { getTheme, setTheme } from './utils/store';
+import { getTheme, setTheme, incrementLaunchCount, shouldShowDiscordInvitation, dismissDiscordInvitation } from './utils/store';
 import { AIService } from './services/ai/AIService';
 import { AgentService } from './services/agents/AgentService';
 import { cliManager } from './services/CLIManager';
@@ -163,6 +163,10 @@ app.whenReady().then(async () => {
     logger.main.info('App ready');
     analytics.sendEvent('app_startup');
 
+    // Track app launch for Discord invitation
+    const launchCount = incrementLaunchCount();
+    logger.main.info(`App launch count: ${launchCount}`);
+
     // Parse command line arguments
     parseCommandLineArgs();
 
@@ -262,6 +266,12 @@ app.whenReady().then(async () => {
         updateWindowTitleBars();
     });
 
+    // Set up IPC handler for Discord invitation dismissal
+    ipcMain.on('dismiss-discord-invitation', (event) => {
+        logger.main.info('User dismissed Discord invitation permanently');
+        dismissDiscordInvitation();
+    });
+
     // Try to restore session, otherwise show Workspace Manager
     const sessionRestored = await restoreSessionState();
 
@@ -291,6 +301,41 @@ app.whenReady().then(async () => {
                 pendingFilePath = null;
             }, 100); // Give renderer 100ms to initialize
         });
+    }
+
+    // Check if we should show Discord invitation after windows are fully loaded
+    if (shouldShowDiscordInvitation()) {
+        // Set up a listener to show invitation when a workspace window finishes loading
+        const showInvitationOnWindowReady = () => {
+            const allWindows = BrowserWindow.getAllWindows();
+            logger.main.info(`Discord invitation check: ${allWindows.length} windows available`);
+
+            // Find a workspace window (not special windows like workspace-manager)
+            const workspaceWindow = allWindows.find(win => {
+                const url = win.webContents.getURL();
+                return !url.includes('mode=workspace-manager') &&
+                       !url.includes('mode=session-manager') &&
+                       !url.includes('mode=ai-models');
+            });
+
+            if (workspaceWindow && workspaceWindow.webContents.isLoading() === false) {
+                logger.main.info('Showing Discord invitation to user');
+                // Wait a bit for React to mount and register IPC handlers
+                setTimeout(() => {
+                    workspaceWindow.webContents.send('show-discord-invitation');
+                }, 500);
+                return true;
+            }
+            return false;
+        };
+
+        // Try immediately in case windows are already loaded
+        setTimeout(() => {
+            if (!showInvitationOnWindowReady()) {
+                // If not ready yet, wait and try again
+                setTimeout(showInvitationOnWindowReady, 3000);
+            }
+        }, 2000);
     }
 
     // Create application menu

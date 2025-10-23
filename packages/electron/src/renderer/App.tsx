@@ -19,6 +19,7 @@ import { QuickOpen } from './components/QuickOpen';
 import { AgentCommandPalette } from './components/AgentCommandPalette';
 import { AIChat } from './components/AIChat';
 import { ConfirmDialog } from './components/ConfirmDialog/ConfirmDialog';
+import { DiscordInvitation } from './components/DiscordInvitation/DiscordInvitation';
 import { HistoryDialog } from './components/HistoryDialog';
 import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog/KeyboardShortcutsDialog';
 import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
@@ -174,6 +175,7 @@ export default function App() {
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [isKeyboardShortcutsDialogOpen, setIsKeyboardShortcutsDialogOpen] = useState(false);
+  const [isDiscordInvitationOpen, setIsDiscordInvitationOpen] = useState(false);
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
   // Planning mode for AI sidebar (Claude Code safety). Default ON
   const [aiPlanningModeEnabled, setAIPlanningModeEnabled] = useState<boolean>(true);
@@ -724,6 +726,28 @@ export default function App() {
       // window.electronAPI.off?.('toggle-agent-palette', handleToggleAgentPalette);
     };
   }, []); // Remove workspaceMode dependency - listener should always be active
+
+  // Listen for Discord invitation IPC event
+  useEffect(() => {
+    console.log('[App] Setting up Discord invitation IPC listener');
+    if (!window.electronAPI?.on) {
+      console.log('[App] electronAPI.on not available');
+      return;
+    }
+
+    const handleShowDiscordInvitation = () => {
+      console.log('[App] Received show-discord-invitation event');
+      setIsDiscordInvitationOpen(true);
+    };
+
+    window.electronAPI.on('show-discord-invitation', handleShowDiscordInvitation);
+    console.log('[App] Discord invitation listener registered');
+
+    return () => {
+      console.log('[App] Removing Discord invitation listener');
+      window.electronAPI.off?.('show-discord-invitation', handleShowDiscordInvitation);
+    };
+  }, []);
 
   // Update window title and dirty state
   useEffect(() => {
@@ -1532,6 +1556,11 @@ export default function App() {
         destructive={confirmDialog.options.destructive}
         onConfirm={confirmDialog.handleConfirm}
         onCancel={confirmDialog.handleCancel}
+      />
+      <DiscordInvitation
+        isOpen={isDiscordInvitationOpen}
+        onClose={() => setIsDiscordInvitationOpen(false)}
+        onDismiss={() => setIsDiscordInvitationOpen(false)}
       />
       <ErrorToastContainer />
     </div>

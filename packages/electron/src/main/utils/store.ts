@@ -14,6 +14,9 @@ interface AppStoreSchema {
   openWorkspaces: Array<{ path: string; windowId?: number }>;
   sessionState?: SessionState;
   loggerConfig?: unknown;
+  // Discord invitation tracking
+  launchCount?: number;
+  discordInvitationDismissed?: boolean;
 }
 
 export interface TabState {
@@ -528,4 +531,30 @@ export function saveAgenticTabState(workspacePath: string, state: TabManagerStat
       tabOrder: [...state.tabOrder],
     };
   });
+}
+
+// Discord Invitation Management
+export function incrementLaunchCount(): number {
+  const current = appStore.get('launchCount', 0);
+  const next = current + 1;
+  appStore.set('launchCount', next);
+  return next;
+}
+
+export function getLaunchCount(): number {
+  return appStore.get('launchCount', 0);
+}
+
+export function isDiscordInvitationDismissed(): boolean {
+  return appStore.get('discordInvitationDismissed', false);
+}
+
+export function dismissDiscordInvitation(): void {
+  appStore.set('discordInvitationDismissed', true);
+}
+
+export function shouldShowDiscordInvitation(): boolean {
+  const launchCount = getLaunchCount();
+  const dismissed = isDiscordInvitationDismissed();
+  return launchCount >= 3 && !dismissed;
 }
