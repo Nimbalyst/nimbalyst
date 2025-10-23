@@ -103,9 +103,9 @@ function ItemTrackerPlugin(): JSX.Element | null {
   const capturedTextRef = useRef<string>('');
 
   const trackerTriggerFn: TriggerFunction = useCallback((text: string) => {
-    const match = text.match(/@(\w*)$/);
+    const match = text.match(/#(\w*)$/);
     if (match) {
-      // Capture the text before the @trigger
+      // Capture the text before the # trigger
       capturedTextRef.current = text.substring(0, match.index).trim();
       return {
         leadOffset: match.index!,

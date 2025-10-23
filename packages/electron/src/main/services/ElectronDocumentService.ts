@@ -37,6 +37,8 @@ export class ElectronDocumentService implements DocumentService {
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
 
+    console.log(`[DocumentService] Constructor called for workspace: ${workspacePath}`);
+
     // Start async initial load (non-blocking)
     this.initializationPromise = this.initializeAsync();
 
@@ -73,6 +75,11 @@ export class ElectronDocumentService implements DocumentService {
   private async refreshDocuments() {
     const oldDocuments = this.documents;
     this.documents = await this.scanDocuments();
+
+    console.log(`[DocumentService] refreshDocuments: found ${this.documents.length} documents`);
+    if (this.documents.length > 0) {
+      console.log(`[DocumentService] Sample documents:`, this.documents.slice(0, 3).map(d => d.path));
+    }
 
     // Update metadata cache
     await this.updateMetadataCache(oldDocuments, this.documents);
@@ -134,6 +141,7 @@ export class ElectronDocumentService implements DocumentService {
                          cachedState.mtime !== stats.mtime;
 
       if (needsUpdate) {
+        console.log(`[DocumentService] File needs update: ${newDoc.path} (oldDoc=${!!oldDoc}, cachedState=${!!cachedState}, mtimeChanged=${cachedState?.mtime !== stats.mtime})`);
         try {
           // Extract frontmatter
           // console.log(`[DocumentService] Extracting frontmatter from: ${fullPath}`);
@@ -193,10 +201,13 @@ export class ElectronDocumentService implements DocumentService {
 
           // Update tracker items cache whenever file content changes (mtime changed)
           // This ensures tracker items are updated even if frontmatter didn't change
+          console.log(`[DocumentService] Calling updateTrackerItemsCache for: ${newDoc.path}`);
           await this.updateTrackerItemsCache(newDoc.path);
         } catch (error) {
           console.error(`[DocumentService] Failed to extract metadata for ${newDoc.path}:`, error);
         }
+      } else {
+        // console.log(`[DocumentService] Skipping file (no update needed): ${newDoc.path}`);
       }
     }
 
@@ -554,11 +565,18 @@ export class ElectronDocumentService implements DocumentService {
   // Tracker Items API methods
   async listTrackerItems(): Promise<TrackerItem[]> {
     try {
+      console.log(`[DocumentService] listTrackerItems called for workspace: ${this.workspacePath}`);
       const result = await database.query<any>(
         `SELECT * FROM tracker_items WHERE workspace = $1 ORDER BY last_indexed DESC`,
         [this.workspacePath]
       );
-      return result.rows.map(row => this.rowToTrackerItem(row));
+      console.log(`[DocumentService] Query returned ${result.rows.length} tracker items`);
+      if (result.rows.length > 0) {
+        console.log(`[DocumentService] Sample row:`, result.rows[0]);
+      }
+      const items = result.rows.map(row => this.rowToTrackerItem(row));
+      console.log(`[DocumentService] Returning ${items.length} tracker items`);
+      return items;
     } catch (error) {
       console.error('[DocumentService] Failed to list tracker items:', error);
       return [];
@@ -567,10 +585,12 @@ export class ElectronDocumentService implements DocumentService {
 
   async getTrackerItemsByType(type: TrackerItemType): Promise<TrackerItem[]> {
     try {
+      console.log(`[DocumentService] getTrackerItemsByType(${type}) for workspace: ${this.workspacePath}`);
       const result = await database.query<any>(
         `SELECT * FROM tracker_items WHERE workspace = $1 AND type = $2 ORDER BY last_indexed DESC`,
         [this.workspacePath, type]
       );
+      console.log(`[DocumentService] Query returned ${result.rows.length} items for type ${type}`);
       return result.rows.map(row => this.rowToTrackerItem(row));
     } catch (error) {
       console.error('[DocumentService] Failed to get tracker items by type:', error);
@@ -581,7 +601,7 @@ export class ElectronDocumentService implements DocumentService {
   async getTrackerItemsByModule(module: string): Promise<TrackerItem[]> {
     try {
       const result = await database.query<any>(
-        `SELECT * FROM tracker_items WHERE workspace = $1 AND module = $2 ORDER BY line_number ASC`,
+        `SELECT * FROM tracker_items WHERE workspace = $1 AND document_path = $2 ORDER BY line_number ASC`,
         [this.workspacePath, module]
       );
       return result.rows.map(row => this.rowToTrackerItem(row));
@@ -602,21 +622,24 @@ export class ElectronDocumentService implements DocumentService {
   }
 
   private rowToTrackerItem(row: any): TrackerItem {
+    // Parse JSONB data field
+    const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+
     return {
       id: row.id,
       type: row.type,
-      title: row.title,
-      description: row.description || undefined,
-      status: row.status,
-      priority: row.priority || undefined,
-      owner: row.owner || undefined,
-      module: row.module,
+      title: data.title || row.title, // Fallback to generated column
+      description: data.description || undefined,
+      status: data.status || row.status, // Fallback to generated column
+      priority: data.priority || undefined,
+      owner: data.owner || undefined,
+      module: row.document_path, // Use new column name
       lineNumber: row.line_number || undefined,
       workspace: row.workspace,
-      tags: row.tags ? JSON.parse(row.tags) : undefined,
-      created: row.created || undefined,
-      updated: row.updated || undefined,
-      dueDate: row.due_date || undefined,
+      tags: data.tags || undefined,
+      created: data.created || row.created || undefined,
+      updated: data.updated || row.updated || undefined,
+      dueDate: data.dueDate || undefined,
       lastIndexed: new Date(row.last_indexed)
     };
   }
@@ -630,8 +653,8 @@ export class ElectronDocumentService implements DocumentService {
       const items: TrackerItem[] = [];
       const lines = content.split('\n');
 
-      // Regex to match: text @type[id:... status:...]
-      const trackerRegex = /(.+?)\s+@(bug|task|plan|idea|decision)\[(.+?)\]/;
+      // Regex to match: text #type[id:... status:...]
+      const trackerRegex = /(.+?)\s+#(bug|task|plan|idea|decision)\[(.+?)\]/;
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -688,6 +711,7 @@ export class ElectronDocumentService implements DocumentService {
         }
       }
 
+      console.log(`[DocumentService] Parsed ${items.length} tracker items from ${relativePath}`);
       return items;
     } catch (error) {
       console.error(`[DocumentService] Failed to parse tracker items from ${relativePath}:`, error);
@@ -701,15 +725,24 @@ export class ElectronDocumentService implements DocumentService {
   private async updateTrackerItemsCache(relativePath: string): Promise<void> {
     const fullPath = path.join(this.workspacePath, relativePath);
 
+    console.log(`[DocumentService] updateTrackerItemsCache called for: ${relativePath}`);
+    console.log(`[DocumentService] Full path: ${fullPath}`);
+
     try {
       // Parse tracker items from the file
       const items = await this.parseTrackerItems(fullPath, relativePath);
+      console.log(`[DocumentService] Found ${items.length} tracker items in ${relativePath}`);
+      if (items.length > 0) {
+        console.log(`[DocumentService] Sample tracker item:`, items[0]);
+      }
 
       // Get existing items for this module
+      console.log(`[DocumentService] Querying database for existing tracker items...`);
       const existingResult = await database.query<any>(
-        `SELECT id FROM tracker_items WHERE workspace = $1 AND module = $2`,
+        `SELECT id FROM tracker_items WHERE workspace = $1 AND document_path = $2`,
         [this.workspacePath, relativePath]
       );
+      console.log(`[DocumentService] Found ${existingResult.rows.length} existing tracker items in database`);
       const existingIds = new Set(existingResult.rows.map(row => row.id));
       const newIds = new Set(items.map(item => item.id));
 
@@ -718,6 +751,7 @@ export class ElectronDocumentService implements DocumentService {
 
       // Remove old items
       if (removedIds.length > 0) {
+        console.log(`[DocumentService] Removing ${removedIds.length} tracker items from database`);
         await database.query(
           `DELETE FROM tracker_items WHERE id = ANY($1)`,
           [removedIds]
@@ -725,33 +759,39 @@ export class ElectronDocumentService implements DocumentService {
       }
 
       // Upsert new/updated items
+      console.log(`[DocumentService] Upserting ${items.length} tracker items to database`);
       for (const item of items) {
-        await database.query(
+        // Build JSONB data object
+        const data = {
+          title: item.title,
+          description: item.description,
+          status: item.status,
+          priority: item.priority,
+          owner: item.owner,
+          tags: item.tags || [],
+          dueDate: item.dueDate,
+          created: item.created,
+          updated: item.updated
+        };
+
+        console.log(`[DocumentService] Inserting tracker item: ${item.id} (${item.type})`);
+        const result = await database.query(
           `INSERT INTO tracker_items (
-            id, type, title, description, status, priority, owner, module, line_number,
-            workspace, tags, created, updated, due_date, last_indexed
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            id, type, data, workspace, document_path, line_number, created, updated, last_indexed
+          ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), $7)
           ON CONFLICT (id) DO UPDATE SET
-            type = $2, title = $3, description = $4, status = $5, priority = $6, owner = $7,
-            module = $8, line_number = $9, tags = $11, updated = $13, due_date = $14, last_indexed = $15`,
+            type = $2, data = $3, document_path = $5, line_number = $6, updated = NOW(), last_indexed = $7`,
           [
             item.id,
             item.type,
-            item.title,
-            item.description || null,
-            item.status,
-            item.priority || null,
-            item.owner || null,
-            item.module,
-            item.lineNumber || null,
+            JSON.stringify(data),
             item.workspace,
-            item.tags ? JSON.stringify(item.tags) : null,
-            item.created || null,
-            item.updated || null,
-            item.dueDate || null,
+            item.module, // document_path
+            item.lineNumber || null,
             item.lastIndexed
           ]
         );
+        console.log(`[DocumentService] Insert result:`, result);
       }
 
       // Notify watchers if there are changes
@@ -763,8 +803,11 @@ export class ElectronDocumentService implements DocumentService {
           timestamp: new Date()
         };
 
+        console.log(`[DocumentService] Notifying ${this.trackerItemWatchers.size} watchers of tracker item changes`);
         this.trackerItemWatchers.forEach(callback => callback(changeEvent));
       }
+
+      console.log(`[DocumentService] updateTrackerItemsCache completed successfully for ${relativePath}`);
     } catch (error) {
       console.error(`[DocumentService] Failed to update tracker items cache for ${relativePath}:`, error);
     }
@@ -1087,12 +1130,19 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
 
   // Handle tracker item watch subscriptions
   ipcMain.on('document-service:tracker-items-watch', (event) => {
+    console.log('[DocumentService IPC] tracker-items-watch subscription requested');
     let unsubscribe: (() => void) | undefined;
     try {
       const service = requireDocumentService(event);
       unsubscribe = service.watchTrackerItems((change: TrackerItemChangeEvent) => {
+        console.log('[DocumentService IPC] Sending tracker-items-changed event to renderer:', {
+          added: change.added?.length || 0,
+          updated: change.updated?.length || 0,
+          removed: change.removed?.length || 0
+        });
         event.sender.send('document-service:tracker-items-changed', change);
       });
+      console.log('[DocumentService IPC] tracker-items-watch subscription successful');
     } catch (error) {
       console.error('[DocumentService] tracker-items-watch failed to start:', error);
     }

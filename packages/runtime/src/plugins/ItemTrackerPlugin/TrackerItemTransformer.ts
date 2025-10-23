@@ -1,7 +1,7 @@
 /**
  * Transformer for TrackerItem nodes
- * Exports/imports tracker items in markdown format with metadata in HTML comments
- * Format: @bug <!-- tracker:{...metadata...} -->
+ * Exports/imports tracker items in markdown format with metadata
+ * Format: #bug[id:bug_123 status:to-do]
  */
 
 import { ElementTransformer, TextMatchTransformer } from '@lexical/markdown';
@@ -58,7 +58,7 @@ export const TRACKER_ITEM_ELEMENT_TRANSFORMER: ElementTransformer = {
     if (metadata.dueDate) parts.push(`due:${metadata.dueDate}`);
     if (metadata.tags && metadata.tags.length > 0) parts.push(`tags:${metadata.tags.join(',')}`);
 
-    let result = `${textContent} @${data.type}[${parts.join(' ')}]`;
+    let result = `${textContent} #${data.type}[${parts.join(' ')}]`;
 
     // Add description as indented lines if present
     if (data.description) {
@@ -74,18 +74,18 @@ export const TRACKER_ITEM_ELEMENT_TRANSFORMER: ElementTransformer = {
   type: 'element',
 };
 
-// TextMatchTransformer for IMPORT (handles markdown with @bug[...] metadata)
+// TextMatchTransformer for IMPORT (handles markdown with #bug[...] metadata)
 export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
   dependencies: [TrackerItemNode],
   export: () => null,  // Export handled by ElementTransformer
-  importRegExp: /^(.+?)\s+@(bug|task|plan|idea|decision)\[.+?\]$/,
-  regExp: /^(.+?)\s+@(bug|task|plan|idea|decision)\[.+?\]$/,
+  importRegExp: /^(.+?)\s+#(bug|task|plan|idea|decision)\[.+?\]$/,
+  regExp: /^(.+?)\s+#(bug|task|plan|idea|decision)\[.+?\]$/,
   replace: (textNode: TextNode, match: RegExpMatchArray) => {
     // console.log('TrackerItem transformer matched:', match[0]);
     const fullMatch = match[0];
 
     // Extract text content and metadata
-    const contentMatch = fullMatch.match(/^(.+?)\s+@(bug|task|plan|idea|decision)\[(.+?)\]$/);
+    const contentMatch = fullMatch.match(/^(.+?)\s+#(bug|task|plan|idea|decision)\[(.+?)\]$/);
     if (!contentMatch) {
       console.log('No content match found');
       return;
@@ -150,7 +150,7 @@ export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
       console.error('Failed to parse tracker item metadata:', e);
     }
   },
-  trigger: '@',
+  trigger: '#',
   type: 'text-match',
 };
 

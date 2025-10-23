@@ -108,17 +108,29 @@ export function registerFileHandlers() {
                 state.documentEdited = false; // Reset dirty state after save
             }
 
-            // Refresh metadata cache immediately after save if in workspace mode
+            // Refresh metadata and tracker items cache immediately after save if in workspace mode
             if (state?.workspacePath) {
                 const documentService = documentServices.get(state.workspacePath);
+                console.log('[SAVE] Workspace mode:', state.workspacePath, 'documentService exists:', !!documentService);
                 if (documentService) {
-                    // Add a small delay to ensure file is fully written before reading frontmatter
-                    setTimeout(() => {
-                        documentService.refreshFileMetadata(filePath).catch(err => {
-                            console.error('[SAVE] Failed to refresh metadata:', err);
-                        });
+                    // Add a small delay to ensure file is fully written before reading
+                    setTimeout(async () => {
+                        try {
+                            await documentService.refreshFileMetadata(filePath);
+                            // Also refresh tracker items for this file
+                            const relativePath = filePath.startsWith(state.workspacePath)
+                                ? filePath.substring(state.workspacePath.length + 1)
+                                : filePath;
+                            console.log('[SAVE] Updating tracker items for:', relativePath);
+                            await (documentService as any).updateTrackerItemsCache(relativePath);
+                            console.log('[SAVE] Tracker items update completed');
+                        } catch (err) {
+                            console.error('[SAVE] Failed to refresh metadata/tracker items:', err);
+                        }
                     }, 50);
                 }
+            } else {
+                console.log('[SAVE] Not in workspace mode, state:', state);
             }
 
             // Clear the saving flag after a delay to ensure the file watcher doesn't react

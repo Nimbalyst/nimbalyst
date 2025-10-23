@@ -152,7 +152,7 @@ export class TrackerItemNode extends ElementNode {
 
     // Add type text
     const typeText = document.createElement('span');
-    typeText.textContent = `@${this.__data.type}`;
+    typeText.textContent = `#${this.__data.type}`;
     typeBadge.appendChild(typeText);
 
     // Content area where children render - Lexical handles editability of children

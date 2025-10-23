@@ -1,0 +1,38 @@
+type: idea
+displayName: Idea
+displayNamePlural: Ideas
+icon: lightbulb
+color: "#eab308"
+
+modes:
+  inline: true
+  fullDocument: false
+
+idPrefix: ida
+
+fields:
+  - name: title
+    type: string
+    required: true
+
+  - name: status
+    type: select
+    default: proposed
+    options:
+      - value: proposed
+        label: Proposed
+        icon: lightbulb
+      - value: evaluating
+        label: Evaluating
+        icon: psychology
+      - value: accepted
+        label: Accepted
+        icon: check_circle
+      - value: rejected
+        label: Rejected
+        icon: cancel
+
+  - name: owner
+    type: string
+
+inlineTemplate: "{icon} {title} {status}"

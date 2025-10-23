@@ -1,0 +1,114 @@
+type: plan
+displayName: Plan
+displayNamePlural: Plans
+icon: edit_note
+color: "#3b82f6"
+
+modes:
+  inline: true
+  fullDocument: true
+
+idPrefix: pln
+idFormat: ulid
+
+fields:
+  - name: title
+    type: string
+    required: true
+    displayInline: true
+
+  - name: status
+    type: select
+    required: true
+    default: draft
+    options:
+      - value: draft
+        label: Draft
+        icon: edit_note
+        color: "#64748b"
+      - value: ready-for-development
+        label: Ready
+        icon: check_circle
+        color: "#22c55e"
+      - value: in-development
+        label: In Progress
+        icon: construction
+        color: "#f59e0b"
+      - value: completed
+        label: Completed
+        icon: task_alt
+        color: "#10b981"
+      - value: rejected
+        label: Rejected
+        icon: cancel
+        color: "#ef4444"
+      - value: blocked
+        label: Blocked
+        icon: block
+        color: "#dc2626"
+
+  - name: priority
+    type: select
+    required: false
+    options:
+      - value: low
+        label: Low
+        icon: arrow_downward
+      - value: medium
+        label: Medium
+        icon: remove
+      - value: high
+        label: High
+        icon: arrow_upward
+      - value: critical
+        label: Critical
+        icon: priority_high
+
+  - name: progress
+    type: number
+    min: 0
+    max: 100
+    default: 0
+    displayInline: false
+
+  - name: owner
+    type: string
+    displayInline: true
+
+  - name: tags
+    type: array
+    itemType: string
+    displayInline: false
+
+  - name: dueDate
+    type: date
+    displayInline: true
+
+statusBarLayout:
+  - row:
+    - field: status
+      width: 200
+    - field: priority
+      width: 150
+    - field: progress
+      width: 100
+  - row:
+    - field: owner
+      width: 200
+    - field: dueDate
+      width: 150
+    - field: tags
+      width: auto
+
+inlineTemplate: "{icon} {title} {status} {priority} {owner}"
+
+tableView:
+  defaultColumns:
+    - title
+    - status
+    - priority
+    - owner
+    - updated
+  sortable: true
+  filterable: true
+  exportable: true

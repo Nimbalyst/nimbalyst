@@ -230,6 +230,79 @@ class PGLiteWorker {
         `);
       }
 
+      // Migrate tracker_items to JSONB structure
+      const trackerDataColumnResult = await this.db.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'tracker_items'
+        AND column_name = 'data'
+      `);
+
+      const hasDataColumn = trackerDataColumnResult.rows.length > 0;
+
+      if (!hasDataColumn) {
+        console.log('[PGLite Worker] Migrating tracker_items to JSONB structure...');
+
+        // Create new table with JSONB structure
+        await this.db.exec(`
+          -- Create new table with JSONB structure
+          CREATE TABLE IF NOT EXISTS tracker_items_new (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            data JSONB NOT NULL,
+            workspace TEXT NOT NULL,
+            document_path TEXT,
+            line_number INTEGER,
+            created TIMESTAMP DEFAULT NOW(),
+            updated TIMESTAMP DEFAULT NOW(),
+            last_indexed TIMESTAMP DEFAULT NOW()
+          );
+
+          -- Migrate existing data
+          INSERT INTO tracker_items_new (id, type, data, workspace, document_path, line_number, created, updated, last_indexed)
+          SELECT
+            id,
+            type,
+            jsonb_build_object(
+              'title', title,
+              'description', description,
+              'status', status,
+              'priority', priority,
+              'owner', owner,
+              'tags', CASE
+                WHEN tags IS NOT NULL AND tags != '' THEN to_jsonb(string_to_array(tags, ','))
+                ELSE '[]'::jsonb
+              END,
+              'dueDate', due_date
+            ),
+            workspace,
+            module as document_path,
+            line_number,
+            CASE WHEN created IS NOT NULL THEN to_timestamp(created, 'YYYY-MM-DD') ELSE NOW() END,
+            CASE WHEN updated IS NOT NULL THEN to_timestamp(updated, 'YYYY-MM-DD"T"HH24:MI:SS') ELSE NOW() END,
+            COALESCE(last_indexed, NOW())
+          FROM tracker_items;
+
+          -- Drop old table and rename new one
+          DROP TABLE tracker_items;
+          ALTER TABLE tracker_items_new RENAME TO tracker_items;
+
+          -- Create indexes
+          CREATE INDEX IF NOT EXISTS idx_tracker_type ON tracker_items(type);
+          CREATE INDEX IF NOT EXISTS idx_tracker_workspace ON tracker_items(workspace);
+          CREATE INDEX IF NOT EXISTS idx_tracker_created ON tracker_items(created);
+          CREATE INDEX IF NOT EXISTS idx_tracker_updated ON tracker_items(updated);
+          CREATE INDEX IF NOT EXISTS idx_tracker_data_gin ON tracker_items USING GIN(data);
+
+          -- Create generated columns for commonly queried fields
+          ALTER TABLE tracker_items ADD COLUMN title TEXT GENERATED ALWAYS AS (data->>'title') STORED;
+          ALTER TABLE tracker_items ADD COLUMN status TEXT GENERATED ALWAYS AS (data->>'status') STORED;
+          CREATE INDEX IF NOT EXISTS idx_tracker_status ON tracker_items(status);
+        `);
+
+        console.log('[PGLite Worker] tracker_items migration to JSONB completed');
+      }
+
       console.log('[PGLite Worker] Database migrations completed');
     } catch (error) {
       console.warn('[PGLite Worker] Migration check/execution:', error);
@@ -303,33 +376,30 @@ class PGLiteWorker {
       CREATE INDEX IF NOT EXISTS idx_session_files_unique ON session_files(session_id, file_path, link_type);
     `);
 
-    // Tracker Items table
+    // Tracker Items table (JSONB structure)
     console.log('[PGLite Worker] Creating tracker_items table...');
     try {
       await this.db.exec(`
         CREATE TABLE IF NOT EXISTS tracker_items (
           id TEXT PRIMARY KEY,
           type TEXT NOT NULL,
-          title TEXT NOT NULL,
-          description TEXT,
-          status TEXT NOT NULL,
-          priority TEXT,
-          owner TEXT,
-          module TEXT NOT NULL,
-          line_number INTEGER,
+          data JSONB NOT NULL,
           workspace TEXT NOT NULL,
-          tags TEXT,
-          created TEXT,
-          updated TEXT,
-          due_date TEXT,
-          last_indexed TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          document_path TEXT,
+          line_number INTEGER,
+          created TIMESTAMP DEFAULT NOW(),
+          updated TIMESTAMP DEFAULT NOW(),
+          last_indexed TIMESTAMP DEFAULT NOW(),
+          title TEXT GENERATED ALWAYS AS (data->>'title') STORED,
+          status TEXT GENERATED ALWAYS AS (data->>'status') STORED
         );
 
-        CREATE INDEX IF NOT EXISTS idx_tracker_items_type ON tracker_items(type);
-        CREATE INDEX IF NOT EXISTS idx_tracker_items_status ON tracker_items(status);
-        CREATE INDEX IF NOT EXISTS idx_tracker_items_module ON tracker_items(module);
-        CREATE INDEX IF NOT EXISTS idx_tracker_items_workspace ON tracker_items(workspace);
-        CREATE INDEX IF NOT EXISTS idx_tracker_items_priority ON tracker_items(priority);
+        CREATE INDEX IF NOT EXISTS idx_tracker_type ON tracker_items(type);
+        CREATE INDEX IF NOT EXISTS idx_tracker_workspace ON tracker_items(workspace);
+        CREATE INDEX IF NOT EXISTS idx_tracker_status ON tracker_items(status);
+        CREATE INDEX IF NOT EXISTS idx_tracker_created ON tracker_items(created);
+        CREATE INDEX IF NOT EXISTS idx_tracker_updated ON tracker_items(updated);
+        CREATE INDEX IF NOT EXISTS idx_tracker_data_gin ON tracker_items USING GIN(data);
       `);
       console.log('[PGLite Worker] tracker_items table created successfully');
     } catch (error) {

@@ -1,9 +1,13 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import './TrackerBottomPanel.css';
 import { TrackerTable, SortColumn as TrackerSortColumn, SortDirection as TrackerSortDirection } from '@nimbalyst/runtime/plugins/ItemTrackerPlugin/TrackerTable';
 import { MaterialSymbol } from '../MaterialSymbol';
+import { globalRegistry, loadBuiltinTrackers } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 
-export type TrackerBottomPanelType = 'plans' | 'bugs' | 'tasks' | 'ideas' | 'decisions';
+// Load built-in trackers immediately at module level
+loadBuiltinTrackers();
+
+export type TrackerBottomPanelType = string; // Now dynamic based on registered trackers
 
 interface BottomPanelProps {
   activePanel: TrackerBottomPanelType | null;
@@ -16,11 +20,7 @@ interface BottomPanelProps {
 }
 
 interface ItemCounts {
-  plans: number;
-  bugs: number;
-  tasks: number;
-  ideas: number;
-  decisions: number;
+  [key: string]: number; // Dynamic counts by tracker type
 }
 
 export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
@@ -33,7 +33,20 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
   onSwitchToFilesMode,
 }) => {
   const [isResizing, setIsResizing] = useState(false);
-  const [itemCounts, setItemCounts] = useState<ItemCounts>({ plans: 0, bugs: 0, tasks: 0, ideas: 0, decisions: 0 });
+
+  // Get available tracker types from registry
+  const trackerTypes = useMemo(() => {
+    return globalRegistry.getAll();
+  }, []);
+
+  // Initialize counts for all tracker types
+  const [itemCounts, setItemCounts] = useState<ItemCounts>(() => {
+    const counts: ItemCounts = {};
+    trackerTypes.forEach(tracker => {
+      counts[tracker.type] = 0;
+    });
+    return counts;
+  });
 
   // Debug logging
   useEffect(() => {
@@ -71,37 +84,44 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
 
         // console.log('[TrackerBottomPanel] Loaded tracker items:', items.length);
 
-        // Count tracker items
-        let planCount = items.filter((i: any) => i.type === 'plan' && i.status !== 'done').length;
-        const bugCount = items.filter((i: any) => i.type === 'bug' && i.status !== 'done').length;
-        const taskCount = items.filter((i: any) => i.type === 'task' && i.status !== 'done').length;
-        const ideaCount = items.filter((i: any) => i.type === 'idea').length;
-        const decisionCount = items.filter((i: any) => i.type === 'decision').length;
-
-        // Also count plan status documents
-        if (documentService.listDocumentMetadata) {
-          const metadata = await documentService.listDocumentMetadata();
-          const planStatusCount = metadata.filter((doc: any) => {
-            if (!doc.frontmatter || !doc.frontmatter.planStatus) return false;
-
-            const pathLower = doc.path.toLowerCase();
-            const isAgentFile = pathLower.includes('/agents/') || pathLower.includes('\\agents\\');
-            if (isAgentFile) return false;
-
-            const status = (doc.frontmatter.planStatus.status || '').toLowerCase();
-            return status !== 'completed' && status !== 'done';
+        // Count tracker items dynamically for all types
+        const counts: ItemCounts = {};
+        trackerTypes.forEach(tracker => {
+          // Count inline items from tracker_items table
+          const inlineCount = items.filter((i: any) => {
+            if (i.type !== tracker.type) return false;
+            // Exclude 'done' and 'completed' status items
+            const status = (i.status || '').toLowerCase();
+            return status !== 'done' && status !== 'completed';
           }).length;
 
-          planCount += planStatusCount;
+          counts[tracker.type] = inlineCount;
+        });
+
+        // Also count full-document trackers (plan, decision) from frontmatter
+        if (documentService.listDocumentMetadata) {
+          const metadata = await documentService.listDocumentMetadata();
+
+          // For each tracker type that supports fullDocument mode
+          trackerTypes.forEach(tracker => {
+            if (!tracker.modes.fullDocument) return;
+
+            const frontmatterKey = `${tracker.type}Status`; // e.g., 'planStatus', 'decisionStatus'
+            const fullDocCount = metadata.filter((doc: any) => {
+              if (!doc.frontmatter || !doc.frontmatter[frontmatterKey]) return false;
+
+              const pathLower = doc.path.toLowerCase();
+              const isAgentFile = pathLower.includes('/agents/') || pathLower.includes('\\agents\\');
+              if (isAgentFile) return false;
+
+              const status = (doc.frontmatter[frontmatterKey].status || '').toLowerCase();
+              return status !== 'completed' && status !== 'done';
+            }).length;
+
+            counts[tracker.type] = (counts[tracker.type] || 0) + fullDocCount;
+          });
         }
 
-        const counts: ItemCounts = {
-          plans: planCount,
-          bugs: bugCount,
-          tasks: taskCount,
-          ideas: ideaCount,
-          decisions: decisionCount,
-        };
         // console.log('[TrackerBottomPanel] Counts:', counts);
         setItemCounts(counts);
       } catch (error) {
@@ -134,7 +154,7 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
       if (unsubscribeTracker) unsubscribeTracker();
       if (unsubscribeMetadata) unsubscribeMetadata();
     };
-  }, []);
+  }, [trackerTypes]);
 
   const [trackerSortBy, setTrackerSortBy] = useState<TrackerSortColumn>('lastIndexed');
   const [trackerSortDirection, setTrackerSortDirection] = useState<TrackerSortDirection>('desc');
@@ -200,46 +220,17 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
           <div className="bottom-panel" style={{ height: '100%' }}>
             <div className="bottom-panel-header">
               <div className="bottom-panel-tabs">
-                <button
-                  className={`bottom-panel-tab ${activePanel === 'plans' ? 'active' : ''}`}
-                  onClick={() => handlePanelClick('plans')}
-                >
-                  <MaterialSymbol icon="edit_note" size={16} />
-                  Plans
-                  <span className="tab-count">{itemCounts.plans}</span>
-                </button>
-                <button
-                  className={`bottom-panel-tab ${activePanel === 'bugs' ? 'active' : ''}`}
-                  onClick={() => handlePanelClick('bugs')}
-                >
-                  <MaterialSymbol icon="bug_report" size={16} />
-                  Bugs
-                  <span className="tab-count">{itemCounts.bugs}</span>
-                </button>
-                <button
-                  className={`bottom-panel-tab ${activePanel === 'tasks' ? 'active' : ''}`}
-                  onClick={() => handlePanelClick('tasks')}
-                >
-                  <MaterialSymbol icon="task_alt" size={16} />
-                  Tasks
-                  <span className="tab-count">{itemCounts.tasks}</span>
-                </button>
-                <button
-                  className={`bottom-panel-tab ${activePanel === 'ideas' ? 'active' : ''}`}
-                  onClick={() => handlePanelClick('ideas')}
-                >
-                  <MaterialSymbol icon="lightbulb" size={16} />
-                  Ideas
-                  <span className="tab-count">{itemCounts.ideas}</span>
-                </button>
-                <button
-                  className={`bottom-panel-tab ${activePanel === 'decisions' ? 'active' : ''}`}
-                  onClick={() => handlePanelClick('decisions')}
-                >
-                  <MaterialSymbol icon="gavel" size={16} />
-                  Decisions
-                  <span className="tab-count">{itemCounts.decisions}</span>
-                </button>
+                {trackerTypes.map((tracker) => (
+                  <button
+                    key={tracker.type}
+                    className={`bottom-panel-tab ${activePanel === tracker.type ? 'active' : ''}`}
+                    onClick={() => handlePanelClick(tracker.type)}
+                  >
+                    <MaterialSymbol icon={tracker.icon} size={16} />
+                    {tracker.displayNamePlural}
+                    <span className="tab-count">{itemCounts[tracker.type] || 0}</span>
+                  </button>
+                ))}
               </div>
               <button
                 className="bottom-panel-close"
@@ -250,61 +241,9 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
               </button>
             </div>
             <div className="bottom-panel-content">
-              {activePanel === 'plans' && (
+              {activePanel && (
                 <TrackerTable
-                  filterType="plan"
-                  sortBy={trackerSortBy}
-                  sortDirection={trackerSortDirection}
-                  hideTypeTabs={true}
-                  onSortChange={(column, direction) => {
-                    setTrackerSortBy(column);
-                    setTrackerSortDirection(direction);
-                  }}
-                  onSwitchToFilesMode={onSwitchToFilesMode}
-                />
-              )}
-              {activePanel === 'bugs' && (
-                <TrackerTable
-                  filterType="bug"
-                  sortBy={trackerSortBy}
-                  sortDirection={trackerSortDirection}
-                  hideTypeTabs={true}
-                  onSortChange={(column, direction) => {
-                    setTrackerSortBy(column);
-                    setTrackerSortDirection(direction);
-                  }}
-                  onSwitchToFilesMode={onSwitchToFilesMode}
-                />
-              )}
-              {activePanel === 'tasks' && (
-                <TrackerTable
-                  filterType="task"
-                  sortBy={trackerSortBy}
-                  sortDirection={trackerSortDirection}
-                  hideTypeTabs={true}
-                  onSortChange={(column, direction) => {
-                    setTrackerSortBy(column);
-                    setTrackerSortDirection(direction);
-                  }}
-                  onSwitchToFilesMode={onSwitchToFilesMode}
-                />
-              )}
-              {activePanel === 'ideas' && (
-                <TrackerTable
-                  filterType="idea"
-                  sortBy={trackerSortBy}
-                  sortDirection={trackerSortDirection}
-                  hideTypeTabs={true}
-                  onSortChange={(column, direction) => {
-                    setTrackerSortBy(column);
-                    setTrackerSortDirection(direction);
-                  }}
-                  onSwitchToFilesMode={onSwitchToFilesMode}
-                />
-              )}
-              {activePanel === 'decisions' && (
-                <TrackerTable
-                  filterType="decision"
+                  filterType={activePanel}
                   sortBy={trackerSortBy}
                   sortDirection={trackerSortDirection}
                   hideTypeTabs={true}

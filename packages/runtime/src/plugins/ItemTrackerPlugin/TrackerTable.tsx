@@ -134,7 +134,9 @@ export function TrackerTable({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<TrackerItemType | 'all'>(filterType);
+
+  // Use filterType prop directly instead of local state so it updates when prop changes
+  const typeFilter = filterType;
 
   useEffect(() => {
     let unsubscribeTracker: (() => void) | null = null;
@@ -143,6 +145,7 @@ export function TrackerTable({
 
     async function loadItems() {
       try {
+        console.log('[TrackerTable] loadItems called, typeFilter:', typeFilter);
         const documentService = (window as any).documentService;
 
         if (!documentService) {
@@ -153,16 +156,19 @@ export function TrackerTable({
         }
 
         if (!documentService.listTrackerItems) {
+          console.log('[TrackerTable] listTrackerItems not available');
           setError('Tracker items not supported');
           setLoading(false);
           return;
         }
 
         // Load tracker items
+        console.log('[TrackerTable] Loading tracker items...');
         const trackerItems = typeFilter !== 'all' && documentService.getTrackerItemsByType
           ? await documentService.getTrackerItemsByType(typeFilter)
           : await documentService.listTrackerItems();
 
+        console.log('[TrackerTable] Loaded tracker items:', trackerItems?.length || 0);
         let allItems = trackerItems || [];
 
         // If showing plans, also load plan status documents
@@ -170,16 +176,19 @@ export function TrackerTable({
           if (documentService.listDocumentMetadata) {
             const metadata = await documentService.listDocumentMetadata();
             const planStatusItems = convertPlanStatusToTrackerItems(metadata || []);
+            console.log('[TrackerTable] Loaded plan status items:', planStatusItems.length);
             allItems = [...allItems, ...planStatusItems];
           }
         }
 
+        console.log('[TrackerTable] Total items to display:', allItems.length);
         if (isSubscribed) {
           setItems(allItems);
           setLoading(false);
+          console.log('[TrackerTable] State updated with', allItems.length, 'items');
         }
       } catch (err) {
-        console.error('Failed to load tracker items:', err);
+        console.error('[TrackerTable] Failed to load tracker items:', err);
         if (isSubscribed) {
           setError('Failed to load tracker items');
           setLoading(false);
@@ -189,11 +198,20 @@ export function TrackerTable({
 
     async function setupWatchers() {
       const documentService = (window as any).documentService;
-      if (!documentService) return;
+      if (!documentService) {
+        console.log('[TrackerTable] Cannot setup watchers - no document service');
+        return;
+      }
 
       // Subscribe to tracker item changes
       if (documentService.watchTrackerItems) {
+        console.log('[TrackerTable] Setting up tracker items watcher');
         unsubscribeTracker = documentService.watchTrackerItems((change: TrackerItemChangeEvent) => {
+          console.log('[TrackerTable] Tracker items changed event received:', {
+            added: change.added?.length || 0,
+            updated: change.updated?.length || 0,
+            removed: change.removed?.length || 0
+          });
           // Only reload items, don't re-register watchers
           loadItems();
         });
@@ -201,7 +219,9 @@ export function TrackerTable({
 
       // Subscribe to metadata changes (for plan status documents)
       if (documentService.watchDocumentMetadata && (typeFilter === 'plan' || typeFilter === 'all')) {
+        console.log('[TrackerTable] Setting up metadata watcher');
         unsubscribeMetadata = documentService.watchDocumentMetadata(() => {
+          console.log('[TrackerTable] Metadata changed event received');
           // Only reload items, don't re-register watchers
           loadItems();
         });
@@ -291,6 +311,7 @@ export function TrackerTable({
       return true;
     });
 
+  console.log('[TrackerTable] Render - items:', items.length, 'filtered:', filteredItems.length, 'typeFilter:', typeFilter);
   const sortedItems = sortItems(filteredItems, currentSortBy, currentSortDirection);
 
   const handleRowClick = (item: TrackerItem) => {

@@ -1,0 +1,44 @@
+type: bug
+displayName: Bug
+displayNamePlural: Bugs
+icon: bug_report
+color: "#dc2626"
+
+modes:
+  inline: true
+  fullDocument: false
+
+idPrefix: bug
+
+fields:
+  - name: title
+    type: string
+    required: true
+
+  - name: status
+    type: select
+    default: to-do
+    options:
+      - value: to-do
+        label: To Do
+        icon: circle
+      - value: in-progress
+        label: In Progress
+        icon: motion_photos_on
+      - value: done
+        label: Done
+        icon: check_circle
+
+  - name: priority
+    type: select
+    options:
+      - value: low
+        label: Low
+      - value: medium
+        label: Medium
+      - value: high
+        label: High
+      - value: critical
+        label: Critical
+
+inlineTemplate: "{icon} {title} {status} {priority}"

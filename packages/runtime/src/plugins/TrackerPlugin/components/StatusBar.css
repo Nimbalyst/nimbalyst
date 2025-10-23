@@ -1,0 +1,150 @@
+.status-bar {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.status-bar-collapsed {
+  padding: 8px 12px;
+}
+
+.status-bar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.status-bar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.status-bar-title .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.status-bar-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.status-bar-collapse-btn,
+.status-bar-close-btn,
+.status-bar-toggle {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.status-bar-collapse-btn:hover,
+.status-bar-close-btn:hover,
+.status-bar-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.status-bar-toggle {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.status-bar-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.status-bar-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.status-bar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 120px;
+}
+
+.status-bar-field label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-bar-field input[type="text"],
+.status-bar-field input[type="number"],
+.status-bar-field input[type="date"],
+.status-bar-field select {
+  padding: 6px 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.status-bar-field input:focus,
+.status-bar-field select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb, 59, 130, 246), 0.1);
+}
+
+.status-bar-field-checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+
+.status-bar-field-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.status-bar-field-checkbox input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+/* Select styling with icons */
+.status-bar-field select option {
+  padding: 4px 8px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .status-bar-row {
+    flex-direction: column;
+  }
+
+  .status-bar-field {
+    width: 100%;
+  }
+}
