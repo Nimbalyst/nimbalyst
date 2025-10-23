@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { SessionData } from '../../../ai/server/types';
-import type { TranscriptSettings, PromptMarker, FileEditSummary, TodoItem } from '../types';
+import type { TranscriptSettings, PromptMarker, FileEditSummary } from '../types';
 import { RichTranscriptView } from './RichTranscriptView';
 import { TranscriptSidebar } from './TranscriptSidebar';
 import { FileEditsSidebar } from './FileEditsSidebar';
-import { TodosSidebar } from './TodosSidebar';
 import { formatISO } from '../../../utils/dateUtils';
 
-type SidebarTab = 'prompts' | 'files' | 'todos';
+type SidebarTab = 'prompts' | 'files';
 
 interface AgentTranscriptPanelProps {
   sessionId: string;
@@ -16,8 +15,7 @@ interface AgentTranscriptPanelProps {
   showSettings?: boolean;
   initialSettings?: TranscriptSettings;
   onFileClick?: (filePath: string) => void;
-  onTodoClick?: (todo: TodoItem) => void;
-  hideSidebar?: boolean;  // Hide the prompts/files/todos sidebar
+  hideSidebar?: boolean;  // Hide the prompts/files sidebar
 }
 
 export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
@@ -27,7 +25,6 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   showSettings,
   initialSettings,
   onFileClick,
-  onTodoClick,
   hideSidebar = false
 }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
@@ -47,7 +44,6 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
 
   const [prompts, setPrompts] = useState<PromptMarker[]>([]);
   const [fileEdits, setFileEdits] = useState<FileEditSummary[]>([]);
-  const [todos, setTodos] = useState<TodoItem[]>([]);
   const transcriptRef = useRef<{ scrollToMessage: (index: number) => void }>(null);
 
   // Resize logic
@@ -88,13 +84,8 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
     setPrompts(markers);
   }, [sessionData.messages, sessionId]);
 
-  // Extract file edits from database and todos from metadata
+  // Extract file edits from database
   useEffect(() => {
-    const metadata = sessionData.metadata;
-    if (metadata) {
-      setTodos((metadata.todos as TodoItem[]) || []);
-    }
-
     // Fetch file links from database via IPC
     const fetchFileLinks = async () => {
       try {
@@ -350,33 +341,6 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
                   )}
                 </div>
               </button>
-              <button
-                onClick={() => setActiveTab('todos')}
-                style={{
-                  flex: 1,
-                  padding: '0.5rem 0.75rem',
-                  fontSize: '0.75rem',
-                  fontWeight: 500,
-                  transition: 'colors 0.2s',
-                  color: activeTab === 'todos' ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                  cursor: 'pointer',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  borderBottom: activeTab === 'todos' ? '2px solid var(--primary-color)' : '2px solid transparent'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: '0.875rem', height: '0.875rem' }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span>TODOs</span>
-                  {todos.length > 0 && (
-                    <span style={{ marginLeft: '0.25rem', padding: '0.125rem 0.375rem', backgroundColor: 'var(--surface-tertiary)', borderRadius: '0.25rem', fontSize: '10px' }}>
-                      {todos.length}
-                    </span>
-                  )}
-                </div>
-              </button>
             </div>
 
             {/* Tab Content */}
@@ -395,12 +359,6 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
                   fileEdits={fileEdits}
                   onFileClick={onFileClick}
                   workspacePath={sessionData.workspacePath}
-                />
-              )}
-              {activeTab === 'todos' && (
-                <TodosSidebar
-                  todos={todos}
-                  onTodoClick={onTodoClick}
                 />
               )}
             </div>
