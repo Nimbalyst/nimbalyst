@@ -880,17 +880,17 @@ export default function App() {
       // Cmd+Shift+P for Plans panel
       if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'p') {
         e.preventDefault();
-        setBottomPanel(prev => prev === 'plans' ? null : 'plans');
+        setBottomPanel(prev => prev === 'plan' ? null : 'plan');
       }
       // Cmd+Shift+B for Bugs panel
       if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'b') {
         e.preventDefault();
-        setBottomPanel(prev => prev === 'bugs' ? null : 'bugs');
+        setBottomPanel(prev => prev === 'bug' ? null : 'bug');
       }
       // Cmd+Shift+K for Tasks panel
       if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'k') {
         e.preventDefault();
-        setBottomPanel(prev => prev === 'tasks' ? null : 'tasks');
+        setBottomPanel(prev => prev === 'task' ? null : 'task');
       }
     };
 
@@ -1243,17 +1243,17 @@ export default function App() {
           }
         }}
         onTogglePlansPanel={() => {
-          setBottomPanel(prev => prev === 'plans' ? null : 'plans');
+          setBottomPanel(prev => prev === 'plan' ? null : 'plan');
         }}
         bottomPanel={bottomPanel}
         onToggleBugsPanel={() => {
-          setBottomPanel(prev => prev === 'bugs' ? null : 'bugs');
+          setBottomPanel(prev => prev === 'bug' ? null : 'bug');
         }}
         onToggleTasksPanel={() => {
-          setBottomPanel(prev => prev === 'tasks' ? null : 'tasks');
+          setBottomPanel(prev => prev === 'task' ? null : 'task');
         }}
         onToggleIdeasPanel={() => {
-          setBottomPanel(prev => prev === 'ideas' ? null : 'ideas');
+          setBottomPanel(prev => prev === 'idea' ? null : 'idea');
         }}
       />
 
@@ -1289,7 +1289,7 @@ export default function App() {
                 setIsNewFileDialogOpen(true);
                 setNewFileDirectory(workspacePath ? `${workspacePath}/plans` : null);
               }}
-              onOpenPlansTable={() => setBottomPanel(prev => prev === 'plans' ? null : 'plans')}
+              onOpenPlansTable={() => setBottomPanel(prev => prev === 'plan' ? null : 'plan')}
             />
             ) : (
               <PlansPanel

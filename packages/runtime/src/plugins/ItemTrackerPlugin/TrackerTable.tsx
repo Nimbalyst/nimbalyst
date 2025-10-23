@@ -11,6 +11,7 @@ import type {
   TrackerItemStatus,
   TrackerItemPriority
 } from '../../core/DocumentService';
+import { globalRegistry } from '../TrackerPlugin/models';
 import './TrackerTable.css';
 
 export type SortColumn = 'title' | 'type' | 'status' | 'priority' | 'module' | 'lastIndexed';
@@ -74,45 +75,52 @@ function formatDate(date: Date): string {
   return date.toLocaleDateString();
 }
 
-function convertPlanStatusToTrackerItems(metadata: any[]): TrackerItem[] {
+/**
+ * Convert full-document tracker items (from frontmatter) to TrackerItem format
+ * Works for any tracker type that supports fullDocument mode (plan, decision, etc.)
+ */
+function convertFullDocumentToTrackerItems(metadata: any[], trackerType: TrackerItemType): TrackerItem[] {
+  // Get the frontmatter key for this tracker type (e.g., 'planStatus', 'decisionStatus')
+  const frontmatterKey = `${trackerType}Status`;
+
   return metadata
     .filter(doc => {
-      // Only include documents that have planStatus in their frontmatter
-      const hasPlanStatus = !!(doc.frontmatter && doc.frontmatter.planStatus);
+      // Only include documents that have the tracker's frontmatter key
+      const hasTrackerStatus = !!(doc.frontmatter && doc.frontmatter[frontmatterKey]);
 
       // Exclude agent files
       const pathLower = doc.path.toLowerCase();
       const isAgentFile = pathLower.includes('/agents/') || pathLower.includes('\\agents\\');
 
-      return hasPlanStatus && !isAgentFile;
+      return hasTrackerStatus && !isAgentFile;
     })
     .map(doc => {
-      const planStatus = doc.frontmatter.planStatus as any || {};
+      const trackerStatus = doc.frontmatter[frontmatterKey] as any || {};
       const frontmatter = doc.frontmatter;
 
-      // Map plan status to tracker item status
+      // Map status to standard tracker item status
       let status: TrackerItemStatus = 'to-do';
-      const planStatusValue = (planStatus.status || frontmatter.status || 'draft').toLowerCase();
+      const statusValue = (trackerStatus.status || frontmatter.status || 'draft').toLowerCase();
 
-      if (planStatusValue === 'completed' || planStatusValue === 'done') {
+      if (statusValue === 'completed' || statusValue === 'done' || statusValue === 'decided' || statusValue === 'implemented') {
         status = 'done';
-      } else if (planStatusValue === 'in-progress' || planStatusValue === 'in-development') {
+      } else if (statusValue === 'in-progress' || statusValue === 'in-development' || statusValue === 'evaluating') {
         status = 'in-progress';
-      } else if (planStatusValue === 'in-review') {
+      } else if (statusValue === 'in-review') {
         status = 'in-review';
-      } else if (planStatusValue === 'blocked') {
+      } else if (statusValue === 'blocked') {
         status = 'blocked';
       }
 
       return {
-        type: 'plan' as TrackerItemType,
-        title: planStatus.title || frontmatter.title || doc.path.split('/').pop()?.replace('.md', '') || 'Untitled',
+        type: trackerType,
+        title: trackerStatus.title || frontmatter.title || doc.path.split('/').pop()?.replace('.md', '') || 'Untitled',
         status,
-        priority: (planStatus.priority || frontmatter.priority || 'medium') as TrackerItemPriority,
+        priority: (trackerStatus.priority || frontmatter.priority || 'medium') as TrackerItemPriority,
         module: doc.path,
         lineNumber: 0,
-        owner: planStatus.owner || frontmatter.owner,
-        tags: planStatus.tags || frontmatter.tags,
+        owner: trackerStatus.owner || frontmatter.owner,
+        tags: trackerStatus.tags || frontmatter.tags,
         lastIndexed: doc.lastModified || new Date(),
       } as TrackerItem;
     });
@@ -171,13 +179,24 @@ export function TrackerTable({
         console.log('[TrackerTable] Loaded tracker items:', trackerItems?.length || 0);
         let allItems = trackerItems || [];
 
-        // If showing plans, also load plan status documents
-        if (typeFilter === 'plan' || typeFilter === 'all') {
-          if (documentService.listDocumentMetadata) {
-            const metadata = await documentService.listDocumentMetadata();
-            const planStatusItems = convertPlanStatusToTrackerItems(metadata || []);
-            console.log('[TrackerTable] Loaded plan status items:', planStatusItems.length);
-            allItems = [...allItems, ...planStatusItems];
+        // Load full-document tracker items from frontmatter
+        if (documentService.listDocumentMetadata) {
+          const metadata = await documentService.listDocumentMetadata();
+
+          // Get all tracker types that support fullDocument mode
+          const trackerTypes = globalRegistry.getAll();
+          const fullDocumentTrackers = trackerTypes.filter(t => t.modes.fullDocument);
+
+          console.log('[TrackerTable] Found full-document trackers:', fullDocumentTrackers.map(t => t.type));
+
+          // Load items for each full-document tracker type
+          for (const tracker of fullDocumentTrackers) {
+            // Only load if we're showing all types or this specific type
+            if (typeFilter === 'all' || typeFilter === tracker.type) {
+              const items = convertFullDocumentToTrackerItems(metadata || [], tracker.type as TrackerItemType);
+              console.log(`[TrackerTable] Loaded ${items.length} ${tracker.type} items from frontmatter`);
+              allItems = [...allItems, ...items];
+            }
           }
         }
 
@@ -217,8 +236,13 @@ export function TrackerTable({
         });
       }
 
-      // Subscribe to metadata changes (for plan status documents)
-      if (documentService.watchDocumentMetadata && (typeFilter === 'plan' || typeFilter === 'all')) {
+      // Subscribe to metadata changes (for full-document tracker types)
+      // Need to watch metadata if we're showing all types or any type that supports fullDocument mode
+      const trackerTypes = globalRegistry.getAll();
+      const fullDocumentTrackers = trackerTypes.filter(t => t.modes.fullDocument);
+      const needsMetadataWatcher = typeFilter === 'all' || fullDocumentTrackers.some(t => t.type === typeFilter);
+
+      if (documentService.watchDocumentMetadata && needsMetadataWatcher) {
         console.log('[TrackerTable] Setting up metadata watcher');
         unsubscribeMetadata = documentService.watchDocumentMetadata(() => {
           console.log('[TrackerTable] Metadata changed event received');

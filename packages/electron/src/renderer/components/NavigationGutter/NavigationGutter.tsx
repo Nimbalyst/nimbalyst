@@ -8,7 +8,7 @@ import { ThemeToggleButton } from '../ThemeToggleButton/ThemeToggleButton';
 export type NavigationMode = 'planning' | 'coding';
 export type SidebarView = 'files' | 'plans' | 'settings';
 
-export type TrackerBottomPanelType = 'plans' | 'bugs' | 'tasks' | 'ideas' | 'decisions';
+export type TrackerBottomPanelType = 'plan' | 'bug' | 'task' | 'idea' | 'decision';
 
 interface NavigationGutterProps {
   contentMode: ContentMode;
@@ -69,7 +69,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   // Bottom panel buttons - positioned above settings
   const bottomPanelButtons: NavButton[] = [
     {
-      id: 'plans',
+      id: 'plan',
       icon: 'edit_note',
       label: 'Plans (Cmd+Shift+P)',
       onClick: onTogglePlansPanel,
