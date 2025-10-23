@@ -98,8 +98,8 @@
 /* Floating Toggle Button (Collapsed State) */
 .ai-chat-floating-toggle {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: 40px;
+  right: 7px;
   width: 36px;
   height: 36px;
   border-radius: 8px;
