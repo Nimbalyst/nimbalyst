@@ -512,8 +512,9 @@ export function AgenticPanel({
   // Listen for database updates and reload session (debounced)
   useEffect(() => {
     const handleMessageLogged = async (data: { sessionId: string; direction: string }) => {
-      // Only reload if this is for one of our open sessions
-      const isRelevantSession = sessionTabs.some(tab => tab.id === data.sessionId);
+      // Check if this is for the active session or any open session
+      // Also check activeTabId to handle race condition where sessionTabs state hasn't updated yet
+      const isRelevantSession = sessionTabs.some(tab => tab.id === data.sessionId) || data.sessionId === activeTabId;
       if (!isRelevantSession) return;
 
       // Debounce reloads to avoid excessive database queries

@@ -639,6 +639,58 @@ export class ClaudeProvider extends BaseAIProvider {
         if (toolUses.length > 0) {
           console.log(`[ClaudeProvider] Got ${toolUses.length} tool uses, continuing conversation...`);
 
+          // Log the complete assistant response (text + tool_use blocks) to database
+          if (sessionId) {
+            // Log text content if any
+            if (fullContent) {
+              this.logAgentMessage(sessionId, 'claude', 'output', JSON.stringify({
+                type: 'text',
+                content: fullContent
+              }));
+            }
+
+            // Log each tool use and result
+            for (const toolUse of toolUses) {
+              // Log the tool_use block
+              this.logAgentMessage(sessionId, 'claude', 'output', JSON.stringify({
+                type: 'assistant',
+                message: {
+                  content: [{
+                    type: 'tool_use',
+                    id: toolUse.id,
+                    name: toolUse.name,
+                    input: toolUse.input
+                  }]
+                }
+              }));
+
+              // Log the tool_result block
+              const result = toolUse.result || { success: true, message: 'Tool executed successfully' };
+              let resultContent: string;
+              if (typeof result === 'string') {
+                resultContent = result;
+              } else if (result.content) {
+                resultContent = result.content;
+              } else if (result.message) {
+                resultContent = result.message;
+              } else {
+                resultContent = JSON.stringify(result, null, 2);
+              }
+
+              this.logAgentMessage(sessionId, 'claude', 'output', JSON.stringify({
+                type: 'assistant',
+                message: {
+                  content: [{
+                    type: 'tool_result',
+                    tool_use_id: toolUse.id,
+                    content: resultContent,
+                    is_error: result.success === false
+                  }]
+                }
+              }));
+            }
+          }
+
           // Add assistant message with tool uses to conversation
           continuationMessages.push({
             role: 'assistant',
