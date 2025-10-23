@@ -446,7 +446,7 @@ class PGLiteWorker {
             db: this.db,
             port: port,
             host: '127.0.0.1',
-            inspect: true  // Enable debug output
+            inspect: false  // Disable verbose protocol logging
           });
 
           await this.protocolServer.start();
