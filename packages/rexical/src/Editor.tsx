@@ -49,6 +49,7 @@ import { LayoutPlugin } from './plugins/LayoutPlugin/LayoutPlugin';
 import LinkPlugin from './plugins/LinkPlugin';
 import MarkdownShortcutPlugin from './plugins/MarkdownShortcutPlugin';
 import MarkdownPastePlugin from './plugins/MarkdownPastePlugin';
+import MarkdownCopyPlugin from './plugins/MarkdownCopyPlugin';
 import PageBreakPlugin from './plugins/PageBreakPlugin';
 import ShortcutsPlugin from './plugins/ShortcutsPlugin';
 import SpeechToTextPlugin from './plugins/SpeechToTextPlugin';
@@ -275,6 +276,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             />
             <MarkdownShortcutPlugin />
             <MarkdownPastePlugin transformers={markdownTransformers} />
+            <MarkdownCopyPlugin transformers={markdownTransformers} />
             {isCodeHighlighted && (
               <Suspense fallback={null}>
                 <CodeHighlightPlugin />

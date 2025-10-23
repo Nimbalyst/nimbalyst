@@ -122,12 +122,64 @@ export function $convertNodeToEnhancedMarkdownString(
 }
 
 /**
+ * Convert selected content to markdown string.
+ * This exports only the selected nodes.
+ */
+export function $convertSelectionToEnhancedMarkdownString(
+  transformers: Array<Transformer>,
+  selection: any,
+  shouldPreserveNewLines: boolean = true,
+): string {
+  if (!selection) {
+    return '';
+  }
+
+  const nodes = selection.getNodes();
+  if (nodes.length === 0) {
+    return '';
+  }
+
+  const exportMarkdown = createEnhancedMarkdownExport(
+    transformers,
+    shouldPreserveNewLines,
+    null, // No selection filtering - we're exporting specific nodes
+  );
+
+  // Export each selected node
+  const output: string[] = [];
+  const processedNodes = new Set<string>();
+
+  for (const node of nodes) {
+    // Get the top-level element parent (paragraph, heading, etc.)
+    let exportNode = node;
+    while (exportNode.getParent() && !$isRootOrShadowRoot(exportNode.getParent()!)) {
+      exportNode = exportNode.getParent()!;
+    }
+
+    // Avoid duplicates
+    const key = exportNode.getKey();
+    if (processedNodes.has(key)) {
+      continue;
+    }
+    processedNodes.add(key);
+
+    const result = exportMarkdown(exportNode);
+    if (result) {
+      output.push(result);
+    }
+  }
+
+  return output.join('\n');
+}
+
+/**
  * Create an enhanced markdown export function with the provided transformers.
  * This properly handles individual nodes and maintains compatibility with standard Lexical export.
  */
 function createEnhancedMarkdownExport(
   transformers: Array<Transformer>,
   shouldPreserveNewLines: boolean = true,
+  selection: any = null,
 ): (node?: ElementNode | null) => string {
   const byType = transformersByType(transformers);
   const isNewlineDelimited = !byType.multilineElement.length;
@@ -157,6 +209,7 @@ function createEnhancedMarkdownExport(
         textFormatTransformers,
         textMatchTransformers,
         shouldPreserveNewLines,
+        selection,
       );
 
       if (result !== null) {
@@ -174,6 +227,7 @@ function createEnhancedMarkdownExport(
           textFormatTransformers,
           textMatchTransformers,
           shouldPreserveNewLines,
+          selection,
         );
 
         if (result !== null) {
@@ -202,6 +256,7 @@ function exportTopLevelElements(
   textFormatTransformers: Array<TextFormatTransformer>,
   textMatchTransformers: Array<TextMatchTransformer>,
   shouldPreserveNewLines: boolean = false,
+  selection: any = null,
 ): string | null {
   // Skip nodes marked as removed in diff state
   const diffState = $getDiffState(node);
@@ -223,6 +278,7 @@ function exportTopLevelElements(
         undefined,
         shouldPreserveNewLines,
         elementTransformers,
+        selection,
       ),
     );
 
@@ -240,6 +296,7 @@ function exportTopLevelElements(
       undefined,
       shouldPreserveNewLines,
       elementTransformers,
+      selection,
     );
   } else if ($isDecoratorNode(node)) {
     // Decorator nodes at top level: just return text content as fallback
@@ -259,6 +316,7 @@ function exportChildren(
   textTransformer?: TextFormatTransformer | null,
   shouldPreserveNewLines: boolean = false,
   elementTransformers?: Array<ElementTransformer | MultilineElementTransformer>,
+  selection: any = null,
 ): string {
   const output = [];
   const children = node.getChildren();
@@ -313,6 +371,7 @@ function exportChildren(
                   textTransformer,
                   shouldPreserveNewLines,
                   elementTransformers,
+                  selection,
                 ),
               (node: TextNode, textContent: string) => textContent,
             );
@@ -347,6 +406,7 @@ function exportChildren(
               undefined,
               shouldPreserveNewLines,
               elementTransformers,
+              selection,
             ),
           (node: TextNode, textContent: string) => textContent,
         );
@@ -365,6 +425,7 @@ function exportChildren(
           textFormatTransformers,
           textMatchTransformers,
           shouldPreserveNewLines,
+          selection,
         );
 
         if (result != null) {
@@ -389,6 +450,7 @@ function exportChildren(
               undefined,
               shouldPreserveNewLines,
               elementTransformers,
+              selection,
             ),
           (node: TextNode, textContent: string) => textContent,
         );

@@ -58,6 +58,7 @@ export type { InsertMode } from './MarkdownStreamProcessor';
 export {
   $convertToEnhancedMarkdownString,
   $convertNodeToEnhancedMarkdownString,
+  $convertSelectionToEnhancedMarkdownString,
   type EnhancedExportOptions,
 } from './EnhancedMarkdownExport';
 

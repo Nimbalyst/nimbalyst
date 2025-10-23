@@ -77,7 +77,8 @@ export {
   type InsertMode,
   getEditorTransformers, // Gets complete set of transformers (core + plugin)
   $convertToEnhancedMarkdownString,
-  $convertNodeToEnhancedMarkdownString
+  $convertNodeToEnhancedMarkdownString,
+  $convertSelectionToEnhancedMarkdownString
 } from './markdown';
 
 // Markdown normalization utilities
@@ -108,6 +109,9 @@ export {
 
 // Export our forked markdown import (prefer $convertFromEnhancedMarkdownString instead)
 export { $convertFromMarkdownStringRexical } from './markdown/LexicalMarkdownImport';
+
+// Markdown copy plugin - adds text/markdown MIME type to clipboard
+export { default as MarkdownCopyPlugin } from './plugins/MarkdownCopyPlugin';
 
 // Diff plugin and hook
 export { DiffPlugin, useDiffCommands, APPLY_MARKDOWN_REPLACE_COMMAND } from './plugins/DiffPlugin';
