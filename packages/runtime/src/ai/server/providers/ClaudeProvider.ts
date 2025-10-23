@@ -417,7 +417,8 @@ export class ClaudeProvider extends BaseAIProvider {
           }
         } else if (chunk.type === 'content_block_stop') {
           // Check if this was a tool use block
-          if (currentToolUse && toolInputBuffer) {
+          // Note: toolInputBuffer can be empty string for tools with no parameters
+          if (currentToolUse) {
             try {
               // Parse the complete tool input
               if (currentToolUse.name === 'applyDiff') {
@@ -430,7 +431,9 @@ export class ClaudeProvider extends BaseAIProvider {
               // The fine-grained-tool-streaming beta API sometimes appends protocol tags after valid JSON
               let parsedInput;
               try {
-                parsedInput = JSON.parse(toolInputBuffer);
+                // Empty buffer means no parameters - treat as empty object
+                const jsonToParse = toolInputBuffer.trim() || '{}';
+                parsedInput = JSON.parse(jsonToParse);
               } catch (firstError) {
                 // Try to find where valid JSON ends by looking for the closing brace
                 // then removing any trailing garbage (like ]</invoke>})
