@@ -28,7 +28,10 @@ export const PLAN_STATUS_TRANSFORMER: ElementTransformer = {
       parentNode.insertBefore(planStatusNode);
     }
 
-    planStatusNode.selectNext();
+    // Don't select during import - this causes unwanted scroll-to-view behavior
+    if (!isImport) {
+      planStatusNode.selectNext();
+    }
   },
   type: 'element',
 };

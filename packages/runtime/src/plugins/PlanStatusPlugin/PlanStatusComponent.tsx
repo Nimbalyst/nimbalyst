@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   NodeKey,
   LexicalEditor,
+  SKIP_SCROLL_INTO_VIEW_TAG,
 } from 'lexical';
 import {
   $getFrontmatter,
@@ -176,7 +177,7 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
               planStatus: nextConfig
             };
             $setFrontmatter(nextFrontmatter);
-          });
+          }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
           return updated;
         });
       }
@@ -211,7 +212,7 @@ export default function PlanStatusComponent({ nodeKey, editor }: PlanStatusCompo
       };
 
       $setFrontmatter(nextFrontmatter);
-    });
+    }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
 
     setUpdated(now);
   }, [editor]);

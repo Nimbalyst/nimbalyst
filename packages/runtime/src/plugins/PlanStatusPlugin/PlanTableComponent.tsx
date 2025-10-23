@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { NodeKey, $getNodeByKey } from 'lexical';
+import { NodeKey, $getNodeByKey, SKIP_SCROLL_INTO_VIEW_TAG } from 'lexical';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { PlanTable } from './PlanTable';
@@ -32,7 +32,7 @@ export default function PlanTableComponent({
       if (node) {
         node.setSorting(column, direction);
       }
-    });
+    }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
   };
 
   // Delegate to standalone PlanTable component

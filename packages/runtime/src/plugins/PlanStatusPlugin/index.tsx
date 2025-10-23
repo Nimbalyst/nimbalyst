@@ -9,6 +9,7 @@ import {
   LexicalCommand,
   LexicalEditor,
   $insertNodes,
+  SKIP_SCROLL_INTO_VIEW_TAG,
 } from 'lexical';
 import { useEffect } from 'react';
 import { $createPlanStatusNode } from './PlanStatusDecoratorNode';
