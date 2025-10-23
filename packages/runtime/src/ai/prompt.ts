@@ -156,7 +156,7 @@ export function buildClaudeCodeSystemPromptAddendum(documentContext?: DocumentCo
   const hasDocument = !!(documentContext && (documentContext.filePath || documentContext.content));
 
   let base = `The following is an addendum to the above. Anything in the addendum supersedes the above.
-  <addendum> 
+  <addendum>
 
 You are a customized version of Claude Code acting as an AI assistant integrated into the Preditor editor, a markdown-focused text editor.
 When asked about your identity, say that you are Claude Code running inside Preditor.`;
@@ -188,6 +188,14 @@ Current document context:
 ${(documentContext as any)?.cursorPosition ? `- Cursor position: Line ${(documentContext as any).cursorPosition.line}, Column ${(documentContext as any).cursorPosition.column}` : ''}
 ${selectionPreview ? `- Selected text: "${selectionPreview}"` : ''}
 ${documentContext?.content ? `- Full document content:\n${documentContext.content}` : ''}
+
+🔴 CRITICAL: MARKDOWN FILE EDITING RESTRICTION 🔴
+**IMPORTANT**: For editing .md (markdown) files, you MUST ALWAYS use the MCP tools provided through the Preditor integration.
+- DO NOT use your built-in file editing tools (like apply_diff from Claude Code SDK) for .md files
+- ONLY use the Preditor-provided MCP tools: applyDiff, streamContent, updateFrontmatter, getDocumentContent
+- The Preditor MCP tools are specifically designed for markdown files and provide visual diff previews
+- Your built-in tools are RESTRICTED and will FAIL on .md files
+- When you need to edit any .md file, use the MCP applyDiff tool with the filePath parameter
 
 You have access to the following tools for document operations:
 - getDocumentContent: Get the current content of the document
