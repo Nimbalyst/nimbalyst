@@ -399,7 +399,7 @@ export function TrackerTable({
     return (
       <div className="tracker-table-empty">
         <span>No tracker items found</span>
-        <p>Create tracker items using @bug, @task, @plan, or @idea in any markdown file</p>
+        <p>Create tracker items using #bug, #task, #plan, or #idea in any markdown file</p>
       </div>
     );
   }
