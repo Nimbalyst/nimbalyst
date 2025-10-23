@@ -1,8 +1,8 @@
 /* Workspace Header - Shared across windows */
 .workspace-header-container {
-  padding: 10px 16px 10px 80px;
-  border-bottom: 1px solid var(--border-primary);
-  border-left: 4px solid;
+  /*padding: 10px 16px 10px 80px;*/
+  /*border-bottom: 1px solid var(--border-primary);*/
+  /*border-left: 4px solid;*/
   display: flex;
   align-items: center;
   justify-content: space-between;

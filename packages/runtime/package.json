@@ -51,6 +51,14 @@
     "./ui/AgentTranscript": {
       "import": "./dist/ui/AgentTranscript/index.js",
       "types": "./dist/ui/AgentTranscript/index.d.ts"
+    },
+    "./plugins/TrackerPlugin": {
+      "import": "./dist/plugins/TrackerPlugin/index.js",
+      "types": "./dist/plugins/TrackerPlugin/index.d.ts"
+    },
+    "./plugins/TrackerPlugin/documentHeader": {
+      "import": "./dist/plugins/TrackerPlugin/documentHeader/index.js",
+      "types": "./dist/plugins/TrackerPlugin/documentHeader/index.d.ts"
     }
   },
   "files": [

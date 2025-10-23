@@ -157,7 +157,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
   }
 
   return (
-    <div className="status-bar" >
+    <div className="status-bar">
       <div
         className="status-bar-header"
         onClick={() => setIsCollapsed(true)}

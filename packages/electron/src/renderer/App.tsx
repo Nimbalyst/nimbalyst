@@ -46,6 +46,7 @@ import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
 import { registerDecisionStatusPlugin } from './plugins/registerDecisionStatusPlugin';
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
 import { registerItemTrackerPlugin } from './plugins/registerItemTrackerPlugin';
+import { registerTrackerPlugin } from './plugins/registerTrackerPlugin';
 import SettingsScreen from './components/SettingsScreen/SettingsScreen';
 import OnboardingService from './services/OnboardingService';
 import './WorkspaceWelcome.css';
@@ -78,8 +79,9 @@ const LOG_CONFIG = {
 let pluginsRegistered = false;
 if (!pluginsRegistered) {
   registerDocumentLinkPlugin();
-  registerPlanStatusPlugin();
-  registerDecisionStatusPlugin();
+  registerTrackerPlugin(); // New unified tracker system
+  registerPlanStatusPlugin(); // TODO: Remove after testing
+  registerDecisionStatusPlugin(); // TODO: Remove after testing
   registerItemTrackerPlugin();
   registerAIChatPlugin();
   pluginsRegistered = true;
