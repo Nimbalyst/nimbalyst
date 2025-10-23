@@ -13,6 +13,7 @@ import { useConfirmDialog } from './hooks/useConfirmDialog';
 import { useDocumentContext } from './hooks/useDocumentContext';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from './utils/workspaceFileOperations';
 import { aiToolService } from './services/AIToolService';
+import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx';
 import { WorkspaceWelcome } from './components/WorkspaceWelcome.tsx';
 import { QuickOpen } from './components/QuickOpen';
@@ -655,6 +656,16 @@ export default function App() {
   useEffect(() => {
     aiToolService.setHandleWorkspaceFileSelectFunction(handleWorkspaceFileSelect);
   }, [handleWorkspaceFileSelect]);
+
+  // Register file opener with editorRegistry for background file opening
+  useEffect(() => {
+    const fileOpener = async (filePath: string, content: string, switchToTab: boolean) => {
+      if (tabs && tabs.addTab) {
+        tabs.addTab(filePath, content, switchToTab);
+      }
+    };
+    editorRegistry.setFileOpener(fileOpener);
+  }, [tabs]);
 
   // Open the welcome tab - virtual document
   const openWelcomeTab = useCallback(async () => {

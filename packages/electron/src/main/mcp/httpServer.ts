@@ -206,10 +206,14 @@ async function tryCreateServer(port: number): Promise<any> {
             },
             {
               name: 'applyDiff',
-              description: 'Apply text replacements to the document',
+              description: 'Apply text replacements to a markdown document. IMPORTANT: Only .md files can be modified. If no filePath is provided, applies to the currently active document.',
               inputSchema: {
                 type: 'object',
                 properties: {
+                  filePath: {
+                    type: 'string',
+                    description: 'Optional absolute path to the markdown file (.md) to apply replacements to. If not provided, applies to the currently active document. MUST end in .md extension.'
+                  },
                   replacements: {
                     type: 'array',
                     items: {
@@ -280,9 +284,28 @@ async function tryCreateServer(port: number): Promise<any> {
           case 'applyDiff': {
             const windows = BrowserWindow.getAllWindows();
             if (windows.length > 0) {
-              // Get the current document state for file path
-              const states = Array.from(documentStateBySession.values());
-              const currentDocState = states[states.length - 1];
+              // Use explicit filePath from args, or fall back to current document state
+              let targetFilePath = args?.filePath;
+
+              if (!targetFilePath) {
+                // Get the current document state for file path
+                const states = Array.from(documentStateBySession.values());
+                const currentDocState = states[states.length - 1];
+                targetFilePath = currentDocState?.filePath;
+              }
+
+              // Validate that the file is a markdown file
+              if (targetFilePath && !targetFilePath.endsWith('.md')) {
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: `Error: applyDiff can only modify markdown files (.md). Attempted to modify: ${targetFilePath}`
+                    }
+                  ],
+                  isError: true
+                };
+              }
 
               // Create a unique channel for the result
               const resultChannel = `mcp-result-${Date.now()}-${Math.random()}`;
@@ -309,10 +332,8 @@ async function tryCreateServer(port: number): Promise<any> {
                   const success = result?.success ?? false;
                   const error = result?.error;
 
-                  // Get most recent document state for filePath
-                  const states = Array.from(documentStateBySession.values());
-                  const documentState = states[states.length - 1];
-                  const filePath = documentState?.filePath || 'untitled';
+                  // Use the targetFilePath we determined earlier
+                  const filePath = targetFilePath || 'untitled';
 
                   resolve({
                     content: [
@@ -331,7 +352,7 @@ async function tryCreateServer(port: number): Promise<any> {
                 windows[0].webContents.send('mcp:applyDiff', {
                   replacements: args?.replacements,
                   resultChannel,
-                  targetFilePath: currentDocState?.filePath
+                  targetFilePath: targetFilePath
                 });
               });
             }

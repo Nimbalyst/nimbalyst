@@ -34,7 +34,7 @@ interface UseTabsResult {
   tabs: TabData[];
   activeTab: TabData | null;
   activeTabId: string | null;
-  addTab: (filePath: string, content?: string) => string | null;
+  addTab: (filePath: string, content?: string, switchToTab?: boolean) => string | null;
   removeTab: (tabId: string) => void;
   switchTab: (tabId: string) => void;
   updateTab: (tabId: string, updates: Partial<TabData>) => void;
@@ -87,15 +87,18 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
   const activeTab = activeTabId ? tabs.get(activeTabId) || null : null;
 
   // Add a new tab
-  const addTab = useCallback((filePath: string, content: string = ''): string | null => {
+  const addTab = useCallback((filePath: string, content: string = '', switchToTab: boolean = true): string | null => {
     if (!enabled) return null;
 
     // Check if tab already exists
     const existingTab = Array.from(tabs.values()).find(tab => tab.filePath === filePath);
     if (existingTab) {
-      // Directly set active tab instead of calling switchTab to avoid circular dependency
-      // onTabChange will be called by the useEffect when activeTabId changes
-      setActiveTabId(existingTab.id);
+      // Only switch to tab if requested
+      if (switchToTab) {
+        // Directly set active tab instead of calling switchTab to avoid circular dependency
+        // onTabChange will be called by the useEffect when activeTabId changes
+        setActiveTabId(existingTab.id);
+      }
       return existingTab.id;
     }
 
@@ -135,8 +138,12 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     // console.log('[useTabs] Creating new tab:', { tabId, fileName, filePath });
     setTabs(prev => new Map(prev).set(tabId, newTab));
     setTabOrder(prev => [...prev, tabId]);
-    setActiveTabId(tabId);
-    // console.log('[useTabs] Set activeTabId to:', tabId);
+
+    // Only switch to the new tab if requested
+    if (switchToTab) {
+      setActiveTabId(tabId);
+      // console.log('[useTabs] Set activeTabId to:', tabId);
+    }
     // console.log('[useTabs] About to check file watcher condition');
 
     // Start watching the file for external changes (skip virtual files)

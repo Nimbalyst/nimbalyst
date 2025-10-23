@@ -652,6 +652,30 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             console.error('[MCP] No target file path available for applyDiff');
             return;
           }
+
+          // Validate that the file is a markdown file
+          if (!filePath.endsWith('.md')) {
+            console.error('[MCP] applyDiff can only modify markdown files:', filePath);
+            if (window.electronAPI.sendMcpApplyDiffResult) {
+              window.electronAPI.sendMcpApplyDiffResult(resultChannel, {
+                success: false,
+                error: `applyDiff can only modify markdown files (.md). Attempted to modify: ${filePath}`
+              });
+            }
+            return;
+          }
+
+          // If the file isn't registered (not open), open it in the background
+          if (!editorRegistry.has(filePath)) {
+            console.log('[MCP] File not open, opening in background:', filePath);
+
+            // Read the file content
+            const fileContent = await window.electronAPI.readFileContent(filePath);
+
+            // Open the file using editorRegistry's file opener
+            await editorRegistry.openFileInBackground(filePath, fileContent);
+          }
+
           // Use the editor registry to apply replacements to the target file
           // Pass the resultChannel as a unique ID so the event can be correlated
           const result = await editorRegistry.applyReplacements(filePath, replacements, resultChannel);

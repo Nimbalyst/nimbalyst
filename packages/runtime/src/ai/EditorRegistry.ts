@@ -18,9 +18,12 @@ export interface EditorInstance {
   getContent: () => string;
 }
 
+export type FileOpenerFunction = (filePath: string, content: string, switchToTab: boolean) => Promise<void> | void;
+
 class EditorRegistry {
   private editors: Map<string, EditorInstance> = new Map();
   private activeFilePath: string | null = null;
+  private fileOpener: FileOpenerFunction | null = null;
 
   /**
    * Register an editor instance for a file path
@@ -164,6 +167,28 @@ class EditorRegistry {
     }
 
     return editor.getContent();
+  }
+
+  /**
+   * Set the file opener function to be called when opening files in background
+   */
+  setFileOpener(opener: FileOpenerFunction): void {
+    this.fileOpener = opener;
+  }
+
+  /**
+   * Open a file in the background (without switching focus)
+   */
+  async openFileInBackground(filePath: string, content: string): Promise<void> {
+    if (!this.fileOpener) {
+      console.warn('[EditorRegistry] No file opener registered, cannot open file:', filePath);
+      return;
+    }
+
+    await this.fileOpener(filePath, content, false);
+
+    // Wait a bit for the editor to register
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
 }
 

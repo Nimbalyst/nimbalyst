@@ -264,6 +264,26 @@ class AIApi {
           return;
         }
 
+        // Validate that the file is a markdown file
+        if (!targetFilePath.endsWith('.md')) {
+          window.electronAPI.sendMcpApplyDiffResult(data.resultChannel, {
+            success: false,
+            error: `applyDiff can only modify markdown files (.md). Attempted to modify: ${targetFilePath}`
+          });
+          return;
+        }
+
+        // If the file isn't registered (not open), open it in the background
+        if (!editorRegistry.has(targetFilePath)) {
+          logger.api.info('File not open, opening in background:', targetFilePath);
+
+          // Read the file content
+          const fileContent = await window.electronAPI.readFileContent(targetFilePath);
+
+          // Open the file using editorRegistry's file opener
+          await editorRegistry.openFileInBackground(targetFilePath, fileContent);
+        }
+
         const result = await editorRegistry.applyReplacements(targetFilePath, data.replacements);
         logger.api.info('Renderer applyDiff result', result);
         // Send result back through the result channel

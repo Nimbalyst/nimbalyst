@@ -1,5 +1,6 @@
 import type { StreamingConfig } from '../types';
 import { applyReplacements, endStreamingEdit, startStreamingEdit, streamContent, getDocumentContent, createDocument } from '../editorBridge';
+import { editorRegistry } from '../EditorRegistry';
 import { FILE_TOOLS } from './fileTools';
 import { DOCUMENT_TOOLS } from './documentTools';
 
@@ -21,10 +22,14 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
   {
     name: 'applyDiff',
     description:
-      'Apply text replacements to the current document. REQUIRED for adding rows to tables - replace the entire table.',
+      'Apply text replacements to a markdown document. IMPORTANT: Only .md files can be modified. REQUIRED for adding rows to tables - replace the entire table. If no filePath is provided, applies to the currently active document.',
     parameters: {
       type: 'object',
       properties: {
+        filePath: {
+          type: 'string',
+          description: 'Optional absolute path to the markdown file (.md) to apply replacements to. If not provided, applies to the currently active document. MUST end in .md extension.',
+        },
         replacements: {
           type: 'array',
           items: {
@@ -265,7 +270,7 @@ export class RuntimeToolExecutor {
     }
   }
 
-  private async executeApplyDiff(args: { replacements: Array<{ oldText: string; newText: string }> }): Promise<any> {
+  private async executeApplyDiff(args: { filePath?: string; replacements: Array<{ oldText: string; newText: string }> }): Promise<any> {
     if (!args || !Array.isArray(args.replacements)) {
       throw new Error('applyDiff requires replacements array');
     }
@@ -275,12 +280,28 @@ export class RuntimeToolExecutor {
       throw new Error('applyDiff requires at least one replacement');
     }
 
+    // Validate that the file is a markdown file if filePath is provided
+    if (args.filePath && !args.filePath.endsWith('.md')) {
+      throw new Error(`applyDiff can only modify markdown files (.md). Attempted to modify: ${args.filePath}`);
+    }
+
     try {
       // eslint-disable-next-line no-console
-      console.info('[runtime][tool] applyDiff invoked', { replacements: replacementCount });
+      console.info('[runtime][tool] applyDiff invoked', {
+        replacements: replacementCount,
+        filePath: args.filePath
+      });
     } catch {}
 
-    const result = await applyReplacements(args.replacements);
+    let result;
+
+    // If filePath is provided, use editorRegistry to apply to specific file
+    if (args.filePath) {
+      result = await editorRegistry.applyReplacements(args.filePath, args.replacements);
+    } else {
+      // Fall back to current document via editorBridge
+      result = await applyReplacements(args.replacements);
+    }
 
     try {
       // eslint-disable-next-line no-console
