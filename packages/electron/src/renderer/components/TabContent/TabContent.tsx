@@ -137,18 +137,102 @@ export const TabContent: React.FC<TabContentProps> = ({
   // Track loaded content for tabs
   const [tabContents, setTabContents] = useState<Map<string, string>>(new Map());
   const loadingRef = useRef<Set<string>>(new Set());
+  const hmrRestoredTabsRef = useRef<Set<string>>(new Set()); // Track which tabs were HMR-restored
+
+  // HMR: Save current content before unmount to preserve unsaved changes
+  useEffect(() => {
+    if (import.meta.hot) {
+      import.meta.hot.dispose(() => {
+        // Save all current tab contents to sessionStorage, keyed by filePath
+        const contentsToSave: Record<string, string> = {};
+
+        // Get ACTUAL current content from editors, not just initial content
+        tabs.forEach(tab => {
+          // Try to get current content from editor's getContent function
+          const getContentFn = getContentFunctionsRef.current.get(tab.id);
+          if (getContentFn) {
+            try {
+              const currentContent = getContentFn();
+              contentsToSave[tab.filePath] = currentContent;
+            } catch (error) {
+              logger.ui.error(`[TabContent HMR] Failed to get content for ${tab.fileName}:`, error);
+              // Fall back to cached content if available
+              const cachedContent = tabContents.get(tab.id);
+              if (cachedContent !== undefined) {
+                contentsToSave[tab.filePath] = cachedContent;
+              }
+            }
+          } else {
+            // Editor not ready yet, use cached content if available
+            const cachedContent = tabContents.get(tab.id);
+            if (cachedContent !== undefined) {
+              contentsToSave[tab.filePath] = cachedContent;
+            }
+          }
+        });
+
+        if (Object.keys(contentsToSave).length > 0) {
+          try {
+            sessionStorage.setItem('hmr-tab-contents', JSON.stringify(contentsToSave));
+            logger.ui.info(`[TabContent HMR] Saved ${Object.keys(contentsToSave).length} tab contents`);
+          } catch (error) {
+            logger.ui.error('[TabContent HMR] Failed to save contents:', error);
+          }
+        }
+      });
+    }
+  }, [tabs, tabContents]); // Still depend on tabContents for fallback
+
+  // HMR: Restore content when tabs are available
+  const hasRestoredRef = useRef(false);
+  useEffect(() => {
+    if (import.meta.hot && !hasRestoredRef.current && tabs.length > 0) {
+      try {
+        const saved = sessionStorage.getItem('hmr-tab-contents');
+        if (saved) {
+          const savedContents = JSON.parse(saved) as Record<string, string>;
+
+          // Map restored content from filePath back to current tab IDs
+          const restoredMap = new Map<string, string>();
+          tabs.forEach(tab => {
+            const restoredContent = savedContents[tab.filePath];
+            if (restoredContent !== undefined) {
+              restoredMap.set(tab.id, restoredContent);
+              hmrRestoredTabsRef.current.add(tab.id); // Mark as HMR-restored
+            }
+          });
+
+          if (restoredMap.size > 0) {
+            setTabContents(restoredMap);
+            logger.ui.info(`[TabContent HMR] Restored ${restoredMap.size} tab contents`);
+          }
+
+          // Clear after restoration
+          sessionStorage.removeItem('hmr-tab-contents');
+          hasRestoredRef.current = true;
+        }
+      } catch (error) {
+        logger.ui.error('[TabContent HMR] Failed to restore contents:', error);
+      }
+    }
+  }, [tabs]); // Run when tabs change
 
   // Load content for tabs that don't have it yet
   useEffect(() => {
     const loadMissingContent = async () => {
       for (const tab of tabs) {
-        // Skip if we already have content
+        // Skip if we already have content (including HMR-restored content)
         if (tabContents.has(tab.id)) {
           continue;
         }
 
         // Skip if already loading
         if (loadingRef.current.has(tab.id)) {
+          continue;
+        }
+
+        // Skip if this tab was restored from HMR (redundant check, but explicit)
+        if (hmrRestoredTabsRef.current.has(tab.id)) {
           continue;
         }
 
