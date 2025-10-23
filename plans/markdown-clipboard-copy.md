@@ -2,7 +2,7 @@
 planStatus:
   planId: plan-markdown-clipboard-copy
   title: Markdown Clipboard Copy Feature
-  status: in-development
+  status: completed
   planType: feature
   priority: medium
   owner: assistant
@@ -14,266 +14,149 @@ planStatus:
     - copy-paste
   created: "2025-01-23"
   updated: "2025-01-23T00:00:00.000Z"
-  progress: 60
+  progress: 100
 ---
 # Markdown Clipboard Copy Feature
 <!-- plan-status -->
 
 ## Current Status
 
-Successfully implemented a basic markdown clipboard copy feature that writes markdown to `text/plain` when copying from the Lexical editor.
+Successfully implemented markdown clipboard copy as a **separate keyboard shortcut (Cmd+Shift+C)**, preserving Lexical's default HTML copy behavior for regular Cmd+C.
 
 ### What's Working
 
 1. **MarkdownCopyPlugin** (`packages/rexical/src/plugins/MarkdownCopyPlugin/index.tsx`)
-  - Registers at `COMMAND_PRIORITY_CRITICAL` for Lexical's `COPY_COMMAND`
+  - Registers custom keyboard shortcut: **Cmd+Shift+C** (Mac) or **Ctrl+Shift+C** (Windows/Linux)
+  - Creates `COPY_AS_MARKDOWN_COMMAND` for markdown copying
   - Generates markdown using the enhanced markdown export system
-  - Writes markdown to `text/plain` clipboard format
-  - Prevents default browser copy behavior
-  - Stops other Lexical copy handlers from running
+  - Uses `navigator.clipboard.writeText()` to copy markdown
+  - Works alongside Lexical's default copy (Cmd+C still copies as HTML)
 
 2. **E2E Test** (`packages/electron/e2e/markdown/markdown-copy.spec.ts`)
-  - Verifies markdown is written to system clipboard
+  - Verifies Cmd+Shift+C copies markdown to system clipboard
   - Tests formatted content (headings, bold text)
   - Checks clipboard via `navigator.clipboard.read()`
 
 3. **Behavior**
-  - When copying from editor: `text/plain` contains markdown syntax
-  - Example: copying "Hello **world**" heading produces `# Hello **world**`
-  - Pasting into plain text editors gives markdown source
-  - Works without forking Lexical or custom clipboard APIs
+  - **Cmd+C**: Copies as HTML (Lexical's default) - works with Word, Google Docs, Gmail, etc.
+  - **Cmd+Shift+C**: Copies as markdown - perfect for pasting into markdown editors, Slack, GitHub
+  - Example: Cmd+Shift+C on "Hello **world**" heading produces `# Hello **world**`
+  - Best of both worlds: users choose format based on destination app
 
-### What We've Lost
+### Advantages of This Approach
 
-By writing markdown to `text/plain`, we've lost important clipboard features:
+This keyboard shortcut solution **preserves all existing functionality while adding markdown support**:
 
-1. **No HTML Format**
-  - Previously: `text/html` contained rich HTML for pasting into rich text editors
-  - Now: Only markdown in `text/plain`, no HTML
-  - Impact: Pasting into Word, Google Docs, rich email clients won't preserve formatting
+1. **No Breaking Changes**
+  - Regular Cmd+C unchanged - still copies HTML for rich text editors
+  - Existing copy/paste workflows unaffected
+  - No trade-offs or lost features
 
-2. **No Lexical Format**
-  - Previously: `application/x-lexical-editor` preserved full editor state
-  - Now: This format is not written
-  - Impact: Can't copy/paste between Lexical editors with full fidelity
+2. **User Choice**
+  - Users decide which format they need per copy operation
+  - Markdown copy is opt-in via keyboard shortcut
+  - Intuitive: Shift key modifies behavior (like Shift+Click in many apps)
 
-3. **Limited Cross-App Compatibility**
-  - Apps that expect HTML for rich formatting won't get it
-  - Apps that don't understand markdown will show raw markdown syntax
-  - No fallback to plain text (markdown syntax includes special characters)
+3. **Clean Implementation**
+  - No conflicts with Lexical's copy handler
+  - No need to intercept or modify COPY_COMMAND
+  - Uses standard clipboard API (`navigator.clipboard.writeText`)
+  - Simple keyboard shortcut registration
+
+## Technical Implementation
+
+### Keyboard Shortcut Registration
+
+The plugin registers two command handlers:
+
+1. **KEY\_MODIFIER\_COMMAND** handler
+  - Detects Cmd+Shift+C (or Ctrl+Shift+C)
+  - Dispatches custom `COPY_AS_MARKDOWN_COMMAND`
+  - Prevents default to avoid interference
+
+2. **COPY\_AS\_MARKDOWN\_COMMAND** handler
+  - Reads selection from editor state
+  - Generates markdown via `$convertSelectionToEnhancedMarkdownString()`
+  - Copies to clipboard via `navigator.clipboard.writeText()`
+
+### Why This Works
+
+- **No ClipboardEvent needed**: Uses Clipboard API directly, avoiding browser limitations
+- **No event.preventDefault() issues**: Not intercepting native copy events
+- **No timing issues**: Clipboard write happens async via standard API
+- **No read-only errors**: Not competing with other clipboard handlers
 
 ## Technical Challenges Discovered
 
-### Browser Clipboard API Limitations
+### Browser Clipboard API Limitations (Original Approach)
+
+When we initially tried to intercept Cmd+C and write both HTML and markdown:
 
 1. **Custom MIME Types Not Supported**
-  - Chromium/Electron's `ClipboardEvent.clipboardData.setData()` only supports standard formats
-  - Standard formats: `text/plain`, `text/html`, `text/uri-list`
-  - Custom formats like `text/markdown` are accepted during the event but don't persist to system clipboard
-  - Verified through testing: `text/markdown` was set but not readable by `navigator.clipboard.read()`
+  - `ClipboardEvent.clipboardData.setData('text/markdown', ...)` doesn't persist
+  - Only standard formats work: `text/plain`, `text/html`, `text/uri-list`
+  - Custom MIME types accepted during event but lost afterwards
 
 2. **Read-Only Mode Errors**
-  - Calling `event.preventDefault()` before `editor.getEditorState().read()` causes errors
-  - Error: "Cannot use method in read-only mode" when calling `$getHtmlContent()` or `$getLexicalContent()`
-  - Solution: Generate content first, then prevent default
+  - Calling `event.preventDefault()` before `read()` causes editor state errors
+  - `$getHtmlContent()` and `$getLexicalContent()` fail with "Cannot use method in read-only mode"
 
 3. **Event Timing Issues**
-  - `ClipboardEvent.clipboardData` is only valid during the event handler
-  - Reading after event completes (e.g., in setTimeout) returns empty data
-  - System clipboard must be read via `navigator.clipboard.read()` after copy completes
+  - `ClipboardEvent.clipboardData` only valid during event handler
+  - Can't write clipboard data asynchronously after event
 
-## Future Solutions
+### Solution: Separate Keyboard Shortcut
 
-### Option 1: Multiple MIME Types (Ideal Solution)
-
-**Goal:** Write markdown to `text/plain` AND HTML/Lexical formats
-
-**Approach:**
-```typescript
-// In MarkdownCopyPlugin
-editor.getEditorState().read(() => {
-  const selection = $getSelection();
-
-  // Generate all formats
-  const markdown = $convertSelectionToEnhancedMarkdownString(transformers, selection, true);
-  const htmlContent = $getHtmlContent(editor, selection);
-  const lexicalContent = $getLexicalContent(editor, selection);
-
-  // Set all formats
-  clipboardData.setData('text/plain', markdown);
-  clipboardData.setData('text/html', htmlContent);
-  clipboardData.setData('application/x-lexical-editor', lexicalContent);
-});
-```
-
-**Challenges:**
-- Must solve "read-only mode" error when calling `$getHtmlContent()` and `$getLexicalContent()`
-- Need to understand why these functions fail after `preventDefault()` is called
-- May need to call these functions in a different way or at a different time
-
-**Investigation Needed:**
-1. Check if `$getHtmlContent()` and `$getLexicalContent()` require write access
-2. Try calling them in a separate `read()` context before the copy event
-3. Look at how Lexical's own copy handler calls these functions
-4. Consider if we need to use `editor.update()` instead of `editor.getEditorState().read()`
-
-### Option 2: Electron Native Clipboard (Electron-Only Solution)
-
-**Goal:** Use Electron's native clipboard API which supports any MIME type
-
-**Approach:**
-1. Add IPC method in preload (`window.electronAPI.setClipboard()`)
-2. Add handler in main process using Electron's `clipboard.write()`
-3. Plugin calls IPC after generating markdown
-
-```typescript
-// In main process
-ipcMain.handle('clipboard:write', async (event, formats) => {
-  const { clipboard } = require('electron');
-  clipboard.write({
-    text: formats.markdown,
-    html: formats.html,
-    // Custom formats work in Electron!
-    'text/markdown': formats.markdown
-  });
-});
-
-// In plugin
-editor.getEditorState().read(() => {
-  const markdown = $convertSelectionToEnhancedMarkdownString(...);
-  const html = $getHtmlContent(editor, selection);
-
-  // Let default copy happen first for standard formats
-  // Then enhance with our custom format via Electron
-  setTimeout(() => {
-    window.electronAPI.setClipboard({
-      markdown,
-      html
-    });
-  }, 0);
-});
-```
-
-**Pros:**
-- Can write `text/markdown` as a real MIME type
-- Full control over all clipboard formats
-- Can preserve both markdown and HTML
-
-**Cons:**
-- Only works in Electron, not in browser
-- Adds IPC complexity
-- Race condition between browser copy and Electron clipboard write
-
-### Option 3: Smart Format Detection (Compromise)
-
-**Goal:** Write different formats based on selection content
-
-**Approach:**
-```typescript
-editor.getEditorState().read(() => {
-  const selection = $getSelection();
-
-  // Check if content has rich formatting
-  const hasFormatting = checkForRichFormatting(selection);
-
-  if (hasFormatting) {
-    // Rich content: write HTML to preserve formatting
-    const html = $getHtmlContent(editor, selection);
-    clipboardData.setData('text/plain', selection.getTextContent());
-    clipboardData.setData('text/html', html);
-  } else {
-    // Plain content: write markdown
-    const markdown = $convertSelectionToEnhancedMarkdownString(...);
-    clipboardData.setData('text/plain', markdown);
-  }
-});
-```
-
-**Pros:**
-- Best of both worlds for different content types
-- No complex infrastructure needed
-- Works in browser and Electron
-
-**Cons:**
-- Users don't get consistent behavior
-- Hard to define "rich formatting" vs "simple markdown"
-- Doesn't solve the core problem
-
-### Option 4: User Preference Toggle
-
-**Goal:** Let users choose their preferred copy format
-
-**Approach:**
-1. Add setting: "Copy as Markdown" vs "Copy as Rich Text"
-2. Plugin respects user preference
-
-```typescript
-// In settings
-const copyFormat = settings.get('copyFormat'); // 'markdown' | 'html'
-
-// In plugin
-if (copyFormat === 'markdown') {
-  const markdown = $convertSelectionToEnhancedMarkdownString(...);
-  clipboardData.setData('text/plain', markdown);
-} else {
-  const html = $getHtmlContent(editor, selection);
-  const text = selection.getTextContent();
-  clipboardData.setData('text/plain', text);
-  clipboardData.setData('text/html', html);
-}
-```
-
-**Pros:**
-- User control
-- Simple to implement
-- Clear behavior
-
-**Cons:**
-- Users have to know what they want in advance
-- Can't have both formats simultaneously
-- Extra UI/settings complexity
-
-## Recommended Next Steps
-
-1. **Investigate Read-Only Error** (High Priority)
-  - Debug why `$getHtmlContent()` fails with "Cannot use method in read-only mode"
-  - Test calling it before `preventDefault()`
-  - Look at Lexical source for `$getHtmlContent()` implementation
-  - Goal: Enable writing multiple formats simultaneously
-
-2. **Implement Option 1** (If Investigation Succeeds)
-  - Add back HTML and Lexical formats alongside markdown
-  - Update test to verify all formats are written
-  - Document behavior: markdown in plain, HTML for rich text editors, Lexical for copy/paste within editor
-
-3. **Consider Option 4** (If Option 1 Fails)
-  - Add user preference for copy format
-  - Default to HTML (current Lexical behavior)
-  - Add keyboard shortcut for "Copy as Markdown"
-
-4. **Future Enhancement: Paste Detection**
-  - Detect markdown syntax on paste
-  - Offer to convert markdown to rich text
-  - Preserves round-trip capability
+By using a separate shortcut (Cmd+Shift+C), we avoid all these issues:
+- Don't need ClipboardEvent (use Clipboard API instead)
+- Don't interfere with Lexical's copy handler
+- Don't need to write multiple MIME types simultaneously
+- Clean, simple implementation
 
 ## Files Changed
 
 - `packages/rexical/src/plugins/MarkdownCopyPlugin/index.tsx` - Plugin implementation
 - `packages/rexical/src/Editor.tsx` - Added plugin to editor
-- `packages/rexical/src/index.ts` - Exported plugin
+- `packages/rexical/src/index.ts` - Exported plugin and command
 - `packages/electron/e2e/markdown/markdown-copy.spec.ts` - E2E test
-- `packages/rexical/src/markdown/EnhancedMarkdownExport.ts` - Enhanced markdown export with selection support
+- `packages/rexical/src/markdown/EnhancedMarkdownExport.ts` - Selection export support
 
-## Test Coverage
+## User Documentation
 
-- ✅ E2E test verifies markdown in clipboard
-- ✅ Test checks formatted content (headings, bold)
-- ❌ No test for HTML format (currently not written)
-- ❌ No test for Lexical format (currently not written)
-- ❌ No test for pasting into different apps
+Users should be informed of this feature:
 
-## Related Issues
+**Keyboard Shortcuts**
+- `Cmd+C` (Mac) / `Ctrl+C` (Windows/Linux): Copy as rich text (HTML) - use for pasting into Word, Google Docs, email
+- `Cmd+Shift+C` (Mac) / `Ctrl+Shift+C` (Windows/Linux): Copy as markdown - use for pasting into markdown editors, Slack, GitHub, VS Code
 
-- Custom MIME types in browser clipboard API
-- Lexical clipboard architecture
-- Cross-application paste compatibility
+## Future Enhancements
+
+### Potential Improvements
+
+1. **Context Menu**
+  - Add "Copy as Markdown" to right-click menu
+  - Provides discoverability for users who don't know the shortcut
+
+2. **Paste Detection**
+  - Detect markdown syntax on paste
+  - Offer to convert markdown to rich text
+  - Round-trip capability between editors
+
+3. **Configuration**
+  - Allow users to customize keyboard shortcut
+  - Option to show indicator when markdown copy succeeds
+
+4. **Additional Formats**
+  - Cmd+Shift+Option+C for plain text (no formatting, no markdown)
+  - Cmd+Option+C for HTML source code
+
+## Lessons Learned
+
+1. **Browser APIs are Limited**: Can't reliably write custom MIME types via ClipboardEvent
+2. **Separate Shortcuts Work Better**: Avoids complexity of handling multiple formats in one copy operation
+3. **User Choice is Valuable**: Let users pick format based on their destination app
+4. **Keyboard Shortcuts are Intuitive**: Shift modifier follows established UI patterns
+
+## Status: Complete
+
+This feature is complete and ready for use. No further work needed unless we want to add the context menu or configuration options mentioned in Future Enhancements.

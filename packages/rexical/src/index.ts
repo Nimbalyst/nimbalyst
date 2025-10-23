@@ -110,8 +110,8 @@ export {
 // Export our forked markdown import (prefer $convertFromEnhancedMarkdownString instead)
 export { $convertFromMarkdownStringRexical } from './markdown/LexicalMarkdownImport';
 
-// Markdown copy plugin - adds text/markdown MIME type to clipboard
-export { default as MarkdownCopyPlugin } from './plugins/MarkdownCopyPlugin';
+// Markdown copy plugin - Cmd+Shift+C to copy as markdown
+export { default as MarkdownCopyPlugin, COPY_AS_MARKDOWN_COMMAND } from './plugins/MarkdownCopyPlugin';
 
 // Diff plugin and hook
 export { DiffPlugin, useDiffCommands, APPLY_MARKDOWN_REPLACE_COMMAND } from './plugins/DiffPlugin';

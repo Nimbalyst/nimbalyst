@@ -3,7 +3,7 @@ import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, ACTIVE_EDITOR_SE
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
-test('markdown copy should write markdown to text/plain clipboard', async () => {
+test('Cmd+Shift+C should copy selection as markdown', async () => {
   const workspaceDir = await createTempWorkspace();
   const testFilePath = path.join(workspaceDir, 'test.md');
   await fs.writeFile(testFilePath, '# Initial Content\n\nTest file.', 'utf8');
@@ -34,9 +34,9 @@ test('markdown copy should write markdown to text/plain clipboard', async () => 
     await appWindow.keyboard.press('Meta+B');
     await editor.type('world');
 
-    // Select all and copy
+    // Select all and copy as markdown with Cmd+Shift+C
     await appWindow.keyboard.press('Meta+A');
-    await appWindow.keyboard.press('Meta+C');
+    await appWindow.keyboard.press('Meta+Shift+C');
 
     // Wait for copy to complete
     await appWindow.waitForTimeout(500);
