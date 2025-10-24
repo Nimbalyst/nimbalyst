@@ -382,10 +382,9 @@ planStatus:
 
 After the frontmatter, include:
 
-1. Title followed by plan status comment:
+1. Title:
 \`\`\`markdown
 # Plan Title
-<!-- plan-status -->
 \`\`\`
 
 2. Goals section outlining objectives
@@ -417,7 +416,6 @@ planStatus:
 ---
 
 # User Authentication System
-<!-- plan-status -->
 
 ## Goals
 - Implement secure user authentication
@@ -507,7 +505,6 @@ This project uses Nimbalyst's structured markdown-based planning system for orga
 ### Plan Structure
 Every plan document includes:
 - YAML frontmatter with metadata (planId, status, type, priority, etc.)
-- Plan status comment: \`<!-- plan-status -->\`
 - Goals section
 - Implementation details
 - Acceptance criteria
@@ -566,7 +563,6 @@ planStatus:
 ---
 
 # Example Feature Plan
-<!-- plan-status -->
 
 ## Goals
 
