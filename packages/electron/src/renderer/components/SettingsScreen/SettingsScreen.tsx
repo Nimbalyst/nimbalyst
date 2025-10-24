@@ -60,6 +60,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
     try {
       const planCommandExists = await checkFileExists('.claude/commands/plan.md');
       const trackCommandExists = await checkFileExists('.claude/commands/track.md');
+      const trackBugCommandExists = await checkFileExists('.claude/commands/track-bug.md');
       const claudeMdConfigured = await checkCLAUDEmdConfigured();
       const bugsTrackerExists = await checkFileExists('nimbalyst-local/tracker/bugs.md');
       const tasksTrackerExists = await checkFileExists('nimbalyst-local/tracker/tasks.md');
@@ -83,6 +84,15 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
           completed: trackCommandExists,
           action: async () => {
             await OnboardingService.installTrackCommand(workspacePath);
+          },
+        },
+        {
+          id: 'track-bug-command',
+          title: 'Install /track-bug command',
+          description: 'Quick bug tracking with context awareness',
+          completed: trackBugCommandExists,
+          action: async () => {
+            await OnboardingService.installTrackBugCommand(workspacePath);
           },
         },
         {
@@ -261,7 +271,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </p>
 
           <div className="action-cards">
-            {actions.slice(0, 3).map(action => (
+            {actions.slice(0, 4).map(action => (
               <div key={action.id} className={`action-card ${action.completed ? 'completed' : ''}`}>
                 <div className="action-card-header">
                   <div className="action-checkbox">
@@ -306,7 +316,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </p>
 
           <div className="action-cards">
-            {actions.slice(3).map(action => (
+            {actions.slice(4).map(action => (
               <div key={action.id} className={`action-card ${action.completed ? 'completed' : ''}`}>
                 <div className="action-card-header">
                   <div className="action-checkbox">
