@@ -37,6 +37,7 @@ export function FileContextMenu({
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState(fileName);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [adjustedPosition, setAdjustedPosition] = useState({ x, y });
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -66,6 +67,29 @@ export function FileContextMenu({
       document.removeEventListener('keydown', handleEscape);
     };
   }, [onClose, isRenaming, fileName]);
+
+  // Adjust position after menu is mounted
+  useEffect(() => {
+    if (menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      let newX = x;
+      let newY = y;
+
+      if (x + rect.width > viewportWidth) {
+        newX = x - rect.width;
+      }
+      if (y + rect.height > viewportHeight) {
+        newY = y - rect.height;
+      }
+
+      if (newX !== x || newY !== y) {
+        setAdjustedPosition({ x: newX, y: newY });
+      }
+    }
+  }, [x, y]);
 
   useEffect(() => {
     if (isRenaming && inputRef.current) {
@@ -132,21 +156,6 @@ export function FileContextMenu({
       onClose();
     }
   };
-
-  // Adjust menu position to stay within viewport
-  const adjustedPosition = { x, y };
-  if (menuRef.current) {
-    const rect = menuRef.current.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    
-    if (x + rect.width > viewportWidth) {
-      adjustedPosition.x = x - rect.width;
-    }
-    if (y + rect.height > viewportHeight) {
-      adjustedPosition.y = y - rect.height;
-    }
-  }
 
   if (isRenaming) {
     return (
