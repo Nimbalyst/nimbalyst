@@ -1,6 +1,6 @@
-# Agent Instructions for Preditor Integration
+# Agent Instructions for Nimbalyst Integration
 
-This document provides concise instructions for AI agents working with projects that use Preditor's structured planning and tracking systems.
+This document provides concise instructions for AI agents working with projects that use Nimbalyst's structured planning and tracking systems.
 
 ## Plan Documents
 

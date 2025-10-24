@@ -406,3 +406,5 @@ After the frontmatter, plans should include:
 - **Collaboration**: Plans support both human and agent contributors
 - Never use emojis
 - stop putting code in plan docs!
+- For playwrite - write one playwright test case and get it working before writing more and see @docs/PLAYWRIGHT.md
+- if your editor is scrolling on load when it shouldn't you probably are missing this from an editor.update - { tag: SKIP_SCROLL_INTO_VIEW_TAG }

@@ -1,8 +1,8 @@
-# Preditor
+# Nimbalyst
 
-Preditor is the AI-native markdown workspace for teams that build with agents. It brings document editing, planning, and delivery into a single canvas so you can move from concept to shipped work without switching tools.
+Nimbalyst is the AI-native markdown workspace for teams that build with agents. It brings document editing, planning, and delivery into a single canvas so you can move from concept to shipped work without switching tools.
 
-With agentic workflows and deep ties into your AI coding copilots, Preditor enables assistants that can read your codebase, propose implementation plans, draft documentation, and track features, ideas, and todos—while keeping you in control of every decision.
+With agentic workflows and deep ties into your AI coding copilots, Nimbalyst enables assistants that can read your codebase, propose implementation plans, draft documentation, and track features, ideas, and todos—while keeping you in control of every decision.
 
 ## Key Benefits
 
@@ -10,7 +10,7 @@ With agentic workflows and deep ties into your AI coding copilots, Preditor enab
 - **AI assistive document editing**: Blend natural writing with agent suggestions that understand your context and keep documents aligned with product goals.
 - **Code-aware agent orchestration**: Connect to AI coding agents that can inspect your repository to generate plans, outline changes, and sync action items back to the editor.
 - **Team-aligned workspaces**: Bring engineering, product, and documentation together in one AI-aware canvas that keeps everyone working from the same plan.
-- **Extensible ecosystem**: Compose custom plugins, inputs, and UI to tailor Preditor to engineering, product, or documentation teams.
+- **Extensible ecosystem**: Compose custom plugins, inputs, and UI to tailor Nimbalyst to engineering, product, or documentation teams.
 - **Production-ready foundations**: Built on Lexical for performance, stability, and accessibility so you can focus on your experience—not the editor internals.
 
 ## Packages
@@ -66,7 +66,7 @@ cd packages/electron && npm run build:mac:local
 
 ## Open Data Philosophy
 
-Preditor keeps every insight in plain Markdown so you never lose control of your knowledge. Bugs, ideas, tasks, and implementation plans live alongside your content as transparent documents—no opaque databases or locked-down SaaS exports required. When you're ready to share, commit the files to Git and bring your workflows into the same review and collaboration loops that already power your code.
+Nimbalyst keeps every insight in plain Markdown so you never lose control of your knowledge. Bugs, ideas, tasks, and implementation plans live alongside your content as transparent documents—no opaque databases or locked-down SaaS exports required. When you're ready to share, commit the files to Git and bring your workflows into the same review and collaboration loops that already power your code.
 
 ## Development
 
@@ -80,7 +80,7 @@ npm run build
 ### Electron Development
 
 ```bash
-# Build the preditor library first
+# Build the rexical library first
 npm run build
 
 # Navigate to electron package
@@ -139,9 +139,9 @@ The development setup provides seamless HMR:
 ### Library Installation (for end users)
 
 ```bash
-npm install preditor
+npm install nimbalyst
 # or
-yarn add preditor
+yarn add nimbalyst
 ```
 
 ## Usage
@@ -162,10 +162,10 @@ Visit `http://localhost:4101` to access the editor with:
 
 ### As a Component
 
-Import and use the `Preditor` component in your React application:
+Import and use the `Nimbalyst` component in your React application:
 
 ```tsx
-import { Preditor } from 'preditor';
+import { Nimbalyst } from 'nimbalyst';
 // CSS is automatically included when you import the component!
 
 const config = {
@@ -178,7 +178,7 @@ const config = {
 function MyApp() {
   return (
     <div style={{ height: '400px' }}>
-      <Preditor config={config} />
+      <Nimbalyst config={config} />
     </div>
   );
 }
@@ -350,7 +350,7 @@ packages/
 
 - `npm run test:unit`: Vitest unit suite (JSDOM)
 - `npm run test:e2e`: Playwright e2e projects
-- `npm run test:e2e -- --project=electron`: Electron autosave-on-navigation regression test (requires `npm run build --workspace @preditor/electron`; see `docs/PLAYWRIGHT.md`)
+- `npm run test:e2e -- --project=electron`: Electron autosave-on-navigation regression test (requires `npm run build --workspace @nimbalyst/electron`; see `docs/PLAYWRIGHT.md`)
 
 ### Key Commands
 
@@ -394,7 +394,7 @@ npm install lexical @lexical/react @lexical/rich-text @lexical/plain-text @lexic
 
 **Solution**: The library includes TypeScript definitions. Make sure you're importing from the correct path:
 ```tsx
-import { Preditor, type EditorConfig } from 'preditor';
+import { Nimbalyst, type EditorConfig } from 'nimbalyst';
 ```
 
 ## Browser Support
@@ -424,4 +424,4 @@ This project is based on Meta's Lexical playground and maintains the same MIT li
 - Comprehensive plugin architecture for extensibility
 -
 
-Preditor is a modern, rich‑text Markdown editor that turns documentation and code writing into a fast, delightful experience. Built on Lexical, it delivers blazing performance, elegant formatting, powerful tables, code blocks with syntax highlighting, images, and Excalidraw—plus pro features like search/replace and red/green diff rendering. Its modular plugin architecture and simple React API make integration effortless, while auto‑save, hybrid file system support (Web FS, OPFS, Electron), and cross‑platform apps (Web, Electron, Tauri, Capacitor) keep teams productive everywhere. With AI‑assisted editing, project‑aware file management, and seamless theming, Preditor brings a polished, production‑ready editor to your product in minutes.
+Nimbalyst is a modern, rich‑text Markdown editor that turns documentation and code writing into a fast, delightful experience. Built on Lexical, it delivers blazing performance, elegant formatting, powerful tables, code blocks with syntax highlighting, images, and Excalidraw—plus pro features like search/replace and red/green diff rendering. Its modular plugin architecture and simple React API make integration effortless, while auto‑save, hybrid file system support (Web FS, OPFS, Electron), and cross‑platform apps (Web, Electron, Tauri, Capacitor) keep teams productive everywhere. With AI‑assisted editing, project‑aware file management, and seamless theming, Nimbalyst brings a polished, production‑ready editor to your product in minutes.
