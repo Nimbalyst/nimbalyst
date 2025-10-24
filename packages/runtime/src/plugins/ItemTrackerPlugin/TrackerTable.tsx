@@ -13,6 +13,7 @@ import type {
 } from '../../core/DocumentService';
 import { globalRegistry } from '../TrackerPlugin/models';
 import './TrackerTable.css';
+import {usePostHog} from "posthog-js/react";
 
 export type SortColumn = 'title' | 'type' | 'status' | 'priority' | 'module' | 'lastIndexed';
 export type SortDirection = 'asc' | 'desc';
@@ -142,6 +143,7 @@ export function TrackerTable({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const posthog = usePostHog();
 
   // Use filterType prop directly instead of local state so it updates when prop changes
   const typeFilter = filterType;
@@ -359,7 +361,7 @@ export function TrackerTable({
   const handleColumnClick = (column: SortColumn) => {
     const newDirection = currentSortBy === column && currentSortDirection === 'desc' ? 'asc' : 'desc';
     if (currentSortBy !== column) {
-      window.electronAPI.analytics?.sendEvent('tracker_table_sort', { column });
+      posthog.capture('tracker_table_sort', { column });
     }
     setCurrentSortBy(column);
     setCurrentSortDirection(newDirection);

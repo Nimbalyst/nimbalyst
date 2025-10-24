@@ -158,7 +158,7 @@ interface ElectronAPI {
     getDistinctId: () => Promise<string>;
     optIn: () => Promise<void>;
     optOut: () => Promise<void>;
-    sendEvent: (eventName: string, properties?: Record<string | number, any>) => void;
+    setSessionId: (sessionId: string) => void;
   }
 
   // Document Service

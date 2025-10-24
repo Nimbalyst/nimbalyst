@@ -76,6 +76,7 @@
     "esbuild": "0.25.10",
     "happy-dom": "^20.0.4",
     "openai": "^4.56.0",
+    "posthog-js": "^1.280.1",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^15.5.0",
     "remark-gfm": "^4.0.1",

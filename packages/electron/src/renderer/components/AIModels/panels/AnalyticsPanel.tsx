@@ -1,9 +1,11 @@
 import React, {useEffect} from "react";
+import {usePostHog} from "posthog-js/react";
 
 export function AnalyticsSettingsPanel() {
   const [loading, setLoading] = React.useState<boolean>(true);
   const [analyticsEnabled, setAnalyticsEnabled] = React.useState<boolean>(false);
   const [analyticsId, setAnalyticsId] = React.useState<string>('');
+  const posthog = usePostHog();
 
   useEffect(() => {
     (async () => {
@@ -16,8 +18,10 @@ export function AnalyticsSettingsPanel() {
   const toggleAnalytics = async (enabled: boolean) => {
     if (enabled) {
       await window.electronAPI.analytics?.optIn();
+      posthog?.opt_in_capturing();
     } else {
       await window.electronAPI.analytics?.optOut();
+      posthog?.opt_out_capturing();
     }
     setAnalyticsEnabled(enabled);
   }

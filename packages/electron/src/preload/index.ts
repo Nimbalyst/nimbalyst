@@ -490,7 +490,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getDistinctId: () => ipcRenderer.invoke('analytics:get-distinct-id'),
     optIn: () => ipcRenderer.invoke('analytics:opt-in'),
     optOut: () => ipcRenderer.invoke('analytics:opt-out'),
-    sendEvent: (eventName: string, properties?: Record<string | number, any>) => ipcRenderer.invoke('analytics:send-event', eventName, properties),
+    setSessionId: (sessionId: string) => ipcRenderer.invoke('analytics:set-session-id', sessionId),
   },
 
   // Generic IPC methods for services that need them

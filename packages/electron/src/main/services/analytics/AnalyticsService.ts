@@ -11,7 +11,9 @@ type AnalyticsSettings = {
 }
 
 /**
- * Singleton analytics service
+ * Singleton analytics service for server side (electron) events. If you need to send events from the renderer on
+ * the other side of the IPC boundary, use the usePostHog react hook from posthog-js/react to get the client-side
+ * posthog instance.
  */
 export class AnalyticsService {
 
@@ -29,32 +31,27 @@ export class AnalyticsService {
 
   private settingsStore?: Store<AnalyticsSettings>;
   private postHogClient?: PostHog;
+  private sessionTracker?: PostHog; // only used to track session start times
   private distinctId?: string;
+  private sessionId?: string;
 
   public init(): void {
     this.postHogClient ??= this.initPostHogClient();
-    this.log.info(`Analytics service initialized (analytics ID: ${this.getDistinctId()})`);
-    this.log.info(`Analytics allowed: ${this.allowedToSendAnalytics()}`)
-  }
-
-  public async sendEventImmediate(eventName: string, properties?: Record<string | number, any>): Promise<void> {
-    if (this.allowedToSendAnalytics() && this.postHogClient && eventName) {
-      this.log.info(`event (immediate): ${eventName}`, properties || {});
-      return this.postHogClient.captureImmediate({
-        distinctId: this.getDistinctId(),
-        event: eventName,
-        properties: properties,
-      });
-    }
+    this.sessionTracker ??= this.initPostHogClient(true);
+    this.log.info(`Analytics service initialized (analytics ID: ${this.getDistinctId()}, anonymous tracking consent: ${this.allowedToSendAnalytics()})`);
   }
 
   public sendEvent(eventName: string, properties?: Record<string | number, any>): void {
     if (this.allowedToSendAnalytics() && this.postHogClient && eventName) {
-      this.log.info(`event: ${eventName}`, properties || {});
+      const eventProperties = {
+        '$session_id': this.sessionId,
+        ...properties,
+      }
+      this.log.info(`event: ${eventName}`, eventProperties);
       this.postHogClient.capture({
         distinctId: this.getDistinctId(),
         event: eventName,
-        properties: properties,
+        properties: eventProperties,
       })
     }
   }
@@ -69,8 +66,6 @@ export class AnalyticsService {
     if (!this.getSettingsStore().get("analyticsId")) {
       this.getSettingsStore().set({ analyticsId: `nimbalyst_${ulid()}` });
     }
-
-    this.sendEvent('analytics_opt_in');
   }
 
   public async optOut(): Promise<void> {
@@ -82,6 +77,22 @@ export class AnalyticsService {
     }
 
     this.getSettingsStore().set({ analyticsEnabled: false });
+  }
+
+  /**
+   * Invoked by the render-side tracker when PostHog generates a new session ID so the electron-side tracker can send
+   * the same session ID in its events too. You probably never need to call this yourself.
+   */
+  public setSessionId(sessionId: string): void {
+    this.log.info(`Setting analytics session ID: ${sessionId}, previous session ID: ${this.sessionId}, anonymous tracking consent: ${this.allowedToSendAnalytics()}`);
+    this.sessionId = sessionId;
+    this.sessionTracker?.capture({
+      distinctId: this.getDistinctId(),
+      event: 'nimbalyst_session_start',
+      properties: {
+        '$session_id': this.sessionId,
+      }
+    })
   }
 
   public async destroy(): Promise<void> {
@@ -112,15 +123,15 @@ export class AnalyticsService {
     });
   }
 
-  private initPostHogClient(): PostHog {
+  private initPostHogClient(forceOptIn?: boolean): PostHog {
     return new PostHog(
       POSTHOG_PROJECT_PUBLIC_ID,
       {
         privacyMode: true,
-        defaultOptIn: this.allowedToSendAnalytics(),
+        defaultOptIn: forceOptIn || this.allowedToSendAnalytics(),
         bootstrap: {
           distinctId: this.getDistinctId()
-        }
+        },
       }
     );
   }
