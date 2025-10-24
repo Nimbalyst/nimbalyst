@@ -12,6 +12,7 @@ import { useTheme } from './hooks/useTheme';
 import { useConfirmDialog } from './hooks/useConfirmDialog';
 import { useDocumentContext } from './hooks/useDocumentContext';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from './utils/workspaceFileOperations';
+import { createInitialFileContent } from './utils/fileUtils';
 import { aiToolService } from './services/AIToolService';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx';
@@ -996,8 +997,9 @@ export default function App() {
     const filePath = `${directory}/${fileName}`;
 
     try {
-      // Create the file with empty content
-      await window.electronAPI.createFile(filePath, '');
+      // Create the file with initial title heading
+      const initialContent = createInitialFileContent(fileName);
+      await window.electronAPI.createFile(filePath, initialContent);
 
       // Open the newly created file
       await handleWorkspaceFileSelect(filePath);

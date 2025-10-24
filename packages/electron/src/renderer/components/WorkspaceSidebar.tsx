@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FileTree } from './FileTree';
 import { InputModal } from './InputModal';
 import { PlansPanel } from './PlansPanel/PlansPanel';
+import { createInitialFileContent } from '../utils/fileUtils';
 import '../WorkspaceSidebar.css';
 
 interface FileTreeItem {
@@ -95,7 +96,7 @@ export function WorkspaceSidebar({
     try {
       const basePath = targetFolder || workspacePath;
       const filePath = `${basePath}/${fullFileName}`;
-      const content = `# ${fullFileName.replace('.md', '')}\n\n`;
+      const content = createInitialFileContent(fullFileName);
 
       const result = await (window as any).electronAPI?.createFile?.(filePath, content);
       if (result?.success) {
