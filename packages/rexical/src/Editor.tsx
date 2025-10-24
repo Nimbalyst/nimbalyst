@@ -75,7 +75,7 @@ import CodeHighlightPlugin from './plugins/CodeHighlightPlugin';
 const ExcalidrawPlugin = React.lazy(() => import('./plugins/ExcalidrawPlugin'));
 import { KanbanBoardPlugin } from './plugins/KanbanBoardPlugin';
 import CommentPlugin from "./plugins/CommentPlugin";
-import FloatingDocumentActionsPlugin from './plugins/FloatingDocumentActionsPlugin';
+// import FloatingDocumentActionsPlugin from './plugins/FloatingDocumentActionsPlugin';
 
 
 interface EditorProps {
@@ -266,7 +266,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             ) : ( */}
               <HistoryPlugin externalHistoryState={historyState} />
             {/* )} */}
-            {editable && <FloatingDocumentActionsPlugin config={config} />}
+            {/* {editable && <FloatingDocumentActionsPlugin config={config} />} */}
             <RichTextPlugin
               contentEditable={
                 <div className="editor-scroller" ref={onRef}>
