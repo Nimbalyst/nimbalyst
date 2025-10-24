@@ -136,6 +136,7 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                 } else if (block.type === 'tool_result') {
                   // Tool result - find the corresponding tool_use message and add result
                   const toolUseId = block.tool_use_id || block.id;
+
                   // Search backwards for the tool message with this ID
                   for (let i = uiMessages.length - 1; i >= 0; i--) {
                     const msg = uiMessages[i];

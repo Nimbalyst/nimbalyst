@@ -461,22 +461,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
                     console.log(`[CLAUDE-CODE] Updated tool call ${toolResultId} with result (isError: ${toolCall.isError || false})`);
 
-                    // Log tool call and result to database in format that UI can reconstruct
+                    // Log ONLY the tool_result block to database
+                    // The tool_use block was already logged by raw chunk logging at line 264
                     if (sessionId) {
-                      // Log the tool_use block
-                      this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
-                        type: 'assistant',
-                        message: {
-                          content: [{
-                            type: 'tool_use',
-                            id: toolCall.id,
-                            name: toolCall.name,
-                            input: toolCall.arguments
-                          }]
-                        }
-                      }));
-
-                      // Log the tool_result block
                       this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
                         type: 'assistant',
                         message: {
@@ -783,6 +770,22 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                     }
 
                     console.log(`[CLAUDE-CODE] Updated tool call ${toolResultId} with result from user message (isError: ${toolCall.isError || false})`);
+
+                    // Log ONLY the tool_result block to database
+                    // The tool_use block was already logged when the tool was first called
+                    if (sessionId) {
+                      this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
+                        type: 'assistant',
+                        message: {
+                          content: [{
+                            type: 'tool_result',
+                            tool_use_id: toolCall.id,
+                            content: toolCall.result,
+                            is_error: toolCall.isError || false
+                          }]
+                        }
+                      }));
+                    }
 
                     // Re-emit the tool call with the result
                     yield {
