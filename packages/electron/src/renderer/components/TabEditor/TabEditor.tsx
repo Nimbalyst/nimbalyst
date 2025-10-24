@@ -43,6 +43,10 @@ interface TabEditorProps {
   // External control (exposed via imperative handle)
   onManualSaveReady?: (saveFunction: () => Promise<void>) => void;
   onGetContentReady?: (getContentFunction: () => string) => void;
+
+  // Document action callbacks
+  onViewHistory?: () => void;
+  onRenameDocument?: () => void;
 }
 
 export const TabEditor: React.FC<TabEditorProps> = ({
@@ -60,6 +64,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                                                       onContentChange,
                                                       onManualSaveReady,
                                                       onGetContentReady,
+                                                      onViewHistory,
+                                                      onRenameDocument,
                                                     }) => {
   // Internal state - fully owned by this component
   const [content, setContent] = useState(initialContent);
@@ -650,6 +656,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 editorRef.current = editor;
               },
               onSaveRequest: handleManualSave,
+              onViewHistory,
+              onRenameDocument,
               textReplacements: isActive ? textReplacements : undefined,
               documentHeader: (
                 <DocumentHeaderContainer

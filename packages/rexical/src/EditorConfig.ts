@@ -66,6 +66,8 @@ export interface EditorConfig {
   /** Show the hierarchical node tree view for debugging */
   showTreeView?: boolean;
 
+  /** Show the toolbar at the top of the editor */
+  showToolbar?: boolean;
 
   // Is this only for testing?
   disableBeforeInput?: boolean;
@@ -92,6 +94,10 @@ export interface EditorConfig {
   onSaveRequest?: () => void;
   initialContent?: string; // Pre-loaded content to set in editor
 
+  // Document action callbacks
+  onViewHistory?: () => void;
+  onRenameDocument?: () => void;
+
   // Document header - renders at the top of the editor scroll pane
   documentHeader?: ReactNode;
 }
@@ -105,6 +111,7 @@ export const DEFAULT_EDITOR_CONFIG: EditorConfig = {
   selectionAlwaysOnDisplay: false,
   shouldPreserveNewLinesInMarkdown: true,
   showTreeView: false,
+  showToolbar: false,
   disableBeforeInput: false,
   listStrictIndent: false,
   markdownOnly: true,

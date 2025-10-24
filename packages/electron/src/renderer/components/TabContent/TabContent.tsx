@@ -27,6 +27,10 @@ interface TabContentProps {
   onManualSaveReady?: (saveFunction: () => Promise<void>) => void;
   onGetContentReady?: (tabId: string, getContentFunction: () => string) => void;
   onSaveComplete?: (filePath: string) => void;
+
+  // Document action callbacks
+  onViewHistory?: () => void;
+  onRenameDocument?: () => void;
 }
 
 export const TabContent: React.FC<TabContentProps> = ({
@@ -38,6 +42,8 @@ export const TabContent: React.FC<TabContentProps> = ({
   onManualSaveReady,
   onGetContentReady,
   onSaveComplete,
+  onViewHistory,
+  onRenameDocument,
 }) => {
   // Track manual save functions for each tab
   const saveFunctionsRef = useRef<Map<string, () => Promise<void>>>(new Map());
@@ -334,6 +340,8 @@ export const TabContent: React.FC<TabContentProps> = ({
             onSaveComplete={onSaveComplete}
             onManualSaveReady={(saveFn) => handleManualSaveReady(tab.id, saveFn)}
             onGetContentReady={(getContentFn) => handleGetContentReady(tab.id, getContentFn)}
+            onViewHistory={onViewHistory}
+            onRenameDocument={onRenameDocument}
           />
         );
       })}
