@@ -50,7 +50,7 @@ planStatus:
 
 ### Document Structure
 After the frontmatter, plans should include:
-1. **Title** with `<!-- plan-status -->` comment immediately after
+1. **Title**
 2. **Goals** section outlining objectives
 3. **System Overview** or problem description
 4. **Implementation details** as needed
