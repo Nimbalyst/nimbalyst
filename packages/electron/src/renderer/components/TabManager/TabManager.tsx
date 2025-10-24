@@ -24,6 +24,8 @@ interface TabManagerProps {
   onViewHistory?: (tabId: string) => void;
   hideTabBar?: boolean;
   isActive?: boolean; // Whether this TabManager's keyboard shortcuts should be active
+  onToggleAIChat?: () => void; // Toggle AI Chat panel
+  isAIChatCollapsed?: boolean; // Whether AI Chat is collapsed
   children: React.ReactNode;
 }
 
@@ -38,6 +40,8 @@ export const TabManager: React.FC<TabManagerProps> = ({
   onViewHistory,
   hideTabBar = false,
   isActive = true,
+  onToggleAIChat,
+  isAIChatCollapsed,
   children
 }) => {
   return (
@@ -53,6 +57,8 @@ export const TabManager: React.FC<TabManagerProps> = ({
           onTabReorder={onTabReorder}
           onViewHistory={onViewHistory}
           isActive={isActive}
+          onToggleAIChat={onToggleAIChat}
+          isAIChatCollapsed={isAIChatCollapsed}
         />
       )}
       <div className="tab-content">

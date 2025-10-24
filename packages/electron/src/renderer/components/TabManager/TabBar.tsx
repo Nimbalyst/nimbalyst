@@ -15,6 +15,8 @@ interface TabBarProps {
   onTabRename?: (tabId: string, newName: string) => void;
   allowRename?: boolean;
   isActive?: boolean; // Whether this TabBar should handle keyboard shortcuts
+  onToggleAIChat?: () => void; // Toggle AI Chat panel
+  isAIChatCollapsed?: boolean; // Whether AI Chat is collapsed
 }
 
 export const TabBar: React.FC<TabBarProps> = ({
@@ -30,7 +32,9 @@ export const TabBar: React.FC<TabBarProps> = ({
   hasClosedTabs = false,
   onTabRename,
   allowRename = false,
-  isActive = true
+  isActive = true,
+  onToggleAIChat,
+  isAIChatCollapsed = false
 }) => {
   const [contextMenuTab, setContextMenuTab] = useState<string | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
@@ -530,6 +534,20 @@ export const TabBar: React.FC<TabBarProps> = ({
               </div>
             )}
           </div>
+          {onToggleAIChat && (
+            <button
+              className="ai-chat-toggle-button"
+              onClick={onToggleAIChat}
+              title={isAIChatCollapsed ? "Open AI Assistant (⌘⇧A)" : "Close AI Assistant (⌘⇧A)"}
+              aria-label={isAIChatCollapsed ? "Open AI Assistant" : "Close AI Assistant"}
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10 2L11.5 7.5L17 9L11.5 10.5L10 16L8.5 10.5L3 9L8.5 7.5L10 2Z" fill="currentColor"/>
+                <path d="M4 3L4.5 4.5L6 5L4.5 5.5L4 7L3.5 5.5L2 5L3.5 4.5L4 3Z" fill="currentColor" opacity="0.6"/>
+                <path d="M16 13L16.5 14.5L18 15L16.5 15.5L16 17L15.5 15.5L14 15L15.5 14.5L16 13Z" fill="currentColor" opacity="0.6"/>
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 

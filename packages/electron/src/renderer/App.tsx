@@ -1383,6 +1383,8 @@ export default function App() {
                   }}
                   hideTabBar={false}
                   isActive={activeMode === 'files' || activeMode === 'plan'}
+                  onToggleAIChat={() => setIsAIChatCollapsed(prev => !prev)}
+                  isAIChatCollapsed={isAIChatCollapsed}
                 >
                   {tabs.activeTab ? (
                     <TabContent

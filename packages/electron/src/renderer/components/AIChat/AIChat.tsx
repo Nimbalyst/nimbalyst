@@ -80,22 +80,9 @@ export function AIChat({
     };
   }, [onWidthChange]);
 
-  // Collapsed state - show floating toggle button
+  // Collapsed state - toggle button is now in the title bar, so don't render anything
   if (isCollapsed) {
-    return (
-      <button
-        className="ai-chat-floating-toggle"
-        onClick={onToggleCollapse}
-        title="Open AI Assistant (⌘⇧A)"
-        aria-label="Open AI Assistant"
-      >
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M10 2L11.5 7.5L17 9L11.5 10.5L10 16L8.5 10.5L3 9L8.5 7.5L10 2Z" fill="currentColor"/>
-          <path d="M4 3L4.5 4.5L6 5L4.5 5.5L4 7L3.5 5.5L2 5L3.5 4.5L4 3Z" fill="currentColor" opacity="0.6"/>
-          <path d="M16 13L16.5 14.5L18 15L16.5 15.5L16 17L15.5 15.5L14 15L15.5 14.5L16 13Z" fill="currentColor" opacity="0.6"/>
-        </svg>
-      </button>
-    );
+    return null;
   }
 
   // Expanded state - show full panel with AgenticPanel
@@ -120,29 +107,6 @@ export function AIChat({
           flexDirection: 'column',
           position: 'relative'
         }}>
-          {/* Close button overlay (top-right corner) */}
-          <button
-            onClick={onToggleCollapse}
-            style={{
-              position: 'absolute',
-              top: '0.5rem',
-              right: '0.5rem',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '0.25rem',
-              display: 'flex',
-              alignItems: 'center',
-              color: 'var(--text-secondary)',
-              zIndex: 10
-            }}
-            title="Close AI Assistant (⌘⇧A)"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
-          </button>
-
           <AgenticPanel
             mode="chat"
             workspacePath={workspacePath}

@@ -198,6 +198,32 @@
   position: relative;
 }
 
+/* AI Chat Toggle Button */
+.ai-chat-toggle-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--tab-border, #e5e7eb);
+  background: var(--tab-bg, #ffffff);
+  color: var(--primary-color, #3b82f6);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.ai-chat-toggle-button:hover {
+  background: var(--tab-hover-bg, #f9fafb);
+  color: var(--primary-color, #3b82f6);
+  transform: scale(1.05);
+}
+
+.ai-chat-toggle-button:active {
+  transform: scale(0.95);
+}
+
 /* Tab Menu Button */
 .tab-menu-button {
   display: flex;
