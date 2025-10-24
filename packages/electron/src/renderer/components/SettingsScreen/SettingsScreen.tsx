@@ -61,6 +61,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
       const planCommandExists = await checkFileExists('.claude/commands/plan.md');
       const trackCommandExists = await checkFileExists('.claude/commands/track.md');
       const trackBugCommandExists = await checkFileExists('.claude/commands/track-bug.md');
+      const trackIdeaCommandExists = await checkFileExists('.claude/commands/track-idea.md');
       const claudeMdConfigured = await checkCLAUDEmdConfigured();
       const bugsTrackerExists = await checkFileExists('nimbalyst-local/tracker/bugs.md');
       const tasksTrackerExists = await checkFileExists('nimbalyst-local/tracker/tasks.md');
@@ -93,6 +94,15 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
           completed: trackBugCommandExists,
           action: async () => {
             await OnboardingService.installTrackBugCommand(workspacePath);
+          },
+        },
+        {
+          id: 'track-idea-command',
+          title: 'Install /track-idea command',
+          description: 'Quick idea tracking with context awareness',
+          completed: trackIdeaCommandExists,
+          action: async () => {
+            await OnboardingService.installTrackIdeaCommand(workspacePath);
           },
         },
         {
@@ -271,7 +281,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </p>
 
           <div className="action-cards">
-            {actions.slice(0, 4).map(action => (
+            {actions.slice(0, 5).map(action => (
               <div key={action.id} className={`action-card ${action.completed ? 'completed' : ''}`}>
                 <div className="action-card-header">
                   <div className="action-checkbox">
@@ -316,7 +326,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </p>
 
           <div className="action-cards">
-            {actions.slice(4).map(action => (
+            {actions.slice(5).map(action => (
               <div key={action.id} className={`action-card ${action.completed ? 'completed' : ''}`}>
                 <div className="action-card-header">
                   <div className="action-checkbox">
