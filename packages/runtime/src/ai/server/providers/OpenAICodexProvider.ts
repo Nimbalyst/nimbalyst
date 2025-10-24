@@ -140,10 +140,10 @@ export class OpenAICodexProvider extends BaseAIProvider {
       console.log('[OpenAICodexProvider] MCP server path resolved to:', mcpServerPath);
 
       // Configure Codex to use our native stdio MCP server
-      configArgs.push('-c', `mcp_servers.preditor.command="node"`);
-      configArgs.push('-c', `mcp_servers.preditor.args=["${mcpServerPath}"]`);
-      configArgs.push('-c', 'mcp_servers.preditor.name="Preditor Editor"');
-      configArgs.push('-c', 'mcp_servers.preditor.description="Preditor MCP tools for file operations"');
+      configArgs.push('-c', `mcp_servers.nimbalyst.command="node"`);
+      configArgs.push('-c', `mcp_servers.nimbalyst.args=["${mcpServerPath}"]`);
+      configArgs.push('-c', 'mcp_servers.nimbalyst.name="Nimbalyst Editor"');
+      configArgs.push('-c', 'mcp_servers.nimbalyst.description="Nimbalyst MCP tools for file operations"');
 
       // Enable debug logging if needed
       if (process.env.DEBUG_MCP || options?.mcpServerUrl) {

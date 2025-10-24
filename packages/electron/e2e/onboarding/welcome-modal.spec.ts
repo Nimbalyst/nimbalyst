@@ -127,7 +127,7 @@ test.describe('Welcome Modal', () => {
     expect(fs.existsSync(path.join(workspacePath, 'CLAUDE.md'))).toBe(true);
 
     // Verify config was saved
-    const configPath = path.join(workspacePath, '.preditor', 'config.json');
+    const configPath = path.join(workspacePath, '.nimbalyst', 'config.json');
     expect(fs.existsSync(configPath)).toBe(true);
 
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
@@ -182,7 +182,7 @@ test.describe('Welcome Modal', () => {
     await expect(modal).not.toBeVisible();
 
     // Config should be saved with onboardingCompleted: true
-    const configPath = path.join(workspacePath, '.preditor', 'config.json');
+    const configPath = path.join(workspacePath, '.nimbalyst', 'config.json');
     expect(fs.existsSync(configPath)).toBe(true);
 
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
@@ -210,7 +210,7 @@ test.describe('Welcome Modal', () => {
     await expect(modal).not.toBeVisible();
 
     // Config should be saved
-    const configPath = path.join(workspacePath, '.preditor', 'config.json');
+    const configPath = path.join(workspacePath, '.nimbalyst', 'config.json');
     expect(fs.existsSync(configPath)).toBe(true);
 
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));

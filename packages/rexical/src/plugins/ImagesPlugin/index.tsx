@@ -119,7 +119,7 @@ export function InsertImageUploadedDialogBody({
 
         // Get current document path to calculate relative path
         // For now, use a placeholder - this will be replaced with actual document path
-        const relativePath = `.preditor/assets/${hash}.${extension}`;
+        const relativePath = `.nimbalyst/assets/${hash}.${extension}`;
         setSrc(relativePath);
       } catch (error) {
         console.error('Failed to store asset:', error);

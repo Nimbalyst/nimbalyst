@@ -38,7 +38,7 @@ async function processImageFile(file: File): Promise<string> {
 
       // Return relative path to asset
       // TODO: Calculate proper relative path based on current document location
-      return `.preditor/assets/${hash}.${extension}`;
+      return `.nimbalyst/assets/${hash}.${extension}`;
     } catch (error) {
       console.error('Failed to store asset, falling back to base64:', error);
       // Fall through to base64 fallback

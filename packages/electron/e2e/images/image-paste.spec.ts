@@ -58,8 +58,8 @@ test.describe('Image Paste', () => {
       // Wait a bit for async processing
       await window.waitForTimeout(1000);
 
-      // Check that .preditor/assets directory was created
-      const assetsDir = path.join(workspace, '.preditor', 'assets');
+      // Check that .nimbalyst/assets directory was created
+      const assetsDir = path.join(workspace, '.nimbalyst', 'assets');
       const assetsDirExists = fs.existsSync(assetsDir);
       expect(assetsDirExists).toBe(true);
 
@@ -98,7 +98,7 @@ test.describe('Image Paste', () => {
 
       expect(hasImage).not.toBeNull();
       expect(hasImage?.count).toBeGreaterThan(0);
-      expect(hasImage?.src).toContain('.preditor/assets/');
+      expect(hasImage?.src).toContain('.nimbalyst/assets/');
       expect(hasImage?.src).not.toContain('data:image');
 
     } finally {
@@ -156,7 +156,7 @@ test.describe('Image Paste', () => {
       }
 
       // Check that only ONE asset file was created (deduplication)
-      const assetsDir = path.join(workspace, '.preditor', 'assets');
+      const assetsDir = path.join(workspace, '.nimbalyst', 'assets');
       const files = fs.readdirSync(assetsDir);
       const svgFiles = files.filter(f => f.endsWith('.svg'));
 

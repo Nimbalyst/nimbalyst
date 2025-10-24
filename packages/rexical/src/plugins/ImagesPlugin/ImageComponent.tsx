@@ -246,11 +246,11 @@ export default function ImageComponent({
     setIsLoadError(false);
   }, [src]);
 
-  // Resolve .preditor/assets/ paths to absolute file:// URLs
+  // Resolve .nimbalyst/assets/ paths to absolute file:// URLs
   useEffect(() => {
-    if (src.includes('.preditor/assets/') && typeof window !== 'undefined' && (window as any).electronAPI) {
+    if (src.includes('.nimbalyst/assets/') && typeof window !== 'undefined' && (window as any).electronAPI) {
       // Extract hash from path
-      const match = src.match(/\.preditor\/assets\/([a-f0-9]+)\./);
+      const match = src.match(/\.nimbalyst\/assets\/([a-f0-9]+)\./);
       if (match) {
         const hash = match[1];
         (window as any).electronAPI.invoke('document-service:get-asset-path', hash)
