@@ -10,7 +10,7 @@ import { createWorkspaceManagerWindow } from '../window/WorkspaceManagerWindow.t
 import { createAIModelsWindow } from '../window/AIModelsWindow';
 import { createAgenticCodingWindow } from '../window/AgenticCodingWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
-import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceWindowState } from '../utils/store';
+import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceState } from '../utils/store';
 import { updateWindowTitleBars, updateNativeTheme } from '../theme/ThemeManager';
 import { getFileWatcherStatus, refreshWorkspaceFileTree, getGlobalFileWatcherStats } from '../file/FileWatcherDebug';
 import { getFolderContents } from '../utils/FileTree';
@@ -366,6 +366,7 @@ export async function createApplicationMenu() {
             label: 'File',
             submenu: [
                 {
+                    id: 'file-new', // Add ID for dynamic updates
                     label: 'New',
                     accelerator: KeyboardShortcuts.file.new,
                     click: async () => {
@@ -383,9 +384,27 @@ export async function createApplicationMenu() {
                                 console.log('[File->New] Window state:', state);
 
                                 if (state?.mode === 'workspace') {
-                                    // In workspace mode, send event to create new file in workspace
-                                    console.log('[File->New] Workspace mode detected, sending file-new-in-workspace event');
-                                    focusedWindow.webContents.send('file-new-in-workspace');
+                                    // In workspace mode, check activeMode to determine action
+                                    const workspacePath = state.workspacePath;
+                                    if (workspacePath) {
+                                        const workspaceState = getWorkspaceState(workspacePath);
+                                        const activeMode = workspaceState?.activeMode;
+                                        console.log('[File->New] Active mode:', activeMode, 'workspace path:', workspacePath);
+
+                                        if (activeMode === 'agent') {
+                                            // In agent mode, create new AI session
+                                            console.log('[File->New] Agent mode detected, sending agent-new-session event');
+                                            focusedWindow.webContents.send('agent-new-session');
+                                        } else {
+                                            // In files/plan mode, create new file
+                                            console.log('[File->New] Files/Plan mode detected, sending file-new-in-workspace event');
+                                            focusedWindow.webContents.send('file-new-in-workspace');
+                                        }
+                                    } else {
+                                        // No workspace path, default to new file
+                                        console.log('[File->New] No workspace path, sending file-new-in-workspace event');
+                                        focusedWindow.webContents.send('file-new-in-workspace');
+                                    }
                                 } else {
                                     // In document mode, create new window
                                     console.log('[File->New] Document mode or no mode, creating new window');

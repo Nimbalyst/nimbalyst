@@ -9,6 +9,7 @@ interface ElectronAPI {
   // File menu callbacks
   onFileNew: (callback: () => void) => () => void;
   onFileNewInWorkspace?: (callback: () => void) => () => void;
+  onAgentNewSession?: (callback: () => void) => () => void;
   onFileOpen: (callback: () => void) => () => void;
   onFileSave: (callback: () => void) => () => void;
   onFileSaveAs: (callback: () => void) => () => void;

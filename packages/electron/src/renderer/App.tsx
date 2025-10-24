@@ -31,7 +31,7 @@ import { SessionManager } from './components/SessionManager/SessionManager';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { NewFileDialog } from './components/NewFileDialog';
 import { AgenticCodingWindow } from './components/AgenticCodingWindow';
-import { AgenticPanel } from './components/UnifiedAI';
+import { AgenticPanel, type AgenticPanelRef } from './components/UnifiedAI';
 import { TabManager } from './components/TabManager/TabManager';
 import { TabContent } from './components/TabContent/TabContent';
 import { NavigationGutter, type NavigationMode, type SidebarView } from './components/NavigationGutter';
@@ -228,10 +228,15 @@ export default function App() {
   useEffect(() => {
     if (!workspacePath || !window.electronAPI?.invoke) return;
 
+    console.log('[App Layout] Loading workspace state for:', workspacePath);
     window.electronAPI.invoke('workspace:get-state', workspacePath)
       .then(state => {
+        console.log('[App Layout] Loaded workspace state:', JSON.stringify(state, null, 2));
         if (state?.activeMode) {
+          console.log('[App Layout] Restoring activeMode:', state.activeMode);
           setActiveMode(state.activeMode as ContentMode);
+        } else {
+          console.log('[App Layout] No activeMode in state (keys:', Object.keys(state || {}), ')');
         }
       })
       .catch(error => {
@@ -241,11 +246,16 @@ export default function App() {
 
   // Save active mode when it changes
   useEffect(() => {
-    // console.log('[App Layout] Active mode changed to:', activeMode, 'bottomPanel:', bottomPanel);
+    console.log('[App Layout] Active mode changed to:', activeMode, 'workspacePath:', workspacePath);
 
     if (!workspacePath || !window.electronAPI?.invoke) return;
 
-    window.electronAPI.invoke('workspace:update-state', workspacePath, { activeMode })
+    const updates = { activeMode };
+    console.log('[App Layout] Saving updates:', JSON.stringify(updates));
+    window.electronAPI.invoke('workspace:update-state', workspacePath, updates)
+      .then((result) => {
+        console.log('[App Layout] Successfully saved active mode:', activeMode, 'result:', result);
+      })
       .catch(error => {
         console.error('[ContentMode] Failed to save active mode:', error);
       });
@@ -456,6 +466,7 @@ export default function App() {
   const editorRef = useRef<any>(null);
   const searchCommandRef = useRef<LexicalCommand<undefined> | null>(null);
   const isInitializedRef = useRef<boolean>(false);
+  const agenticPanelRef = useRef<AgenticPanelRef>(null);
 
   // NOTE: autoSaveIntervalRef and autoSaveCancellationRef removed - EditorContainer handles autosave now
   const activeSavesRef = useRef<Set<string>>(new Set());
@@ -754,6 +765,31 @@ export default function App() {
       // window.electronAPI.off?.('toggle-agent-palette', handleToggleAgentPalette);
     };
   }, []); // Remove workspaceMode dependency - listener should always be active
+
+  // Listen for agent-new-session IPC event (Cmd+N in agent mode)
+  useEffect(() => {
+    console.log('[App] Setting up IPC listener for agent-new-session');
+    if (!window.electronAPI?.onAgentNewSession) {
+      console.log('[App] electronAPI.onAgentNewSession not available');
+      return;
+    }
+
+    const handleAgentNewSession = () => {
+      console.log('[App] Received agent-new-session event');
+      if (agenticPanelRef.current) {
+        agenticPanelRef.current.createNewSession();
+      } else {
+        console.warn('[App] agenticPanelRef not available');
+      }
+    };
+
+    const cleanup = window.electronAPI.onAgentNewSession(handleAgentNewSession);
+
+    return () => {
+      console.log('[App] Cleaning up agent-new-session listener');
+      cleanup();
+    };
+  }, []);
 
   // Listen for Discord invitation IPC event
   useEffect(() => {
@@ -1452,6 +1488,7 @@ export default function App() {
             >
               {workspacePath ? (
                 <AgenticPanel
+                  ref={agenticPanelRef}
                   mode="agent"
                   workspacePath={workspacePath}
                   documentContext={documentContext}

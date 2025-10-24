@@ -46,6 +46,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('file-new-in-workspace', callback);
     return () => ipcRenderer.removeListener('file-new-in-workspace', callback);
   },
+  onAgentNewSession: (callback: () => void) => {
+    ipcRenderer.on('agent-new-session', callback);
+    return () => ipcRenderer.removeListener('agent-new-session', callback);
+  },
   onFileOpen: (callback: () => void) => {
     ipcRenderer.on('file-open', callback);
     return () => ipcRenderer.removeListener('file-open', callback);

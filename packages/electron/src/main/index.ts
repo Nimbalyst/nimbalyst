@@ -304,7 +304,8 @@ app.whenReady().then(async () => {
     }
 
     // Check if we should show Discord invitation after windows are fully loaded
-    if (shouldShowDiscordInvitation()) {
+    // Skip in Playwright test environment
+    if (shouldShowDiscordInvitation() && !process.env.PLAYWRIGHT) {
         // Set up a listener to show invitation when a workspace window finishes loading
         const showInvitationOnWindowReady = () => {
             const allWindows = BrowserWindow.getAllWindows();

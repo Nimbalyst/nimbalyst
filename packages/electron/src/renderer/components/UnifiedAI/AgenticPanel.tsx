@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AISessionView } from './AISessionView';
 import { SessionDropdown } from '../AIChat/SessionDropdown';
@@ -9,6 +9,10 @@ import type { Tab } from '../TabManager/TabManager';
 import { useFileMention } from '../../hooks/useFileMention';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
+
+export interface AgenticPanelRef {
+  createNewSession: (planPath?: string) => Promise<void>;
+}
 
 export interface AgenticPanelProps {
   // Mode configuration
@@ -59,7 +63,7 @@ type SessionListItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' |
  * - Handles streaming state across all sessions
  * - Persists state to workspace
  */
-export function AgenticPanel({
+export const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function AgenticPanel({
   mode,
   workspacePath,
   documentContext,
@@ -68,7 +72,7 @@ export function AgenticPanel({
   isActive = true,
   onSessionChange,
   onContentModeChange
-}: AgenticPanelProps) {
+}: AgenticPanelProps, ref) {
   // Session state
   const [sessionTabs, setSessionTabs] = useState<SessionTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -311,6 +315,11 @@ export function AgenticPanel({
 
     return sessionData;
   }, [sessionTabs, workspacePath, mode, loadSessions, onSessionChange]);
+
+  // Expose createNewSession to parent via ref
+  useImperativeHandle(ref, () => ({
+    createNewSession
+  }), [createNewSession]);
 
   // Load or create initial session
   useEffect(() => {
@@ -1135,4 +1144,4 @@ export function AgenticPanel({
       />
     </div>
   );
-}
+});
