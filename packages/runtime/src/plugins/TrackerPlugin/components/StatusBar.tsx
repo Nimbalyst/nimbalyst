@@ -144,13 +144,13 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
         <button
           className="status-bar-toggle"
           onClick={() => setIsCollapsed(false)}
-          title="Expand status bar"
+          aria-label="Expand status bar"
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <MaterialSymbol icon={model.icon} size={18} />
             <span>{model.displayName}</span>
           </div>
-          <MaterialSymbol icon="expand_more" size={18} />
+          {/*<MaterialSymbol icon="expand_more" size={18} />*/}
         </button>
       </div>
     );
@@ -162,14 +162,12 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
         className="status-bar-header"
         onClick={() => setIsCollapsed(true)}
         style={{ cursor: 'pointer' }}
-        title="Click to collapse"
       >
         <div className="status-bar-title">
           <MaterialSymbol icon={model.icon} size={20} />
           <span>{model.displayName}</span>
         </div>
         <div className="status-bar-actions">
-          <MaterialSymbol icon="expand_less" size={18} />
           {onClose && (
             <button
               className="status-bar-close-btn"
@@ -177,7 +175,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
                 e.stopPropagation();
                 onClose();
               }}
-              title="Remove tracker"
+              aria-label="Remove tracker"
             >
               <MaterialSymbol icon="close" size={18} />
             </button>
