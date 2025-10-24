@@ -102,19 +102,12 @@ export class OnboardingService {
    * Save onboarding configuration to project
    */
   async saveConfig(workspacePath: string, config: OnboardingConfig): Promise<void> {
-    const nimbalystDir = joinPath(workspacePath, '.nimbalyst');
-    const configPath = joinPath(nimbalystDir, 'config.json');
+    const configPath = joinPath(workspacePath, '.nimbalyst', 'config.json');
+    const relativePath = '.nimbalyst/config.json'; // Relative to workspace
 
     try {
-      // Ensure .nimbalyst directory exists
-      try {
-        await window.electronAPI.createFolder(nimbalystDir);
-      } catch (err) {
-        // Directory might already exist, that's okay
-      }
-
-      // Write config
-      await window.electronAPI.createFile(configPath, JSON.stringify(config, null, 2));
+      // Write config (create-document expects relative path)
+      await window.electronAPI.invoke('create-document', relativePath, JSON.stringify(config, null, 2));
 
       this.currentConfig = config;
     } catch (error) {
@@ -136,25 +129,10 @@ export class OnboardingService {
    * Install /plan command file
    */
   async installPlanCommand(workspacePath: string, plansLocation?: string): Promise<void> {
-    const claudeDir = joinPath(workspacePath, '.claude');
-    const commandsDir = joinPath(claudeDir, 'commands');
-    const planCommandPath = joinPath(commandsDir, 'plan.md');
+    const planCommandPath = joinPath(workspacePath, '.claude', 'commands', 'plan.md');
+    const relativePath = '.claude/commands/plan.md'; // Relative to workspace
 
     try {
-      // Ensure .claude directory exists
-      try {
-        await window.electronAPI.createFolder(claudeDir);
-      } catch (err) {
-        // Directory might already exist
-      }
-
-      // Ensure .claude/commands directory exists
-      try {
-        await window.electronAPI.createFolder(commandsDir);
-      } catch (err) {
-        // Directory might already exist
-      }
-
       // Check if plan.md already exists
       try {
         const existing = await window.electronAPI.readFileContent(planCommandPath);
@@ -166,9 +144,9 @@ export class OnboardingService {
         // File doesn't exist, continue with installation
       }
 
-      // Write plan command template
+      // Write plan command template (create-document expects relative path)
       const template = this.getPlanCommandTemplate(plansLocation);
-      await window.electronAPI.createFile(planCommandPath, template);
+      await window.electronAPI.invoke('create-document', relativePath, template);
 
       // Update config
       if (this.currentConfig) {
@@ -185,25 +163,10 @@ export class OnboardingService {
    * Install /track command file
    */
   async installTrackCommand(workspacePath: string): Promise<void> {
-    const claudeDir = joinPath(workspacePath, '.claude');
-    const commandsDir = joinPath(claudeDir, 'commands');
-    const trackCommandPath = joinPath(commandsDir, 'track.md');
+    const trackCommandPath = joinPath(workspacePath, '.claude', 'commands', 'track.md');
+    const relativePath = '.claude/commands/track.md'; // Relative to workspace
 
     try {
-      // Ensure .claude directory exists
-      try {
-        await window.electronAPI.createFolder(claudeDir);
-      } catch (err) {
-        // Directory might already exist
-      }
-
-      // Ensure .claude/commands directory exists
-      try {
-        await window.electronAPI.createFolder(commandsDir);
-      } catch (err) {
-        // Directory might already exist
-      }
-
       // Check if track.md already exists
       try {
         const existing = await window.electronAPI.readFileContent(trackCommandPath);
@@ -215,9 +178,9 @@ export class OnboardingService {
         // File doesn't exist, continue with installation
       }
 
-      // Write track command template
+      // Write track command template (create-document expects relative path)
       const template = this.getTrackCommandTemplate();
-      await window.electronAPI.createFile(trackCommandPath, template);
+      await window.electronAPI.invoke('create-document', relativePath, template);
 
       // Update config
       if (this.currentConfig) {
@@ -235,6 +198,7 @@ export class OnboardingService {
    */
   async configureCLAUDEmd(workspacePath: string): Promise<void> {
     const claudeMdPath = joinPath(workspacePath, 'CLAUDE.md');
+    const relativePath = 'CLAUDE.md'; // Relative to workspace
 
     try {
       const preditorSection = this.getCLAUDEmdSection();
@@ -271,8 +235,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ${preditorSection}`;
       }
 
-      // Write the file
-      await window.electronAPI.createFile(claudeMdPath, finalContent);
+      // Write the file (create-document expects relative path)
+      await window.electronAPI.invoke('create-document', relativePath, finalContent);
 
       // Update config
       if (this.currentConfig) {
@@ -291,21 +255,11 @@ ${preditorSection}`;
   async ensurePlansDirectory(workspacePath: string, plansLocation?: string): Promise<void> {
     const config = this.currentConfig || (await this.loadConfig(workspacePath));
     const location = plansLocation || config.plansLocation;
-    const plansDir = joinPath(workspacePath, location);
 
+    // Create a dummy file to ensure directory exists, then delete it
+    const dummyPath = joinPath(workspacePath, location, '.gitkeep');
     try {
-      // Create all parent directories if needed
-      const pathParts = location.split('/');
-      let currentPath = workspacePath;
-
-      for (const part of pathParts) {
-        currentPath = joinPath(currentPath, part);
-        try {
-          await window.electronAPI.createFolder(currentPath);
-        } catch (error) {
-          // Directory might already exist, that's okay
-        }
-      }
+      await window.electronAPI.invoke('create-document', dummyPath, '');
     } catch (error) {
       console.error('Failed to create plans directory:', error);
     }
@@ -322,7 +276,7 @@ ${preditorSection}`;
     const template = this.getExamplePlanTemplate();
 
     try {
-      await window.electronAPI.createFile(planPath, template);
+      await window.electronAPI.invoke('create-document', planPath, template);
       return planPath;
     } catch (error) {
       console.error('Failed to create example plan:', error);
@@ -360,7 +314,7 @@ ${preditorSection}`;
 
       // Append the ignore entry
       const finalContent = content + ignoreEntry;
-      await window.electronAPI.createFile(gitignorePath, finalContent);
+      await window.electronAPI.invoke('create-document', gitignorePath, finalContent);
     } catch (error) {
       console.error('Failed to configure .gitignore:', error);
       // Don't throw - this is not critical
@@ -659,6 +613,93 @@ When creating your own plans:
     const config = this.currentConfig || (await this.loadConfig(workspacePath));
     config.features.analytics = true;
     await this.saveConfig(workspacePath, config);
+  }
+
+  /**
+   * Create a tracker document (bugs, tasks, ideas, or decisions)
+   */
+  async createTrackerDocument(
+    workspacePath: string,
+    type: 'bugs' | 'tasks' | 'ideas' | 'decisions'
+  ): Promise<void> {
+    const trackerPath = joinPath(workspacePath, 'nimbalyst-local', 'tracker', `${type}.md`);
+    const relativePath = `nimbalyst-local/tracker/${type}.md`; // Relative to workspace
+
+    try {
+      // Check if tracker already exists
+      try {
+        const existing = await window.electronAPI.readFileContent(trackerPath);
+        if (existing && existing.content) {
+          console.log(`${type}.md already exists, skipping creation`);
+          return;
+        }
+      } catch (err) {
+        // File doesn't exist, continue with creation
+      }
+
+      // Create tracker document (create-document expects relative path)
+      const template = this.getTrackerTemplate(type);
+      await window.electronAPI.invoke('create-document', relativePath, template);
+    } catch (error) {
+      console.error(`Failed to create ${type} tracker:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get tracker document template
+   */
+  private getTrackerTemplate(type: 'bugs' | 'tasks' | 'ideas' | 'decisions'): string {
+    const typeConfig = {
+      bugs: {
+        title: 'Bugs & Issues',
+        description: 'Track bugs, defects, and issues that need fixing',
+        icon: 'bug_report',
+        itemPrefix: 'bug',
+      },
+      tasks: {
+        title: 'Tasks & Todos',
+        description: 'Track work items, todos, and action items',
+        icon: 'task',
+        itemPrefix: 'task',
+      },
+      ideas: {
+        title: 'Ideas & Improvements',
+        description: 'Track feature ideas, improvements, and enhancements',
+        icon: 'lightbulb',
+        itemPrefix: 'idea',
+      },
+      decisions: {
+        title: 'Decisions',
+        description: 'Track architecture and design decisions',
+        icon: 'account_tree',
+        itemPrefix: 'decision',
+      },
+    };
+
+    const config = typeConfig[type];
+    const today = new Date().toISOString().split('T')[0];
+
+    return `# ${config.title}
+
+${config.description}
+
+## Active Items
+
+<!-- Use /track command or # syntax to create new items -->
+
+## Completed Items
+
+<!-- Completed items will appear here -->
+
+---
+
+**About this tracker:**
+- Use \`/track [description]\` in Claude Code to create new ${type}
+- Or use \`#${type}\` syntax in any document
+- Items use YAML frontmatter for metadata
+- Status values: open, in-progress, blocked, resolved, closed, wont-fix
+`;
   }
 
   /**

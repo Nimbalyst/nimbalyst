@@ -9,123 +9,210 @@ export interface SettingsScreenProps {
   isFirstTime?: boolean;
 }
 
+interface SetupAction {
+  id: string;
+  title: string;
+  description: string;
+  completed: boolean;
+  action: () => Promise<void>;
+}
+
 const SettingsScreen: React.FC<SettingsScreenProps> = ({
   workspacePath,
   workspaceName,
   onClose,
   isFirstTime = false,
 }) => {
-  const [plansDirectory, setPlansDirectory] = useState('nimbalyst-local');
-  const [enableClaudeCode, setEnableClaudeCode] = useState(false);
-  const [installPlanCommand, setInstallPlanCommand] = useState(true);
-  const [installTrackCommand, setInstallTrackCommand] = useState(true);
-  const [configureCLAUDEmd, setConfigureCLAUDEmd] = useState(true);
+  const [actions, setActions] = useState<SetupAction[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Load existing config on mount
-  useEffect(() => {
-    const loadConfig = async () => {
-      try {
-        const config = await OnboardingService.loadConfig(workspacePath);
+  // Helper functions
+  const checkFileExists = async (relativePath: string): Promise<boolean> => {
+    try {
+      const fullPath = `${workspacePath}/${relativePath}`;
+      const result = await window.electronAPI.readFileContent(fullPath);
+      const exists = !!(result && result.content);
+      console.log(`[SettingsScreen] File check for ${relativePath}:`, exists);
+      return exists;
+    } catch (err) {
+      console.log(`[SettingsScreen] File check for ${relativePath}: false (error:`, err, ')');
+      return false;
+    }
+  };
 
-        // Extract directory name from plansLocation (e.g., "nimbalyst-local/plans" -> "nimbalyst-local")
-        if (config.plansLocation) {
-          const parts = config.plansLocation.split('/');
-          setPlansDirectory(parts[0] || 'nimbalyst-local');
-        }
-
-        setEnableClaudeCode(config.claudeCodeIntegration.enabled);
-      } catch (err) {
-        console.error('Failed to load config:', err);
+  const checkCLAUDEmdConfigured = async (): Promise<boolean> => {
+    try {
+      const claudeMdPath = `${workspacePath}/CLAUDE.md`;
+      const result = await window.electronAPI.readFileContent(claudeMdPath);
+      if (result && result.content) {
+        return result.content.includes('## Nimbalyst Planning System');
       }
-    };
+      return false;
+    } catch {
+      return false;
+    }
+  };
 
-    loadConfig();
+  // Check which actions are already completed
+  const checkActionStatus = async () => {
+    try {
+      const planCommandExists = await checkFileExists('.claude/commands/plan.md');
+      const trackCommandExists = await checkFileExists('.claude/commands/track.md');
+      const claudeMdConfigured = await checkCLAUDEmdConfigured();
+      const bugsTrackerExists = await checkFileExists('nimbalyst-local/tracker/bugs.md');
+      const tasksTrackerExists = await checkFileExists('nimbalyst-local/tracker/tasks.md');
+      const ideasTrackerExists = await checkFileExists('nimbalyst-local/tracker/ideas.md');
+      const decisionsTrackerExists = await checkFileExists('nimbalyst-local/tracker/decisions.md');
+
+      setActions([
+        {
+          id: 'plan-command',
+          title: 'Install /plan command',
+          description: 'Create plan documents with proper structure and frontmatter',
+          completed: planCommandExists,
+          action: async () => {
+            await OnboardingService.installPlanCommand(workspacePath, 'nimbalyst-local/plans');
+          },
+        },
+        {
+          id: 'track-command',
+          title: 'Install /track command',
+          description: 'Create tracking items for bugs, tasks, and ideas',
+          completed: trackCommandExists,
+          action: async () => {
+            await OnboardingService.installTrackCommand(workspacePath);
+          },
+        },
+        {
+          id: 'claude-md',
+          title: 'Configure CLAUDE.md',
+          description: 'Add Nimbalyst-specific instructions for Claude Code',
+          completed: claudeMdConfigured,
+          action: async () => {
+            await OnboardingService.configureCLAUDEmd(workspacePath);
+          },
+        },
+        {
+          id: 'bugs-tracker',
+          title: 'Create bugs tracker',
+          description: 'Set up tracker document for bugs and issues',
+          completed: bugsTrackerExists,
+          action: async () => {
+            await OnboardingService.createTrackerDocument(workspacePath, 'bugs');
+          },
+        },
+        {
+          id: 'tasks-tracker',
+          title: 'Create tasks tracker',
+          description: 'Set up tracker document for tasks and todos',
+          completed: tasksTrackerExists,
+          action: async () => {
+            await OnboardingService.createTrackerDocument(workspacePath, 'tasks');
+          },
+        },
+        {
+          id: 'ideas-tracker',
+          title: 'Create ideas tracker',
+          description: 'Set up tracker document for feature ideas and improvements',
+          completed: ideasTrackerExists,
+          action: async () => {
+            await OnboardingService.createTrackerDocument(workspacePath, 'ideas');
+          },
+        },
+        {
+          id: 'decisions-tracker',
+          title: 'Create decisions tracker',
+          description: 'Set up tracker document for architecture and design decisions',
+          completed: decisionsTrackerExists,
+          action: async () => {
+            await OnboardingService.createTrackerDocument(workspacePath, 'decisions');
+          },
+        },
+      ]);
+    } catch (err) {
+      console.error('Failed to check action status:', err);
+    }
+  };
+
+  // Load action status on mount
+  useEffect(() => {
+    checkActionStatus();
   }, [workspacePath]);
 
-  const handleSave = async () => {
+  const handleRunAction = async (actionId: string) => {
+    const action = actions.find(a => a.id === actionId);
+    if (!action || action.completed) return;
+
     setError(null);
     setSuccess(null);
     setIsProcessing(true);
 
     try {
-      const config = await OnboardingService.loadConfig(workspacePath);
+      await action.action();
+      setSuccess(`${action.title} completed!`);
 
-      // Update plans location
-      const plansLocation = `${plansDirectory}/plans`;
-      config.plansLocation = plansLocation;
-      config.checkInPlans = false; // Always gitignored
+      // Longer delay to ensure file system has synced and IPC has completed
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Configure .gitignore
-      await OnboardingService.configureGitignore(workspacePath, plansDirectory);
+      // Refresh action status
+      await checkActionStatus();
 
-      // Create plans directory
-      await OnboardingService.ensurePlansDirectory(workspacePath, plansLocation);
-
-      // Configure Claude Code if enabled
-      if (enableClaudeCode) {
-        if (installPlanCommand) {
-          await OnboardingService.installPlanCommand(workspacePath, plansLocation);
-        }
-        if (installTrackCommand) {
-          await OnboardingService.installTrackCommand(workspacePath);
-        }
-        if (configureCLAUDEmd) {
-          await OnboardingService.configureCLAUDEmd(workspacePath);
-        }
-
-        config.claudeCodeIntegration.enabled = true;
-        config.claudeCodeIntegration.planCommandInstalled = installPlanCommand;
-        config.claudeCodeIntegration.trackCommandInstalled = installTrackCommand;
-        config.claudeCodeIntegration.claudeMdConfigured = configureCLAUDEmd;
-      } else {
-        config.claudeCodeIntegration.enabled = false;
-      }
-
-      // Mark onboarding as completed if first time
-      if (isFirstTime) {
-        config.onboardingCompleted = true;
-      }
-
-      // Save config
-      await OnboardingService.saveConfig(workspacePath, config);
-
-      setSuccess('Settings saved successfully!');
-
-      // Close after a brief delay
-      setTimeout(() => {
-        onClose();
-      }, 1000);
+      // Clear success message after 3 seconds (longer so user can see it)
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save settings');
+      console.error(`Failed to execute action ${action.id}:`, err);
+      setError(err instanceof Error ? err.message : `Failed to ${action.title}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleCreateExamplePlan = async () => {
-    setIsProcessing(true);
+  const handleInstallAll = async () => {
     setError(null);
+    setSuccess(null);
+    setIsProcessing(true);
 
     try {
-      const planPath = await OnboardingService.createExamplePlan(workspacePath);
-      window.electronAPI.send('open-file', planPath);
-      setSuccess('Example plan created!');
+      // Ensure base directories exist
+      await OnboardingService.ensurePlansDirectory(workspacePath, 'nimbalyst-local/plans');
+      await OnboardingService.configureGitignore(workspacePath, 'nimbalyst-local');
+
+      // Run all incomplete actions
+      const incompleteActions = actions.filter(a => !a.completed);
+      for (const action of incompleteActions) {
+        try {
+          await action.action();
+        } catch (err) {
+          console.error(`Failed to ${action.title}:`, err);
+          // Continue with other actions even if one fails
+        }
+      }
+
+      setSuccess('All setup actions completed!');
+
+      // Refresh action status
+      await checkActionStatus();
+
+      // Clear success message after 2 seconds
+      setTimeout(() => setSuccess(null), 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create example plan');
+      setError(err instanceof Error ? err.message : 'Failed to install all');
     } finally {
       setIsProcessing(false);
     }
   };
+
+  const completedCount = actions.filter(a => a.completed).length;
+  const totalCount = actions.length;
 
   return (
     <div className="settings-screen">
       <div className="settings-header">
         <h2>
           <span className="material-symbols-outlined">settings</span>
-          Project Settings
+          Claude Code Setup
         </h2>
         <button className="settings-close" onClick={onClose} title="Close settings">
           <span className="material-symbols-outlined">close</span>
@@ -133,12 +220,22 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
       </div>
 
       <div className="settings-content">
-        {isFirstTime && (
-          <div className="settings-welcome">
-            <h3>Welcome to {workspaceName}!</h3>
-            <p>Configure your project below to get started with Nimbalyst's planning and tracking features.</p>
+        <div className="settings-intro">
+          <p>Configure your workspace to work seamlessly with Claude Code.</p>
+          <div className="settings-progress">
+            <span className="progress-text">{completedCount} of {totalCount} completed</span>
+            {completedCount < totalCount && (
+              <button
+                className="install-all-button"
+                onClick={handleInstallAll}
+                disabled={isProcessing}
+              >
+                <span className="material-symbols-outlined">download</span>
+                Install All
+              </button>
+            )}
           </div>
-        )}
+        </div>
 
         {error && (
           <div className="settings-message error">
@@ -156,129 +253,93 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
         <div className="settings-section">
           <h3>
-            <span className="material-symbols-outlined">folder</span>
-            Plans Directory
+            <span className="material-symbols-outlined">smart_toy</span>
+            Claude Code Commands
           </h3>
-          <div className="settings-field">
-            <input
-              type="text"
-              value={plansDirectory}
-              onChange={(e) => setPlansDirectory(e.target.value)}
-              placeholder="nimbalyst-local"
-              className="settings-input"
-            />
-            <p className="settings-help">
-              Plans will be stored in <code>{plansDirectory}/plans</code> and added to .gitignore.
-              You can move plans later if you want to check them into version control.
-            </p>
+          <p className="settings-help">
+            Custom slash commands that teach Claude Code about Nimbalyst's planning system.
+          </p>
+
+          <div className="action-cards">
+            {actions.slice(0, 3).map(action => (
+              <div key={action.id} className={`action-card ${action.completed ? 'completed' : ''}`}>
+                <div className="action-card-header">
+                  <div className="action-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={action.completed}
+                      readOnly
+                    />
+                  </div>
+                  <div className="action-info">
+                    <h4>{action.title}</h4>
+                    <p>{action.description}</p>
+                  </div>
+                </div>
+                {!action.completed && (
+                  <button
+                    className="action-install-button"
+                    onClick={() => handleRunAction(action.id)}
+                    disabled={isProcessing}
+                  >
+                    Install
+                  </button>
+                )}
+                {action.completed && (
+                  <div className="action-completed-badge">
+                    <span className="material-symbols-outlined">check_circle</span>
+                    Installed
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
         <div className="settings-section">
           <h3>
-            <span className="material-symbols-outlined">smart_toy</span>
-            Claude Code Integration
+            <span className="material-symbols-outlined">bookmark</span>
+            Tracker Documents
           </h3>
           <p className="settings-help">
-            Configure Claude Code to understand Nimbalyst's extended markdown features for plans and tracking.
+            Pre-configured tracker documents for organizing bugs, tasks, ideas, and decisions.
           </p>
 
-          <div className="settings-field">
-            <label className="settings-checkbox-with-description">
-              <div className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={enableClaudeCode}
-                  onChange={(e) => setEnableClaudeCode(e.target.checked)}
-                />
-                <span className="checkbox-label">Enable Claude Code integration</span>
+          <div className="action-cards">
+            {actions.slice(3).map(action => (
+              <div key={action.id} className={`action-card ${action.completed ? 'completed' : ''}`}>
+                <div className="action-card-header">
+                  <div className="action-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={action.completed}
+                      readOnly
+                    />
+                  </div>
+                  <div className="action-info">
+                    <h4>{action.title}</h4>
+                    <p>{action.description}</p>
+                  </div>
+                </div>
+                {!action.completed && (
+                  <button
+                    className="action-install-button"
+                    onClick={() => handleRunAction(action.id)}
+                    disabled={isProcessing}
+                  >
+                    Create
+                  </button>
+                )}
+                {action.completed && (
+                  <div className="action-completed-badge">
+                    <span className="material-symbols-outlined">check_circle</span>
+                    Created
+                  </div>
+                )}
               </div>
-            </label>
-
-            {enableClaudeCode && (
-              <div className="settings-subsection">
-                <label className="settings-checkbox-with-description">
-                  <div className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={installPlanCommand}
-                      onChange={(e) => setInstallPlanCommand(e.target.checked)}
-                    />
-                    <div className="checkbox-content">
-                      <span className="checkbox-label">Install /plan command</span>
-                      <span className="checkbox-description">Create plan documents with proper structure</span>
-                    </div>
-                  </div>
-                </label>
-
-                <label className="settings-checkbox-with-description">
-                  <div className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={installTrackCommand}
-                      onChange={(e) => setInstallTrackCommand(e.target.checked)}
-                    />
-                    <div className="checkbox-content">
-                      <span className="checkbox-label">Install /track command</span>
-                      <span className="checkbox-description">Create tracking items (bugs, tasks, ideas)</span>
-                    </div>
-                  </div>
-                </label>
-
-                <label className="settings-checkbox-with-description">
-                  <div className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={configureCLAUDEmd}
-                      onChange={(e) => setConfigureCLAUDEmd(e.target.checked)}
-                    />
-                    <div className="checkbox-content">
-                      <span className="checkbox-label">Configure CLAUDE.md</span>
-                      <span className="checkbox-description">Add Nimbalyst-specific instructions</span>
-                    </div>
-                  </div>
-                </label>
-              </div>
-            )}
+            ))}
           </div>
         </div>
-
-        {isFirstTime && (
-          <div className="settings-section">
-            <h3>
-              <span className="material-symbols-outlined">description</span>
-              Quick Start
-            </h3>
-            <button
-              className="settings-button secondary"
-              onClick={handleCreateExamplePlan}
-              disabled={isProcessing}
-            >
-              <span className="material-symbols-outlined">add_circle</span>
-              Create Example Plan
-            </button>
-            <p className="settings-help">
-              Create a sample plan to see how the planning system works.
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div className="settings-footer">
-        <button
-          className="settings-button secondary"
-          onClick={onClose}
-          disabled={isProcessing}
-        >
-          Cancel
-        </button>
-        <button
-          className="settings-button primary"
-          onClick={handleSave}
-          disabled={isProcessing}
-        >
-          {isProcessing ? 'Saving...' : isFirstTime ? 'Get Started' : 'Save Changes'}
-        </button>
       </div>
     </div>
   );

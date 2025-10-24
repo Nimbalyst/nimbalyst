@@ -202,6 +202,21 @@ export default function App() {
     setActiveModeRaw(mode);
   };
 
+  // Expose test helpers for testing
+  useEffect(() => {
+    // Always expose in development
+    if (import.meta.env.DEV) {
+      (window as any).__testHelpers = {
+        ...(window as any).__testHelpers,
+        setSidebarView: (view: any) => setSidebarView(view),
+        setActiveMode: (mode: any) => setActiveMode(mode),
+        getActiveMode: () => activeMode,
+        getSidebarView: () => sidebarView
+      };
+      console.log('[App] Test helpers exposed, DEV mode:', import.meta.env.DEV);
+    }
+  }, [activeMode, sidebarView]);
+
   // Bottom panel state (shared across all modes)
   const [bottomPanel, setBottomPanel] = useState<TrackerBottomPanelType | null>(null);
   const [bottomPanelHeight, setBottomPanelHeight] = useState<number>(300);
@@ -1394,6 +1409,13 @@ export default function App() {
                           getContentRef.current = getContentFn;
                           aiToolService.setGetContentFunction(getContentFn);
                         }
+                      }}
+                      onViewHistory={() => {
+                        setIsHistoryDialogOpen(true);
+                      }}
+                      onRenameDocument={() => {
+                        // TODO: Implement tab/document renaming
+                        console.log('Rename document requested');
                       }}
                       onTabDirtyChange={(changedTabId, changedIsDirty) => {
                         const tab = tabs.getTabState(changedTabId);

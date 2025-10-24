@@ -330,6 +330,169 @@
   font-size: 18px;
 }
 
+/* Intro section */
+.settings-intro {
+  margin-bottom: 32px;
+}
+
+.settings-intro p {
+  margin: 0 0 16px;
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.settings-progress {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+}
+
+.progress-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.install-all-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.install-all-button:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.install-all-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.install-all-button .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Action cards */
+.action-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.action-card:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.action-card.completed {
+  background: var(--surface-tertiary);
+  opacity: 0.9;
+}
+
+.action-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+}
+
+.action-checkbox {
+  display: flex;
+  align-items: center;
+  padding-top: 2px;
+}
+
+.action-checkbox input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  cursor: default;
+  pointer-events: none;
+}
+
+.action-info {
+  flex: 1;
+}
+
+.action-info h4 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.action-info p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.action-install-button {
+  padding: 6px 16px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.action-install-button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.action-install-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-completed-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #efe;
+  border: 1px solid #cfc;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #3c3;
+  white-space: nowrap;
+}
+
+.action-completed-badge .material-symbols-outlined {
+  font-size: 16px;
+}
+
 /* Scrollbar styling */
 .settings-content::-webkit-scrollbar {
   width: 8px;
