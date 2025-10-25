@@ -153,3 +153,4 @@ bundle-analysis.json
 worktrees/
 
 .nimbalyst/
+nimalyst-local/
