@@ -7,13 +7,13 @@
 }
 
 .streaming-status.active {
-  border-color: var(--accent-color, #007bff);
-  background: var(--bg-active, #e7f3ff);
+  border-color: var(--accent-primary, #007bff);
+  background: var(--surface-selected);
 }
 
 .streaming-status.complete {
   border-color: var(--success-color, #28a745);
-  background: var(--bg-success, #e7f5ea);
+  background: var(--surface-tertiary);
 }
 
 .streaming-status-header {
@@ -55,7 +55,7 @@
   border-radius: 12px;
   font-size: 11px;
   font-weight: 500;
-  background: var(--danger-color, #dc3545);
+  background: var(--error-color);
   color: white;
   margin-left: 8px;
   border: none;
@@ -63,7 +63,7 @@
 }
 
 .streaming-status-cancel:hover {
-  background: var(--danger-color-hover, #c82333);
+  background: var(--error-color);
 }
 
 .streaming-status-content {
@@ -95,21 +95,4 @@
   40% { content: '.'; }
   60% { content: '..'; }
   80%, 100% { content: '...'; }
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  .streaming-status {
-    --border-primary: #3a3a3a;
-    --surface-secondary: #2a2a2a;
-    --bg-active: #1a3a52;
-    --bg-success: #1a3a2a;
-    --bg-primary: #1e1e1e;
-    --text-primary: #e0e0e0;
-    --text-secondary: #a0a0a0;
-    --accent-color: #4a9eff;
-    --success-color: #4ade80;
-    --danger-color: #dc3545;
-    --danger-color-hover: #c82333;
-  }
 }

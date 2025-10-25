@@ -52,7 +52,7 @@
 
 .new-file-input:focus {
   outline: none;
-  border-color: var(--accent-color, #007acc);
+  border-color: var(--accent-primary, #007acc);
 }
 
 .new-file-error {
@@ -84,8 +84,8 @@
 }
 
 .new-file-buttons button[type="submit"] {
-  background: var(--accent-color, #007acc);
-  border-color: var(--accent-color, #007acc);
+  background: var(--accent-primary, #007acc);
+  border-color: var(--accent-primary, #007acc);
   color: white;
 }
 

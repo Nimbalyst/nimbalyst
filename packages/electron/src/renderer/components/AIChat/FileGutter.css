@@ -8,12 +8,12 @@
 }
 
 .file-gutter-referenced {
-  border-bottom-color: var(--primary-color);
+  border-bottom-color: var(--accent-primary);
   background-color: var(--surface-tertiary);
 }
 
 .file-gutter-edited {
-  border-top: 1px solid var(--status-success);
+  border-top: 1px solid var(--success-color);
   background-color: var(--surface-tertiary);
 }
 
@@ -92,7 +92,7 @@
 
 .file-gutter-item:hover {
   background-color: var(--surface-hover);
-  border-color: var(--primary-color);
+  border-color: var(--accent-primary);
 }
 
 .file-gutter-path {

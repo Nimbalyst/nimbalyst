@@ -20,7 +20,7 @@
 
 .provider-selector-trigger:hover:not(:disabled) {
   background: var(--surface-hover);
-  border-color: var(--border-hover);
+  border-color: var(--border-focus);
 }
 
 .provider-selector-trigger:disabled {
@@ -92,8 +92,8 @@
 }
 
 .provider-selector-option.selected {
-  background: var(--accent-background);
-  color: var(--accent-color);
+  background: var(--surface-selected);
+  color: var(--accent-primary);
 }
 
 .provider-selector-option-info {
@@ -114,7 +114,7 @@
 }
 
 .provider-selector-check {
-  color: var(--accent-color);
+  color: var(--accent-primary);
 }
 
 /* Dark theme adjustments */

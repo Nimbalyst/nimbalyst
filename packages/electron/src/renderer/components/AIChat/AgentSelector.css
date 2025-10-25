@@ -19,7 +19,7 @@
 
 .agent-selector-trigger:hover:not(:disabled) {
   background: var(--surface-hover);
-  border-color: var(--primary-color);
+  border-color: var(--accent-primary);
 }
 
 .agent-selector-trigger:disabled {
@@ -28,8 +28,8 @@
 }
 
 .agent-selector-trigger.has-selection {
-  background: var(--primary-light);
-  border-color: var(--primary-color);
+  background: var(--surface-selected);
+  border-color: var(--accent-primary);
 }
 
 .agent-icon {
@@ -90,7 +90,7 @@
 
 .agent-search input:focus {
   outline: none;
-  border-color: var(--primary-color);
+  border-color: var(--accent-primary);
 }
 
 .agent-list {
@@ -147,7 +147,7 @@
 }
 
 .agent-item.selected {
-  background: var(--primary-light);
+  background: var(--surface-selected);
 }
 
 .agent-item.no-agent {
@@ -191,7 +191,7 @@
 
 .agent-item-params {
   font-size: 11px;
-  color: var(--primary-color);
+  color: var(--accent-primary);
   margin-top: 4px;
 }
 

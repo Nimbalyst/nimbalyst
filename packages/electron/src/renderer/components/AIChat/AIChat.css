@@ -116,9 +116,9 @@
 }
 
 .ai-chat-floating-toggle:hover {
-  background: var(--primary-color);
+  background: var(--accent-primary);
   color: white;
-  border-color: var(--primary-color);
+  border-color: var(--accent-primary);
   transform: scale(1.05);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
@@ -145,7 +145,7 @@
 }
 
 .ai-chat-resize-handle:hover::before {
-  background: var(--primary-color);
+  background: var(--accent-primary);
 }
 
 /* Header */
@@ -367,7 +367,7 @@
 }
 
 .ai-chat-message--user .ai-chat-message-avatar {
-  background: var(--primary-color);
+  background: var(--accent-primary);
   color: white;
 }
 
@@ -456,7 +456,7 @@
 }
 
 .ai-chat-input-field:focus {
-  border-color: var(--primary-color);
+  border-color: var(--accent-primary);
 }
 
 .ai-chat-input-field:disabled {
@@ -474,7 +474,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--primary-color);
+  background: var(--accent-primary);
   border: none;
   border-radius: 6px;
   color: white;
@@ -516,11 +516,11 @@
 }
 .ai-chat-pill-toggle.on .pill-knob {
   left: calc(100% - 20px);
-  background: var(--primary-color);
+  background: var(--accent-primary);
 }
 
 .ai-chat-send-button:hover:not(:disabled) {
-  background: var(--primary-color-hover);
+  background: var(--accent-primary-hover);
   transform: scale(1.05);
 }
 
@@ -629,7 +629,7 @@
 .ai-chat-cursor {
   display: inline-block;
   animation: blink 1s infinite;
-  color: var(--primary-color);
+  color: var(--accent-primary);
   font-weight: 600;
 }
 
@@ -647,7 +647,7 @@
 .ai-chat-edits-toggle {
   background: transparent;
   border: none;
-  color: var(--primary-color);
+  color: var(--accent-primary);
   cursor: pointer;
   font-size: 13px;
   padding: 0;
@@ -682,7 +682,7 @@
 }
 
 .ai-chat-edit-type {
-  background: var(--primary-color);
+  background: var(--accent-primary);
   color: white;
   padding: 2px 6px;
   border-radius: 3px;
@@ -717,7 +717,7 @@
 }
 
 .ai-chat-edit-apply {
-  background: var(--primary-color);
+  background: var(--accent-primary);
   color: white;
   border: none;
   border-radius: 4px;
@@ -729,7 +729,7 @@
 }
 
 .ai-chat-edit-apply:hover:not(:disabled) {
-  background: var(--primary-color-hover);
+  background: var(--accent-primary-hover);
 }
 
 .ai-chat-edit-apply:disabled {
@@ -750,7 +750,7 @@
 }
 
 .ai-chat-edit-status--applied {
-  border-left-color: var(--primary-color);
+  border-left-color: var(--accent-primary);
 }
 
 .ai-chat-edit-status--failed {
@@ -773,7 +773,7 @@
 }
 
 .ai-chat-edit-status-text--success {
-  color: var(--primary-color);
+  color: var(--accent-primary);
 }
 
 .ai-chat-edit-status-text--error {
@@ -793,7 +793,7 @@
 .ai-chat-edit-apply--inline {
   margin-left: auto;
   padding: 4px 8px;
-  background: var(--primary-color);
+  background: var(--accent-primary);
   color: white;
   border: none;
   border-radius: 4px;
@@ -803,15 +803,15 @@
 }
 
 .ai-chat-edit-apply--inline:hover {
-  background: var(--primary-color-hover);
+  background: var(--accent-primary-hover);
 }
 
 .ai-chat-edit-retry {
   margin-left: auto;
   padding: 4px 8px;
   background: transparent;
-  border: 1px solid var(--primary-color);
-  color: var(--primary-color);
+  border: 1px solid var(--accent-primary);
+  color: var(--accent-primary);
   border-radius: 4px;
   font-size: 11px;
   cursor: pointer;
@@ -819,7 +819,7 @@
 }
 
 .ai-chat-edit-retry:hover {
-  background: var(--primary-color);
+  background: var(--accent-primary);
   color: white;
 }
 
@@ -1002,7 +1002,7 @@
 .ai-chat-edit-apply,
 .ai-chat-edit-retry {
   padding: 4px 12px;
-  background: var(--primary-color);
+  background: var(--accent-primary);
   color: white;
   border: none;
   border-radius: 4px;
@@ -1014,7 +1014,7 @@
 
 .ai-chat-edit-apply:hover,
 .ai-chat-edit-retry:hover {
-  background: var(--primary-color-hover);
+  background: var(--accent-primary-hover);
 }
 
 .ai-chat-loading-indicator {

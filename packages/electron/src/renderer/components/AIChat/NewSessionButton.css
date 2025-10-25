@@ -92,7 +92,7 @@
 }
 
 .new-session-dropdown::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: var(--text-tertiary);
 }
 
 @keyframes slideDown {
@@ -127,8 +127,8 @@
 }
 
 .new-session-option.selected {
-  background: var(--accent-background);
-  color: var(--accent-color);
+  background: var(--surface-selected);
+  color: var(--accent-primary);
 }
 
 .new-session-option.selected:hover {
@@ -151,13 +151,13 @@
 
 .new-session-option-current {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-tertiary);
   font-weight: normal;
 }
 
 .new-session-option-action {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-tertiary);
   margin-top: 2px;
 }
 
@@ -166,7 +166,7 @@
 }
 
 .new-session-option.selected .new-session-option-action {
-  color: var(--accent-color);
+  color: var(--accent-primary);
   opacity: 0.8;
 }
 
@@ -177,7 +177,7 @@
 }
 
 .new-session-option-icon {
-  color: var(--text-muted);
+  color: var(--text-tertiary);
   margin-left: auto;
 }
 
@@ -186,11 +186,11 @@
 }
 
 .new-session-option.selected .new-session-option-icon {
-  color: var(--accent-color);
+  color: var(--accent-primary);
 }
 
 .new-session-option-check {
-  color: var(--accent-color);
+  color: var(--accent-primary);
   margin-left: auto;
 }
 
@@ -227,7 +227,7 @@
 .new-session-empty {
   padding: 12px;
   text-align: center;
-  color: var(--text-muted);
+  color: var(--text-tertiary);
   font-size: 13px;
 }
 
@@ -237,7 +237,7 @@
 
 .new-session-configure-inline {
   padding: 6px 12px;
-  background: var(--primary-color);
+  background: var(--accent-primary);
   color: white;
   border: none;
   border-radius: 4px;
@@ -247,7 +247,7 @@
 }
 
 .new-session-configure-inline:hover {
-  background: var(--primary-color-hover);
+  background: var(--accent-primary-hover);
 }
 
 /* Dark theme adjustments */

@@ -102,7 +102,7 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: var(--accent-color);
+  background: var(--accent-primary);
 }
 
 .nav-item-icon {
@@ -146,7 +146,7 @@
 }
 
 .nav-item-status.configured {
-  color: var(--accent-color);
+  color: var(--accent-primary);
 }
 
 .nav-item-status.warning {
@@ -216,7 +216,7 @@
 }
 
 .button-save {
-  background: var(--accent-color);
+  background: var(--accent-primary);
   color: white;
   border: none;
 }
@@ -408,7 +408,7 @@
 }
 
 .button-install {
-  background: var(--accent-color);
+  background: var(--accent-primary);
   color: white;
 }
 
@@ -446,7 +446,7 @@
 
 .api-key-input:focus {
   outline: none;
-  border-color: var(--accent-color);
+  border-color: var(--accent-primary);
 }
 
 .test-button {
@@ -661,7 +661,7 @@
 
 .installation-progress-fill {
   height: 100%;
-  background: var(--accent-color, #007acc);
+  background: var(--accent-primary, #007acc);
   width: 0;
   transition: width 0.3s ease;
 }

@@ -42,17 +42,17 @@
 }
 
 .ai-chat-tool-badge--loading {
-  background: var(--accent-color-light);
-  color: var(--accent-color);
+  background: var(--surface-selected);
+  color: var(--accent-primary);
 }
 
 .ai-chat-tool-badge--success {
-  background: var(--success-background);
+  background: var(--surface-tertiary);
   color: var(--success-color);
 }
 
 .ai-chat-tool-badge--error {
-  background: var(--error-background);
+  background: var(--surface-tertiary);
   color: var(--error-color);
 }
 
@@ -63,7 +63,7 @@
 }
 
 .ai-chat-tool-error {
-  background: var(--error-background-light);
+  background: var(--surface-secondary);
   color: var(--error-color);
   border-radius: 6px;
   padding: 8px 10px;
@@ -82,7 +82,7 @@
 }
 
 .ai-chat-tool-type {
-  background: var(--accent-color);
+  background: var(--accent-primary);
   color: white;
   padding: 2px 6px;
   border-radius: 3px;
@@ -143,12 +143,12 @@
 }
 
 .ai-chat-tool-content--remove {
-  background: var(--error-background-light);
+  background: var(--surface-secondary);
   color: var(--error-color);
 }
 
 .ai-chat-tool-content--add {
-  background: var(--success-background-light);
+  background: var(--surface-secondary);
   color: var(--success-color);
 }
 
@@ -215,7 +215,7 @@
 /* Reapply button */
 .ai-chat-tool-reapply {
   padding: 4px 12px;
-  background: var(--accent-color);
+  background: var(--accent-primary);
   color: white;
   border: none;
   border-radius: 4px;
@@ -226,7 +226,7 @@
 }
 
 .ai-chat-tool-reapply:hover {
-  background: var(--accent-color-hover, #0052a3);
+  background: var(--accent-primary-hover, #0052a3);
 }
 
 .ai-chat-tool-reapply:active {
@@ -234,17 +234,17 @@
 }
 
 .ai-chat-tool-status--pending {
-  background: var(--info-background);
+  background: var(--surface-selected);
   color: var(--info-color);
 }
 
 .ai-chat-tool-status--success {
-  background: var(--success-background);
+  background: var(--surface-tertiary);
   color: var(--success-color);
 }
 
 .ai-chat-tool-status--failed {
-  background: var(--error-background);
+  background: var(--surface-tertiary);
   color: var(--error-color);
 }
 
@@ -263,46 +263,4 @@
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-/* CSS Variables (already defined in AIChat.css, but here for reference) */
-:root {
-  --surface-primary: white;
-  --surface-secondary: #f5f5f5;
-  --surface-hover: rgba(0, 0, 0, 0.05);
-  --border-primary: #e0e0e0;
-  --text-primary: #1e1e1e;
-  --text-secondary: #666;
-  --accent-color: #0066cc;
-  --accent-color-light: #e3f2fd;
-  --success-color: #2e7d32;
-  --success-background: #e8f5e9;
-  --success-background-light: #f1f8f1;
-  --error-color: #c62828;
-  --error-background: #ffebee;
-  --error-background-light: #fff5f5;
-  --info-color: #1976d2;
-  --info-background: #e3f2fd;
-}
-
-/* Dark theme overrides */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface-primary: #1e1e1e;
-    --surface-secondary: #2a2a2a;
-    --surface-hover: rgba(255, 255, 255, 0.05);
-    --border-primary: #404040;
-    --text-primary: #e0e0e0;
-    --text-secondary: #999;
-    --accent-color: #4a9eff;
-    --accent-color-light: #1a2535;
-    --success-color: #66bb6a;
-    --success-background: #1b3a1b;
-    --success-background-light: #0f1f0f;
-    --error-color: #ef5350;
-    --error-background: #3a1b1b;
-    --error-background-light: #2a0f0f;
-    --info-color: #42a5f5;
-    --info-background: #1a2535;
-  }
 }

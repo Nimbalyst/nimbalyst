@@ -101,7 +101,7 @@
 }
 
 .session-dropdown-item.active {
-  background: var(--bg-active, #e7f3ff);
+  background: var(--surface-selected);
   font-weight: 500;
 }
 
@@ -110,7 +110,7 @@
   align-items: center;
   gap: 8px;
   font-weight: 500;
-  color: var(--accent-color, #007bff);
+  color: var(--accent-primary, #007bff);
 }
 
 .session-dropdown-divider {
@@ -203,14 +203,14 @@
 }
 
 .session-action-btn.delete:hover {
-  background: var(--danger-bg, #fee);
-  color: var(--danger-color, #d00);
+  background: var(--surface-tertiary);
+  color: var(--error-color);
 }
 
 .session-rename-input {
   flex: 1;
   padding: 4px 6px;
-  border: 1px solid var(--accent-color, #007bff);
+  border: 1px solid var(--accent-primary, #007bff);
   border-radius: 4px;
   font-size: 13px;
   outline: none;
@@ -223,26 +223,4 @@
   text-align: center;
   color: var(--text-secondary, #666);
   font-size: 13px;
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  .session-dropdown-trigger {
-    --border-primary: #3a3a3a;
-    --surface-hover: #2a2a2a;
-    --border-hover: #4a4a4a;
-    --text-primary: #e0e0e0;
-  }
-
-  .session-dropdown-menu {
-    --bg-primary: #1e1e1e;
-    --border-primary: #3a3a3a;
-    --surface-hover: #2a2a2a;
-    --bg-active: #1a3a52;
-    --text-primary: #e0e0e0;
-    --text-secondary: #a0a0a0;
-    --accent-color: #4a9eff;
-    --danger-bg: #3a1a1a;
-    --danger-color: #ff6a6a;
-  }
 }
