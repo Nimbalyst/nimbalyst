@@ -241,7 +241,7 @@ export function ClaudeCodePanel({
                     </div>
                   )}
 
-                  {/* Login Button - only show if not logged in */}
+                  {/* COMMENTED OUT - Login button disabled until login system is working
                   {loginStatus && !loginStatus.isLoggedIn && (
                     <div style={{ marginBottom: '12px' }}>
                       <button
@@ -278,6 +278,7 @@ export function ClaudeCodePanel({
                       </button>
                     </div>
                   )}
+                  */}
                   <div className="api-key-row">
                     <input
                       type="password"

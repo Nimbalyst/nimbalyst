@@ -150,7 +150,7 @@ const PROVIDERS: Provider[] = [
 ];
 
 export function AIModelsRedesigned({ onClose }: AIModelsProps) {
-  const [selectedProvider, setSelectedProvider] = useState<ProviderId>('claude');
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId>('claude-code');
   const [providers, setProviders] = useState<Record<string, ProviderConfig>>({
     claude: { enabled: false, testStatus: 'idle' },
     'claude-code': { enabled: false, testStatus: 'idle', installStatus: 'not-installed' },
