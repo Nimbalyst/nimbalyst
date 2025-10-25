@@ -389,10 +389,9 @@ planStatus:
 
 ### Plan Document Structure
 After the frontmatter, plans should include:
-1. **Title** followed by plan status indicator comment on the next line:
-```javascript
+1. **Title**
+```
    # Plan Title
-   <!-- plan-status -->
 ```
 2. **Goals** section outlining objectives
 3. **System Overview** or problem description
