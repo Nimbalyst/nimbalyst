@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron';
+import { ipcMain, dialog, BrowserWindow, app } from 'electron';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { basename, join, dirname } from 'path';
  import { windowStates, savingWindows, findWindowByFilePath, createWindow, getWindowId, windows, documentServices } from '../window/WindowManager';
@@ -7,6 +7,7 @@ import { startFileWatcher, stopFileWatcher, chokidarFileWatcher } from '../file/
 import { AUTOSAVE_DELAY } from '../utils/constants';
 import { addWorkspaceRecentFile } from '../utils/store';
 import { logger } from '../utils/logger';
+import { homedir } from 'os';
 
 export function registerFileHandlers() {
     // Open file dialog
@@ -342,6 +343,70 @@ export function registerFileHandlers() {
             };
         } catch (error) {
             console.error('[CREATE_DOC] Error creating document:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            };
+        }
+    });
+
+    // Write to global ~/.claude/ directory
+    ipcMain.handle('write-global-claude-file', async (event, relativePath: string, content: string) => {
+        try {
+            const claudeDir = join(homedir(), '.claude');
+            const absolutePath = join(claudeDir, relativePath);
+            const directory = dirname(absolutePath);
+
+            console.log('[WRITE_GLOBAL] Writing to global .claude:', absolutePath);
+
+            // Ensure the directory exists
+            if (!existsSync(directory)) {
+                mkdirSync(directory, { recursive: true });
+                console.log('[WRITE_GLOBAL] Created directory:', directory);
+            }
+
+            // Write the content (overwrites if exists)
+            writeFileSync(absolutePath, content, 'utf-8');
+            console.log('[WRITE_GLOBAL] File written successfully');
+
+            return {
+                success: true,
+                filePath: absolutePath
+            };
+        } catch (error) {
+            console.error('[WRITE_GLOBAL] Error writing file:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            };
+        }
+    });
+
+    // Read from global ~/.claude/ directory
+    ipcMain.handle('read-global-claude-file', async (event, relativePath: string) => {
+        try {
+            const claudeDir = join(homedir(), '.claude');
+            const absolutePath = join(claudeDir, relativePath);
+
+            console.log('[READ_GLOBAL] Reading from global .claude:', absolutePath);
+
+            if (!existsSync(absolutePath)) {
+                return {
+                    success: false,
+                    error: 'File not found'
+                };
+            }
+
+            const content = readFileSync(absolutePath, 'utf-8');
+            console.log('[READ_GLOBAL] File read successfully');
+
+            return {
+                success: true,
+                content,
+                filePath: absolutePath
+            };
+        } catch (error) {
+            console.error('[READ_GLOBAL] Error reading file:', error);
             return {
                 success: false,
                 error: error instanceof Error ? error.message : 'Unknown error'

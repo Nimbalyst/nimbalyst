@@ -11,6 +11,7 @@ export interface OnboardingConfig {
   onboardingCompleted: boolean;
   plansLocation: 'nimbalyst-local/plans' | 'plans' | string;
   checkInPlans: boolean;
+  commandsLocation: 'project' | 'global'; // .claude/ vs ~/.claude/
   claudeCodeIntegration: {
     enabled: boolean;
     planCommandInstalled: boolean;
@@ -34,6 +35,7 @@ const DEFAULT_CONFIG: OnboardingConfig = {
   onboardingCompleted: false,
   plansLocation: 'nimbalyst-local/plans',
   checkInPlans: false,
+  commandsLocation: 'project', // Default to project-level .claude/
   claudeCodeIntegration: {
     enabled: false,
     planCommandInstalled: false,
@@ -88,7 +90,14 @@ export class OnboardingService {
         return this.currentConfig;
       }
 
-      this.currentConfig = JSON.parse(result.content);
+      const parsedConfig = JSON.parse(result.content);
+
+      // Migrate old configs that don't have commandsLocation
+      if (!parsedConfig.commandsLocation) {
+        parsedConfig.commandsLocation = 'project';
+      }
+
+      this.currentConfig = parsedConfig;
       return this.currentConfig;
     } catch (error) {
       // File doesn't exist or can't be read
@@ -129,24 +138,38 @@ export class OnboardingService {
    * Install /plan command file
    */
   async installPlanCommand(workspacePath: string, plansLocation?: string): Promise<void> {
-    const planCommandPath = joinPath(workspacePath, '.claude', 'commands', 'plan.md');
-    const relativePath = '.claude/commands/plan.md'; // Relative to workspace
+    const config = this.currentConfig || await this.loadConfig(workspacePath);
+    const isGlobal = config.commandsLocation === 'global';
+    const relativePath = 'commands/plan.md'; // Relative to .claude/
 
     try {
       // Check if plan.md already exists
       try {
-        const existing = await window.electronAPI.readFileContent(planCommandPath);
-        if (existing && existing.content) {
-          console.log('plan.md already exists, skipping installation');
-          return;
+        if (isGlobal) {
+          const result = await window.electronAPI.invoke('read-global-claude-file', relativePath);
+          if (result && result.content) {
+            console.log('plan.md already exists in ~/.claude/, skipping installation');
+            return;
+          }
+        } else {
+          const planCommandPath = joinPath(workspacePath, '.claude', 'commands', 'plan.md');
+          const existing = await window.electronAPI.readFileContent(planCommandPath);
+          if (existing && existing.content) {
+            console.log('plan.md already exists in project .claude/, skipping installation');
+            return;
+          }
         }
       } catch (err) {
         // File doesn't exist, continue with installation
       }
 
-      // Write plan command template (create-document expects relative path)
+      // Write plan command template
       const template = this.getPlanCommandTemplate(plansLocation);
-      await window.electronAPI.invoke('create-document', relativePath, template);
+      if (isGlobal) {
+        await window.electronAPI.invoke('write-global-claude-file', relativePath, template);
+      } else {
+        await window.electronAPI.invoke('create-document', `.claude/${relativePath}`, template);
+      }
 
       // Update config
       if (this.currentConfig) {
@@ -163,24 +186,38 @@ export class OnboardingService {
    * Install /track command file
    */
   async installTrackCommand(workspacePath: string): Promise<void> {
-    const trackCommandPath = joinPath(workspacePath, '.claude', 'commands', 'track.md');
-    const relativePath = '.claude/commands/track.md'; // Relative to workspace
+    const config = this.currentConfig || await this.loadConfig(workspacePath);
+    const isGlobal = config.commandsLocation === 'global';
+    const relativePath = 'commands/track.md';
 
     try {
       // Check if track.md already exists
       try {
-        const existing = await window.electronAPI.readFileContent(trackCommandPath);
-        if (existing && existing.content) {
-          console.log('track.md already exists, skipping installation');
-          return;
+        if (isGlobal) {
+          const result = await window.electronAPI.invoke('read-global-claude-file', relativePath);
+          if (result && result.content) {
+            console.log('track.md already exists in ~/.claude/, skipping installation');
+            return;
+          }
+        } else {
+          const trackCommandPath = joinPath(workspacePath, '.claude', 'commands', 'track.md');
+          const existing = await window.electronAPI.readFileContent(trackCommandPath);
+          if (existing && existing.content) {
+            console.log('track.md already exists in project .claude/, skipping installation');
+            return;
+          }
         }
       } catch (err) {
         // File doesn't exist, continue with installation
       }
 
-      // Write track command template (create-document expects relative path)
+      // Write track command template
       const template = this.getTrackCommandTemplate();
-      await window.electronAPI.invoke('create-document', relativePath, template);
+      if (isGlobal) {
+        await window.electronAPI.invoke('write-global-claude-file', relativePath, template);
+      } else {
+        await window.electronAPI.invoke('create-document', `.claude/${relativePath}`, template);
+      }
 
       // Update config
       if (this.currentConfig) {
@@ -197,24 +234,38 @@ export class OnboardingService {
    * Install /track-bug command file
    */
   async installTrackBugCommand(workspacePath: string): Promise<void> {
-    const trackBugCommandPath = joinPath(workspacePath, '.claude', 'commands', 'track-bug.md');
-    const relativePath = '.claude/commands/track-bug.md'; // Relative to workspace
+    const config = this.currentConfig || await this.loadConfig(workspacePath);
+    const isGlobal = config.commandsLocation === 'global';
+    const relativePath = 'commands/track-bug.md';
 
     try {
       // Check if track-bug.md already exists
       try {
-        const existing = await window.electronAPI.readFileContent(trackBugCommandPath);
-        if (existing && existing.content) {
-          console.log('track-bug.md already exists, skipping installation');
-          return;
+        if (isGlobal) {
+          const result = await window.electronAPI.invoke('read-global-claude-file', relativePath);
+          if (result && result.content) {
+            console.log('track-bug.md already exists in ~/.claude/, skipping installation');
+            return;
+          }
+        } else {
+          const trackBugCommandPath = joinPath(workspacePath, '.claude', 'commands', 'track-bug.md');
+          const existing = await window.electronAPI.readFileContent(trackBugCommandPath);
+          if (existing && existing.content) {
+            console.log('track-bug.md already exists in project .claude/, skipping installation');
+            return;
+          }
         }
       } catch (err) {
         // File doesn't exist, continue with installation
       }
 
-      // Write track-bug command template (create-document expects relative path)
+      // Write track-bug command template
       const template = this.getTrackBugCommandTemplate();
-      await window.electronAPI.invoke('create-document', relativePath, template);
+      if (isGlobal) {
+        await window.electronAPI.invoke('write-global-claude-file', relativePath, template);
+      } else {
+        await window.electronAPI.invoke('create-document', `.claude/${relativePath}`, template);
+      }
     } catch (error) {
       console.error('Failed to install track-bug command:', error);
       throw error;
@@ -225,24 +276,38 @@ export class OnboardingService {
    * Install /track-idea command file
    */
   async installTrackIdeaCommand(workspacePath: string): Promise<void> {
-    const trackIdeaCommandPath = joinPath(workspacePath, '.claude', 'commands', 'track-idea.md');
-    const relativePath = '.claude/commands/track-idea.md'; // Relative to workspace
+    const config = this.currentConfig || await this.loadConfig(workspacePath);
+    const isGlobal = config.commandsLocation === 'global';
+    const relativePath = 'commands/track-idea.md';
 
     try {
       // Check if track-idea.md already exists
       try {
-        const existing = await window.electronAPI.readFileContent(trackIdeaCommandPath);
-        if (existing && existing.content) {
-          console.log('track-idea.md already exists, skipping installation');
-          return;
+        if (isGlobal) {
+          const result = await window.electronAPI.invoke('read-global-claude-file', relativePath);
+          if (result && result.content) {
+            console.log('track-idea.md already exists in ~/.claude/, skipping installation');
+            return;
+          }
+        } else {
+          const trackIdeaCommandPath = joinPath(workspacePath, '.claude', 'commands', 'track-idea.md');
+          const existing = await window.electronAPI.readFileContent(trackIdeaCommandPath);
+          if (existing && existing.content) {
+            console.log('track-idea.md already exists in project .claude/, skipping installation');
+            return;
+          }
         }
       } catch (err) {
         // File doesn't exist, continue with installation
       }
 
-      // Write track-idea command template (create-document expects relative path)
+      // Write track-idea command template
       const template = this.getTrackIdeaCommandTemplate();
-      await window.electronAPI.invoke('create-document', relativePath, template);
+      if (isGlobal) {
+        await window.electronAPI.invoke('write-global-claude-file', relativePath, template);
+      } else {
+        await window.electronAPI.invoke('create-document', `.claude/${relativePath}`, template);
+      }
     } catch (error) {
       console.error('Failed to install track-idea command:', error);
       throw error;
@@ -384,78 +449,104 @@ ${preditorSection}`;
     const config = this.currentConfig;
     const location = plansLocation || config?.plansLocation || 'plans';
 
-    return `Create a new plan document in the ${location}/ directory following these guidelines:
+    return `# /plan Command
 
-## File Naming and Location
-- Location: ${location}/[descriptive-name].md
-- Use kebab-case for filenames (e.g., user-authentication-system.md)
-- Name should be descriptive of the feature or task
+Create a new plan document for tracking development work.
 
-## Plan Document Structure
+## Overview
 
-Every plan MUST include YAML frontmatter with the following fields:
+Plans are structured markdown documents with YAML frontmatter that track features, refactors, bug fixes, and other development work. They provide a single source of truth for what needs to be done, who's responsible, and current progress.
+
+## File Location and Naming
+
+**Location**: \`${location}/[descriptive-name].md\`
+
+**Naming conventions**:
+- Use kebab-case: \`user-authentication-system.md\`
+- Be descriptive: The filename should clearly indicate what the plan is about
+- Keep it concise: Aim for 2-5 words
+
+## Required YAML Frontmatter
+
+Every plan MUST start with this frontmatter structure:
 
 \`\`\`yaml
 ---
 planStatus:
-  planId: plan-[unique-identifier]  # Use kebab-case, e.g., plan-user-auth
+  planId: plan-[unique-identifier]  # Use kebab-case
   title: [Plan Title]                # Human-readable title
-  status: [status]                   # See status values below
-  planType: [type]                   # See plan types below
+  status: [status]                   # See Status Values below
+  planType: [type]                   # See Plan Types below
   priority: [priority]               # low | medium | high | critical
   owner: [username]                  # Primary owner/assignee
-  stakeholders:                      # List of stakeholders
-    - [stakeholder1]
-    - [stakeholder2]
-  tags:                              # Relevant tags for categorization
+  tags:                              # Keywords for categorization
     - [tag1]
     - [tag2]
   created: "YYYY-MM-DD"             # Creation date
-  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"  # Last update timestamp
+  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"  # Last update (ISO 8601)
   progress: [0-100]                  # Completion percentage
-  dueDate: "YYYY-MM-DD"              # Due date (optional)
-  startDate: "YYYY-MM-DD"            # Start date (optional)
 ---
 \`\`\`
 
+**Optional frontmatter fields**:
+- \`stakeholders\`: Array of people interested in this plan
+- \`dueDate\`: Target completion date (YYYY-MM-DD)
+- \`startDate\`: When work began (YYYY-MM-DD)
+
 ## Status Values
-- draft: Initial planning phase
-- ready-for-development: Approved and ready for implementation
-- in-development: Currently being worked on
-- in-review: Implementation complete, pending review
-- completed: Successfully completed
-- rejected: Plan has been rejected or cancelled
-- blocked: Progress blocked by dependencies
+
+| Status | When to Use |
+|--------|-------------|
+| \`draft\` | Just created, gathering requirements |
+| \`ready-for-development\` | Planning complete, ready to start |
+| \`in-development\` | Actively being implemented |
+| \`in-review\` | Implementation done, awaiting review |
+| \`completed\` | All acceptance criteria met |
+| \`rejected\` | Decided not to pursue |
+| \`blocked\` | Waiting on dependencies |
 
 ## Plan Types
-- feature: New feature development
-- bug-fix: Bug fix or issue resolution
-- refactor: Code refactoring/improvement
-- system-design: Architecture/design work
-- research: Research/investigation task
 
-## Document Structure
+| Type | Example |
+|------|---------|
+| \`feature\` | Add dark mode, Implement user profiles |
+| \`bug-fix\` | Fix login timeout, Resolve memory leak |
+| \`refactor\` | Migrate to TypeScript, Clean up database |
+| \`system-design\` | Design API architecture, Database schema |
+| \`research\` | Evaluate frameworks, Performance analysis |
 
-After the frontmatter, include:
+## Document Body Structure
 
-1. Title:
+After the frontmatter, organize the plan like this:
+
 \`\`\`markdown
-# Plan Title
+# [Plan Title]
+
+## Goals
+- Clear, measurable objectives
+- What success looks like
+- Key deliverables
+
+## Overview
+Brief description of the problem or feature being addressed.
+
+## Implementation Details
+Technical details about how this will be implemented.
+
+## Acceptance Criteria
+- [ ] Checklist item 1
+- [ ] Checklist item 2
+- [ ] Checklist item 3
 \`\`\`
 
-2. Goals section outlining objectives
-3. System Overview or problem description
-4. Implementation details as needed
-5. Acceptance criteria when applicable
-
-## Example
+## Complete Example
 
 \`\`\`markdown
 ---
 planStatus:
   planId: plan-user-authentication
   title: User Authentication System
-  status: draft
+  status: in-development
   planType: feature
   priority: high
   owner: developer
@@ -465,24 +556,71 @@ planStatus:
   tags:
     - authentication
     - security
-    - user-management
-  created: "2025-10-16"
-  updated: "2025-10-16T10:00:00.000Z"
-  progress: 0
+  created: "2025-10-24"
+  updated: "2025-10-24T14:30:00.000Z"
+  progress: 45
+  startDate: "2025-10-20"
+  dueDate: "2025-11-01"
 ---
 
 # User Authentication System
 
 ## Goals
-- Implement secure user authentication
-- Support multiple authentication providers
-- Ensure session management
+- Implement secure JWT-based authentication
+- Support email/password and OAuth (Google, GitHub)
+- Add role-based access control (RBAC)
+
+## Overview
+
+The app currently has no authentication. We need a complete auth system with multiple sign-in methods and proper authorization.
 
 ## Implementation Details
-[Your implementation details here]
+
+### Technology Stack
+- Passport.js for authentication
+- JWT for stateless auth
+- Redis for sessions
+- bcrypt for password hashing
+
+### API Endpoints
+- \`POST /auth/register\` - User registration
+- \`POST /auth/login\` - Email/password login
+- \`POST /auth/refresh\` - Refresh access token
+- \`GET /auth/google\` - OAuth with Google
+
+## Acceptance Criteria
+- [ ] Users can register with email/password
+- [ ] Users can log in with email/password
+- [ ] OAuth works (Google, GitHub)
+- [ ] JWT tokens expire after 15 minutes
+- [ ] Role-based permissions work
+- [ ] All tests passing
 \`\`\`
 
-When creating a plan, extract the key information from the user's request and populate all required frontmatter fields appropriately.`;
+## Usage
+
+When the user types \`/plan [description]\`:
+
+1. Extract key information from the description
+2. Choose appropriate \`planType\`, \`priority\`, and \`status\`
+3. Generate unique \`planId\` from description (kebab-case)
+4. Set \`created\` to today's date, \`updated\` to current timestamp
+5. Create file in \`${location}/\` with proper frontmatter
+6. Include relevant sections based on plan type
+
+## Related Commands
+
+- \`/track-bug\` - Track a bug (see .claude/commands/track-bug.md)
+- \`/track-idea\` - Track an idea (see .claude/commands/track-idea.md)
+
+## Best Practices
+
+- Keep plans focused (one feature/task per plan)
+- Update status and progress regularly
+- Use clear, descriptive titles
+- Tag appropriately for filtering
+- Link related plans in document body
+- Break large plans into multiple focused plans`;
   }
 
   /**
@@ -546,206 +684,313 @@ Example: "Fix login button not responding on mobile"
    * Get track-bug command template
    */
   private getTrackBugCommandTemplate(): string {
-    return `# track-bug
+    return `# /track-bug Command
+
 Track a bug using Nimbalyst's inline tracker syntax.
 
-## Context Awareness
+## Overview
 
-You should be context-aware when tracking bugs:
+The \`/track-bug\` command creates bug tracking items using a lightweight inline syntax. Bugs can be tracked in dedicated tracker files or directly within plan documents for context-aware organization.
 
-1. **If working on a plan document** (file has \`planStatus\` frontmatter):
-   - Add the bug to the current plan file
-   - Add it in a relevant section (e.g., "Bugs", "Known Issues", "Problems", etc.)
-   - If no such section exists, create a "## Known Issues" section
+## Context-Aware Bug Tracking
 
-2. **If the bug is related to a specific feature/component**:
-   - Check if there's a plan document for that feature in \`nimbalyst-local/plans/\`
-   - If found, add the bug there
+The command automatically determines the best location for the bug:
 
-3. **Otherwise** (general bug or no specific context):
-   - Add the bug to \`nimbalyst-local/tracker/bugs.md\`
-   - If the file doesn't exist, create it with proper structure
+### 1. In Current Plan Document
+If you're working on a plan document (has \`planStatus\` frontmatter):
+- Bug is added to the current plan file
+- Added in a relevant section (e.g., "Bugs", "Known Issues", "Problems")
+- If no such section exists, creates "## Known Issues" section
+
+### 2. In Related Feature Plan
+If the bug is related to a specific feature/component:
+- Checks for a plan document for that feature in \`nimbalyst-local/plans/\`
+- If found, adds the bug there for context
+
+### 3. In Global Bug Tracker
+Otherwise (general bug or no specific context):
+- Adds to \`nimbalyst-local/tracker/bugs.md\`
+- Creates the file with proper structure if it doesn't exist
 
 ## Bug Tracker Syntax
 
-Use the inline tracker syntax with the \`#bug\` prefix:
+Use inline tracker syntax with \`#bug\` prefix:
 
 \`\`\`markdown
 - [Brief bug description] #bug[id:bug_[ulid] status:to-do priority:medium created:YYYY-MM-DD]
 \`\`\`
 
 ### Required Fields
-- \`id\`: Unique identifier using format \`bug_[ulid]\` where ulid is a 26-character Base32 string
-- \`status\`: Current status (to-do | in-progress | done)
-- \`priority\`: Bug severity (low | medium | high | critical)
-- \`created\`: Creation date in YYYY-MM-DD format
+
+| Field | Format | Description |
+|-------|--------|-------------|
+| \`id\` | \`bug_[ulid]\` | Unique identifier (26-char ULID) |
+| \`status\` | \`to-do\|in-progress\|done\` | Current status |
+| \`priority\` | \`low\|medium\|high\|critical\` | Bug severity |
+| \`created\` | \`YYYY-MM-DD\` | Creation date |
 
 ### Optional Fields
-- \`title\`: Explicit title (if different from the line text)
-- \`updated\`: Last update timestamp in ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)
 
-## ID Generation
+| Field | Format | Description |
+|-------|--------|-------------|
+| \`title\` | \`"Title text"\` | Explicit title (if different from line text) |
+| \`updated\` | \`YYYY-MM-DDTHH:MM:SS.sssZ\` | Last update timestamp (ISO 8601) |
+
+## ULID Generation
 
 Generate a unique ULID (Universally Unique Lexicographically Sortable Identifier):
-- Format: 26 characters, Base32 encoded (0-9, A-Z excluding I, L, O, U)
-- Structure: 10 chars timestamp + 16 chars random
-- Example: \`01HQXYZ7890ABCDEF12345\`
 
-Full bug ID format: \`bug_01HQXYZ7890ABCDEF12345\`
+- **Format**: 26 characters, Base32 encoded
+- **Character set**: 0-9, A-Z (excluding I, L, O, U)
+- **Structure**: 10 chars timestamp + 16 chars random
+- **Example**: \`01HQXYZ7890ABCDEF12345\`
+- **Full bug ID**: \`bug_01HQXYZ7890ABCDEF12345\`
+
+**Why ULID?**
+- Lexicographically sortable (sorts by creation time)
+- No central coordination needed
+- URL-safe and case-insensitive
+- More compact than UUIDs
 
 ## Examples
 
-### Simple bug
+### Simple Bug
 \`\`\`markdown
 - Login button doesn't work on mobile Safari #bug[id:bug_01HQXYZ7890ABCDEF12345 status:to-do priority:high created:2025-10-24]
 \`\`\`
 
-### Bug with title
+### Bug with Explicit Title
 \`\`\`markdown
 - Safari mobile login issue #bug[id:bug_01HQXYZ7890ABCDEF12346 status:in-progress priority:high created:2025-10-24 title:"Mobile Safari Login Failure"]
 \`\`\`
 
-### Bug with update timestamp
+### Bug with Update Timestamp
 \`\`\`markdown
 - API timeout on large requests #bug[id:bug_01HQXYZ7890ABCDEF12347 status:to-do priority:critical created:2025-10-24 updated:2025-10-24T14:30:00.000Z]
 \`\`\`
 
-## File Structure for bugs.md
+### Completed Bug
+\`\`\`markdown
+- Memory leak in image loader #bug[id:bug_01HQXYZ7890ABCDEF12348 status:done priority:high created:2025-10-20 updated:2025-10-24T16:00:00.000Z]
+\`\`\`
 
-If creating a new \`nimbalyst-local/tracker/bugs.md\` file, use this structure:
+## Bug Tracker File Structure
+
+If creating \`nimbalyst-local/tracker/bugs.md\`, use this template:
 
 \`\`\`markdown
 # Bugs
 
 ## Active Bugs
 
-- [Bug descriptions go here with #bug syntax]
+- [New and in-progress bugs with #bug syntax]
 
 ## Completed Bugs
 
 - [Completed bugs with status:done]
 \`\`\`
 
-## Process
+## Usage Workflow
 
-1. Extract the bug description from the user's request
-2. Determine the appropriate file based on context
-3. Generate a unique ULID for the bug ID
-4. Create the bug entry with proper syntax
-5. Add it to the appropriate section in the file
-6. Confirm to the user where the bug was tracked
+When the user types \`/track-bug [description]\`:
 
-## Important Notes
+1. **Extract bug details** from the user's description
+2. **Determine location** based on context (plan, related feature, or global tracker)
+3. **Generate ULID** for the unique bug ID
+4. **Create bug entry** with proper inline syntax
+5. **Add to appropriate section** in the target file
+6. **Confirm** to the user where the bug was tracked
 
-- Never hardcode IDs - always generate a new ULID for each bug
-- Always include the creation date
-- Default priority is "medium" unless user specifies otherwise
-- Default status is "to-do" for new bugs
-- Preserve existing file formatting and structure
-- If adding to an existing section, maintain consistent list formatting`;
+## Priority Guidelines
+
+Choose priority based on impact:
+
+- **Critical**: System down, data loss, security vulnerability
+- **High**: Major feature broken, affects many users
+- **Medium**: Feature partially broken, workaround exists
+- **Low**: Minor issue, cosmetic problem, edge case
+
+## Status Transitions
+
+Typical bug lifecycle:
+
+\`\`\`
+to-do → in-progress → done
+         ↓
+      blocked (if stuck)
+\`\`\`
+
+## Related Commands
+
+- \`/plan [description]\` - Create a feature plan (see .claude/commands/plan.md)
+- \`/track-idea [description]\` - Track an idea (see .claude/commands/track-idea.md)
+
+## Best Practices
+
+- **Always generate new ULIDs** - Never hardcode or reuse IDs
+- **Include creation date** - Required for all new bugs
+- **Default to medium priority** - Unless user specifies otherwise
+- **Preserve file formatting** - Maintain existing structure and styling
+- **Group related bugs** - Keep bugs near related content in plans
+- **Update timestamps** - Set \`updated\` field when modifying bugs
+- **Move completed bugs** - Move to "Completed" section when done`;
   }
 
   /**
    * Get track-idea command template
    */
   private getTrackIdeaCommandTemplate(): string {
-    return `# track-idea
+    return `# /track-idea Command
+
 Track a feature idea using Nimbalyst's inline tracker syntax.
 
-## Context Awareness
+## Overview
 
-You should be context-aware when tracking ideas:
+The \`/track-idea\` command creates idea tracking items for feature requests, improvements, and enhancements. Ideas can be tracked in dedicated files or within plan documents for context-aware organization.
 
-1. **If working on a plan document** (file has \`planStatus\` frontmatter):
-   - Add the idea to the current plan file
-   - Add it in a relevant section (e.g., "Ideas", "Future Enhancements", "Improvements", etc.)
-   - If no such section exists, create a "## Future Ideas" section
+## Context-Aware Idea Tracking
 
-2. **If the idea is related to a specific feature/component**:
-   - Check if there's a plan document for that feature in \`nimbalyst-local/plans/\`
-   - If found, add the idea there
+The command automatically determines the best location for the idea:
 
-3. **Otherwise** (general idea or no specific context):
-   - Add the idea to \`nimbalyst-local/tracker/ideas.md\`
-   - If the file doesn't exist, create it with proper structure
+### 1. In Current Plan Document
+If you're working on a plan document (has \`planStatus\` frontmatter):
+- Idea is added to the current plan file
+- Added in a relevant section (e.g., "Ideas", "Future Enhancements", "Improvements")
+- If no such section exists, creates "## Future Ideas" section
+
+### 2. In Related Feature Plan
+If the idea is related to a specific feature/component:
+- Checks for a plan document for that feature in \`nimbalyst-local/plans/\`
+- If found, adds the idea there for context
+
+### 3. In Global Ideas Tracker
+Otherwise (general idea or no specific context):
+- Adds to \`nimbalyst-local/tracker/ideas.md\`
+- Creates the file with proper structure if it doesn't exist
 
 ## Idea Tracker Syntax
 
-Use the inline tracker syntax with the \`#idea\` prefix:
+Use inline tracker syntax with \`#idea\` prefix:
 
 \`\`\`markdown
 - [Brief idea description] #idea[id:ida_[ulid] status:to-do priority:medium created:YYYY-MM-DD]
 \`\`\`
 
 ### Required Fields
-- \`id\`: Unique identifier using format \`ida_[ulid]\` where ulid is a 26-character Base32 string
-- \`status\`: Current status (to-do | in-progress | done)
-- \`priority\`: Idea importance (low | medium | high | critical)
-- \`created\`: Creation date in YYYY-MM-DD format
+
+| Field | Format | Description |
+|-------|--------|-------------|
+| \`id\` | \`ida_[ulid]\` | Unique identifier (26-char ULID) |
+| \`status\` | \`to-do\|in-progress\|done\` | Current status |
+| \`priority\` | \`low\|medium\|high\|critical\` | Idea importance |
+| \`created\` | \`YYYY-MM-DD\` | Creation date |
 
 ### Optional Fields
-- \`title\`: Explicit title (if different from the line text)
-- \`updated\`: Last update timestamp in ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)
 
-## ID Generation
+| Field | Format | Description |
+|-------|--------|-------------|
+| \`title\` | \`"Title text"\` | Explicit title (if different from line text) |
+| \`updated\` | \`YYYY-MM-DDTHH:MM:SS.sssZ\` | Last update timestamp (ISO 8601) |
+
+## ULID Generation
 
 Generate a unique ULID (Universally Unique Lexicographically Sortable Identifier):
-- Format: 26 characters, Base32 encoded (0-9, A-Z excluding I, L, O, U)
-- Structure: 10 chars timestamp + 16 chars random
-- Example: \`01HQXYZ7890ABCDEF12345\`
 
-Full idea ID format: \`ida_01HQXYZ7890ABCDEF12345\`
+- **Format**: 26 characters, Base32 encoded
+- **Character set**: 0-9, A-Z (excluding I, L, O, U)
+- **Structure**: 10 chars timestamp + 16 chars random
+- **Example**: \`01HQXYZ7890ABCDEF12345\`
+- **Full idea ID**: \`ida_01HQXYZ7890ABCDEF12345\`
+
+**Why ULID?**
+- Lexicographically sortable (sorts by creation time)
+- No central coordination needed
+- URL-safe and case-insensitive
+- More compact than UUIDs
 
 ## Examples
 
-### Simple idea
+### Simple Idea
 \`\`\`markdown
 - Add dark mode to settings panel #idea[id:ida_01HQXYZ7890ABCDEF12345 status:to-do priority:medium created:2025-10-24]
 \`\`\`
 
-### Idea with title
+### Idea with Explicit Title
 \`\`\`markdown
 - Dark mode settings #idea[id:ida_01HQXYZ7890ABCDEF12346 status:in-progress priority:high created:2025-10-24 title:"Dark Mode Theme Switcher"]
 \`\`\`
 
-### Idea with update timestamp
+### Idea with Update Timestamp
 \`\`\`markdown
 - Add keyboard shortcuts for common actions #idea[id:ida_01HQXYZ7890ABCDEF12347 status:to-do priority:low created:2025-10-24 updated:2025-10-24T14:30:00.000Z]
 \`\`\`
 
-## File Structure for ideas.md
+### Implemented Idea
+\`\`\`markdown
+- Auto-save draft messages #idea[id:ida_01HQXYZ7890ABCDEF12348 status:done priority:high created:2025-10-20 updated:2025-10-24T16:00:00.000Z]
+\`\`\`
 
-If creating a new \`nimbalyst-local/tracker/ideas.md\` file, use this structure:
+## Ideas Tracker File Structure
+
+If creating \`nimbalyst-local/tracker/ideas.md\`, use this template:
 
 \`\`\`markdown
 # Ideas
 
 ## Active Ideas
 
-- [Idea descriptions go here with #idea syntax]
+- [New and in-progress ideas with #idea syntax]
 
 ## Implemented Ideas
 
 - [Implemented ideas with status:done]
 \`\`\`
 
-## Process
+## Usage Workflow
 
-1. Extract the idea description from the user's request
-2. Determine the appropriate file based on context
-3. Generate a unique ULID for the idea ID
-4. Create the idea entry with proper syntax
-5. Add it to the appropriate section in the file
-6. Confirm to the user where the idea was tracked
+When the user types \`/track-idea [description]\`:
 
-## Important Notes
+1. **Extract idea details** from the user's description
+2. **Determine location** based on context (plan, related feature, or global tracker)
+3. **Generate ULID** for the unique idea ID
+4. **Create idea entry** with proper inline syntax
+5. **Add to appropriate section** in the target file
+6. **Confirm** to the user where the idea was tracked
 
-- Never hardcode IDs - always generate a new ULID for each idea
-- Always include the creation date
-- Default priority is "medium" unless user specifies otherwise
-- Default status is "to-do" for new ideas
-- Preserve existing file formatting and structure
-- If adding to an existing section, maintain consistent list formatting`;
+## Priority Guidelines
+
+Choose priority based on value and effort:
+
+- **Critical**: Must-have feature, competitive necessity
+- **High**: High-value feature, significant user benefit
+- **Medium**: Nice to have, moderate value
+- **Low**: Minor enhancement, low priority
+
+## Status Transitions
+
+Typical idea lifecycle:
+
+\`\`\`
+to-do → in-progress → done
+   ↓
+rejected (if decided not to implement)
+\`\`\`
+
+## Related Commands
+
+- \`/plan [description]\` - Create a feature plan (see .claude/commands/plan.md)
+- \`/track-bug [description]\` - Track a bug (see .claude/commands/track-bug.md)
+
+## Best Practices
+
+- **Always generate new ULIDs** - Never hardcode or reuse IDs
+- **Include creation date** - Required for all new ideas
+- **Default to medium priority** - Unless user specifies otherwise
+- **Preserve file formatting** - Maintain existing structure and styling
+- **Group related ideas** - Keep ideas near related content in plans
+- **Update timestamps** - Set \`updated\` field when modifying ideas
+- **Move implemented ideas** - Move to "Implemented" section when done
+- **Convert to plans** - Promote high-value ideas to full plan documents`;
   }
 
   /**
@@ -754,49 +999,21 @@ If creating a new \`nimbalyst-local/tracker/ideas.md\` file, use this structure:
   private getCLAUDEmdSection(): string {
     const config = this.currentConfig;
     const plansLocation = config?.plansLocation || 'plans';
+    const commandsLocation = config?.commandsLocation === 'global' ? '~/.claude' : '.claude';
 
     return `## Nimbalyst Planning System
 
-This project uses Nimbalyst's structured markdown-based planning system for organizing development work.
-
-### Plan Documents
-- **Location**: All plans are stored in the \`${plansLocation}/\` directory
-- **Format**: Markdown files with YAML frontmatter
-- **Naming**: Use descriptive kebab-case names (e.g., \`user-authentication.md\`)
-
-### Plan Structure
-Every plan document includes:
-- YAML frontmatter with metadata (planId, status, type, priority, etc.)
-- Goals section
-- Implementation details
-- Acceptance criteria
-
-### Status Values
-- \`draft\`: Initial planning
-- \`ready-for-development\`: Ready to implement
-- \`in-development\`: Work in progress
-- \`in-review\`: Pending review
-- \`completed\`: Done
-- \`rejected\`: Cancelled
-- \`blocked\`: Blocked by dependencies
-
-### Plan Types
-- \`feature\`: New feature development
-- \`bug-fix\`: Bug fixes
-- \`refactor\`: Code improvements
-- \`system-design\`: Architecture work
-- \`research\`: Investigation tasks
+This project uses Nimbalyst for structured planning and task tracking.
 
 ### Custom Commands
-Use \`/plan [description]\` to create new plan documents with proper structure and frontmatter.
-Use \`/track [description]\` to create tracking items (bugs, tasks, ideas).
+- \`/plan [description]\` - Create a new plan document (see ${commandsLocation}/commands/plan.md for details)
+- \`/track-bug [description]\` - Track a bug (see ${commandsLocation}/commands/track-bug.md for details)
+- \`/track-idea [description]\` - Track an idea (see ${commandsLocation}/commands/track-idea.md for details)
 
-### Best Practices
-- Keep plans focused and actionable
-- Update progress and status regularly
-- Use clear, descriptive titles
-- Tag plans appropriately for easy filtering
-- Link related plans in the document body`;
+### Plan Location
+Plans are stored in \`${plansLocation}/\` as markdown files with YAML frontmatter.
+
+For detailed documentation on planning, tracking, and templates, see the command files in ${commandsLocation}/commands/.`;
   }
 
   /**

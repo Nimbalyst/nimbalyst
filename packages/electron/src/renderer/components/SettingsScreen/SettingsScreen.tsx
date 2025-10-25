@@ -24,6 +24,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
   isFirstTime = false,
 }) => {
   const [actions, setActions] = useState<SetupAction[]>([]);
+  const [commandsLocation, setCommandsLocation] = useState<'project' | 'global'>('project');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -156,10 +157,46 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
     }
   };
 
-  // Load action status on mount
+  // Load action status and commands location on mount
   useEffect(() => {
-    checkActionStatus();
+    const loadSettings = async () => {
+      await checkActionStatus();
+
+      // Load commands location from config
+      try {
+        const config = await OnboardingService.loadConfig(workspacePath);
+        setCommandsLocation(config.commandsLocation || 'project');
+      } catch (err) {
+        console.error('Failed to load commands location:', err);
+      }
+    };
+
+    loadSettings();
   }, [workspacePath]);
+
+  const handleChangeCommandsLocation = async (newLocation: 'project' | 'global') => {
+    setError(null);
+    setSuccess(null);
+    setIsProcessing(true);
+
+    try {
+      const config = await OnboardingService.loadConfig(workspacePath);
+      config.commandsLocation = newLocation;
+      await OnboardingService.saveConfig(workspacePath, config);
+      setCommandsLocation(newLocation);
+      setSuccess(`Commands location changed to ${newLocation === 'project' ? 'project (.claude/)' : 'global (~/.claude/)'}`);
+
+      // Refresh action status
+      await checkActionStatus();
+
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Failed to change commands location:', err);
+      setError(err instanceof Error ? err.message : 'Failed to change commands location');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleRunAction = async (actionId: string) => {
     const action = actions.find(a => a.id === actionId);
@@ -270,6 +307,48 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
             <span>{success}</span>
           </div>
         )}
+
+        <div className="settings-section">
+          <h3>
+            <span className="material-symbols-outlined">folder</span>
+            Commands Location
+          </h3>
+          <p className="settings-help">
+            Choose where to install custom Claude Code commands for this project.
+          </p>
+
+          <div className="commands-location-selector">
+            <label className="radio-option">
+              <input
+                type="radio"
+                name="commandsLocation"
+                value="project"
+                checked={commandsLocation === 'project'}
+                onChange={() => handleChangeCommandsLocation('project')}
+                disabled={isProcessing}
+              />
+              <div className="radio-option-content">
+                <strong>Project (.claude/)</strong>
+                <p>Commands stored in project directory, can be checked into version control for team sharing</p>
+              </div>
+            </label>
+
+            <label className="radio-option">
+              <input
+                type="radio"
+                name="commandsLocation"
+                value="global"
+                checked={commandsLocation === 'global'}
+                onChange={() => handleChangeCommandsLocation('global')}
+                disabled={isProcessing}
+              />
+              <div className="radio-option-content">
+                <strong>Global (~/.claude/)</strong>
+                <p>Commands stored in home directory, shared across all projects</p>
+              </div>
+            </label>
+          </div>
+        </div>
 
         <div className="settings-section">
           <h3>

@@ -21,6 +21,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
   const [plansLocation, setPlansLocation] = useState<'nimbalyst-local/plans' | 'plans' | 'custom'>('nimbalyst-local/plans');
   const [customPlansLocation, setCustomPlansLocation] = useState('');
   const [checkInPlans, setCheckInPlans] = useState(false);
+  const [commandsLocation, setCommandsLocation] = useState<'project' | 'global'>('project');
   const [enableClaudeCode, setEnableClaudeCode] = useState(false);
   const [installPlanCommand, setInstallPlanCommand] = useState(true);
   const [installTrackCommand, setInstallTrackCommand] = useState(true);
@@ -64,6 +65,12 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
     if (currentStep === 'claude-code' && enableClaudeCode) {
       setIsProcessing(true);
       try {
+        // Update config with commands location first
+        const config = await OnboardingService.loadConfig(workspacePath);
+        config.commandsLocation = commandsLocation;
+        config.claudeCodeIntegration.enabled = true;
+        await OnboardingService.saveConfig(workspacePath, config);
+
         // Install selected components
         if (installPlanCommand) {
           await OnboardingService.installPlanCommand(workspacePath);
@@ -74,11 +81,6 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
         if (configureCLAUDEmd) {
           await OnboardingService.configureCLAUDEmd(workspacePath);
         }
-
-        // Update config
-        const config = await OnboardingService.loadConfig(workspacePath);
-        config.claudeCodeIntegration.enabled = true;
-        await OnboardingService.saveConfig(workspacePath, config);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to configure Claude Code');
         setIsProcessing(false);
@@ -299,7 +301,39 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
 
               {enableClaudeCode && (
                 <div className="claude-code-options">
-                  <p className="options-intro">Select components to install:</p>
+                  <p className="options-intro">Where should commands be installed?</p>
+
+                  <div className="commands-location-options">
+                    <label className="plan-location-option">
+                      <input
+                        type="radio"
+                        name="commandsLocation"
+                        value="project"
+                        checked={commandsLocation === 'project'}
+                        onChange={(e) => setCommandsLocation('project')}
+                      />
+                      <div className="plan-location-content">
+                        <strong>Project (.claude/)</strong> (Recommended)
+                        <p>Commands stored in project directory, can be checked into version control for team sharing</p>
+                      </div>
+                    </label>
+
+                    <label className="plan-location-option">
+                      <input
+                        type="radio"
+                        name="commandsLocation"
+                        value="global"
+                        checked={commandsLocation === 'global'}
+                        onChange={(e) => setCommandsLocation('global')}
+                      />
+                      <div className="plan-location-content">
+                        <strong>Global (~/.claude/)</strong>
+                        <p>Commands stored in home directory, shared across all projects</p>
+                      </div>
+                    </label>
+                  </div>
+
+                  <p className="options-intro" style={{ marginTop: '1.5rem' }}>Select components to install:</p>
 
                   <label className="checkbox-label">
                     <input
@@ -340,10 +374,10 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
                     </p>
                     <ul>
                       <li>
-                        <code>.claude/commands/plan.md</code> - Custom slash command
+                        <code>{commandsLocation === 'project' ? '.claude' : '~/.claude'}/commands/plan.md</code> - Custom slash command
                       </li>
                       <li>
-                        <code>.claude/commands/track.md</code> - Tracking command
+                        <code>{commandsLocation === 'project' ? '.claude' : '~/.claude'}/commands/track.md</code> - Tracking command
                       </li>
                       <li>
                         <code>CLAUDE.md</code> - Planning system documentation
