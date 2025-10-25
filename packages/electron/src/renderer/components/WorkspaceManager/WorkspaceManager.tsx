@@ -233,7 +233,7 @@ export const WorkspaceManager: React.FC = () => {
             </div>
           ) : workspaces.length === 0 ? (
             <div className="sidebar-empty">
-              <p>No recent workspaces</p>
+              <p>No recent projects</p>
             </div>
           ) : (
             workspaces.map(workspace => (
