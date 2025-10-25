@@ -223,6 +223,9 @@ export const WorkspaceManager: React.FC = () => {
             <button className="btn btn-primary" onClick={handleBrowse}>
               Open Folder
             </button>
+            <button className="btn btn-secondary" onClick={handleCreateWorkspace}>
+              New Folder
+            </button>
           </div>
         </div>
 
@@ -350,9 +353,13 @@ export const WorkspaceManager: React.FC = () => {
               </div>
 
               <div className="welcome-actions">
-                <button className="btn btn-large btn-gradient" onClick={handleBrowse}>
+                <button className="btn btn-large btn-welcome-primary" onClick={handleBrowse}>
                   <span className="material-symbols-outlined">folder_open</span>
                   Open Folder
+                </button>
+                <button className="btn btn-large btn-welcome-secondary" onClick={handleCreateWorkspace}>
+                  <span className="material-symbols-outlined">create_new_folder</span>
+                  New Folder
                 </button>
               </div>
             </div>
