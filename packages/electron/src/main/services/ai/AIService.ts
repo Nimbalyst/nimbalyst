@@ -171,11 +171,15 @@ export class AIService {
 
       switch (provider) {
         case 'claude':
-        case 'claude-code':
           apiKey = apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
           if (!apiKey) {
             throw new Error('Anthropic API key not configured');
           }
+          break;
+        case 'claude-code':
+          // Claude Code: API key is optional, uses SSO login if not provided
+          apiKey = apiKeys['claude-code'];
+          // No error if missing - will use SSO login
           break;
         case 'openai':
         case 'openai-codex':
@@ -415,11 +419,16 @@ export class AIService {
         // Get the correct API key based on provider
         let apiKey: string | undefined;
         let errorMessage = 'API key not configured';
+        let requiresApiKey = true;
         switch (session.provider) {
           case 'claude':
-          case 'claude-code':
             apiKey = apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
             errorMessage = 'Anthropic API key not configured';
+            break;
+          case 'claude-code':
+            // Claude Code: API key is optional, uses SSO login if not provided
+            apiKey = apiKeys['claude-code'];
+            requiresApiKey = false;
             break;
           case 'openai':
           case 'openai-codex':
@@ -434,7 +443,7 @@ export class AIService {
             throw new Error(`Unknown provider: ${session.provider}`);
         }
 
-        if (!apiKey) {
+        if (!apiKey && requiresApiKey) {
           throw new Error(errorMessage);
         }
 
@@ -1115,11 +1124,15 @@ export class AIService {
       let apiKey: string | undefined;
       switch (provider) {
         case 'claude':
-        case 'claude-code':
           apiKey = apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
           if (!apiKey) {
             return { success: false, error: 'Anthropic API key not configured' };
           }
+          break;
+        case 'claude-code':
+          // Claude Code: API key is optional, uses SSO login if not provided
+          apiKey = apiKeys['claude-code'];
+          // No error if missing - will use SSO login
           break;
         case 'openai':
         case 'openai-codex':

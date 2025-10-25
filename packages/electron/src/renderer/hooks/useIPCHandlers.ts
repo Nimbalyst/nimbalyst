@@ -256,23 +256,24 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       return;
     }
 
+    // COMMENTED OUT - API key dialog no longer needed, using claude-code login
     // Check for first launch (no API key configured)
-    const checkFirstLaunch = async () => {
-      try {
-        const hasApiKey = await window.electronAPI.aiHasApiKey();
-        if (!hasApiKey) {
-          // Show API key dialog on first launch
-          handlersRef.current.setIsApiKeyDialogOpen(true);
-        }
-      } catch (error) {
-        console.error('Failed to check for API key:', error);
-      }
-    };
+    // const checkFirstLaunch = async () => {
+    //   try {
+    //     const hasApiKey = await window.electronAPI.aiHasApiKey();
+    //     if (!hasApiKey) {
+    //       // Show API key dialog on first launch
+    //       handlersRef.current.setIsApiKeyDialogOpen(true);
+    //     }
+    //   } catch (error) {
+    //     console.error('Failed to check for API key:', error);
+    //   }
+    // };
 
     // Only check on initial mount (when currentFilePath is null)
-    if (!stateRef.current.currentFilePath && !stateRef.current.sessionToLoad) {
-      checkFirstLaunch();
-    }
+    // if (!stateRef.current.currentFilePath && !stateRef.current.sessionToLoad) {
+    //   checkFirstLaunch();
+    // }
 
     // Set up listeners and store cleanup functions
     const cleanupFns: Array<() => void> = [];

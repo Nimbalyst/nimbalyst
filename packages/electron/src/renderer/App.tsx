@@ -1543,7 +1543,9 @@ export default function App() {
               sessionToLoad={sessionToLoad}
               onSessionLoaded={() => setSessionToLoad(null)}
               onSessionIdChange={setCurrentAISessionId}
-              onShowApiKeyError={() => setIsApiKeyDialogOpen(true)}
+              // COMMENTED OUT - API key dialog no longer needed, using claude-code login
+              // onShowApiKeyError={() => setIsApiKeyDialogOpen(true)}
+              onShowApiKeyError={() => {}} // No-op for now
               documentContext={documentContext}
               onApplyEdit={(edit, prompt, aiResponse) => {
                 console.log('Edit already applied by AIChat component, updating UI state');
