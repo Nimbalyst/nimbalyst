@@ -24,6 +24,7 @@ import { registerAttachmentHandlers } from './ipc/AttachmentHandlers';
 import { registerWorkspaceWatcherHandlers } from './file/WorkspaceWatcher';
 import { setupSessionFileHandlers } from './ipc/SessionFileHandlers';
 import { registerSlashCommandHandlers } from './ipc/SlashCommandHandlers';
+import { registerClaudeCodeHandlers } from './ipc/ClaudeCodeHandlers';
 import { getTheme, setTheme, incrementLaunchCount, shouldShowDiscordInvitation, dismissDiscordInvitation } from './utils/store';
 import { AIService } from './services/ai/AIService';
 import { AgentService } from './services/agents/AgentService';
@@ -230,6 +231,7 @@ app.whenReady().then(async () => {
     setupSessionFileHandlers();
     registerSlashCommandHandlers();
     registerAttachmentHandlers();
+    registerClaudeCodeHandlers();
     registerAnalyticsHandlers();
 
     // Initialize AI service

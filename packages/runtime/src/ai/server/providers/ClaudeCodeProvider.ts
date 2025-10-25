@@ -130,7 +130,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         abortController: this.abortController,
         model: 'sonnet',
         permissionMode: 'bypassPermissions'
-        // Do NOT pass API key - Claude Agent SDK manages authentication internally
+        // API key is passed via environment variable if configured (see env setup below)
       };
 
       // Apply tool restrictions based on session type
@@ -174,18 +174,28 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       console.log('[CLAUDE-CODE] Options built without API key (Claude Code manages auth internally)');
 
+      // Set up environment variables for the SDK
+      // If user has configured a claude-code API key, pass it via environment
+      const env: any = { ...process.env };
+
+      if (this.config.apiKey) {
+        console.log('[CLAUDE-CODE] Using API key from config');
+        env.ANTHROPIC_API_KEY = this.config.apiKey;
+      } else {
+        console.log('[CLAUDE-CODE] No API key in config - SDK will use claude login credentials or system env var');
+      }
+
       // In production, we need to spawn claude-code differently
       // The SDK expects to spawn with 'node', but we need to use Electron in node mode
       if (app.isPackaged) {
         // Set environment to run Electron as Node
-        options.env = {
-          ...process.env,
-          ELECTRON_RUN_AS_NODE: '1'
-        };
+        env.ELECTRON_RUN_AS_NODE = '1';
         options.executable = process.execPath;
         options.executableArgs = [];
         console.log('[CLAUDE-CODE] Using Electron as node with ELECTRON_RUN_AS_NODE=1');
       }
+
+      options.env = env;
 
       // If we have a session ID and a claude session ID, resume
       if (sessionId) {

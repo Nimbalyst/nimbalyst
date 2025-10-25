@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ProviderConfig, Model } from '../AIModelsRedesigned';
-import { InstallationProgress } from './InstallationProgress';
-import { CLIInstaller } from '../services/CLIInstaller';
+// Commented out for now - using built-in SDK only
+// import { InstallationProgress } from './InstallationProgress';
+// import { CLIInstaller } from '../services/CLIInstaller';
 import {
   CLAUDE_CODE_TOOLS,
   TOOL_CATEGORIES,
@@ -9,6 +10,9 @@ import {
   getToolsByCategory,
   getDefaultAllowedTools
 } from './claudeCodeTools';
+
+// Built-in SDK version (from package.json)
+const BUNDLED_SDK_VERSION = '0.1.14';
 
 interface ClaudeCodePanelProps {
   config: ProviderConfig;
@@ -23,7 +27,8 @@ interface ClaudeCodePanelProps {
   onConfigChange: (updates: Partial<ProviderConfig>) => void;
 }
 
-const cliInstaller = new CLIInstaller();
+// Commented out - using built-in SDK only
+// const cliInstaller = new CLIInstaller();
 
 export function ClaudeCodePanel({
   config,
@@ -37,283 +42,111 @@ export function ClaudeCodePanel({
   onTestConnection,
   onConfigChange
 }: ClaudeCodePanelProps) {
-  const [isChecking, setIsChecking] = useState(false);
-  const [npmAvailable, setNpmAvailable] = useState<{
-    available: boolean;
-    version?: string;
-    error?: string;
-    checked: boolean;
-  }>({
-    available: false,
-    checked: false
-  });
-  const [localInstallStatus, setLocalInstallStatus] = useState<{
-    installed: boolean;
-    version?: string;
-    updateAvailable?: boolean;
-    path?: string;
-    latestVersion?: string;
-    claudeDesktopVersion?: string;
-  }>({
-    installed: false
-  });
-  const [installationProgress, setInstallationProgress] = useState<{
-    isOpen: boolean;
-    status: string;
-    progress: number;
-    logs: string[];
-    isNodeJs?: boolean;
-  }>({
-    isOpen: false,
-    status: '',
-    progress: 0,
-    logs: [],
-    isNodeJs: false
-  });
+  const [loginStatus, setLoginStatus] = useState<{
+    isLoggedIn: boolean;
+    hasSession: boolean;
+    hasApiKey: boolean;
+  } | null>(null);
 
   useEffect(() => {
-    checkNpmAndInstallation();
+    checkLoginStatus();
   }, []);
 
-  const checkNpmAndInstallation = async () => {
-    console.log('[ClaudeCodePanel] Checking npm and installation...');
-
-    // First check if npm is available
-    const npmCheck = await cliInstaller.checkNpmAvailable();
-    console.log('[ClaudeCodePanel] npm check result:', npmCheck);
-    setNpmAvailable({ ...npmCheck, checked: true });
-
-    // If npm is available, check installation
-    if (npmCheck.available) {
-      console.log('[ClaudeCodePanel] npm is available, checking claude-code installation...');
-      checkInstallation();
-    } else {
-      console.log('[ClaudeCodePanel] npm is NOT available');
-      if (npmCheck.error) {
-        console.error('[ClaudeCodePanel] npm error:', npmCheck.error);
-      }
-    }
-  };
-
-  const checkInstallation = async () => {
-    setIsChecking(true);
+  const checkLoginStatus = async () => {
     try {
-      console.log('[ClaudeCodePanel] Checking installation...');
-      const status = await cliInstaller.checkInstallation('claude-code');
-      console.log('[ClaudeCodePanel] Installation status:', status);
-
-      setLocalInstallStatus(status);
-      onConfigChange({
-        installed: status.installed,
-        version: status.version,
-        updateAvailable: status.updateAvailable,
-        installStatus: status.installed ? 'installed' : 'not-installed'
-      });
+      const status = await window.electronAPI.invoke('claude-code:check-login');
+      setLoginStatus(status);
     } catch (error) {
-      console.error('Failed to check Claude Code installation:', error);
-      setLocalInstallStatus({ installed: false });
-      onConfigChange({
-        installStatus: 'not-installed'
-      });
-    } finally {
-      setIsChecking(false);
+      console.error('Failed to check login status:', error);
+      setLoginStatus({ isLoggedIn: false, hasSession: false, hasApiKey: false });
     }
   };
 
-  const handleInstall = async () => {
-    setInstallationProgress({
-      isOpen: true,
-      status: 'Preparing to install Claude Code...',
-      progress: 0,
-      logs: []
-    });
+  // Commented out - no longer checking local installation
+  // const [isChecking, setIsChecking] = useState(false);
+  // const [npmAvailable, setNpmAvailable] = useState<{
+  //   available: boolean;
+  //   version?: string;
+  //   error?: string;
+  //   checked: boolean;
+  // }>({
+  //   available: false,
+  //   checked: false
+  // });
+  // const [localInstallStatus, setLocalInstallStatus] = useState<{
+  //   installed: boolean;
+  //   version?: string;
+  //   updateAvailable?: boolean;
+  //   path?: string;
+  //   latestVersion?: string;
+  //   claudeDesktopVersion?: string;
+  // }>({
+  //   installed: false
+  // });
+  // const [installationProgress, setInstallationProgress] = useState<{
+  //   isOpen: boolean;
+  //   status: string;
+  //   progress: number;
+  //   logs: string[];
+  //   isNodeJs?: boolean;
+  // }>({
+  //   isOpen: false,
+  //   status: '',
+  //   progress: 0,
+  //   logs: [],
+  //   isNodeJs: false
+  // });
 
-    onConfigChange({ installStatus: 'installing' });
+  // useEffect(() => {
+  //   checkNpmAndInstallation();
+  // }, []);
 
-    try {
-      await cliInstaller.install('claude-code', {
-        onProgress: (progress) => {
-          if (!progress) return;
-          setInstallationProgress(prev => ({
-            ...prev,
-            progress: progress.percent || 0,
-            status: progress.status || '',
-            logs: [...prev.logs, progress.log].filter(Boolean)
-          }));
-        }
-      });
+  // Commented out - no longer managing installation
+  // const checkNpmAndInstallation = async () => {
+  //   console.log('[ClaudeCodePanel] Checking npm and installation...');
+  //   const npmCheck = await cliInstaller.checkNpmAvailable();
+  //   console.log('[ClaudeCodePanel] npm check result:', npmCheck);
+  //   setNpmAvailable({ ...npmCheck, checked: true });
+  //   if (npmCheck.available) {
+  //     console.log('[ClaudeCodePanel] npm is available, checking claude-code installation...');
+  //     checkInstallation();
+  //   } else {
+  //     console.log('[ClaudeCodePanel] npm is NOT available');
+  //     if (npmCheck.error) {
+  //       console.error('[ClaudeCodePanel] npm error:', npmCheck.error);
+  //     }
+  //   }
+  // };
 
-      onConfigChange({ 
-        installed: true,
-        installStatus: 'installed'
-      });
-      
-      // Re-check to get version info
-      await checkInstallation();
-      
-      setInstallationProgress(prev => ({
-        ...prev,
-        status: 'Installation complete!',
-        progress: 100
-      }));
-      
-      setTimeout(() => {
-        setInstallationProgress(prev => ({ ...prev, isOpen: false }));
-      }, 2000);
-    } catch (error: any) {
-      onConfigChange({ installStatus: 'error' });
+  // const checkInstallation = async () => {
+  //   setIsChecking(true);
+  //   try {
+  //     console.log('[ClaudeCodePanel] Checking installation...');
+  //     const status = await cliInstaller.checkInstallation('claude-code');
+  //     console.log('[ClaudeCodePanel] Installation status:', status);
+  //     setLocalInstallStatus(status);
+  //     onConfigChange({
+  //       installed: status.installed,
+  //       version: status.version,
+  //       updateAvailable: status.updateAvailable,
+  //       installStatus: status.installed ? 'installed' : 'not-installed'
+  //     });
+  //   } catch (error) {
+  //     console.error('Failed to check Claude Code installation:', error);
+  //     setLocalInstallStatus({ installed: false });
+  //     onConfigChange({
+  //       installStatus: 'not-installed'
+  //     });
+  //   } finally {
+  //     setIsChecking(false);
+  //   }
+  // };
 
-      // Parse the error message to show in the logs
-      const errorMessage = error.message || 'Unknown error occurred';
-      const errorDetails = error.stderr || error.stdout || '';
-
-      setInstallationProgress(prev => ({
-        ...prev,
-        status: `Installation failed: ${errorMessage}`,
-        progress: 0,
-        logs: [
-          ...prev.logs,
-          '❌ Installation failed',
-          errorMessage,
-          ...(errorDetails ? errorDetails.split('\n').filter(Boolean) : [])
-        ]
-      }));
-    }
-  };
-
-  const handleUpdate = async () => {
-    setInstallationProgress({
-      isOpen: true,
-      status: 'Preparing to update Claude Code...',
-      progress: 0,
-      logs: []
-    });
-
-    onConfigChange({ installStatus: 'installing' });
-
-    try {
-      await cliInstaller.update('claude-code', {
-        onProgress: (progress) => {
-          if (!progress) return;
-          setInstallationProgress(prev => ({
-            ...prev,
-            progress: progress.percent || 0,
-            status: progress.status || '',
-            logs: [...prev.logs, progress.log].filter(Boolean).slice(-10)
-          }));
-        }
-      });
-
-      onConfigChange({
-        installed: true,
-        installStatus: 'installed',
-        updateAvailable: false
-      });
-
-      // Re-check to get new version info
-      await checkInstallation();
-
-      setInstallationProgress(prev => ({
-        ...prev,
-        status: 'Update complete!',
-        progress: 100
-      }));
-
-      setTimeout(() => {
-        setInstallationProgress(prev => ({ ...prev, isOpen: false }));
-      }, 2000);
-    } catch (error: any) {
-      onConfigChange({ installStatus: 'error' });
-
-      // Parse the error message to show in the logs
-      const errorMessage = error.message || 'Unknown error occurred';
-      const errorDetails = error.stderr || error.stdout || '';
-
-      setInstallationProgress(prev => ({
-        ...prev,
-        status: `Update failed: ${errorMessage}`,
-        progress: 0,
-        logs: [
-          ...prev.logs,
-          '❌ Update failed',
-          errorMessage,
-          ...(errorDetails ? errorDetails.split('\n').filter(Boolean) : [])
-        ]
-      }));
-    }
-  };
-
-  const handleUninstall = async () => {
-    if (!confirm('Are you sure you want to uninstall Claude Code CLI?')) {
-      return;
-    }
-
-    setIsChecking(true);
-    try {
-      await cliInstaller.uninstall('claude-code');
-      onConfigChange({
-        installed: false,
-        version: undefined,
-        installStatus: 'not-installed'
-      });
-    } catch (error) {
-      console.error('Failed to uninstall Claude Code:', error);
-    } finally {
-      setIsChecking(false);
-    }
-  };
-
-  const handleInstallNodeJs = async () => {
-    setInstallationProgress({
-      isOpen: true,
-      status: 'Preparing to install Node.js...',
-      progress: 0,
-      logs: [],
-      isNodeJs: true
-    });
-
-    try {
-      await cliInstaller.installNodeJs({
-        onProgress: (progress) => {
-          if (!progress) return;
-          setInstallationProgress(prev => ({
-            ...prev,
-            progress: progress.percent || 0,
-            status: progress.status || '',
-            logs: [...prev.logs, progress.log].filter(Boolean).slice(-10)
-          }));
-        }
-      });
-
-      // After successful installation, re-check npm availability
-      await checkNpmAndInstallation();
-
-      setInstallationProgress(prev => ({
-        ...prev,
-        status: 'Node.js installed! Please restart Nimbalyst.',
-        progress: 100
-      }));
-    } catch (error: any) {
-      setInstallationProgress(prev => ({
-        ...prev,
-        status: error.message || 'Installation failed',
-        progress: 0,
-        logs: [
-          ...prev.logs,
-          error.message || 'Unknown error occurred'
-        ]
-      }));
-    }
-  };
-
-  const getInstallationStatusClass = () => {
-    switch (config.installStatus) {
-      case 'installed': return 'installed';
-      case 'installing': return 'installing';
-      case 'error': return 'error';
-      default: return 'not-installed';
-    }
-  };
+  // const handleInstall = async () => { ... };
+  // const handleUpdate = async () => { ... };
+  // const handleUninstall = async () => { ... };
+  // const handleInstallNodeJs = async () => { ... };
+  // const getInstallationStatusClass = () => { ... };
 
   return (
     <div className="provider-panel">
@@ -341,147 +174,143 @@ export function ClaudeCodePanel({
       </div>
 
       <div className="provider-panel-section">
-        <h4 className="provider-panel-section-title">Installation Status</h4>
-            <div className={`installation-status ${getInstallationStatusClass()}`}>
-              {isChecking ? (
-                <div className="installation-status-row">
-                  <span className="installation-status-label">Checking installation...</span>
-                </div>
-              ) : (
-                <>
-                  <div className="installation-status-row">
-                    <span className="installation-status-label">Status:</span>
-                    <span className="installation-status-value">
-                      {localInstallStatus.installed || config.installed ? 'Installed' : 'Not Installed'}
-                      {config.installStatus === 'installing' && ' (Installing...)'}
-                    </span>
+        <h4 className="provider-panel-section-title">Claude Agent SDK</h4>
+        <div className="installation-status installed">
+          <div className="installation-status-row">
+            <span className="installation-status-label">Version:</span>
+            <span className="installation-status-value">{BUNDLED_SDK_VERSION}</span>
+          </div>
+          <div className="installation-status-row">
+            <span className="installation-status-label">Source:</span>
+            <span className="installation-status-value">Built-in (bundled with app)</span>
+          </div>
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px', lineHeight: '1.4' }}>
+            Nimbalyst includes the Claude Agent SDK. No additional installation required.
+          </p>
+        </div>
+      </div>
+
+      {config.enabled && (
+        <>
+              <div className="provider-panel-section">
+                <h4 className="provider-panel-section-title">Authentication</h4>
+                <div className="api-key-section">
+                  <div style={{
+                    fontSize: '13px',
+                    color: 'var(--text-secondary)',
+                    marginBottom: '12px',
+                    padding: '10px',
+                    backgroundColor: 'var(--surface-secondary)',
+                    borderRadius: '4px',
+                    lineHeight: '1.5'
+                  }}>
+                    <strong>Choose authentication method:</strong>
+                    <br /><br />
+                    <strong>1. Claude Pro/Max subscription:</strong> Use your existing subscription (no extra charges)
+                    <br />
+                    <strong>2. Anthropic API key:</strong> Pay per use with API credits (enter key below)
                   </div>
-                  {(localInstallStatus.version || config.version) && (
-                    <div className="installation-status-row">
-                      <span className="installation-status-label">Version:</span>
-                      <span className="installation-status-value">{localInstallStatus.version || config.version}</span>
-                    </div>
-                  )}
-                  {(localInstallStatus.path) && (
-                    <div className="installation-status-row">
-                      <span className="installation-status-label">Location:</span>
-                      <span className="installation-status-value" style={{ fontSize: '11px' }}>
-                        {localInstallStatus.path}
-                      </span>
-                    </div>
-                  )}
-                  {(localInstallStatus.claudeDesktopVersion && !localInstallStatus.installed) && (
-                    <div className="installation-status-row">
-                      <span className="installation-status-label">Note:</span>
-                      <span className="installation-status-value" style={{ fontSize: '11px' }}>
-                        Claude Desktop has v{localInstallStatus.claudeDesktopVersion} installed separately
-                      </span>
-                    </div>
-                  )}
-                  {(localInstallStatus.updateAvailable || config.updateAvailable) && (
-                    <div className="installation-status-row">
-                      <span className="installation-status-label">Update:</span>
-                      <span className="installation-status-value">
-                        Version {localInstallStatus.latestVersion || 'new'} available
-                      </span>
-                    </div>
-                  )}
-                  {!npmAvailable.checked ? (
-                    <div className="installation-status-row">
-                      <span className="installation-status-label">Checking npm...</span>
-                    </div>
-                  ) : !npmAvailable.available ? (
-                    <div className="installation-npm-warning">
-                      <div className="installation-status-row">
-                        <span className="installation-status-label" style={{ color: 'var(--color-error, #e74c3c)' }}>⚠️ npm not found</span>
-                      </div>
-                      <div style={{ fontSize: '12px', marginTop: '8px', lineHeight: '1.4' }}>
-                        Claude Code requires Node.js and npm to be installed.
-                      </div>
-                      <div className="installation-actions" style={{ marginTop: '12px' }}>
-                        <button
-                          className="button-install"
-                          onClick={handleInstallNodeJs}
-                        >
-                          Install Node.js
-                        </button>
-                        <button
-                          className="button-uninstall"
-                          onClick={checkNpmAndInstallation}
-                        >
-                          Refresh
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="installation-actions">
-                      {!localInstallStatus.installed && !config.installed && (
-                        <button
-                          className="button-install"
-                          onClick={handleInstall}
-                          disabled={config.installStatus === 'installing' || !npmAvailable.available}
-                        >
-                          Install Claude Code
-                        </button>
+
+                  {/* Login Status */}
+                  {loginStatus && (
+                    <div style={{
+                      marginBottom: '12px',
+                      padding: '10px',
+                      backgroundColor: loginStatus.isLoggedIn ? 'var(--surface-secondary)' : 'transparent',
+                      borderRadius: '4px',
+                      fontSize: '13px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      {loginStatus.isLoggedIn ? (
+                        <>
+                          <span style={{ color: '#10b981', fontSize: '16px' }}>✓</span>
+                          <span style={{ color: 'var(--text-primary)' }}>
+                            <strong>Logged in with Claude subscription</strong>
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: '16px' }}>ℹ️</span>
+                          <span style={{ color: 'var(--text-secondary)' }}>
+                            Not logged in with subscription
+                          </span>
+                        </>
                       )}
-                      {(localInstallStatus.installed || config.installed) && (localInstallStatus.updateAvailable || config.updateAvailable) && (
-                        <button
-                          className="button-update"
-                          onClick={handleUpdate}
-                          disabled={config.installStatus === 'installing' || !npmAvailable.available}
-                        >
-                          Update
-                        </button>
-                      )}
-                      {(localInstallStatus.installed || config.installed) && (
-                        <button
-                          className="button-uninstall"
-                          onClick={handleUninstall}
-                          disabled={config.installStatus === 'installing' || !npmAvailable.available}
-                        >
-                          Uninstall
-                        </button>
-                      )}
+                    </div>
+                  )}
+
+                  {/* Login Button - only show if not logged in */}
+                  {loginStatus && !loginStatus.isLoggedIn && (
+                    <div style={{ marginBottom: '12px' }}>
                       <button
-                        className="button-uninstall"
-                        onClick={checkNpmAndInstallation}
-                        disabled={isChecking}
+                        style={{
+                          width: '100%',
+                          padding: '10px 16px',
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          border: 'none',
+                          background: 'var(--primary-color, #2563eb)',
+                          color: 'white'
+                        }}
+                        onClick={async () => {
+                          try {
+                            const result = await window.electronAPI.invoke('claude-code:login');
+                            alert('Login initiated! Please complete authentication in your browser, then click OK to refresh status.');
+                            // Refresh login status after user confirms
+                            await checkLoginStatus();
+                          } catch (error: any) {
+                            alert(`Login failed: ${error.message}`);
+                          }
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.opacity = '0.9';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.opacity = '1';
+                        }}
                       >
-                        Refresh Status
+                        Login with Claude Subscription
                       </button>
                     </div>
                   )}
-                </>
-              )}
-            </div>
-          </div>
-
-      {config.enabled && (localInstallStatus.installed || config.installed) && (
-        <>
-              <div className="provider-panel-section">
-                <h4 className="provider-panel-section-title">API Configuration</h4>
-                <div className="api-key-section">
-                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                    Claude Code uses the same API key as Claude (Anthropic)
-                  </p>
                   <div className="api-key-row">
                     <input
                       type="password"
-                      value={apiKeys.anthropic || ''}
-                      onChange={(e) => onApiKeyChange('anthropic', e.target.value)}
+                      value={apiKeys['claude-code'] || ''}
+                      onChange={(e) => onApiKeyChange('claude-code', e.target.value)}
                       onFocus={(e) => e.target.select()}
-                      placeholder="sk-ant-..."
+                      placeholder="sk-ant-... (optional if using subscription)"
                       className="api-key-input"
                     />
-                    <button
-                      className={`test-button ${config.testStatus}`}
-                      onClick={onTestConnection}
-                      disabled={config.testStatus === 'testing'}
-                    >
-                      {config.testStatus === 'testing' ? 'Testing...' :
-                       config.testStatus === 'success' ? '✓ Connected' :
-                       config.testStatus === 'error' ? '✗ Failed' : 'Test'}
-                    </button>
+                    {apiKeys['claude-code'] ? (
+                      <button
+                        className={`test-button ${config.testStatus}`}
+                        onClick={onTestConnection}
+                        disabled={config.testStatus === 'testing'}
+                      >
+                        {config.testStatus === 'testing' ? 'Testing...' :
+                         config.testStatus === 'success' ? '✓ Connected' :
+                         config.testStatus === 'error' ? '✗ Failed' : 'Test'}
+                      </button>
+                    ) : (
+                      <div style={{
+                        padding: '8px 16px',
+                        fontSize: '13px',
+                        color: 'var(--text-secondary)',
+                        backgroundColor: 'var(--surface-secondary)',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        ℹ️ Using subscription auth
+                      </div>
+                    )}
                   </div>
                   {config.testMessage && config.testStatus === 'error' && (
                     <div className="test-error">{config.testMessage}</div>
@@ -627,7 +456,8 @@ export function ClaudeCodePanel({
         </>
       )}
 
-      {installationProgress.isOpen && (
+      {/* Commented out - no longer managing installation */}
+      {/* {installationProgress.isOpen && (
         <InstallationProgress
           title={installationProgress.isNodeJs ? "Installing Node.js" : "Installing Claude Code"}
           status={installationProgress.status}
@@ -635,7 +465,7 @@ export function ClaudeCodePanel({
           logs={installationProgress.logs}
           onClose={() => setInstallationProgress(prev => ({ ...prev, isOpen: false }))}
         />
-      )}
+      )} */}
     </div>
   );
 }
