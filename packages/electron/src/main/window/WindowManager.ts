@@ -334,6 +334,13 @@ export function createWindow(
                     }
                 }
             }
+
+            // Save session state immediately after window closes
+            // This ensures the global session state is updated so closed windows don't reopen on app launch
+            import('../session/SessionState').then(({ saveSessionState }) => {
+                saveSessionState();
+            });
+
             // Update menu to reflect window closure
             // This will be handled by the menu system
         });
