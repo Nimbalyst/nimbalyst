@@ -1,7 +1,5 @@
 import { spawn } from 'child_process';
-import path from 'path';
-import fs from 'fs';
-import os from 'os';
+import { logger } from '../utils/logger';
 
 export interface ClaudeCodeStatus {
   installed: boolean;
@@ -76,122 +74,136 @@ export class ClaudeCodeDetector {
   }
 
   /**
-   * Check if the bundled SDK CLI is available
+   * Check if the user has Claude Code CLI installed globally
    */
   private async checkInstallation(): Promise<{ installed: boolean; version?: string }> {
-    try {
-      // Try to find the bundled Claude Agent SDK CLI
-      const cliPath = this.findBundledCli();
-
-      if (!cliPath) {
-        console.log('[ClaudeCodeDetector] Bundled CLI not found');
-        return { installed: false };
-      }
-
-      // Try to get version
-      const version = await this.getCliVersion(cliPath);
-
-      return {
-        installed: true,
-        version,
-      };
-    } catch (error) {
-      console.error('[ClaudeCodeDetector] Installation check failed:', error);
-      return { installed: false };
-    }
-  }
-
-  /**
-   * Get the CLI version
-   */
-  private async getCliVersion(cliPath: string): Promise<string | undefined> {
     return new Promise((resolve) => {
       try {
-        const versionProcess = spawn('node', [cliPath, '--version'], {
-          timeout: 5000,
+        // Try to run: claude --version
+        logger.main.info('[ClaudeCodeDetector] Checking for Claude Code CLI installation...');
+
+        // Include ~/.local/bin in PATH for native installs
+        const env = {
+          ...process.env,
+          PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`,
+        };
+
+        const childProcess = spawn('claude', ['--version'], {
+          timeout: 10000,
           shell: true,
+          env,
         });
 
         let output = '';
+        let errorOutput = '';
 
-        versionProcess.stdout?.on('data', (data) => {
+        childProcess.stdout?.on('data', (data) => {
           output += data.toString();
         });
 
-        versionProcess.on('close', (code) => {
+        childProcess.stderr?.on('data', (data) => {
+          errorOutput += data.toString();
+        });
+
+        childProcess.on('close', (code) => {
           if (code === 0 && output) {
             const version = output.trim();
-            resolve(version);
+            logger.main.info('[ClaudeCodeDetector] CLI installed, version:', version);
+            resolve({ installed: true, version });
           } else {
-            resolve(undefined);
+            logger.main.info('[ClaudeCodeDetector] CLI not installed or failed to run. Exit code:', code);
+            if (errorOutput) {
+              logger.main.info('[ClaudeCodeDetector] Error output:', errorOutput);
+            }
+            resolve({ installed: false });
           }
         });
 
-        versionProcess.on('error', () => {
-          resolve(undefined);
+        childProcess.on('error', (error) => {
+          logger.main.error('[ClaudeCodeDetector] Failed to spawn claude:', error);
+          resolve({ installed: false });
         });
       } catch (error) {
-        resolve(undefined);
+        logger.main.error('[ClaudeCodeDetector] Installation check failed:', error);
+        resolve({ installed: false });
       }
     });
   }
 
   /**
-   * Check login status by looking for credentials
+   * Check login status by running `claude -p status`
    */
   private async checkLoginStatus(): Promise<{
     loggedIn: boolean;
     hasSession?: boolean;
     hasApiKey?: boolean;
   }> {
-    try {
-      // Check for stored credentials in the config directory
-      // Claude SDK stores credentials in ~/.config/claude-code/credentials.json
-      const configDir = path.join(os.homedir(), '.config', 'claude-code');
-      const credentialsPath = path.join(configDir, 'credentials.json');
+    return new Promise((resolve) => {
+      try {
+        logger.main.info('[ClaudeCodeDetector] Checking login status with claude -p status...');
 
-      if (!fs.existsSync(credentialsPath)) {
-        return { loggedIn: false };
+        // Include ~/.local/bin in PATH for native installs
+        // Set TERM and other vars to indicate non-interactive mode
+        const env = {
+          ...process.env,
+          PATH: `${process.env.HOME}/.local/bin:${process.env.PATH}`,
+          TERM: 'dumb', // Indicate non-interactive terminal
+          CI: 'true',   // Some CLIs use this to detect non-interactive mode
+        };
+
+        const childProcess = spawn('claude', ['-p', 'status'], {
+          timeout: 10000, // 10 seconds should be enough - fails fast when not logged in
+          shell: true,
+          env,
+          stdio: ['ignore', 'pipe', 'pipe'], // Ignore stdin, capture stdout/stderr
+        });
+
+        let output = '';
+        let errorOutput = '';
+
+        childProcess.stdout?.on('data', (data) => {
+          output += data.toString();
+        });
+
+        childProcess.stderr?.on('data', (data) => {
+          errorOutput += data.toString();
+        });
+
+        childProcess.on('close', (code) => {
+          const combinedOutput = output + errorOutput;
+
+          // If output contains "Invalid API key" or "Please run /login", user is not logged in
+          if (combinedOutput.includes('Invalid API key') || combinedOutput.includes('Please run /login')) {
+            logger.main.info('[ClaudeCodeDetector] User not logged in');
+            resolve({ loggedIn: false });
+          } else if (code === 0) {
+            // Exit code 0 and no error message means logged in
+            logger.main.info('[ClaudeCodeDetector] User is logged in (exit code 0)');
+            resolve({ loggedIn: true, hasSession: true });
+          } else if (code === 143 || code === null) {
+            // Exit code 143 = SIGTERM timeout, or null = process was killed by timeout
+            // The command times out when it's actually working (generating status output),
+            // which only happens when logged in. When not logged in, it fails fast with
+            // "Invalid API key" message.
+            logger.main.info('[ClaudeCodeDetector] User is logged in (command timed out but was working)');
+            resolve({ loggedIn: true, hasSession: true });
+          } else {
+            logger.main.info('[ClaudeCodeDetector] Unexpected output from status command:', combinedOutput, 'Exit code:', code);
+            // Some other error
+            logger.main.info('[ClaudeCodeDetector] Login status check failed, assuming not logged in');
+            resolve({ loggedIn: false });
+          }
+        });
+
+        childProcess.on('error', (error) => {
+          logger.main.error('[ClaudeCodeDetector] Failed to run claude -p status:', error);
+          resolve({ loggedIn: false });
+        });
+      } catch (error) {
+        logger.main.error('[ClaudeCodeDetector] Login status check failed:', error);
+        resolve({ loggedIn: false });
       }
-
-      const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
-
-      // Check if credentials are valid (has session token or API key)
-      const hasSession = !!credentials.sessionToken;
-      const hasApiKey = !!credentials.apiKey;
-      const loggedIn = hasSession || hasApiKey;
-
-      return {
-        loggedIn,
-        hasSession,
-        hasApiKey,
-      };
-    } catch (error) {
-      console.error('[ClaudeCodeDetector] Login status check failed:', error);
-      return { loggedIn: false };
-    }
-  }
-
-  /**
-   * Find the bundled Claude Agent SDK CLI
-   */
-  private findBundledCli(): string | null {
-    try {
-      // Try to resolve the package
-      const packagePath = require.resolve('@anthropic-ai/claude-agent-sdk');
-      const packageDir = path.dirname(packagePath);
-      const cliPath = path.join(packageDir, 'cli.js');
-
-      if (fs.existsSync(cliPath)) {
-        return cliPath;
-      }
-
-      console.error('[ClaudeCodeDetector] CLI not found at expected path:', cliPath);
-      return null;
-    } catch (error) {
-      console.error('[ClaudeCodeDetector] Error finding bundled CLI:', error);
-      return null;
-    }
+    });
   }
 }
 

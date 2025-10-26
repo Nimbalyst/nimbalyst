@@ -50,7 +50,7 @@ export function GettingStartedPanel({ onContinue }: GettingStartedPanelProps) {
   };
 
   const handleOpenDocs = () => {
-    window.electronAPI.invoke('open-external', 'https://docs.claude.com/en/docs/claude-code/quickstart');
+    window.electronAPI.invoke('open-external', 'https://docs.claude.com/en/docs/claude-code/quickstart#native-install');
   };
 
   const isReady = status?.installed && status?.loggedIn;
@@ -148,8 +148,8 @@ export function GettingStartedPanel({ onContinue }: GettingStartedPanelProps) {
                     <div className="setup-step">
                       <span className="material-symbols-outlined step-icon">error</span>
                       <div>
-                        <h5>Claude Code CLI not detected</h5>
-                        <p>The bundled Claude Agent SDK was not found. This should not happen in a normal installation.</p>
+                        <h5>Claude Code CLI not installed</h5>
+                        <p>To use agentic coding features, install Claude Code CLI and log in with your Anthropic account.</p>
                       </div>
                     </div>
                   ) : !status.loggedIn ? (
@@ -157,11 +157,7 @@ export function GettingStartedPanel({ onContinue }: GettingStartedPanelProps) {
                       <span className="material-symbols-outlined step-icon">info</span>
                       <div>
                         <h5>Login required</h5>
-                        <p>To use agentic coding features:</p>
-                        <ol className="setup-instructions">
-                          <li>Log in with your Anthropic account</li>
-                          <li>Choose between Claude Pro/Max subscription or API key</li>
-                        </ol>
+                        <p>Claude Code is installed but you need to log in with your Anthropic account.</p>
                       </div>
                     </div>
                   ) : null}
