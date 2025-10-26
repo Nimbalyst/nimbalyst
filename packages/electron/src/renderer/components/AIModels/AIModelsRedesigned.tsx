@@ -10,6 +10,7 @@ import { OpenAICodexPanel } from './panels/OpenAICodexPanel';
 import { LMStudioPanel } from './panels/LMStudioPanel';
 import { AdvancedPanel } from './panels/AdvancedPanel';
 import {AnalyticsSettingsPanel} from "./panels/AnalyticsPanel.tsx";
+import { GettingStartedPanel } from '../SettingsScreen/GettingStartedPanel';
 
 // Apply theme IMMEDIATELY when module loads - BEFORE React renders
 // This prevents flash of wrong theme
@@ -102,6 +103,7 @@ interface AIModelsProps {
 }
 
 type ProviderId = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio' | 'advanced' | 'analytics';
+type NavItemId = 'getting-started' | ProviderId;
 
 interface Provider {
   id: ProviderId;
@@ -111,7 +113,8 @@ interface Provider {
   type: 'api' | 'cli' | 'local';
 }
 
-const PROVIDERS: Provider[] = [
+// All available providers (some may be filtered based on environment)
+const ALL_PROVIDERS: Provider[] = [
   {
     id: 'claude',
     name: 'Claude',
@@ -149,8 +152,24 @@ const PROVIDERS: Provider[] = [
   }
 ];
 
+// Filter providers based on environment
+// In production, hide Codex provider
+const PROVIDERS: Provider[] = ALL_PROVIDERS.filter(provider => {
+  // Hide Codex in production
+  if (provider.id === 'openai-codex' && import.meta.env.PROD) {
+    return false;
+  }
+  return true;
+});
+
 export function AIModelsRedesigned({ onClose }: AIModelsProps) {
-  const [selectedProvider, setSelectedProvider] = useState<ProviderId>('claude-code');
+  // Check if this is first time from URL params
+  const urlParams = new URLSearchParams(window.location.search);
+  const isFirstTime = urlParams.get('isFirstTime') === 'true';
+
+  const [selectedNav, setSelectedNav] = useState<NavItemId>(
+    isFirstTime ? 'getting-started' : 'claude-code'
+  );
   const [providers, setProviders] = useState<Record<string, ProviderConfig>>({
     claude: { enabled: false, testStatus: 'idle' },
     'claude-code': { enabled: false, testStatus: 'idle', installStatus: 'not-installed' },
@@ -296,37 +315,37 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
 
   const renderProviderPanel = () => {
     const commonProps = {
-      config: providers[selectedProvider] || { enabled: false, testStatus: 'idle' },
+      config: providers[selectedNav] || { enabled: false, testStatus: 'idle' },
       apiKeys,
-      availableModels: availableModels[selectedProvider] || [],
-      loading: loading[selectedProvider] || false,
-      onToggle: (enabled: boolean) => handleProviderToggle(selectedProvider, enabled),
+      availableModels: availableModels[selectedNav] || [],
+      loading: loading[selectedNav] || false,
+      onToggle: (enabled: boolean) => handleProviderToggle(selectedNav, enabled),
       onApiKeyChange: handleApiKeyChange,
       onModelToggle: (modelId: string, enabled: boolean) => {
         setProviders(prev => {
-          const models = prev[selectedProvider]?.models || [];
+          const models = prev[selectedNav]?.models || [];
           const updated = enabled
             ? [...models, modelId]
             : models.filter(m => m !== modelId);
 
           return {
             ...prev,
-            [selectedProvider]: { ...prev[selectedProvider], models: updated }
+            [selectedNav]: { ...prev[selectedNav], models: updated }
           };
         });
         setHasChanges(true);
       },
       onSelectAllModels: (selectAll: boolean) => {
         if (selectAll) {
-          const models = availableModels[selectedProvider] || [];
+          const models = availableModels[selectedNav] || [];
           setProviders(prev => ({
             ...prev,
-            [selectedProvider]: { ...prev[selectedProvider], models: models.map(m => m.id) }
+            [selectedNav]: { ...prev[selectedNav], models: models.map(m => m.id) }
           }));
         } else {
           setProviders(prev => ({
             ...prev,
-            [selectedProvider]: { ...prev[selectedProvider], models: [] }
+            [selectedNav]: { ...prev[selectedNav], models: [] }
           }));
         }
         setHasChanges(true);
@@ -334,7 +353,7 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
       onTestConnection: async () => {
         setProviders(prev => ({
           ...prev,
-          [selectedProvider]: { ...prev[selectedProvider], testStatus: 'testing', testMessage: undefined }
+          [selectedNav]: { ...prev[selectedNav], testStatus: 'testing', testMessage: undefined }
         }));
 
         // Save the current API keys FIRST
@@ -345,12 +364,12 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
         await window.electronAPI.aiSaveSettings(settings);
 
         try {
-          const result = await window.electronAPI.aiTestConnection(selectedProvider);
+          const result = await window.electronAPI.aiTestConnection(selectedNav);
 
           setProviders(prev => ({
             ...prev,
-            [selectedProvider]: {
-              ...prev[selectedProvider],
+            [selectedNav]: {
+              ...prev[selectedNav],
               testStatus: result.success ? 'success' : 'error',
               testMessage: result.success ? 'Connected' : result.error
             }
@@ -358,13 +377,13 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
 
           if (result.success) {
             await window.electronAPI.aiClearModelCache?.();
-            await fetchModels(selectedProvider);
+            await fetchModels(selectedNav);
           }
         } catch (error) {
           setProviders(prev => ({
             ...prev,
-            [selectedProvider]: {
-              ...prev[selectedProvider],
+            [selectedNav]: {
+              ...prev[selectedNav],
               testStatus: 'error',
               testMessage: 'Connection failed'
             }
@@ -374,13 +393,17 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
       onConfigChange: (updates: Partial<ProviderConfig>) => {
         setProviders(prev => ({
           ...prev,
-          [selectedProvider]: { ...prev[selectedProvider], ...updates }
+          [selectedNav]: { ...prev[selectedNav], ...updates }
         }));
         setHasChanges(true);
       }
     };
 
-    switch (selectedProvider) {
+    if (selectedNav === 'getting-started') {
+      return <GettingStartedPanel />;
+    }
+
+    switch (selectedNav) {
       case 'claude':
         return <ClaudePanel {...commonProps} />;
       case 'claude-code':
@@ -449,6 +472,20 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
 
       <div className="ai-models-body">
         <nav className="ai-models-nav">
+          {/* Getting Started nav item */}
+          <button
+            className={`nav-item ${selectedNav === 'getting-started' ? 'active' : ''}`}
+            onClick={() => setSelectedNav('getting-started')}
+          >
+            <span className="nav-item-icon">
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>rocket_launch</span>
+            </span>
+            <div className="nav-item-content">
+              <div className="nav-item-title">Getting Started</div>
+              <div className="nav-item-subtitle">Setup Guide</div>
+            </div>
+          </button>
+
           <div className="nav-section">
             <div className="nav-section-title">Agents</div>
             {PROVIDERS.filter(p => p.type === 'cli').map(provider => {
@@ -456,8 +493,8 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
               return (
                 <button
                   key={provider.id}
-                  className={`nav-item ${selectedProvider === provider.id ? 'active' : ''}`}
-                  onClick={() => setSelectedProvider(provider.id)}
+                  className={`nav-item ${selectedNav === provider.id ? 'active' : ''}`}
+                  onClick={() => setSelectedNav(provider.id)}
                 >
                   <span className="nav-item-icon">{provider.icon}</span>
                   <div className="nav-item-content">
@@ -481,8 +518,8 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
               return (
                 <button
                   key={provider.id}
-                  className={`nav-item ${selectedProvider === provider.id ? 'active' : ''}`}
-                  onClick={() => setSelectedProvider(provider.id)}
+                  className={`nav-item ${selectedNav === provider.id ? 'active' : ''}`}
+                  onClick={() => setSelectedNav(provider.id)}
                 >
                   <span className="nav-item-icon">{provider.icon}</span>
                   <div className="nav-item-content">
@@ -501,12 +538,12 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
 
           <div className="nav-section nav-section-bottom">
             <button
-              className={`nav-action-button ${selectedProvider === 'advanced' ? 'active' : ''}`}
-              onClick={() => setSelectedProvider('advanced')}
+              className={`nav-action-button ${selectedNav === 'advanced' ? 'active' : ''}`}
+              onClick={() => setSelectedNav('advanced')}
             >
               Advanced Settings
             </button>
-            <button className={'nav-action-button'} onClick={() => setSelectedProvider('analytics')}>
+            <button className={'nav-action-button'} onClick={() => setSelectedNav('analytics')}>
               Analytics
             </button>
             <button className="nav-action-button">

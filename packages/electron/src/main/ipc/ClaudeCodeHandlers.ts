@@ -3,11 +3,36 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { claudeCodeDetector } from '../services/ClaudeCodeDetector';
 
 /**
  * Register Claude Code related IPC handlers
  */
 export function registerClaudeCodeHandlers() {
+  // Check if Claude Code is installed
+  ipcMain.handle('claude-code:check-installation', async () => {
+    console.log('[ClaudeCodeHandlers] Checking installation...');
+    const status = await claudeCodeDetector.getStatus();
+    return {
+      installed: status.installed,
+      version: status.version,
+    };
+  });
+
+  // Get full Claude Code status
+  ipcMain.handle('claude-code:get-status', async () => {
+    console.log('[ClaudeCodeHandlers] Getting full status...');
+    const status = await claudeCodeDetector.getStatus();
+    return status;
+  });
+
+  // Refresh Claude Code detection (clears cache)
+  ipcMain.handle('claude-code:refresh-status', async () => {
+    console.log('[ClaudeCodeHandlers] Refreshing status...');
+    claudeCodeDetector.clearCache();
+    const status = await claudeCodeDetector.getStatus();
+    return status;
+  });
   // Check login status
   ipcMain.handle('claude-code:check-login', async () => {
     console.log('[ClaudeCodeHandlers] Checking login status...');

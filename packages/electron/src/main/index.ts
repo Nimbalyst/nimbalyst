@@ -25,7 +25,7 @@ import { registerWorkspaceWatcherHandlers } from './file/WorkspaceWatcher';
 import { setupSessionFileHandlers } from './ipc/SessionFileHandlers';
 import { registerSlashCommandHandlers } from './ipc/SlashCommandHandlers';
 import { registerClaudeCodeHandlers } from './ipc/ClaudeCodeHandlers';
-import { getTheme, setTheme, incrementLaunchCount, shouldShowDiscordInvitation, dismissDiscordInvitation } from './utils/store';
+import { getTheme, setTheme, incrementLaunchCount, shouldShowDiscordInvitation, dismissDiscordInvitation, isFirstLaunch, markAppLaunched } from './utils/store';
 import { AIService } from './services/ai/AIService';
 import { AgentService } from './services/agents/AgentService';
 import { cliManager } from './services/CLIManager';
@@ -273,7 +273,11 @@ app.whenReady().then(async () => {
         dismissDiscordInvitation();
     });
 
-    // Try to restore session, otherwise show Workspace Manager
+    // Check if this is the first launch
+    // In tests, can force first launch with FORCE_FIRST_LAUNCH env var
+    const firstLaunch = process.env.FORCE_FIRST_LAUNCH === '1' || isFirstLaunch();
+
+    // Try to restore session, otherwise show Workspace Manager or Settings (on first launch)
     const sessionRestored = await restoreSessionState();
 
     if (pendingWorkspacePath) {
@@ -288,8 +292,16 @@ app.whenReady().then(async () => {
             window.webContents.send('open-workspace-from-cli', workspacePath);
         });
     } else if (!sessionRestored && !pendingFilePath) {
-        // No session to restore and no file to open, show Workspace Manager
-        createWorkspaceManagerWindow();
+        // No session to restore and no file to open
+        if (firstLaunch) {
+            // First launch: show AI Models with Getting Started
+            logger.main.info('First launch detected, showing AI Models window with Getting Started');
+            markAppLaunched();
+            createAIModelsWindow(true);
+        } else {
+            // Regular launch: show Workspace Manager
+            createWorkspaceManagerWindow();
+        }
     } else if (pendingFilePath) {
         // Handle pending file if we have one
         const window = createWindow(true);

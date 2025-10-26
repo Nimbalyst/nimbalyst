@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, isFirstLaunch, markAppLaunched, isSettingsCompleted, markSettingsCompleted } from '../utils/store';
 import { logger } from '../utils/logger';
 
 export function registerSettingsHandlers() {
@@ -40,4 +40,21 @@ export function registerSettingsHandlers() {
 
     // AI Chat state has been moved to unified workspace state
     // Use workspace:get-state and workspace:update-state instead
+
+    // First launch detection
+    ipcMain.handle('first-launch:is-first-launch', () => {
+        return isFirstLaunch();
+    });
+
+    ipcMain.handle('first-launch:mark-launched', () => {
+        markAppLaunched();
+    });
+
+    ipcMain.handle('first-launch:is-settings-completed', () => {
+        return isSettingsCompleted();
+    });
+
+    ipcMain.handle('first-launch:mark-settings-completed', () => {
+        markSettingsCompleted();
+    });
 }

@@ -5,7 +5,7 @@ import { getBackgroundColor } from '../theme/ThemeManager';
 
 let aiModelsWindow: BrowserWindow | null = null;
 
-export function createAIModelsWindow() {
+export function createAIModelsWindow(isFirstTime: boolean = false) {
     // If window already exists, focus it
     if (aiModelsWindow) {
         aiModelsWindow.focus();
@@ -32,11 +32,12 @@ export function createAIModelsWindow() {
 
     // Load the main app with a query parameter to indicate AI Models mode
     const currentTheme = getTheme();
+    const queryParams = `mode=ai-models&theme=${currentTheme}&isFirstTime=${isFirstTime}`;
     if (process.env.NODE_ENV === 'development') {
-        aiModelsWindow.loadURL(`http://localhost:5273/?mode=ai-models&theme=${currentTheme}`);
+        aiModelsWindow.loadURL(`http://localhost:5273/?${queryParams}`);
     } else {
         aiModelsWindow.loadFile(join(__dirname, '../renderer/index.html'), {
-            query: { mode: 'ai-models', theme: currentTheme }
+            query: { mode: 'ai-models', theme: currentTheme, isFirstTime: isFirstTime.toString() }
         });
     }
 
