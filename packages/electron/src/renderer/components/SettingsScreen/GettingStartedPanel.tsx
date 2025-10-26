@@ -9,11 +9,7 @@ interface ClaudeCodeStatus {
   hasApiKey?: boolean;
 }
 
-interface GettingStartedPanelProps {
-  onContinue?: () => void;
-}
-
-export function GettingStartedPanel({ onContinue }: GettingStartedPanelProps) {
+export function GettingStartedPanel() {
   const [status, setStatus] = useState<ClaudeCodeStatus | null>(null);
   const [isChecking, setIsChecking] = useState(false);
 
@@ -51,6 +47,11 @@ export function GettingStartedPanel({ onContinue }: GettingStartedPanelProps) {
 
   const handleOpenDocs = () => {
     window.electronAPI.invoke('open-external', 'https://docs.claude.com/en/docs/claude-code/quickstart#native-install');
+  };
+
+  const handleGetStarted = () => {
+    // Close the AI Models window - user is ready to start
+    window.close();
   };
 
   const isReady = status?.installed && status?.loggedIn;
@@ -133,6 +134,12 @@ export function GettingStartedPanel({ onContinue }: GettingStartedPanelProps) {
                     )}
                   </div>
                 </div>
+                <div className="status-actions">
+                  <button className="primary-button" onClick={handleGetStarted}>
+                    <span className="material-symbols-outlined">rocket_launch</span>
+                    Get Started
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="status-needs-setup">
@@ -178,15 +185,6 @@ export function GettingStartedPanel({ onContinue }: GettingStartedPanelProps) {
           </div>
         ) : null}
       </div>
-
-      {isReady && onContinue && (
-        <div className="getting-started-footer">
-          <button className="continue-button" onClick={onContinue}>
-            Continue to Settings
-            <span className="material-symbols-outlined">arrow_forward</span>
-          </button>
-        </div>
-      )}
     </div>
   );
 }
