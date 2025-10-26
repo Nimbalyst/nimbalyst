@@ -578,6 +578,8 @@ export type { TrackerDataModel, FieldDefinition } from './models/TrackerDataMode
 
 // Export components
 export { StatusBar } from './components/StatusBar';
+export { TrackerTable } from './components/TrackerTable';
+export type { SortColumn, SortDirection } from './components/TrackerTable';
 
 // Export tracker node and types
 export { TrackerItemNode, $createTrackerItemNode, $getTrackerItemNode, $isTrackerItemNode } from './TrackerItemNode';
