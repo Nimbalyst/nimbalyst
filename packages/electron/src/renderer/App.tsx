@@ -43,10 +43,7 @@ import type { ContentMode } from './types/WindowModeTypes';
 import { PlansPanel } from './components/PlansPanel/PlansPanel';
 import { TrackerBottomPanel, TrackerBottomPanelType } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
-import { registerPlanStatusPlugin } from './plugins/registerPlanStatusPlugin';
-import { registerDecisionStatusPlugin } from './plugins/registerDecisionStatusPlugin';
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
-import { registerItemTrackerPlugin } from './plugins/registerItemTrackerPlugin';
 import { registerTrackerPlugin } from './plugins/registerTrackerPlugin';
 import SettingsScreen from './components/SettingsScreen/SettingsScreen';
 import OnboardingService from './services/OnboardingService';
@@ -80,10 +77,7 @@ const LOG_CONFIG = {
 let pluginsRegistered = false;
 if (!pluginsRegistered) {
   registerDocumentLinkPlugin();
-  registerTrackerPlugin(); // New unified tracker system
-  registerPlanStatusPlugin(); // TODO: Remove after testing
-  registerDecisionStatusPlugin(); // TODO: Remove after testing
-  registerItemTrackerPlugin();
+  registerTrackerPlugin(); // Unified tracker system (inline + full-document tracking)
   registerAIChatPlugin();
   pluginsRegistered = true;
 }

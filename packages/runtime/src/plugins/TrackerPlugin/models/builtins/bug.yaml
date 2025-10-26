@@ -41,4 +41,10 @@ fields:
       - value: critical
         label: Critical
 
+  - name: owner
+    type: string
+
+  - name: description
+    type: text
+
 inlineTemplate: "{icon} {title} {status} {priority}"

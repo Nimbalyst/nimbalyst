@@ -8,32 +8,563 @@
  * - Unified storage in JSONB
  */
 
-import { useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
+import {
+  $createParagraphNode,
+  $createTextNode,
+  $getSelection,
+  $isRangeSelection,
+  COMMAND_PRIORITY_EDITOR,
+  createCommand,
+  LexicalCommand,
+  LexicalEditor,
+  $insertNodes,
+  $getNodeByKey,
+  TextNode,
+  LexicalNode,
+} from 'lexical';
+import { $isListItemNode } from '@lexical/list';
+import { useEffect as useReactEffect } from 'react';
+import { $createTrackerItemNode, $getTrackerItemNode, TrackerItemData, TrackerItemType, TrackerItemNode, TrackerItemStatus, TrackerItemPriority } from './TrackerItemNode';
+import { TRACKER_ITEM_TRANSFORMERS } from './TrackerItemTransformer';
+import type { PluginPackage } from 'rexical';
+import { TypeaheadMenuPlugin, type TypeaheadMenuOption } from 'rexical';
+import { globalRegistry } from './models';
 import { DocumentHeaderRegistry } from './documentHeader/DocumentHeaderRegistry';
 import { TrackerDocumentHeader, shouldRenderTrackerHeader } from './documentHeader/TrackerDocumentHeader';
+import './TrackerItem.css';
 
-/**
- * TrackerPlugin component - registers document header providers
- */
-export function TrackerPlugin() {
-  useEffect(() => {
-    // Register the tracker document header provider
+interface TrackerEditorState {
+  nodeKey: string;
+  data: TrackerItemData;
+  position: { x: number; y: number };
+}
+
+type TriggerFunction = (text: string) => {
+  leadOffset: number;
+  matchingString: string;
+  replaceableString: string;
+} | null;
+
+export const INSERT_TRACKER_TASK_COMMAND: LexicalCommand<void> = createCommand();
+export const INSERT_TRACKER_BUG_COMMAND: LexicalCommand<void> = createCommand();
+export const INSERT_TRACKER_PLAN_COMMAND: LexicalCommand<void> = createCommand();
+export const INSERT_TRACKER_IDEA_COMMAND: LexicalCommand<void> = createCommand();
+
+// Helper function to generate a ULID-style ID
+function generateId(prefix: string): string {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 10);
+  return `${prefix}_${timestamp}${random}`;
+}
+
+function insertTrackerItemNode(editor: LexicalEditor, type: TrackerItemType, existingText?: string): void {
+  editor.update(() => {
+    const selection = $getSelection();
+
+    const title = existingText || `New ${type}`;
+
+    // Generate ID prefix based on type
+    let prefix = 'tsk';
+    if (type === 'bug') prefix = 'bug';
+    else if (type === 'plan') prefix = 'pln';
+    else if (type === 'idea') prefix = 'ida';
+    else if (type === 'decision') prefix = 'dec';
+
+    const itemData: TrackerItemData = {
+      id: generateId(prefix),
+      type,
+      title,
+      status: 'to-do',
+      priority: 'medium',
+      created: new Date().toISOString().split('T')[0],
+    };
+
+    const trackerItemNode = $createTrackerItemNode(itemData);
+
+    // Add text content as children
+    const textNode = $createTextNode(title);
+    trackerItemNode.append(textNode);
+
+    if ($isRangeSelection(selection)) {
+      $insertNodes([trackerItemNode]);
+      const nextParagraph = $createParagraphNode();
+      trackerItemNode.insertAfter(nextParagraph);
+      nextParagraph.select();
+    } else {
+      $insertNodes([trackerItemNode]);
+      const nextParagraph = $createParagraphNode();
+      trackerItemNode.insertAfter(nextParagraph);
+      nextParagraph.select();
+    }
+  });
+}
+
+export interface TrackerPluginProps {}
+
+function TrackerPlugin(): JSX.Element | null {
+  const [editor] = useLexicalComposerContext();
+  const [query, setQuery] = useState<string | null>(null);
+  const [editorState, setEditorState] = useState<TrackerEditorState | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const capturedTextRef = useRef<string>('');
+
+  // Register document header provider
+  useReactEffect(() => {
     const unregister = DocumentHeaderRegistry.register({
       id: 'tracker-document-header',
-      priority: 100, // High priority
+      priority: 100,
       shouldRender: shouldRenderTrackerHeader,
       component: TrackerDocumentHeader,
     });
 
-    // Cleanup on unmount
     return () => {
       unregister();
     };
   }, []);
 
-  // This plugin doesn't render anything itself
-  return null;
+  // Register inline tracker commands
+  useReactEffect(() => {
+    return editor.registerCommand(
+      INSERT_TRACKER_TASK_COMMAND,
+      () => {
+        insertTrackerItemNode(editor, 'task');
+        return true;
+      },
+      COMMAND_PRIORITY_EDITOR,
+    );
+  }, [editor]);
+
+  useReactEffect(() => {
+    return editor.registerCommand(
+      INSERT_TRACKER_BUG_COMMAND,
+      () => {
+        insertTrackerItemNode(editor, 'bug');
+        return true;
+      },
+      COMMAND_PRIORITY_EDITOR,
+    );
+  }, [editor]);
+
+  useReactEffect(() => {
+    return editor.registerCommand(
+      INSERT_TRACKER_PLAN_COMMAND,
+      () => {
+        insertTrackerItemNode(editor, 'plan');
+        return true;
+      },
+      COMMAND_PRIORITY_EDITOR,
+    );
+  }, [editor]);
+
+  useReactEffect(() => {
+    return editor.registerCommand(
+      INSERT_TRACKER_IDEA_COMMAND,
+      () => {
+        insertTrackerItemNode(editor, 'idea');
+        return true;
+      },
+      COMMAND_PRIORITY_EDITOR,
+    );
+  }, [editor]);
+
+  // Handle tracker-item-toggle and tracker-item-edit events
+  useReactEffect(() => {
+    const handleToggle = (event: any) => {
+      const { nodeKey, checked } = event.detail;
+      editor.update(() => {
+        const node = $getTrackerItemNode(nodeKey);
+        if (node) {
+          const data = node.getData();
+          node.setData({
+            ...data,
+            status: checked ? 'done' : 'to-do',
+            updated: new Date().toISOString(),
+          });
+        }
+      });
+    };
+
+    const handleEdit = (event: any) => {
+      const { nodeKey, data, target } = event.detail;
+      const rect = target.getBoundingClientRect();
+
+      // Estimate popover height (adjust based on content)
+      const popoverHeight = 450;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+
+      // Position above if not enough space below
+      let yPosition: number;
+      if (spaceBelow < popoverHeight && spaceAbove > spaceBelow) {
+        // Position above the target
+        yPosition = rect.top - popoverHeight - 8;
+      } else {
+        // Position below the target (default)
+        yPosition = rect.bottom + 8;
+      }
+
+      setEditorState({
+        nodeKey,
+        data,
+        position: { x: rect.left, y: yPosition },
+      });
+    };
+
+    window.addEventListener('tracker-item-toggle', handleToggle);
+    window.addEventListener('tracker-item-edit', handleEdit);
+
+    return () => {
+      window.removeEventListener('tracker-item-toggle', handleToggle);
+      window.removeEventListener('tracker-item-edit', handleEdit);
+    };
+  }, [editor]);
+
+  // Click outside to close popover
+  useReactEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+        setEditorState(null);
+      }
+    };
+
+    if (editorState) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [editorState]);
+
+  // Update tracker data
+  const updateTrackerData = useCallback((nodeKey: string, updates: Partial<TrackerItemData>) => {
+    editor.update(() => {
+      const node = $getTrackerItemNode(nodeKey);
+      if (node) {
+        const data = node.getData();
+        node.setData({
+          ...data,
+          ...updates,
+          updated: new Date().toISOString(),
+        });
+      }
+    });
+  }, [editor]);
+
+  // Typeahead trigger function
+  const trackerTriggerFn: TriggerFunction = useCallback((text: string) => {
+    const match = text.match(/#(\w*)$/);
+    if (match) {
+      // Capture the text before the # trigger
+      capturedTextRef.current = text.substring(0, match.index).trim();
+      return {
+        leadOffset: match.index!,
+        matchingString: match[1],
+        replaceableString: match[0],
+      };
+    }
+    return null;
+  }, []);
+
+  // Typeahead options
+  const trackerOptions: TypeaheadMenuOption[] = [
+    {
+      id: 'bug',
+      label: 'Bug',
+      description: 'Track a bug or issue',
+      icon: <span className="material-symbols-outlined">bug_report</span>,
+      keywords: ['bug', 'issue', 'defect'],
+    },
+    {
+      id: 'task',
+      label: 'Task',
+      description: 'Track a task or work item',
+      icon: <span className="material-symbols-outlined">check_box</span>,
+      keywords: ['task', 'todo', 'work'],
+    },
+    {
+      id: 'plan',
+      label: 'Plan',
+      description: 'Track a plan or initiative',
+      icon: <span className="material-symbols-outlined">assignment</span>,
+      keywords: ['plan', 'feature', 'project'],
+    },
+    {
+      id: 'idea',
+      label: 'Idea',
+      description: 'Track an idea or suggestion',
+      icon: <span className="material-symbols-outlined">lightbulb</span>,
+      keywords: ['idea', 'suggestion', 'improvement'],
+    },
+  ];
+
+  const filteredOptions = query
+    ? trackerOptions.filter(option =>
+        option.keywords?.some(kw => kw.toLowerCase().includes(query.toLowerCase())) ||
+        option.label.toLowerCase().includes(query.toLowerCase())
+      )
+    : trackerOptions;
+
+  const handleSelectOption = useCallback(
+    (option: TypeaheadMenuOption, textNode: TextNode | null, closeMenu: () => void) => {
+      editor.update(() => {
+        // Get the type from the option ID
+        const type = option.id as TrackerItemType;
+
+        // Use the captured text from the trigger function
+        const existingText = capturedTextRef.current;
+
+        // Generate ID prefix based on type
+        let prefix = 'tsk';
+        if (type === 'bug') prefix = 'bug';
+        else if (type === 'plan') prefix = 'pln';
+        else if (type === 'idea') prefix = 'ida';
+        else if (type === 'decision') prefix = 'dec';
+
+        // Create tracker item
+        const itemData: TrackerItemData = {
+          id: generateId(prefix),
+          type,
+          title: existingText || `New ${type}`,
+          status: 'to-do',
+          priority: 'medium',
+          created: new Date().toISOString().split('T')[0],
+        };
+
+        const trackerItemNode = $createTrackerItemNode(itemData);
+        const newTextNode = $createTextNode(itemData.title);
+        trackerItemNode.append(newTextNode);
+
+        // Try to find the list item to replace its content
+        let listItem = null;
+        if (textNode) {
+          let node: LexicalNode | null = textNode;
+          while (node) {
+            if ($isListItemNode(node)) {
+              listItem = node;
+              break;
+            }
+            node = node.getParent();
+          }
+        }
+
+        // Fallback: try from selection
+        if (!listItem) {
+          const selection = $getSelection();
+          if ($isRangeSelection(selection)) {
+            let node: LexicalNode | null = selection.anchor.getNode();
+            while (node) {
+              if ($isListItemNode(node)) {
+                listItem = node;
+                break;
+              }
+              node = node.getParent();
+            }
+          }
+        }
+
+        // Replace list item content with tracker item
+        if (listItem) {
+          // Clear the list item and add tracker
+          listItem.clear();
+          listItem.append(trackerItemNode);
+          trackerItemNode.selectEnd();
+        } else {
+          // Not in a list - insert at current selection
+          const selection = $getSelection();
+          if ($isRangeSelection(selection)) {
+            selection.insertNodes([trackerItemNode]);
+            trackerItemNode.selectEnd();
+          }
+        }
+
+        // Clear the captured text
+        capturedTextRef.current = '';
+      });
+      closeMenu();
+    },
+    [editor],
+  );
+
+  // Get model config for the tracker type being edited
+  const model = useMemo(() =>
+    editorState ? globalRegistry.get(editorState.data.type) : null,
+    [editorState?.data.type]
+  );
+
+  // Helper to render a field based on model definition
+  const renderField = useCallback((field: any, fieldName: string) => {
+    if (!editorState) return null;
+
+    const value = (editorState.data as any)[fieldName] || '';
+    const label = fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
+
+    const handleChange = (newValue: any) => {
+      updateTrackerData(editorState.nodeKey, { [fieldName]: newValue || undefined });
+      setEditorState({ ...editorState, data: { ...editorState.data, [fieldName]: newValue || undefined } });
+    };
+
+    switch (field.type) {
+      case 'text':
+        return (
+          <div key={fieldName} className="tracker-item-popover-field tracker-item-popover-description">
+            <label>{label}</label>
+            <textarea
+              value={value}
+              onChange={(e) => handleChange(e.target.value)}
+              placeholder={`Add ${label.toLowerCase()}...`}
+              rows={4}
+            />
+          </div>
+        );
+
+      case 'select':
+        return (
+          <div key={fieldName} className="tracker-item-popover-field">
+            <label>{label}</label>
+            <select
+              value={value}
+              onChange={(e) => handleChange(e.target.value)}
+            >
+              {!field.required && <option value="">None</option>}
+              {field.options?.map((option: any) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+
+      default: // string, number, etc.
+        return (
+          <div key={fieldName} className="tracker-item-popover-field">
+            <label>{label}</label>
+            <input
+              type={field.type === 'number' ? 'number' : 'text'}
+              value={value}
+              onChange={(e) => handleChange(e.target.value)}
+              placeholder={`Enter ${label.toLowerCase()}...`}
+            />
+          </div>
+        );
+    }
+  }, [editorState, updateTrackerData]);
+
+  // Group fields for layout
+  const fields = model?.fields || [];
+  const titleField = fields.find(f => f.name === 'title');
+  const statusField = fields.find(f => f.name === 'status');
+  const priorityField = fields.find(f => f.name === 'priority');
+  const otherFields = fields.filter(f =>
+    f.name !== 'title' && f.name !== 'status' && f.name !== 'priority'
+  );
+
+  return (
+    <>
+      <TypeaheadMenuPlugin
+        options={filteredOptions}
+        triggerFn={trackerTriggerFn}
+        onQueryChange={setQuery}
+        onSelectOption={handleSelectOption}
+      />
+
+      {editorState && model && (
+        <div
+          ref={popoverRef}
+          className="tracker-item-popover"
+          style={{
+            position: 'fixed',
+            left: `${editorState.position.x}px`,
+            top: `${editorState.position.y}px`,
+            zIndex: 10000,
+          }}
+        >
+          <div className="tracker-item-popover-header">
+            <span className="material-symbols-outlined">{model.icon}</span>
+            <span>{model.displayName}</span>
+          </div>
+
+          {/* Title field - always first */}
+          {titleField && (
+            <div className="tracker-item-popover-field">
+              <label>Title</label>
+              <input
+                type="text"
+                value={editorState.data.title}
+                onChange={(e) => {
+                  updateTrackerData(editorState.nodeKey, { title: e.target.value });
+                  setEditorState({ ...editorState, data: { ...editorState.data, title: e.target.value } });
+                }}
+                placeholder="Enter title"
+              />
+            </div>
+          )}
+
+          {/* Status and Priority in a row */}
+          {(statusField || priorityField) && (
+            <div className="tracker-item-popover-row">
+              {statusField && renderField(statusField, 'status')}
+              {priorityField && renderField(priorityField, 'priority')}
+            </div>
+          )}
+
+          {/* Other fields */}
+          {otherFields.map((field) => renderField(field, field.name))}
+
+          <div className="tracker-item-popover-footer">
+            <span className="tracker-item-date">Created: {editorState.data.created ? new Date(editorState.data.created).toLocaleString() : 'N/A'}</span>
+            <span className="tracker-item-date">Updated: {editorState.data.updated ? new Date(editorState.data.updated).toLocaleString() : 'N/A'}</span>
+            <span className="tracker-item-id">ID: {editorState.data.id}</span>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
+
+// Export the plugin package for dynamic registration
+export const trackerPluginPackage: PluginPackage<TrackerPluginProps> = {
+  name: 'tracker',
+  Component: TrackerPlugin,
+  nodes: [TrackerItemNode],
+  transformers: TRACKER_ITEM_TRANSFORMERS,
+  commands: {
+    INSERT_TRACKER_TASK: INSERT_TRACKER_TASK_COMMAND,
+    INSERT_TRACKER_BUG: INSERT_TRACKER_BUG_COMMAND,
+    INSERT_TRACKER_PLAN: INSERT_TRACKER_PLAN_COMMAND,
+    INSERT_TRACKER_IDEA: INSERT_TRACKER_IDEA_COMMAND,
+  },
+  userCommands: [
+    {
+      title: 'Task Item',
+      description: 'Add a task item to track work',
+      icon: 'check_box',
+      keywords: ['task', 'todo', 'item', 'tracker'],
+      command: INSERT_TRACKER_TASK_COMMAND,
+    },
+    {
+      title: 'Bug Item',
+      description: 'Add a bug item to track issues',
+      icon: 'bug_report',
+      keywords: ['bug', 'issue', 'defect', 'tracker'],
+      command: INSERT_TRACKER_BUG_COMMAND,
+    },
+    {
+      title: 'Plan Item',
+      description: 'Add a plan item to track features',
+      icon: 'flag',
+      keywords: ['plan', 'feature', 'tracker'],
+      command: INSERT_TRACKER_PLAN_COMMAND,
+    },
+    {
+      title: 'Idea Item',
+      description: 'Add an idea item',
+      icon: 'lightbulb',
+      keywords: ['idea', 'suggestion', 'tracker'],
+      command: INSERT_TRACKER_IDEA_COMMAND,
+    },
+  ],
+};
 
 // Export document header system for external use
 export { DocumentHeaderRegistry } from './documentHeader/DocumentHeaderRegistry';
@@ -42,8 +573,12 @@ export { DocumentHeaderContainer } from './documentHeader/DocumentHeaderContaine
 export { TrackerDocumentHeader, shouldRenderTrackerHeader } from './documentHeader/TrackerDocumentHeader';
 
 // Export data models
-export { ModelLoader } from './models/ModelLoader';
+export { ModelLoader, loadBuiltinTrackers } from './models/ModelLoader';
 export type { TrackerDataModel, FieldDefinition } from './models/TrackerDataModel';
 
 // Export components
 export { StatusBar } from './components/StatusBar';
+
+// Export tracker node and types
+export { TrackerItemNode, $createTrackerItemNode, $getTrackerItemNode, $isTrackerItemNode } from './TrackerItemNode';
+export type { TrackerItemData, TrackerItemType, TrackerItemStatus, TrackerItemPriority } from './TrackerItemNode';

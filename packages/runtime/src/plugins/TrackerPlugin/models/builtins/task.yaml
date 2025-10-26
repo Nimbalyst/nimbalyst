@@ -44,7 +44,7 @@ fields:
   - name: owner
     type: string
 
-  - name: dueDate
-    type: date
+  - name: description
+    type: text
 
 inlineTemplate: "{icon} {title} {status} {priority}"

@@ -23,30 +23,32 @@ export * from './agents';
 // Plugins
 export { DocumentLinkPlugin } from './plugins/DocumentLinkPlugin';
 export { DocumentReferenceNode, DocumentReferenceTransformer, $createDocumentReferenceNode, $isDocumentReferenceNode } from './plugins/DocumentLinkPlugin/DocumentLinkNode';
-export { planStatusPluginPackage, PlanStatusNode, $createPlanStatusNode, $isPlanStatusNode, PLAN_STATUS_TRANSFORMER, INSERT_PLAN_STATUS_COMMAND } from './plugins/PlanStatusPlugin';
-export type { PlanStatusPluginProps } from './plugins/PlanStatusPlugin';
-export { decisionStatusPluginPackage, DecisionStatusNode, $createDecisionStatusNode, $isDecisionStatusNode, DECISION_STATUS_TRANSFORMER, INSERT_DECISION_STATUS_COMMAND } from './plugins/DecisionStatusPlugin';
-export type { DecisionStatusPluginProps } from './plugins/DecisionStatusPlugin';
+// Unified Tracker Plugin
 export {
-  itemTrackerPluginPackage,
+  trackerPluginPackage,
   TrackerItemNode,
   $createTrackerItemNode,
   $getTrackerItemNode,
   $isTrackerItemNode,
-  TRACKER_ITEM_TEXT_TRANSFORMER,
-  TRACKER_ITEM_TRANSFORMERS,
-  INSERT_TRACKER_TASK_COMMAND,
-  INSERT_TRACKER_BUG_COMMAND,
-  INSERT_TRACKER_PLAN_COMMAND,
-} from './plugins/ItemTrackerPlugin';
+  loadBuiltinTrackers,
+  DocumentHeaderRegistry,
+  DocumentHeaderContainer,
+  TrackerDocumentHeader,
+  shouldRenderTrackerHeader,
+  StatusBar,
+  ModelLoader,
+} from './plugins/TrackerPlugin';
 export type {
   TrackerItemData,
   TrackerItemType,
   TrackerItemStatus,
   TrackerItemPriority,
-  SerializedTrackerItemNode,
-  ItemTrackerPluginProps,
-} from './plugins/ItemTrackerPlugin';
+  TrackerPluginProps,
+  TrackerDataModel,
+  FieldDefinition,
+  DocumentHeaderProvider,
+  DocumentHeaderComponentProps,
+} from './plugins/TrackerPlugin';
 // Virtual Documents
 export * from './constants/virtualDocs';
 export * from './documents/virtualDocTypes';

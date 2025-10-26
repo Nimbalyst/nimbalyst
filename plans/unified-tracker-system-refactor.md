@@ -18,7 +18,7 @@ planStatus:
   progress: 52
 ---
 # Unified Tracker System Refactor
-<!-- plan-status -->
+
 
 
 
@@ -35,14 +35,15 @@ planStatus:
 - [x] Phase 3: Update TrackerItemNode to use # syntax instead of @
 - [x] Phase 4: Create StatusBar component for full document tracking
 - [x] Phase 4.5: Implement DocumentHeaderContainer and register tracker header provider
-- [ ] Phase 5: Update TrackerBottomPanel to be data-model driven
+- [x] Phase 5: Migrate inline tracker popover to config-driven system
+- [x] Phase 5.5: Consolidate all tracker functionality into unified TrackerPlugin
 - [ ] Phase 6: Add reference system (#type[ref:id] syntax)
 - [ ] Phase 7: Implement copy/paste with reference vs duplicate modes
 - [ ] Phase 8: Create onboarding tracker selection screen
 - [ ] Phase 9: Generate AI slash commands from tracker definitions
-- [ ] Phase 10: Remove old PlanStatusPlugin, DecisionStatusPlugin
+- [x] Phase 10: Remove old PlanStatusPlugin, DecisionStatusPlugin, ItemTrackerPlugin
 
-**Progress: 4.5/10 phases complete (45%)**
+**Progress: 6.5/10 phases complete (65%)**
 
 ## Goals
 
@@ -53,7 +54,7 @@ Unify all tracking functionality (Plans, Decisions, ItemTracker) into a single, 
 - Improved storage with JSONB in PGLite
 - Better user experience with hash syntax and typeahead
 
-## Implementation Progress (45% Complete)
+## Implementation Progress (65% Complete)
 
 ### Phase 1: Data Model System ✓ COMPLETED
 **Files**: `packages/runtime/src/plugins/TrackerPlugin/models/`
@@ -95,8 +96,32 @@ Unify all tracking functionality (Plans, Decisions, ItemTracker) into a single, 
 - Fixed z-index layering for floating toolbar visibility
 - Added e2e test for plan status header rendering
 
-### Next: Phase 5 - Update TrackerBottomPanel
-Make TrackerBottomPanel data-model driven with dynamic columns
+### Phase 5: Config-Driven Inline Tracker Popover ✓ COMPLETED
+**Files**: `packages/runtime/src/plugins/TrackerPlugin/index.tsx`, `packages/runtime/src/plugins/TrackerPlugin/models/ModelLoader.ts`
+- Updated bug and task model definitions to include `owner` and `description` fields
+- Migrated inline tracker popover to render fields dynamically from model config
+- Implemented two-column layout (Status/Priority side-by-side)
+- Added larger description textarea with better styling
+- Replaced Due Date with Created/Updated dates in footer
+- Made popover width responsive (380px for better space utilization)
+
+### Phase 5.5: Unified TrackerPlugin ✓ COMPLETED
+**Files**: `packages/runtime/src/plugins/TrackerPlugin/`, `packages/electron/src/renderer/App.tsx`, `packages/electron/src/renderer/plugins/registerTrackerPlugin.tsx`
+- Integrated inline tracking functionality into TrackerPlugin
+- Copied TrackerItemNode, TrackerItemTransformer, and styles to TrackerPlugin
+- Combined full-document headers and inline items in single plugin
+- Created trackerPluginPackage export with nodes, transformers, and commands
+- Updated plugin registration to load built-in models
+
+### Phase 10: Remove Old Plugins ✓ COMPLETED
+**Files**: `packages/electron/src/renderer/App.tsx`, `packages/runtime/src/index.ts`
+- Removed PlanStatusPlugin, DecisionStatusPlugin, ItemTrackerPlugin registrations
+- Updated runtime exports to use unified TrackerPlugin exports
+- Cleaned up old plugin imports from App.tsx
+- All tracking now unified in single TrackerPlugin
+
+### Next: Phase 6 - Reference System
+Add `#type``````````````[ref:id]` syntax for referencing tracker items across documents
 
 ## Current State Analysis
 
@@ -437,7 +462,7 @@ function generatePrefix(type: string): string {
 
 #### Inline Syntax
 **Current**: `Fix the bug @bug[id:bug_123 status:to-do]`
-**New**: `Fix the bug````````````````````````````````````````````````````````````````#bug````````````````````````````````````````````````````````````````[id:bug_123 status:to-do]`
+**New**: `Fix the bug``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````#bug``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````[id:bug_123 status:to-do]`
 
 **Rationale**:
 - Hash is more familiar (hashtags, anchors, references)
@@ -622,7 +647,7 @@ When copying tracker items:
 **Option 1: Copy as Reference (Default)**
 - Paste creates reference to original item
 - Preserves single source of truth
-- Example: `#bug````````````````````````````````````````````````````````````````[ref:bug_123]`
+- Example: `#bug``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````[ref:bug_123]`
 
 **Option 2: Duplicate Item**
 - Hold Option/Alt while pasting
@@ -983,7 +1008,7 @@ Core field types supported in data models:
 ### Phase 3: Inline Tracker Refactor
 **Files**: `packages/runtime/src/plugins/TrackerPlugin/nodes/`
 
-1. Create new hash syntax parser (`#type``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````[...]`)
+1. Create new hash syntax parser (`#type````````````````````````````````````````````````````````````[...]`)
 2. Implement InlineTrackerNode Lexical node
 3. Build typeahead system for hash syntax
 4. Add field autocomplete
@@ -1029,7 +1054,7 @@ Core field types supported in data models:
 ### Phase 7: Reference System
 **Files**: `packages/runtime/src/plugins/TrackerPlugin/references/`
 
-1. Implement reference syntax (`#type````````````````````````````````````````````````````````````````[ref:id]`)
+1. Implement reference syntax (`#type``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````[ref:id]`)
 2. Build reference resolution
 3. Create reference picker UI
 4. Add "Expand to Document" action

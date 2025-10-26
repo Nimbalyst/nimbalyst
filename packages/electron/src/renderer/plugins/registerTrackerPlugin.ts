@@ -1,26 +1,21 @@
 /**
- * Register the unified Tracker Plugin
- * This initializes the document header system and loads tracker data models
+ * Register the unified TrackerPlugin with the plugin registry
  */
 
-import {
-  ModelLoader,
-  DocumentHeaderRegistry,
-  TrackerDocumentHeader,
-  shouldRenderTrackerHeader
-} from '@nimbalyst/runtime/plugins/TrackerPlugin';
+import { pluginRegistry } from 'rexical';
+import { trackerPluginPackage, loadBuiltinTrackers } from '@nimbalyst/runtime';
+import { getDocumentService } from '../services/RendererDocumentService';
 
-export function registerTrackerPlugin() {
-  // Initialize the ModelLoader singleton to load built-in trackers
-  ModelLoader.getInstance();
+export function registerTrackerPlugin(): void {
+  // Load built-in tracker models
+  loadBuiltinTrackers();
 
-  // Register the tracker document header provider
-  DocumentHeaderRegistry.register({
-    id: 'tracker-document-header',
-    priority: 100, // High priority
-    shouldRender: shouldRenderTrackerHeader,
-    component: TrackerDocumentHeader,
-  });
+  // Register the unified tracker plugin
+  pluginRegistry.register(trackerPluginPackage);
 
-  console.log('[TrackerPlugin] Registered and initialized');
+  // Expose document service on window for TrackerBottomPanel and other components
+  const documentService = getDocumentService();
+  if (documentService) {
+    (window as any).documentService = documentService;
+  }
 }
