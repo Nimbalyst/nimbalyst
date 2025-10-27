@@ -123,7 +123,16 @@ export function GettingStartedPanel() {
             <div className="step-number">1</div>
             <div className="step-content">
               <h4>Claude Code must be installed and Authenticated</h4>
-              <p>Click on Claude Code section to the left for details</p>
+              <p>Use your current installation or follow Anthropic's instructions to install it:<br/>
+                <a onClick={(e) => {
+                  e.preventDefault();
+                  // get url from link
+                  const url = (e.target as HTMLAnchorElement).href;
+                  window.electronAPI?.openExternal?.(url);
+                }}
+                    href={"https://docs.claude.com/en/docs/claude-code/setup#native-binary-installation-beta"}>
+                  Claude Code Setup</a>
+              </p>
             </div>
           </div>
 
