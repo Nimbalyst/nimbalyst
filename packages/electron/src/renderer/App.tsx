@@ -36,7 +36,6 @@ import { AgenticPanel, type AgenticPanelRef } from './components/UnifiedAI';
 import { TabManager } from './components/TabManager/TabManager';
 import { TabContent } from './components/TabContent/TabContent';
 import { NavigationGutter, type NavigationMode, type SidebarView } from './components/NavigationGutter';
-import { BugsScreen } from './components/BugsScreen/BugsScreen';
 import { useTabs } from './hooks/useTabs';
 import { useTabNavigation } from './hooks/useTabNavigation';
 import type { ContentMode } from './types/WindowModeTypes';
@@ -1502,12 +1501,6 @@ export default function App() {
               )}
             </div>
 
-            {/* Tracker Mode - conditionally rendered for now */}
-            {activeMode === 'tracker' && (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-                <BugsScreen />
-              </div>
-            )}
 
             {/* Settings Mode - conditionally rendered for now */}
             {activeMode === 'settings' && (
