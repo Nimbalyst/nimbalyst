@@ -33,6 +33,10 @@ import { TypeaheadMenuPlugin, type TypeaheadMenuOption } from 'rexical';
 import { globalRegistry } from './models';
 import { DocumentHeaderRegistry } from './documentHeader/DocumentHeaderRegistry';
 import { TrackerDocumentHeader, shouldRenderTrackerHeader } from './documentHeader/TrackerDocumentHeader';
+import { updateTrackerInFrontmatter } from './documentHeader/frontmatterUtils';
+import { generateTrackerId } from './models/IDGenerator';
+import { $isHeadingNode } from '@lexical/rich-text';
+import { $getRoot } from 'lexical';
 import './TrackerItem.css';
 
 interface TrackerEditorState {
@@ -51,6 +55,8 @@ export const INSERT_TRACKER_TASK_COMMAND: LexicalCommand<void> = createCommand()
 export const INSERT_TRACKER_BUG_COMMAND: LexicalCommand<void> = createCommand();
 export const INSERT_TRACKER_PLAN_COMMAND: LexicalCommand<void> = createCommand();
 export const INSERT_TRACKER_IDEA_COMMAND: LexicalCommand<void> = createCommand();
+export const CONVERT_TO_PLAN_COMMAND: LexicalCommand<void> = createCommand();
+export const CONVERT_TO_DECISION_COMMAND: LexicalCommand<void> = createCommand();
 
 // Helper function to generate a ULID-style ID
 function generateId(prefix: string): string {
@@ -97,6 +103,150 @@ function insertTrackerItemNode(editor: LexicalEditor, type: TrackerItemType, exi
       const nextParagraph = $createParagraphNode();
       trackerItemNode.insertAfter(nextParagraph);
       nextParagraph.select();
+    }
+  });
+}
+
+/**
+ * Extract the first heading or a default title from the document
+ */
+function extractDocumentTitle(editor: LexicalEditor): string {
+  let title = 'Untitled';
+
+  editor.getEditorState().read(() => {
+    const root = $getRoot();
+    const children = root.getChildren();
+
+    // Look for the first heading
+    for (const child of children) {
+      if ($isHeadingNode(child)) {
+        title = child.getTextContent().trim();
+        break;
+      }
+    }
+  });
+
+  return title || 'Untitled';
+}
+
+/**
+ * Remove command text (starting with /) from the current selection/paragraph
+ */
+function removeCommandText(editor: LexicalEditor): void {
+  editor.update(() => {
+    const selection = $getSelection();
+    if (!$isRangeSelection(selection)) return;
+
+    const anchorNode = selection.anchor.getNode();
+    const textContent = anchorNode.getTextContent();
+
+    // Check if this node contains command text (starts with /)
+    const match = textContent.match(/^\/[a-zA-Z]*/);
+    if (match) {
+      // Remove the command text
+      const commandLength = match[0].length;
+      if (anchorNode instanceof TextNode) {
+        const newText = textContent.slice(commandLength).trimStart();
+        anchorNode.setTextContent(newText);
+
+        // Move selection to start
+        if (newText.length === 0) {
+          selection.removeText();
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Convert document to a plan by adding plan frontmatter
+ */
+async function convertToPlan(editor: LexicalEditor, onContentChange?: (content: string) => void): Promise<void> {
+  if (!onContentChange) {
+    console.warn('[TrackerPlugin] Cannot convert to plan: no content change handler');
+    return;
+  }
+
+  // Remove any command text first
+  removeCommandText(editor);
+
+  // Extract title and get current content as markdown
+  const title = extractDocumentTitle(editor);
+  const planId = generateTrackerId('plan');
+  const now = new Date();
+
+  const planData = {
+    planId,
+    title,
+    status: 'draft',
+    planType: 'feature',
+    priority: 'medium',
+    progress: 0,
+    created: now.toISOString().split('T')[0],
+    updated: now.toISOString(),
+    owner: '',
+    stakeholders: [],
+    tags: [],
+  };
+
+  // Get current content as markdown (proper export)
+  const { $convertToEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+
+  editor.getEditorState().read(() => {
+    try {
+      const transformers = getEditorTransformers();
+      const markdownContent = $convertToEnhancedMarkdownString(transformers, { includeFrontmatter: false });
+      const updatedContent = updateTrackerInFrontmatter('', 'plan', planData);
+      const finalContent = updatedContent + '\n' + markdownContent;
+      onContentChange(finalContent);
+    } catch (error) {
+      console.error('[TrackerPlugin] Failed to convert to plan:', error);
+    }
+  });
+}
+
+/**
+ * Convert document to a decision by adding decision frontmatter
+ */
+async function convertToDecision(editor: LexicalEditor, onContentChange?: (content: string) => void): Promise<void> {
+  if (!onContentChange) {
+    console.warn('[TrackerPlugin] Cannot convert to decision: no content change handler');
+    return;
+  }
+
+  // Remove any command text first
+  removeCommandText(editor);
+
+  // Extract title and get current content as markdown
+  const title = extractDocumentTitle(editor);
+  const decisionId = generateTrackerId('decision');
+  const now = new Date();
+
+  const decisionData = {
+    decisionId,
+    title,
+    status: 'to-do',
+    priority: 'medium',
+    created: now.toISOString().split('T')[0],
+    updated: now.toISOString(),
+    owner: '',
+    stakeholders: [],
+    tags: [],
+    chosen: '',
+  };
+
+  // Get current content as markdown (proper export)
+  const { $convertToEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+
+  editor.getEditorState().read(() => {
+    try {
+      const transformers = getEditorTransformers();
+      const markdownContent = $convertToEnhancedMarkdownString(transformers, { includeFrontmatter: false });
+      const updatedContent = updateTrackerInFrontmatter('', 'decision', decisionData);
+      const finalContent = updatedContent + '\n' + markdownContent;
+      onContentChange(finalContent);
+    } catch (error) {
+      console.error('[TrackerPlugin] Failed to convert to decision:', error);
     }
   });
 }
@@ -163,6 +313,37 @@ function TrackerPlugin(): JSX.Element | null {
       INSERT_TRACKER_IDEA_COMMAND,
       () => {
         insertTrackerItemNode(editor, 'idea');
+        return true;
+      },
+      COMMAND_PRIORITY_EDITOR,
+    );
+  }, [editor]);
+
+  // Register document conversion commands
+  useReactEffect(() => {
+    return editor.registerCommand(
+      CONVERT_TO_PLAN_COMMAND,
+      () => {
+        // Get onContentChange from window if available (set by DocumentHeaderContainer)
+        const onContentChange = (window as any).__documentContentChangeHandler;
+        convertToPlan(editor, onContentChange).catch(error => {
+          console.error('[TrackerPlugin] Failed to convert to plan:', error);
+        });
+        return true;
+      },
+      COMMAND_PRIORITY_EDITOR,
+    );
+  }, [editor]);
+
+  useReactEffect(() => {
+    return editor.registerCommand(
+      CONVERT_TO_DECISION_COMMAND,
+      () => {
+        // Get onContentChange from window if available (set by DocumentHeaderContainer)
+        const onContentChange = (window as any).__documentContentChangeHandler;
+        convertToDecision(editor, onContentChange).catch(error => {
+          console.error('[TrackerPlugin] Failed to convert to decision:', error);
+        });
         return true;
       },
       COMMAND_PRIORITY_EDITOR,
@@ -533,6 +714,8 @@ export const trackerPluginPackage: PluginPackage<TrackerPluginProps> = {
     INSERT_TRACKER_BUG: INSERT_TRACKER_BUG_COMMAND,
     INSERT_TRACKER_PLAN: INSERT_TRACKER_PLAN_COMMAND,
     INSERT_TRACKER_IDEA: INSERT_TRACKER_IDEA_COMMAND,
+    CONVERT_TO_PLAN: CONVERT_TO_PLAN_COMMAND,
+    CONVERT_TO_DECISION: CONVERT_TO_DECISION_COMMAND,
   },
   userCommands: [
     {
@@ -562,6 +745,20 @@ export const trackerPluginPackage: PluginPackage<TrackerPluginProps> = {
       icon: 'lightbulb',
       keywords: ['idea', 'suggestion', 'tracker'],
       command: INSERT_TRACKER_IDEA_COMMAND,
+    },
+    {
+      title: 'Convert to Plan',
+      description: 'Convert this document to a plan document',
+      icon: 'flag',
+      keywords: ['convert', 'plan', 'document'],
+      command: CONVERT_TO_PLAN_COMMAND,
+    },
+    {
+      title: 'Convert to Decision',
+      description: 'Convert this document to a decision document',
+      icon: 'gavel',
+      keywords: ['convert', 'decision', 'document'],
+      command: CONVERT_TO_DECISION_COMMAND,
     },
   ],
 };

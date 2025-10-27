@@ -7,7 +7,7 @@
  * - Passes document context to each header
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { DocumentHeaderRegistry } from './DocumentHeaderRegistry';
 import type { DocumentHeaderComponentProps } from './DocumentHeaderRegistry';
 import './DocumentHeader.css';
@@ -31,6 +31,16 @@ export const DocumentHeaderContainer: React.FC<DocumentHeaderContainerProps> = (
   const providers = useMemo(() => {
     return DocumentHeaderRegistry.getProviders(content);
   }, [content]);
+
+  // Expose onContentChange handler globally for commands to access
+  useEffect(() => {
+    if (onContentChange) {
+      (window as any).__documentContentChangeHandler = onContentChange;
+    }
+    return () => {
+      delete (window as any).__documentContentChangeHandler;
+    };
+  }, [onContentChange]);
 
   if (providers.length === 0) {
     return null;
