@@ -28,6 +28,7 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [hoveredActionId, setHoveredActionId] = useState<string | null>(null);
 
   // Helper functions
   const checkFileExists = async (relativePath: string): Promise<boolean> => {
@@ -61,8 +62,6 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
     try {
       const planCommandExists = await checkFileExists('.claude/commands/plan.md');
       const trackCommandExists = await checkFileExists('.claude/commands/track.md');
-      const trackBugCommandExists = await checkFileExists('.claude/commands/track-bug.md');
-      const trackIdeaCommandExists = await checkFileExists('.claude/commands/track-idea.md');
       const claudeMdConfigured = await checkCLAUDEmdConfigured();
       const bugsTrackerExists = await checkFileExists('nimbalyst-local/tracker/bugs.md');
       const tasksTrackerExists = await checkFileExists('nimbalyst-local/tracker/tasks.md');
@@ -72,8 +71,8 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
       setActions([
         {
           id: 'plan-command',
-          title: 'Install /plan command',
-          description: 'Create plan documents with proper structure and frontmatter',
+          title: '/plan command',
+          description: 'Create and track plans across your project',
           completed: planCommandExists,
           action: async () => {
             await OnboardingService.installPlanCommand(workspacePath, 'nimbalyst-local/plans');
@@ -81,29 +80,11 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
         },
         {
           id: 'track-command',
-          title: 'Install /track command',
+          title: '/track command',
           description: 'Create tracking items for bugs, tasks, and ideas',
           completed: trackCommandExists,
           action: async () => {
             await OnboardingService.installTrackCommand(workspacePath);
-          },
-        },
-        {
-          id: 'track-bug-command',
-          title: 'Install /track-bug command',
-          description: 'Quick bug tracking with context awareness',
-          completed: trackBugCommandExists,
-          action: async () => {
-            await OnboardingService.installTrackBugCommand(workspacePath);
-          },
-        },
-        {
-          id: 'track-idea-command',
-          title: 'Install /track-idea command',
-          description: 'Quick idea tracking with context awareness',
-          completed: trackIdeaCommandExists,
-          action: async () => {
-            await OnboardingService.installTrackIdeaCommand(workspacePath);
           },
         },
         {
@@ -117,8 +98,8 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
         },
         {
           id: 'bugs-tracker',
-          title: 'Create bugs tracker',
-          description: 'Set up tracker document for bugs and issues',
+          title: 'Bugs',
+          description: 'Track bugs and issues',
           completed: bugsTrackerExists,
           action: async () => {
             await OnboardingService.createTrackerDocument(workspacePath, 'bugs');
@@ -126,8 +107,8 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
         },
         {
           id: 'tasks-tracker',
-          title: 'Create tasks tracker',
-          description: 'Set up tracker document for tasks and todos',
+          title: 'Tasks',
+          description: 'Track tasks and todos',
           completed: tasksTrackerExists,
           action: async () => {
             await OnboardingService.createTrackerDocument(workspacePath, 'tasks');
@@ -135,8 +116,8 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
         },
         {
           id: 'ideas-tracker',
-          title: 'Create ideas tracker',
-          description: 'Set up tracker document for feature ideas and improvements',
+          title: 'Ideas',
+          description: 'Track feature ideas',
           completed: ideasTrackerExists,
           action: async () => {
             await OnboardingService.createTrackerDocument(workspacePath, 'ideas');
@@ -144,8 +125,8 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
         },
         {
           id: 'decisions-tracker',
-          title: 'Create decisions tracker',
-          description: 'Set up tracker document for architecture and design decisions',
+          title: 'Decisions',
+          description: 'Track architecture decisions',
           completed: decisionsTrackerExists,
           action: async () => {
             await OnboardingService.createTrackerDocument(workspacePath, 'decisions');
@@ -200,15 +181,18 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
 
   const handleRunAction = async (actionId: string) => {
     const action = actions.find(a => a.id === actionId);
-    if (!action || action.completed) return;
+    if (!action) return;
 
     setError(null);
     setSuccess(null);
     setIsProcessing(true);
 
+    const wasCompleted = action.completed;
+
     try {
       await action.action();
-      setSuccess(`${action.title} completed!`);
+      const verb = wasCompleted ? 'reinstalled' : 'completed';
+      setSuccess(`${action.title} ${verb}!`);
 
       // Longer delay to ensure file system has synced and IPC has completed
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -269,7 +253,7 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
       <div className="settings-header">
         <h2>
           <span className="material-symbols-outlined">settings</span>
-          Claude Code Setup
+          Claude Code Setup for {workspaceName}
         </h2>
         <button className="settings-close" onClick={onClose} title="Close settings">
           <span className="material-symbols-outlined">close</span>
@@ -277,23 +261,6 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
       </div>
 
       <div className="settings-content">
-        <div className="settings-intro">
-          <p>Configure your workspace to work seamlessly with Claude Code.</p>
-          <div className="settings-progress">
-            <span className="progress-text">{completedCount} of {totalCount} completed</span>
-            {completedCount < totalCount && (
-              <button
-                className="install-all-button"
-                onClick={handleInstallAll}
-                disabled={isProcessing}
-              >
-                <span className="material-symbols-outlined">download</span>
-                Install All
-              </button>
-            )}
-          </div>
-        </div>
-
         {error && (
           <div className="settings-message error">
             <span className="material-symbols-outlined">error</span>
@@ -309,73 +276,57 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
         )}
 
         <div className="settings-section">
-          <h3>
-            <span className="material-symbols-outlined">folder</span>
-            Commands Location
-          </h3>
-          <p className="settings-help">
-            Choose where to install custom Claude Code commands for this project.
-          </p>
-
-          <div className="commands-location-selector">
-            <label className="radio-option">
-              <input
-                type="radio"
-                name="commandsLocation"
-                value="project"
-                checked={commandsLocation === 'project'}
-                onChange={() => handleChangeCommandsLocation('project')}
-                disabled={isProcessing}
-              />
-              <div className="radio-option-content">
-                <strong>Project (.claude/)</strong>
-                <p>Commands stored in project directory, can be checked into version control for team sharing</p>
+          <div className="section-header-row">
+            <div>
+              <h3>Commands Location</h3>
+              <p className="settings-help">Install for this project or your user directory</p>
+            </div>
+            <div className="header-actions">
+              <div className="location-tabs">
+                <button
+                  className={`location-tab ${commandsLocation === 'project' ? 'active' : ''}`}
+                  onClick={() => handleChangeCommandsLocation('project')}
+                  disabled={isProcessing}
+                >
+                  Project
+                </button>
+                <button
+                  className={`location-tab ${commandsLocation === 'global' ? 'active' : ''}`}
+                  onClick={() => handleChangeCommandsLocation('global')}
+                  disabled={isProcessing}
+                >
+                  Global
+                </button>
               </div>
-            </label>
-
-            <label className="radio-option">
-              <input
-                type="radio"
-                name="commandsLocation"
-                value="global"
-                checked={commandsLocation === 'global'}
-                onChange={() => handleChangeCommandsLocation('global')}
-                disabled={isProcessing}
-              />
-              <div className="radio-option-content">
-                <strong>Global (~/.claude/)</strong>
-                <p>Commands stored in home directory, shared across all projects</p>
-              </div>
-            </label>
+              {completedCount < totalCount && (
+                <button
+                  className="install-all-button"
+                  onClick={handleInstallAll}
+                  disabled={isProcessing}
+                >
+                  Install All
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
         <div className="settings-section">
-          <h3>
-            <span className="material-symbols-outlined">smart_toy</span>
-            Claude Code Commands
-          </h3>
-          <p className="settings-help">
-            Custom slash commands that teach Claude Code about Nimbalyst's planning system.
-          </p>
+          <h3>Claude Code Commands</h3>
 
           <div className="action-cards">
-            {actions.slice(0, 5).map(action => (
-              <div key={action.id} className={`action-card ${action.completed ? 'completed' : ''}`}>
-                <div className="action-card-header">
-                  <div className="action-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={action.completed}
-                      readOnly
-                    />
-                  </div>
-                  <div className="action-info">
-                    <h4>{action.title}</h4>
-                    <p>{action.description}</p>
-                  </div>
+            {actions.slice(0, 3).map(action => (
+              <div
+                key={action.id}
+                className={`action-card ${action.completed ? 'completed' : ''}`}
+                onMouseEnter={() => setHoveredActionId(action.id)}
+                onMouseLeave={() => setHoveredActionId(null)}
+              >
+                <div className="action-info">
+                  <h4>{action.title}</h4>
+                  <p>{action.description}</p>
                 </div>
-                {!action.completed && (
+                {!action.completed ? (
                   <button
                     className="action-install-button"
                     onClick={() => handleRunAction(action.id)}
@@ -383,12 +334,16 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
                   >
                     Install
                   </button>
-                )}
-                {action.completed && (
-                  <div className="action-completed-badge">
-                    <span className="material-symbols-outlined">check_circle</span>
-                    Installed
-                  </div>
+                ) : hoveredActionId === action.id ? (
+                  <button
+                    className="action-reinstall-button"
+                    onClick={() => handleRunAction(action.id)}
+                    disabled={isProcessing}
+                  >
+                    Reinstall
+                  </button>
+                ) : (
+                  <span className="action-status">Installed</span>
                 )}
               </div>
             ))}
@@ -396,31 +351,22 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
 
         <div className="settings-section">
-          <h3>
-            <span className="material-symbols-outlined">bookmark</span>
-            Tracker Documents
-          </h3>
-          <p className="settings-help">
-            Pre-configured tracker documents for organizing bugs, tasks, ideas, and decisions.
-          </p>
+          <h3>Tracker Documents</h3>
+          <p className="settings-help">Select which types of items you want to track</p>
 
           <div className="action-cards">
-            {actions.slice(5).map(action => (
-              <div key={action.id} className={`action-card ${action.completed ? 'completed' : ''}`}>
-                <div className="action-card-header">
-                  <div className="action-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={action.completed}
-                      readOnly
-                    />
-                  </div>
-                  <div className="action-info">
-                    <h4>{action.title}</h4>
-                    <p>{action.description}</p>
-                  </div>
+            {actions.slice(3).map(action => (
+              <div
+                key={action.id}
+                className={`action-card ${action.completed ? 'completed' : ''}`}
+                onMouseEnter={() => setHoveredActionId(action.id)}
+                onMouseLeave={() => setHoveredActionId(null)}
+              >
+                <div className="action-info">
+                  <h4>{action.title}</h4>
+                  <p>{action.description}</p>
                 </div>
-                {!action.completed && (
+                {!action.completed ? (
                   <button
                     className="action-install-button"
                     onClick={() => handleRunAction(action.id)}
@@ -428,12 +374,16 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
                   >
                     Create
                   </button>
-                )}
-                {action.completed && (
-                  <div className="action-completed-badge">
-                    <span className="material-symbols-outlined">check_circle</span>
-                    Created
-                  </div>
+                ) : hoveredActionId === action.id ? (
+                  <button
+                    className="action-reinstall-button"
+                    onClick={() => handleRunAction(action.id)}
+                    disabled={isProcessing}
+                  >
+                    Recreate
+                  </button>
+                ) : (
+                  <span className="action-status">Created</span>
                 )}
               </div>
             ))}

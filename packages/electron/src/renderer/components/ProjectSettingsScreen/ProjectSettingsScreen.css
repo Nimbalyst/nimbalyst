@@ -475,6 +475,29 @@
   cursor: not-allowed;
 }
 
+.action-reinstall-button {
+  padding: 6px 16px;
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.action-reinstall-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--primary-color);
+}
+
+.action-reinstall-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .action-completed-badge {
   display: flex;
   align-items: center;
@@ -509,6 +532,81 @@
 
 .settings-content::-webkit-scrollbar-thumb:hover {
   background: var(--text-tertiary);
+}
+
+/* Section header with actions */
+.section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  gap: 24px;
+}
+
+.section-header-row h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.section-header-row .settings-help {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+/* Location tabs */
+.location-tabs {
+  display: flex;
+  gap: 8px;
+  background: var(--surface-secondary);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+}
+
+.location-tab {
+  padding: 8px 20px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.location-tab:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.location-tab.active {
+  background: var(--primary-color);
+  color: white;
+}
+
+.location-tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Action status text */
+.action-status {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  padding: 6px 12px;
 }
 
 /* Commands location selector */
