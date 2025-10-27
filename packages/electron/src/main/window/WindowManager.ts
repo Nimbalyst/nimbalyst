@@ -272,9 +272,14 @@ export function createWindow(
             }
         });
 
+        // Store state for use in both 'close' and 'closed' handlers
+        let savedState: WindowState | undefined;
+
         window.on('close', (event) => {
             // Save workspace-specific window state before closing
             const state = windowStates.get(windowId);
+            savedState = state; // Preserve for 'closed' handler
+
             if (state?.mode === 'workspace' && state.workspacePath) {
                 const bounds = window.getBounds();
                 const focusOrder = windowFocusOrder.get(windowId) || 0;
@@ -295,12 +300,21 @@ export function createWindow(
                     saveWorkspaceNavigationHistory(state.workspacePath, navHistory);
                 }
             }
+
+            // Remove from windowStates so saveSessionState() will skip this closing window
+            windowStates.delete(windowId);
+
+            // Save global session state (will not include this window since we removed it from windowStates)
+            // This ensures closed windows are not restored on next launch
+            import('../session/SessionState').then(({ saveSessionState }) => {
+                saveSessionState();
+            });
         });
 
         window.on('closed', () => {
             windows.delete(windowId);
-            const state = windowStates.get(windowId);
-            windowStates.delete(windowId);
+            // Use saved state from 'close' handler
+            const state = savedState;
             savingWindows.delete(windowId);
             windowFocusOrder.delete(windowId);
             windowDevToolsState.delete(windowId);
@@ -335,11 +349,9 @@ export function createWindow(
                 }
             }
 
-            // Save session state immediately after window closes
-            // This ensures the global session state is updated so closed windows don't reopen on app launch
-            import('../session/SessionState').then(({ saveSessionState }) => {
-                saveSessionState();
-            });
+            // Note: We do NOT save global session state here because this window has already
+            // been removed from the windows Map. Session state is saved on app quit in main/index.ts
+            // which captures all open windows at that moment.
 
             // Update menu to reflect window closure
             // This will be handled by the menu system
