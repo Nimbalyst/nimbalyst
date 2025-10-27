@@ -200,7 +200,7 @@ export default function FloatingDocumentActionsPlugin({ config }: FloatingDocume
       {showActionsMenu && (
         <div className="floating-doc-actions-dropdown">
           <button className="action-menu-item" onClick={handleMarkdownMode}>
-            Switch to Markdown Mode
+            Toggle Markdown Mode
           </button>
           <button className="action-menu-item" onClick={handleViewHistory}>
             View History
