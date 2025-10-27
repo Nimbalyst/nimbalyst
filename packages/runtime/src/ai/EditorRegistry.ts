@@ -190,6 +190,47 @@ class EditorRegistry {
     // Wait a bit for the editor to register
     await new Promise(resolve => setTimeout(resolve, 100));
   }
+
+  /**
+   * Scroll to a tracker item in the document by its ID
+   */
+  scrollToTrackerItem(filePath: string, itemId: string): void {
+    const editorInstance = this.getEditor(filePath);
+
+    if (!editorInstance) {
+      console.warn('[EditorRegistry] No editor found for scrolling to tracker item:', filePath);
+      return;
+    }
+
+    const { editor } = editorInstance;
+
+    // Find the TrackerItemNode with the matching ID
+    editor.getEditorState().read(() => {
+      let targetKey: string | null = null;
+
+      // Walk through all nodes to find the TrackerItemNode with matching ID
+      const allNodes = editor._editorState._nodeMap;
+      for (const [key, node] of allNodes) {
+        if ((node as any).__type === 'tracker-item') {
+          const trackerNode = node as any;
+          if (trackerNode.__data?.id === itemId) {
+            targetKey = key;
+            break;
+          }
+        }
+      }
+
+      if (targetKey) {
+        const domElement = editor.getElementByKey(targetKey);
+        if (domElement) {
+          // Scroll the element into view with smooth behavior
+          domElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      } else {
+        console.warn('[EditorRegistry] TrackerItemNode not found with ID:', itemId);
+      }
+    });
+  }
 }
 
 // Export singleton instance

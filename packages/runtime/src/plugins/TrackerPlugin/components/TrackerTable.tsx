@@ -387,13 +387,31 @@ export function TrackerTable({
       onSwitchToFilesMode();
     }
 
-    // Open the document at the specific line
+    // Open the document and scroll to the tracker item
     const documentService = (window as any).documentService;
     if (documentService && documentService.openDocument) {
       documentService.getDocumentByPath(item.module).then((doc: any) => {
         if (doc) {
-          documentService.openDocument(doc.id);
-          // TODO: Scroll to line number (item.lineNumber)
+          // Construct the full absolute path for the editor registry
+          // item.workspace is the full workspace path, doc.path is relative
+          const fullPath = item.workspace && doc.path
+            ? `${item.workspace}/${doc.path}`.replace(/\/+/g, '/')
+            : doc.path;
+
+          documentService.openDocument(doc.id).then(() => {
+            // Wait for editor to be ready and then scroll to the tracker item
+            // Only scroll for inline items (full-document items don't need scrolling)
+            if (item.lineNumber !== undefined && item.lineNumber !== 0) {
+              const editorRegistry = (window as any).__editorRegistry;
+              if (editorRegistry && item.id) {
+                // Give the editor time to render and register
+                setTimeout(() => {
+                  // Use the full absolute path
+                  editorRegistry.scrollToTrackerItem(fullPath, item.id);
+                }, 500);
+              }
+            }
+          });
         }
       });
     }
