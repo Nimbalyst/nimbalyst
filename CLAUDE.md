@@ -410,3 +410,4 @@ After the frontmatter, plans should include:
 - stop putting code in plan docs!
 - For playwrite - write one playwright test case and get it working before writing more and see @docs/PLAYWRIGHT.md
 - if your editor is scrolling on load when it shouldn't you probably are missing this from an editor.update - { tag: SKIP_SCROLL_INTO_VIEW_TAG }
+- Markdown import and export should use our enhance conversion system $convertFromEnhancedMarkdownString and $convertToEnhancedMarkdownString
