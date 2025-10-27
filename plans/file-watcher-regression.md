@@ -121,9 +121,9 @@ All file watcher E2E tests passing:
 - ✅ Rapid successive changes
 
 ## Bugs
-- File watcher doesn't see changes immediately after auto-save @bug[id:bug_mgffum864wffh0jy status:resolved priority:medium created:2025-10-06]
+- File watcher doesn't see changes immediately after auto-save #bug[id:bug_mgffum864wffh0jy status:resolved priority:medium created:2025-10-06]
 
 
 
 ## Future Ideas
-- Build a file cache to speed metadata parsing @idea[id:ida_mgffzyjqancja627 status:to-do priority:medium created:2025-10-06]
+- Build a file cache to speed metadata parsing #idea[id:ida_mgffzyjqancja627 status:to-do priority:medium created:2025-10-06]

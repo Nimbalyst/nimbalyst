@@ -366,7 +366,7 @@ export function markAppLaunched(): void {
 
 ## Test Results
 
-```
+```javascript
 ✓ should show AI Models window with Getting Started on first launch
 ✓ should display Claude Code status
 ✓ should have navigation to other AI provider panels

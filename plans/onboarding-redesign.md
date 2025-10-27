@@ -19,7 +19,7 @@ planStatus:
   startDate: "2025-10-16"
 ---
 # Onboarding Redesign - Settings Screen Approach
-<!-- plan-status -->
+
 
 ## Problem with Current Approach
 
@@ -30,36 +30,57 @@ The current modal-based onboarding has several issues:
 4. Users can't easily reconfigure after initial setup
 5. Modal blocks the entire application
 
-## New Approach: Settings Screen
+## New Approach: Feature Cards Screen
 
-Instead of a modal wizard, use a dedicated settings screen that:
-- Appears in the main window content area
+Instead of a modal wizard, use a feature cards screen that:
 - Can be accessed anytime via gear icon
-- Shows all configuration options at once (no wizard)
-- Provides immediate feedback and previews
+- Shows available features as individual cards
+- Each card displays installation status (installed/not installed)
+- Actions happen immediately (no save/cancel)
+- Stateless - just reflects current project state
 - Feels integrated with the application
 
-## Settings Screen Structure
+## Feature Cards Screen Structure
 
 ### Layout
 ```javascript
 ┌─────────────────────────────────────────────────────────┐
-│ Settings                                          [×]    │
+│ Project Features                                  [×]    │
 ├─────────────────────────────────────────────────────────┤
 │                                                          │
-│  Plans Directory                                         │
-│  [nimbalyst-local____]                                   │
-│  Plans will be stored in this folder (added to          │
-│  .gitignore). You can move plans later if you want to   │
-│  check them into version control.                       │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ 📋 Plans Directory                               │  │
+│  │ Store plans in a dedicated folder                │  │
+│  │                                                  │  │
+│  │ Status: Not configured                           │  │
+│  │ [Set Up Plans Directory]                         │  │
+│  └──────────────────────────────────────────────────┘  │
 │                                                          │
-│  Claude Code Integration                                 │
-│  ☐ Enable Claude Code integration                       │
-│      ☐ Install /plan command                            │
-│      ☐ Install /track command                           │
-│      ☐ Configure CLAUDE.md                              │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ 🤖 Claude Code - /plan Command                   │  │
+│  │ Create and manage plans from Claude              │  │
+│  │                                                  │  │
+│  │ Status: ✓ Installed                              │  │
+│  │ [Uninstall]                                      │  │
+│  └──────────────────────────────────────────────────┘  │
 │                                                          │
-│  [Get Started]  [Save Changes]                          │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ 📊 Claude Code - /track Command                  │  │
+│  │ Track progress on plans from Claude              │  │
+│  │                                                  │  │
+│  │ Status: Not installed                            │  │
+│  │ [Install]                                        │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                          │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ 📝 CLAUDE.md Configuration                       │  │
+│  │ Add Preditor context to Claude conversations     │  │
+│  │                                                  │  │
+│  │ Status: Not installed                            │  │
+│  │ [Install]                                        │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                          │
+│  [Install All Features]                                 │
 │                                                          │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -67,37 +88,42 @@ Instead of a modal wizard, use a dedicated settings screen that:
 ### Simplified Flow
 
 **First-time project open:**
-1. Settings screen appears automatically
-2. All options visible at once (no steps)
-3. User can configure what they want, skip what they don't
-4. Click "Get Started" to save and continue
-5. Settings screen closes, main editor appears
+1. Feature cards screen appears automatically
+2. All features shown as cards with current status
+3. User can install individual features or all at once
+4. Each action happens immediately (no save step)
+5. Status updates in real-time
+6. User closes when done
 
 **Returning users:**
-- Access settings via gear icon anytime
-- Make changes and save
+- Access feature cards via gear icon anytime
+- See current installation status
+- Install or uninstall features as needed
 - Changes apply immediately
 
-## Configuration Options
+## Feature Cards
 
-### 1. Plans Directory (simple input)
-- Text input prefilled with "nimbalyst-local"
-- Plans will be stored in `[directory]/plans`
-- Directory automatically added to .gitignore
-- User can change if they want, but default is good for most cases
-- Note: Users can always move plans later if they decide to check them in
+### 1. Plans Directory Card
+- Shows current status: configured or not
+- Button: "Set Up Plans Directory"
+- On click: Creates `nimbalyst-local/plans` folder and adds to .gitignore
+- Uses sensible default (no configuration needed)
+- Action completes immediately, status updates
 
-### 2. Claude Code Integration (optional)
-Single checkbox to enable, with sub-options:
-- Install /plan command
-- Install /track command
-- Configure CLAUDE.md
+### 2. /plan Command Card
+- Shows current status: installed or not installed
+- Checks for `.claude/commands/plan.md` file
+- Button: "Install" or "Uninstall" based on status
+- On install: Creates command file immediately
+- On uninstall: Removes command file immediately
 
-All sub-options checked by default when parent is enabled.
 
-### 3. Quick Start
-- "Create Example Plan" button
-- Opens example plan immediately after settings
+### 3. /track Command Card
+- Shows current status: installed or not installed
+- Checks for `.claude/commands/track.md` file
+- Button: "Install" or "Uninstall" based on status
+- On install: Creates command file immediately
+- On uninstall: Removes command file immediately
 
 ## AI Model Configuration
 
@@ -116,15 +142,32 @@ All sub-options checked by default when parent is enabled.
 - When enabled, show model picker UI
 - Location: `[project]/.preditor/ai-config.json`
 
-**Settings Screen Addition:**
+**Feature Card Addition:**
 ```javascript
-AI Models
-○ Use global AI settings
-○ Customize for this project
-  [Model Configuration UI appears when selected]
+┌──────────────────────────────────────────────────┐
+│ 🤖 AI Model Configuration                        │
+│ Customize AI models for this project             │
+│                                                  │
+│ Status: Using global settings                    │
+│ [Customize for This Project]                     │
+└──────────────────────────────────────────────────┘
 ```
 
 ### Why This Approach?
+
+### 4. CLAUDE.md Configuration Card
+- Shows current status: installed or not installed
+- Checks for `CLAUDE.md` file with Preditor context
+- Button: "Install" or "Uninstall" based on status
+- On install: Creates/updates CLAUDE.md immediately
+- On uninstall: Removes Preditor section from CLAUDE.md
+
+### 5. Install All Button
+- Appears at bottom of screen
+- Installs all features that aren't already installed
+- Each installation happens immediately
+- Status updates in real-time as features are installed
+
 
 1. **Defaults work everywhere**: Set up once, works in all projects
 2. **Flexibility when needed**: Different models for different types of projects
@@ -142,67 +185,79 @@ Example use cases:
 - `WelcomeModal.tsx` and `WelcomeModal.css`
 - Multi-step wizard logic
 - Modal overlay
+- Any stateful form management
+- Save/cancel buttons
 
 ### Create
-- `SettingsScreen.tsx` - Main settings component
-- `SettingsScreen.css` - Simple, clean styling
+- `FeatureCardsScreen.tsx` - Main feature cards component
+- `FeatureCard.tsx` - Individual card component
+- `FeatureCardsScreen.css` - Simple, clean card styling
 - Integrate into main window routing
 
 ### Keep
 - `OnboardingService.ts` - Reuse for file operations
-- Configuration structure in `.preditor/config.json`
 - All the template content (plan command, track command, CLAUDE.md)
 
 ### Add
+- Status detection logic (check if features are installed)
+- Immediate action handlers (install/uninstall)
 - Global AI settings management
 - Per-project AI config override
-- Gear icon in UI to open settings
-- Settings screen route/state management
+- Gear icon in UI to open feature cards
+- Feature cards screen route/state management
 
 ## UI/UX Improvements
 
 ### First-Time Experience
-1. App launches with settings screen visible
-2. Brief welcome message at top: "Welcome to Preditor! Configure your project below."
-3. All options visible, with recommended defaults pre-selected
-4. Click "Get Started" when ready
-5. Settings screen slides away, editor appears
+1. App launches with feature cards screen visible
+2. Brief welcome message at top: "Welcome to Preditor! Set up features for your project."
+3. All features shown as cards with clear status
+4. User can install features individually or all at once
+5. Each action completes immediately with visual feedback
+6. User closes screen when done
 
 ### Returning Users
 1. Gear icon always visible in UI (toolbar or sidebar)
-2. Click to open settings screen
-3. Make changes, save, close
-4. Or cancel to discard changes
+2. Click to open feature cards screen
+3. Close when done
+4. See current status of all features
+5. Install or uninstall as needed
 
 ### Visual Design
-- Clean, modern form layout
-- Group related options together
-- Use material symbols icons (plan icon, settings icon, etc.)
-- Show helper text below each option
-- Validate configuration in real-time
-- Show success message when saved
+- Clean card-based layout
+- Each card is self-contained with icon, title, description
+- Clear status indicators (✓ Installed, Not installed)
+- Action buttons change based on status (Install/Uninstall)
+- Use material symbols icons (plan icon, robot icon, etc.)
+- Immediate visual feedback on actions (loading state, then status update)
+- Toast notifications for success/error
 
 ## Acceptance Criteria
 
-- [ ] Settings screen appears on first project open
-- [ ] Settings screen can be reopened via gear icon
-- [ ] Plans location configuration works
-- [ ] Claude Code integration configuration works
-- [ ] Settings persist to `.preditor/config.json`
+- [ ] Feature cards screen appears on first project open
+- [ ] Feature cards screen can be reopened via gear icon
+- [ ] Each card correctly detects installation status
+- [ ] Plans directory setup works immediately
+- [ ] /plan command install/uninstall works immediately
+- [ ] "Install All" button installs all missing features
+- [ ] Status updates in real-time after each action
+- [ ] /track command install/uninstall works immediately
+- [ ] No save/cancel buttons (stateless design)
 - [ ] Global AI settings work for all projects
 - [ ] Per-project AI overrides work when enabled
-- [ ] Changes apply immediately after saving
-- [ ] Form validates configuration before saving
-- [ ] User can cancel changes without saving
+- [ ] CLAUDE.md install/uninstall works immediately
+- [ ] Toast notifications show success/error feedback
 
 ## Migration from Current Implementation
 
 1. Remove WelcomeModal component and routes
-2. Create SettingsScreen component
-3. Add settings screen routing in App.tsx
-4. Add gear icon to UI
-5. Keep OnboardingService but simplify (no step tracking)
-6. Update tests to use settings screen instead of modal
+2. Create FeatureCardsScreen and FeatureCard components
+3. Add feature detection logic (check file existence)
+4. Add immediate action handlers (no save/cancel)
+5. Add feature cards screen routing in App.tsx
+6. Add gear icon to UI
+7. Keep OnboardingService but simplify (no step tracking, no state)
+8. Update tests to use feature cards instead of modal
 
 ## Next Steps
 

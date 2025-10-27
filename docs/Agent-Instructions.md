@@ -67,9 +67,9 @@ After the frontmatter, plans should include:
 Track bugs, tasks, and ideas directly in any markdown file using inline syntax:
 
 ```markdown
-- Fix login bug @bug[id:bug_abc123 status:in-progress priority:high owner:alice]
-- Add dark mode @task[id:tsk_xyz789 status:to-do priority:medium]
-- Research API design @idea[id:ida_def456 status:to-do]
+- Fix login bug #bug[id:bug_abc123 status:in-progress priority:high owner:alice]
+- Add dark mode #task[id:tsk_xyz789 status:to-do priority:medium]
+- Research API design #idea[id:ida_def456 status:to-do]
 ```
 
 Metadata attributes: `id`, `status`, `priority`, `owner`, `tags`, `due_date`

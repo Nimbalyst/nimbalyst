@@ -19,6 +19,7 @@ planStatus:
 # PGLite Database Corruption Investigation & Mitigation
 <!-- plan-status -->
 
+
 ## Problem
 
 The PGLite database became corrupted, preventing app startup with error:

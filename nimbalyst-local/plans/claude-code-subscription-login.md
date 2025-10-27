@@ -17,7 +17,6 @@ planStatus:
   updated: "2025-10-25T21:10:00.000Z"
   progress: 40
 ---
-
 # Claude Code Subscription Login Integration
 
 ## Goal
@@ -53,7 +52,7 @@ The `claude login` CLI command expects to run in a **real terminal (TTY)** envir
 4. Hangs indefinitely
 
 **Evidence:**
-```
+```javascript
 [ClaudeCodeHandlers] Process spawned, PID: 96992
 [ClaudeCodeHandlers] Had output: false  // ← No stdout/stderr at all
 [ClaudeCodeHandlers] Total output:      // ← Completely empty

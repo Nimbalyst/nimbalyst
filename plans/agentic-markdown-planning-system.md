@@ -25,7 +25,7 @@ planStatus:
       status: active
 ---
 # Agentic Markdown Planning System
-<!-- plan-status -->
+
 
 ## Goals
 - Treat markdown plans as the single source of truth for agent-led workstreams.

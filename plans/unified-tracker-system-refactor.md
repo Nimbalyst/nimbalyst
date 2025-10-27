@@ -14,16 +14,15 @@ planStatus:
     - tracker-system
     - data-model
   created: "2025-10-17"
-  updated: "2025-10-23T20:49:08.586Z"
-  progress: 52
+  updated: "2025-10-26T18:00:00.000Z"
+  progress: 65
 ---
 # Unified Tracker System Refactor
 
 
-
-
+- Add more ways to add ideas #idea[id:ida_mh86u7bmgcxg11qx status:to-do priority:medium created:2025-10-26]
 - testtest3asdfas #bug[id:bug_mh3pkcl40nyisjsx status:done priority:medium created:2025-10-23 updated:2025-10-23T18:36:09.686Z]
-- shit #bug[id:bug_mh3szl93gemf3hkp status:to-do priority:medium created:2025-10-23]
+- shit #bug[id:bug_mh3szl93gemf3hkp status:to-do priority:medium created:2025-10-23 updated:2025-10-26T18:15:49.603Z]
 
 ## TODO
 - Tracker items are always in lists and if you tag a bug outside of a list, it makes a list
@@ -121,7 +120,7 @@ Unify all tracking functionality (Plans, Decisions, ItemTracker) into a single, 
 - All tracking now unified in single TrackerPlugin
 
 ### Next: Phase 6 - Reference System
-Add `#type``````````````[ref:id]` syntax for referencing tracker items across documents
+Add `#type``````````````````````````````````````````````[ref:id]` syntax for referencing tracker items across documents
 
 ## Current State Analysis
 
@@ -461,8 +460,8 @@ function generatePrefix(type: string): string {
 ### Syntax Change: @ to #
 
 #### Inline Syntax
-**Current**: `Fix the bug @bug[id:bug_123 status:to-do]`
-**New**: `Fix the bug``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````#bug``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````[id:bug_123 status:to-do]`
+**Current**: `Fix the bug ``````````````````````````#bug``````````````````````````[id:bug_123 status:to-do]`
+**New**: `Fix the bug``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````#bug``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````[id:bug_123 status:to-do]`
 
 **Rationale**:
 - Hash is more familiar (hashtags, anchors, references)
@@ -647,7 +646,7 @@ When copying tracker items:
 **Option 1: Copy as Reference (Default)**
 - Paste creates reference to original item
 - Preserves single source of truth
-- Example: `#bug``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````[ref:bug_123]`
+- Example: `#bug``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````[ref:bug_123]`
 
 **Option 2: Duplicate Item**
 - Hold Option/Alt while pasting
@@ -1008,7 +1007,7 @@ Core field types supported in data models:
 ### Phase 3: Inline Tracker Refactor
 **Files**: `packages/runtime/src/plugins/TrackerPlugin/nodes/`
 
-1. Create new hash syntax parser (`#type````````````````````````````````````````````````````````````[...]`)
+1. Create new hash syntax parser (`#type````````````````````````````````````````````````````````````````````````````````````````````[...]`)
 2. Implement InlineTrackerNode Lexical node
 3. Build typeahead system for hash syntax
 4. Add field autocomplete
@@ -1054,7 +1053,7 @@ Core field types supported in data models:
 ### Phase 7: Reference System
 **Files**: `packages/runtime/src/plugins/TrackerPlugin/references/`
 
-1. Implement reference syntax (`#type``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````[ref:id]`)
+1. Implement reference syntax (`#type``````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````[ref:id]`)
 2. Build reference resolution
 3. Create reference picker UI
 4. Add "Expand to Document" action
@@ -1361,3 +1360,5 @@ This unified tracker system will:
 - Position the product for advanced features
 
 The refactor is substantial but well-scoped, with clear phases and acceptance criteria. The new system will be more maintainable, extensible, and user-friendly than the current fragmented approach.
+
+
