@@ -1,4 +1,4 @@
-.ai-models-redesigned {
+.global-settings-redesigned {
   width: 100%;
   height: 100vh;
   display: flex;
@@ -9,7 +9,7 @@
 }
 
 /* macOS draggable area */
-.ai-models-redesigned::before {
+.global-settings-redesigned::before {
   content: '';
   position: fixed;
   top: 0;
@@ -20,7 +20,7 @@
   z-index: 1000;
 }
 
-.ai-models-header {
+.global-settings-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -29,24 +29,25 @@
   -webkit-app-region: no-drag;
 }
 
-.ai-models-header h2 {
+.global-settings-header h2 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
 }
 
 /* Main body with nav and content */
-.ai-models-body {
+.global-settings-body {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
 /* Left navigation */
-.ai-models-nav {
+.global-settings-nav {
   width: 220px;
   background: var(--surface-secondary);
   border-right: 1px solid var(--border-primary);
+  border-top: 1px solid var(--border-primary);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -88,7 +89,7 @@
 }
 
 .nav-item:hover {
-  background: var(--hover-bg);
+  background: var(--surface-hover);
 }
 
 .nav-item.active {
@@ -179,14 +180,14 @@
 }
 
 /* Main content area */
-.ai-models-main {
+.global-settings-main {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
+  padding: 16px;
 }
 
 /* Footer */
-.ai-models-footer {
+.global-settings-footer {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
@@ -232,7 +233,7 @@
 
 /* Panel styles - shared by all provider panels */
 .provider-panel {
-  max-width: 800px;
+  max-width: 900px;
 }
 
 .provider-panel-header {

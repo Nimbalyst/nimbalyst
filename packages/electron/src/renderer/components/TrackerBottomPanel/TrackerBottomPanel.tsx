@@ -49,9 +49,9 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
   });
 
   // Debug logging
-  useEffect(() => {
-    console.log('[TrackerBottomPanel Component] activePanel:', activePanel, 'height:', height, 'visible:', activePanel !== null);
-  }, [activePanel, height]);
+   // useEffect(() => {
+  //   console.log('[TrackerBottomPanel Component] activePanel:', activePanel, 'height:', height, 'visible:', activePanel !== null);
+  // }, [activePanel, height]);
 
   // Load item counts
   useEffect(() => {

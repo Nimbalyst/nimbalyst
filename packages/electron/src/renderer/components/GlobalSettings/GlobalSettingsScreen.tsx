@@ -465,13 +465,14 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
   };
 
   return (
-    <div className="ai-models-redesigned">
-      <div className="ai-models-header">
-        <h2>AI Provider Configuration</h2>
-      </div>
+    <div className="global-settings-redesigned">
 
-      <div className="ai-models-body">
-        <nav className="ai-models-nav">
+
+      <div className="global-settings-body">
+        <nav className="global-settings-nav">
+          <div className="global-settings-header">
+            <h2>Global Settings</h2>
+          </div>
           {/* Getting Started nav item */}
           <button
             className={`nav-item ${selectedNav === 'getting-started' ? 'active' : ''}`}
@@ -552,12 +553,12 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
           </div>
         </nav>
 
-        <main className="ai-models-main">
+        <main className="global-settings-main">
           {renderProviderPanel()}
         </main>
       </div>
 
-      <div className="ai-models-footer">
+      <div className="global-settings-footer">
         <button
           className="button-cancel"
           onClick={onClose}

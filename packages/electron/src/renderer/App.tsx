@@ -102,7 +102,7 @@ export default function App() {
     // Set window title for AI Models
     React.useEffect(() => {
       if (window.electronAPI) {
-        window.electronAPI.setTitle('AI Models');
+        window.electronAPI.setTitle('Global Settings');
       }
     }, []);
     return <AIModels onClose={() => window.close()} />;
