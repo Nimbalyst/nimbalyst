@@ -81,7 +81,7 @@
     "react-syntax-highlighter": "^15.5.0",
     "remark-gfm": "^4.0.1",
     "rexical": "file:../rexical",
-    "vite": "7.1.9",
+    "vite": "7.1.12",
     "y-websocket": "^1.5.4",
     "yjs": ">=13.5.42"
   },

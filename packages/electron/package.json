@@ -35,11 +35,11 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.14",
-    "@anthropic-ai/sdk": "^0.65.0",
-    "@electric-sql/pglite": "^0.3.8",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.27",
+    "@anthropic-ai/sdk": "^0.67.0",
+    "@electric-sql/pglite": "^0.3.11",
     "@excalidraw/excalidraw": "0.17.6",
-    "@modelcontextprotocol/sdk": "^1.20.0",
+    "@modelcontextprotocol/sdk": "^1.20.2",
     "@nimbalyst/runtime": "*",
     "@types/glob": "^8.1.0",
     "@types/js-yaml": "^4.0.9",
@@ -95,8 +95,8 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.45.0",
-    "vite": "^7.1.9",
-    "vite-plugin-static-copy": "^3.1.1",
+    "vite": "^7.1.12",
+    "vite-plugin-static-copy": "^3.1.4",
     "vitest": "^3.2.4"
   },
   "build": {
