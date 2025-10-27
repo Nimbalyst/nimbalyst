@@ -1194,16 +1194,16 @@ Note: Only one connection at a time is supported.`,
         template.push({
             label: 'Help',
             submenu: [
-                {
-                    label: 'Welcome',
-                    click: async () => {
-                        // Send message to renderer to open welcome tab
-                        const focusedWindow = BrowserWindow.getFocusedWindow();
-                        if (focusedWindow) {
-                            focusedWindow.webContents.send('open-welcome-tab');
-                        }
-                    }
-                },
+                // {
+                //     label: 'Welcome',
+                //     click: async () => {
+                //         // Send message to renderer to open welcome tab
+                //         const focusedWindow = BrowserWindow.getFocusedWindow();
+                //         if (focusedWindow) {
+                //             focusedWindow.webContents.send('open-welcome-tab');
+                //         }
+                //     }
+                // },
                 {
                     label: 'Keyboard Shortcuts',
                     accelerator: 'CmdOrCtrl+/',
