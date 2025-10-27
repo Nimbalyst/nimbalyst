@@ -1061,9 +1061,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     }
 
     // Connect to MCP server running in Electron
-    console.log('[CLAUDE-CODE] Including stravu-editor MCP server configuration');
+    console.log('[CLAUDE-CODE] Including nimbalyst MCP server configuration');
     return {
-      "stravu-editor": {
+      "nimbalyst": {
         "type": "sse",
         "transport": "sse",
         "url": "http://127.0.0.1:3456/mcp"
