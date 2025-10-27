@@ -80,6 +80,14 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
               content: parsed.prompt,
               timestamp
             });
+          } else if (parsed.type === 'user' && parsed.message) {
+            // Slash command format: { type: "user", message: { role: "user", content: "..." } }
+            const msg = parsed.message;
+            uiMessages.push({
+              role: msg.role || 'user',
+              content: msg.content || '',
+              timestamp
+            });
           }
         } catch (parseError) {
           // Not JSON - treat as raw text (regular Claude SDK format)
@@ -160,6 +168,24 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
               timestamp,
               isError: true,
               errorMessage: typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error)
+            });
+          } else if (parsed.type === 'user' && parsed.message) {
+            // Slash command format (output): { type: "user", message: { role: "user", content: "..." } }
+            // Note: Sometimes slash command outputs are marked as "user" messages (e.g., local command stdout)
+            const msg = parsed.message;
+            let content = msg.content || '';
+
+            // Extract content from <local-command-stdout> tags if present
+            const stdoutMatch = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
+            if (stdoutMatch && stdoutMatch[1]) {
+              // Format as code block for command output with system response label
+              content = '**System Response:**\n\n```\n' + stdoutMatch[1].trim() + '\n```';
+            }
+
+            uiMessages.push({
+              role: msg.role || 'user',
+              content: content,
+              timestamp
             });
           } else if (parsed.usage) {
             // This is metadata (usage stats), mark last message as complete
