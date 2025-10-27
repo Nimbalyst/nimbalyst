@@ -1205,6 +1205,12 @@ Note: Only one connection at a time is supported.`,
                 //     }
                 // },
                 {
+                    label: 'Documentation',
+                    click: async () => {
+                        shell.openExternal('https://docs.nimbalyst.com/');
+                    }
+                },
+                {
                     label: 'Keyboard Shortcuts',
                     accelerator: 'CmdOrCtrl+/',
                     click: async () => {
@@ -1229,6 +1235,12 @@ Note: Only one connection at a time is supported.`,
                         if (focusedWindow) {
                             focusedWindow.webContents.send('open-welcome-tab');
                         }
+                    }
+                },
+                {
+                    label: 'Documentation',
+                    click: async () => {
+                        shell.openExternal('https://docs.nimbalyst.com/');
                     }
                 },
                 {
