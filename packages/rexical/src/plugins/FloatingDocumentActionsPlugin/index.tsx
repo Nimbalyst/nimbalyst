@@ -5,6 +5,7 @@ import { $isHeadingNode } from '@lexical/rich-text';
 import { $isCodeNode, CodeNode } from '@lexical/code';
 import { $convertFromEnhancedMarkdownString, $convertToEnhancedMarkdownString, getEditorTransformers } from '../../markdown';
 import { EditorConfig } from '../../EditorConfig';
+import { useRuntimeSettings } from '../../context/RuntimeSettingsContext';
 import './styles.css';
 
 interface TOCItem {
@@ -19,11 +20,15 @@ interface FloatingDocumentActionsPluginProps {
 
 export default function FloatingDocumentActionsPlugin({ config }: FloatingDocumentActionsPluginProps): JSX.Element {
   const [editor] = useLexicalComposerContext();
+  const runtimeSettings = useRuntimeSettings();
   const [showTOC, setShowTOC] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [tocItems, setTocItems] = useState<TOCItem[]>([]);
   const tocButtonRef = useRef<HTMLButtonElement>(null);
   const actionsButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Check if we're in dev mode
+  const isDevMode = import.meta.env.DEV;
 
   // Extract TOC from editor content
   const extractTOC = useCallback(() => {
@@ -155,6 +160,11 @@ export default function FloatingDocumentActionsPlugin({ config }: FloatingDocume
     setShowActionsMenu(false);
   }, [editor]);
 
+  const handleToggleDebugTree = useCallback(() => {
+    runtimeSettings.toggleSetting('showTreeView');
+    setShowActionsMenu(false);
+  }, [runtimeSettings]);
+
   return (
     <div className="floating-document-actions">
       {/* Table of Contents Button */}
@@ -211,6 +221,11 @@ export default function FloatingDocumentActionsPlugin({ config }: FloatingDocume
           <button className="action-menu-item" onClick={handleCopyAsMarkdown}>
             Copy as Markdown
           </button>
+          {isDevMode && (
+            <button className="action-menu-item" onClick={handleToggleDebugTree}>
+              Toggle Debug Tree
+            </button>
+          )}
         </div>
       )}
     </div>
