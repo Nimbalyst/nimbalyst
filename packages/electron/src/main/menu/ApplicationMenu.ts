@@ -1,4 +1,4 @@
-import { Menu, BrowserWindow, app, dialog, shell } from 'electron';
+import { Menu, BrowserWindow, app, dialog, shell, nativeTheme } from 'electron';
 import { basename, join } from 'path';
 import * as path from 'path';
 import { existsSync, copyFileSync, mkdirSync } from 'fs';
@@ -10,7 +10,7 @@ import { createWorkspaceManagerWindow } from '../window/WorkspaceManagerWindow.t
 import { createAIModelsWindow } from '../window/AIModelsWindow';
 import { createAgenticCodingWindow } from '../window/AgenticCodingWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
-import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceState } from '../utils/store';
+import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceState, getWorkspaceWindowState } from '../utils/store';
 import { updateWindowTitleBars, updateNativeTheme } from '../theme/ThemeManager';
 import { getFileWatcherStatus, refreshWorkspaceFileTree, getGlobalFileWatcherStats } from '../file/FileWatcherDebug';
 import { getFolderContents } from '../utils/FileTree';

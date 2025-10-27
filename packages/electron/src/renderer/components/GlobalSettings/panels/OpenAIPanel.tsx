@@ -1,7 +1,7 @@
 import React from 'react';
-import { ProviderConfig, Model } from '../AIModelsRedesigned';
+import { ProviderConfig, Model } from '../GlobalSettingsScreen.tsx';
 
-interface LMStudioPanelProps {
+interface OpenAIPanelProps {
   config: ProviderConfig;
   apiKeys: Record<string, string>;
   availableModels: Model[];
@@ -14,7 +14,7 @@ interface LMStudioPanelProps {
   onConfigChange: (updates: Partial<ProviderConfig>) => void;
 }
 
-export function LMStudioPanel({
+export function OpenAIPanel({
   config,
   apiKeys,
   availableModels,
@@ -25,19 +25,19 @@ export function LMStudioPanel({
   onSelectAllModels,
   onTestConnection,
   onConfigChange
-}: LMStudioPanelProps) {
+}: OpenAIPanelProps) {
   return (
     <div className="provider-panel">
       <div className="provider-panel-header">
-        <h3 className="provider-panel-title">LM Studio</h3>
+        <h3 className="provider-panel-title">OpenAI</h3>
         <p className="provider-panel-description">
-          Connect to local LLMs running in LM Studio on your machine.
-          Start LM Studio and load a model before enabling.
+          Access to GPT-4, GPT-3.5, and other OpenAI models.
+          Requires an OpenAI API key from platform.openai.com.
         </p>
       </div>
 
       <div className="provider-enable">
-        <span className="provider-enable-label">Enable LM Studio</span>
+        <span className="provider-enable-label">Enable OpenAI</span>
         <label className="provider-toggle">
           <input
             type="checkbox"
@@ -51,15 +51,15 @@ export function LMStudioPanel({
       {config.enabled && (
         <>
           <div className="provider-panel-section">
-            <h4 className="provider-panel-section-title">Server Configuration</h4>
+            <h4 className="provider-panel-section-title">API Configuration</h4>
             <div className="api-key-section">
               <div className="api-key-row">
                 <input
-                  type="text"
-                  value={apiKeys.lmstudio_url || 'http://127.0.0.1:8234'}
-                  onChange={(e) => onApiKeyChange('lmstudio_url', e.target.value)}
+                  type="password"
+                  value={apiKeys.openai || ''}
+                  onChange={(e) => onApiKeyChange('openai', e.target.value)}
                   onFocus={(e) => e.target.select()}
-                  placeholder="http://127.0.0.1:8234"
+                  placeholder="sk-..."
                   className="api-key-input"
                 />
                 <button
@@ -81,13 +81,13 @@ export function LMStudioPanel({
           <div className="provider-panel-section">
             <h4 className="provider-panel-section-title">Available Models</h4>
             {loading && (
-              <div className="models-loading">Loading models from LM Studio...</div>
+              <div className="models-loading">Loading models...</div>
             )}
-            
+
             {!loading && availableModels.length > 0 && (
               <div className="models-section">
                 <div className="models-header">
-                  <span>Detected models:</span>
+                  <span>Select models to enable:</span>
                   <div className="models-actions">
                     <button
                       className="models-action-btn"
@@ -117,22 +117,10 @@ export function LMStudioPanel({
                 </div>
               </div>
             )}
-            
-            {!loading && availableModels.length === 0 && (
-              <div className="models-loading">
-                No models found. Make sure LM Studio is running with a loaded model.
-              </div>
-            )}
 
-            <div style={{ marginTop: '16px' }}>
-              <button
-                className="models-action-btn"
-                onClick={() => onTestConnection()}
-                disabled={loading}
-              >
-                Refresh Models
-              </button>
-            </div>
+            {!loading && availableModels.length === 0 && apiKeys.openai && (
+              <div className="models-loading">No models available. Check your API key and connection.</div>
+            )}
           </div>
         </>
       )}

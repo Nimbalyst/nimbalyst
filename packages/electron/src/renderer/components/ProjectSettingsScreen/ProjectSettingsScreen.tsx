@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import './SettingsScreen.css';
+import './ProjectSettingsScreen.css';
 import OnboardingService from '../../services/OnboardingService';
 
 export interface SettingsScreenProps {
@@ -17,7 +17,7 @@ interface SetupAction {
   action: () => Promise<void>;
 }
 
-const SettingsScreen: React.FC<SettingsScreenProps> = ({
+const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
   workspacePath,
   workspaceName,
   onClose,
@@ -444,4 +444,4 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
   );
 };
 
-export default SettingsScreen;
+export default ProjectSettingsScreen;

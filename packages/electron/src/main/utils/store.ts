@@ -3,7 +3,7 @@ import { existsSync } from 'fs';
 import { RecentItem, SessionState, SessionWindow } from '../types';
 import { logger } from './logger';
 
-type AppTheme = 'dark' | 'light' | 'system' | 'crystal-dark';
+export type AppTheme = 'dark' | 'light' | 'system' | 'crystal-dark';
 
 interface AppStoreSchema {
   theme: AppTheme;

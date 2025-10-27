@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getProviderIcon } from '../icons/ProviderIcons';
-import './AIModelsRedesigned.css';
+import './GlobalSettingsScreen.css';
 
 // Provider panels
 import { ClaudePanel } from './panels/ClaudePanel';
@@ -10,7 +10,7 @@ import { OpenAICodexPanel } from './panels/OpenAICodexPanel';
 import { LMStudioPanel } from './panels/LMStudioPanel';
 import { AdvancedPanel } from './panels/AdvancedPanel';
 import {AnalyticsSettingsPanel} from "./panels/AnalyticsPanel.tsx";
-import { GettingStartedPanel } from '../SettingsScreen/GettingStartedPanel';
+import { GettingStartedPanel } from './GettingStartedPanel.tsx';
 
 // Apply theme IMMEDIATELY when module loads - BEFORE React renders
 // This prevents flash of wrong theme
@@ -18,7 +18,7 @@ const applyTheme = () => {
   if (typeof window === 'undefined') return;
 
   const savedTheme = localStorage.getItem('theme');
-  // console.log('[AIModelsRedesigned] Applying theme:', savedTheme);
+  // console.log('[GlobalSettingsScreen] Applying theme:', savedTheme);
   const root = document.documentElement;
 
   // Clear all theme classes first
@@ -27,19 +27,19 @@ const applyTheme = () => {
   if (savedTheme === 'dark') {
     root.setAttribute('data-theme', 'dark');
     root.classList.add('dark-theme');
-    // console.log('[AIModelsRedesigned] Set to dark theme');
+    // console.log('[GlobalSettingsScreen] Set to dark theme');
   } else if (savedTheme === 'crystal-dark') {
     root.setAttribute('data-theme', 'crystal-dark');
     root.classList.add('crystal-dark-theme');
-    // console.log('[AIModelsRedesigned] Set to crystal-dark theme');
+    // console.log('[GlobalSettingsScreen] Set to crystal-dark theme');
   } else if (savedTheme === 'light') {
     root.setAttribute('data-theme', 'light');
     root.classList.add('light-theme');
-    // console.log('[AIModelsRedesigned] Set to light theme');
+    // console.log('[GlobalSettingsScreen] Set to light theme');
   } else {
     // Auto - check system preference
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    // console.log('[AIModelsRedesigned] No saved theme, system prefers dark:', prefersDark);
+    // console.log('[GlobalSettingsScreen] No saved theme, system prefers dark:', prefersDark);
     if (prefersDark) {
       root.setAttribute('data-theme', 'dark');
       root.classList.add('dark-theme');
@@ -48,8 +48,8 @@ const applyTheme = () => {
       root.classList.add('light-theme');
     }
   }
-  // console.log('[AIModelsRedesigned] Final classes:', root.className);
-  // console.log('[AIModelsRedesigned] Final data-theme:', root.getAttribute('data-theme'));
+  // console.log('[GlobalSettingsScreen] Final classes:', root.className);
+  // console.log('[GlobalSettingsScreen] Final data-theme:', root.getAttribute('data-theme'));
 };
 
 // Apply theme IMMEDIATELY on module load
@@ -162,7 +162,7 @@ const PROVIDERS: Provider[] = ALL_PROVIDERS.filter(provider => {
   return true;
 });
 
-export function AIModelsRedesigned({ onClose }: AIModelsProps) {
+export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
   // Check if this is first time from URL params
   const urlParams = new URLSearchParams(window.location.search);
   const isFirstTime = urlParams.get('isFirstTime') === 'true';
@@ -220,7 +220,7 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
       // Fetch ALL models once
       try {
         const response = await window.electronAPI.aiGetAllModels();
-        console.log('[AIModels] Initial models fetch response:', response);
+        console.log('[GlobalSettings] Initial models fetch response:', response);
 
         if (response.success && response.grouped) {
           setAvailableModels(response.grouped);
@@ -278,7 +278,7 @@ export function AIModelsRedesigned({ onClose }: AIModelsProps) {
 
     try {
       const response = await window.electronAPI.aiGetAllModels();
-      console.log('[AIModels] Fetched ALL models response:', response);
+      console.log('[GlobalSettings] Fetched ALL models response:', response);
 
       if (response.success && response.grouped) {
         setAvailableModels(response.grouped);

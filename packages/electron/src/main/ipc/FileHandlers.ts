@@ -111,16 +111,17 @@ export function registerFileHandlers() {
 
             // Refresh metadata and tracker items cache immediately after save if in workspace mode
             if (state?.workspacePath) {
-                const documentService = documentServices.get(state.workspacePath);
-                console.log('[SAVE] Workspace mode:', state.workspacePath, 'documentService exists:', !!documentService);
+                const workspacePath = state.workspacePath; // Store in local variable for closure
+                const documentService = documentServices.get(workspacePath);
+                console.log('[SAVE] Workspace mode:', workspacePath, 'documentService exists:', !!documentService);
                 if (documentService) {
                     // Add a small delay to ensure file is fully written before reading
                     setTimeout(async () => {
                         try {
                             await documentService.refreshFileMetadata(filePath);
                             // Also refresh tracker items for this file
-                            const relativePath = filePath.startsWith(state.workspacePath)
-                                ? filePath.substring(state.workspacePath.length + 1)
+                            const relativePath = filePath.startsWith(workspacePath)
+                                ? filePath.substring(workspacePath.length + 1)
                                 : filePath;
                             console.log('[SAVE] Updating tracker items for:', relativePath);
                             await (documentService as any).updateTrackerItemsCache(relativePath);
@@ -431,7 +432,7 @@ export function registerFileHandlers() {
             await startFileWatcher(window, filePath);
             return { success: true };
         } catch (error) {
-            logger.error('[START_WATCH] Failed to start watcher:', error);
+            logger.fileWatcher.error('[START_WATCH] Failed to start watcher:', error);
             return { success: false, error: String(error) };
         }
     });

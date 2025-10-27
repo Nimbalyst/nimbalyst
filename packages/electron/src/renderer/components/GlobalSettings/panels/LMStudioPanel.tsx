@@ -1,7 +1,7 @@
 import React from 'react';
-import { ProviderConfig, Model } from '../AIModelsRedesigned';
+import { ProviderConfig, Model } from '../GlobalSettingsScreen.tsx';
 
-interface ClaudePanelProps {
+interface LMStudioPanelProps {
   config: ProviderConfig;
   apiKeys: Record<string, string>;
   availableModels: Model[];
@@ -14,7 +14,7 @@ interface ClaudePanelProps {
   onConfigChange: (updates: Partial<ProviderConfig>) => void;
 }
 
-export function ClaudePanel({
+export function LMStudioPanel({
   config,
   apiKeys,
   availableModels,
@@ -25,19 +25,19 @@ export function ClaudePanel({
   onSelectAllModels,
   onTestConnection,
   onConfigChange
-}: ClaudePanelProps) {
+}: LMStudioPanelProps) {
   return (
     <div className="provider-panel">
       <div className="provider-panel-header">
-        <h3 className="provider-panel-title">Claude (Anthropic)</h3>
+        <h3 className="provider-panel-title">LM Studio</h3>
         <p className="provider-panel-description">
-          Direct API access to Claude models including Claude 3 Opus, Sonnet, and Haiku.
-          Requires an Anthropic API key.
+          Connect to local LLMs running in LM Studio on your machine.
+          Start LM Studio and load a model before enabling.
         </p>
       </div>
 
       <div className="provider-enable">
-        <span className="provider-enable-label">Enable Claude</span>
+        <span className="provider-enable-label">Enable LM Studio</span>
         <label className="provider-toggle">
           <input
             type="checkbox"
@@ -51,15 +51,15 @@ export function ClaudePanel({
       {config.enabled && (
         <>
           <div className="provider-panel-section">
-            <h4 className="provider-panel-section-title">API Configuration</h4>
+            <h4 className="provider-panel-section-title">Server Configuration</h4>
             <div className="api-key-section">
               <div className="api-key-row">
                 <input
-                  type="password"
-                  value={apiKeys.anthropic || ''}
-                  onChange={(e) => onApiKeyChange('anthropic', e.target.value)}
+                  type="text"
+                  value={apiKeys.lmstudio_url || 'http://127.0.0.1:8234'}
+                  onChange={(e) => onApiKeyChange('lmstudio_url', e.target.value)}
                   onFocus={(e) => e.target.select()}
-                  placeholder="sk-ant-..."
+                  placeholder="http://127.0.0.1:8234"
                   className="api-key-input"
                 />
                 <button
@@ -81,13 +81,13 @@ export function ClaudePanel({
           <div className="provider-panel-section">
             <h4 className="provider-panel-section-title">Available Models</h4>
             {loading && (
-              <div className="models-loading">Loading models...</div>
+              <div className="models-loading">Loading models from LM Studio...</div>
             )}
-            
+
             {!loading && availableModels.length > 0 && (
               <div className="models-section">
                 <div className="models-header">
-                  <span>Select models to enable:</span>
+                  <span>Detected models:</span>
                   <div className="models-actions">
                     <button
                       className="models-action-btn"
@@ -117,10 +117,22 @@ export function ClaudePanel({
                 </div>
               </div>
             )}
-            
-            {!loading && availableModels.length === 0 && apiKeys.anthropic && (
-              <div className="models-loading">No models available. Check your API key and connection.</div>
+
+            {!loading && availableModels.length === 0 && (
+              <div className="models-loading">
+                No models found. Make sure LM Studio is running with a loaded model.
+              </div>
             )}
+
+            <div style={{ marginTop: '16px' }}>
+              <button
+                className="models-action-btn"
+                onClick={() => onTestConnection()}
+                disabled={loading}
+              >
+                Refresh Models
+              </button>
+            </div>
           </div>
         </>
       )}

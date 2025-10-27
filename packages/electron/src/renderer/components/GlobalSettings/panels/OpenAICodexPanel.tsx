@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ProviderConfig, Model } from '../AIModelsRedesigned';
+import { ProviderConfig, Model } from '../GlobalSettingsScreen.tsx';
 import { InstallationProgress } from './InstallationProgress';
 import { CLIInstaller } from '../services/CLIInstaller';
 

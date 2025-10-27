@@ -1,7 +1,7 @@
 import React from 'react';
-import { ProviderConfig, Model } from '../AIModelsRedesigned';
+import { ProviderConfig, Model } from '../GlobalSettingsScreen.tsx';
 
-interface OpenAIPanelProps {
+interface ClaudePanelProps {
   config: ProviderConfig;
   apiKeys: Record<string, string>;
   availableModels: Model[];
@@ -14,7 +14,7 @@ interface OpenAIPanelProps {
   onConfigChange: (updates: Partial<ProviderConfig>) => void;
 }
 
-export function OpenAIPanel({
+export function ClaudePanel({
   config,
   apiKeys,
   availableModels,
@@ -25,19 +25,19 @@ export function OpenAIPanel({
   onSelectAllModels,
   onTestConnection,
   onConfigChange
-}: OpenAIPanelProps) {
+}: ClaudePanelProps) {
   return (
     <div className="provider-panel">
       <div className="provider-panel-header">
-        <h3 className="provider-panel-title">OpenAI</h3>
+        <h3 className="provider-panel-title">Claude (Anthropic)</h3>
         <p className="provider-panel-description">
-          Access to GPT-4, GPT-3.5, and other OpenAI models.
-          Requires an OpenAI API key from platform.openai.com.
+          Direct API access to Claude models including Claude 3 Opus, Sonnet, and Haiku.
+          Requires an Anthropic API key.
         </p>
       </div>
 
       <div className="provider-enable">
-        <span className="provider-enable-label">Enable OpenAI</span>
+        <span className="provider-enable-label">Enable Claude</span>
         <label className="provider-toggle">
           <input
             type="checkbox"
@@ -56,10 +56,10 @@ export function OpenAIPanel({
               <div className="api-key-row">
                 <input
                   type="password"
-                  value={apiKeys.openai || ''}
-                  onChange={(e) => onApiKeyChange('openai', e.target.value)}
+                  value={apiKeys.anthropic || ''}
+                  onChange={(e) => onApiKeyChange('anthropic', e.target.value)}
                   onFocus={(e) => e.target.select()}
-                  placeholder="sk-..."
+                  placeholder="sk-ant-..."
                   className="api-key-input"
                 />
                 <button
@@ -83,7 +83,7 @@ export function OpenAIPanel({
             {loading && (
               <div className="models-loading">Loading models...</div>
             )}
-            
+
             {!loading && availableModels.length > 0 && (
               <div className="models-section">
                 <div className="models-header">
@@ -117,8 +117,8 @@ export function OpenAIPanel({
                 </div>
               </div>
             )}
-            
-            {!loading && availableModels.length === 0 && apiKeys.openai && (
+
+            {!loading && availableModels.length === 0 && apiKeys.anthropic && (
               <div className="models-loading">No models available. Check your API key and connection.</div>
             )}
           </div>

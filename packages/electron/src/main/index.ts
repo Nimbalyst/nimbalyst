@@ -25,7 +25,7 @@ import { registerWorkspaceWatcherHandlers } from './file/WorkspaceWatcher';
 import { setupSessionFileHandlers } from './ipc/SessionFileHandlers';
 import { registerSlashCommandHandlers } from './ipc/SlashCommandHandlers';
 import { registerClaudeCodeHandlers } from './ipc/ClaudeCodeHandlers';
-import { getTheme, setTheme, incrementLaunchCount, shouldShowDiscordInvitation, dismissDiscordInvitation, isFirstLaunch, markAppLaunched } from './utils/store';
+import { getTheme, setTheme, incrementLaunchCount, shouldShowDiscordInvitation, dismissDiscordInvitation, isFirstLaunch, markAppLaunched, type AppTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
 import { AgentService } from './services/agents/AgentService';
 import { cliManager } from './services/CLIManager';
@@ -258,7 +258,7 @@ app.whenReady().then(async () => {
     });
 
     // Set up IPC handler for theme changes from renderer
-    ipcMain.on('set-theme', (event, theme: string) => {
+    ipcMain.on('set-theme', (event, theme: AppTheme) => {
         setTheme(theme);
         updateNativeTheme();
         BrowserWindow.getAllWindows().forEach(window => {
