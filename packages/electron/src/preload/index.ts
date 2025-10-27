@@ -484,6 +484,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Open external links
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
 
+  // Image operations
+  openImageInDefaultApp: (imagePath: string) => ipcRenderer.invoke('image:open-in-default-app', imagePath),
+  startImageDrag: (imagePath: string) => ipcRenderer.invoke('image:start-drag', imagePath),
+
   // analytics
   analytics: {
     allowedToSendAnalytics: () => ipcRenderer.invoke('analytics:allowed'),

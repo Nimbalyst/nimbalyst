@@ -294,7 +294,10 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
               hasHorizontalScroll={false}
             />
             <TableCellResizer />
-            <ImagesPlugin />
+            <ImagesPlugin
+              onImageDoubleClick={config.onImageDoubleClick}
+              onImageDragStart={config.onImageDragStart}
+            />
             <LinkPlugin hasLinkAttributes={hasLinkAttributes} />
             <ClickableLinkPlugin disabled={isEditable} />
             <HorizontalRulePlugin />

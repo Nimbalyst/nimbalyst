@@ -170,6 +170,10 @@ interface ElectronAPI {
   // Open external links
   openExternal: (url: string) => Promise<void>;
 
+  // Image operations
+  openImageInDefaultApp: (imagePath: string) => Promise<{ success: boolean; error?: string }>;
+  startImageDrag: (imagePath: string) => Promise<{ success: boolean; error?: string }>;
+
   // Generic IPC methods for services
   invoke: (channel: string, ...args: any[]) => Promise<any>;
   send: (channel: string, ...args: any[]) => void;

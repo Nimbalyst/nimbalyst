@@ -30,7 +30,7 @@ export const IMAGE_TRANSFORMER: TextMatchTransformer = {
     const [, altText, src, width, height] = match;
     const imageNode = $createImageNode({
       altText,
-      maxWidth: 800,
+      maxWidth: 10000,
       src,
       width: width ? parseInt(width) : undefined,
       height: height ? parseInt(height) : undefined,

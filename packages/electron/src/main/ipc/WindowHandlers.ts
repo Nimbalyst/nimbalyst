@@ -1,10 +1,12 @@
-import { ipcMain, BrowserWindow, shell } from 'electron';
+import { ipcMain, BrowserWindow, shell, nativeImage } from 'electron';
 import { windowStates, windows, getWindowId } from '../window/WindowManager';
 import { updateApplicationMenu } from '../menu/ApplicationMenu';
 import { stopFileWatcher, startFileWatcher } from '../file/FileWatcher';
 import { createAIModelsWindow } from '../window/AIModelsWindow';
-import { basename } from 'path';
+import { basename, join } from 'path';
 import { getFolderContents } from '../utils/FileTree';
+import { writeFileSync, existsSync } from 'fs';
+import { tmpdir } from 'os';
 
 export function registerWindowHandlers() {
     // Get initial window state
@@ -119,4 +121,122 @@ export function registerWindowHandlers() {
         }
         console.log('[SET_FILE] Current file path updated from renderer:', filePath);
     });
+
+    // Open image in default application
+    ipcMain.handle('image:open-in-default-app', async (event, imagePath: string) => {
+        try {
+            // Handle data URLs by creating a temp file
+            if (imagePath.startsWith('data:')) {
+                const tempPath = await createTempFileFromDataURL(imagePath);
+                if (tempPath) {
+                    await shell.openPath(tempPath);
+                    return { success: true };
+                } else {
+                    return { success: false, error: 'Failed to create temp file from data URL' };
+                }
+            }
+
+            // Handle file:// URLs
+            let filePath = imagePath;
+            if (filePath.startsWith('file://')) {
+                filePath = filePath.replace('file://', '');
+            }
+
+            // Check if file exists
+            if (!existsSync(filePath)) {
+                return { success: false, error: 'File does not exist' };
+            }
+
+            // Open in default application
+            const result = await shell.openPath(filePath);
+            if (result) {
+                // openPath returns an error string if it failed, empty string on success
+                return { success: false, error: result };
+            }
+            return { success: true };
+        } catch (error: any) {
+            console.error('[IMAGE] Failed to open image:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Start native drag for image
+    ipcMain.handle('image:start-drag', async (event, imagePath: string) => {
+        try {
+            const window = BrowserWindow.fromWebContents(event.sender);
+            if (!window) {
+                return { success: false, error: 'Window not found' };
+            }
+
+            // Handle data URLs by creating a temp file
+            if (imagePath.startsWith('data:')) {
+                const tempPath = await createTempFileFromDataURL(imagePath);
+                if (!tempPath) {
+                    return { success: false, error: 'Failed to create temp file from data URL' };
+                }
+                imagePath = tempPath;
+            }
+
+            // Handle file:// URLs
+            let filePath = imagePath;
+            if (filePath.startsWith('file://')) {
+                filePath = filePath.replace('file://', '');
+            }
+
+            // Check if file exists
+            if (!existsSync(filePath)) {
+                return { success: false, error: 'File does not exist' };
+            }
+
+            // Create icon for drag preview
+            const icon = nativeImage.createFromPath(filePath);
+
+            // Start drag operation
+            event.sender.startDrag({
+                file: filePath,
+                icon: icon.resize({ width: 64, height: 64 })
+            });
+
+            return { success: true };
+        } catch (error: any) {
+            console.error('[IMAGE] Failed to start drag:', error);
+            return { success: false, error: error.message };
+        }
+    });
+}
+
+// Helper function to create a temp file from a data URL
+async function createTempFileFromDataURL(dataURL: string): Promise<string | null> {
+    try {
+        // Parse data URL: data:image/png;base64,iVBORw0KGgo...
+        const matches = dataURL.match(/^data:([^;]+);base64,(.+)$/);
+        if (!matches) {
+            console.error('[IMAGE] Invalid data URL format');
+            return null;
+        }
+
+        const mimeType = matches[1];
+        const base64Data = matches[2];
+
+        // Determine file extension from MIME type
+        const extensionMap: Record<string, string> = {
+            'image/png': 'png',
+            'image/jpeg': 'jpg',
+            'image/jpg': 'jpg',
+            'image/gif': 'gif',
+            'image/webp': 'webp',
+            'image/svg+xml': 'svg',
+        };
+        const extension = extensionMap[mimeType] || 'png';
+
+        // Create temp file
+        const tempPath = join(tmpdir(), `image-${Date.now()}.${extension}`);
+        const buffer = Buffer.from(base64Data, 'base64');
+        writeFileSync(tempPath, buffer);
+
+        return tempPath;
+    } catch (error) {
+        console.error('[IMAGE] Failed to create temp file:', error);
+        return null;
+    }
 }

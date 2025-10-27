@@ -49,6 +49,7 @@ import LinkPlugin from '../../plugins/LinkPlugin';
 import ContentEditable from '../../ui/ContentEditable';
 import ImageResizer from '../../ui/ImageResizer';
 import {$isImageNode} from './ImageNode';
+import {getImagePluginCallbacks} from './index';
 
 const imageCache = new Map<string, Promise<boolean> | boolean>();
 
@@ -130,9 +131,9 @@ function LazyImage({
   // Calculate final dimensions with proper scaling
   const calculateDimensions = () => {
     if (!isSVGImage) {
+      // For non-SVG images, just use the width and height without maxWidth constraint
       return {
         height,
-        maxWidth,
         width,
       };
     }
@@ -152,7 +153,7 @@ function LazyImage({
     }
 
     // Scale down if height exceeds maxHeight while maintaining aspect ratio
-    const maxHeight = 500;
+    const maxHeight = 10000;
     if (finalHeight > maxHeight) {
       const scale = maxHeight / finalHeight;
       finalHeight = maxHeight;
@@ -161,7 +162,6 @@ function LazyImage({
 
     return {
       height: finalHeight,
-      maxWidth,
       width: finalWidth,
     };
   };
@@ -348,6 +348,20 @@ export default function ImageComponent({
     [isResizing, isSelected, setSelected, clearSelection],
   );
 
+  const onDoubleClick = useCallback(
+    (event: MouseEvent) => {
+      if (event.target === imageRef.current && resolvedSrc) {
+        const callbacks = getImagePluginCallbacks();
+        if (callbacks.onImageDoubleClick) {
+          callbacks.onImageDoubleClick(resolvedSrc, nodeKey);
+        }
+        return true;
+      }
+      return false;
+    },
+    [resolvedSrc, nodeKey],
+  );
+
   const onRightClick = useCallback(
     (event: MouseEvent): void => {
       editor.getEditorState().read(() => {
@@ -401,6 +415,13 @@ export default function ImageComponent({
         DRAGSTART_COMMAND,
         (event) => {
           if (event.target === imageRef.current) {
+            // Call platform-specific drag callback if provided
+            if (resolvedSrc) {
+              const callbacks = getImagePluginCallbacks();
+              if (callbacks.onImageDragStart) {
+                callbacks.onImageDragStart(resolvedSrc, event);
+              }
+            }
             // TODO This is just a temporary workaround for FF to behave like other browsers.
             // Ideally, this handles drag & drop too (and all browsers).
             event.preventDefault();
@@ -420,9 +441,18 @@ export default function ImageComponent({
 
     rootElement?.addEventListener('contextmenu', onRightClick);
 
+    // Add double-click listener to image element
+    const imgElement = imageRef.current;
+    if (imgElement) {
+      imgElement.addEventListener('dblclick', onDoubleClick as any);
+    }
+
     return () => {
       unregister();
       rootElement?.removeEventListener('contextmenu', onRightClick);
+      if (imgElement) {
+        imgElement.removeEventListener('dblclick', onDoubleClick as any);
+      }
     };
   }, [
     clearSelection,
@@ -433,8 +463,10 @@ export default function ImageComponent({
     $onEnter,
     $onEscape,
     onClick,
+    onDoubleClick,
     onRightClick,
     setSelected,
+    resolvedSrc,
   ]);
 
   const setShowCaption = () => {

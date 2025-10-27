@@ -72,16 +72,10 @@ export default function ImageResizer({
     startY: 0,
   });
   const editorRootElement = editor.getRootElement();
-  // Find max width, accounting for editor padding.
-  const maxWidthContainer = maxWidth
-    ? maxWidth
-    : editorRootElement !== null
-    ? editorRootElement.getBoundingClientRect().width - 20
-    : 100;
-  const maxHeightContainer =
-    editorRootElement !== null
-      ? editorRootElement.getBoundingClientRect().height - 20
-      : 100;
+  // Use a very large max width to effectively remove the constraint
+  // Images can be resized to any size the user wants
+  const maxWidthContainer = maxWidth || 10000;
+  const maxHeightContainer = 10000;
 
   const minWidth = 100;
   const minHeight = 100;

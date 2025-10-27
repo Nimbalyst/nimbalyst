@@ -11,6 +11,16 @@ import type {JSX} from 'react';
 // Export the transformer for use in markdown operations
 export { IMAGE_TRANSFORMER } from './ImageTransformer';
 
+// Store callbacks at module level so ImageComponent can access them
+let imagePluginCallbacks: {
+  onImageDoubleClick?: (src: string, nodeKey: NodeKey) => void;
+  onImageDragStart?: (src: string, event: DragEvent) => void;
+} = {};
+
+export function getImagePluginCallbacks() {
+  return imagePluginCallbacks;
+}
+
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {$wrapNodeInElement, mergeRegister} from '@lexical/utils';
 import {
@@ -32,6 +42,7 @@ import {
   isHTMLElement,
   LexicalCommand,
   LexicalEditor,
+  NodeKey,
 } from 'lexical';
 import {useEffect, useRef, useState} from 'react';
 
@@ -220,8 +231,12 @@ export function InsertImageDialog({
 
 export default function ImagesPlugin({
   captionsEnabled,
+  onImageDoubleClick,
+  onImageDragStart,
 }: {
   captionsEnabled?: boolean;
+  onImageDoubleClick?: (src: string, nodeKey: NodeKey) => void;
+  onImageDragStart?: (src: string, event: DragEvent) => void;
 }): JSX.Element | null {
   const [editor] = useLexicalComposerContext();
 
@@ -229,6 +244,12 @@ export default function ImagesPlugin({
     if (!editor.hasNodes([ImageNode])) {
       throw new Error('ImagesPlugin: ImageNode not registered on editor');
     }
+
+    // Store callbacks at module level
+    imagePluginCallbacks = {
+      onImageDoubleClick,
+      onImageDragStart,
+    };
 
     return mergeRegister(
       editor.registerCommand<InsertImagePayload>(

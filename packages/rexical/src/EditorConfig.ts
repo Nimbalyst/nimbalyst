@@ -1,5 +1,6 @@
 import type { Transformer } from '@lexical/markdown';
 import type { ReactNode } from 'react';
+import type { NodeKey } from 'lexical';
 
 /**
  * Configuration interface for the Stravu Editor component.
@@ -97,6 +98,10 @@ export interface EditorConfig {
   // Document action callbacks
   onViewHistory?: () => void;
   onRenameDocument?: () => void;
+
+  // Image interaction callbacks (platform-specific)
+  onImageDoubleClick?: (src: string, nodeKey: NodeKey) => void;
+  onImageDragStart?: (src: string, event: DragEvent) => void;
 
   // Document header - renders at the top of the editor scroll pane
   documentHeader?: ReactNode;

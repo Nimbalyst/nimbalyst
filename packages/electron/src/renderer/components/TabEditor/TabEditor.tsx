@@ -623,6 +623,27 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     }
   }, []);
 
+  // Image interaction callbacks
+  const handleImageDoubleClick = useCallback(async (src: string, nodeKey: string) => {
+    try {
+      const result = await window.electronAPI.openImageInDefaultApp(src);
+      if (!result.success) {
+        logger.ui.error(`[TabEditor] Failed to open image:`, result.error);
+      }
+    } catch (error) {
+      logger.ui.error(`[TabEditor] Error opening image:`, error);
+    }
+  }, []);
+
+  const handleImageDragStart = useCallback(async (src: string, event: DragEvent) => {
+    try {
+      // The main process will handle the native drag operation
+      await window.electronAPI.startImageDrag(src);
+    } catch (error) {
+      logger.ui.error(`[TabEditor] Error starting image drag:`, error);
+    }
+  }, []);
+
   return (
       <div
           className={`tab-editor multi-editor-instance ${isActive ? 'active' : 'hidden'}`}
@@ -658,6 +679,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               onSaveRequest: handleManualSave,
               onViewHistory,
               onRenameDocument,
+              onImageDoubleClick: handleImageDoubleClick,
+              onImageDragStart: handleImageDragStart,
               textReplacements: isActive ? textReplacements : undefined,
               documentHeader: (
                 <DocumentHeaderContainer
