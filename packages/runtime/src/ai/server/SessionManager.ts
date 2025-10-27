@@ -83,11 +83,44 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
           } else if (parsed.type === 'user' && parsed.message) {
             // Slash command format: { type: "user", message: { role: "user", content: "..." } }
             const msg = parsed.message;
-            uiMessages.push({
-              role: msg.role || 'user',
-              content: msg.content || '',
-              timestamp
-            });
+
+            // Check if this is a tool result message (content is array with tool_result blocks)
+            if (Array.isArray(msg.content) && msg.content.some((block: any) => block.type === 'tool_result')) {
+              // This is a tool result - find the corresponding tool_use and add the result
+              for (const block of msg.content) {
+                if (block.type === 'tool_result') {
+                  const toolUseId = block.tool_use_id;
+                  let resultText = '';
+
+                  if (Array.isArray(block.content)) {
+                    for (const innerBlock of block.content) {
+                      if (innerBlock.type === 'text' && innerBlock.text) {
+                        resultText += innerBlock.text;
+                      }
+                    }
+                  }
+
+                  // Search backwards for the tool message with this ID
+                  for (let i = uiMessages.length - 1; i >= 0; i--) {
+                    const uiMsg = uiMessages[i];
+                    if (uiMsg.role === 'tool' && uiMsg.toolCall?.id === toolUseId) {
+                      // Add the result to this tool call
+                      uiMsg.toolCall.result = resultText;
+                      break;
+                    }
+                  }
+                }
+              }
+            } else {
+              // Regular user message with string content
+              let content = typeof msg.content === 'string' ? msg.content : '';
+
+              uiMessages.push({
+                role: msg.role || 'user',
+                content: content,
+                timestamp
+              });
+            }
           }
         } catch (parseError) {
           // Not JSON - treat as raw text (regular Claude SDK format)
@@ -173,20 +206,51 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
             // Slash command format (output): { type: "user", message: { role: "user", content: "..." } }
             // Note: Sometimes slash command outputs are marked as "user" messages (e.g., local command stdout)
             const msg = parsed.message;
-            let content = msg.content || '';
 
-            // Extract content from <local-command-stdout> tags if present
-            const stdoutMatch = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
-            if (stdoutMatch && stdoutMatch[1]) {
-              // Format as code block for command output with system response label
-              content = '**System Response:**\n\n```\n' + stdoutMatch[1].trim() + '\n```';
+            // Check if this is a tool result message (content is array with tool_result blocks)
+            if (Array.isArray(msg.content) && msg.content.some((block: any) => block.type === 'tool_result')) {
+              // This is a tool result - find the corresponding tool_use and add the result
+              for (const block of msg.content) {
+                if (block.type === 'tool_result') {
+                  const toolUseId = block.tool_use_id;
+                  let resultText = '';
+
+                  if (Array.isArray(block.content)) {
+                    for (const innerBlock of block.content) {
+                      if (innerBlock.type === 'text' && innerBlock.text) {
+                        resultText += innerBlock.text;
+                      }
+                    }
+                  }
+
+                  // Search backwards for the tool message with this ID
+                  for (let i = uiMessages.length - 1; i >= 0; i--) {
+                    const uiMsg = uiMessages[i];
+                    if (uiMsg.role === 'tool' && uiMsg.toolCall?.id === toolUseId) {
+                      // Add the result to this tool call
+                      uiMsg.toolCall.result = resultText;
+                      break;
+                    }
+                  }
+                }
+              }
+            } else {
+              // Regular user/system message with string content
+              let content = typeof msg.content === 'string' ? msg.content : '';
+
+              // Extract content from <local-command-stdout> tags if present
+              const stdoutMatch = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
+              if (stdoutMatch && stdoutMatch[1]) {
+                // Format as code block for command output with system response label
+                content = '**System Response:**\n\n```\n' + stdoutMatch[1].trim() + '\n```';
+              }
+
+              uiMessages.push({
+                role: msg.role || 'user',
+                content: content,
+                timestamp
+              });
             }
-
-            uiMessages.push({
-              role: msg.role || 'user',
-              content: content,
-              timestamp
-            });
           } else if (parsed.usage) {
             // This is metadata (usage stats), mark last message as complete
             const lastMsg = uiMessages[uiMessages.length - 1];
