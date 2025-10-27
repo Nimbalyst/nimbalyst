@@ -171,7 +171,7 @@ export function TrackerTable({
 
     async function loadItems() {
       try {
-        console.log('[TrackerTable] loadItems called, typeFilter:', typeFilter);
+        // console.log('[TrackerTable] loadItems called, typeFilter:', typeFilter);
         const documentService = (window as any).documentService;
 
         if (!documentService) {
@@ -189,12 +189,12 @@ export function TrackerTable({
         }
 
         // Load tracker items
-        console.log('[TrackerTable] Loading tracker items...');
+        // console.log('[TrackerTable] Loading tracker items...');
         const trackerItems = typeFilter !== 'all' && documentService.getTrackerItemsByType
           ? await documentService.getTrackerItemsByType(typeFilter)
           : await documentService.listTrackerItems();
 
-        console.log('[TrackerTable] Loaded tracker items:', trackerItems?.length || 0);
+        // console.log('[TrackerTable] Loaded tracker items:', trackerItems?.length || 0);
 
         // Convert to proper date format - use updated/created, NOT lastIndexed (that's indexing time)
         let allItems = (trackerItems || []).map((item: TrackerItem) => {
@@ -230,24 +230,24 @@ export function TrackerTable({
           const trackerTypes = globalRegistry.getAll();
           const fullDocumentTrackers = trackerTypes.filter(t => t.modes.fullDocument);
 
-          console.log('[TrackerTable] Found full-document trackers:', fullDocumentTrackers.map(t => t.type));
+          // console.log('[TrackerTable] Found full-document trackers:', fullDocumentTrackers.map(t => t.type));
 
           // Load items for each full-document tracker type
           for (const tracker of fullDocumentTrackers) {
             // Only load if we're showing all types or this specific type
             if (typeFilter === 'all' || typeFilter === tracker.type) {
               const items = convertFullDocumentToTrackerItems(metadata || [], tracker.type as TrackerItemType);
-              console.log(`[TrackerTable] Loaded ${items.length} ${tracker.type} items from frontmatter`);
+              // console.log(`[TrackerTable] Loaded ${items.length} ${tracker.type} items from frontmatter`);
               allItems = [...allItems, ...items];
             }
           }
         }
 
-        console.log('[TrackerTable] Total items to display:', allItems.length);
+        // console.log('[TrackerTable] Total items to display:', allItems.length);
         if (isSubscribed) {
           setItems(allItems);
           setLoading(false);
-          console.log('[TrackerTable] State updated with', allItems.length, 'items');
+          // console.log('[TrackerTable] State updated with', allItems.length, 'items');
         }
       } catch (err) {
         console.error('[TrackerTable] Failed to load tracker items:', err);
@@ -267,7 +267,7 @@ export function TrackerTable({
 
       // Subscribe to tracker item changes
       if (documentService.watchTrackerItems) {
-        console.log('[TrackerTable] Setting up tracker items watcher');
+        // console.log('[TrackerTable] Setting up tracker items watcher');
         unsubscribeTracker = documentService.watchTrackerItems((change: TrackerItemChangeEvent) => {
           console.log('[TrackerTable] Tracker items changed event received:', {
             added: change.added?.length || 0,
@@ -286,7 +286,7 @@ export function TrackerTable({
       const needsMetadataWatcher = typeFilter === 'all' || fullDocumentTrackers.some(t => t.type === typeFilter);
 
       if (documentService.watchDocumentMetadata && needsMetadataWatcher) {
-        console.log('[TrackerTable] Setting up metadata watcher');
+        // console.log('[TrackerTable] Setting up metadata watcher');
         unsubscribeMetadata = documentService.watchDocumentMetadata(() => {
           console.log('[TrackerTable] Metadata changed event received');
           // Only reload items, don't re-register watchers
@@ -378,7 +378,7 @@ export function TrackerTable({
       return true;
     });
 
-  console.log('[TrackerTable] Render - items:', items.length, 'filtered:', filteredItems.length, 'typeFilter:', typeFilter);
+  // console.log('[TrackerTable] Render - items:', items.length, 'filtered:', filteredItems.length, 'typeFilter:', typeFilter);
   const sortedItems = sortItems(filteredItems, currentSortBy, currentSortDirection);
 
   const handleRowClick = (item: TrackerItem) => {
