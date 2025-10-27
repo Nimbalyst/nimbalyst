@@ -28,7 +28,7 @@ const builtinTrackers: TrackerDataModel[] = [
           { value: 'draft', label: 'Draft', icon: 'edit_note', color: '#64748b' },
           { value: 'ready-for-development', label: 'Ready', icon: 'check_circle', color: '#22c55e' },
           { value: 'in-development', label: 'In Development', icon: 'construction', color: '#f59e0b' },
-          { value: 'in-review', label: 'In Review', icon: '8b5cf6' },
+          { value: 'in-review', label: 'In Review', icon: 'rate_review', color: '#3b82f6' },
           { value: 'completed', label: 'Completed', icon: 'task_alt', color: '#10b981' },
           { value: 'rejected', label: 'Rejected', icon: 'cancel', color: '#ef4444' },
           { value: 'blocked', label: 'Blocked', icon: 'block', color: '#dc2626' },
