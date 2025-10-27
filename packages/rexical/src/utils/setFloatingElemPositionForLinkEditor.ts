@@ -15,7 +15,8 @@ export function setFloatingElemPositionForLinkEditor(
   verticalGap: number = VERTICAL_GAP,
   horizontalOffset: number = HORIZONTAL_OFFSET,
 ): void {
-  const scrollerElem = anchorElem.parentElement;
+  // anchorElem is the editor-scroller itself
+  const scrollerElem = anchorElem;
 
   if (targetRect === null || !scrollerElem) {
     floatingElem.style.opacity = '0';
@@ -40,6 +41,12 @@ export function setFloatingElemPositionForLinkEditor(
 
   top -= anchorElementRect.top;
   left -= anchorElementRect.left;
+
+  // Account for scroll offset of the editor content
+  if (scrollerElem) {
+    top += scrollerElem.scrollTop;
+    left += scrollerElem.scrollLeft;
+  }
 
   floatingElem.style.opacity = '1';
   floatingElem.style.transform = `translate(${left}px, ${top}px)`;

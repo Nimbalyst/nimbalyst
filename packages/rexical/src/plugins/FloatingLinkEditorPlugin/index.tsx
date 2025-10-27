@@ -150,7 +150,8 @@ function FloatingLinkEditor({
   }, [anchorElem, editor, setIsLinkEditMode, isLinkEditMode, linkUrl]);
 
   useEffect(() => {
-    const scrollerElem = anchorElem.parentElement;
+    // anchorElem is the editor-scroller itself
+    const scrollerElem = anchorElem;
 
     const update = () => {
       editor.getEditorState().read(() => {
@@ -171,7 +172,7 @@ function FloatingLinkEditor({
         scrollerElem.removeEventListener('scroll', update);
       }
     };
-  }, [anchorElem.parentElement, editor, $updateLinkEditor]);
+  }, [anchorElem, editor, $updateLinkEditor]);
 
   useEffect(() => {
     return mergeRegister(

@@ -272,7 +272,8 @@ function TextFormatFloatingToolbar({
   }, [editor, anchorElem, isLink]);
 
   useEffect(() => {
-    const scrollerElem = anchorElem.parentElement;
+    // anchorElem is the editor-scroller itself
+    const scrollerElem = anchorElem;
 
     const update = () => {
       editor.getEditorState().read(() => {
