@@ -10,9 +10,12 @@ import {
   getToolsByCategory,
   getDefaultAllowedTools
 } from './claudeCodeTools';
+// Import the actual SDK package.json to get the exact installed version
+// @ts-ignore - importing json
+import sdkPackageJson from '@anthropic-ai/claude-agent-sdk/package.json';
 
-// Built-in SDK version (from package.json)
-const BUNDLED_SDK_VERSION = '0.1.14';
+// Built-in SDK version (dynamically from the SDK's package.json)
+const BUNDLED_SDK_VERSION = sdkPackageJson.version || 'unknown';
 
 interface ClaudeCodePanelProps {
   config: ProviderConfig;

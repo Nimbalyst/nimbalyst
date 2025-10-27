@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import './GettingStartedPanel.css';
 
 interface ClaudeCodeStatus {
@@ -10,66 +10,62 @@ interface ClaudeCodeStatus {
 }
 
 export function GettingStartedPanel() {
-  const [status, setStatus] = useState<ClaudeCodeStatus | null>(null);
-  const [isChecking, setIsChecking] = useState(false);
+  // const [status, setStatus] = useState<ClaudeCodeStatus | null>(null);
+  // const [isChecking, setIsChecking] = useState(false);
 
-  useEffect(() => {
-    checkStatus();
-  }, []);
+  // useEffect(() => {
+  //   checkStatus();
+  // }, []);
 
-  const checkStatus = async () => {
-    setIsChecking(true);
-    try {
-      const result = await window.electronAPI.invoke('claude-code:get-status');
-      setStatus(result);
-    } catch (error) {
-      console.error('Failed to check Claude Code status:', error);
-      setStatus({
-        installed: false,
-        loggedIn: false,
-      });
-    } finally {
-      setIsChecking(false);
-    }
-  };
+  // const checkStatus = async () => {
+  //   setIsChecking(true);
+  //   try {
+  //     // const result = await window.electronAPI.invoke('claude-code:get-status');
+  //     // setStatus(result);
+  //   } catch (error) {
+  //     console.error('Failed to check Claude Code status:', error);
+  //     setStatus({
+  //       installed: false,
+  //       loggedIn: false,
+  //     });
+  //   } finally {
+  //     setIsChecking(false);
+  //   }
+  // };
 
-  const handleRefreshStatus = async () => {
-    setIsChecking(true);
-    try {
-      const result = await window.electronAPI.invoke('claude-code:refresh-status');
-      setStatus(result);
-    } catch (error) {
-      console.error('Failed to refresh Claude Code status:', error);
-    } finally {
-      setIsChecking(false);
-    }
-  };
+  // const handleRefreshStatus = async () => {
+  //   setIsChecking(true);
+  //   try {
+  //     const result = await window.electronAPI.invoke('claude-code:refresh-status');
+  //     setStatus(result);
+  //   } catch (error) {
+  //     console.error('Failed to refresh Claude Code status:', error);
+  //   } finally {
+  //     setIsChecking(false);
+  //   }
+  // };
 
-  const handleOpenDocs = () => {
-    window.electronAPI.invoke('open-external', 'https://docs.claude.com/en/docs/claude-code/quickstart#native-install');
-  };
+  // const handleOpenDocs = () => {
+  //   window.electronAPI.invoke('open-external', 'https://docs.claude.com/en/docs/claude-code/quickstart#native-install');
+  // };
 
-  const handleGetStarted = () => {
-    // Close the AI Models window - user is ready to start
-    window.close();
-  };
+  // const handleGetStarted = () => {
+  //   // Close the AI Models window - user is ready to start
+  //   window.close();
+  // };
 
-  const isReady = status?.installed && status?.loggedIn;
+  // const isReady = status?.installed && status?.loggedIn;
 
   return (
     <div className="getting-started-panel">
       <div className="getting-started-header">
         <h2>Getting Started with Nimbalyst</h2>
-        <p className="getting-started-subtitle">
-          Set up your AI coding assistant in minutes
-        </p>
+        <h3 className="section-description">
+          Nimbalyst uses AI in two ways:
+        </h3>
       </div>
 
       <div className="getting-started-section">
-        <h3>Understanding Agents and Models</h3>
-        <p className="section-description">
-          Nimbalyst uses AI in two ways:
-        </p>
 
         <div className="ai-types-grid">
           <div className="ai-type-card">
@@ -78,11 +74,13 @@ export function GettingStartedPanel() {
               <h4>Agents</h4>
             </div>
             <div className="ai-type-content">
-              <p className="ai-type-name">Claude Code (agentic coding)</p>
+              <p className="ai-type-name">Claude Code (agentic coding and more)</p>
               <ul className="ai-type-features">
-                <li>Autonomous code editing</li>
-                <li>Multi-file operations</li>
+                <li>Agentic project research</li>
+                <li>Multi-file read and write</li>
                 <li>Plan-based development</li>
+                <li>Documentation writing</li>
+                <li>Autonomous code editing</li>
               </ul>
               <div className="ai-type-status supported">
                 <span className="material-symbols-outlined">check_circle</span>
@@ -99,9 +97,14 @@ export function GettingStartedPanel() {
             <div className="ai-type-content">
               <p className="ai-type-name">Direct AI chat</p>
               <ul className="ai-type-features">
-                <li>Claude (Anthropic)</li>
-                <li>OpenAI</li>
-                <li>LM Studio</li>
+                <li>Edit a single document with AI</li>
+                <li>Diverse model options</li>
+                <li><ul>
+                  <li>Claude</li>
+                  <li>OpenAI GPT</li>
+                  <li>local models with LMStudio</li>
+                </ul>
+                </li>
               </ul>
               <div className="ai-type-status beta">
                 <span className="material-symbols-outlined">science</span>
@@ -113,6 +116,36 @@ export function GettingStartedPanel() {
       </div>
 
       <div className="getting-started-section">
+        <h3>Here are the steps to configure Nimbalyst for AI</h3>
+
+        <div className="setup-steps-list">
+          <div className="setup-step-item">
+            <div className="step-number">1</div>
+            <div className="step-content">
+              <h4>Claude Code must be installed and Authenticated</h4>
+              <p>Click on Claude Code section to the left for details</p>
+            </div>
+          </div>
+
+          <div className="setup-step-item">
+            <div className="step-number">2</div>
+            <div className="step-content">
+              <h4>Configure AI Model Integration (optional)</h4>
+              <p>On the left, click on whichever additional models you wish to configure</p>
+            </div>
+          </div>
+
+          <div className="setup-step-item">
+            <div className="step-number">3</div>
+            <div className="step-content">
+              <h4>Configure CLAUDE.md and Claude commands for each project (optional)</h4>
+              <p>You will be prompted to do this when you open each project for the first time</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* <div className="getting-started-section">
         <h3>Claude Code Status</h3>
 
         {isChecking ? (
@@ -184,7 +217,7 @@ export function GettingStartedPanel() {
             )}
           </div>
         ) : null}
-      </div>
+      </div> */}
     </div>
   );
 }
