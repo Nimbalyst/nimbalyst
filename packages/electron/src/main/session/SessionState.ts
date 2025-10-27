@@ -108,10 +108,12 @@ export async function restoreSessionState(): Promise<boolean> {
                     if (existsSync(sessionWindow.filePath)) {
                         // Restore document window
                         window = createWindow(true, false, undefined, sessionWindow.bounds);
-                        window.once('ready-to-show', () => {
-                            loadFileIntoWindow(window, sessionWindow.filePath!);
-                        });
-                        logger.session.info(`Restored document window: ${sessionWindow.filePath}`);
+                        if (window) {
+                            window.once('ready-to-show', () => {
+                                loadFileIntoWindow(window!, sessionWindow.filePath!);
+                            });
+                            logger.session.info(`Restored document window: ${sessionWindow.filePath}`);
+                        }
                     } else {
                         logger.session.warn(`File no longer exists: ${sessionWindow.filePath}`);
                     }

@@ -4,6 +4,7 @@ import { RecentItem, SessionState, SessionWindow } from '../types';
 import { logger } from './logger';
 
 export type AppTheme = 'dark' | 'light' | 'system' | 'crystal-dark';
+export type { SessionState, SessionWindow } from '../types';
 
 interface AppStoreSchema {
   theme: AppTheme;

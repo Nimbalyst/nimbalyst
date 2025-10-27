@@ -166,7 +166,7 @@ export class ElectronFileSystemService implements FileSystemService {
           const stats = await stat(filePath);
           return {
             path: relative(this.workspacePath, filePath),
-            type: stats.isDirectory() ? 'directory' : 'file' as const,
+            type: stats.isDirectory() ? 'directory' as const : 'file' as const,
             size: stats.size,
             modified: stats.mtime.toISOString()
           };
@@ -196,7 +196,7 @@ export class ElectronFileSystemService implements FileSystemService {
               return {
                 path: relative(this.workspacePath, fullPath),
                 name: item.name,
-                type: item.isDirectory() ? 'directory' : 'file' as const,
+                type: item.isDirectory() ? 'directory' as const : 'file' as const,
                 size: stats.size,
                 modified: stats.mtime.toISOString()
               };

@@ -32,7 +32,7 @@ function previewForLog(value?: string, max: number = LOG_PREVIEW_LENGTH): string
 
 export class AIService {
   private sessionManager: SessionManager;
-  private settingsStore: Store | null = null;
+  private settingsStore: Store<Record<string, unknown>> | null = null;
   private readonly analytics = AnalyticsService.getInstance();
   // Track providers per window to avoid cross-window conflicts
   private providersByWindow: Map<number, AIProvider> = new Map();
@@ -58,9 +58,9 @@ export class AIService {
     }
   }
 
-  private getSettingsStore(): Store {
+  private getSettingsStore(): Store<Record<string, unknown>> {
     if (!this.settingsStore) {
-      this.settingsStore = new Store({
+      this.settingsStore = new Store<Record<string, unknown>>({
         name: 'ai-settings',
         schema: {
           defaultProvider: {
@@ -200,8 +200,7 @@ export class AIService {
       let model = modelId;
       if (!model && provider !== 'claude-code') {
         // For non-claude-code providers, try to get a default model
-        const defaultModel = await ModelRegistry.getDefaultModel(provider);
-        model = defaultModel?.id;
+        model = await ModelRegistry.getDefaultModel(provider);
       }
 
       // For claude-code, don't pass a model at all - let it handle its own selection
@@ -601,13 +600,14 @@ export class AIService {
           });
         }
 
-        // Add sessionType to documentContext for provider to use in system prompt
+        // Add sessionType and attachments to documentContext for provider to use in system prompt
         const contextWithSession = documentContext ? {
           ...documentContext,
-          sessionType: (documentContext as any)?.sessionType ?? session.sessionType
-        } as any : { sessionType: session.sessionType } as any;
+          sessionType: (documentContext as any)?.sessionType ?? session.sessionType,
+          attachments
+        } as any : { sessionType: session.sessionType, attachments } as any;
 
-        for await (const chunk of provider.sendMessage(message, contextWithSession, session.id, sessionMessages, workspacePath, attachments)) {
+        for await (const chunk of provider.sendMessage(message, contextWithSession, session.id, sessionMessages, workspacePath)) {
           chunkCount++;
 
           if (!firstChunkTime) {
@@ -1290,7 +1290,7 @@ export class AIService {
         // If no provider for window, try to get from session
         if (!provider && sessionId) {
           console.log('[AIService] Trying to get provider from ProviderFactory with sessionId:', sessionId);
-          provider = ProviderFactory.getProvider('claude-code', sessionId);
+          provider = ProviderFactory.getProvider('claude-code', sessionId) ?? undefined;
           console.log('[AIService] Provider from ProviderFactory:', provider ? 'found' : 'not found');
         }
 
@@ -1303,13 +1303,10 @@ export class AIService {
             const commands = (provider as any).getSlashCommands();
             console.log('[AIService] Retrieved slash commands from provider:', commands);
 
-            // If commands array is empty, use the static fallback
+            // If commands array is empty, return empty array
             if (commands.length === 0) {
-              console.log('[AIService] Provider returned empty commands, using static fallback');
-              const { ClaudeCodeProvider } = await import('@nimbalyst/runtime/ai/server/providers/ClaudeCodeProvider');
-              const fallbackCommands = ClaudeCodeProvider.getKnownSlashCommands();
-              // console.log('[AIService] Using fallback commands:', fallbackCommands);
-              return { success: true, commands: fallbackCommands };
+              console.log('[AIService] Provider returned empty commands');
+              return { success: true, commands: [] };
             }
 
             return { success: true, commands };
@@ -1318,12 +1315,9 @@ export class AIService {
           }
         }
 
-        // No provider found - return the known built-in commands as fallback
-        console.log('[AIService] No provider found, using static Claude Code commands as fallback');
-        const { ClaudeCodeProvider } = await import('@nimbalyst/runtime/ai/server/providers/ClaudeCodeProvider');
-        const fallbackCommands = ClaudeCodeProvider.getKnownSlashCommands();
-        // console.log('[AIService] Fallback commands:', fallbackCommands);
-        return { success: true, commands: fallbackCommands };
+        // No provider found - return empty commands
+        console.log('[AIService] No provider found');
+        return { success: true, commands: [] };
       } catch (error) {
         console.error('[AIService] Error getting slash commands:', error);
         return { success: false, commands: [], error: error instanceof Error ? error.message : 'Unknown error' };
