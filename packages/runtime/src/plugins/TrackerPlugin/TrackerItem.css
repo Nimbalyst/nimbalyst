@@ -6,6 +6,7 @@
   padding: 0;
   position: relative;
   vertical-align: middle;
+  max-width: calc(100% - 62px);
 }
 
 /* Custom checkbox styling */

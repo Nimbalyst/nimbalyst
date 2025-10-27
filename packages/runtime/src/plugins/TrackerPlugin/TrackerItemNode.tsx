@@ -295,7 +295,7 @@ export class TrackerItemNode extends ElementNode {
   }
 
   canInsertTextBefore(): boolean {
-    return false;
+    return true;
   }
 
   canInsertTextAfter(): boolean {

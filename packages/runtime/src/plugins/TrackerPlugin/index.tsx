@@ -291,6 +291,7 @@ function TrackerPlugin(): JSX.Element | null {
       if (children.length === 0) {
         const spaceNode = $createTextNode(' ');
         node.append(spaceNode);
+        spaceNode.selectStart();
         return;
       }
 
@@ -381,8 +382,10 @@ function TrackerPlugin(): JSX.Element | null {
         const textContent = trackerNode.getTextContent();
         const offset = selection.anchor.offset;
         const isAtEnd = offset >= textContent.length;
+        const onlyWhitespaceAfter = /^\s*$/.test(textContent.slice(offset));
 
-        if (!isAtEnd) {
+        // only continue if selection is at the end or if there's only whitespace after the cursor
+        if (!isAtEnd && !onlyWhitespaceAfter) {
           return false;
         }
 
