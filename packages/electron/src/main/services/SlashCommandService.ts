@@ -52,7 +52,7 @@ export class SlashCommandService {
       return this.mergeWithSdkCommands(this.commandsCache, commandsToMerge);
     }
 
-    console.log('[SlashCommandService] Scanning for custom slash commands...');
+    // console.log('[SlashCommandService] Scanning for custom slash commands...');
 
     const commands: SlashCommand[] = [];
 
@@ -62,13 +62,13 @@ export class SlashCommandService {
       'project'
     );
     commands.push(...projectCommands);
-    console.log(`[SlashCommandService] Found ${projectCommands.length} project commands`);
+    // console.log(`[SlashCommandService] Found ${projectCommands.length} project commands`);
 
     // Scan user commands
     const userCommandsPath = path.join(homedir(), '.claude', 'commands');
     const userCommands = await this.scanCommandsDirectory(userCommandsPath, 'user');
     commands.push(...userCommands);
-    console.log(`[SlashCommandService] Found ${userCommands.length} user commands`);
+    // console.log(`[SlashCommandService] Found ${userCommands.length} user commands`);
 
     // Update cache
     this.commandsCache = commands;
@@ -76,7 +76,7 @@ export class SlashCommandService {
 
     // Use SDK commands if provided, otherwise use known built-ins as fallback
     const commandsToMerge = sdkCommands.length > 0 ? sdkCommands : this.getKnownBuiltinCommands();
-    console.log(`[SlashCommandService] Using ${commandsToMerge.length} built-in commands (${sdkCommands.length > 0 ? 'from SDK' : 'hardcoded fallback'})`);
+    // console.log(`[SlashCommandService] Using ${commandsToMerge.length} built-in commands (${sdkCommands.length > 0 ? 'from SDK' : 'hardcoded fallback'})`);
 
     return this.mergeWithSdkCommands(commands, commandsToMerge);
   }
@@ -166,7 +166,7 @@ export class SlashCommandService {
 
           if (command && validateCommand(command)) {
             commands.push(command);
-            console.log(`[SlashCommandService] Loaded command: ${command.name} from ${source}`);
+            // console.log(`[SlashCommandService] Loaded command: ${command.name} from ${source}`);
           } else {
             console.warn(`[SlashCommandService] Invalid command file: ${filePath}`);
           }

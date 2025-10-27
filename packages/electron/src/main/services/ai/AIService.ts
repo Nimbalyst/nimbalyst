@@ -399,11 +399,11 @@ export class AIService {
       // Get or create provider for this session
       const providerStartTime = Date.now();
       const isProviderClaudeCode = session.provider === 'claude-code';
-      
+
       if (isProviderClaudeCode) {
         console.log('[CLAUDE-CODE-SERVICE] Getting provider for claude-code, session:', session.id);
       }
-      
+
       console.log(`[AIService] Getting provider for: ${session.provider}, sessionId: ${session.id}`);
       let provider = ProviderFactory.getProvider(session.provider as AIProviderType, session.id);
       perfLog.getProviderTime = Date.now() - providerStartTime;
@@ -452,7 +452,7 @@ export class AIService {
           console.log('[CLAUDE-CODE-SERVICE] Creating claude-code provider instance');
         }
         provider = ProviderFactory.createProvider(session.provider, session.id);
-        
+
         if (isProviderClaudeCode) {
           console.log('[CLAUDE-CODE-SERVICE] Provider instance created, preparing config');
         }
@@ -495,11 +495,11 @@ export class AIService {
         }
         console.log('[AIService] About to initialize provider with config:', reinitConfig);
         const initStartTime = Date.now();
-        
+
         try {
           await provider.initialize(reinitConfig);
           perfLog.providerInitTime = Date.now() - initStartTime;
-          
+
           if (isProviderClaudeCode) {
             console.log(`[CLAUDE-CODE-SERVICE] Provider initialization completed in ${perfLog.providerInitTime}ms`);
           }
@@ -590,7 +590,7 @@ export class AIService {
         const isClaudeCode = session.provider === 'claude-code';
         const logPrefix = isClaudeCode ? '[CLAUDE-CODE-SERVICE]' : '[AIService]';
         console.log(`🚀 ${logPrefix} Starting to stream response from provider: ${session.provider}`);
-        
+
         if (isClaudeCode) {
           console.log(`[CLAUDE-CODE-SERVICE] Calling sendMessage with:`, {
             messageLength: message.length,
@@ -1308,7 +1308,7 @@ export class AIService {
               console.log('[AIService] Provider returned empty commands, using static fallback');
               const { ClaudeCodeProvider } = await import('@nimbalyst/runtime/ai/server/providers/ClaudeCodeProvider');
               const fallbackCommands = ClaudeCodeProvider.getKnownSlashCommands();
-              console.log('[AIService] Using fallback commands:', fallbackCommands);
+              // console.log('[AIService] Using fallback commands:', fallbackCommands);
               return { success: true, commands: fallbackCommands };
             }
 
@@ -1322,7 +1322,7 @@ export class AIService {
         console.log('[AIService] No provider found, using static Claude Code commands as fallback');
         const { ClaudeCodeProvider } = await import('@nimbalyst/runtime/ai/server/providers/ClaudeCodeProvider');
         const fallbackCommands = ClaudeCodeProvider.getKnownSlashCommands();
-        console.log('[AIService] Fallback commands:', fallbackCommands);
+        // console.log('[AIService] Fallback commands:', fallbackCommands);
         return { success: true, commands: fallbackCommands };
       } catch (error) {
         console.error('[AIService] Error getting slash commands:', error);

@@ -27,7 +27,7 @@ import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog/Ke
 import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
 import { ApiKeyDialog } from './components/ApiKeyDialog';
-import { AIModelsRedesigned as AIModels } from './components/AIModels/AIModelsRedesigned';
+import { GlobalSettingsScreen as AIModels } from './components/GlobalSettings/GlobalSettingsScreen.tsx';
 import { SessionManager } from './components/SessionManager/SessionManager';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { NewFileDialog } from './components/NewFileDialog';
@@ -44,10 +44,10 @@ import { TrackerBottomPanel, TrackerBottomPanelType } from './components/Tracker
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
 import { registerTrackerPlugin } from './plugins/registerTrackerPlugin';
-import SettingsScreen from './components/SettingsScreen/SettingsScreen';
+import ProjectSettingsScreen from './components/ProjectSettingsScreen/ProjectSettingsScreen.tsx';
 import OnboardingService from './services/OnboardingService';
 import './WorkspaceWelcome.css';
-import './components/AIModels/AIModelsRedesigned.css';
+import './components/GlobalSettings/GlobalSettingsScreen.css';
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
@@ -1386,7 +1386,7 @@ export default function App() {
               }}
             >
               {sidebarView === 'settings' ? (
-                <SettingsScreen
+                <ProjectSettingsScreen
                   workspacePath={workspacePath || ''}
                   workspaceName={workspaceName || ''}
                   onClose={() => {
@@ -1505,7 +1505,7 @@ export default function App() {
             {/* Settings Mode - conditionally rendered for now */}
             {activeMode === 'settings' && (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-                <SettingsScreen
+                <ProjectSettingsScreen
                   workspacePath={workspacePath || ''}
                   workspaceName={workspaceName || ''}
                   onClose={() => {
