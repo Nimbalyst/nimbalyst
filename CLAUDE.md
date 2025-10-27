@@ -336,6 +336,9 @@ The Nimbalyst app uses **PGLite** (PostgreSQL in WebAssembly) for all data stora
 - **File watching**: Automatic updates when files change on disk
 - **Recent files**: Quick access to recently opened files in projects
 
+## Adding Analytics Events
+See @docs/ANALYTICS_GUIDE.md for details on how to add anonymous usage analytics to track feature use.
+
 ## Agentic Planning System
 
 The repository uses a structured markdown-based planning system for agent-led development workstreams. Plans are stored as markdown files with YAML frontmatter metadata.
