@@ -242,12 +242,12 @@ const builtinTrackers: TrackerDataModel[] = [
  * Load all built-in tracker definitions
  */
 export function loadBuiltinTrackers(): void {
-  console.log('[TrackerPlugin] Loading built-in trackers...');
+  // console.log('[TrackerPlugin] Loading built-in trackers...');
 
   for (const model of builtinTrackers) {
     try {
       globalRegistry.register(model);
-      console.log(`[TrackerPlugin] Loaded built-in tracker: ${model.type}`);
+      // console.log(`[TrackerPlugin] Loaded built-in tracker: ${model.type}`);
     } catch (error) {
       console.error(`[TrackerPlugin] Failed to load built-in tracker '${model.type}':`, error);
     }

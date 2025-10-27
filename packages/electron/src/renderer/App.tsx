@@ -192,7 +192,7 @@ export default function App() {
   // Content mode management - simple state, no manager needed
   const [activeMode, setActiveModeRaw] = useState<ContentMode>('files');
   const setActiveMode = (mode: ContentMode) => {
-    console.log('[App] setActiveMode called with:', mode, 'current:', activeMode);
+    // console.log('[App] setActiveMode called with:', mode, 'current:', activeMode);
     setActiveModeRaw(mode);
   };
 
@@ -225,9 +225,9 @@ export default function App() {
     console.log('[App Layout] Loading workspace state for:', workspacePath);
     window.electronAPI.invoke('workspace:get-state', workspacePath)
       .then(state => {
-        console.log('[App Layout] Loaded workspace state:', JSON.stringify(state, null, 2));
+        // console.log('[App Layout] Loaded workspace state:', JSON.stringify(state, null, 2));
         if (state?.activeMode) {
-          console.log('[App Layout] Restoring activeMode:', state.activeMode);
+          // console.log('[App Layout] Restoring activeMode:', state.activeMode);
           setActiveMode(state.activeMode as ContentMode);
         } else {
           console.log('[App Layout] No activeMode in state (keys:', Object.keys(state || {}), ')');
@@ -746,7 +746,7 @@ export default function App() {
       setAgentPlanReference(planPath);
     };
 
-    console.log('[App] Setting up IPC listener for set-content-mode');
+    // console.log('[App] Setting up IPC listener for set-content-mode');
     window.electronAPI.on('set-content-mode', handleSetContentMode);
     window.electronAPI.on('agent:insert-plan-reference', handleInsertPlanReference);
     // COMMENTED OUT - Cmd+K now switches to Agent mode
@@ -762,7 +762,7 @@ export default function App() {
 
   // Listen for agent-new-session IPC event (Cmd+N in agent mode)
   useEffect(() => {
-    console.log('[App] Setting up IPC listener for agent-new-session');
+    // console.log('[App] Setting up IPC listener for agent-new-session');
     if (!window.electronAPI?.onAgentNewSession) {
       console.log('[App] electronAPI.onAgentNewSession not available');
       return;

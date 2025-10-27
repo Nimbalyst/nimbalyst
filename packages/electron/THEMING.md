@@ -25,7 +25,7 @@ This file contains ALL theme variable definitions for:
 Themes are applied using BOTH CSS classes AND data-theme attributes on the root HTML element:
 
 ```javascript
-// Correct theme application (as in AIModels.tsx, SessionManager.tsx)
+// Correct theme application (as in GlobalSettings.tsx, SessionManager.tsx)
 if (savedTheme === 'dark') {
   root.setAttribute('data-theme', 'dark');
   root.classList.add('dark-theme');
