@@ -1,5 +1,6 @@
 import {
   $applyNodeReplacement,
+  $createTextNode,
   ElementNode,
   LexicalNode,
   NodeKey,
@@ -289,8 +290,8 @@ export class TrackerItemNode extends ElementNode {
     writable.__data = data;
   }
 
-  canBeEmpty(): false {
-    return false;
+  canBeEmpty(): boolean {
+    return true;
   }
 
   canInsertTextBefore(): boolean {
@@ -303,6 +304,31 @@ export class TrackerItemNode extends ElementNode {
 
   extractWithChild(): boolean {
     return true;
+  }
+
+  // This is the key method - it allows the node to be merged when empty
+  // rather than deleted. This is how QuoteNode and ListItemNode handle it.
+  canMergeWhenEmpty(): boolean {
+    return true;
+  }
+
+  // Ensure node always has at least an empty text child to hold the cursor
+  normalizeChildren(): boolean {
+    const children = this.getChildren();
+
+    if (children.length === 0) {
+      // Add empty text node so cursor can be positioned inside
+      const emptyText = $createTextNode('');
+      this.append(emptyText);
+      return true;
+    }
+
+    return false;
+  }
+
+  // Prevent collapse - keep tracker node even when backspacing at start
+  collapseAtStart(): boolean {
+    return false;
   }
 
 

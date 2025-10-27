@@ -15,6 +15,7 @@ import {
   $createTextNode,
   $getSelection,
   $isRangeSelection,
+  $isTextNode,
   COMMAND_PRIORITY_EDITOR,
   createCommand,
   LexicalCommand,
@@ -23,10 +24,16 @@ import {
   $getNodeByKey,
   TextNode,
   LexicalNode,
+  KEY_ENTER_COMMAND,
+  KEY_BACKSPACE_COMMAND,
+  KEY_DELETE_COMMAND,
+  COMMAND_PRIORITY_LOW,
+  COMMAND_PRIORITY_HIGH,
+  CONTROLLED_TEXT_INSERTION_COMMAND,
 } from 'lexical';
-import { $isListItemNode } from '@lexical/list';
+import { $isListItemNode, $createListNode, $createListItemNode } from '@lexical/list';
 import { useEffect as useReactEffect } from 'react';
-import { $createTrackerItemNode, $getTrackerItemNode, TrackerItemData, TrackerItemType, TrackerItemNode, TrackerItemStatus, TrackerItemPriority } from './TrackerItemNode';
+import { $createTrackerItemNode, $getTrackerItemNode, $isTrackerItemNode, TrackerItemData, TrackerItemType, TrackerItemNode, TrackerItemStatus, TrackerItemPriority } from './TrackerItemNode';
 import { TRACKER_ITEM_TRANSFORMERS } from './TrackerItemTransformer';
 import type { PluginPackage } from 'rexical';
 import { TypeaheadMenuPlugin, type TypeaheadMenuOption } from 'rexical';
@@ -274,6 +281,139 @@ function TrackerPlugin(): JSX.Element | null {
     };
   }, []);
 
+
+  // Use node transform to enforce tracker always has at least a space
+  useReactEffect(() => {
+    return editor.registerNodeTransform(TrackerItemNode, (node) => {
+      const children = node.getChildren();
+
+      // If no children, add a space
+      if (children.length === 0) {
+        const spaceNode = $createTextNode(' ');
+        node.append(spaceNode);
+        return;
+      }
+
+      // If we have a single text child that's empty, replace with space
+      if (children.length === 1 && $isTextNode(children[0])) {
+        const textNode = children[0];
+        const text = textNode.getTextContent();
+
+        if (text === '') {
+          textNode.setTextContent(' ');
+        }
+      }
+    });
+  }, [editor]);
+
+  // Handle text insertion to trim leading space when typing
+  useReactEffect(() => {
+    return editor.registerCommand(
+      CONTROLLED_TEXT_INSERTION_COMMAND,
+      (text) => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) {
+          return false;
+        }
+
+        const anchorNode = selection.anchor.getNode();
+
+        // Find if we're inside a tracker item
+        let trackerNode: TrackerItemNode | null = null;
+        let node: LexicalNode | null = anchorNode;
+        while (node) {
+          if ($isTrackerItemNode(node)) {
+            trackerNode = node;
+            break;
+          }
+          node = node.getParent();
+        }
+
+        if (!trackerNode) {
+          return false;
+        }
+
+        // If tracker only has a space, replace it with the typed text
+        const textContent = trackerNode.getTextContent();
+        if (textContent === ' ') {
+          const children = trackerNode.getChildren();
+          if (children.length === 1 && $isTextNode(children[0])) {
+            children[0].setTextContent(text);
+            children[0].select(text.length, text.length);
+            return true;
+          }
+        }
+
+        return false;
+      },
+      COMMAND_PRIORITY_HIGH,
+    );
+  }, [editor]);
+
+  // Handle Enter key in tracker items
+  useReactEffect(() => {
+    return editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event) => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) {
+          return false;
+        }
+
+        const anchorNode = selection.anchor.getNode();
+
+        // Find if we're inside a tracker item
+        let trackerNode: TrackerItemNode | null = null;
+        let node: LexicalNode | null = anchorNode;
+        while (node) {
+          if ($isTrackerItemNode(node)) {
+            trackerNode = node;
+            break;
+          }
+          node = node.getParent();
+        }
+
+        if (!trackerNode) {
+          return false;
+        }
+
+        // Check if we're at the end of the tracker content
+        const textContent = trackerNode.getTextContent();
+        const offset = selection.anchor.offset;
+        const isAtEnd = offset >= textContent.length;
+
+        if (!isAtEnd) {
+          return false;
+        }
+
+        // Find the list item containing this tracker
+        let listItem: LexicalNode | null = trackerNode;
+        while (listItem) {
+          if ($isListItemNode(listItem)) {
+            break;
+          }
+          listItem = listItem.getParent();
+        }
+
+        if (!listItem || !$isListItemNode(listItem)) {
+          return false;
+        }
+
+        // Create a new list item after this one
+        event?.preventDefault();
+        editor.update(() => {
+          const newListItem = $createListItemNode();
+          // newListItem.append(paragraph);
+          listItem!.insertAfter(newListItem);
+          newListItem.select();
+        });
+
+        return true;
+      },
+      COMMAND_PRIORITY_LOW,
+    );
+  }, [editor]);
+
   // Register inline tracker commands
   useReactEffect(() => {
     return editor.registerCommand(
@@ -349,6 +489,7 @@ function TrackerPlugin(): JSX.Element | null {
       COMMAND_PRIORITY_EDITOR,
     );
   }, [editor]);
+
 
   // Handle tracker-item-toggle and tracker-item-edit events
   useReactEffect(() => {
@@ -545,15 +686,32 @@ function TrackerPlugin(): JSX.Element | null {
 
         // Replace list item content with tracker item
         if (listItem) {
-          // Clear the list item and add tracker
+          // Add tracker directly to list item (no paragraph wrapper)
           listItem.clear();
           listItem.append(trackerItemNode);
           trackerItemNode.selectEnd();
         } else {
-          // Not in a list - insert at current selection
+          // Not in a list - create a list and add the tracker to it
           const selection = $getSelection();
           if ($isRangeSelection(selection)) {
-            selection.insertNodes([trackerItemNode]);
+            // Create list structure
+            const list = $createListNode('bullet');
+            const newListItem = $createListItemNode();
+            newListItem.append(trackerItemNode);
+            list.append(newListItem);
+
+            // Get the anchor node and check if it's a paragraph or text node
+            const anchorNode = selection.anchor.getNode();
+            const topLevelNode = anchorNode.getTopLevelElement();
+
+            // If we're in a paragraph with text, replace it with the list
+            if (topLevelNode) {
+              topLevelNode.replace(list);
+            } else {
+              // Fallback: just insert the list
+              selection.insertNodes([list]);
+            }
+
             trackerItemNode.selectEnd();
           }
         }
