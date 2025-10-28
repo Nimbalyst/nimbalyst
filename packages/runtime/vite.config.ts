@@ -25,7 +25,6 @@ export default defineConfig(({ mode }) => ({
         'react-dom',
         'lexical',
         /^@lexical\//,
-        /^rexical/,
         '@electric-sql/pglite',
         '@anthropic-ai/sdk',
         'openai',
