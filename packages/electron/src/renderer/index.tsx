@@ -6,6 +6,7 @@ import App from './App';
 import './index.css';
 import posthog from "posthog-js";
 import {PostHogProvider} from "posthog-js/react";
+import {beforePostHogSendWeb} from "../main/services/analytics/analytics-utils.ts";
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
 
@@ -27,14 +28,15 @@ const posthogClient = posthog.init(
     autocapture: false,
     capture_heatmaps: false,
     disable_session_recording: true,
-    capture_exceptions: true,
+    capture_exceptions: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     loaded: (posthog) => {
       console.log(`[RENDERER] PostHog loaded (analytics ID: ${posthog.get_distinct_id()}, session: ${posthog.get_session_id()})`);
       if (!analyticsAllowed) {
         console.log('[RENDERER] Opting out of granular analytics as the user has not consented');
       }
-    }
+    },
+    before_send: beforePostHogSendWeb
   }
 )
 

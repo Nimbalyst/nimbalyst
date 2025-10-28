@@ -2,6 +2,7 @@ import Store from "electron-store";
 import {PostHog} from "posthog-node";
 import {ulid} from "ulid";
 import {logger} from "../../utils/logger.ts";
+import {beforePosthogSendNodeJS} from "./analytics-utils.ts";
 
 const POSTHOG_PROJECT_PUBLIC_ID = 'phc_s3lQIILexwlGHvxrMBqti355xUgkRocjMXW4LjV0ATw';
 
@@ -132,6 +133,9 @@ export class AnalyticsService {
         bootstrap: {
           distinctId: this.getDistinctId()
         },
+        disableGeoip: false,
+        enableExceptionAutocapture: false,
+        before_send: beforePosthogSendNodeJS
       }
     );
   }
