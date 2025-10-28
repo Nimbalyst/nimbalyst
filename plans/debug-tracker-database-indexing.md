@@ -17,13 +17,12 @@ planStatus:
   updated: "2025-10-23T19:00:00.000Z"
   progress: 100
 ---
-
 # Debug Tracker Item Database Indexing
-<!-- plan-status -->
+
 
 ## Problem Statement
 
-Tracker items with `#bug[...]` syntax are rendering correctly in the editor but are NOT being indexed into the database. The TrackerBottomPanel shows "0" for all tracker types even when tracker items exist in documents.
+Tracker items with `#bug````````````[...]` syntax are rendering correctly in the editor but are NOT being indexed into the database. The TrackerBottomPanel shows "0" for all tracker types even when tracker items exist in documents.
 
 ## What's Working
 
@@ -43,10 +42,10 @@ Tracker items with `#bug[...]` syntax are rendering correctly in the editor but 
 
 1. Verified regex pattern matches test content correctly
 2. Added logging to:
-   - `ElectronDocumentService` constructor
-   - `refreshDocuments()`
-   - `updateTrackerItemsCache()`
-   - `parseTrackerItems()`
+  - `ElectronDocumentService` constructor
+  - `refreshDocuments()`
+  - `updateTrackerItemsCache()`
+  - `parseTrackerItems()`
 3. Confirmed IPC handlers are registered
 4. Confirmed document service is created in `WindowManager.ts` for workspace windows
 
@@ -71,7 +70,7 @@ Tracker items with `#bug[...]` syntax are rendering correctly in the editor but 
 ## Test Case
 
 File: `/tmp/test-workspace/test.md`
-Content: `Fix authentication bug #bug[id:bug_test123 status:to-do]`
+Content: `Fix authentication bug ````````````#bug````````````\[id:bug_test123 status:to-do\]`
 
 Expected: After opening file, waiting 5+ seconds, bug count should be > 0
 Actual: Bug count remains 0
@@ -96,7 +95,7 @@ The tracker indexing system was working correctly all along. Enhanced logging re
 4. **Database reads work**: `listTrackerItems()` successfully returns items
 
 ### Evidence from Logs
-```
+```javascript
 [DocumentService] Parsed 7 tracker items from plans/unified-tracker-system-refactor.md
 [DocumentService] Inserting tracker item: bug_mh3pkcl40nyisjsx (bug)
 [DocumentService] Query returned 7 tracker items

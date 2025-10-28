@@ -21,7 +21,7 @@ planStatus:
   startDate: "2025-10-19"
 ---
 # AI Agentic Sessions Raw Storage Table
-<!-- plan-status -->
+
 
 ## Goals
 

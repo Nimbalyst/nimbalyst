@@ -22,7 +22,7 @@ planStatus:
   startDate: ""
 ---
 # Preditor Electron E2E Testing
-<!-- plan-status -->
+
 
 ## Context & Objectives
 - Establish reliable end-to-end coverage for the Preditor Electron app, beginning with a single smoke test that exercises the core Markdown editing flow.

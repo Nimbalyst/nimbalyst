@@ -19,7 +19,7 @@ planStatus:
   progress: 100
 ---
 # AI Session File Tracking System
-<!-- plan-status -->
+
 
 ## Implementation Status
 

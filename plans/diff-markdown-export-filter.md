@@ -23,7 +23,7 @@ planStatus:
       status: active
 ---
 # Filter Removed Nodes from Markdown Export
-<!-- plan-status -->
+
 
 ## Problem
 The DiffPlugin uses Lexical text nodes with NodeState.added and NodeState.removed to track additions (green) and removals (red). Currently, markdown serialization persists both added and removed content, so when a file is saved and reopened, both versions appear in the document - making it look like all diffs were accepted.

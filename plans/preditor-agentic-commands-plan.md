@@ -23,7 +23,7 @@ planStatus:
   startDate: ""
 ---
 # Preditor Agentic Commands
-<!-- plan-status -->
+
 
 ## Vision & Objectives
 - Deliver reusable, customizable agent command files that users can invoke against the currently open document to guide the AI assistant.

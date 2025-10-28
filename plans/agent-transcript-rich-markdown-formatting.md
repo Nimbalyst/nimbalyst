@@ -18,7 +18,7 @@ planStatus:
   progress: 100
 ---
 # Add Rich Markdown Formatting to Agent Transcript Output
-<!-- plan-status -->
+
 
 ## Goals
 

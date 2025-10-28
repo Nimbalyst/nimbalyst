@@ -18,7 +18,7 @@ planStatus:
   startDate: "2025-10-04"
 ---
 # File Watcher Regression Investigation
-<!-- plan-status -->
+
 
 ## Goals
 - Restore reliable detection of external file changes in Electron editor tabs.

@@ -49,7 +49,7 @@ planStatus:
 ---
 
 # Plan Title
-<!-- plan-status -->
+
 
 ## Goals
 
@@ -255,8 +255,8 @@ To ensure AI coding agents (like Claude Code) correctly create and maintain plan
 1. User clicks plan in sidebar
 2. PlansPanel calls `documentService.openDocument()`
 3. Electron opens document in editor
-4. PlanStatusPlugin detects `<!-- plan-status -->` comment
-5. PlanStatusComponent renders with frontmatter data
+4. TrackerPlugin detects frontmatter
+5. TrackerStatusComponent renders with frontmatter data
 
 **Editing Plan Metadata**:
 1. User clicks field in PlanStatusComponent

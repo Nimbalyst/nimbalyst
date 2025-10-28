@@ -115,7 +115,6 @@ Based on the selected action, perform the following:
 For "create" and "update-status" actions:
 - Generate the complete markdown document with frontmatter
 - Use proper markdown formatting
-- Include the plan status indicator comment: `<!-- plan-status -->`
 
 For "review" action:
 - Provide analysis as structured feedback

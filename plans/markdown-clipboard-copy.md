@@ -17,7 +17,7 @@ planStatus:
   progress: 100
 ---
 # Markdown Clipboard Copy Feature
-<!-- plan-status -->
+
 
 ## Current Status
 

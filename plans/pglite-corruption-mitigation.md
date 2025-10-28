@@ -17,7 +17,7 @@ planStatus:
   progress: 0
 ---
 # PGLite Database Corruption Investigation & Mitigation
-<!-- plan-status -->
+
 
 
 ## Problem

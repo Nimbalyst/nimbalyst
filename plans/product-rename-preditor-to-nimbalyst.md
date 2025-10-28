@@ -17,7 +17,7 @@ planStatus:
   progress: 100
 ---
 # Rename Product from Preditor to Nimbalyst
-<!-- plan-status -->
+
 
 ## Goals
 

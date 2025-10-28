@@ -19,7 +19,7 @@ planStatus:
   startDate: "2025-09-20"
 ---
 # Electron Back & Forward Navigation
-<!-- plan-status -->
+
 
 ## Overview
 - Add Electron menu items and keyboard shortcuts for navigating backward/forward through recently opened tabs (max history depth 50).

@@ -17,7 +17,7 @@ planStatus:
   progress: 100
 ---
 # App.tsx State Cleanup
-<!-- plan-status -->
+
 
 This plan addresses scattered state in App.tsx that belongs in child components, violating separation of concerns and creating unnecessary prop drilling.
 

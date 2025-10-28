@@ -21,7 +21,7 @@ planStatus:
   parentPlan: plan-first-launch-experience
 ---
 # First Launch Settings Screen Implementation
-<!-- plan-status -->
+
 
 ## Goals
 - ✅ Create a "Getting Started" panel in AI Models window

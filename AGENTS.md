@@ -49,7 +49,7 @@
 - Populate required fields (`planId`, `title`, `status`, `planType`, `owner`, `priority`, `created`, `updated`) and list stakeholders/tags as arrays.
 - Use ISO 8601 dates (`YYYY-MM-DD` or timestamp for `updated`), and track progress as an integer between 0-100.
 - Include `dueDate` and `startDate` fields for scheduling; use empty strings if unknown to avoid `null` parsing issues.
-- After the frontmatter, add the `#` title heading and the `<!-- plan-status -->` control comment so tools can inject status tables.
+- After the frontmatter, add the `#` title heading.
 - Valid status values: `draft`, `ready-for-development`, `in-development`, `in-review`, `completed`, `rejected`, `blocked`.
 
 ```markdown
@@ -72,5 +72,5 @@ planStatus:
   startDate: ""
 ---
 # My Feature Plan
-<!-- plan-status -->
+
 ```

@@ -24,7 +24,7 @@ planStatus:
       status: active
 ---
 # Agent Image Management Strategy
-<!-- plan-status -->
+
 
 ## Background
 - Plan documents and other project markdown files often embed images as base64 data URIs, greatly inflating file size and prompt tokens when shared with AI providers.

@@ -18,7 +18,7 @@ planStatus:
   startDate: "2025-09-30"
 ---
 # Workspace Welcome Tab
-<!-- plan-status -->
+
 
 - Add intro to welcome.md explaining how to add PLANS instructions via .nimbalyst.md #task[id:tsk_mgl00yiyppmezd3j status:to-do priority:medium created:2025-10-10]
 - Recommend changes to .gitignore #task[id:tsk_mgl01h4u886ef5ed status:to-do priority:medium created:2025-10-10]

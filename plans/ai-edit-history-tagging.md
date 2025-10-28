@@ -17,7 +17,7 @@ planStatus:
   progress: 100
 ---
 # AI Edit History Tagging
-<!-- plan-status -->
+
 
 ## Goals
 
