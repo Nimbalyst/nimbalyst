@@ -113,13 +113,13 @@
 /* Highlight the currently selected change group */
 .diff-group-highlight-removed {
   outline: 2px solid #dc2626 !important; /* Darker red for removed nodes */
-  outline-offset: 2px;
+  outline-offset: 0px;
   border-radius: 4px;
 }
 
 .diff-group-highlight-added {
   outline: 2px solid #16a34a !important; /* Darker green for added nodes */
-  outline-offset: 2px;
+  outline-offset: 0px;
   border-radius: 4px;
 }
 
