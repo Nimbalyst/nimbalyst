@@ -152,8 +152,8 @@ export function AISessionView({
     }
   }, [onTodoClick]);
 
-  // All features enabled in both modes
-  const enableSlashCommands = true; // Available in both chat and agent modes
+  // Feature flags based on mode and provider
+  const enableSlashCommands = sessionData.provider === 'claude-code'; // Only for Claude Code
   const enableAttachments = true; // Available in both chat and agent modes
   const enableHistoryNavigation = mode === 'chat'; // Only in chat mode for arrow key history
 
@@ -222,7 +222,9 @@ export function AISessionView({
         placeholder={
           mode === 'chat'
             ? "Ask a question... (type @ to mention files)"
-            : "Type your message... (Enter to send, Shift+Enter for new line, @ for files, / for commands)"
+            : enableSlashCommands
+              ? "Type your message... (Enter to send, Shift+Enter for new line, @ for files, / for commands)"
+              : "Type your message... (Enter to send, Shift+Enter for new line, @ for files)"
         }
         mode={aiMode}
         onModeChange={onAIModeChange}
