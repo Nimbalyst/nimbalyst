@@ -378,21 +378,42 @@ export function resetLoggerConfig() {
   configureLogger();
 }
 
-// Override console methods to use our logger (optional)
+// Override console methods to use our logger
+// This ensures all console output goes to both the log file AND stdout
 export function overrideConsole() {
   const originalConsole = {
-    log: console.log,
-    error: console.error,
-    warn: console.warn,
-    info: console.info,
-    debug: console.debug
+    log: console.log.bind(console),
+    error: console.error.bind(console),
+    warn: console.warn.bind(console),
+    info: console.info.bind(console),
+    debug: console.debug.bind(console)
   };
-  
-  console.log = (...args: any[]) => logger.main.info(args.join(' '));
-  console.error = (...args: any[]) => logger.main.error(args.join(' '));
-  console.warn = (...args: any[]) => logger.main.warn(args.join(' '));
-  console.info = (...args: any[]) => logger.main.info(args.join(' '));
-  console.debug = (...args: any[]) => logger.main.debug(args.join(' '));
-  
+
+  // Override console methods to log to both file and original console (stdout)
+  console.log = (...args: any[]) => {
+    logger.main.info(args.join(' '));
+    originalConsole.log(...args); // Also log to stdout
+  };
+
+  console.error = (...args: any[]) => {
+    logger.main.error(args.join(' '));
+    originalConsole.error(...args); // Also log to stderr
+  };
+
+  console.warn = (...args: any[]) => {
+    logger.main.warn(args.join(' '));
+    originalConsole.warn(...args); // Also log to stderr
+  };
+
+  console.info = (...args: any[]) => {
+    logger.main.info(args.join(' '));
+    originalConsole.info(...args); // Also log to stdout
+  };
+
+  console.debug = (...args: any[]) => {
+    logger.main.debug(args.join(' '));
+    originalConsole.debug(...args); // Also log to stdout
+  };
+
   return originalConsole;
 }

@@ -30,7 +30,7 @@ import { AIService } from './services/ai/AIService';
 import { AgentService } from './services/agents/AgentService';
 import { cliManager } from './services/CLIManager';
 import { startMcpHttpServer, updateDocumentState, cleanupMcpServer, shutdownHttpServer } from './mcp/httpServer';
-import { logger } from './utils/logger';
+import { logger, overrideConsole } from './utils/logger';
 import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
 import { setupForceQuit, cancelForceQuit } from './utils/forceQuit';
 import { stopAllFileWatchers } from './file/FileWatcher';
@@ -161,6 +161,10 @@ function parseCommandLineArgs() {
 
 // App ready handler
 app.whenReady().then(async () => {
+    // Override console methods to capture all console output in log file
+    // This must be called FIRST before any console.log calls
+    overrideConsole();
+
     logger.main.info('App ready');
 
     // Track app launch for Discord invitation
