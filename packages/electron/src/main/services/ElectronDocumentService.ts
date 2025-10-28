@@ -656,11 +656,41 @@ export class ElectronDocumentService implements DocumentService {
       // Regex to match: text #type[id:... status:...]
       const trackerRegex = /(.+?)\s+#(bug|task|plan|idea|decision)\[(.+?)\]/;
 
+      // Track whether we're inside a code block
+      let inCodeBlock = false;
+
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
+
+        // Check for code block fences (``` or ~~~)
+        if (line.trim().startsWith('```') || line.trim().startsWith('~~~')) {
+          inCodeBlock = !inCodeBlock;
+          continue;
+        }
+
+        // Skip lines inside code blocks
+        if (inCodeBlock) {
+          continue;
+        }
+
+        // Skip lines that are indented code blocks (4+ spaces or tab at start)
+        if (line.match(/^(\s{4,}|\t)/)) {
+          continue;
+        }
+
         const match = line.match(trackerRegex);
 
         if (match) {
+          // Additional check: ensure the match is not inside inline code (backticks)
+          // This prevents matching `#bug[...]` within inline code blocks
+          const matchIndex = line.indexOf(match[0]);
+          const beforeMatch = line.substring(0, matchIndex);
+          const backtickCount = (beforeMatch.match(/`/g) || []).length;
+
+          // If odd number of backticks before the match, we're inside inline code
+          if (backtickCount % 2 !== 0) {
+            continue;
+          }
           const [, title, type, propsStr] = match;
 
           // Parse key:value pairs
