@@ -19,7 +19,7 @@ const documentService = new ElectronRendererDocumentService();
 // Based on createBasicTriggerFunction but excludes dots from punctuation
 function createDocumentLinkTrigger(trigger: string, { minLength = 0, maxLength = 75 }) {
   // Punctuation WITHOUT dots - allows filenames like "test.md"
-  const PUNCTUATION_NO_DOT = String.raw`\,\+\*\?\$\@\|#{}\(\)\^\-\[\]\\\/!%'"~=<>_:;`;
+  const PUNCTUATION_NO_DOT = String.raw`\,\+\*\?\$\|#{}\(\)\^\-\[\]\\\/!%'"~=<>_:;`;
 
   return (text: string) => {
     const validChars = '[^' + trigger + PUNCTUATION_NO_DOT + '\\s]';
@@ -54,7 +54,7 @@ function createDocumentLinkTrigger(trigger: string, { minLength = 0, maxLength =
 // Create a wrapper component that properly uses the hook
 function DocumentLinkPluginWrapper() {
   // Create the trigger function that allows dots in filenames
-  const triggerFn = useMemo(() => createDocumentLinkTrigger('[', { minLength: 0, maxLength: 75 }), []);
+  const triggerFn = useMemo(() => createDocumentLinkTrigger('@', { minLength: 0, maxLength: 75 }), []);
   const anchorElem = useAnchorElem();
 
   return (
