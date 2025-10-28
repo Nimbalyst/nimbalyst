@@ -456,15 +456,6 @@ export function TrackerTable({
     );
   }
 
-  if (sortedItems.length === 0) {
-    return (
-      <div className="tracker-table-empty">
-        <span>No tracker items found</span>
-        <p>Create tracker items using #bug, #task, #plan, or #idea in any markdown file</p>
-      </div>
-    );
-  }
-
   const statusOptions = [
     { value: 'all', label: 'All' },
     { value: 'to-do', label: 'To Do' },
@@ -614,59 +605,70 @@ export function TrackerTable({
             </tr>
           </thead>
           <tbody>
-          {sortedItems.map((item, index) => (
-            <tr
-              key={index}
-              className="tracker-table-row"
-              onClick={() => handleRowClick(item)}
-            >
-              <td className="tracker-table-cell type">
-                <span className={`type-icon type-${item.type}`}>
-                  <span className="material-symbols-outlined">{getTypeIcon(item.type)}</span>
-                </span>
-              </td>
-              <td className="tracker-table-cell title">
-                <div className="title-info">
-                  <div className="title-text">{item.title}</div>
-                  {/*{item.tags && item.tags.length > 0 && (*/}
-                  {/*  <div className="tags">*/}
-                  {/*    {item.tags.map((tag, i) => (*/}
-                  {/*      <span key={i} className="tag">{tag}</span>*/}
-                  {/*    ))}*/}
-                  {/*  </div>*/}
-                  {/*)}*/}
+          {sortedItems.length === 0 ? (
+            <tr>
+              <td colSpan={6} className="tracker-table-empty-cell">
+                <div className="tracker-table-empty">
+                  <span>No tracker items found</span>
+                  <p>Create tracker items using #bug, #task, #plan, or #idea in any markdown file</p>
                 </div>
               </td>
-              <td className="tracker-table-cell status">
-                <span
-                  className="status-badge"
-                  style={{
-                    backgroundColor: `${getStatusColor(item.status)}20`,
-                    color: getStatusColor(item.status),
-                    borderColor: getStatusColor(item.status)
-                  }}
-                >
-                  {item.status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                </span>
-              </td>
-              <td className="tracker-table-cell priority">
-                {item.priority && (
-                  <span
-                    className="priority-badge"
-                    style={{ color: getPriorityColor(item.priority) }}
-                  >
-                    {item.priority.charAt(0).toUpperCase() + item.priority.slice(1)}
-                  </span>
-                )}
-              </td>
-              <td className="tracker-table-cell module">
-                <span className="module-text">{item.module}</span>
-              </td>
-              <td className="tracker-table-cell updated">
-                <span className="updated-text">{formatDate(item.lastIndexed)}</span>
-              </td>
             </tr>
-          ))}
+          ) : (
+            sortedItems.map((item, index) => (
+              <tr
+                key={index}
+                className="tracker-table-row"
+                onClick={() => handleRowClick(item)}
+              >
+                <td className="tracker-table-cell type">
+                  <span className={`type-icon type-${item.type}`}>
+                    <span className="material-symbols-outlined">{getTypeIcon(item.type)}</span>
+                  </span>
+                </td>
+                <td className="tracker-table-cell title">
+                  <div className="title-info">
+                    <div className="title-text">{item.title}</div>
+                    {/*{item.tags && item.tags.length > 0 && (*/}
+                    {/*  <div className="tags">*/}
+                    {/*    {item.tags.map((tag, i) => (*/}
+                    {/*      <span key={i} className="tag">{tag}</span>*/}
+                    {/*    ))}*/}
+                    {/*  </div>*/}
+                    {/*)}*/}
+                  </div>
+                </td>
+                <td className="tracker-table-cell status">
+                  <span
+                    className="status-badge"
+                    style={{
+                      backgroundColor: `${getStatusColor(item.status)}20`,
+                      color: getStatusColor(item.status),
+                      borderColor: getStatusColor(item.status)
+                    }}
+                  >
+                    {item.status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                  </span>
+                </td>
+                <td className="tracker-table-cell priority">
+                  {item.priority && (
+                    <span
+                      className="priority-badge"
+                      style={{ color: getPriorityColor(item.priority) }}
+                    >
+                      {item.priority.charAt(0).toUpperCase() + item.priority.slice(1)}
+                    </span>
+                  )}
+                </td>
+                <td className="tracker-table-cell module">
+                  <span className="module-text">{item.module}</span>
+                </td>
+                <td className="tracker-table-cell updated">
+                  <span className="updated-text">{formatDate(item.lastIndexed)}</span>
+                </td>
+              </tr>
+            ))
+          )}
           </tbody>
         </table>
       </div>

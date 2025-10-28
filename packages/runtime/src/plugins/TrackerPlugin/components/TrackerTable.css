@@ -300,3 +300,12 @@
 .tracker-table-error {
   color: #ef4444;
 }
+
+.tracker-table-empty-cell {
+  padding: 0 !important;
+  border: none !important;
+}
+
+.tracker-table-empty-cell .tracker-table-empty {
+  padding: 60px 20px;
+}
