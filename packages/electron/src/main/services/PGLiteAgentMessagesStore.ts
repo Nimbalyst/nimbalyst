@@ -42,17 +42,24 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
 
     async list(sessionId: string, options?: { limit?: number; offset?: number }): Promise<AgentMessage[]> {
       await ensureReady();
-      const limit = options?.limit ?? 100;
+      const limit = options?.limit;
       const offset = options?.offset ?? 0;
 
-      const { rows } = await db.query<any>(
-        `SELECT id, session_id, created_at, source, direction, content, metadata
+      let query = `SELECT id, session_id, created_at, source, direction, content, metadata
          FROM ai_agent_messages
          WHERE session_id = $1
-         ORDER BY id ASC
-         LIMIT $2 OFFSET $3`,
-        [sessionId, limit, offset]
-      );
+         ORDER BY id ASC`;
+
+      const params: any[] = [sessionId];
+      if (typeof limit === 'number') {
+        query += ' LIMIT $2 OFFSET $3';
+        params.push(limit, offset);
+      } else if (offset > 0) {
+        query += ' OFFSET $2';
+        params.push(offset);
+      }
+
+      const { rows } = await db.query<any>(query, params);
 
       return rows.map(row => ({
         id: Number(row.id),

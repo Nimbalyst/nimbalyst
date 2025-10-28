@@ -113,35 +113,36 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
     fetchFileLinks();
   }, [sessionData.metadata, sessionId]);
 
+  // Memoize the file update handler to prevent listener leaks
+  const handleFileUpdate = useCallback(async (updatedSessionId: string) => {
+    // Only refresh if the update is for this session
+    if (updatedSessionId === sessionId) {
+      console.log('[AgentTranscriptPanel] Files updated, refreshing...');
+      try {
+        const result = await (window as any).electronAPI.invoke('session-files:get-by-session', sessionId);
+        if (result.success && result.files) {
+          const fileEditsFromDb: FileEditSummary[] = result.files.map((file: any) => ({
+            filePath: file.filePath,
+            linkType: file.linkType,
+            operation: file.metadata?.operation,
+            linesAdded: file.metadata?.linesAdded,
+            linesRemoved: file.metadata?.linesRemoved,
+            timestamp: new Date(file.timestamp).toISOString(),
+            metadata: file.metadata
+          }));
+          setFileEdits(fileEditsFromDb);
+        }
+      } catch (error) {
+        console.error('Failed to refresh file links:', error);
+      }
+    }
+  }, [sessionId]);
+
   // Listen for file tracking updates and refresh
   useEffect(() => {
     if (typeof window === 'undefined' || !(window as any).electronAPI) {
       return;
     }
-
-    const handleFileUpdate = async (updatedSessionId: string) => {
-      // Only refresh if the update is for this session
-      if (updatedSessionId === sessionId) {
-        console.log('[AgentTranscriptPanel] Files updated, refreshing...');
-        try {
-          const result = await (window as any).electronAPI.invoke('session-files:get-by-session', sessionId);
-          if (result.success && result.files) {
-            const fileEditsFromDb: FileEditSummary[] = result.files.map((file: any) => ({
-              filePath: file.filePath,
-              linkType: file.linkType,
-              operation: file.metadata?.operation,
-              linesAdded: file.metadata?.linesAdded,
-              linesRemoved: file.metadata?.linesRemoved,
-              timestamp: new Date(file.timestamp).toISOString(),
-              metadata: file.metadata
-            }));
-            setFileEdits(fileEditsFromDb);
-          }
-        } catch (error) {
-          console.error('Failed to refresh file links:', error);
-        }
-      }
-    };
 
     // Register listener
     (window as any).electronAPI.on('session-files:updated', handleFileUpdate);
@@ -152,7 +153,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
         (window as any).electronAPI.off('session-files:updated', handleFileUpdate);
       }
     };
-  }, [sessionId]);
+  }, [handleFileUpdate]);
 
   const handleNavigateToPrompt = useCallback((marker: PromptMarker) => {
     transcriptRef.current?.scrollToMessage(marker.outputIndex);
