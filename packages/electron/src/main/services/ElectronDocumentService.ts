@@ -571,9 +571,6 @@ export class ElectronDocumentService implements DocumentService {
         [this.workspacePath]
       );
       // console.log(`[DocumentService] Query returned ${result.rows.length} tracker items`);
-      // if (result.rows.length > 0) {
-      //   console.log(`[DocumentService] Sample row:`, result.rows[0]);
-      // }
       const items = result.rows.map(row => this.rowToTrackerItem(row));
       // console.log(`[DocumentService] Returning ${items.length} tracker items`);
       return items;
@@ -810,7 +807,7 @@ export class ElectronDocumentService implements DocumentService {
             id, type, data, workspace, document_path, line_number, created, updated, last_indexed
           ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), $7)
           ON CONFLICT (id) DO UPDATE SET
-            type = $2, data = $3, document_path = $5, line_number = $6, updated = NOW(), last_indexed = $7`,
+            type = $2, data = $3, workspace = $4, document_path = $5, line_number = $6, updated = NOW(), last_indexed = $7`,
           [
             item.id,
             item.type,
