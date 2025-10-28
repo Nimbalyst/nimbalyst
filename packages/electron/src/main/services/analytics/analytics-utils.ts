@@ -1,8 +1,8 @@
 import {BeforeSendFn as BeforeSendFnNodeJS, EventMessage} from "posthog-node";
 import {BeforeSendFn as BeforeSendFnWeb, CaptureResult} from "posthog-js";
-import {findPhoneNumbersInText, isPossiblePhoneNumber} from "libphonenumber-js/max";
+import {findPhoneNumbersInText} from "libphonenumber-js/max";
 
-const sensitivePropertyKeyPattern = /email|user|phone|address|key|token/i;
+const sensitivePropertyKeyPattern = /email|username|phone|address|key/i;
 const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 const ccnPattern = /\b(?:\d[ -]*?){13,16}\b/;
 

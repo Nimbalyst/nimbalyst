@@ -36,7 +36,7 @@ const posthogClient = posthog.init(
         console.log('[RENDERER] Opting out of granular analytics as the user has not consented');
       }
     },
-    before_send: beforePostHogSendWeb
+    before_send: beforePostHogSendWeb,
   }
 )
 
