@@ -57,8 +57,9 @@ export function groupDiffChanges(editor: LexicalEditor): DiffChangeGroup[] {
 
       // Only collect this node if it has diff state AND no children have diff state
       // This prevents collecting parent containers when their children are the actual changes
+      // IMPORTANT: Exclude 'modified' nodes - they are just metadata markers on parent containers
       if (hasDiffState && !childHasDiffState) {
-        if (diffState) {
+        if (diffState && diffState !== 'modified') {
           allDiffNodes.push({ node, state: diffState });
         } else if (isLegacyDiff) {
           // Legacy support

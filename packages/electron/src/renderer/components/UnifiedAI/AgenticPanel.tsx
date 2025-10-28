@@ -9,6 +9,7 @@ import type { Tab } from '../TabManager/TabManager';
 import { useFileMention } from '../../hooks/useFileMention';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
+import { DiffTestDropdown } from "../AIChat/DiffTestDropdown.tsx";
 
 export interface AgenticPanelRef {
   createNewSession: (planPath?: string) => Promise<void>;
@@ -63,7 +64,7 @@ type SessionListItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' |
  * - Handles streaming state across all sessions
  * - Persists state to workspace
  */
-export const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function AgenticPanel({
+const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function AgenticPanel({
   mode,
   workspacePath,
   documentContext,
@@ -974,6 +975,7 @@ export const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(funct
             onDeleteSession={deleteSession}
             onOpenSessionManager={() => window.electronAPI.invoke('open-session-manager', workspacePath)}
           />
+          <DiffTestDropdown documentContext={documentContext} />
           <button
             onClick={() => createNewSession()}
             style={{
@@ -1145,3 +1147,4 @@ export const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(funct
     </div>
   );
 });
+export default AgenticPanel
