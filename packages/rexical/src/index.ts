@@ -123,10 +123,16 @@ export {
   $rejectDiffs,
   $hasDiffNodes,
   $setDiffState,
+  groupDiffChanges,
+  scrollToChangeGroup,
+  $approveChangeGroup,
+  $rejectChangeGroup,
+  $getDiffState,
   APPROVE_DIFF_COMMAND,
   REJECT_DIFF_COMMAND,
   type TextReplacement
 } from './plugins/DiffPlugin/core/exports';
+export type { DiffChangeGroup } from './plugins/DiffPlugin/core/exports';
 
 // Anchor context for floating UI consumers
 export { AnchorProvider, AnchorContext, useAnchorElem } from './context/AnchorContext';

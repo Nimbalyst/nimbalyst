@@ -44,6 +44,7 @@ import { TrackerBottomPanel, TrackerBottomPanelType } from './components/Tracker
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
 import { registerTrackerPlugin } from './plugins/registerTrackerPlugin';
+import { registerDiffApprovalBarPlugin } from './plugins/registerDiffApprovalBarPlugin';
 import ProjectSettingsScreen from './components/ProjectSettingsScreen/ProjectSettingsScreen.tsx';
 import OnboardingService from './services/OnboardingService';
 import './WorkspaceWelcome.css';
@@ -78,6 +79,7 @@ if (!pluginsRegistered) {
   registerDocumentLinkPlugin();
   registerTrackerPlugin(); // Unified tracker system (inline + full-document tracking)
   registerAIChatPlugin();
+  registerDiffApprovalBarPlugin(); // Diff approval bar in fixed tab header
   pluginsRegistered = true;
 }
 

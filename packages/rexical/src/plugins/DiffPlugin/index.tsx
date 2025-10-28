@@ -38,7 +38,6 @@ import {
 } from 'lexical';
 import React, { useEffect, useCallback } from 'react';
 import { useLexicalEditable } from '@lexical/react/useLexicalEditable';
-import { DiffToolbar } from './DiffToolbar';
 
 import { createCommand } from 'lexical';
 
@@ -314,11 +313,7 @@ export function DiffPlugin(): JSX.Element | null {
     };
   }, [editor]);
 
-  return (
-    <>
-      {isEditable && <DiffToolbar />}
-    </>
-  );
+  return null;
 }
 
 /**

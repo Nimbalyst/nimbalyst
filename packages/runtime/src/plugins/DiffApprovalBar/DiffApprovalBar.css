@@ -1,0 +1,156 @@
+.diff-approval-bar {
+  background-color: var(--surface-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  padding: 8px 16px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+}
+
+.diff-approval-bar-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 16px;
+}
+
+.diff-approval-bar-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.diff-approval-bar-label svg {
+  flex-shrink: 0;
+}
+
+.diff-approval-bar-navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diff-nav-button {
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-primary);
+  padding: 0;
+  transition: background-color 0.15s ease;
+}
+
+.diff-nav-button:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
+.diff-nav-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.diff-change-counter {
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 60px;
+  text-align: center;
+  user-select: none;
+}
+
+.diff-approval-bar-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.diff-approval-bar-actions .button {
+  white-space: nowrap;
+}
+
+.diff-reject-all-button,
+.diff-accept-all-button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.diff-reject-all-button {
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+}
+
+.diff-reject-all-button:hover {
+  background-color: var(--surface-hover);
+}
+
+.diff-accept-all-button {
+  background-color: var(--primary-color);
+  border: none;
+  color: white;
+}
+
+.diff-accept-all-button:hover {
+  opacity: 0.9;
+}
+
+/* Highlight the currently selected change group */
+.diff-group-highlight-removed {
+  outline: 2px solid #dc2626 !important; /* Darker red for removed nodes */
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.diff-group-highlight-added {
+  outline: 2px solid #16a34a !important; /* Darker green for added nodes */
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.diff-group-highlight-modified {
+  outline: 2px solid var(--primary-color) !important; /* Blue for modified nodes */
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Disabled button styling */
+.diff-reject-all-button:disabled,
+.diff-accept-all-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .diff-approval-bar-content {
+    flex-wrap: wrap;
+  }
+
+  .diff-approval-bar-label {
+    flex: 1 1 100%;
+    margin-bottom: 8px;
+  }
+
+  .diff-approval-bar-navigation {
+    flex: 1 1 auto;
+  }
+
+  .diff-approval-bar-actions {
+    margin-left: 0;
+  }
+}

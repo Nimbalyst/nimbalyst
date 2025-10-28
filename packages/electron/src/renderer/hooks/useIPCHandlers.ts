@@ -624,10 +624,13 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     if (window.electronAPI.onApproveAction) {
       cleanupFns.push(window.electronAPI.onApproveAction(() => {
         console.log('Approve action triggered');
-        // Trigger approve action in the editor
-        const editor = editorRef.current;
-        if (editor) {
-          editor.dispatchCommand(APPROVE_DIFF_COMMAND, undefined);
+        // Get the active editor from the registry
+        const activeFilePath = editorRegistry.getActiveFilePath();
+        if (activeFilePath) {
+          const editorInstance = editorRegistry.getEditor(activeFilePath);
+          if (editorInstance && editorInstance.editor) {
+            editorInstance.editor.dispatchCommand(APPROVE_DIFF_COMMAND, undefined);
+          }
         }
       }));
     }
@@ -635,10 +638,13 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     if (window.electronAPI.onRejectAction) {
       cleanupFns.push(window.electronAPI.onRejectAction(() => {
         console.log('Reject action triggered');
-        // Trigger reject action in the editor
-        const editor = editorRef.current;
-        if (editor) {
-          editor.dispatchCommand(REJECT_DIFF_COMMAND, undefined);
+        // Get the active editor from the registry
+        const activeFilePath = editorRegistry.getActiveFilePath();
+        if (activeFilePath) {
+          const editorInstance = editorRegistry.getEditor(activeFilePath);
+          if (editorInstance && editorInstance.editor) {
+            editorInstance.editor.dispatchCommand(REJECT_DIFF_COMMAND, undefined);
+          }
         }
       }));
     }

@@ -23,6 +23,7 @@ export * from './agents';
 // Plugins
 export { DocumentLinkPlugin } from './plugins/DocumentLinkPlugin';
 export { DocumentReferenceNode, DocumentReferenceTransformer, $createDocumentReferenceNode, $isDocumentReferenceNode } from './plugins/DocumentLinkPlugin/DocumentLinkNode';
+export { DiffApprovalBarPlugin, DiffApprovalBar } from './plugins/DiffApprovalBar';
 // Unified Tracker Plugin
 export {
   trackerPluginPackage,

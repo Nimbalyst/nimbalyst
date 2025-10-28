@@ -29,7 +29,11 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
-    "./styles": "./dist/style.css"
+    "./styles": "./dist/style.css",
+    "./plugins/DiffPlugin": {
+      "import": "./dist/plugins/DiffPlugin/core/exports.js",
+      "types": "./dist/plugins/DiffPlugin/core/exports.d.ts"
+    }
   },
   "files": [
     "dist",

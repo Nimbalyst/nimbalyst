@@ -383,3 +383,69 @@ export function getDiffNodesFromEditor(
 
   return diffNodes;
 }
+
+/**
+ * Approve a specific change group (specific nodes only)
+ */
+export function $approveChangeGroup(editor: LexicalEditor, nodes: LexicalNode[]): void {
+  initializeHandlers();
+
+  editor.update(() => {
+    for (const node of nodes) {
+      if (!node || !node.isAttached()) continue;
+
+      const diffState = $getDiffState(node);
+
+      if (diffState === 'added') {
+        $clearDiffState(node);
+      } else if (diffState === 'removed') {
+        node.remove();
+      } else if (diffState === 'modified') {
+        $clearDiffState(node);
+      } else {
+        // Handle legacy nodes
+        const nodeType = node.getType();
+        if (nodeType === 'add') {
+          const textContent = node.getTextContent();
+          const textNode = $createTextNode(textContent);
+          node.replace(textNode);
+        } else if (nodeType === 'remove') {
+          node.remove();
+        }
+      }
+    }
+  }, { discrete: true });
+}
+
+/**
+ * Reject a specific change group (specific nodes only)
+ */
+export function $rejectChangeGroup(editor: LexicalEditor, nodes: LexicalNode[]): void {
+  initializeHandlers();
+
+  editor.update(() => {
+    for (const node of nodes) {
+      if (!node || !node.isAttached()) continue;
+
+      const diffState = $getDiffState(node);
+
+      if (diffState === 'added') {
+        node.remove();
+      } else if (diffState === 'removed') {
+        $clearDiffState(node);
+      } else if (diffState === 'modified') {
+        $clearDiffState(node);
+      } else {
+        // Handle legacy nodes
+        const nodeType = node.getType();
+        if (nodeType === 'add') {
+          node.remove();
+        } else if (nodeType === 'remove') {
+          const textContent = node.getTextContent();
+          const textNode = $createTextNode(textContent);
+          node.replace(textNode);
+        }
+      }
+    }
+  }, { discrete: true });
+}

@@ -10,6 +10,8 @@ export {
   $approveDiffs,
   $hasDiffNodes,
   $rejectDiffs,
+  $approveChangeGroup,
+  $rejectChangeGroup,
   APPLY_DIFF_COMMAND,
   APPROVE_DIFF_COMMAND,
   REJECT_DIFF_COMMAND,
@@ -36,3 +38,7 @@ export { diffHandlerRegistry } from '../handlers';
 export { NoopDiffHandler } from '../handlers/NoopDiffHandler';
 
 export { DiffError } from './DiffError';
+
+// Change grouping for approval bar
+export { groupDiffChanges, scrollToChangeGroup } from './diffChangeGroups';
+export type { DiffChangeGroup } from './diffChangeGroups';

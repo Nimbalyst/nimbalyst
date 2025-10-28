@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConfigTheme, TextReplacement } from 'rexical';
 import { StravuEditor } from 'rexical';
 import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
+import { FixedTabHeaderContainer } from '@nimbalyst/runtime/plugins/shared/fixedTabHeader';
 import { logger } from '../../utils/logger';
 
 interface TabEditorProps {
@@ -664,7 +665,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             position: 'relative'
           }}
       >
-        <StravuEditor
+        <FixedTabHeaderContainer
+          filePath={filePath}
+          fileName={fileName}
+          editor={editorRef.current}
+        />
+        <div className="tab-editor-scrollable" style={{ flex: 1, overflow: 'auto' }}>
+          <StravuEditor
             key={filePath}
             config={{
               initialContent,
@@ -700,6 +707,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               ),
             }}
         />
+        </div>
 
         {showConflictDialog && (
           <div
