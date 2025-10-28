@@ -402,7 +402,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('mcp:applyDiff', handler);
     return () => ipcRenderer.removeListener('mcp:applyDiff', handler);
   },
-  onMcpStreamContent: (callback: (data: { streamId: string, content: string, position: string, insertAfter?: string, mode?: string }) => void) => {
+  onMcpStreamContent: (callback: (data: { streamId: string, content: string, position: string, insertAfter?: string, mode?: string, targetFilePath?: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('mcp:streamContent', handler);
     return () => ipcRenderer.removeListener('mcp:streamContent', handler);

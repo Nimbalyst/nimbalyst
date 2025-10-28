@@ -228,6 +228,33 @@ async function tryCreateServer(port: number): Promise<any> {
                 },
                 required: ['replacements']
               }
+            },
+            {
+              name: 'streamContent',
+              description: 'Stream new content into the document at a specific position. Use this for inserting NEW content without replacing existing text.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  content: {
+                    type: 'string',
+                    description: 'The content to insert into the document'
+                  },
+                  position: {
+                    type: 'string',
+                    enum: ['cursor', 'end', 'after-selection'],
+                    description: 'Where to insert the content. "cursor" inserts at current cursor position, "end" appends to end of document, "after-selection" inserts after selected text.'
+                  },
+                  insertAfter: {
+                    type: 'string',
+                    description: 'Optional: specific text to insert after. If provided, content will be inserted after the first occurrence of this text.'
+                  },
+                  filePath: {
+                    type: 'string',
+                    description: 'Optional: absolute path to the file to insert into. If not provided, uses the currently active document.'
+                  }
+                },
+                required: ['content']
+              }
             }
           ]
         };
@@ -357,6 +384,51 @@ async function tryCreateServer(port: number): Promise<any> {
               });
             }
             return { success: false, error: 'No window available' };
+          }
+
+          case 'streamContent': {
+            const windows = BrowserWindow.getAllWindows();
+            if (windows.length > 0) {
+              // Use explicit filePath from args, or fall back to current document state
+              let targetFilePath = args?.filePath;
+
+              if (!targetFilePath) {
+                // Get the current document state for file path
+                const states = Array.from(documentStateBySession.values());
+                const currentDocState = states[states.length - 1];
+                targetFilePath = currentDocState?.filePath;
+              }
+
+              // Generate a unique stream ID
+              const streamId = `mcp-stream-${Date.now()}-${Math.random()}`;
+
+              // Send IPC message to renderer
+              windows[0].webContents.send('mcp:streamContent', {
+                streamId,
+                content: args?.content,
+                position: args?.position || 'end',
+                insertAfter: args?.insertAfter,
+                targetFilePath: targetFilePath
+              });
+
+              return {
+                content: [
+                  {
+                    type: 'text',
+                    text: `Successfully streamed content to ${targetFilePath || 'active document'}`
+                  }
+                ]
+              };
+            }
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: 'Error: No window available'
+                }
+              ],
+              isError: true
+            };
           }
 
           default:
