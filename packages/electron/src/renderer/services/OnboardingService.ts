@@ -482,8 +482,8 @@ planStatus:
   tags:                              # Keywords for categorization
     - [tag1]
     - [tag2]
-  created: "YYYY-MM-DD"             # Creation date
-  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"  # Last update (ISO 8601)
+  created: "YYYY-MM-DD"             # Creation date (use today's date)
+  updated: "YYYY-MM-DDTHH:MM:SS.sssZ"  # Last update timestamp (use current time via new Date().toISOString())
   progress: [0-100]                  # Completion percentage
 ---
 \`\`\`
@@ -597,6 +597,15 @@ The app currently has no authentication. We need a complete auth system with mul
 - [ ] All tests passing
 \`\`\`
 
+## CRITICAL: Timestamp Requirements
+
+When creating a plan:
+1. Set \`created\` to today's date in YYYY-MM-DD format
+2. Set \`updated\` to the CURRENT timestamp using new Date().toISOString() format
+3. NEVER use midnight timestamps (00:00:00.000Z) - always use the actual current time
+
+The \`updated\` field is used to display "last updated" times in the tracker table. Using midnight timestamps will show incorrect "Xh ago" values.
+
 ## Usage
 
 When the user types \`/plan [description]\`:
@@ -604,7 +613,7 @@ When the user types \`/plan [description]\`:
 1. Extract key information from the description
 2. Choose appropriate \`planType\`, \`priority\`, and \`status\`
 3. Generate unique \`planId\` from description (kebab-case)
-4. Set \`created\` to today's date, \`updated\` to current timestamp
+4. Set \`created\` to today's date, \`updated\` to current timestamp (use new Date().toISOString())
 5. Create file in \`${location}/\` with proper frontmatter
 6. Include relevant sections based on plan type
 
