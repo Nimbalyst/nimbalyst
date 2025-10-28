@@ -1,16 +1,10 @@
 # Release Notes
 
-## Features
-- feat: add commands to convert documents to plan or decision
-- feat: add double-click to open images and remove size constraints
-- feat: complete unified tracker system refactor
-
 ## Bug Fixes
-- fix: save session state before removing closed window
-- fix: update button label to toggle Markdown mode
-- fix: update icon for 'in-review' status in ModelLoader
+- Fixed "Thinking..." indicator not showing during AI operations
+- Fixed Claude Code responses not displaying correctly in chat
+- Fixed slash command autocomplete appearing when not using Claude Code
+- Fixed diff approval groups incorrectly including modified nodes
 
-## Improvements
-- refactor: remove legacy tracker plugins in favor of unified system
-- refactor: improve update window layout to maximize space
-- docs: update about box to focus on Claude Code integration
+## Features
+- Added Get Started button to project settings header for easier onboarding
