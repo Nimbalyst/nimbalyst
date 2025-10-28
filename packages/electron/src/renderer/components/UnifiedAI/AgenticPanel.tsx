@@ -960,7 +960,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onDeleteSession={deleteSession}
             onOpenSessionManager={() => window.electronAPI.invoke('open-session-manager', workspacePath)}
           />
-          <DiffTestDropdown documentContext={documentContext} />
+          {import.meta.env.DEV && (
+              <DiffTestDropdown documentContext={documentContext} />
+          )}
           <button
             onClick={() => createNewSession()}
             style={{

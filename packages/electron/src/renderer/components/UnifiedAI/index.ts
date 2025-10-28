@@ -10,5 +10,5 @@
 export { AIInput } from './AIInput';
 export { AISessionView } from './AISessionView';
 export type { AISessionViewProps } from './AISessionView';
-export { AgenticPanel } from './AgenticPanel';
+export { default as AgenticPanel } from './AgenticPanel'
 export type { AgenticPanelProps } from './AgenticPanel';
