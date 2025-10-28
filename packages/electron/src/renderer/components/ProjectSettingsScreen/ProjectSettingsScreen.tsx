@@ -255,9 +255,14 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
           <span className="material-symbols-outlined">settings</span>
           Claude Code Setup for {workspaceName}
         </h2>
-        <button className="settings-close" onClick={onClose} title="Close settings">
-          <span className="material-symbols-outlined">close</span>
-        </button>
+        <div className="settings-header-actions">
+          <button className="button-get-started" onClick={onClose}>
+            Get Started
+          </button>
+          <button className="settings-close" onClick={onClose} title="Close settings">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
       </div>
 
       <div className="settings-content">

@@ -30,6 +30,28 @@
   color: var(--primary-color);
 }
 
+.settings-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.button-get-started {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+}
+
+.button-get-started:hover {
+  opacity: 0.9;
+}
+
 .settings-close {
   background: none;
   border: none;
