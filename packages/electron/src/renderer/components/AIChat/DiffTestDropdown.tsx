@@ -46,6 +46,9 @@ export function DiffTestDropdown({ documentContext }: DiffTestDropdownProps) {
     setIsOpen(!isOpen);
   };
 
+  const LOREM_IPSUM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
+
+
   const testCases: TestCase[] = [
     {
       id: 'stream-end',
@@ -67,9 +70,30 @@ export function DiffTestDropdown({ documentContext }: DiffTestDropdownProps) {
           editorRegistry.streamContent(filePath, testId, 'This content was streamed to the end of the document.\n\n');
         }, 100);
 
-        setTimeout(() => {
-          editorRegistry.endStreaming(filePath, testId);
-        }, 150);
+        // Wait for initial content, then stream lorem ipsum
+        await new Promise(resolve => setTimeout(resolve, 150));
+
+        // Stream lorem ipsum text in chunks of 4 words, 10 paragraphs
+        const loremWords = LOREM_IPSUM.split(' ');
+        const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+        // Stream 10 paragraphs
+        for (let para = 0; para < 10; para++) {
+          // Add paragraph break
+          editorRegistry.streamContent(filePath, testId, '\n\n');
+          await delay(100);
+
+          // Stream words in chunks of 4
+          for (let i = 0; i < 10; i++) {
+            const startIdx = (i * 4) % loremWords.length;
+            const chunk = loremWords.slice(startIdx, startIdx + 4).join(' ') + ' ';
+            editorRegistry.streamContent(filePath, testId, chunk);
+            await delay(50);
+          }
+        }
+
+        // End streaming after all content is sent
+        editorRegistry.endStreaming(filePath, testId);
       }
     },
     {
@@ -133,6 +157,70 @@ export function DiffTestDropdown({ documentContext }: DiffTestDropdownProps) {
             {
               oldText: targetWord,
               newText: targetWord.toUpperCase()
+            }
+          ]);
+        }
+      }
+    },
+    {
+      id: 'paragraph-multiple-changes',
+      name: 'Paragraph Multiple Changes',
+      icon: 'article',
+      description: 'Change two words far apart in same paragraph',
+      run: async (filePath: string) => {
+        let content = editorRegistry.getContent(filePath);
+
+        // Check if we have a suitable paragraph with enough words
+        const paragraphs = content.split('\n\n').filter(p => p.trim().length > 50);
+
+        if (paragraphs.length === 0 || paragraphs[0].split(/\s+/).length < 10) {
+          // Add a paragraph with plenty of words
+          const testId = 'setup-' + Date.now();
+          editorRegistry.startStreaming(filePath, {
+            id: testId,
+            insertAtEnd: true
+          });
+
+          await new Promise(resolve => {
+            setTimeout(() => {
+              editorRegistry.streamContent(
+                filePath,
+                testId,
+                '\n\nThis is a long paragraph with many different words scattered throughout the entire sentence so that we can test multiple non-contiguous changes within the same paragraph structure.\n'
+              );
+            }, 50);
+            setTimeout(() => {
+              editorRegistry.endStreaming(filePath, testId);
+              resolve(undefined);
+            }, 100);
+          });
+
+          await new Promise(resolve => setTimeout(resolve, 200));
+          content = editorRegistry.getContent(filePath);
+        }
+
+        // Find a paragraph with enough words
+        const suitableParagraphs = content.split('\n\n').filter(p => {
+          const words = p.split(/\s+/).filter(w => w.length > 3);
+          return words.length >= 10;
+        });
+
+        if (suitableParagraphs.length > 0) {
+          const targetParagraph = suitableParagraphs[0];
+          const words = targetParagraph.split(/\s+/).filter(w => w.length > 3);
+
+          // Change the first and last words (far apart)
+          const firstWord = words[0];
+          const lastWord = words[words.length - 1];
+
+          await editorRegistry.applyReplacements(filePath, [
+            {
+              oldText: firstWord,
+              newText: `[FIRST]${firstWord}`
+            },
+            {
+              oldText: lastWord,
+              newText: `[LAST]${lastWord}`
             }
           ]);
         }

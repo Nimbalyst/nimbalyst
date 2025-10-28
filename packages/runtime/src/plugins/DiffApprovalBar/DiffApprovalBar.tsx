@@ -229,21 +229,55 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
   const handleAcceptThis = () => {
     if (!editor || currentGroupIndex < 0 || currentGroupIndex >= changeGroups.length) return;
 
-    const currentGroup = changeGroups[currentGroupIndex];
+    const indexBeforeApproval = currentGroupIndex;
+    const currentGroup = changeGroups[indexBeforeApproval];
     $approveChangeGroup(editor, currentGroup.nodes);
 
-    // Auto-navigate: stay at same index (which will now point to next change after update)
-    // The updateGroups effect will handle recalculating groups
+    // Wait for groups to update, then move Lexical selection to next group
+    setTimeout(() => {
+      const updatedGroups = groupDiffChanges(editor);
+      if (updatedGroups.length > 0) {
+        const newIndex = Math.min(indexBeforeApproval, updatedGroups.length - 1);
+        const nextGroup = updatedGroups[newIndex];
+
+        // Move the actual Lexical selection to the next group
+        editor.update(() => {
+          const startNode = nextGroup.startNode;
+          try {
+            startNode.selectStart();
+          } catch (e) {
+            console.warn('Failed to move selection to next group:', e);
+          }
+        });
+      }
+    }, 100);
   };
 
   const handleRejectThis = () => {
     if (!editor || currentGroupIndex < 0 || currentGroupIndex >= changeGroups.length) return;
 
-    const currentGroup = changeGroups[currentGroupIndex];
+    const indexBeforeRejection = currentGroupIndex;
+    const currentGroup = changeGroups[indexBeforeRejection];
     $rejectChangeGroup(editor, currentGroup.nodes);
 
-    // Auto-navigate: stay at same index (which will now point to next change after update)
-    // The updateGroups effect will handle recalculating groups
+    // Wait for groups to update, then move Lexical selection to next group
+    setTimeout(() => {
+      const updatedGroups = groupDiffChanges(editor);
+      if (updatedGroups.length > 0) {
+        const newIndex = Math.min(indexBeforeRejection, updatedGroups.length - 1);
+        const nextGroup = updatedGroups[newIndex];
+
+        // Move the actual Lexical selection to the next group
+        editor.update(() => {
+          const startNode = nextGroup.startNode;
+          try {
+            startNode.selectStart();
+          } catch (e) {
+            console.warn('Failed to move selection to next group:', e);
+          }
+        });
+      }
+    }, 100);
   };
 
   const hasSelection = currentGroupIndex >= 0 && currentGroupIndex < changeGroups.length;
