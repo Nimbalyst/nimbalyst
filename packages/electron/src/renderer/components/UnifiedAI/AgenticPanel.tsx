@@ -538,6 +538,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           if (sessionData) {
             setSessionTabs(prev => prev.map(tab => {
               if (tab.id === data.sessionId) {
+                // Preserve thinking message if it exists in current state
+                const hasThinkingMessage = tab.sessionData.messages.some(m => m.isThinking);
+                if (hasThinkingMessage && isSending) {
+                  // Don't replace session data while thinking message is showing
+                  // The completion handler will reload the session when done
+                  return tab;
+                }
                 return { ...tab, sessionData };
               }
               return tab;
@@ -558,25 +565,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
       if (cleanup) cleanup();
     };
-  }, [sessionTabs, workspacePath]);
-
-  // Remove thinking placeholder when sending starts
-  useEffect(() => {
-    if (isSending && activeTabId) {
-      setSessionTabs(prev => prev.map(tab => {
-        if (tab.id === activeTabId) {
-          return {
-            ...tab,
-            sessionData: {
-              ...tab.sessionData,
-              messages: tab.sessionData.messages.filter(m => !m.isThinking)
-            }
-          };
-        }
-        return tab;
-      }));
-    }
-  }, [isSending, activeTabId]);
+  }, [sessionTabs, workspacePath, isSending, activeTabId]);
 
   // Listen for completion and errors
   useEffect(() => {
@@ -780,10 +769,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       const result = await window.electronAPI.aiCancelRequest();
       if (result.success) {
         setIsSending(false);
-        setStreamingContent(null);
-        if (streamingTimeoutRef.current) {
-          clearTimeout(streamingTimeoutRef.current);
-        }
 
         // Remove thinking message
         setSessionTabs(prev => prev.map(tab => {
