@@ -112,21 +112,15 @@
 
 /* Highlight the currently selected change group */
 .diff-group-highlight-removed {
-  outline: 2px solid #dc2626 !important; /* Darker red for removed nodes */
-  outline-offset: 0px;
-  border-radius: 4px;
+  background-color: rgba(220, 38, 38, 0.15) !important; /* Light red background for removed nodes */
 }
 
 .diff-group-highlight-added {
-  outline: 2px solid #16a34a !important; /* Darker green for added nodes */
-  outline-offset: 0px;
-  border-radius: 4px;
+  background-color: rgba(22, 163, 74, 0.15) !important; /* Light green background for added nodes */
 }
 
 .diff-group-highlight-modified {
-  outline: 2px solid var(--primary-color) !important; /* Blue for modified nodes */
-  outline-offset: 2px;
-  border-radius: 4px;
+  background-color: rgba(59, 130, 246, 0.15) !important; /* Light blue background for modified nodes */
 }
 
 /* Disabled button styling */
