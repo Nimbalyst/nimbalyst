@@ -18,10 +18,14 @@ export interface DiffChangeGroup {
 /**
  * Groups diff changes intelligently:
  * - Consecutive removed+added nodes are grouped together (replacements)
- * - Isolated added/removed nodes are separate groups
- * - Modified nodes are individual groups
+ * - Adjacent nodes with the same state are grouped if any is whitespace-only
+ * - Whitespace nodes (empty paragraphs) are grouped with adjacent content changes
+ * - Content nodes with the same state but no whitespace between them are separate groups
  *
- * This matches user intent where a replacement (remove old + add new) is one change.
+ * This matches user intent where:
+ * - A replacement (remove old + add new) is one change
+ * - Whitespace around content changes is part of the same logical change
+ * - Multiple distinct content changes remain separate even if they're the same type
  */
 export function groupDiffChanges(editor: LexicalEditor): DiffChangeGroup[] {
   const groups: DiffChangeGroup[] = [];
@@ -84,6 +88,12 @@ export function groupDiffChanges(editor: LexicalEditor): DiffChangeGroup[] {
       collectDiffNodes(child);
     }
 
+    // Helper to check if a node is whitespace-only (empty paragraph)
+    const isWhitespaceNode = (node: LexicalNode): boolean => {
+      const text = node.getTextContent();
+      return text.trim().length === 0;
+    };
+
     // Now group them intelligently
     let i = 0;
     while (i < allDiffNodes.length) {
@@ -91,7 +101,7 @@ export function groupDiffChanges(editor: LexicalEditor): DiffChangeGroup[] {
       const nodes: LexicalNode[] = [current.node];
       const types: Set<'added' | 'removed' | 'modified'> = new Set([current.state]);
 
-      // Check if this is part of a remove+add pair
+      // Check if this is part of a remove+add pair (replacement)
       if (current.state === 'removed' && i + 1 < allDiffNodes.length) {
         const next = allDiffNodes[i + 1];
 
@@ -100,11 +110,29 @@ export function groupDiffChanges(editor: LexicalEditor): DiffChangeGroup[] {
           nodes.push(next.node);
           types.add(next.state);
           i += 2; // Skip both nodes
+
+          // Continue grouping if subsequent nodes are also added (whitespace handling)
+          while (i < allDiffNodes.length && allDiffNodes[i].state === 'added') {
+            nodes.push(allDiffNodes[i].node);
+            types.add(allDiffNodes[i].state);
+            i++;
+          }
         } else {
           i += 1; // Just this node
         }
-      } else {
-        i += 1; // Just this node
+      }
+      // Group consecutive nodes with the same state
+      else {
+        i += 1; // Start with current node
+
+        // Look ahead for adjacent nodes with the same state
+        // Group ALL consecutive nodes with the same diff state together
+        // This handles: whitespace + content, multiple content nodes, etc.
+        while (i < allDiffNodes.length && allDiffNodes[i].state === current.state) {
+          nodes.push(allDiffNodes[i].node);
+          types.add(allDiffNodes[i].state);
+          i++;
+        }
       }
 
       // Create the group

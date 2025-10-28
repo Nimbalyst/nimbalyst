@@ -398,10 +398,32 @@ export function $approveChangeGroup(editor: LexicalEditor, nodes: LexicalNode[])
 
       if (diffState === 'added') {
         $clearDiffState(node);
+
+        // Also clear diff state from parent nodes
+        // This is necessary because grouping collects child nodes (text nodes)
+        // but their parent containers (paragraphs) also have diff state
+        let parent = node.getParent();
+        while (parent) {
+          const parentDiffState = $getDiffState(parent);
+          if (parentDiffState) {
+            $clearDiffState(parent);
+          }
+          parent = parent.getParent();
+        }
       } else if (diffState === 'removed') {
         node.remove();
       } else if (diffState === 'modified') {
         $clearDiffState(node);
+
+        // Also clear diff state from parent nodes
+        let parent = node.getParent();
+        while (parent) {
+          const parentDiffState = $getDiffState(parent);
+          if (parentDiffState) {
+            $clearDiffState(parent);
+          }
+          parent = parent.getParent();
+        }
       } else {
         // Handle legacy nodes
         const nodeType = node.getType();
