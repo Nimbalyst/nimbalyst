@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import type { LexicalEditor } from 'lexical';
 import { $getSelection, $isRangeSelection } from 'lexical';
 import {
@@ -26,6 +26,7 @@ const HIGHLIGHT_CLASS_MODIFIED = 'diff-group-highlight-modified';
 export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
   const [changeGroups, setChangeGroups] = useState<DiffChangeGroup[]>([]);
   const [currentGroupIndex, setCurrentGroupIndex] = useState(-1); // -1 = no selection
+  const isNavigatingRef = useRef(false); // Track programmatic navigation
 
   // Update groups whenever editor changes
   const updateGroups = useCallback(() => {
@@ -144,6 +145,9 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
     if (!editor || changeGroups.length === 0) return;
 
     const handleSelectionChange = () => {
+      // Skip selection detection if we're programmatically navigating
+      if (isNavigatingRef.current) return;
+
       editor.getEditorState().read(() => {
         const selection = $getSelection();
         if (!$isRangeSelection(selection)) {
@@ -209,10 +213,32 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
     const newIndex = currentGroupIndex < 0
       ? changeGroups.length - 1
       : Math.max(0, currentGroupIndex - 1);
+
+    if (!editor || newIndex < 0 || newIndex >= changeGroups.length) return;
+
+    const targetGroup = changeGroups[newIndex];
+
+    // Set flag to prevent selection detection from interfering
+    isNavigatingRef.current = true;
+
+    // Directly set the index
     setCurrentGroupIndex(newIndex);
-    if (editor) {
-      scrollToChangeGroup(editor, newIndex, changeGroups);
-    }
+
+    // Move the Lexical selection to this group for visual feedback
+    editor.update(() => {
+      try {
+        targetGroup.startNode.selectStart();
+      } catch (e) {
+        console.warn('Failed to move selection to previous group:', e);
+      }
+    });
+
+    scrollToChangeGroup(editor, newIndex, changeGroups);
+
+    // Reset flag after a brief delay
+    setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 100);
   };
 
   const handleNext = () => {
@@ -220,10 +246,32 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
     const newIndex = currentGroupIndex < 0
       ? 0
       : Math.min(changeGroups.length - 1, currentGroupIndex + 1);
+
+    if (!editor || newIndex < 0 || newIndex >= changeGroups.length) return;
+
+    const targetGroup = changeGroups[newIndex];
+
+    // Set flag to prevent selection detection from interfering
+    isNavigatingRef.current = true;
+
+    // Directly set the index
     setCurrentGroupIndex(newIndex);
-    if (editor) {
-      scrollToChangeGroup(editor, newIndex, changeGroups);
-    }
+
+    // Move the Lexical selection to this group for visual feedback
+    editor.update(() => {
+      try {
+        targetGroup.startNode.selectStart();
+      } catch (e) {
+        console.warn('Failed to move selection to next group:', e);
+      }
+    });
+
+    scrollToChangeGroup(editor, newIndex, changeGroups);
+
+    // Reset flag after a brief delay
+    setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 100);
   };
 
   const handleAcceptThis = () => {
