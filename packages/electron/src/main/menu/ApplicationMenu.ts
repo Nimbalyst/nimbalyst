@@ -516,14 +516,8 @@ export async function createApplicationMenu() {
                             if (windowId !== null) {
                                 const state = windowStates.get(windowId);
 
-                                // If in agentic coding mode, close the active tab
-                                if (state?.mode === 'agentic-coding') {
-                                    focused.webContents.send('agentic-coding:close-active-tab');
-                                    return;
-                                }
-
-                                // If in workspace mode, close the active tab
-                                if (state?.mode === 'workspace') {
+                                // If in workspace or agentic coding mode, close the active tab
+                                if (state?.mode === 'workspace' || state?.mode === 'agentic-coding') {
                                     focused.webContents.send('close-active-tab');
                                     return;
                                 }

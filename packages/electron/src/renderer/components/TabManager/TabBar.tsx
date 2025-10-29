@@ -397,35 +397,6 @@ export const TabBar: React.FC<TabBarProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [tabs, activeTabId, onTabSelect, onTabClose, onNewTab, showTabMenu, isActive]);
 
-  // IPC listener for menu-triggered close tab
-  // Use refs to always have current values without re-registering listener
-  const isActiveRef = useRef(isActive);
-  const activeTabIdRef = useRef(activeTabId);
-  const onTabCloseRef = useRef(onTabClose);
-
-  React.useEffect(() => {
-    isActiveRef.current = isActive;
-    activeTabIdRef.current = activeTabId;
-    onTabCloseRef.current = onTabClose;
-  });
-
-  React.useEffect(() => {
-    if (!window.electronAPI) return;
-
-    const handleCloseActiveTab = () => {
-      // Check current values (not stale closure values)
-      if (isActiveRef.current && activeTabIdRef.current) {
-        onTabCloseRef.current(activeTabIdRef.current);
-      }
-    };
-
-    window.electronAPI.on('close-active-tab', handleCloseActiveTab);
-
-    return () => {
-      window.electronAPI?.off('close-active-tab', handleCloseActiveTab);
-    };
-  }, []); // Empty deps - only register once per component mount
-
   if (tabs.length === 0) {
     return null;
   }

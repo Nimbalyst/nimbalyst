@@ -13,6 +13,7 @@ import { DiffTestDropdown } from "../AIChat/DiffTestDropdown.tsx";
 
 export interface AgenticPanelRef {
   createNewSession: (planPath?: string) => Promise<void>;
+  closeActiveTab: () => void;
 }
 
 export interface AgenticPanelProps {
@@ -320,11 +321,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     return sessionData;
   }, [sessionTabs, workspacePath, mode, loadSessions, onSessionChange]);
-
-  // Expose createNewSession to parent via ref
-  useImperativeHandle(ref, () => ({
-    createNewSession
-  }), [createNewSession]);
 
   // Load or create initial session
   useEffect(() => {
@@ -916,22 +912,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     });
   }, [sessionTabs, activeTabId, onSessionChange]);
 
-  // Listen for Cmd+W to close active tab in agent mode
-  useEffect(() => {
-    if (mode !== 'agent') return;
-
-    const handleCloseActiveTab = () => {
-      if (activeTabId) {
-        handleTabClose(activeTabId);
-      }
-    };
-
-    window.electronAPI.on('agentic-coding:close-active-tab', handleCloseActiveTab);
-    return () => {
-      window.electronAPI.off('agentic-coding:close-active-tab', handleCloseActiveTab);
-    };
-  }, [mode, activeTabId, handleTabClose]);
-
   const handleTabReorder = useCallback((fromIndex: number, toIndex: number) => {
     setSessionTabs(prev => {
       const newTabs = [...prev];
@@ -940,6 +920,16 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       return newTabs;
     });
   }, []);
+
+  // Expose methods to parent via ref
+  useImperativeHandle(ref, () => ({
+    createNewSession,
+    closeActiveTab: () => {
+      if (activeTabId) {
+        handleTabClose(activeTabId);
+      }
+    }
+  }), [createNewSession, activeTabId, handleTabClose]);
 
   const handleTogglePin = useCallback((tabId: string) => {
     setSessionTabs(prev => {

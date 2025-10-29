@@ -1348,6 +1348,31 @@ export default function App() {
     };
   }, [confirmDialog]);
 
+  // Handle close-active-tab from menu - route to active panel
+  const activeModeRef = useRef(activeMode);
+  const currentTabsRef = useRef(tabs);
+
+  useEffect(() => {
+    activeModeRef.current = activeMode;
+    currentTabsRef.current = tabs;
+  });
+
+  useEffect(() => {
+    const handleCloseActiveTab = () => {
+      if (activeModeRef.current === 'agent') {
+        agenticPanelRef.current?.closeActiveTab();
+      } else if ((activeModeRef.current === 'files' || activeModeRef.current === 'plan') && currentTabsRef.current.activeTabId) {
+        currentTabsRef.current.removeTab(currentTabsRef.current.activeTabId);
+      }
+    };
+
+    window.electronAPI.on('close-active-tab', handleCloseActiveTab);
+
+    return () => {
+      window.electronAPI?.off?.('close-active-tab', handleCloseActiveTab);
+    };
+  }, []); // Empty deps - listener registered once, uses refs for current values
+
   // Show nothing while initializing - let HTML/CSS background show through
   if (isInitializing) {
     return <div style={{ height: '100vh' }} />;
