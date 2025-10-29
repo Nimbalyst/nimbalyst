@@ -3,6 +3,7 @@ import {PostHog} from "posthog-node";
 import {ulid} from "ulid";
 import {logger} from "../../utils/logger.ts";
 import {beforePosthogSendNodeJS} from "./analytics-utils.ts";
+import {app} from "electron";
 
 const POSTHOG_PROJECT_PUBLIC_ID = 'phc_s3lQIILexwlGHvxrMBqti355xUgkRocjMXW4LjV0ATw';
 
@@ -91,6 +92,9 @@ export class AnalyticsService {
 
     const eventProperties: Record<string | number, any> = {
       '$session_id': this.sessionId,
+      $set: {
+        'nimbalyst_version': app.getVersion(),
+      }
     };
 
     if (this.isDevInstallation) {
