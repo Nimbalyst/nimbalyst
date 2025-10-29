@@ -188,6 +188,7 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [showToolCalls, setShowToolCalls] = useState(false);
+  const [aiDebugLogging, setAiDebugLogging] = useState(false);
 
   // Load current settings on mount
   useEffect(() => {
@@ -215,6 +216,9 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
       }
       if (settings.showToolCalls !== undefined) {
         setShowToolCalls(settings.showToolCalls);
+      }
+      if (settings.aiDebugLogging !== undefined) {
+        setAiDebugLogging(settings.aiDebugLogging);
       }
 
       // Fetch ALL models once
@@ -294,7 +298,8 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
     const settings = {
       apiKeys,
       providerSettings: providers,
-      showToolCalls
+      showToolCalls,
+      aiDebugLogging
     };
 
     await window.electronAPI.aiSaveSettings(settings);
@@ -419,6 +424,11 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
           showToolCalls={showToolCalls}
           onShowToolCallsChange={(value) => {
             setShowToolCalls(value);
+            setHasChanges(true);
+          }}
+          aiDebugLogging={aiDebugLogging}
+          onAiDebugLoggingChange={(value) => {
+            setAiDebugLogging(value);
             setHasChanges(true);
           }}
         />;

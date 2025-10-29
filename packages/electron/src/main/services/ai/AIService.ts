@@ -78,6 +78,10 @@ export class AIService {
           showToolCalls: {
             type: 'boolean',
             default: false  // Hidden by default, developer mode only
+          },
+          aiDebugLogging: {
+            type: 'boolean',
+            default: false  // Hidden by default, developer mode only
           }
         }
       });
@@ -944,7 +948,7 @@ export class AIService {
         const logPrefix = isClaudeCode ? '[CLAUDE-CODE-SERVICE]' : '[AIService]';
 
         if (isClaudeCode) {
-          console.error('[CLAUDE-CODE-SERVICE] ========== CRITICAL ERROR ==========');
+          console.error('[CLAUDE-CODE-SERVICE] ====== CRITICAL ERROR ======');
           console.error('[CLAUDE-CODE-SERVICE] Error caught in stream handler:', error);
           console.error('[CLAUDE-CODE-SERVICE] Error type:', error instanceof Error ? error.constructor.name : typeof error);
           console.error('[CLAUDE-CODE-SERVICE] Error message:', error instanceof Error ? error.message : String(error));
@@ -1065,12 +1069,14 @@ export class AIService {
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
       const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
       const showToolCalls = this.getSettingsStore().get('showToolCalls', false) as boolean;
+      const aiDebugLogging = this.getSettingsStore().get('aiDebugLogging', false) as boolean;
 
       return {
         defaultProvider: this.getSettingsStore().get('defaultProvider', 'claude-code'),
         apiKeys: this.maskApiKeys(apiKeys),
         providerSettings,
-        showToolCalls
+        showToolCalls,
+        aiDebugLogging
       };
     });
 
@@ -1113,6 +1119,10 @@ export class AIService {
 
       if (settings.showToolCalls !== undefined) {
         this.getSettingsStore().set('showToolCalls', settings.showToolCalls);
+      }
+
+      if (settings.aiDebugLogging !== undefined) {
+        this.getSettingsStore().set('aiDebugLogging', settings.aiDebugLogging);
       }
 
       return { success: true };

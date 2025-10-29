@@ -3,11 +3,15 @@ import React from 'react';
 interface AdvancedPanelProps {
   showToolCalls: boolean;
   onShowToolCallsChange: (value: boolean) => void;
+  aiDebugLogging: boolean;
+  onAiDebugLoggingChange: (value: boolean) => void;
 }
 
 export function AdvancedPanel({
   showToolCalls,
-  onShowToolCallsChange
+  onShowToolCallsChange,
+  aiDebugLogging,
+  onAiDebugLoggingChange
 }: AdvancedPanelProps) {
   const isDevelopment = import.meta.env.DEV;
 
@@ -41,6 +45,25 @@ export function AdvancedPanel({
                   Display all MCP tool calls in the AI chat sidebar, including Edit/applyDiff calls.
                   When disabled, edit operations are shown without the underlying tool call details to reduce clutter.
                   Useful for debugging and understanding exactly what tools the AI is using.
+                </span>
+              </div>
+            </label>
+          </div>
+
+          <div className="setting-item">
+            <label className="setting-label">
+              <input
+                type="checkbox"
+                checked={aiDebugLogging}
+                onChange={(e) => onAiDebugLoggingChange(e.target.checked)}
+                className="setting-checkbox"
+              />
+              <div className="setting-text">
+                <span className="setting-name">Enable AI Debug Logging</span>
+                <span className="setting-description">
+                  Capture detailed logs of all AI editing operations including LLM requests/responses,
+                  diff applications, and streaming operations. Logs are saved per session in your
+                  application support directory for troubleshooting integration issues.
                 </span>
               </div>
             </label>

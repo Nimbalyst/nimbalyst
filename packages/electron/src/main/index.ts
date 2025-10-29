@@ -289,6 +289,13 @@ app.whenReady().then(async () => {
         const workspacePath = pendingWorkspacePath;
         pendingWorkspacePath = null;
 
+        // Ensure .nimbalyst/trackers/ directory exists
+        // DISABLED FOR NOW - test creates it
+        // if (workspacePath) {
+        //     const { getTrackerLoaderService } = await import('./services/TrackerLoaderService');
+        //     await getTrackerLoaderService().ensureTrackersDirectory(workspacePath);
+        // }
+
         const window = createWindow(false, true, workspacePath);
         window.once('ready-to-show', () => {
             window.show();
