@@ -1,16 +1,16 @@
 ---
-planStatus: null
-planId: plan-encapsulate-mode-components
-title: Encapsulate Mode-Specific UI into Dedicated Components
-status: completed
-planType: refactor
-priority: high
-owner: developer
-stakeholders: null
-tags: null
-created: "2025-01-29"
-updated: "2025-01-30T00:15:00.000Z"
-progress: 100
+planStatus:
+  planId: plan-encapsulate-mode-components
+  title: Encapsulate Mode-Specific UI into Dedicated Components
+  status: completed
+  planType: refactor
+  priority: high
+  owner: developer
+  stakeholders: null
+  tags: null  
+  created: "2025-01-29"
+  updated: "2025-01-30T00:15:00.000Z"
+  progress: 100
 ---
 # Encapsulate Mode-Specific UI into Dedicated Components
 
