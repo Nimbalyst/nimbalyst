@@ -113,6 +113,8 @@ jobs:
           # Windows signing
           WIN_CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
+          # GitHub token for electron-builder publishing
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
           # Require notarization for release builds
           REQUIRE_NOTARIZE: ${{ github.event_name == 'push' || github.event.inputs.release == 'true' }}
         working-directory: packages/electron
