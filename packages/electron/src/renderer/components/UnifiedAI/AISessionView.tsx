@@ -41,7 +41,7 @@ export interface AISessionViewProps {
   // Loading state (passed from parent)
   isLoading?: boolean;
 
-  // History navigation (chat mode only)
+  // History navigation (up/down arrow in input)
   onNavigateHistory?: (sessionId: string, direction: 'up' | 'down') => void;
 
   // AI Mode (plan vs agent)
@@ -162,7 +162,7 @@ export function AISessionView({
   // Feature flags based on mode and provider
   const enableSlashCommands = sessionData.provider === 'claude-code'; // Only for Claude Code
   const enableAttachments = true; // Available in both chat and agent modes
-  const enableHistoryNavigation = mode === 'chat'; // Only in chat mode for arrow key history
+  const enableHistoryNavigation = true; // Available in both chat and agent modes
 
   return (
     <div
