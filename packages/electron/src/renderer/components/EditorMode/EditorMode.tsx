@@ -21,6 +21,16 @@ export interface EditorModeRef {
   handleSaveAs: () => Promise<void>;
   selectFile: (filePath: string) => Promise<void>;
   openHistoryDialog: () => void;
+  tabs: {
+    addTab: (filePath: string, content?: string) => string | undefined;
+    removeTab: (tabId: string) => void;
+    switchTab: (tabId: string) => void;
+    nextTab: () => void;
+    previousTab: () => void;
+    findTabByPath: (filePath: string) => any | undefined;
+    tabs: any[];
+    activeTabId: string | null;
+  };
 }
 
 export interface EditorModeProps {
@@ -233,7 +243,35 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     handleOpen,
     handleSaveAs,
     selectFile: handleWorkspaceFileSelect,
-    openHistoryDialog: () => setIsHistoryDialogOpen(true)
+    openHistoryDialog: () => setIsHistoryDialogOpen(true),
+    tabs: {
+      addTab: tabs.addTab,
+      removeTab: tabs.removeTab,
+      switchTab: tabs.switchTab,
+      findTabByPath: tabs.findTabByPath,
+      nextTab: () => {
+        if (tabs.tabs.length > 1) {
+          const currentIndex = tabs.tabs.findIndex(tab => tab.id === tabs.activeTabId);
+          const nextIndex = (currentIndex + 1) % tabs.tabs.length;
+          const nextTab = tabs.tabs[nextIndex];
+          if (nextTab) {
+            tabs.switchTab(nextTab.id);
+          }
+        }
+      },
+      previousTab: () => {
+        if (tabs.tabs.length > 1) {
+          const currentIndex = tabs.tabs.findIndex(tab => tab.id === tabs.activeTabId);
+          const prevIndex = currentIndex <= 0 ? tabs.tabs.length - 1 : currentIndex - 1;
+          const prevTab = tabs.tabs[prevIndex];
+          if (prevTab) {
+            tabs.switchTab(prevTab.id);
+          }
+        }
+      },
+      tabs: tabs.tabs,
+      activeTabId: tabs.activeTabId,
+    }
   }), [tabs, handleOpen, handleSaveAs, handleWorkspaceFileSelect]);
 
   // Handle sidebar resize

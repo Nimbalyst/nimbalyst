@@ -959,6 +959,7 @@ export default function App() {
     getContentRef,
     editorRef,
     searchCommandRef,
+    editorModeRef,
 
     // State values
     currentFilePath,
@@ -966,8 +967,6 @@ export default function App() {
     workspacePath,
     sessionToLoad,
     isDirty,
-
-    // NOTE: tabs removed - EditorMode manages tabs now
 
     // Config
     LOG_CONFIG,
