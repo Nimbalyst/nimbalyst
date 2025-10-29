@@ -38,6 +38,8 @@ export {
   shouldRenderTrackerHeader,
   StatusBar,
   ModelLoader,
+  globalRegistry,
+  parseTrackerYAML,
 } from './plugins/TrackerPlugin';
 export type {
   TrackerItemData,

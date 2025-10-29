@@ -590,37 +590,30 @@ function TrackerPlugin(): JSX.Element | null {
     return null;
   }, []);
 
-  // Typeahead options
-  const trackerOptions: TypeaheadMenuOption[] = [
-    {
-      id: 'bug',
-      label: 'Bug',
-      description: 'Track a bug or issue',
-      icon: <span className="material-symbols-outlined">bug_report</span>,
-      keywords: ['bug', 'issue', 'defect'],
-    },
-    {
-      id: 'task',
-      label: 'Task',
-      description: 'Track a task or work item',
-      icon: <span className="material-symbols-outlined">check_box</span>,
-      keywords: ['task', 'todo', 'work'],
-    },
-    {
-      id: 'plan',
-      label: 'Plan',
-      description: 'Track a plan or initiative',
-      icon: <span className="material-symbols-outlined">assignment</span>,
-      keywords: ['plan', 'feature', 'project'],
-    },
-    {
-      id: 'idea',
-      label: 'Idea',
-      description: 'Track an idea or suggestion',
-      icon: <span className="material-symbols-outlined">lightbulb</span>,
-      keywords: ['idea', 'suggestion', 'improvement'],
-    },
-  ];
+  // Typeahead options - dynamically build from globalRegistry
+  // No useMemo - recompute fresh every render to pick up newly registered custom trackers
+  const trackerOptions: TypeaheadMenuOption[] = (() => {
+    const options: TypeaheadMenuOption[] = [];
+
+    // Get all registered tracker models
+    const allModels = globalRegistry.getAll();
+
+    for (const model of allModels) {
+      // Only include trackers that support inline mode
+      if (model.modes.inline) {
+        options.push({
+          id: model.type,
+          label: model.displayName,
+          description: `Track a ${model.displayName.toLowerCase()}`,
+          icon: <span className="material-symbols-outlined">{model.icon}</span>,
+          keywords: [model.type, model.displayName.toLowerCase()],
+          onSelect: () => {}, // Required by TypeaheadMenuOption but handled in handleSelectOption
+        });
+      }
+    }
+
+    return options;
+  })()
 
   const filteredOptions = query
     ? trackerOptions.filter(option =>
@@ -933,6 +926,8 @@ export { TrackerDocumentHeader, shouldRenderTrackerHeader } from './documentHead
 // Export data models
 export { ModelLoader, loadBuiltinTrackers } from './models/ModelLoader';
 export type { TrackerDataModel, FieldDefinition } from './models/TrackerDataModel';
+export { parseTrackerYAML } from './models/YAMLParser';
+export { globalRegistry } from './models/TrackerDataModel';
 
 // Export components
 export { StatusBar } from './components/StatusBar';
