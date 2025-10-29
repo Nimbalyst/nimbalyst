@@ -463,12 +463,12 @@ export default function App() {
     return {
       filePath: currentFilePath,
       fileType: 'markdown',
-      content: getContentRef.current ? getContentRef.current() : '',
+      content: '', // Don't call getContentRef during render - getLatestContent will be called when needed
       cursorPosition: undefined,
       selection: undefined,
       getLatestContent: getContentRef.current || undefined
     };
-  }, [currentFilePath, getContentRef.current]);
+  }, [currentFilePath]);
   const editorRef = useRef<any>(null);
   const searchCommandRef = useRef<LexicalCommand<undefined> | null>(null);
   const isInitializedRef = useRef<boolean>(false);
