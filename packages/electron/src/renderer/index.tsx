@@ -18,6 +18,7 @@ const root = ReactDOM.createRoot(rootElement);
 
 const analyticsId = await window.electronAPI.analytics?.getDistinctId() ?? '';
 const analyticsAllowed = await window.electronAPI.analytics?.allowedToSendAnalytics() ?? false;
+const isDevInstallation = process.env.NODE_ENV?.toLowerCase() === 'development';
 const posthogClient = posthog.init(
   'phc_s3lQIILexwlGHvxrMBqti355xUgkRocjMXW4LjV0ATw',
   {
@@ -37,6 +38,7 @@ const posthogClient = posthog.init(
       }
     },
     before_send: beforePostHogSendWeb,
+    debug: isDevInstallation
   }
 )
 
