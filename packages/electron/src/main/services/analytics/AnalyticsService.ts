@@ -35,6 +35,7 @@ export class AnalyticsService {
   private sessionTracker?: PostHog; // only used to track session start times
   private distinctId?: string;
   private sessionId?: string;
+  private isDevInstallation: boolean = process.env.NODE_ENV?.toLowerCase() === 'development';
 
   public init(): void {
     this.postHogClient ??= this.initPostHogClient();
@@ -87,12 +88,21 @@ export class AnalyticsService {
   public setSessionId(sessionId: string): void {
     this.log.info(`Setting analytics session ID: ${sessionId}, previous session ID: ${this.sessionId}, anonymous tracking consent: ${this.allowedToSendAnalytics()}`);
     this.sessionId = sessionId;
+
+    const eventProperties: Record<string | number, any> = {
+      '$session_id': this.sessionId,
+    };
+
+    if (this.isDevInstallation) {
+      eventProperties.$set_once = {
+        'is_dev_install': true
+      }
+    }
+
     this.sessionTracker?.capture({
       distinctId: this.getDistinctId(),
       event: 'nimbalyst_session_start',
-      properties: {
-        '$session_id': this.sessionId,
-      }
+      properties: eventProperties
     })
   }
 
