@@ -638,6 +638,7 @@ export class AIService {
               console.log(`${logPrefix} Forwarding text chunk #${textChunks}: ${chunkContent.length} chars, total: ${fullResponse.length}`);
               // Send ACCUMULATED response to renderer (not just the chunk)
               event.sender.send('ai:streamResponse', {
+                sessionId: session.id,
                 partial: fullResponse,  // Send the full accumulated text
                 isComplete: false
               });
@@ -722,6 +723,7 @@ export class AIService {
                   }
 
                   event.sender.send('ai:streamResponse', {
+                    sessionId: session.id,
                     partial: '',
                     isComplete: false,
                     edits: [edit],
@@ -733,6 +735,7 @@ export class AIService {
                 } else {
                   // For other tools, just send the tool call
                   event.sender.send('ai:streamResponse', {
+                    sessionId: session.id,
                     partial: '',
                     isComplete: false,
                     toolCalls: [chunk.toolCall]
@@ -763,6 +766,7 @@ export class AIService {
                 await this.sessionManager.addMessage(errorMessage, session.id);
 
                 event.sender.send('ai:streamResponse', {
+                  sessionId: session.id,
                   partial: '',
                   isComplete: false,
                   toolError: chunk.toolError
@@ -773,20 +777,29 @@ export class AIService {
             case 'stream_edit_start':
               // Forward streaming edit start event to renderer
               console.log('[AIService] Forwarding stream_edit_start to renderer:', chunk.config);
-              event.sender.send('ai:streamEditStart', chunk.config);
+              event.sender.send('ai:streamEditStart', {
+                sessionId: session.id,
+                ...chunk.config
+              });
               hasStreamingContent = true;  // Mark that we're doing streaming
               break;
 
             case 'stream_edit_content':
               // Forward streaming content to renderer
               console.log('[AIService] Forwarding stream_edit_content to renderer:', chunk.content?.substring(0, 50));
-              event.sender.send('ai:streamEditContent', chunk.content);
+              event.sender.send('ai:streamEditContent', {
+                sessionId: session.id,
+                content: chunk.content
+              });
               break;
 
             case 'stream_edit_end':
               // Forward streaming end event to renderer
               console.log('[AIService] Forwarding stream_edit_end to renderer');
-              event.sender.send('ai:streamEditEnd', chunk.error ? { error: chunk.error } : {});
+              event.sender.send('ai:streamEditEnd', {
+                sessionId: session.id,
+                ...(chunk.error ? { error: chunk.error } : {})
+              });
 
               // Track the streamContent file interaction
               if (documentContext?.filePath && workspacePath) {
@@ -820,6 +833,7 @@ export class AIService {
               }
               console.error(`${logPrefix} Provider error:`, chunk.error);
               event.sender.send('ai:error', {
+                sessionId: session.id,
                 message: chunk.error || 'Unknown error occurred'
               });
               break;
@@ -933,6 +947,7 @@ export class AIService {
               // Send complete response
               console.log('[AIService] Sending FINAL ai:streamResponse with isComplete=true, content length:', fullResponse.length);
               event.sender.send('ai:streamResponse', {
+                sessionId: session.id,
                 content: fullResponse,
                 isComplete: true
               });
@@ -970,6 +985,7 @@ export class AIService {
 
           // Send error to renderer
           event.sender.send('ai:error', {
+            sessionId: session.id,
             message: error instanceof Error ? error.message : 'Unknown error occurred'
           });
         }

@@ -342,8 +342,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('ai:streamEditStart', handler);
     return () => ipcRenderer.removeListener('ai:streamEditStart', handler);
   },
-  onAIStreamEditContent: (callback: (content: string) => void) => {
-    const handler = (_event: any, content: string) => callback(content);
+  onAIStreamEditContent: (callback: (data: any) => void) => {
+    const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('ai:streamEditContent', handler);
     return () => ipcRenderer.removeListener('ai:streamEditContent', handler);
   },

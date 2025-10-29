@@ -97,6 +97,7 @@ interface UseIPCHandlersProps {
   getContentRef: React.MutableRefObject<(() => string) | null>;
   editorRef: React.MutableRefObject<any>;
   searchCommandRef: React.MutableRefObject<LexicalCommand<undefined> | null>;
+  editorModeRef: React.RefObject<any>; // EditorModeRef from EditorMode component
 
   // State values
   currentFilePath: string | null;
@@ -104,9 +105,6 @@ interface UseIPCHandlersProps {
   workspacePath: string | null;
   sessionToLoad: { sessionId: string; workspacePath?: string } | null;
   isDirty: boolean;
-
-  // Tabs object
-  tabs: any;
 
   // Logging configuration
   LOG_CONFIG: {
@@ -157,6 +155,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     getContentRef,
     editorRef,
     searchCommandRef,
+    editorModeRef,
 
     // State values
     currentFilePath,
@@ -164,9 +163,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     workspacePath,
     sessionToLoad,
     isDirty,
-
-    // Tabs
-    tabs,
 
     // Config
     LOG_CONFIG
@@ -193,7 +189,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setSessionToLoad,
     setIsAgentPaletteVisible,
     setAIPlanningMode,
-    tabs,  // Add tabs so IPC handlers can create/modify tabs
   });
 
   const stateRef = useRef({
@@ -202,7 +197,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     workspacePath,
     sessionToLoad,
     isDirty,
-    tabs,
   });
 
   // Update refs whenever values change
@@ -228,7 +222,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setIsAgentPaletteVisible,
     setAIPlanningMode,
     setTheme,
-    tabs,  // Keep tabs updated in ref
   };
 
   stateRef.current = {
@@ -237,7 +230,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     workspacePath,
     sessionToLoad,
     isDirty,
-    tabs,
   };
 
   useEffect(() => {
@@ -310,7 +302,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }
 
       // Open welcome tab if no tabs are open
-      if (stateRef.current.tabs && stateRef.current.tabs.tabs.length === 0) {
+      if (editorModeRef.current?.tabs && editorModeRef.current.tabs.tabs.length === 0) {
         console.log('[WORKSPACE] No tabs open, opening welcome tab');
         // Delay slightly to ensure workspace state is fully set
         setTimeout(() => handlersRef.current.openWelcomeTab(), 100);
@@ -359,12 +351,12 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       // NOTE: initialContentRef removed - TabEditor tracks this per-tab
 
       // Add tab for the opened file (works for both single-file and workspace modes)
-      console.log('[FILE_OPS] Checking tabs object:', !!handlersRef.current.tabs);
-      if (handlersRef.current.tabs) {
+      console.log('[FILE_OPS] Checking tabs object:', !!editorModeRef.current?.tabs);
+      if (editorModeRef.current?.tabs) {
         console.log('[FILE_OPS] Adding tab for file opened from OS:', data.filePath);
 
         // TabContent/TabEditor will handle editor creation and state management
-        const tabId = handlersRef.current.tabs.addTab(data.filePath, data.content);
+        const tabId = editorModeRef.current.tabs.addTab(data.filePath, data.content);
         console.log('[FILE_OPS] addTab returned:', tabId);
         if (tabId) {
           console.log('[FILE_OPS] Tab added with ID:', tabId);
@@ -372,7 +364,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
           console.warn('[FILE_OPS] Failed to add tab - max tabs reached or addTab returned falsy');
         }
       } else {
-        console.error('[FILE_OPS] tabs object not available in handlersRef!');
+        console.error('[FILE_OPS] tabs object not available in editorModeRef!');
       }
 
       // Create automatic snapshot when file is opened from OS
@@ -436,17 +428,17 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }));
     cleanupFns.push(window.electronAPI.onFileDeleted((data) => {
       console.log('[FILE_DELETED] File deleted event received:', data.filePath);
-      // console.log('[FILE_DELETED] Tabs object:', stateRef.current.tabs);
+      // console.log('[FILE_DELETED] Tabs object:', editorModeRef.current?.tabs);
 
       // Find and close the tab for this file
-      if (stateRef.current.tabs) {
-        const tabToClose = stateRef.current.tabs.findTabByPath(data.filePath);
+      if (editorModeRef.current?.tabs) {
+        const tabToClose = editorModeRef.current.tabs.findTabByPath(data.filePath);
         // console.log('[FILE_DELETED] Tab to close:', tabToClose);
         if (tabToClose) {
           // console.log('[FILE_DELETED] Closing tab for deleted file:', data.filePath, 'tab id:', tabToClose.id);
 
           // If this is the active tab, we need to immediately clear state to prevent autosave
-          if (stateRef.current.tabs.activeTabId === tabToClose.id) {
+          if (editorModeRef.current.tabs.activeTabId === tabToClose.id) {
             // console.log('[FILE_DELETED] This is the active tab, clearing file path immediately');
             // Clear the file path immediately to prevent autosave from recreating the file
             handlersRef.current.setCurrentFilePath(null);
@@ -454,7 +446,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             handlersRef.current.setIsDirty(false);
           }
 
-          stateRef.current.tabs.removeTab(tabToClose.id);
+          editorModeRef.current.tabs.removeTab(tabToClose.id);
           // console.log('[FILE_DELETED] Tab removed');
         } else {
           // console.log('[FILE_DELETED] No tab found for path:', data.filePath);
@@ -577,26 +569,16 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     // Tab navigation handlers
     if (window.electronAPI.onNextTab) {
       cleanupFns.push(window.electronAPI.onNextTab(() => {
-        if (stateRef.current.tabs && stateRef.current.tabs.tabs.length > 1) {
-          const currentIndex = stateRef.current.tabs.tabs.findIndex(tab => tab.id === stateRef.current.tabs.activeTabId);
-          const nextIndex = (currentIndex + 1) % stateRef.current.tabs.tabs.length;
-          const nextTab = stateRef.current.tabs.tabs[nextIndex];
-          if (nextTab) {
-            stateRef.current.tabs.switchTab(nextTab.id);
-          }
+        if (editorModeRef.current?.tabs) {
+          editorModeRef.current.tabs.nextTab();
         }
       }));
     }
 
     if (window.electronAPI.onPreviousTab) {
       cleanupFns.push(window.electronAPI.onPreviousTab(() => {
-        if (stateRef.current.tabs && stateRef.current.tabs.tabs.length > 1) {
-          const currentIndex = stateRef.current.tabs.tabs.findIndex(tab => tab.id === stateRef.current.tabs.activeTabId);
-          const prevIndex = currentIndex <= 0 ? stateRef.current.tabs.tabs.length - 1 : currentIndex - 1;
-          const prevTab = stateRef.current.tabs.tabs[prevIndex];
-          if (prevTab) {
-            stateRef.current.tabs.switchTab(prevTab.id);
-          }
+        if (editorModeRef.current?.tabs) {
+          editorModeRef.current.tabs.previousTab();
         }
       }));
     }
@@ -992,8 +974,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     // Set up AI streaming event listeners
     // These connect the aiApi events to the editorRegistry methods
-    const handleStreamEditStart = (config: any) => {
-      console.log('[AI Streaming] Stream edit started:', config);
+    const handleStreamEditStart = (data: any) => {
+      console.log('[AI Streaming] Stream edit started:', { sessionId: data.sessionId, config: data });
       const filePath = editorRegistry.getActiveFilePath();
       if (!filePath) {
         console.error('[AI Streaming] No active editor for streaming');
@@ -1001,16 +983,19 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }
 
       editorRegistry.startStreaming(filePath, {
-        id: config.id || 'ai-stream',
-        position: config.position || 'end',
-        mode: config.mode,
-        insertAfter: config.insertAfter,
-        insertAtEnd: config.insertAtEnd ?? true
+        id: data.id || 'ai-stream',
+        position: data.position || 'end',
+        mode: data.mode,
+        insertAfter: data.insertAfter,
+        insertAtEnd: data.insertAtEnd ?? true
       });
     };
 
-    const handleStreamEditContent = (content: string) => {
-      console.log('[AI Streaming] Stream edit content:', content.substring(0, 50));
+    const handleStreamEditContent = (data: any) => {
+      // Handle both old format (string) and new format ({ sessionId, content })
+      const content = typeof data === 'string' ? data : data.content;
+      const sessionId = typeof data === 'object' ? data.sessionId : undefined;
+      console.log('[AI Streaming] Stream edit content:', { sessionId, preview: content?.substring(0, 50) });
       const filePath = editorRegistry.getActiveFilePath();
       if (!filePath) {
         console.error('[AI Streaming] No active editor for streaming');
@@ -1021,7 +1006,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     };
 
     const handleStreamEditEnd = (data: any) => {
-      console.log('[AI Streaming] Stream edit ended:', data);
+      console.log('[AI Streaming] Stream edit ended:', { sessionId: data?.sessionId, error: data?.error });
       const filePath = editorRegistry.getActiveFilePath();
       if (!filePath) {
         console.error('[AI Streaming] No active editor for streaming');

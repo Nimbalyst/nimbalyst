@@ -50,18 +50,21 @@ class AIApi {
     });
     
     // Set up IPC listeners for streaming edit events from AI service
-    window.electronAPI.onAIStreamEditStart((config: any) => {
-      logger.streaming.info('🚀 Stream edit started from AI service:', config);
-      this.emit('streamEditStart', config);
+    window.electronAPI.onAIStreamEditStart((data: any) => {
+      logger.streaming.info('🚀 Stream edit started from AI service:', { sessionId: data.sessionId });
+      this.emit('streamEditStart', data);
     });
 
-    window.electronAPI.onAIStreamEditContent((content: string) => {
-      logger.streaming.info('Stream edit content from AI service:', content.substring(0, 50));
-      this.emit('streamEditContent', content);
+    window.electronAPI.onAIStreamEditContent((data: any) => {
+      // Handle both old format (string) and new format ({ sessionId, content })
+      const content = typeof data === 'string' ? data : data.content;
+      const sessionId = typeof data === 'object' ? data.sessionId : undefined;
+      logger.streaming.info('Stream edit content from AI service:', { sessionId, preview: content?.substring(0, 50) });
+      this.emit('streamEditContent', data);
     });
 
     window.electronAPI.onAIStreamEditEnd((data: any) => {
-      logger.streaming.info('🏁 Stream edit ended from AI service:', data);
+      logger.streaming.info('🏁 Stream edit ended from AI service:', { sessionId: data?.sessionId });
       this.emit('streamEditEnd', data);
     });
 

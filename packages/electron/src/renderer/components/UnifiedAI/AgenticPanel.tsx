@@ -590,6 +590,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     const handleStreamResponse = async (data: any) => {
       console.log(`[AgenticPanel-${handlerId}] handleStreamResponse called:`, {
+        sessionId: data.sessionId,
         hasActiveTabId: !!activeTabId,
         isComplete: data.isComplete,
         hasPartial: !!data.partial,
@@ -598,13 +599,19 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         toolCallsCount: data.toolCalls?.length
       });
 
-      if (!activeTabId) return;
+      // Check if this session is relevant to this panel (any open tab)
+      const isRelevantSession = sessionTabs.some(tab => tab.id === data.sessionId);
+      if (!isRelevantSession) {
+        console.log('[AgenticPanel] Ignoring stream for session not in this panel:', data.sessionId);
+        return;
+      }
 
       // Handle streaming content updates (not complete)
       if (!data.isComplete) {
-        console.log('[AgenticPanel] Processing streaming update');
+        console.log('[AgenticPanel] Processing streaming update for session:', data.sessionId);
         setSessionTabs(prev => prev.map(tab => {
-          if (tab.id !== activeTabId) return tab;
+          // Update the tab that matches this session, not just the active tab
+          if (tab.id !== data.sessionId) return tab;
 
           const sessionData = { ...tab.sessionData };
           const messages = [...sessionData.messages];
@@ -698,10 +705,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Handle completion
       if (data.isComplete) {
         try {
-          const sessionData = await window.electronAPI.aiLoadSession(activeTabId, workspacePath);
+          const sessionData = await window.electronAPI.aiLoadSession(data.sessionId, workspacePath);
           if (sessionData) {
             setSessionTabs(prev => prev.map(tab => {
-              if (tab.id === activeTabId) {
+              if (tab.id === data.sessionId) {
                 return { ...tab, sessionData };
               }
               return tab;
@@ -710,7 +717,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         } catch (err) {
           console.error('[AgenticPanel] Failed to reload session after completion:', err);
         } finally {
-          setIsSending(false);
+          // Only clear sending state if this was the active tab
+          if (data.sessionId === activeTabId) {
+            setIsSending(false);
+          }
         }
       }
     };
