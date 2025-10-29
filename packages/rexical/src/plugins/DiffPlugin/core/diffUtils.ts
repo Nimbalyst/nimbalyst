@@ -717,7 +717,7 @@ export function applyMarkdownDiffToDocument(
             transformers,
             undefined,
             true,
-            false
+            true
           );
         },
         {discrete: true},
@@ -732,7 +732,7 @@ export function applyMarkdownDiffToDocument(
             transformers,
             undefined,
             true,
-            false
+            true
           );
         },
         {discrete: true},
