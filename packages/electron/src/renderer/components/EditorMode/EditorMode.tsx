@@ -20,6 +20,7 @@ export interface EditorModeRef {
   handleOpen: () => Promise<void>;
   handleSaveAs: () => Promise<void>;
   selectFile: (filePath: string) => Promise<void>;
+  openHistoryDialog: () => void;
 }
 
 export interface EditorModeProps {
@@ -31,6 +32,7 @@ export interface EditorModeProps {
   onCurrentFileChange?: (filePath: string | null, fileName: string | null, isDirty: boolean) => void;
   onGetContentReady?: (getContentFn: (() => string) | null) => void;
   onCloseWorkspace?: () => void;
+  onOpenQuickSearch?: () => void;
 }
 
 const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMode({
@@ -41,7 +43,8 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   onModeChange,
   onCurrentFileChange,
   onGetContentReady,
-  onCloseWorkspace
+  onCloseWorkspace,
+  onOpenQuickSearch
 }, ref) {
   // File tree state
   const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
@@ -229,7 +232,8 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     },
     handleOpen,
     handleSaveAs,
-    selectFile: handleWorkspaceFileSelect
+    selectFile: handleWorkspaceFileSelect,
+    openHistoryDialog: () => setIsHistoryDialogOpen(true)
   }), [tabs, handleOpen, handleSaveAs, handleWorkspaceFileSelect]);
 
   // Handle sidebar resize
@@ -303,17 +307,13 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
 
     loadFileTree();
 
-    // Listen for file tree updates
-    if (window.electronAPI?.on) {
-      const handleFileTreeUpdate = (newTree: FileTreeItem[]) => {
-        setFileTree(newTree);
-      };
+    // Listen for file tree updates via the proper IPC handler
+    if (window.electronAPI?.onWorkspaceFileTreeUpdated) {
+      const cleanup = window.electronAPI.onWorkspaceFileTreeUpdated((data) => {
+        setFileTree(data.fileTree);
+      });
 
-      window.electronAPI.on('file-tree-updated', handleFileTreeUpdate);
-
-      return () => {
-        window.electronAPI?.off?.('file-tree-updated', handleFileTreeUpdate);
-      };
+      return cleanup;
     }
 
     return undefined;
@@ -366,9 +366,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
             currentView="files"
             onFileSelect={handleWorkspaceFileSelect}
             onCloseWorkspace={onCloseWorkspace || (() => {})}
-            onOpenQuickSearch={() => {
-              // QuickOpen is handled at App level now for global access
-            }}
+            onOpenQuickSearch={onOpenQuickSearch}
             onRefreshFileTree={handleRefreshFileTree}
             onViewHistory={(filePath) => {
               setIsHistoryDialogOpen(true);

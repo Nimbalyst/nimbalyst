@@ -74,17 +74,16 @@ interface UseIPCHandlersProps {
   setWorkspaceMode: (mode: boolean) => void;
   setWorkspacePath: (path: string | null) => void;
   setWorkspaceName: (name: string | null) => void;
-  setFileTree: (tree: FileTreeItem[]) => void;
+  // NOTE: setFileTree removed - EditorMode manages file tree
   setCurrentFilePath: (path: string | null) => void;
   setCurrentFileName: (name: string | null) => void;
   setIsDirty: (dirty: boolean) => void;
-  // NOTE: setContentVersion removed - EditorContainer doesn't need version bumping
-  setIsNewFileDialogOpen: (open: boolean) => void;
+  // NOTE: setIsNewFileDialogOpen removed - EditorMode manages dialogs
   setIsAIChatCollapsed: (collapsed: boolean) => void;
   setAIChatWidth: (width: number) => void;
   setIsAIChatStateLoaded: (loaded: boolean) => void;
   setSessionToLoad: (session: { sessionId: string; workspacePath?: string } | null) => void;
-  setIsHistoryDialogOpen: (open: boolean) => void;
+  // NOTE: setIsHistoryDialogOpen removed - EditorMode manages dialogs
   setIsKeyboardShortcutsDialogOpen: (open: boolean) => void;
   setIsAgentPaletteVisible: (visible: boolean) => void;
   setTheme: (theme: any) => void;
@@ -139,17 +138,13 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setWorkspaceMode,
     setWorkspacePath,
     setWorkspaceName,
-    setFileTree,
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
-    // NOTE: setContentVersion removed - not needed for EditorContainer
-    setIsNewFileDialogOpen,
     setIsAIChatCollapsed,
     setAIChatWidth,
     setIsAIChatStateLoaded,
     setSessionToLoad,
-    setIsHistoryDialogOpen,
     setIsKeyboardShortcutsDialogOpen,
     setIsAgentPaletteVisible,
     setAIPlanningMode,
@@ -189,16 +184,13 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setWorkspaceMode,
     setWorkspacePath,
     setWorkspaceName,
-    setFileTree,
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
-    setIsNewFileDialogOpen,
     setIsAIChatCollapsed,
     setAIChatWidth,
     setIsAIChatStateLoaded,
     setSessionToLoad,
-    setIsHistoryDialogOpen,
     setIsAgentPaletteVisible,
     setAIPlanningMode,
     tabs,  // Add tabs so IPC handlers can create/modify tabs
@@ -225,16 +217,13 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     setWorkspaceMode,
     setWorkspacePath,
     setWorkspaceName,
-    setFileTree,
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
-    setIsNewFileDialogOpen,
     setIsAIChatCollapsed,
     setAIChatWidth,
     setIsAIChatStateLoaded,
     setSessionToLoad,
-    setIsHistoryDialogOpen,
     setIsKeyboardShortcutsDialogOpen,
     setIsAgentPaletteVisible,
     setAIPlanningMode,
@@ -280,14 +269,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     cleanupFns.push(window.electronAPI.onFileNew(handlersRef.current.handleNew));
 
-    // Handle new file in workspace mode
-    if (window.electronAPI.onFileNewInWorkspace) {
-      cleanupFns.push(window.electronAPI.onFileNewInWorkspace(() => {
-        if (stateRef.current.workspaceMode) {
-          handlersRef.current.setIsNewFileDialogOpen(true);
-        }
-      }));
-    }
+    // Handle new file in workspace mode - EditorMode handles this via its own IPC listener
+    // TODO: Remove this handler since EditorMode listens to file-new-in-workspace directly
     cleanupFns.push(window.electronAPI.onFileOpen(handlersRef.current.handleOpen));
     cleanupFns.push(window.electronAPI.onFileSave(handlersRef.current.handleSave));
     cleanupFns.push(window.electronAPI.onFileSaveAs(handlersRef.current.handleSaveAs));
@@ -296,7 +279,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       handlersRef.current.setWorkspaceMode(true);
       handlersRef.current.setWorkspacePath(data.workspacePath);
       handlersRef.current.setWorkspaceName(data.workspaceName);
-      handlersRef.current.setFileTree(data.fileTree);
+      // NOTE: setFileTree removed - EditorMode loads file tree from workspacePath
       // Clear current document (EditorContainer manages content now)
       handlersRef.current.setCurrentFilePath(null);
       handlersRef.current.setCurrentFileName(null);
@@ -538,7 +521,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         });
       };
 
-      handlersRef.current.setFileTree(prevTree => updateFileTree(prevTree));
+      // NOTE: setFileTree removed - EditorMode handles file tree updates via onWorkspaceFileTreeUpdated
 
       // Update current file path if it was renamed
       if (stateRef.current.currentFilePath === data.oldPath) {
@@ -546,10 +529,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         handlersRef.current.setCurrentFileName(data.newPath.split('/').pop() || data.newPath);
       }
     }));
-    cleanupFns.push(window.electronAPI.onWorkspaceFileTreeUpdated((data) => {
-      console.log('[FILE_TREE] Workspace file tree updated, refreshing...');
-      handlersRef.current.setFileTree(data.fileTree);
-    }));
+    // NOTE: File tree updates handled by EditorMode directly via onWorkspaceFileTreeUpdated
 
     // Load session from Session Manager
     if (window.electronAPI.onLoadSessionFromManager) {
@@ -564,7 +544,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
           handlersRef.current.setWorkspaceMode(true);
           handlersRef.current.setWorkspacePath(data.workspacePath);
           handlersRef.current.setWorkspaceName(workspaceName);
-          handlersRef.current.setFileTree(fileTree);
+          // NOTE: setFileTree removed - EditorMode loads file tree from workspacePath
         }
 
         // Set the session to load - AIChat will pick this up
@@ -589,7 +569,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             'Before viewing history'
           );
         }
-        handlersRef.current.setIsHistoryDialogOpen(true);
+        // NOTE: setIsHistoryDialogOpen removed - EditorMode manages history dialog
+        // This IPC handler should delegate to EditorMode instead
       }));
     }
 

@@ -556,32 +556,37 @@ export default function App() {
     window.close();
   }, []);
 
-  // Wrapper for workspace file selection utility with component-specific context
-  // NOTE: This is legacy code - EditorMode handles workspace file selection in workspace mode
+  // Wrapper for workspace file selection - delegates to EditorMode
   const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
-    console.warn('[App] handleWorkspaceFileSelect called - should be handled by EditorMode in workspace mode');
-    // Not used in workspace mode, but kept for aiToolService compatibility
-    return;
-  }, [currentFilePath]);
+    // Switch to files mode if needed
+    if (activeMode !== 'files' && activeMode !== 'plan') {
+      setActiveMode('files');
+    }
+
+    // Delegate to EditorMode
+    if (editorModeRef.current) {
+      await editorModeRef.current.selectFile(filePath);
+    }
+  }, [activeMode]);
 
   // Configure aiToolService with handleWorkspaceFileSelect
   useEffect(() => {
     aiToolService.setHandleWorkspaceFileSelectFunction(handleWorkspaceFileSelect);
   }, [handleWorkspaceFileSelect]);
 
-  // NOTE: File opener moved to EditorMode - EditorMode handles file opening in workspace mode
-  // This is legacy code for single-file mode
+  // File opener - delegates to EditorMode in workspace mode
   useEffect(() => {
     const fileOpener = async (filePath: string, content: string, switchToTab: boolean) => {
-      console.warn('[App] fileOpener called - should be handled by EditorMode in workspace mode');
+      if (workspaceMode && editorModeRef.current && switchToTab) {
+        await editorModeRef.current.selectFile(filePath);
+      }
     };
     editorRegistry.setFileOpener(fileOpener);
-  }, []);
+  }, [workspaceMode]);
 
-  // NOTE: Welcome tab functionality disabled - not used in workspace mode
-  // This is legacy code for single-file mode
+  // Welcome tab - no-op in workspace mode (workspace always shows file tree)
   const openWelcomeTab = useCallback(async () => {
-    console.warn('[App] openWelcomeTab called - not implemented in workspace mode');
+    // No-op: workspace mode doesn't use welcome tabs, always shows file tree
   }, []);
 
 
@@ -771,7 +776,10 @@ export default function App() {
               console.error('[App] Failed to create history snapshot before opening dialog:', error);
             }
           }
-          setIsHistoryDialogOpen(true);
+          // Delegate to EditorMode
+          if (workspaceMode && editorModeRef.current) {
+            editorModeRef.current.openHistoryDialog();
+          }
         };
         openHistoryDialog();
       }
@@ -837,17 +845,6 @@ export default function App() {
   }, [activeMode]);
 
   // NOTE: handleCreateNewFile and handleRestoreFromHistory moved to EditorMode
-
-  // Stub functions for state that moved to EditorMode (to avoid breaking useIPCHandlers)
-  const setFileTree = useCallback(() => {
-    // EditorMode manages its own file tree now
-  }, []);
-  const setIsNewFileDialogOpen = useCallback(() => {
-    // EditorMode manages its own dialog state now
-  }, []);
-  const setIsHistoryDialogOpen = useCallback(() => {
-    // EditorMode manages its own dialog state now
-  }, []);
 
   // Sync current file path with backend whenever it changes
   useEffect(() => {
@@ -944,16 +941,13 @@ export default function App() {
     setWorkspaceMode,
     setWorkspacePath,
     setWorkspaceName,
-    setFileTree,
     setCurrentFilePath,
     setCurrentFileName,
     setIsDirty,
-    setIsNewFileDialogOpen,
     setIsAIChatCollapsed,
     setAIChatWidth,
     setIsAIChatStateLoaded,
     setSessionToLoad,
-    setIsHistoryDialogOpen,
     setIsKeyboardShortcutsDialogOpen,
     setIsAgentPaletteVisible,
     setAIPlanningMode: setAIPlanningModeEnabled,
@@ -1181,6 +1175,7 @@ export default function App() {
                     getContentRef.current = getContentFn;
                   }}
                   onCloseWorkspace={handleCloseWorkspace}
+                  onOpenQuickSearch={() => setIsQuickOpenVisible(true)}
                 />
               ) : (
                 <WorkspaceWelcome workspaceName="Open a workspace to get started" />
