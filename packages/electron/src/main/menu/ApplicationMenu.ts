@@ -532,10 +532,66 @@ export async function createApplicationMenu() {
                     label: 'Close Project',
                     accelerator: KeyboardShortcuts.file.closeProject,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
-                        if (focused) {
+                        const allWindows = BrowserWindow.getAllWindows();
+
+                        // Try multiple methods to find the truly focused window
+                        const getFocusedResult = BrowserWindow.getFocusedWindow();
+                        const isFocusedResults = allWindows.filter(w => !w.isDestroyed() && w.isFocused());
+
+                        console.log('[Close Project] Menu triggered');
+                        console.log('[Close Project] All windows:', allWindows.map(w => ({
+                            id: w.id,
+                            title: w.getTitle(),
+                            isFocused: !w.isDestroyed() && w.isFocused(),
+                            isVisible: !w.isDestroyed() && w.isVisible(),
+                            isMinimized: !w.isDestroyed() && w.isMinimized(),
+                            isFocusable: !w.isDestroyed() && w.isFocusable()
+                        })));
+                        console.log('[Close Project] getFocusedWindow() returned:', getFocusedResult ? {
+                            id: getFocusedResult.id,
+                            title: getFocusedResult.getTitle()
+                        } : 'null');
+                        console.log('[Close Project] windows with isFocused()=true:', isFocusedResults.map(w => ({
+                            id: w.id,
+                            title: w.getTitle()
+                        })));
+
+                        // Prefer window that reports isFocused()=true, fall back to getFocusedWindow()
+                        let focused: BrowserWindow | null = null;
+                        if (isFocusedResults.length === 1) {
+                            focused = isFocusedResults[0];
+                            console.log('[Close Project] Using window with isFocused()=true');
+                        } else if (isFocusedResults.length > 1) {
+                            console.warn('[Close Project] Multiple windows report isFocused()=true, using first one');
+                            focused = isFocusedResults[0];
+                        } else {
+                            focused = getFocusedResult;
+                            console.log('[Close Project] Using getFocusedWindow() result');
+                        }
+
+                        if (focused && !focused.isDestroyed()) {
+                            // Get window info for logging
+                            const windowId = getWindowId(focused);
+                            const state = windowId !== null ? windowStates.get(windowId) : undefined;
+                            let projectName = 'Untitled';
+
+                            if (state?.mode === 'workspace' && state.workspacePath) {
+                                projectName = basename(state.workspacePath);
+                            } else if (state?.filePath) {
+                                projectName = basename(state.filePath);
+                            }
+
+                            console.log('[Close Project] Closing:', {
+                                windowId,
+                                projectName,
+                                mode: state?.mode,
+                                electronId: focused.id
+                            });
+
                             // TODO: Add warning dialog if AI/agent is running
                             focused.close();
+                        } else {
+                            console.error('[Close Project] No focused window found or window is destroyed');
                         }
                     }
                 },
