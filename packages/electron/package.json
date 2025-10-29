@@ -90,7 +90,6 @@
     "electron-vite": "^4.0.0",
     "esbuild": "^0.25.10",
     "eslint": "^9.37.0",
-    "happy-dom": "^20.0.4",
     "playwright": "^1.55.1",
     "playwright-electron": "^0.5.0",
     "ts-node": "^10.9.2",
