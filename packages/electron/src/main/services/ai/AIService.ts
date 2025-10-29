@@ -490,9 +490,11 @@ export class AIService {
         }
 
         if (isProviderClaudeCode) {
-          console.log('[CLAUDE-CODE-SERVICE] About to initialize claude-code provider with config:', reinitConfig);
+          const safeConfig = { ...reinitConfig, apiKey: reinitConfig.apiKey ? '***' : undefined };
+          console.log('[CLAUDE-CODE-SERVICE] About to initialize claude-code provider with config:', JSON.stringify(safeConfig, null, 2));
         }
-        console.log('[AIService] About to initialize provider with config:', reinitConfig);
+        const safeConfig = { ...reinitConfig, apiKey: reinitConfig.apiKey ? '***' : undefined };
+        console.log('[AIService] About to initialize provider with config:', JSON.stringify(safeConfig, null, 2));
         const initStartTime = Date.now();
 
         try {
@@ -591,13 +593,13 @@ export class AIService {
         console.log(`🚀 ${logPrefix} Starting to stream response from provider: ${session.provider}`);
 
         if (isClaudeCode) {
-          console.log(`[CLAUDE-CODE-SERVICE] Calling sendMessage with:`, {
+          console.log(`[CLAUDE-CODE-SERVICE] Calling sendMessage with:`, JSON.stringify({
             messageLength: message.length,
             hasContext: !!documentContext,
             sessionId: session.id,
             sessionMessages: sessionMessages.length,
             workspacePath
-          });
+          }, null, 2));
         }
 
         // Add sessionType and attachments to documentContext for provider to use in system prompt

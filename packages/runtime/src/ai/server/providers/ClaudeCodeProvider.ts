@@ -27,10 +27,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   static readonly DEFAULT_MODEL = 'claude-code';
 
   async initialize(config: ProviderConfig): Promise<void> {
-    console.log('[CLAUDE-CODE] Initializing provider with config:', {
+    const safeConfig = { ...config, apiKey: config.apiKey ? '***' : undefined };
+    console.log('[CLAUDE-CODE] Initializing provider with config:', JSON.stringify({
       model: config.model,
-      configKeys: Object.keys(config)
-    });
+      configKeys: Object.keys(config),
+      config: safeConfig
+    }, null, 2));
 
     this.config = config;
 
