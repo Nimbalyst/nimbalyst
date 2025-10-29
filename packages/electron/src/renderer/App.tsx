@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { logger } from './utils/logger';
-import type { ConfigTheme, LexicalCommand } from 'rexical';
-import { TOGGLE_SEARCH_COMMAND } from 'rexical';
+import type { LexicalCommand } from 'rexical';
 // aiChatBridge has been replaced by editorRegistry
 // Import styles - handled by vite plugin for both dev and prod
 import 'rexical/styles';
@@ -15,14 +14,11 @@ import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from './ut
 import { createInitialFileContent } from './utils/fileUtils';
 import { aiToolService } from './services/AIToolService';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
-import { WorkspaceSidebar } from './components/WorkspaceSidebar.tsx';
 import { WorkspaceWelcome } from './components/WorkspaceWelcome.tsx';
 import { QuickOpen } from './components/QuickOpen';
 import { AgentCommandPalette } from './components/AgentCommandPalette';
-import { AIChat } from './components/AIChat';
 import { ConfirmDialog } from './components/ConfirmDialog/ConfirmDialog';
 import { DiscordInvitation } from './components/DiscordInvitation/DiscordInvitation';
-import { HistoryDialog } from './components/HistoryDialog';
 import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog/KeyboardShortcutsDialog';
 import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
@@ -30,23 +26,19 @@ import { ApiKeyDialog } from './components/ApiKeyDialog';
 import { GlobalSettingsScreen as AIModels } from './components/GlobalSettings/GlobalSettingsScreen.tsx';
 import { SessionManager } from './components/SessionManager/SessionManager';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
-import { NewFileDialog } from './components/NewFileDialog';
 import { AgenticCodingWindow } from './components/AgenticCodingWindow';
 import { AgenticPanel, type AgenticPanelRef } from './components/UnifiedAI';
-import { TabManager } from './components/TabManager/TabManager';
-import { TabContent } from './components/TabContent/TabContent';
-import { NavigationGutter, type NavigationMode, type SidebarView } from './components/NavigationGutter';
+import EditorMode, { type EditorModeRef } from './components/EditorMode/EditorMode';
+import { NavigationGutter, type SidebarView } from './components/NavigationGutter';
 import { useTabs } from './hooks/useTabs';
 import { useTabNavigation } from './hooks/useTabNavigation';
 import type { ContentMode } from './types/WindowModeTypes';
-import { PlansPanel } from './components/PlansPanel/PlansPanel';
 import { TrackerBottomPanel, TrackerBottomPanelType } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
 import { registerTrackerPlugin } from './plugins/registerTrackerPlugin';
 import { registerDiffApprovalBarPlugin } from './plugins/registerDiffApprovalBarPlugin';
 import ProjectSettingsScreen from './components/ProjectSettingsScreen/ProjectSettingsScreen.tsx';
-import OnboardingService from './services/OnboardingService';
 import './WorkspaceWelcome.css';
 import './components/GlobalSettings/GlobalSettingsScreen.css';
 
@@ -227,15 +219,13 @@ export default function App() {
   const [workspaceMode, setWorkspaceMode] = useState(false);
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState<string | null>(null);
-  const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
-  const [sidebarWidth, setSidebarWidth] = useState<number>(250);
+  // NOTE: fileTree, sidebarWidth, isNewFileDialogOpen, newFileDirectory, isHistoryDialogOpen moved to EditorMode
   const [isQuickOpenVisible, setIsQuickOpenVisible] = useState(false);
   const [isAgentPaletteVisible, setIsAgentPaletteVisible] = useState(false);
-  const [isNewFileDialogOpen, setIsNewFileDialogOpen] = useState(false);
-  const [newFileDirectory, setNewFileDirectory] = useState<string | null>(null);
+  // NOTE: isAIChatCollapsed, aiChatWidth moved to EditorMode for workspace mode
+  // These are kept for potential single-file mode or agent mode use
   const [isAIChatCollapsed, setIsAIChatCollapsed] = useState(false);
   const [aiChatWidth, setAIChatWidth] = useState<number>(350);
-  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
   const [isKeyboardShortcutsDialogOpen, setIsKeyboardShortcutsDialogOpen] = useState(false);
   const [isDiscordInvitationOpen, setIsDiscordInvitationOpen] = useState(false);
   const [isAIChatStateLoaded, setIsAIChatStateLoaded] = useState(false);
@@ -537,13 +527,13 @@ export default function App() {
   const searchCommandRef = useRef<LexicalCommand<undefined> | null>(null);
   const isInitializedRef = useRef<boolean>(false);
   const agenticPanelRef = useRef<AgenticPanelRef>(null);
+  const editorModeRef = useRef<EditorModeRef>(null);
 
   // NOTE: autoSaveIntervalRef and autoSaveCancellationRef removed - EditorContainer handles autosave now
   const activeSavesRef = useRef<Set<string>>(new Set());
   const lastSavePathRef = useRef<string | null>(null);
   const lastChangeTimeRef = useRef<number>(0);  // Track when content last changed for debouncing
-  const sidebarRef = useRef<HTMLDivElement>(null);
-  const isResizingRef = useRef<boolean>(false);
+  // NOTE: sidebarRef and isResizingRef moved to EditorMode
 
   // Window lifecycle hook - handles mount/unmount and beforeunload
   useWindowLifecycle({
@@ -562,19 +552,7 @@ export default function App() {
     setIsAIChatStateLoaded(false);
   }, []);
 
-  // Load persisted sidebar width once workspace is known
-  useEffect(() => {
-    if (!workspacePath || !window.electronAPI?.getSidebarWidth) return;
-    window.electronAPI.getSidebarWidth(workspacePath)
-      .then(width => {
-        if (typeof width === 'number') {
-          setSidebarWidth(width);
-        }
-      })
-      .catch(error => {
-        console.error('Failed to load workspace sidebar width:', error);
-      });
-  }, [workspacePath]);
+  // NOTE: Sidebar width loading moved to EditorMode
 
   // Expose workspacePath and currentFilePath globally for plugins
   useEffect(() => {
@@ -589,43 +567,7 @@ export default function App() {
     }
   }, [currentFilePath]);
 
-  // Handle sidebar resize
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizingRef.current = true;
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }, []);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingRef.current) return;
-
-      const newWidth = Math.min(Math.max(150, e.clientX), 500);
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      if (!isResizingRef.current) return;
-
-      isResizingRef.current = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-
-      // Save the width
-      if (window.electronAPI && workspacePath) {
-        window.electronAPI.setSidebarWidth(workspacePath, sidebarWidth);
-      }
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [sidebarWidth]);
+  // NOTE: Sidebar resize handlers moved to EditorMode
 
 
   // Handle new file
@@ -1056,54 +998,18 @@ export default function App() {
     }
   }, [handleWorkspaceFileSelect, activeMode]);
 
-  // Handle creating a new file in workspace
-  const handleCreateNewFile = useCallback(async (fileName: string) => {
-    if (!window.electronAPI) return;
+  // NOTE: handleCreateNewFile and handleRestoreFromHistory moved to EditorMode
 
-    const directory = newFileDirectory || workspacePath;
-    if (!directory) return;
-
-    const filePath = `${directory}/${fileName}`;
-
-    try {
-      // Create the file with initial title heading
-      const initialContent = createInitialFileContent(fileName);
-      await window.electronAPI.createFile(filePath, initialContent);
-
-      // Open the newly created file
-      await handleWorkspaceFileSelect(filePath);
-
-      // Refresh file tree
-      if (workspacePath) {
-        const tree = await window.electronAPI.getFolderContents(workspacePath);
-        setFileTree(tree);
-      }
-
-      // Reset the directory after creating the file
-      setNewFileDirectory(null);
-    } catch (error) {
-      console.error('Failed to create file:', error);
-      alert('Failed to create file: ' + error);
-    }
-  }, [newFileDirectory, workspacePath, handleWorkspaceFileSelect]);
-
-  // Handle restoring content from history
-  const handleRestoreFromHistory = useCallback(async (content: string) => {
-    if (!currentFilePath) {
-      return;
-    }
-
-    try {
-      // Simple approach: Just write the restored content to disk
-      // The file watcher will detect the change and reload the editor automatically
-      await window.electronAPI.saveFile(content, currentFilePath);
-    } catch (error) {
-      console.error('[App] Failed to restore content from history:', error);
-    }
-
-    // Close the history dialog
-    setIsHistoryDialogOpen(false);
-  }, [currentFilePath]);
+  // Stub functions for state that moved to EditorMode (to avoid breaking useIPCHandlers)
+  const setFileTree = useCallback(() => {
+    // EditorMode manages its own file tree now
+  }, []);
+  const setIsNewFileDialogOpen = useCallback(() => {
+    // EditorMode manages its own dialog state now
+  }, []);
+  const setIsHistoryDialogOpen = useCallback(() => {
+    // EditorMode manages its own dialog state now
+  }, []);
 
   // Sync current file path with backend whenever it changes
   useEffect(() => {
@@ -1146,7 +1052,7 @@ export default function App() {
             setWorkspaceMode(true);
             setWorkspacePath(initialState.workspacePath);
             setWorkspaceName(initialState.workspaceName);
-            setFileTree(initialState.fileTree || []);
+            // NOTE: fileTree loading moved to EditorMode
           }
         }
       } catch (error) {
@@ -1361,8 +1267,8 @@ export default function App() {
     const handleCloseActiveTab = () => {
       if (activeModeRef.current === 'agent') {
         agenticPanelRef.current?.closeActiveTab();
-      } else if ((activeModeRef.current === 'files' || activeModeRef.current === 'plan') && currentTabsRef.current.activeTabId) {
-        currentTabsRef.current.removeTab(currentTabsRef.current.activeTabId);
+      } else if (activeModeRef.current === 'files' || activeModeRef.current === 'plan') {
+        editorModeRef.current?.closeActiveTab();
       }
     };
 
@@ -1408,71 +1314,6 @@ export default function App() {
       <div data-layout="main-column-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Top: Main content (sidebar + editor/agent + AI chat) */}
         <div data-layout="top-content-row" style={{ flex: 1, display: 'flex', flexDirection: 'row', minHeight: 0 }}>
-          {/* Left Sidebar (Files or Plans) */}
-          {workspaceName && sidebarView !== 'settings' && (activeMode === 'files' || activeMode === 'plan') && (
-        <>
-          <div ref={sidebarRef} style={{ width: sidebarWidth, position: 'relative' }}>
-            {activeMode === 'files' ? (
-              <WorkspaceSidebar
-              workspaceName={workspaceName}
-              workspacePath={workspacePath || ''}
-              fileTree={fileTree}
-              currentFilePath={currentFilePath}
-              currentView={sidebarView}
-              onFileSelect={handleWorkspaceFileSelect}
-              onCloseWorkspace={handleCloseWorkspace}
-              onOpenQuickSearch={() => setIsQuickOpenVisible(true)}
-              onRefreshFileTree={async () => {
-                if (workspacePath && window.electronAPI) {
-                  const tree = await window.electronAPI.getFolderContents(workspacePath);
-                  setFileTree(tree);
-                }
-              }}
-              onViewHistory={(filePath) => {
-                setIsHistoryDialogOpen(true);
-              }}
-              onNewPlan={() => {
-                // Create a new plan file in the plans directory
-                setIsNewFileDialogOpen(true);
-                setNewFileDirectory(workspacePath ? `${workspacePath}/plans` : null);
-              }}
-              onOpenPlansTable={() => setBottomPanel(prev => prev === 'plan' ? null : 'plan')}
-            />
-            ) : (
-              <PlansPanel
-                currentFilePath={currentFilePath}
-                onPlanSelect={handleWorkspaceFileSelect}
-              />
-            )}
-          </div>
-          <div
-            style={{
-              width: '5px',
-              cursor: 'col-resize',
-              backgroundColor: 'transparent',
-              position: 'relative',
-              zIndex: 10,
-              marginLeft: '-2.5px',
-              marginRight: '-2.5px'
-            }}
-            onMouseDown={handleMouseDown}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                bottom: 0,
-                left: '2px',
-                width: '2px',
-                backgroundColor: '#e5e7eb',
-                transition: 'background-color 0.2s'
-              }}
-              className="sidebar-resize-handle"
-            />
-          </div>
-          </>
-          )}
-
           {/* Center: Editor/Agent/Settings area */}
           <div data-layout="center-content-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
             {/* Files/Plan Mode - always mounted, visibility controlled by display */}
@@ -1481,7 +1322,7 @@ export default function App() {
               style={{
                 flex: 1,
                 display: (activeMode === 'files' || activeMode === 'plan') ? 'flex' : 'none',
-                flexDirection: 'column',
+                flexDirection: 'row',
                 overflow: 'hidden',
                 minHeight: 0
               }}
@@ -1495,80 +1336,23 @@ export default function App() {
                   }}
                   isFirstTime={false}
                 />
-              ) : tabs.activeTab ? (
-                <div className="file-tabs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                  <TabManager
-                  tabs={tabs.tabs}
-                  activeTabId={tabs.activeTabId}
-                  onTabSelect={tabs.switchTab}
-                  onTabClose={tabs.removeTab}
-                  onNewTab={() => {
-                    setIsNewFileDialogOpen(true);
-                  }}
-                  onTogglePin={tabs.togglePin}
-                  onTabReorder={tabs.reorderTabs}
-                  onViewHistory={(tabId) => {
-                    const tab = tabs.getTabState(tabId);
-                    if (tab && tab.filePath) {
-                      setIsHistoryDialogOpen(true);
-                    }
-                  }}
-                  hideTabBar={false}
+              ) : workspacePath ? (
+                <EditorMode
+                  ref={editorModeRef}
+                  workspacePath={workspacePath}
+                  workspaceName={workspaceName}
+                  theme={theme}
                   isActive={activeMode === 'files' || activeMode === 'plan'}
-                  onToggleAIChat={() => setIsAIChatCollapsed(prev => !prev)}
-                  isAIChatCollapsed={isAIChatCollapsed}
-                >
-                  {tabs.activeTab ? (
-                    <TabContent
-                      tabs={tabs.tabs}
-                      activeTabId={tabs.activeTabId}
-                      theme={theme}
-                      onManualSaveReady={(saveFn) => {
-                        handleSaveRef.current = saveFn;
-                      }}
-                      onSaveComplete={(filePath) => {
-                        setCurrentFilePath(filePath);
-                        setCurrentFileName(filePath.split('/').pop() || filePath);
-                        setIsDirty(false);
-
-                        if (tabs.activeTabId) {
-                          tabs.updateTab(tabs.activeTabId, {
-                            isDirty: false,
-                            lastSaved: new Date()
-                          });
-                        }
-                      }}
-                      onGetContentReady={(tabId, getContentFn) => {
-                        if (tabId === tabs.activeTabId) {
-                          getContentRef.current = getContentFn;
-                          aiToolService.setGetContentFunction(getContentFn);
-                        }
-                      }}
-                      onViewHistory={() => {
-                        setIsHistoryDialogOpen(true);
-                      }}
-                      onRenameDocument={() => {
-                        // TODO: Implement tab/document renaming
-                        console.log('Rename document requested');
-                      }}
-                      onTabDirtyChange={(changedTabId, changedIsDirty) => {
-                        const tab = tabs.getTabState(changedTabId);
-                        if (tab && tab.isDirty !== changedIsDirty) {
-                          tabs.updateTab(changedTabId, { isDirty: changedIsDirty });
-                          if (changedTabId === tabs.activeTabId) {
-                            setIsDirty(changedIsDirty);
-                          }
-                        }
-                      }}
-                    />
-                  ) : (
-                    <WorkspaceWelcome workspaceName={workspaceName || 'Workspace'} />
-                  )}
-                </TabManager>
-              </div>
-            ) : (
-              <WorkspaceWelcome workspaceName={workspaceName || 'Open a file to get started'} />
-            )}
+                  onCurrentFileChange={(filePath, fileName, isDirty) => {
+                    setCurrentFilePath(filePath);
+                    setCurrentFileName(fileName);
+                    setIsDirty(isDirty);
+                  }}
+                  onCloseWorkspace={handleCloseWorkspace}
+                />
+              ) : (
+                <WorkspaceWelcome workspaceName="Open a workspace to get started" />
+              )}
             </div>
 
             {/* Agent Mode - always mounted, visibility controlled by display */}
@@ -1617,32 +1401,6 @@ export default function App() {
               </div>
             )}
           </div>
-
-          {/* Right: AI Chat */}
-          {sidebarView !== 'settings' && (activeMode === 'files' || activeMode === 'plan') && (
-            <AIChat
-              isCollapsed={isAIChatCollapsed}
-              onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}
-              width={aiChatWidth}
-              onWidthChange={setAIChatWidth}
-              planningModeEnabled={aiPlanningModeEnabled}
-              onTogglePlanningMode={setAIPlanningModeEnabled}
-              workspacePath={workspacePath || undefined}
-              sessionToLoad={sessionToLoad}
-              onSessionLoaded={() => setSessionToLoad(null)}
-              onSessionIdChange={setCurrentAISessionId}
-              // COMMENTED OUT - API key dialog no longer needed, using claude-code login
-              // onShowApiKeyError={() => setIsApiKeyDialogOpen(true)}
-              onShowApiKeyError={() => {}} // No-op for now
-              documentContext={documentContext}
-              onApplyEdit={(edit, prompt, aiResponse) => {
-                console.log('Edit already applied by AIChat component, updating UI state');
-                if (edit.type === 'diff' && edit.replacements) {
-                  console.log('Diff applied successfully - showing red/green preview');
-                }
-              }}
-            />
-          )}
         </div>
 
         {/* Bottom: Bottom Panel - spans width after nav gutter */}
@@ -1676,24 +1434,8 @@ export default function App() {
               filePath: currentFilePath || undefined
             }}
           />
-          <NewFileDialog
-            isOpen={isNewFileDialogOpen}
-            onClose={() => {
-              setIsNewFileDialogOpen(false);
-              setNewFileDirectory(null);
-            }}
-            currentDirectory={newFileDirectory || workspacePath}
-            workspacePath={workspacePath}
-            onCreateFile={handleCreateNewFile}
-          />
         </>
       )}
-      <HistoryDialog
-        isOpen={isHistoryDialogOpen}
-        onClose={() => setIsHistoryDialogOpen(false)}
-        filePath={currentFilePath}
-        onRestore={handleRestoreFromHistory}
-      />
       <KeyboardShortcutsDialog
         isOpen={isKeyboardShortcutsDialogOpen}
         onClose={() => setIsKeyboardShortcutsDialogOpen(false)}
