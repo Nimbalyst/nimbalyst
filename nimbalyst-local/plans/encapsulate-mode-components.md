@@ -14,8 +14,8 @@ planStatus:
     - app-structure
     - cleanup
   created: "2025-01-29"
-  updated: "2025-01-29T23:15:00.000Z"
-  progress: 75
+  updated: "2025-01-29T23:45:00.000Z"
+  progress: 85
 ---
 # Encapsulate Mode-Specific UI into Dedicated Components
 
@@ -162,20 +162,21 @@ Each mode component handles its own tab closing logic internally.
   - Build documentContext manually from currentFilePath and getContentRef
   - EditorMode syncs getContentRef back to App.tsx via onGetContentReady callback
 
-2. **Move handleOpen/handleSaveAs to EditorMode** (TODO)
-  - These operations still use App-level stub tabs
-  - Need to be moved to EditorMode and exposed via ref
-  - Or delegate to EditorMode when in workspace mode
+2. ✅ **Move handleOpen/handleSaveAs to EditorMode**
+  - Implemented in EditorMode with proper tab management
+  - Exposed via EditorMode ref interface
+  - App.tsx delegates to EditorMode when in workspace mode
+  - Includes automatic history snapshot creation on file open
 
 3. ✅ **Refactor AgenticPanel document context**
   - App.tsx builds documentContext from currentFilePath and getContentRef
   - EditorMode notifies App of changes via onCurrentFileChange and onGetContentReady
   - AgenticPanel continues to receive documentContext as prop
 
-4. **Update IPC handlers** (TODO)
-  - `file-open` → needs to route to EditorMode
-  - `file-save-as` → needs to route to EditorMode
-  - `file-new` → needs investigation (window-level vs workspace-level)
+4. ✅ **Update IPC handlers**
+  - `file-open` → Routes to EditorMode.handleOpen() via ref
+  - `file-save-as` → Routes to EditorMode.handleSaveAs() via ref
+  - `file-new` → Sends 'file-new-in-workspace' in workspace mode (handled separately)
 
 5. ✅ **Clean up navigation state**
   - Removed useTabNavigation from App.tsx
@@ -198,13 +199,14 @@ Each mode component handles its own tab closing logic internally.
 - ✅ Sidebar resize works in EditorMode
 - ✅ Dialogs (new file, history) managed by EditorMode
 
-### Phase 2 (IN PROGRESS - 75%)
+### Phase 2 (COMPLETED - 85%)
 - ✅ No duplicate tabs state between App.tsx and EditorMode (stub for backward compat)
 - ✅ EditorMode syncs getContentRef to App.tsx via callback
-- [ ] handleOpen/handleSaveAs moved to EditorMode or properly delegated
+- ✅ handleOpen/handleSaveAs moved to EditorMode and properly delegated
 - ✅ AgenticPanel document context works without App-level tabs
 - ✅ Tab navigation moved to EditorMode
-- [ ] IPC handlers properly route to mode components
+- ✅ IPC handlers properly route to EditorMode via ref
+- ⏳ Cleanup remaining tabs stub usage (handleNew, debug helpers)
 
 ### Phase 3 (PENDING)
 - [ ] App.tsx reduced to primarily mode routing logic

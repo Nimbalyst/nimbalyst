@@ -543,92 +543,25 @@ export default function App() {
     // Note: No need to set refs - EditorContainer manages all editor state
   }, [tabs]);
 
-  // Handle open file
+  // Handle open file - delegate to EditorMode in workspace mode
   const handleOpen = useCallback(async () => {
-    if (!window.electronAPI) return;
-
-    try {
-      const result = await window.electronAPI.openFile();
-      if (result) {
-        // Close any existing tabs first (single-file mode = one tab only)
-        tabs.closeAllTabs();
-
-        // Create a tab for the new file
-        tabs.addTab(result.filePath, result.content);
-
-        // UI state will be updated by onTabChange callback
-
-        // Create automatic snapshot when opening file
-        if (window.electronAPI.history) {
-          try {
-            // Check if we have previous snapshots
-            const snapshots = await window.electronAPI.history.listSnapshots(result.filePath);
-            if (snapshots.length === 0) {
-              // First time opening this file, create initial snapshot
-              await window.electronAPI.history.createSnapshot(
-                result.filePath,
-                result.content,
-                'auto',
-                'Initial file open'
-              );
-            } else {
-              // Check if content changed since last snapshot
-              const latestSnapshot = snapshots[0]; // Assuming sorted by timestamp desc
-              const lastContent = await window.electronAPI.history.loadSnapshot(
-                result.filePath,
-                latestSnapshot.timestamp
-              );
-              if (lastContent !== result.content) {
-                // Content actually changed, create snapshot
-                await window.electronAPI.history.createSnapshot(
-                  result.filePath,
-                  result.content,
-                  'auto',
-                  'File changed externally'
-                );
-              }
-            }
-          } catch (error) {
-            console.error('Failed to create automatic snapshot:', error);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Failed to open file:', error);
+    if (workspaceMode && editorModeRef.current) {
+      await editorModeRef.current.handleOpen();
+    } else {
+      // TODO: Handle single-file mode if needed
+      console.warn('handleOpen called but not in workspace mode');
     }
-  }, []);
+  }, [workspaceMode]);
 
-  // Handle save as
+  // Handle save as - delegate to EditorMode in workspace mode
   const handleSaveAs = useCallback(async () => {
-    if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] handleSaveAs called');
-    if (!window.electronAPI || !getContentRef.current) return;
-
-    const content = getContentRef.current();
-
-    try {
-      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Calling electronAPI.saveFileAs');
-      const result = await window.electronAPI.saveFileAs(content);
-      if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Save as result:', result);
-      if (result) {
-        if (LOG_CONFIG.FILE_OPS) console.log('[FILE_OPS] Setting current file path to:', result.filePath);
-        setCurrentFilePath(result.filePath);
-        setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
-        setIsDirty(false);
-
-        // Update tab state
-        if (tabs.activeTabId) {
-          tabs.updateTab(tabs.activeTabId, {
-            filePath: result.filePath,
-            fileName: result.filePath.split('/').pop() || result.filePath,
-            isDirty: false,
-            lastSaved: new Date()
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Failed to save file as:', error);
+    if (workspaceMode && editorModeRef.current) {
+      await editorModeRef.current.handleSaveAs();
+    } else {
+      // TODO: Handle single-file mode if needed
+      console.warn('handleSaveAs called but not in workspace mode');
     }
-  }, []);
+  }, [workspaceMode]);
 
   // Manual save function provided by EditorContainer
   const handleSaveRef = useRef<(() => Promise<void>) | null>(null);

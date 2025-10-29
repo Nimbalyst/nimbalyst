@@ -17,6 +17,8 @@ import { HistoryDialog } from '../HistoryDialog';
 
 export interface EditorModeRef {
   closeActiveTab: () => void;
+  handleOpen: () => Promise<void>;
+  handleSaveAs: () => Promise<void>;
 }
 
 export interface EditorModeProps {
@@ -119,14 +121,102 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     switchTab: tabs.switchTab
   });
 
+  // Handle opening a file via system dialog
+  const handleOpen = useCallback(async () => {
+    if (!window.electronAPI) return;
+
+    try {
+      const result = await window.electronAPI.openFile();
+      if (result) {
+        // Close any existing tabs first (single-file mode = one tab only)
+        tabs.closeAllTabs();
+
+        // Create a tab for the new file
+        tabs.addTab(result.filePath, result.content);
+
+        // Create automatic snapshot when opening file
+        if (window.electronAPI.history) {
+          try {
+            // Check if we have previous snapshots
+            const snapshots = await window.electronAPI.history.listSnapshots(result.filePath);
+            if (snapshots.length === 0) {
+              // First time opening this file, create initial snapshot
+              await window.electronAPI.history.createSnapshot(
+                result.filePath,
+                result.content,
+                'auto',
+                'Initial file open'
+              );
+            } else {
+              // Check if content changed since last snapshot
+              const latestSnapshot = snapshots[0];
+              const lastContent = await window.electronAPI.history.loadSnapshot(
+                result.filePath,
+                latestSnapshot.timestamp
+              );
+              if (lastContent !== result.content) {
+                // Content actually changed, create snapshot
+                await window.electronAPI.history.createSnapshot(
+                  result.filePath,
+                  result.content,
+                  'auto',
+                  'File changed externally'
+                );
+              }
+            }
+          } catch (error) {
+            console.error('Failed to create automatic snapshot:', error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to open file:', error);
+    }
+  }, [tabs]);
+
+  // Handle save as
+  const handleSaveAs = useCallback(async () => {
+    if (!window.electronAPI || !getContentRef.current) return;
+
+    const content = getContentRef.current();
+
+    try {
+      const result = await window.electronAPI.saveFileAs(content);
+      if (result) {
+        setCurrentFilePath(result.filePath);
+        setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
+        setIsDirty(false);
+
+        // Update tab state
+        if (tabs.activeTabId) {
+          tabs.updateTab(tabs.activeTabId, {
+            filePath: result.filePath,
+            fileName: result.filePath.split('/').pop() || result.filePath,
+            isDirty: false,
+            lastSaved: new Date()
+          });
+        }
+
+        // Notify parent of file change
+        if (onCurrentFileChange) {
+          onCurrentFileChange(result.filePath, result.filePath.split('/').pop() || result.filePath, false);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to save file as:', error);
+    }
+  }, [tabs, onCurrentFileChange]);
+
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     closeActiveTab: () => {
       if (tabs.activeTabId) {
         tabs.removeTab(tabs.activeTabId);
       }
-    }
-  }), [tabs]);
+    },
+    handleOpen,
+    handleSaveAs
+  }), [tabs, handleOpen, handleSaveAs]);
 
   // Handle sidebar resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
