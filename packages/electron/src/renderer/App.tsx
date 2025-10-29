@@ -444,20 +444,6 @@ export default function App() {
   // NOTE: Tab management moved to EditorMode. App.tsx no longer maintains tabs.
   // EditorMode notifies us of currentFilePath changes via onCurrentFileChange callback.
 
-  // Stub tabs object for backward compatibility with existing code that hasn't been refactored yet
-  // TODO: Remove this once handleOpen, handleSaveAs, etc. are moved to EditorMode
-  const tabs = useMemo(() => ({
-    tabs: [],
-    activeTab: currentFilePath ? { filePath: currentFilePath, fileName: currentFileName, isDirty } : null,
-    activeTabId: currentFilePath || null,
-    closeAllTabs: () => { console.warn('tabs.closeAllTabs called on stub'); },
-    addTab: () => { console.warn('tabs.addTab called on stub'); return ''; },
-    updateTab: () => { console.warn('tabs.updateTab called on stub'); },
-    findTabByPath: () => { console.warn('tabs.findTabByPath called on stub'); return null; },
-    switchTab: () => { console.warn('tabs.switchTab called on stub'); },
-    reopenLastClosedTab: () => { console.warn('tabs.reopenLastClosedTab called on stub'); },
-  }), [currentFilePath, currentFileName, isDirty]);
-
   // Declare refs needed by hooks below
   const getContentRef = useRef<(() => string) | null>(null);
 
@@ -530,18 +516,15 @@ export default function App() {
   // NOTE: Sidebar resize handlers moved to EditorMode
 
 
-  // Handle new file
+  // Handle new file (legacy - used in single-file mode)
   const handleNew = useCallback(() => {
-    // Close all existing tabs and create a new empty tab
-    tabs.closeAllTabs();
-
-    // Reset global UI state
+    // Reset global UI state for new file
     setCurrentFilePath(null);
     setCurrentFileName(null);
     setIsDirty(false);
 
-    // Note: No need to set refs - EditorContainer manages all editor state
-  }, [tabs]);
+    // Note: In workspace mode, this is handled by EditorMode via 'file-new-in-workspace' event
+  }, []);
 
   // Handle open file - delegate to EditorMode in workspace mode
   const handleOpen = useCallback(async () => {
@@ -574,69 +557,32 @@ export default function App() {
   }, []);
 
   // Wrapper for workspace file selection utility with component-specific context
+  // NOTE: This is legacy code - EditorMode handles workspace file selection in workspace mode
   const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
-    return handleWorkspaceFileSelectUtil({
-      filePath,
-      currentFilePath,
-      tabs,
-      isInitializedRef,
-      setCurrentFilePath,
-      setCurrentFileName,
-    });
-  }, [currentFilePath, tabs, setCurrentFileName, setCurrentFilePath]);
+    console.warn('[App] handleWorkspaceFileSelect called - should be handled by EditorMode in workspace mode');
+    // Not used in workspace mode, but kept for aiToolService compatibility
+    return;
+  }, [currentFilePath]);
 
   // Configure aiToolService with handleWorkspaceFileSelect
   useEffect(() => {
     aiToolService.setHandleWorkspaceFileSelectFunction(handleWorkspaceFileSelect);
   }, [handleWorkspaceFileSelect]);
 
-  // Register file opener with editorRegistry for background file opening
+  // NOTE: File opener moved to EditorMode - EditorMode handles file opening in workspace mode
+  // This is legacy code for single-file mode
   useEffect(() => {
     const fileOpener = async (filePath: string, content: string, switchToTab: boolean) => {
-      if (tabs && tabs.addTab) {
-        tabs.addTab(filePath, content, switchToTab);
-      }
+      console.warn('[App] fileOpener called - should be handled by EditorMode in workspace mode');
     };
     editorRegistry.setFileOpener(fileOpener);
-  }, [tabs]);
+  }, []);
 
-  // Open the welcome tab - virtual document
+  // NOTE: Welcome tab functionality disabled - not used in workspace mode
+  // This is legacy code for single-file mode
   const openWelcomeTab = useCallback(async () => {
-    const virtualPath = 'virtual://welcome';
-
-    // Check if welcome tab is already open
-    const existingTab = tabs.findTabByPath(virtualPath);
-    if (existingTab) {
-      tabs.switchTab(existingTab.id);
-      return;
-    }
-
-    try {
-      // Load the welcome document content from the main process
-      console.log('[WELCOME] Attempting to load virtual document:', virtualPath);
-      console.log('[WELCOME] documentService available:', !!window.electronAPI?.documentService);
-      console.log('[WELCOME] loadVirtual method available:', !!(window.electronAPI?.documentService as any)?.loadVirtual);
-
-      const content = await (window.electronAPI.documentService as any).loadVirtual(virtualPath);
-      console.log('[WELCOME] Received content, length:', content?.length);
-
-      if (!content) {
-        console.error('[WELCOME] Failed to load welcome document - content is null or undefined');
-        return;
-      }
-
-      // Add the welcome tab
-      const tabId = tabs.addTab(virtualPath, content);
-      if (tabId) {
-        // Mark the tab as virtual
-        tabs.updateTab(tabId, { isVirtual: true });
-
-        // Global UI state will be updated by onTabChange callback
-      }
-    } catch (error) {
-      console.error('[WELCOME] Failed to open welcome tab:', error);
-    }
-  }, [tabs, setIsDirty, setCurrentFileName, setCurrentFilePath]);
+    console.warn('[App] openWelcomeTab called - not implemented in workspace mode');
+  }, []);
 
 
   // Listen for IPC events from menu
@@ -801,11 +747,8 @@ export default function App() {
         e.preventDefault();
         setIsAIChatCollapsed(prev => !prev);
       }
-      // Cmd+Shift+T (Mac) or Ctrl+Shift+T (Windows/Linux) to reopen last closed tab
-      if (workspaceMode && (e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 't') {
-        e.preventDefault();
-        tabs.reopenLastClosedTab();
-      }
+      // NOTE: Cmd+Shift+T for reopening last closed tab disabled - needs EditorMode integration
+      // TODO: Move this functionality to EditorMode
       // Cmd+Y (Mac) or Ctrl+Y (Windows/Linux) for History
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
         e.preventDefault();
@@ -853,7 +796,7 @@ export default function App() {
     // Use capture phase to intercept before any other handlers (like Lexical's)
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [workspaceMode, tabs.reopenLastClosedTab, activeMode]);
+  }, [workspaceMode, activeMode]);
 
   // Save AI Chat state when it changes (but only after initial load)
   useEffect(() => {
@@ -1028,8 +971,7 @@ export default function App() {
     sessionToLoad,
     isDirty,
 
-    // Tabs
-    tabs,
+    // NOTE: tabs removed - EditorMode manages tabs now
 
     // Config
     LOG_CONFIG,
@@ -1091,8 +1033,7 @@ export default function App() {
   }, [handleWorkspaceFileSelect]);
 
   logger.ui.info('Rendering App with config:', {
-    tabsCount: tabs.tabs.length,
-    activeTabId: tabs.activeTabId,
+    currentFilePath,
     currentFileName,
     theme
   });
@@ -1101,18 +1042,13 @@ export default function App() {
 
   // Debug: expose values for testing (in useEffect to run after state updates)
   useEffect(() => {
-    // console.log('[APP-DEBUG] Setting window variables:', {
-    //   activeTab: tabs.activeTab?.fileName,
-    //   activeTabId: tabs.activeTabId,
-    //   tabCount: tabs.tabs.length
-    // });
     if (typeof window !== 'undefined') {
       (window as any).__tabPreferencesEnabled__ = true;
-      (window as any).__activeTab__ = tabs.activeTab;
-      (window as any).__activeTabId__ = tabs.activeTabId;
-      (window as any).__tabCount__ = tabs.tabs.length;
+      (window as any).__currentFilePath__ = currentFilePath;
+      (window as any).__currentFileName__ = currentFileName;
+      (window as any).__workspaceMode__ = workspaceMode;
     }
-  }, [tabs]);
+  }, [currentFilePath, currentFileName, workspaceMode]);
 
   // Handle close confirmation from main process
   useEffect(() => {
@@ -1149,11 +1085,9 @@ export default function App() {
 
   // Handle close-active-tab from menu - route to active panel
   const activeModeRef = useRef(activeMode);
-  const currentTabsRef = useRef(tabs);
 
   useEffect(() => {
     activeModeRef.current = activeMode;
-    currentTabsRef.current = tabs;
   });
 
   useEffect(() => {
