@@ -118,14 +118,19 @@ function convertFullDocumentToTrackerItems(metadata: any[], trackerType: Tracker
         status = 'blocked';
       }
 
-      // Get the actual update date from frontmatter, NOT doc.lastModified (that's file modification)
-      const dateSource = trackerStatus.updated || frontmatter.updated || trackerStatus.created || frontmatter.created;
+      // Use file modified date for full-document trackers (more accurate than frontmatter)
+      // This ensures recently-edited plans appear at the top regardless of frontmatter state
       let actualDate: Date | null = null;
 
-      if (dateSource) {
-        const parsed = new Date(dateSource);
-        if (!isNaN(parsed.getTime())) {
-          actualDate = parsed;
+      if (doc.lastModified) {
+        // lastModified can be a Date object or ISO string
+        if (doc.lastModified instanceof Date) {
+          actualDate = doc.lastModified;
+        } else {
+          const parsed = new Date(doc.lastModified);
+          if (!isNaN(parsed.getTime())) {
+            actualDate = parsed;
+          }
         }
       }
 
