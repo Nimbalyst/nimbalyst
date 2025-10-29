@@ -42,7 +42,7 @@ export interface AISessionViewProps {
   isLoading?: boolean;
 
   // History navigation (chat mode only)
-  onNavigateHistory?: (direction: 'up' | 'down') => void;
+  onNavigateHistory?: (sessionId: string, direction: 'up' | 'down') => void;
 
   // AI Mode (plan vs agent)
   aiMode?: AIMode;
@@ -152,6 +152,13 @@ export function AISessionView({
     }
   }, [onTodoClick]);
 
+  // Handle history navigation
+  const handleNavigateHistory = useCallback((direction: 'up' | 'down') => {
+    if (onNavigateHistory) {
+      onNavigateHistory(sessionId, direction);
+    }
+  }, [sessionId, onNavigateHistory]);
+
   // Feature flags based on mode and provider
   const enableSlashCommands = sessionData.provider === 'claude-code'; // Only for Claude Code
   const enableAttachments = true; // Available in both chat and agent modes
@@ -218,7 +225,7 @@ export function AISessionView({
         onAttachmentAdd={enableAttachments ? handleAttachmentAdd : undefined}
         onAttachmentRemove={enableAttachments ? handleAttachmentRemove : undefined}
         enableSlashCommands={enableSlashCommands}
-        onNavigateHistory={enableHistoryNavigation ? onNavigateHistory : undefined}
+        onNavigateHistory={enableHistoryNavigation ? handleNavigateHistory : undefined}
         placeholder={
           mode === 'chat'
             ? "Ask a question... (type @ to mention files)"

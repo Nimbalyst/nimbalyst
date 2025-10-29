@@ -85,6 +85,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
 
+  // Prompt history navigation state (per session)
+  const [historyPosition, setHistoryPosition] = useState<Map<string, number>>(new Map());
+  const [savedDraft, setSavedDraft] = useState<Map<string, string>>(new Map());
+
   // Session history layout state (agent mode only)
   const [sessionHistoryWidth, setSessionHistoryWidth] = useState(240);
   const [sessionHistoryCollapsed, setSessionHistoryCollapsed] = useState(mode === 'chat'); // Collapsed in chat mode
@@ -617,6 +621,69 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     ));
   }, []);
 
+  // Handle history navigation (up/down arrow in input)
+  const handleNavigateHistory = useCallback((sessionId: string, direction: 'up' | 'down') => {
+    const currentTab = sessionTabs.find(tab => tab.id === sessionId);
+    if (!currentTab) return;
+
+    // Extract user prompts from session messages
+    const userPrompts = currentTab.sessionData.messages
+      .filter(msg => msg.role === 'user')
+      .map(msg => msg.content);
+
+    if (userPrompts.length === 0) return;
+
+    // Get current position (default to -1 for "not navigating")
+    const currentPosition = historyPosition.get(sessionId) ?? -1;
+
+    if (direction === 'up') {
+      // Move to previous prompt (more recent = higher index)
+      const newPosition = currentPosition === -1 ? userPrompts.length - 1 : Math.max(0, currentPosition - 1);
+
+      // Save current draft on first navigation
+      if (currentPosition === -1) {
+        const newSavedDraft = new Map(savedDraft);
+        newSavedDraft.set(sessionId, currentTab.draftInput || '');
+        setSavedDraft(newSavedDraft);
+      }
+
+      // Update position
+      const newHistoryPosition = new Map(historyPosition);
+      newHistoryPosition.set(sessionId, newPosition);
+      setHistoryPosition(newHistoryPosition);
+
+      // Update draft input
+      handleDraftInputChange(sessionId, userPrompts[newPosition]);
+    } else {
+      // Move to next prompt or restore draft
+      if (currentPosition === -1) return; // Not navigating
+
+      const newPosition = currentPosition + 1;
+
+      if (newPosition >= userPrompts.length) {
+        // Past the last prompt - restore original draft
+        const draft = savedDraft.get(sessionId) || '';
+        handleDraftInputChange(sessionId, draft);
+
+        // Clear history navigation state
+        const newHistoryPosition = new Map(historyPosition);
+        newHistoryPosition.delete(sessionId);
+        setHistoryPosition(newHistoryPosition);
+
+        const newSavedDraft = new Map(savedDraft);
+        newSavedDraft.delete(sessionId);
+        setSavedDraft(newSavedDraft);
+      } else {
+        // Move to next prompt
+        const newHistoryPosition = new Map(historyPosition);
+        newHistoryPosition.set(sessionId, newPosition);
+        setHistoryPosition(newHistoryPosition);
+
+        handleDraftInputChange(sessionId, userPrompts[newPosition]);
+      }
+    }
+  }, [sessionTabs, historyPosition, savedDraft, handleDraftInputChange]);
+
   // Handle mode change (plan <-> agent)
   const handleModeChange = useCallback((sessionId: string, newMode: AIMode) => {
     setSessionTabs(prev => prev.map(tab =>
@@ -671,6 +738,18 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Handle send message
   const handleSendMessage = useCallback(async (sessionId: string, message: string, attachments: ChatAttachment[]) => {
     if (!message.trim() || !sessionId) return;
+
+    // Reset history navigation state when sending a message
+    setHistoryPosition(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(sessionId);
+      return newMap;
+    });
+    setSavedDraft(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(sessionId);
+      return newMap;
+    });
 
     setIsSending(true);
 
@@ -1005,6 +1084,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onDraftAttachmentsChange={handleDraftAttachmentsChange}
             onSendMessage={handleSendMessage}
             onCancelRequest={handleCancelRequest}
+            onNavigateHistory={handleNavigateHistory}
             fileMentionOptions={fileMentionOptions}
             onFileMentionSearch={handleFileMentionSearch}
             onFileMentionSelect={handleFileMentionSelect}
@@ -1103,6 +1183,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                 onDraftAttachmentsChange={handleDraftAttachmentsChange}
                 onSendMessage={handleSendMessage}
                 onCancelRequest={handleCancelRequest}
+                onNavigateHistory={handleNavigateHistory}
                 fileMentionOptions={fileMentionOptions}
                 onFileMentionSearch={handleFileMentionSearch}
                 onFileMentionSelect={handleFileMentionSelect}
