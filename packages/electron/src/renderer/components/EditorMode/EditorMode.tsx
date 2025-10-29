@@ -19,6 +19,7 @@ export interface EditorModeRef {
   closeActiveTab: () => void;
   handleOpen: () => Promise<void>;
   handleSaveAs: () => Promise<void>;
+  selectFile: (filePath: string) => Promise<void>;
 }
 
 export interface EditorModeProps {
@@ -207,6 +208,18 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     }
   }, [tabs, onCurrentFileChange]);
 
+  // Handle workspace file selection
+  const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
+    await handleWorkspaceFileSelectUtil({
+      filePath,
+      currentFilePath,
+      tabs,
+      isInitializedRef,
+      setCurrentFilePath,
+      setCurrentFileName
+    });
+  }, [currentFilePath, tabs]);
+
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     closeActiveTab: () => {
@@ -215,8 +228,9 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       }
     },
     handleOpen,
-    handleSaveAs
-  }), [tabs, handleOpen, handleSaveAs]);
+    handleSaveAs,
+    selectFile: handleWorkspaceFileSelect
+  }), [tabs, handleOpen, handleSaveAs, handleWorkspaceFileSelect]);
 
   // Handle sidebar resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -255,18 +269,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [sidebarWidth, workspacePath]);
-
-  // Handle workspace file selection
-  const handleWorkspaceFileSelect = useCallback(async (filePath: string) => {
-    await handleWorkspaceFileSelectUtil({
-      filePath,
-      currentFilePath,
-      tabs,
-      isInitializedRef,
-      setCurrentFilePath,
-      setCurrentFileName
-    });
-  }, [currentFilePath, tabs]);
 
   // Load sidebar width from storage
   useEffect(() => {
@@ -365,7 +367,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
             onFileSelect={handleWorkspaceFileSelect}
             onCloseWorkspace={onCloseWorkspace || (() => {})}
             onOpenQuickSearch={() => {
-              // TODO: Wire up quick search if needed
+              // QuickOpen is handled at App level now for global access
             }}
             onRefreshFileTree={handleRefreshFileTree}
             onViewHistory={(filePath) => {

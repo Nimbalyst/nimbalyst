@@ -823,16 +823,18 @@ export default function App() {
     saveAIChatState();
   }, [isAIChatCollapsed, aiChatWidth, currentAISessionId, aiPlanningModeEnabled, isAIChatStateLoaded, workspacePath, workspaceMode]);
 
-  // Handle QuickOpen file selection
+  // Handle QuickOpen file selection - delegates to EditorMode and switches mode if needed
   const handleQuickOpenFileSelect = useCallback(async (filePath: string) => {
-    await handleWorkspaceFileSelect(filePath);
-    // Recent files are now added inside handleWorkspaceFileSelect
-
-    // Switch to files mode if we're in a different mode (e.g., settings, agent, etc.)
+    // Switch to files mode if we're in a different mode
     if (activeMode !== 'files' && activeMode !== 'plan') {
       setActiveMode('files');
     }
-  }, [handleWorkspaceFileSelect, activeMode]);
+
+    // Delegate to EditorMode's file selection handler
+    if (editorModeRef.current) {
+      await editorModeRef.current.selectFile(filePath);
+    }
+  }, [activeMode]);
 
   // NOTE: handleCreateNewFile and handleRestoreFromHistory moved to EditorMode
 
