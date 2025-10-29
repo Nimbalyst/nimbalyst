@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { logger } from './utils/logger';
 import type { LexicalCommand } from 'rexical';
 // aiChatBridge has been replaced by editorRegistry
@@ -9,7 +9,7 @@ import { useIPCHandlers } from './hooks/useIPCHandlers';
 import { useWindowLifecycle } from './hooks/useWindowLifecycle';
 import { useTheme } from './hooks/useTheme';
 import { useConfirmDialog } from './hooks/useConfirmDialog';
-import { useDocumentContext } from './hooks/useDocumentContext';
+// NOTE: useDocumentContext removed - we build documentContext manually now
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from './utils/workspaceFileOperations';
 import { createInitialFileContent } from './utils/fileUtils';
 import { aiToolService } from './services/AIToolService';
@@ -30,8 +30,7 @@ import { AgenticCodingWindow } from './components/AgenticCodingWindow';
 import { AgenticPanel, type AgenticPanelRef } from './components/UnifiedAI';
 import EditorMode, { type EditorModeRef } from './components/EditorMode/EditorMode';
 import { NavigationGutter, type SidebarView } from './components/NavigationGutter';
-import { useTabs } from './hooks/useTabs';
-import { useTabNavigation } from './hooks/useTabNavigation';
+// NOTE: useTabs and useTabNavigation removed - EditorMode manages tabs now
 import type { ContentMode } from './types/WindowModeTypes';
 import { TrackerBottomPanel, TrackerBottomPanelType } from './components/TrackerBottomPanel/TrackerBottomPanel.tsx';
 import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin';
@@ -442,87 +441,48 @@ export default function App() {
     return () => clearTimeout(timeout);
   }, [activeMode, bottomPanel, bottomPanelHeight]);
 
-  // Tab management state
-  // Tabs are always enabled - removed tabPreferences
+  // NOTE: Tab management moved to EditorMode. App.tsx no longer maintains tabs.
+  // EditorMode notifies us of currentFilePath changes via onCurrentFileChange callback.
 
-  // Create a ref to hold navigation state getter
-  const getNavigationStateRef = useRef<(() => any) | undefined>();
-
-  // console.log('[APP] Creating useTabs hook, workspaceMode:', workspaceMode, 'workspacePath:', workspacePath);
-  const tabs = useTabs({
-    maxTabs: Infinity, // Unlimited tabs
-    enabled: true,
-    workspacePath, // Pass workspace path for unified state management
-    getNavigationState: () => getNavigationStateRef.current?.(),
-    onTabChange: async (tab) => {
-      // console.log(`[App] onTabChange: switching to ${tab.fileName}, isDirty=${tab.isDirty}`);
-
-      // EditorContainer handles save-on-switch and all per-editor state
-      // We just update global UI state here
-
-      if (tab.filePath) {
-        setCurrentFilePath(tab.filePath);
-        setCurrentFileName(tab.fileName);
-        setIsDirty(tab.isDirty || false);
-
-        // Update the main process about the current file
-        if (window.electronAPI) {
-          window.electronAPI.setCurrentFile(tab.filePath);
-        }
-      }
-    },
-    onTabClose: (tab) => {
-      // EditorContainer handles save-on-close
-      // Nothing to do here - EditorContainer's cleanup useEffect handles saving
-    }
-  });
-
-  // Keep tabsRef updated with the current tabs object
-  useEffect(() => {
-    tabsRef.current = tabs;
-  }, [tabs]);
+  // Stub tabs object for backward compatibility with existing code that hasn't been refactored yet
+  // TODO: Remove this once handleOpen, handleSaveAs, etc. are moved to EditorMode
+  const tabs = useMemo(() => ({
+    tabs: [],
+    activeTab: currentFilePath ? { filePath: currentFilePath, fileName: currentFileName, isDirty } : null,
+    activeTabId: currentFilePath || null,
+    closeAllTabs: () => { console.warn('tabs.closeAllTabs called on stub'); },
+    addTab: () => { console.warn('tabs.addTab called on stub'); return ''; },
+    updateTab: () => { console.warn('tabs.updateTab called on stub'); },
+    findTabByPath: () => { console.warn('tabs.findTabByPath called on stub'); return null; },
+    switchTab: () => { console.warn('tabs.switchTab called on stub'); },
+    reopenLastClosedTab: () => { console.warn('tabs.reopenLastClosedTab called on stub'); },
+  }), [currentFilePath, currentFileName, isDirty]);
 
   // Declare refs needed by hooks below
   const getContentRef = useRef<(() => string) | null>(null);
 
-  // Build document context for AI features
-  const documentContext = useDocumentContext({
-    activeTab: tabs.activeTab,
-    getContentRef
-  });
+  // Build document context for AI features (without needing tabs)
+  const documentContext = useMemo(() => {
+    if (!currentFilePath) {
+      return {
+        filePath: '',
+        fileType: 'markdown',
+        content: '',
+        cursorPosition: undefined,
+        selection: undefined,
+        getLatestContent: undefined
+      };
+    }
 
-  // Initialize tab navigation for back/forward functionality
-  const navigation = useTabNavigation({
-    enabled: workspaceMode,
-    tabs: tabs.tabs,
-    activeTabId: tabs.activeTabId,
-    switchTab: tabs.switchTab
-  });
-
-  // Store navigation state getter in ref for tabs to use
-  useEffect(() => {
-    getNavigationStateRef.current = navigation.getNavigationState;
-  }, [navigation.getNavigationState]);
-
-  // Restore navigation state when tabs are restored
-  useEffect(() => {
-    if (!window.electronAPI?.invoke || !workspacePath) return;
-
-    const restoreNavigationState = async () => {
-      try {
-        const workspaceState = await window.electronAPI.invoke('workspace:get-state', workspacePath);
-        if (workspaceState?.navigationHistory) {
-          navigation.setNavigationState(workspaceState.navigationHistory);
-        }
-      } catch (error) {
-        console.error('Failed to restore navigation state:', error);
-      }
+    return {
+      filePath: currentFilePath,
+      fileType: 'markdown',
+      content: getContentRef.current ? getContentRef.current() : '',
+      cursorPosition: undefined,
+      selection: undefined,
+      getLatestContent: getContentRef.current || undefined
     };
-
-    // Delay to ensure tabs are loaded first
-    const timer = setTimeout(restoreNavigationState, 600);
-    return () => clearTimeout(timer);
-  }, [workspaceMode, workspacePath, navigation.setNavigationState]);
+  }, [currentFilePath, getContentRef.current]);
   const editorRef = useRef<any>(null);
   const searchCommandRef = useRef<LexicalCommand<undefined> | null>(null);
   const isInitializedRef = useRef<boolean>(false);
@@ -1347,6 +1307,9 @@ export default function App() {
                     setCurrentFilePath(filePath);
                     setCurrentFileName(fileName);
                     setIsDirty(isDirty);
+                  }}
+                  onGetContentReady={(getContentFn) => {
+                    getContentRef.current = getContentFn;
                   }}
                   onCloseWorkspace={handleCloseWorkspace}
                 />

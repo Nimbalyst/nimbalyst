@@ -14,8 +14,8 @@ planStatus:
     - app-structure
     - cleanup
   created: "2025-01-29"
-  updated: "2025-01-29T22:30:00.000Z"
-  progress: 60
+  updated: "2025-01-29T23:15:00.000Z"
+  progress: 75
 ---
 # Encapsulate Mode-Specific UI into Dedicated Components
 
@@ -139,7 +139,7 @@ Each mode component handles its own tab closing logic internally.
 7. ✅ Add sidebar resize functionality to EditorMode
 8. ✅ Remove duplicate state from App.tsx (fileTree, sidebarWidth, dialog states, resize handlers)
 
-### Phase 2: Eliminate Duplicate Tabs State (NEXT)
+### Phase 2: Eliminate Duplicate Tabs State (IN PROGRESS)
 
 **Problem:** App.tsx still has its own `tabs` state via useTabs hook, creating duplicate tabs state:
 - EditorMode has tabs for workspace mode
@@ -154,32 +154,32 @@ Each mode component handles its own tab closing logic internally.
 - `navigation` hook for tab navigation
 - Tab-related refs (tabsRef, tabStatesRef)
 
-**Proposed changes:**
+**Progress:**
 
-1. **Remove tabs from App.tsx entirely**
-  - EditorMode owns tabs for workspace mode
-  - AgenticPanel should manage its own document context if needed
-  - Single-file mode (if still needed) can use a simpler pattern
+1. ✅ **Remove tabs from App.tsx** - Replaced with stub object for backward compatibility
+  - Removed useTabs hook and useTabNavigation hook
+  - Created stub tabs object that logs warnings when called
+  - Build documentContext manually from currentFilePath and getContentRef
+  - EditorMode syncs getContentRef back to App.tsx via onGetContentReady callback
 
-2. **Move handleOpen/handleSaveAs to EditorMode**
-  - These operations are workspace-specific
-  - They manipulate tabs, which EditorMode now owns
-  - Expose them via EditorMode ref if App needs to trigger them
+2. **Move handleOpen/handleSaveAs to EditorMode** (TODO)
+  - These operations still use App-level stub tabs
+  - Need to be moved to EditorMode and exposed via ref
+  - Or delegate to EditorMode when in workspace mode
 
-3. **Refactor AgenticPanel document context**
-  - Option A: AgenticPanel builds its own documentContext from EditorMode
-  - Option B: EditorMode exposes documentContext via prop callback
-  - Option C: AgenticPanel doesn't need tabs-based context (investigate)
+3. ✅ **Refactor AgenticPanel document context**
+  - App.tsx builds documentContext from currentFilePath and getContentRef
+  - EditorMode notifies App of changes via onCurrentFileChange and onGetContentReady
+  - AgenticPanel continues to receive documentContext as prop
 
-4. **Update IPC handlers**
-  - `file-open` → route to EditorMode.handleOpen
-  - `file-save-as` → route to EditorMode.handleSaveAs
-  - `file-new` → determine if this creates new window or new file (keep in App if window-level)
+4. **Update IPC handlers** (TODO)
+  - `file-open` → needs to route to EditorMode
+  - `file-save-as` → needs to route to EditorMode
+  - `file-new` → needs investigation (window-level vs workspace-level)
 
-5. **Clean up navigation state**
-  - Tab navigation is EditorMode concern
-  - Move useTabNavigation hook to EditorMode
-  - Remove navigation-related code from App.tsx
+5. ✅ **Clean up navigation state**
+  - Removed useTabNavigation from App.tsx
+  - EditorMode has its own tab navigation (already implemented)
 
 ### Phase 3: Test and Validate (PENDING)
 
@@ -198,11 +198,12 @@ Each mode component handles its own tab closing logic internally.
 - ✅ Sidebar resize works in EditorMode
 - ✅ Dialogs (new file, history) managed by EditorMode
 
-### Phase 2 (PENDING)
-- [ ] No duplicate tabs state between App.tsx and EditorMode
+### Phase 2 (IN PROGRESS - 75%)
+- ✅ No duplicate tabs state between App.tsx and EditorMode (stub for backward compat)
+- ✅ EditorMode syncs getContentRef to App.tsx via callback
 - [ ] handleOpen/handleSaveAs moved to EditorMode or properly delegated
-- [ ] AgenticPanel document context works without App-level tabs
-- [ ] Tab navigation moved to EditorMode
+- ✅ AgenticPanel document context works without App-level tabs
+- ✅ Tab navigation moved to EditorMode
 - [ ] IPC handlers properly route to mode components
 
 ### Phase 3 (PENDING)

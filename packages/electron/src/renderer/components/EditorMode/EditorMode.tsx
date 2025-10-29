@@ -26,6 +26,7 @@ export interface EditorModeProps {
   isActive: boolean;
   onModeChange?: (mode: string) => void;
   onCurrentFileChange?: (filePath: string | null, fileName: string | null, isDirty: boolean) => void;
+  onGetContentReady?: (getContentFn: (() => string) | null) => void;
   onCloseWorkspace?: () => void;
 }
 
@@ -36,6 +37,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   isActive,
   onModeChange,
   onCurrentFileChange,
+  onGetContentReady,
   onCloseWorkspace
 }, ref) {
   // File tree state
@@ -350,6 +352,10 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
                     if (tabId === tabs.activeTabId) {
                       getContentRef.current = getContentFn;
                       aiToolService.setGetContentFunction(getContentFn);
+                      // Notify parent so App.tsx can update its getContentRef
+                      if (onGetContentReady) {
+                        onGetContentReady(getContentFn);
+                      }
                     }
                   }}
                   onViewHistory={() => {
