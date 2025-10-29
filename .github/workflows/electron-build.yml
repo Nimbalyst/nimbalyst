@@ -113,7 +113,9 @@ jobs:
           # Windows signing
           WIN_CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
-          # GitHub token for electron-builder publishing
+          # CRITICAL: GH_TOKEN is required for electron-builder to publish to preditor-releases repo
+          # The package.json "publish" config points to stravu/preditor-releases (public repo)
+          # DO NOT REMOVE THIS - it enables electron-builder to create releases in the public repo
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
           # Require notarization for release builds
           REQUIRE_NOTARIZE: ${{ github.event_name == 'push' || github.event.inputs.release == 'true' }}
@@ -247,8 +249,14 @@ jobs:
             NOTES="See [RELEASE_NOTES.md](https://github.com/stravu/preditor/blob/main/packages/electron/RELEASE_NOTES.md) for details."
           fi
 
+          # NOTE: This step should normally NOT run because electron-builder publishes to preditor-releases
+          # It's a fallback in case electron-builder fails to publish for any reason
+          echo "WARNING: Creating release manually in public repository (electron-builder should have done this)"
+          echo "Available files to upload:"
+          ls -la release-files/ || echo "ERROR: release-files directory not found"
+
           # Create release in public repository with update manifests
-          gh release create "$VERSION" \
+          if gh release create "$VERSION" \
             --repo stravu/preditor-releases \
             --title "Preditor $VERSION" \
             --notes "${NOTES}
@@ -264,4 +272,13 @@ jobs:
             release-files/*.exe \
             release-files/*.AppImage \
             release-files/*.yml \
-            release-files/*.yaml 2>/dev/null || true
+            release-files/*.yaml; then
+            echo "Successfully created release in public repository"
+          else
+            echo "ERROR: Failed to create release in public repository"
+            echo "Possible causes:"
+            echo "  - Release files missing or incorrect glob patterns"
+            echo "  - PUBLIC_REPO_PAT lacks permissions"
+            echo "  - Network issues or rate limiting"
+            exit 1
+          fi
