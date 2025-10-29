@@ -115,6 +115,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
             title={button.label}
             aria-label={button.label}
             aria-pressed={contentMode === button.contentMode}
+            data-mode={button.contentMode || button.id}
           >
             <MaterialSymbol
               icon={button.icon}
@@ -141,6 +142,7 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
             title={button.label}
             aria-label={button.label}
             aria-pressed={contentMode === button.contentMode}
+            data-mode={button.contentMode || button.id}
           >
             <MaterialSymbol
               icon={button.icon}
