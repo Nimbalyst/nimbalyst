@@ -284,7 +284,7 @@ export const WorkspaceManager: React.FC = () => {
               </div>
               <div className="content-actions">
                 <button className="btn btn-primary" onClick={handleOpenWorkspace}>
-                  Open Workspace
+                  Open Project
                 </button>
                 <button className="btn btn-danger" onClick={handleRemoveFromRecent}>
                   Remove from Recent

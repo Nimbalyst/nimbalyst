@@ -95,7 +95,7 @@ function createWindowListMenu(): any[] {
         if (menuItems.length > 0) {
             menuItems.push({ type: 'separator' });
         }
-        menuItems.push({ label: 'Open Workspaces', enabled: false });
+        menuItems.push({ label: 'Open Projects', enabled: false });
         workspaceWindows.forEach(({ window, title }) => {
             const accelerator = shortcutIndex < 9 ? `CmdOrCtrl+${shortcutIndex + 1}` : undefined;
             shortcutIndex++;
@@ -168,7 +168,7 @@ async function createRecentSubmenu(): Promise<any[]> {
 
     // Recent Workspaces section
     if (recentWorkspaces.length > 0) {
-        submenu.push({ label: 'Recent Workspaces', enabled: false });
+        submenu.push({ label: 'Recent Projects', enabled: false });
         recentWorkspaces.forEach(workspace => {
             submenu.push({
                 label: workspace.name,
@@ -241,7 +241,7 @@ async function createRecentSubmenu(): Promise<any[]> {
 
         if (recentWorkspaces.length > 0) {
             submenu.push({
-                label: 'Clear Recent Workspaces',
+                label: 'Clear Recent Projects',
                 click: async () => {
                     clearRecentItems('workspaces');
                     updateApplicationMenu();
