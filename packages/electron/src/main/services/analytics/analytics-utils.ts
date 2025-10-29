@@ -15,6 +15,11 @@ export const beforePostHogSendWeb: BeforeSendFnWeb = (cr: CaptureResult | null):
 }
 
 function beforeSend<T extends EventMessage | CaptureResult>(event: T | null): T | null {
+  // always drop events during playwright tests
+  if (process.env.PLAYWRIGHT_TEST) {
+    return null;
+  }
+
   if (event) {
     const eventProps = event.properties as Record<string | number, any> // coerce to a common type interface
 
