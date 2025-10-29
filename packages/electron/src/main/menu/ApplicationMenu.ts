@@ -516,9 +516,15 @@ export async function createApplicationMenu() {
                             if (windowId !== null) {
                                 const state = windowStates.get(windowId);
 
-                                // If in agentic coding mode, close the active tab instead of the window
+                                // If in agentic coding mode, close the active tab
                                 if (state?.mode === 'agentic-coding') {
                                     focused.webContents.send('agentic-coding:close-active-tab');
+                                    return;
+                                }
+
+                                // If in workspace mode, close the active tab
+                                if (state?.mode === 'workspace') {
+                                    focused.webContents.send('close-active-tab');
                                     return;
                                 }
                             }
@@ -531,24 +537,11 @@ export async function createApplicationMenu() {
                 {
                     label: 'Close Project',
                     accelerator: KeyboardShortcuts.file.closeProject,
-                    enabled: (() => {
-                        const focused = BrowserWindow.getFocusedWindow();
-                        if (!focused) return false;
-                        const windowId = getWindowId(focused);
-                        if (windowId === null) return false;
-                        const state = windowStates.get(windowId);
-                        return state?.mode === 'workspace';
-                    })(),
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
-                            const windowId = getWindowId(focused);
-                            if (windowId !== null) {
-                                const state = windowStates.get(windowId);
-                                if (state?.mode === 'workspace') {
-                                    focused.close();
-                                }
-                            }
+                            // TODO: Add warning dialog if AI/agent is running
+                            focused.close();
                         }
                     }
                 },

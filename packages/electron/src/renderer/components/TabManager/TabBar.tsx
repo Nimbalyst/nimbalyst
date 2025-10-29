@@ -370,12 +370,6 @@ export const TabBar: React.FC<TabBarProps> = ({
       // Don't handle shortcuts if menu is open
       if (showTabMenu) return;
 
-      // Cmd/Ctrl + W to close current tab
-      if ((e.metaKey || e.ctrlKey) && e.key === 'w' && activeTabId) {
-        e.preventDefault();
-        onTabClose(activeTabId);
-      }
-
       // Cmd/Ctrl + Shift + [ or ] to navigate tabs
       if ((e.metaKey || e.ctrlKey) && e.shiftKey) {
         const currentIndex = tabs.findIndex(tab => tab.id === activeTabId);
@@ -402,6 +396,23 @@ export const TabBar: React.FC<TabBarProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [tabs, activeTabId, onTabSelect, onTabClose, onNewTab, showTabMenu, isActive]);
+
+  // IPC listener for menu-triggered close tab
+  React.useEffect(() => {
+    // Only handle IPC if this TabBar is active
+    if (!isActive || !activeTabId) return;
+
+    const handleCloseActiveTab = () => {
+      onTabClose(activeTabId);
+    };
+
+    if (window.electronAPI) {
+      window.electronAPI.on('close-active-tab', handleCloseActiveTab);
+      return () => {
+        window.electronAPI?.off('close-active-tab', handleCloseActiveTab);
+      };
+    }
+  }, [isActive, activeTabId, onTabClose]);
 
   if (tabs.length === 0) {
     return null;
