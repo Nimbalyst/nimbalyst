@@ -533,6 +533,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
 
       reloadDebounceRef.current = setTimeout(async () => {
+        // Skip reload if we're currently sending (streaming in progress)
+        // The streaming handler will update the UI, and completion handler will do final reload
+        if (isSending && data.sessionId === activeTabId) {
+          console.log('[AgenticPanel] Skipping database reload during active streaming');
+          return;
+        }
+
         try {
           const sessionData = await window.electronAPI.aiLoadSession(data.sessionId, workspacePath);
           if (sessionData) {
@@ -567,10 +574,126 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
   }, [sessionTabs, workspacePath, isSending, activeTabId]);
 
-  // Listen for completion and errors
+  // Listen for streaming responses and completion
+  // This handles real-time updates during AI streaming:
+  // - Updates assistant message content as it streams in
+  // - Adds tool calls as they execute
+  // - Final completion triggers database reload for consistency
   useEffect(() => {
+    const handlerId = Math.random().toString(36).substring(7);
+    console.log(`[AgenticPanel] useEffect REGISTER handlers ${handlerId}`, {
+      activeTabId,
+      workspacePath: !!workspacePath,
+      hasElectronAPI: !!window.electronAPI,
+      hasOnAIStreamResponse: typeof window.electronAPI?.onAIStreamResponse === 'function'
+    });
+
     const handleStreamResponse = async (data: any) => {
+      console.log(`[AgenticPanel-${handlerId}] handleStreamResponse called:`, {
+        hasActiveTabId: !!activeTabId,
+        isComplete: data.isComplete,
+        hasPartial: !!data.partial,
+        partialLength: data.partial?.length,
+        hasToolCalls: !!data.toolCalls,
+        toolCallsCount: data.toolCalls?.length
+      });
+
       if (!activeTabId) return;
+
+      // Handle streaming content updates (not complete)
+      if (!data.isComplete) {
+        console.log('[AgenticPanel] Processing streaming update');
+        setSessionTabs(prev => prev.map(tab => {
+          if (tab.id !== activeTabId) return tab;
+
+          const sessionData = { ...tab.sessionData };
+          const messages = [...sessionData.messages];
+
+          // Find the last assistant message (could be thinking message)
+          let lastAssistantIdx = messages.length - 1;
+          while (lastAssistantIdx >= 0 && messages[lastAssistantIdx].role !== 'assistant') {
+            lastAssistantIdx--;
+          }
+
+          console.log('[AgenticPanel] Message analysis:', {
+            totalMessages: messages.length,
+            lastAssistantIdx,
+            lastAssistantIsThinking: lastAssistantIdx >= 0 ? messages[lastAssistantIdx].isThinking : false
+          });
+
+          // If we have streaming text content, update the assistant message
+          if (data.partial) {
+            console.log('[AgenticPanel] Updating text content:', {
+              lastAssistantIdx,
+              partialLength: data.partial.length,
+              partialPreview: data.partial.substring(0, 100)
+            });
+
+            if (lastAssistantIdx >= 0) {
+              // Replace thinking message or update existing message
+              messages[lastAssistantIdx] = {
+                ...messages[lastAssistantIdx],
+                content: data.partial,
+                isThinking: false  // Clear thinking flag when we have actual content
+              };
+              console.log('[AgenticPanel] Updated existing assistant message at index', lastAssistantIdx);
+            } else {
+              // Create new assistant message
+              messages.push({
+                role: 'assistant',
+                content: data.partial,
+                timestamp: Date.now()
+              });
+              console.log('[AgenticPanel] Created new assistant message');
+            }
+          }
+
+          // Handle tool calls from streaming
+          if (data.toolCalls && Array.isArray(data.toolCalls)) {
+            for (const toolCall of data.toolCalls) {
+              // Check if this tool call already exists in messages
+              const existingToolCall = messages.find(
+                msg => msg.role === 'assistant' &&
+                       msg.toolCall?.id === toolCall.id
+              );
+
+              if (!existingToolCall && toolCall.name) {
+                // Add new tool call message
+                messages.push({
+                  role: 'assistant',
+                  content: '',
+                  timestamp: Date.now(),
+                  toolCall: {
+                    id: toolCall.id,
+                    name: toolCall.name,
+                    arguments: toolCall.arguments,
+                    result: toolCall.result,
+                    targetFilePath: toolCall.targetFilePath
+                  }
+                });
+              } else if (existingToolCall && toolCall.result !== undefined) {
+                // Update existing tool call with result
+                const idx = messages.indexOf(existingToolCall);
+                messages[idx] = {
+                  ...messages[idx],
+                  toolCall: {
+                    ...messages[idx].toolCall!,
+                    result: toolCall.result
+                  }
+                };
+              }
+            }
+          }
+
+          return {
+            ...tab,
+            sessionData: {
+              ...sessionData,
+              messages
+            }
+          };
+        }));
+      }
 
       // Handle completion
       if (data.isComplete) {
@@ -599,8 +722,14 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       setIsSending(false);
     };
 
-    window.electronAPI.onAIStreamResponse(handleStreamResponse);
-    window.electronAPI.onAIError(handleStreamError);
+    const cleanupStreamResponse = window.electronAPI.onAIStreamResponse(handleStreamResponse);
+    const cleanupError = window.electronAPI.onAIError(handleStreamError);
+
+    return () => {
+      console.log(`[AgenticPanel] useEffect CLEANUP handlers ${handlerId}`);
+      cleanupStreamResponse();
+      cleanupError();
+    };
   }, [activeTabId, workspacePath]);
 
   // Handle draft input change
