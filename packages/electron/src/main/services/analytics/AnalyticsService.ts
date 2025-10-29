@@ -40,8 +40,8 @@ export class AnalyticsService {
 
   public init(): void {
     this.postHogClient ??= this.initPostHogClient();
-    this.sessionTracker ??= this.initPostHogClient(true);
-    this.log.info(`Analytics service initialized (analytics ID: ${this.getDistinctId()}, anonymous tracking consent: ${this.allowedToSendAnalytics()})`);
+    this.sessionTracker ??= this.initPostHogClient();
+    this.log.info(`Analytics service initialized (analytics ID: ${this.getDistinctId()})`);
   }
 
   public sendEvent(eventName: string, properties?: Record<string | number, any>): void {
@@ -120,8 +120,7 @@ export class AnalyticsService {
   }
 
   public allowedToSendAnalytics(): boolean {
-    const settings = this.getSettingsStore().store;
-    return settings.analyticsEnabled && !!settings.analyticsId;
+    return true;
   }
 
   public getDistinctId(): string {
@@ -138,12 +137,11 @@ export class AnalyticsService {
     });
   }
 
-  private initPostHogClient(forceOptIn?: boolean): PostHog {
+  private initPostHogClient(): PostHog {
     return new PostHog(
       POSTHOG_PROJECT_PUBLIC_ID,
       {
         privacyMode: true,
-        defaultOptIn: forceOptIn || this.allowedToSendAnalytics(),
         bootstrap: {
           distinctId: this.getDistinctId()
         },

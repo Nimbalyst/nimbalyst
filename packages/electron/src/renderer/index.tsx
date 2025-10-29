@@ -22,7 +22,6 @@ const isDevInstallation = process.env.NODE_ENV?.toLowerCase() === 'development';
 const posthogClient = posthog.init(
   'phc_s3lQIILexwlGHvxrMBqti355xUgkRocjMXW4LjV0ATw',
   {
-    opt_out_capturing_by_default: !analyticsAllowed,
     bootstrap: {
       distinctID: analyticsId,
     },

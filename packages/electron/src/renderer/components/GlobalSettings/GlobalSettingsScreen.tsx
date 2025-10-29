@@ -422,8 +422,6 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
             setHasChanges(true);
           }}
         />;
-      case 'analytics':
-        return <AnalyticsSettingsPanel/>;
       default:
         return null;
     }
@@ -543,9 +541,6 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
               onClick={() => setSelectedNav('advanced')}
             >
               Advanced Settings
-            </button>
-            <button className={'nav-action-button'} onClick={() => setSelectedNav('analytics')}>
-              Analytics
             </button>
             <button className="nav-action-button">
               Documentation
