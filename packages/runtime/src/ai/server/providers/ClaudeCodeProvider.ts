@@ -415,7 +415,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
                   const toolName = block.name;
                   const toolArgs = block.input;
-                  const isMcpApplyDiff = toolName?.endsWith('__applyDiff');
+                  const isMcpTool = toolName?.startsWith('mcp__');
 
                   // SDK-native tools that are executed by the Claude Code SDK itself
                   const sdkNativeTools = ['Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS', 'Bash',
@@ -427,8 +427,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
                   if (!toolName) {
                     console.warn('[CLAUDE-CODE] Tool use block missing name');
-                  } else if (isMcpApplyDiff) {
-                    console.log(`[CLAUDE-CODE] MCP applyDiff detected: ${toolName} - handled by MCP server`);
+                  } else if (isMcpTool) {
+                    console.log(`[CLAUDE-CODE] MCP tool detected: ${toolName} - handled by MCP server`);
                   } else if (isSdkNativeTool) {
                     console.log(`[CLAUDE-CODE] SDK-native tool detected: ${toolName} - executed by Claude Code SDK, result will come in tool_result block`);
                     // SDK executes these tools itself, result will come in a tool_result block
@@ -592,7 +592,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
             const toolName = toolChunk.name || 'unknown';
             const toolArgs = toolChunk.input;
-            const isMcpApplyDiff = toolName.endsWith('__applyDiff');
+            const isMcpTool = toolName.startsWith('mcp__');
 
             // SDK-native tools that are executed by the Claude Code SDK itself
             const sdkNativeTools = ['Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS', 'Bash',
@@ -602,8 +602,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
             let executionResult: any | undefined;
 
-            if (isMcpApplyDiff) {
-              console.log(`[CLAUDE-CODE] MCP applyDiff (standalone): ${toolName} - handled by MCP server`);
+            if (isMcpTool) {
+              console.log(`[CLAUDE-CODE] MCP tool (standalone): ${toolName} - handled by MCP server`);
             } else if (isSdkNativeTool) {
               console.log(`[CLAUDE-CODE] SDK-native tool (standalone): ${toolName} - executed by Claude Code SDK`);
               // SDK executes these tools itself, we just observe them
