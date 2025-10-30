@@ -11,6 +11,7 @@ import {
   type DiffChangeGroup,
   $getDiffState
 } from 'rexical';
+import { usePostHog } from 'posthog-js/react';
 import './DiffApprovalBar.css';
 
 interface DiffApprovalBarProps {
@@ -27,6 +28,7 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
   const [changeGroups, setChangeGroups] = useState<DiffChangeGroup[]>([]);
   const [currentGroupIndex, setCurrentGroupIndex] = useState(-1); // -1 = no selection
   const isNavigatingRef = useRef(false); // Track programmatic navigation
+  const posthog = usePostHog();
 
   // Update groups whenever editor changes
   const updateGroups = useCallback(() => {
@@ -279,6 +281,14 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
 
     const indexBeforeApproval = currentGroupIndex;
     const currentGroup = changeGroups[indexBeforeApproval];
+
+    // Track analytics event for accepting a single diff
+    posthog?.capture('ai_diff_accepted', {
+      acceptType: 'partial',
+      replacementCount: currentGroup.nodes.length,
+      provider: 'unknown' // Provider is not available in this context
+    });
+
     $approveChangeGroup(editor, currentGroup.nodes);
 
     // Wait for groups to update, then move Lexical selection to next group
@@ -306,6 +316,14 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
 
     const indexBeforeRejection = currentGroupIndex;
     const currentGroup = changeGroups[indexBeforeRejection];
+
+    // Track analytics event for rejecting a single diff
+    posthog?.capture('ai_diff_rejected', {
+      rejectType: 'partial',
+      replacementCount: currentGroup.nodes.length,
+      provider: 'unknown' // Provider is not available in this context
+    });
+
     $rejectChangeGroup(editor, currentGroup.nodes);
 
     // Wait for groups to update, then move Lexical selection to next group
@@ -332,12 +350,28 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
 
   const handleAcceptAll = () => {
     if (editor) {
+      // Track analytics event for accepting all diffs
+      const totalNodes = changeGroups.reduce((sum, group) => sum + group.nodes.length, 0);
+      posthog?.capture('ai_diff_accepted', {
+        acceptType: 'all',
+        replacementCount: totalNodes,
+        provider: 'unknown' // Provider is not available in this context
+      });
+
       editor.dispatchCommand(APPROVE_DIFF_COMMAND, undefined);
     }
   };
 
   const handleRejectAll = () => {
     if (editor) {
+      // Track analytics event for rejecting all diffs
+      const totalNodes = changeGroups.reduce((sum, group) => sum + group.nodes.length, 0);
+      posthog?.capture('ai_diff_rejected', {
+        rejectType: 'all',
+        replacementCount: totalNodes,
+        provider: 'unknown' // Provider is not available in this context
+      });
+
       editor.dispatchCommand(REJECT_DIFF_COMMAND, undefined);
     }
   };

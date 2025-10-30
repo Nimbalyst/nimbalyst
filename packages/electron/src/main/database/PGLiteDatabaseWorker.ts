@@ -8,6 +8,18 @@ import { app } from 'electron';
 import path from 'path';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
+
+// Helper to categorize database errors
+function categorizeDBError(error: any): string {
+  const message = error?.message?.toLowerCase() || String(error).toLowerCase();
+  if (message.includes('permission') || message.includes('eacces')) return 'permission';
+  if (message.includes('disk') || message.includes('enospc')) return 'disk_full';
+  if (message.includes('lock') || message.includes('busy')) return 'lock';
+  if (message.includes('corrupt')) return 'corruption';
+  if (message.includes('syntax')) return 'syntax';
+  return 'unknown';
+}
 
 interface PendingRequest {
   resolve: (value: any) => void;
@@ -19,6 +31,7 @@ export class PGLiteDatabaseWorker {
   private pendingRequests = new Map<string, PendingRequest>();
   private initialized = false;
   private initPromise: Promise<void> | null = null;
+  private analytics = AnalyticsService.getInstance();
 
   /**
    * Initialize the database worker
@@ -144,7 +157,17 @@ export class PGLiteDatabaseWorker {
     if (!this.initialized) {
       throw new Error('Database not initialized. Call initialize() first.');
     }
-    return await this.sendMessage('query', { sql, params });
+    try {
+      return await this.sendMessage('query', { sql, params });
+    } catch (error) {
+      // Track database error
+      this.analytics.sendEvent('database_error', {
+        operation: 'read',
+        errorType: categorizeDBError(error),
+        tableName: this.extractTableName(sql)
+      });
+      throw error;
+    }
   }
 
   /**
@@ -154,7 +177,25 @@ export class PGLiteDatabaseWorker {
     if (!this.initialized) {
       throw new Error('Database not initialized. Call initialize() first.');
     }
-    await this.sendMessage('exec', { sql });
+    try {
+      await this.sendMessage('exec', { sql });
+    } catch (error) {
+      // Track database error
+      this.analytics.sendEvent('database_error', {
+        operation: 'write',
+        errorType: categorizeDBError(error),
+        tableName: this.extractTableName(sql)
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Extract table name from SQL query (simple heuristic)
+   */
+  private extractTableName(sql: string): string {
+    const match = sql.match(/(?:FROM|INTO|UPDATE|TABLE)\s+([a-zA-Z_][a-zA-Z0-9_]*)/i);
+    return match ? match[1] : 'unknown';
   }
 
   /**

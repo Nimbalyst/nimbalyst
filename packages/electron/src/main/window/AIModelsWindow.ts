@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron';
 import { join } from 'path';
 import { getTheme } from '../utils/store';
 import { getBackgroundColor } from '../theme/ThemeManager';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
 let aiModelsWindow: BrowserWindow | null = null;
 
@@ -44,6 +45,14 @@ export function createAIModelsWindow(isFirstTime: boolean = false) {
     // Show window when ready
     aiModelsWindow.once('ready-to-show', () => {
         aiModelsWindow?.show();
+
+        // Track settings opened (if not already tracked from menu)
+        // We track section based on isFirstTime flag
+        const section = isFirstTime ? 'first_run' : 'general';
+        AnalyticsService.getInstance().sendEvent('global_settings_opened', {
+            source: isFirstTime ? 'first_run' : 'direct',
+            section,
+        });
     });
 
     // Clean up on close

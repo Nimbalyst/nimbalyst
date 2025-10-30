@@ -6,6 +6,7 @@ import { getWorkspaceRepository } from '../services/RepositoryManager';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { getTheme } from '../utils/store';
 import { getBackgroundColor } from '../theme/ThemeManager';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
 let sessionManagerWindow: BrowserWindow | null = null;
 
@@ -90,8 +91,25 @@ export function createSessionManagerWindow(filterWorkspace?: string) {
   });
 
   // Show window when ready
-  sessionManagerWindow.once('ready-to-show', () => {
+  sessionManagerWindow.once('ready-to-show', async () => {
     sessionManagerWindow?.show();
+
+    // Track session manager opened
+    try {
+      const allSessions = await AISessionsRepository.list('default');
+      const sessionCount = allSessions.length;
+      const bucketed = sessionCount === 0 ? '0' :
+                       sessionCount <= 5 ? '1-5' :
+                       sessionCount <= 20 ? '6-20' :
+                       sessionCount <= 50 ? '21-50' : '50+';
+
+      AnalyticsService.getInstance().sendEvent('session_manager_opened', {
+        sessionCount: bucketed,
+        source: filterWorkspace ? 'workspace' : 'menu',
+      });
+    } catch (error) {
+      console.error('[SessionManager] Failed to track analytics:', error);
+    }
   });
 
   // Handle renderer process crashes

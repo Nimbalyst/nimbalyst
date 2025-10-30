@@ -289,6 +289,42 @@ app.whenReady().then(async () => {
         const workspacePath = pendingWorkspacePath;
         pendingWorkspacePath = null;
 
+        // Track workspace opened from CLI
+        try {
+            const { readdirSync, statSync } = await import('fs');
+            const { join } = await import('path');
+
+            // Count files in workspace
+            let fileCount = 0;
+            let hasSubfolders = false;
+            try {
+                const entries = readdirSync(workspacePath, { withFileTypes: true });
+                for (const entry of entries) {
+                    if (entry.isFile()) {
+                        fileCount++;
+                    } else if (entry.isDirectory() && !entry.name.startsWith('.')) {
+                        hasSubfolders = true;
+                    }
+                }
+            } catch (error) {
+                // Ignore count errors
+            }
+
+            // Bucket file count
+            let fileCountBucket = '1-10';
+            if (fileCount > 100) fileCountBucket = '100+';
+            else if (fileCount > 50) fileCountBucket = '51-100';
+            else if (fileCount > 10) fileCountBucket = '11-50';
+
+            analytics.sendEvent('workspace_opened', {
+                fileCount: fileCountBucket,
+                hasSubfolders,
+                source: 'cli',
+            });
+        } catch (error) {
+            logger.main.error('Error tracking workspace_opened event:', error);
+        }
+
         // Ensure .nimbalyst/trackers/ directory exists
         // DISABLED FOR NOW - test creates it
         // if (workspacePath) {

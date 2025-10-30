@@ -6,6 +6,7 @@ import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
 const { writeFile, mkdir, rename, unlink, rmdir, copyFile, readFile, rm, stat, cp } = fsPromises;
 
@@ -25,10 +26,22 @@ import {
 } from '../utils/store';
 import { loadFileIntoWindow } from '../file/FileOperations';
 
+// Helper function to get file type from extension
+function getFileType(filePath: string): string {
+    const ext = extname(filePath).toLowerCase();
+    const typeMap: Record<string, string> = {
+        '.md': 'markdown',
+        '.markdown': 'markdown',
+        '.txt': 'text',
+    };
+    return typeMap[ext] || 'other';
+}
+
 // Cache for quick open file searches
 const fileNameCaches = new Map<string, Array<{ path: string; name: string }>>();
 
 export function registerWorkspaceHandlers() {
+    const analytics = AnalyticsService.getInstance();
     // Get folder contents
     ipcMain.handle('get-folder-contents', (event, dirPath: string) => {
         return getFolderContents(dirPath);
@@ -38,6 +51,13 @@ export function registerWorkspaceHandlers() {
     ipcMain.handle('create-file', async (event, filePath: string, content: string = '') => {
         try {
             await writeFile(filePath, content, 'utf-8');
+
+            // Track file creation from menu
+            analytics.sendEvent('file_created', {
+                creationType: 'new_file_menu',
+                fileType: getFileType(filePath)
+            });
+
             return { success: true, filePath };
         } catch (error: any) {
             console.error('Error creating file:', error);
@@ -579,6 +599,11 @@ export function registerWorkspaceHandlers() {
                 window.webContents.send('file-renamed', { oldPath, newPath });
             });
 
+            // Track file rename
+            analytics.sendEvent('file_renamed', {
+                fileType: getFileType(newPath)
+            });
+
             return { success: true, newPath };
         } catch (error: any) {
             console.error('Error renaming file:', error);
@@ -590,12 +615,21 @@ export function registerWorkspaceHandlers() {
 
         try {
             const stats = await stat(filePath);
+            const isDirectory = stats.isDirectory();
 
-            if (stats.isDirectory()) {
+            if (isDirectory) {
                 // For directories, use recursive removal
                 await rm(filePath, { recursive: true, force: true });
             } else {
                 await unlink(filePath);
+            }
+
+            // Track file deletion (only for files, not directories)
+            if (!isDirectory) {
+                analytics.sendEvent('file_deleted', {
+                    fileType: getFileType(filePath),
+                    source: 'workspace_tree'
+                });
             }
 
             // Clear file path for windows that have this file open
@@ -771,6 +805,13 @@ export function registerWorkspaceHandlers() {
             // Focus the window and load the file
             targetWindow.focus();
             await loadFileIntoWindow(targetWindow, filePath);
+
+            // Track file opened from workspace
+            analytics.sendEvent('file_opened', {
+                source: 'workspace_tree',
+                fileType: getFileType(filePath),
+                hasWorkspace: true
+            });
 
             return { success: true };
         } catch (error: any) {

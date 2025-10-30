@@ -4,8 +4,27 @@ import { existsSync, mkdirSync, statSync, readdirSync } from 'fs';
 import { getRecentItems, addToRecentItems, store, getWorkspaceWindowState, getTheme } from '../utils/store';
 import { createWindow } from './WindowManager';
 import { getBackgroundColor } from '../theme/ThemeManager';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
 let workspaceManagerWindow: BrowserWindow | null = null;
+
+// Helper function to bucket file counts for analytics
+function bucketFileCount(count: number): string {
+  if (count <= 10) return '1-10';
+  if (count <= 50) return '11-50';
+  if (count <= 100) return '51-100';
+  return '100+';
+}
+
+// Helper function to check if workspace has subfolders
+function hasSubfolders(workspacePath: string): boolean {
+  try {
+    const entries = readdirSync(workspacePath, { withFileTypes: true });
+    return entries.some(entry => entry.isDirectory() && !entry.name.startsWith('.'));
+  } catch (error) {
+    return false;
+  }
+}
 
 export function createWorkspaceManagerWindow() {
   // If window already exists, check if it's healthy
@@ -253,6 +272,19 @@ export function setupWorkspaceManagerHandlers() {
   ipcMain.handle('workspace-manager:open-workspace', async (event, workspacePath: string) => {
     // Add to recent workspaces
     addToRecentItems('workspaces', workspacePath, basename(workspacePath));
+
+    // Track workspace opened analytics event
+    try {
+      const files = getWorkspaceFiles(workspacePath);
+      const analytics = AnalyticsService.getInstance();
+      analytics.sendEvent('workspace_opened', {
+        fileCount: bucketFileCount(files.length),
+        hasSubfolders: hasSubfolders(workspacePath),
+        source: 'dialog', // Opened via workspace manager dialog
+      });
+    } catch (error) {
+      console.error('Error tracking workspace_opened event:', error);
+    }
 
     // Check for saved workspace window state
     const savedState = getWorkspaceWindowState(workspacePath);

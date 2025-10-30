@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { usePostHog } from 'posthog-js/react';
 import './QuickOpen.css';
 
 interface FileItem {
@@ -31,6 +32,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
   currentFilePath,
   onFileSelect,
 }) => {
+  const posthog = usePostHog();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [searchResults, setSearchResults] = useState<FileItem[]>([]);
@@ -106,6 +108,31 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
 
         setSearchResults(processedFileNames);
         setIsSearching(false);
+
+        // Track workspace search analytics (file name search)
+        try {
+          const resultCount = processedFileNames.length;
+          const queryLength = query.length;
+          let queryLengthCategory = 'short';
+          if (queryLength > 20) queryLengthCategory = 'long';
+          else if (queryLength > 10) queryLengthCategory = 'medium';
+
+          let resultCountBucket = '0';
+          if (resultCount > 0) {
+            if (resultCount <= 10) resultCountBucket = '1-10';
+            else if (resultCount <= 50) resultCountBucket = '11-50';
+            else if (resultCount <= 100) resultCountBucket = '51-100';
+            else resultCountBucket = '100+';
+          }
+
+          posthog?.capture('workspace_search_used', {
+            resultCount: resultCountBucket,
+            queryLength: queryLengthCategory,
+            searchType: 'file_name',
+          });
+        } catch (error) {
+          console.error('Error tracking workspace_search_used event:', error);
+        }
       } else {
         console.warn('Results is not an array:', fileNameResults);
         setSearchResults([]);
@@ -181,13 +208,38 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
 
           return mergedResults;
         });
+
+        // Track workspace search analytics (content search)
+        try {
+          const queryLength = searchQuery.length;
+          let queryLengthCategory = 'short';
+          if (queryLength > 20) queryLengthCategory = 'long';
+          else if (queryLength > 10) queryLengthCategory = 'medium';
+
+          const resultCount = contentResults.length;
+          let resultCountBucket = '0';
+          if (resultCount > 0) {
+            if (resultCount <= 10) resultCountBucket = '1-10';
+            else if (resultCount <= 50) resultCountBucket = '11-50';
+            else if (resultCount <= 100) resultCountBucket = '51-100';
+            else resultCountBucket = '100+';
+          }
+
+          posthog?.capture('workspace_search_used', {
+            resultCount: resultCountBucket,
+            queryLength: queryLengthCategory,
+            searchType: 'content',
+          });
+        } catch (error) {
+          console.error('Error tracking workspace_search_used event:', error);
+        }
       }
       setIsSearching(false);
     } catch (error) {
       console.error('Error in content search:', error);
       setIsSearching(false);
     }
-  }, [workspacePath, searchQuery, contentSearchTriggered, recentFiles]);
+  }, [workspacePath, searchQuery, contentSearchTriggered, recentFiles, posthog]);
 
   // Debounced search
   useEffect(() => {

@@ -17,6 +17,8 @@ import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
 import { autoUpdaterService } from '../services/autoUpdater';
 import { KeyboardShortcuts } from './KeyboardShortcuts';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import { FeatureTrackingService } from '../services/analytics/FeatureTrackingService';
 
 // Create window list menu items
 function createWindowListMenu(): any[] {
@@ -465,6 +467,13 @@ export async function createApplicationMenu() {
                     label: 'Open Folder...',
                     accelerator: KeyboardShortcuts.file.openFolder,
                     click: async () => {
+                        // Track menu action
+                        AnalyticsService.getInstance().sendEvent('menu_action_used', {
+                            menu: 'file',
+                            action: 'open_folder',
+                            hasKeyboardEquivalent: true,
+                        });
+
                         const result = await dialog.showOpenDialog({
                             properties: ['openDirectory']
                         });
@@ -822,6 +831,14 @@ export async function createApplicationMenu() {
                             type: 'radio',
                             checked: currentTheme === 'light',
                             click: async () => {
+                                const fromTheme = currentTheme;
+                                const featureTracking = FeatureTrackingService.getInstance();
+                                const isFirstChange = !featureTracking.hasBeenUsed('theme_changed' as any);
+
+                                if (isFirstChange) {
+                                    featureTracking.isFirstUse('theme_changed' as any);
+                                }
+
                                 setTheme('light');
                                 updateNativeTheme();
                                 BrowserWindow.getAllWindows().forEach(window => {
@@ -829,6 +846,13 @@ export async function createApplicationMenu() {
                                 });
                                 updateWindowTitleBars();
                                 await createApplicationMenu();
+
+                                // Track theme change
+                                AnalyticsService.getInstance().sendEvent('theme_changed', {
+                                    fromTheme,
+                                    toTheme: 'light',
+                                    isFirstChange,
+                                });
                             }
                         },
                         {
@@ -836,6 +860,14 @@ export async function createApplicationMenu() {
                             type: 'radio',
                             checked: currentTheme === 'dark',
                             click: async () => {
+                                const fromTheme = currentTheme;
+                                const featureTracking = FeatureTrackingService.getInstance();
+                                const isFirstChange = !featureTracking.hasBeenUsed('theme_changed' as any);
+
+                                if (isFirstChange) {
+                                    featureTracking.isFirstUse('theme_changed' as any);
+                                }
+
                                 setTheme('dark');
                                 updateNativeTheme();
                                 BrowserWindow.getAllWindows().forEach(window => {
@@ -843,6 +875,13 @@ export async function createApplicationMenu() {
                                 });
                                 updateWindowTitleBars();
                                 await createApplicationMenu();
+
+                                // Track theme change
+                                AnalyticsService.getInstance().sendEvent('theme_changed', {
+                                    fromTheme,
+                                    toTheme: 'dark',
+                                    isFirstChange,
+                                });
                             }
                         },
                         {
@@ -850,6 +889,14 @@ export async function createApplicationMenu() {
                             type: 'radio',
                             checked: currentTheme === 'crystal-dark',
                             click: async () => {
+                                const fromTheme = currentTheme;
+                                const featureTracking = FeatureTrackingService.getInstance();
+                                const isFirstChange = !featureTracking.hasBeenUsed('theme_changed' as any);
+
+                                if (isFirstChange) {
+                                    featureTracking.isFirstUse('theme_changed' as any);
+                                }
+
                                 setTheme('crystal-dark');
                                 updateNativeTheme();
                                 BrowserWindow.getAllWindows().forEach(window => {
@@ -857,6 +904,13 @@ export async function createApplicationMenu() {
                                 });
                                 updateWindowTitleBars();
                                 await createApplicationMenu();
+
+                                // Track theme change
+                                AnalyticsService.getInstance().sendEvent('theme_changed', {
+                                    fromTheme,
+                                    toTheme: 'crystal-dark',
+                                    isFirstChange,
+                                });
                             }
                         },
                         {
@@ -864,6 +918,14 @@ export async function createApplicationMenu() {
                             type: 'radio',
                             checked: currentTheme === 'system',
                             click: async () => {
+                                const fromTheme = currentTheme;
+                                const featureTracking = FeatureTrackingService.getInstance();
+                                const isFirstChange = !featureTracking.hasBeenUsed('theme_changed' as any);
+
+                                if (isFirstChange) {
+                                    featureTracking.isFirstUse('theme_changed' as any);
+                                }
+
                                 setTheme('system');
                                 updateNativeTheme();
                                 // Send resolved theme (light or dark) to renderers
@@ -873,6 +935,13 @@ export async function createApplicationMenu() {
                                 });
                                 updateWindowTitleBars();
                                 await createApplicationMenu();
+
+                                // Track theme change
+                                AnalyticsService.getInstance().sendEvent('theme_changed', {
+                                    fromTheme,
+                                    toTheme: 'system',
+                                    isFirstChange,
+                                });
                             }
                         }
                     ]
@@ -898,6 +967,12 @@ export async function createApplicationMenu() {
                     label: 'Project Manager',
                     accelerator: KeyboardShortcuts.window.workspaceManager,
                     click: async () => {
+                        // Track menu action
+                        AnalyticsService.getInstance().sendEvent('menu_action_used', {
+                            menu: 'window',
+                            action: 'project_manager',
+                            hasKeyboardEquivalent: true,
+                        });
                         createWorkspaceManagerWindow();
                     }
                 },
@@ -1206,6 +1281,11 @@ Note: Only one connection at a time is supported.`,
                     label: 'Settings...',
                     accelerator: KeyboardShortcuts.window.aiModels,
                     click: async () => {
+                        // Track settings opened
+                        AnalyticsService.getInstance().sendEvent('global_settings_opened', {
+                            source: 'menu',
+                            section: 'general',
+                        });
                         createAIModelsWindow();
                     }
                 },
@@ -1240,6 +1320,11 @@ Note: Only one connection at a time is supported.`,
                 // {
                 //     label: 'Welcome',
                 //     click: async () => {
+                //         // Track help accessed
+                //         AnalyticsService.getInstance().sendEvent('help_accessed', {
+                //             helpType: 'welcome',
+                //             context: 'menu',
+                //         });
                 //         // Send message to renderer to open welcome tab
                 //         const focusedWindow = BrowserWindow.getFocusedWindow();
                 //         if (focusedWindow) {
@@ -1250,6 +1335,11 @@ Note: Only one connection at a time is supported.`,
                 {
                     label: 'Documentation',
                     click: async () => {
+                        // Track help accessed
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'docs',
+                            context: 'menu',
+                        });
                         shell.openExternal('https://docs.nimbalyst.com/');
                     }
                 },
@@ -1257,6 +1347,11 @@ Note: Only one connection at a time is supported.`,
                     label: 'Keyboard Shortcuts',
                     accelerator: 'CmdOrCtrl+/',
                     click: async () => {
+                        // Track help accessed
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'keyboard_shortcuts',
+                            context: 'menu',
+                        });
                         const focusedWindow = BrowserWindow.getFocusedWindow();
                         if (focusedWindow) {
                             focusedWindow.webContents.send('open-keyboard-shortcuts');
@@ -1273,6 +1368,11 @@ Note: Only one connection at a time is supported.`,
                 {
                     label: 'Welcome',
                     click: async () => {
+                        // Track help accessed
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'welcome',
+                            context: 'menu',
+                        });
                         // Send message to renderer to open welcome tab
                         const focusedWindow = BrowserWindow.getFocusedWindow();
                         if (focusedWindow) {
@@ -1283,6 +1383,11 @@ Note: Only one connection at a time is supported.`,
                 {
                     label: 'Documentation',
                     click: async () => {
+                        // Track help accessed
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'docs',
+                            context: 'menu',
+                        });
                         shell.openExternal('https://docs.nimbalyst.com/');
                     }
                 },
@@ -1290,6 +1395,11 @@ Note: Only one connection at a time is supported.`,
                     label: 'Keyboard Shortcuts',
                     accelerator: 'CmdOrCtrl+/',
                     click: async () => {
+                        // Track help accessed
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'keyboard_shortcuts',
+                            context: 'menu',
+                        });
                         const focusedWindow = BrowserWindow.getFocusedWindow();
                         if (focusedWindow) {
                             focusedWindow.webContents.send('open-keyboard-shortcuts');

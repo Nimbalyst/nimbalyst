@@ -2,6 +2,23 @@ import { app } from 'electron';
 import { existsSync, readdirSync, statSync, copyFileSync, mkdirSync, renameSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { logger } from '../utils/logger';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
+
+// Helper function to bucket time in milliseconds
+function bucketMigrationTime(ms: number): 'fast' | 'medium' | 'slow' {
+    if (ms < 1000) return 'fast';  // < 1 second
+    if (ms < 5000) return 'medium';  // 1-5 seconds
+    return 'slow';  // > 5 seconds
+}
+
+// Helper function to bucket record count
+function bucketRecordCount(count: number): string {
+    if (count === 0) return '0';
+    if (count < 10) return '1-9';
+    if (count < 50) return '10-49';
+    if (count < 100) return '50-99';
+    return '100+';
+}
 
 /**
  * Migrates user data from old app locations to new location
@@ -11,6 +28,11 @@ import { logger } from '../utils/logger';
  * New: ~/Library/Application Support/@nimbalyst/electron/
  */
 export async function migrateUserData(): Promise<boolean> {
+    const analytics = AnalyticsService.getInstance();
+    const startTime = Date.now();
+    let recordCount = 0;
+    let hadErrors = false;
+
     try {
         const platform = process.platform;
         const homeDir = app.getPath('home');
@@ -93,12 +115,14 @@ export async function migrateUserData(): Promise<boolean> {
         for (const file of filesToMigrate) {
             const oldFilePath = join(oldPath, file);
             const newFilePath = join(newPath, file);
-            
+
             if (existsSync(oldFilePath)) {
                 try {
                     copyFileSync(oldFilePath, newFilePath);
+                    recordCount++;
                     logger.main.info(`Migrated file: ${file}`);
                 } catch (error) {
+                    hadErrors = true;
                     logger.main.error(`Failed to migrate file ${file}:`, error);
                 }
             }
@@ -108,12 +132,16 @@ export async function migrateUserData(): Promise<boolean> {
         for (const dir of dirsToMigrate) {
             const oldDirPath = join(oldPath, dir);
             const newDirPath = join(newPath, dir);
-            
+
             if (existsSync(oldDirPath) && statSync(oldDirPath).isDirectory()) {
                 try {
                     copyDirectory(oldDirPath, newDirPath);
+                    // Count files in directory
+                    const filesInDir = readdirSync(oldDirPath).length;
+                    recordCount += filesInDir;
                     logger.main.info(`Migrated directory: ${dir}`);
                 } catch (error) {
+                    hadErrors = true;
                     logger.main.error(`Failed to migrate directory ${dir}:`, error);
                 }
             }
@@ -134,12 +162,31 @@ export async function migrateUserData(): Promise<boolean> {
         // Create a migration marker file
         const migrationMarker = join(newPath, `.migrated-from-${migrationSource}`);
         writeFileSync(migrationMarker, new Date().toISOString());
-        
+
         logger.main.info('User data migration completed successfully');
+
+        // Track successful migration
+        const migrationTime = Date.now() - startTime;
+        analytics.sendEvent('history_migration_completed', {
+            recordCount: bucketRecordCount(recordCount),
+            migrationTime: bucketMigrationTime(migrationTime),
+            hadErrors
+        });
+
         return true;
-        
+
     } catch (error) {
+        hadErrors = true;
         logger.main.error('Failed to migrate user data:', error);
+
+        // Track failed migration
+        const migrationTime = Date.now() - startTime;
+        analytics.sendEvent('history_migration_completed', {
+            recordCount: bucketRecordCount(recordCount),
+            migrationTime: bucketMigrationTime(migrationTime),
+            hadErrors: true
+        });
+
         return false;
     }
 }

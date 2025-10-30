@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { windows, windowStates, createWindow, windowFocusOrder, windowDevToolsState, getWindowId } from '../window/WindowManager';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getSessionState, saveSessionState as saveToStore, SessionState, clearSessionState } from '../utils/store';
@@ -8,6 +8,7 @@ import { getFolderContents } from '../utils/FileTree';
 import { basename } from 'path';
 import { logger } from '../utils/logger';
 import { createAgenticCodingWindow } from '../window/AgenticCodingWindow';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
 // Save session state
 export async function saveSessionState() {
@@ -94,6 +95,40 @@ export async function restoreSessionState(): Promise<boolean> {
                 if (sessionWindow.mode === 'workspace' && sessionWindow.workspacePath) {
                     // Check if workspace path still exists
                     if (existsSync(sessionWindow.workspacePath)) {
+                        // Track workspace opened from startup restore
+                        try {
+                            // Count files and check for subfolders
+                            let fileCount = 0;
+                            let hasSubfolders = false;
+                            try {
+                                const entries = readdirSync(sessionWindow.workspacePath, { withFileTypes: true });
+                                for (const entry of entries) {
+                                    if (entry.isFile()) {
+                                        fileCount++;
+                                    } else if (entry.isDirectory() && !entry.name.startsWith('.')) {
+                                        hasSubfolders = true;
+                                    }
+                                }
+                            } catch (error) {
+                                // Ignore count errors
+                            }
+
+                            // Bucket file count
+                            let fileCountBucket = '1-10';
+                            if (fileCount > 100) fileCountBucket = '100+';
+                            else if (fileCount > 50) fileCountBucket = '51-100';
+                            else if (fileCount > 10) fileCountBucket = '11-50';
+
+                            const analytics = AnalyticsService.getInstance();
+                            analytics.sendEvent('workspace_opened', {
+                                fileCount: fileCountBucket,
+                                hasSubfolders,
+                                source: 'startup_restore',
+                            });
+                        } catch (error) {
+                            logger.session.error('Error tracking workspace_opened event:', error);
+                        }
+
                         // Restore workspace window
                         window = createWindow(false, true, sessionWindow.workspacePath, sessionWindow.bounds);
                         logger.session.info(`Restored workspace window: ${sessionWindow.workspacePath}`);

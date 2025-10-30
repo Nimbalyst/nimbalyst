@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getProviderIcon } from '../icons/ProviderIcons';
+import { usePostHog } from 'posthog-js/react';
 import './GlobalSettingsScreen.css';
 
 // Provider panels
@@ -166,6 +167,7 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
   // Check if this is first time from URL params
   const urlParams = new URLSearchParams(window.location.search);
   const isFirstTime = urlParams.get('isFirstTime') === 'true';
+  const posthog = usePostHog();
 
   const [selectedNav, setSelectedNav] = useState<NavItemId>(
     isFirstTime ? 'getting-started' : 'claude-code'
@@ -255,6 +257,13 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
         }
       }
 
+      // Track ai_provider_configured analytics event
+      posthog?.capture('ai_provider_configured', {
+        provider,
+        modelCount: models.length,
+        action: enabled ? 'enabled' : 'disabled'
+      });
+
       return {
         ...prev,
         [provider]: {
@@ -332,6 +341,16 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
           const updated = enabled
             ? [...models, modelId]
             : models.filter(m => m !== modelId);
+
+          // Track ai_model_selected analytics event
+          if (enabled) {
+            // Extract model name from model ID (format: provider:model-name)
+            const modelName = modelId.includes(':') ? modelId.split(':')[1] : modelId;
+            posthog?.capture('ai_model_selected', {
+              provider: selectedNav,
+              modelName
+            });
+          }
 
           return {
             ...prev,

@@ -1,8 +1,25 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
-import { getWindowId } from '../window/WindowManager';
+import { getWindowId, windowStates } from '../window/WindowManager';
 import { optimizedWorkspaceWatcher } from './OptimizedWorkspaceWatcher';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import { readdirSync } from 'fs';
+
+// Helper function to calculate folder depth relative to workspace
+function calculateFolderDepth(folderPath: string, workspacePath: string): number {
+    const relativePath = folderPath.replace(workspacePath, '').replace(/^\//, '');
+    if (!relativePath) return 0;
+    return relativePath.split('/').length;
+}
+
+// Helper function to bucket file counts
+function bucketFileCount(count: number): string {
+    if (count <= 10) return '1-10';
+    if (count <= 50) return '11-50';
+    if (count <= 100) return '51-100';
+    return '100+';
+}
 
 // Set up IPC handlers for folder expand/collapse events
 export function registerWorkspaceWatcherHandlers() {
@@ -15,6 +32,32 @@ export function registerWorkspaceWatcherHandlers() {
 
         logger.workspaceWatcher.debug(`Folder expanded: ${folderPath}`);
         optimizedWorkspaceWatcher.addWatchedFolder(windowId, folderPath);
+
+        // Track folder expansion analytics
+        try {
+            const state = windowStates.get(windowId);
+            if (state?.workspacePath) {
+                // Calculate depth
+                const depth = calculateFolderDepth(folderPath, state.workspacePath);
+
+                // Count files in the expanded folder
+                let fileCount = 0;
+                try {
+                    const entries = readdirSync(folderPath, { withFileTypes: true });
+                    fileCount = entries.filter(entry => entry.isFile()).length;
+                } catch (error) {
+                    // Ignore count errors
+                }
+
+                const analytics = AnalyticsService.getInstance();
+                analytics.sendEvent('workspace_file_tree_expanded', {
+                    depth,
+                    fileCount: bucketFileCount(fileCount),
+                });
+            }
+        } catch (error) {
+            logger.workspaceWatcher.error('Error tracking workspace_file_tree_expanded event:', error);
+        }
     });
 
     ipcMain.handle('workspace-folder-collapsed', async (event, folderPath: string) => {

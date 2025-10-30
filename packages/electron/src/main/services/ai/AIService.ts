@@ -30,6 +30,64 @@ function previewForLog(value?: string, max: number = LOG_PREVIEW_LENGTH): string
   return value.length > max ? `${value.slice(0, max)}…` : value;
 }
 
+// Helper functions for bucketing analytics values
+function bucketMessageLength(length: number): 'short' | 'medium' | 'long' {
+  if (length < 100) return 'short';
+  if (length < 500) return 'medium';
+  return 'long';
+}
+
+function bucketResponseTime(ms: number): 'fast' | 'medium' | 'slow' {
+  if (ms < 2000) return 'fast';
+  if (ms < 5000) return 'medium';
+  return 'slow';
+}
+
+function bucketChunkCount(count: number): string {
+  if (count < 10) return '0-9';
+  if (count < 50) return '10-49';
+  if (count < 100) return '50-99';
+  return '100+';
+}
+
+function bucketContentLength(length: number): string {
+  if (length < 100) return '0-99';
+  if (length < 500) return '100-499';
+  if (length < 1000) return '500-999';
+  return '1000+';
+}
+
+function bucketCount(count: number): string {
+  if (count === 0) return '0';
+  if (count === 1) return '1';
+  if (count < 5) return '2-4';
+  if (count < 10) return '5-9';
+  return '10+';
+}
+
+function bucketAgeInDays(timestampMs: number): string {
+  const ageMs = Date.now() - timestampMs;
+  const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+
+  if (ageDays === 0) return 'today';
+  if (ageDays === 1) return '1-day';
+  if (ageDays < 7) return '2-6-days';
+  if (ageDays < 30) return '1-4-weeks';
+  if (ageDays < 90) return '1-3-months';
+  return '3-months-plus';
+}
+
+// Helper function to categorize AI errors
+function categorizeAIError(error: any): string {
+  const message = error?.message?.toLowerCase() || String(error).toLowerCase();
+  if (message.includes('network') || message.includes('econnrefused') || message.includes('fetch')) return 'network';
+  if (message.includes('api key') || message.includes('unauthorized') || message.includes('authentication')) return 'auth';
+  if (message.includes('timeout') || message.includes('timed out')) return 'timeout';
+  if (message.includes('rate limit') || message.includes('too many requests')) return 'rate_limit';
+  if (message.includes('overloaded') || message.includes('capacity')) return 'overloaded';
+  return 'unknown';
+}
+
 export class AIService {
   private sessionManager: SessionManager;
   private settingsStore: Store<Record<string, unknown>> | null = null;
@@ -240,6 +298,18 @@ export class AIService {
         model,
         sessionType || 'chat' // Default to 'chat' if not specified
       );
+
+      // Track AI chat feature first use
+      const { FeatureTrackingService } = await import('../analytics/FeatureTrackingService');
+      const { AnalyticsService } = await import('../analytics/AnalyticsService');
+      const featureTracking = FeatureTrackingService.getInstance();
+      if (featureTracking.isFirstUse('ai_chat')) {
+        const daysSinceInstall = featureTracking.getDaysSinceInstall();
+        AnalyticsService.getInstance().sendEvent('feature_first_use', {
+          feature: 'ai_chat',
+          daysSinceInstall,
+        });
+      }
 
       // Create and initialize provider
       const providerInstance = ProviderFactory.createProvider(provider, session.id);
@@ -566,6 +636,15 @@ export class AIService {
         logger.main.warn('[AIService] Failed to track user @ mentions:', error);
       }
 
+      // Track ai_message_sent analytics event
+      this.analytics.sendEvent('ai_message_sent', {
+        provider: session.provider,
+        hasDocumentContext: !!documentContext,
+        hasAttachments: !!(attachments && attachments.length > 0),
+        attachmentCount: attachments?.length || 0,
+        messageLength: bucketMessageLength(message.length)
+      });
+
       try {
         let fullResponse = '';
         const toolCalls: any[] = [];
@@ -832,6 +911,14 @@ export class AIService {
                 });
               }
               console.error(`${logPrefix} Provider error:`, chunk.error);
+
+              // Track stream interruption due to error
+              this.analytics.sendEvent('ai_stream_interrupted', {
+                provider: session.provider,
+                chunksReceived: chunkCount,
+                reason: 'error'
+              });
+
               event.sender.send('ai:error', {
                 sessionId: session.id,
                 message: chunk.error || 'Unknown error occurred'
@@ -887,6 +974,25 @@ export class AIService {
                 toolCallCount: toolCallCount,
                 responseLength: fullResponse.length,
                 ...(tokenUsage && { tokenUsage })
+              });
+
+              // Track ai_response_received analytics event
+              const hasError = false; // If we got here, no error occurred
+              const responseType = toolCallCount > 0 ? 'tool_use' : 'text';
+              const toolsUsed = toolCalls.map(tc => tc.name).filter((name, index, self) => self.indexOf(name) === index);
+
+              this.analytics.sendEvent('ai_response_received', {
+                provider: session.provider,
+                responseType,
+                toolsUsed,
+                responseTime: bucketResponseTime(perfLog.totalTime)
+              });
+
+              // Track ai_response_streamed analytics event (for streaming characteristics)
+              this.analytics.sendEvent('ai_response_streamed', {
+                provider: session.provider,
+                chunkCount: bucketChunkCount(chunkCount),
+                totalLength: bucketContentLength(fullResponse.length)
               });
 
               // Only add assistant message if there's actual content or edits
@@ -975,6 +1081,21 @@ export class AIService {
 
         console.error(`${logPrefix} Error after ${errorTime}ms:`, error);
 
+        // Track AI request failure
+        this.analytics.sendEvent('ai_request_failed', {
+          provider: session.provider,
+          errorType: categorizeAIError(error),
+          retryAttempt: 0  // We don't currently track retry attempts
+        });
+
+        // Track ai_response_received with error
+        this.analytics.sendEvent('ai_response_received', {
+          provider: session.provider,
+          responseType: 'error',
+          toolsUsed: [],
+          responseTime: bucketResponseTime(errorTime)
+        });
+
         // Send error metrics
         if (event && event.sender) {
           event.sender.send('ai:performanceMetrics', {
@@ -1006,6 +1127,19 @@ export class AIService {
         console.log(`[SESSION] Session not found: ${sessionId} (this is normal if the session was deleted)`);
         return null;
       }
+
+      // Track ai_session_resumed if session has previous messages
+      if (session.messages && session.messages.length > 0) {
+        const messageCount = session.messages.length;
+        const createdAt = session.createdAt || Date.now();
+
+        this.analytics.sendEvent('ai_session_resumed', {
+          provider: session.provider,
+          messageCount: bucketCount(messageCount),
+          ageInDays: bucketAgeInDays(createdAt)
+        });
+      }
+
       return session;
     });
 
@@ -1067,14 +1201,24 @@ export class AIService {
     });
 
     // Cancel current request
-    ipcMain.handle('ai:cancelRequest', async (event) => {
+    ipcMain.handle('ai:cancelRequest', async (event, chunksReceived?: number) => {
       // Abort the provider for this specific window
       const windowId = event.sender.id;
       const provider = this.providersByWindow.get(windowId);
       if (provider) {
+        // Get provider type
+        const providerType = (provider as any).providerType || 'unknown';
+
+        // Track stream interruption
+        this.analytics.sendEvent('ai_stream_interrupted', {
+          provider: providerType,
+          chunksReceived: chunksReceived || 0,
+          reason: 'user_cancel'
+        });
+
         provider.abort();
         console.log(`[AIService] Cancelled request for window ${windowId}`);
-        this.analytics.sendEvent('cancel_ai_request', {provider})
+        this.analytics.sendEvent('cancel_ai_request', {provider: providerType})
         return { success: true };
       }
       return { success: false, error: 'No active request to cancel' };

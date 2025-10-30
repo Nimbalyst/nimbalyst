@@ -1,6 +1,6 @@
 import { ipcMain, dialog, BrowserWindow, app } from 'electron';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
-import { basename, join, dirname } from 'path';
+import { basename, join, dirname, extname } from 'path';
  import { windowStates, savingWindows, findWindowByFilePath, createWindow, getWindowId, windows, documentServices } from '../window/WindowManager';
 import { loadFileIntoWindow, saveFile } from '../file/FileOperations';
 import { startFileWatcher, stopFileWatcher, chokidarFileWatcher } from '../file/FileWatcher';
@@ -8,8 +8,49 @@ import { AUTOSAVE_DELAY } from '../utils/constants';
 import { addWorkspaceRecentFile } from '../utils/store';
 import { logger } from '../utils/logger';
 import { homedir } from 'os';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
+
+// Helper function to get file type from extension
+function getFileType(filePath: string): string {
+    const ext = extname(filePath).toLowerCase();
+    const typeMap: Record<string, string> = {
+        '.md': 'markdown',
+        '.markdown': 'markdown',
+        '.txt': 'text',
+        '.json': 'json',
+        '.js': 'javascript',
+        '.ts': 'typescript',
+        '.tsx': 'typescript',
+        '.jsx': 'javascript'
+    };
+    return typeMap[ext] || 'other';
+}
+
+// Helper function to categorize errors
+function categorizeError(error: any): string {
+    const message = error?.message?.toLowerCase() || String(error).toLowerCase();
+    if (message.includes('permission') || message.includes('eacces')) return 'permission';
+    if (message.includes('enoent') || message.includes('not found')) return 'not_found';
+    if (message.includes('enospc') || message.includes('disk full')) return 'disk_full';
+    if (message.includes('conflict')) return 'conflict';
+    return 'unknown';
+}
+
+// Helper function to get word count category
+function getWordCountCategory(content: string): 'small' | 'medium' | 'large' {
+    const wordCount = content.split(/\s+/).filter(word => word.length > 0).length;
+    if (wordCount < 500) return 'small';
+    if (wordCount < 2000) return 'medium';
+    return 'large';
+}
+
+// Helper function to check if content has frontmatter
+function hasFrontmatter(content: string): boolean {
+    return content.trimStart().startsWith('---');
+}
 
 export function registerFileHandlers() {
+    const analytics = AnalyticsService.getInstance();
     // Open file dialog
     ipcMain.handle('open-file', async (event) => {
         const window = BrowserWindow.fromWebContents(event.sender);
@@ -39,6 +80,13 @@ export function registerFileHandlers() {
             }
 
             const content = readFileSync(filePath, 'utf-8');
+
+            // Track file opened
+            analytics.sendEvent('file_opened', {
+                source: 'dialog',
+                fileType: getFileType(filePath),
+                hasWorkspace: !!state?.workspacePath
+            });
 
             // Start watching the file
             startFileWatcher(window, filePath);
@@ -85,6 +133,13 @@ export function registerFileHandlers() {
                     const currentDiskContent = readFileSync(filePath, 'utf-8');
                     if (currentDiskContent !== lastKnownContent) {
                         console.log('[SAVE] ⚠ Conflict detected - file changed on disk since last load');
+
+                        // Track conflict detection - no resolution yet (user hasn't chosen)
+                        analytics.sendEvent('file_conflict_detected', {
+                            fileType: getFileType(filePath),
+                            conflictResolution: 'pending'
+                        });
+
                         return {
                             success: false,
                             conflict: true,
@@ -140,10 +195,26 @@ export function registerFileHandlers() {
                 savingWindows.delete(windowId);
             }, AUTOSAVE_DELAY);
 
+            // Track successful file save
+            analytics.sendEvent('file_saved', {
+                saveType: 'manual',
+                fileType: getFileType(filePath),
+                hasFrontmatter: hasFrontmatter(content),
+                wordCount: getWordCountCategory(content)
+            });
+
             return { success: true, filePath };
         } catch (error) {
             console.error('[SAVE] ✗ Error saving file:', error);
             savingWindows.delete(windowId); // Clean up on error
+
+            // Track save failure
+            analytics.sendEvent('file_save_failed', {
+                errorType: categorizeError(error),
+                fileType: filePath ? getFileType(filePath) : 'unknown',
+                isAutoSave: false  // This handler is for manual saves
+            });
+
             return null;
         }
     });
@@ -201,6 +272,14 @@ export function registerFileHandlers() {
             return null;
         } catch (error) {
             console.error('Error in save-file-as:', error);
+
+            // Track save failure
+            analytics.sendEvent('file_save_failed', {
+                errorType: categorizeError(error),
+                fileType: state?.filePath ? getFileType(state.filePath) : 'unknown',
+                isAutoSave: false
+            });
+
             return null;
         }
     });
@@ -332,6 +411,12 @@ export function registerFileHandlers() {
             // Write the initial content
             writeFileSync(absolutePath, initialContent || '', 'utf-8');
             console.log('[CREATE_DOC] File created successfully');
+
+            // Track file creation
+            analytics.sendEvent('file_created', {
+                creationType: 'ai_tool',
+                fileType: getFileType(absolutePath)
+            });
 
             // Add to recent files
             if (state.workspacePath) {

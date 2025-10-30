@@ -35,6 +35,13 @@ export class ToolExecutor extends EventEmitter {
     this.workspaceId = workspaceId;
     this.setupHandlers();
   }
+
+  private bucketContentLength(length: number): string {
+    if (length < 100) return '0-99';
+    if (length < 500) return '100-499';
+    if (length < 1000) return '500-999';
+    return '1000+';
+  }
   
   private setupHandlers(): void {
     // Clean up any existing handlers to avoid duplicates
@@ -93,6 +100,22 @@ export class ToolExecutor extends EventEmitter {
     targetFilePath?: string;
   }): Promise<void> {
     const streamId = `stream-${Date.now()}`;
+
+    // Determine position type for analytics
+    let positionType: 'cursor' | 'end' | 'after-selection';
+    if (args.insertAfter) {
+      positionType = 'after-selection';
+    } else if (args.position === 'cursor') {
+      positionType = 'cursor';
+    } else {
+      positionType = 'end';
+    }
+
+    // Track ai_stream_content_used analytics event
+    analytics.sendEvent('ai_stream_content_used', {
+      position: positionType,
+      contentLength: this.bucketContentLength(args.content.length)
+    });
 
     // Start streaming - let the AI specify insertAfter with actual content
     this.webContents.send('ai:streamEditStart', {

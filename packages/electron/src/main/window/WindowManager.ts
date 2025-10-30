@@ -12,6 +12,8 @@ import { ElectronDocumentService, setupDocumentServiceHandlers } from '../servic
 import { ElectronFileSystemService } from '../services/ElectronFileSystemService';
 import { setFileSystemService, clearFileSystemService } from '@nimbalyst/runtime';
 import { navigationHistoryService } from '../services/NavigationHistoryService';
+import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import { FeatureTrackingService } from '../services/analytics/FeatureTrackingService';
 
 // Window management
 export const windows = new Map<number, BrowserWindow>();
@@ -219,6 +221,16 @@ export function createWindow(
                 // Set the file system service globally for the runtime
                 setFileSystemService(fileSystemService);
                 console.log('[MAIN] Created FileSystemService for workspace:', workspacePath);
+            }
+
+            // Track workspace feature first use
+            const featureTracking = FeatureTrackingService.getInstance();
+            if (featureTracking.isFirstUse('workspace')) {
+                const daysSinceInstall = featureTracking.getDaysSinceInstall();
+                AnalyticsService.getInstance().sendEvent('feature_first_use', {
+                    feature: 'workspace',
+                    daysSinceInstall,
+                });
             }
 
             // Restore navigation history for this workspace
