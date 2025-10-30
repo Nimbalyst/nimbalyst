@@ -111,8 +111,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "stravu",
-        "repo": "preditor-releases",
+        "owner": "nimbalyst",
+        "repo": "nimbalyst",
         "releaseType": "release"
       }
     ],

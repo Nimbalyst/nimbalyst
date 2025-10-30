@@ -113,8 +113,8 @@ jobs:
           # Windows signing
           WIN_CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
-          # CRITICAL: GH_TOKEN is required for electron-builder to publish to preditor-releases repo
-          # The package.json "publish" config points to stravu/preditor-releases (public repo)
+          # CRITICAL: GH_TOKEN is required for electron-builder to publish to nimbalyst repo
+          # The package.json "publish" config points to nimbalyst/nimbalyst (public repo)
           # DO NOT REMOVE THIS - it enables electron-builder to create releases in the public repo
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
           # Require notarization for release builds
@@ -201,11 +201,11 @@ jobs:
           generate_release_notes: false
           body: |
             ## What's Changed
-            See [commit history](https://github.com/stravu/preditor/commits/main) for details.
-            
+            See [commit history](https://github.com/nimbalyst/nimbalyst-code/commits/main) for details.
+
             ## Downloads
             - **macOS**: Download the .dmg file
-            - **Windows**: Download the .exe file  
+            - **Windows**: Download the .exe file
             - **Linux**: Download the .AppImage file
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -226,7 +226,7 @@ jobs:
           VERSION="${{ steps.get_version.outputs.VERSION }}"
 
           # Check if release already exists in public repo
-          if gh release view "$VERSION" --repo stravu/preditor-releases &>/dev/null; then
+          if gh release view "$VERSION" --repo nimbalyst/nimbalyst &>/dev/null; then
             echo "Release $VERSION already exists in public repository"
             exit 0
           fi
@@ -246,10 +246,10 @@ jobs:
 
           # Final fallback if still no notes
           if [ -z "$NOTES" ]; then
-            NOTES="See [RELEASE_NOTES.md](https://github.com/stravu/preditor/blob/main/packages/electron/RELEASE_NOTES.md) for details."
+            NOTES="See [RELEASE_NOTES.md](https://github.com/nimbalyst/nimbalyst-code/blob/main/packages/electron/RELEASE_NOTES.md) for details."
           fi
 
-          # NOTE: This step should normally NOT run because electron-builder publishes to preditor-releases
+          # NOTE: This step should normally NOT run because electron-builder publishes to nimbalyst
           # It's a fallback in case electron-builder fails to publish for any reason
           echo "WARNING: Creating release manually in public repository (electron-builder should have done this)"
           echo "Available files to upload:"
@@ -257,12 +257,12 @@ jobs:
 
           # Create release in public repository with update manifests
           if gh release create "$VERSION" \
-            --repo stravu/preditor-releases \
-            --title "Preditor $VERSION" \
+            --repo nimbalyst/nimbalyst \
+            --title "Nimbalyst $VERSION" \
             --notes "${NOTES}
 
           ### Installation
-          - **macOS**: Download and open the .dmg file, drag Preditor to Applications
+          - **macOS**: Download and open the .dmg file, drag Nimbalyst to Applications
           - **Windows**: Download and run the .exe installer
           - **Linux**: Download the .AppImage, make it executable, and run it
 

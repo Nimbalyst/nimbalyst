@@ -21,8 +21,8 @@ export class AutoUpdaterService {
     // This will look for latest-mac.yml, latest.yml, etc. in the release assets
     autoUpdater.setFeedURL({
       provider: 'github',
-      owner: 'stravu',
-      repo: 'preditor-releases'
+      owner: 'nimbalyst',
+      repo: 'nimbalyst'
     });
 
     // Set up event handlers
