@@ -58,6 +58,15 @@ type TriggerFunction = (text: string) => {
   replaceableString: string;
 } | null;
 
+// Register document header provider at module load time (not in component mount)
+// This ensures the provider is available before DocumentHeaderContainer tries to query it
+DocumentHeaderRegistry.register({
+  id: 'tracker-document-header',
+  priority: 100,
+  shouldRender: shouldRenderTrackerHeader,
+  component: TrackerDocumentHeader,
+});
+
 export const INSERT_TRACKER_TASK_COMMAND: LexicalCommand<void> = createCommand();
 export const INSERT_TRACKER_BUG_COMMAND: LexicalCommand<void> = createCommand();
 export const INSERT_TRACKER_PLAN_COMMAND: LexicalCommand<void> = createCommand();
@@ -266,20 +275,6 @@ function TrackerPlugin(): JSX.Element | null {
   const [editorState, setEditorState] = useState<TrackerEditorState | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const capturedTextRef = useRef<string>('');
-
-  // Register document header provider
-  useReactEffect(() => {
-    const unregister = DocumentHeaderRegistry.register({
-      id: 'tracker-document-header',
-      priority: 100,
-      shouldRender: shouldRenderTrackerHeader,
-      component: TrackerDocumentHeader,
-    });
-
-    return () => {
-      unregister();
-    };
-  }, []);
 
 
   // Use node transform to enforce tracker always has at least a space

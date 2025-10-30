@@ -92,6 +92,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const saveIdRef = useRef<number>(0);
   const pendingSaveIdsRef = useRef<Set<number>>(new Set());
   const instanceIdRef = useRef<number>(Math.floor(Math.random() * 10000));
+  const hasInitialContentSyncRef = useRef<boolean>(false);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -319,6 +320,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     onDirtyChange?.(isContentDirty);
     onContentChange?.();
   }, [onDirtyChange, onContentChange]);
+
 
   // Autosave timer
   useEffect(() => {
@@ -681,6 +683,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 // Now that we have getContentFn, expose the manual save function
                 if (onManualSaveReady) {
                   onManualSaveReady(handleManualSave);
+                }
+                // Sync content once when editor is ready to ensure DocumentHeaderContainer
+                // detects frontmatter on initial load
+                if (!hasInitialContentSyncRef.current) {
+                  hasInitialContentSyncRef.current = true;
+                  const currentContent = getContentFn();
+                  setContent(currentContent);
                 }
               },
               onEditorReady: (editor) => {
