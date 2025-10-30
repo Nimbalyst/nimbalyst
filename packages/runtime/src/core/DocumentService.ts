@@ -68,6 +68,7 @@ export interface TrackerItem {
   created?: string;
   updated?: string;
   dueDate?: string;
+  progress?: number;      // Progress percentage (0-100) for items that support it
   lastIndexed: Date;
 }
 

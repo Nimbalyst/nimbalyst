@@ -15,7 +15,7 @@ import { globalRegistry } from '../models';
 import './TrackerTable.css';
 import {usePostHog} from "posthog-js/react";
 
-export type SortColumn = 'title' | 'type' | 'status' | 'priority' | 'module' | 'lastIndexed';
+export type SortColumn = 'title' | 'type' | 'status' | 'priority' | 'progress' | 'module' | 'lastIndexed';
 export type SortDirection = 'asc' | 'desc';
 
 interface TrackerTableProps {
@@ -143,6 +143,7 @@ function convertFullDocumentToTrackerItems(metadata: any[], trackerType: Tracker
         lineNumber: 0,
         owner: trackerStatus.owner || frontmatter.owner,
         tags: trackerStatus.tags || frontmatter.tags,
+        progress: trackerStatus.progress || frontmatter.progress,
         lastIndexed: actualDate || new Date(0), // Use epoch for invalid dates
       } as TrackerItem;
     });
@@ -335,6 +336,12 @@ export function TrackerTable({
           const aPriority = a.priority ? (priorityOrder[a.priority] ?? 4) : 4;
           const bPriority = b.priority ? (priorityOrder[b.priority] ?? 4) : 4;
           compareValue = aPriority - bPriority;
+          break;
+        }
+        case 'progress': {
+          const aProgress = a.progress ?? -1; // Items without progress sort to bottom
+          const bProgress = b.progress ?? -1;
+          compareValue = aProgress - bProgress;
           break;
         }
         case 'module':
@@ -550,6 +557,15 @@ export function TrackerTable({
                 </span>
               </th>
               <th
+                className="tracker-table-header progress sortable"
+                onClick={() => handleColumnClick('progress')}
+              >
+                <span className="header-content">
+                  <span>PROGRESS</span>
+                  {getSortIndicator('progress')}
+                </span>
+              </th>
+              <th
                 className="tracker-table-header module sortable"
                 onClick={() => handleColumnClick('module')}
               >
@@ -607,12 +623,13 @@ export function TrackerTable({
               </th>
               <th className="tracker-table-header filter-cell"></th>
               <th className="tracker-table-header filter-cell"></th>
+              <th className="tracker-table-header filter-cell"></th>
             </tr>
           </thead>
           <tbody>
           {sortedItems.length === 0 ? (
             <tr>
-              <td colSpan={6} className="tracker-table-empty-cell">
+              <td colSpan={7} className="tracker-table-empty-cell">
                 <div className="tracker-table-empty">
                   <span>No tracker items found</span>
                   <p>Create tracker items using #bug, #task, #plan, or #idea in any markdown file</p>
@@ -663,6 +680,14 @@ export function TrackerTable({
                     >
                       {item.priority.charAt(0).toUpperCase() + item.priority.slice(1)}
                     </span>
+                  )}
+                </td>
+                <td className="tracker-table-cell progress">
+                  {item.progress !== undefined && item.progress !== null && (
+                    <div className="progress-bar-container">
+                      <span className="progress-text">{item.progress}%</span>
+                      <div className="progress-bar-fill" style={{ '--progress-width': `${item.progress}%` } as React.CSSProperties}></div>
+                    </div>
                   )}
                 </td>
                 <td className="tracker-table-cell module">

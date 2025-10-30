@@ -404,6 +404,31 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     }
   }, [workspacePath]);
 
+  // Handle restoring content from history
+  const handleRestoreFromHistory = useCallback(async (content: string) => {
+    if (!currentFilePath) {
+      return;
+    }
+
+    try {
+      // Write restored content to disk
+      await window.electronAPI.saveFile(content, currentFilePath);
+
+      // Update tab state to reflect saved state
+      if (tabs.activeTabId) {
+        tabs.updateTab(tabs.activeTabId, {
+          isDirty: false,
+          lastSaved: new Date()
+        });
+      }
+    } catch (error) {
+      console.error('[EditorMode] Failed to restore content from history:', error);
+    }
+
+    // Close the history dialog
+    setIsHistoryDialogOpen(false);
+  }, [currentFilePath, tabs]);
+
   return (
     <>
       {/* Main content area */}
@@ -564,6 +589,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
           isOpen={isHistoryDialogOpen}
           onClose={() => setIsHistoryDialogOpen(false)}
           filePath={currentFilePath}
+          onRestore={handleRestoreFromHistory}
         />
       )}
     </>
