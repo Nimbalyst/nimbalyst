@@ -145,6 +145,127 @@
   height: 16px;
 }
 
+/* Slider field styles */
+.status-bar-field-slider .slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.status-bar-field-slider .slider-header label {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.status-bar-field-slider .slider-number-input {
+  width: 60px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  text-align: center;
+  transition: border-color 0.2s;
+}
+
+.status-bar-field-slider .slider-number-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb, 59, 130, 246), 0.1);
+}
+
+/* Remove spinner buttons from number input */
+.status-bar-field-slider .slider-number-input::-webkit-inner-spin-button,
+.status-bar-field-slider .slider-number-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.status-bar-field-slider .slider-number-input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.status-bar-field input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-tertiary);
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.status-bar-field input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.status-bar-field input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 4px rgba(var(--primary-color-rgb, 59, 130, 246), 0.1);
+}
+
+.status-bar-field input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary-color);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.status-bar-field input[type="range"]::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 4px rgba(var(--primary-color-rgb, 59, 130, 246), 0.1);
+}
+
+.status-bar-field input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(
+    to right,
+    var(--primary-color) 0%,
+    var(--primary-color) var(--slider-progress, 0%),
+    var(--surface-tertiary) var(--slider-progress, 0%),
+    var(--surface-tertiary) 100%
+  );
+}
+
+.status-bar-field input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-tertiary);
+}
+
+.status-bar-field input[type="range"]::-moz-range-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--primary-color);
+}
+
+.status-bar-field input[type="range"]:focus {
+  outline: none;
+}
+
+.status-bar-field input[type="range"]:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(var(--primary-color-rgb, 59, 130, 246), 0.2);
+}
+
 /* Select styling with icons */
 .status-bar-field select option {
   padding: 4px 8px;

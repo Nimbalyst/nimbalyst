@@ -54,6 +54,40 @@ export const StatusBar: React.FC<StatusBarProps> = ({ model, data, onChange, onC
         );
 
       case 'number':
+        // Use slider for progress fields or any number field with min/max bounds
+        const useSlider = field.min !== undefined && field.max !== undefined;
+
+        if (useSlider) {
+          return (
+            <div key={field.name} className="status-bar-field status-bar-field-slider" style={fieldStyle}>
+              <div className="slider-header">
+                <label htmlFor={fieldId}>{field.name}</label>
+                <input
+                  type="number"
+                  className="slider-number-input"
+                  value={value ?? field.default ?? field.min}
+                  min={field.min}
+                  max={field.max}
+                  onChange={(e) => {
+                    const newValue = Number(e.target.value);
+                    if (!isNaN(newValue)) {
+                      handleFieldChange(field.name, newValue);
+                    }
+                  }}
+                />
+              </div>
+              <input
+                id={fieldId}
+                type="range"
+                value={value ?? field.default ?? field.min}
+                min={field.min}
+                max={field.max}
+                onChange={(e) => handleFieldChange(field.name, Number(e.target.value))}
+              />
+            </div>
+          );
+        }
+
         return (
           <div key={field.name} className="status-bar-field" style={fieldStyle}>
             <label htmlFor={fieldId}>{field.name}</label>
