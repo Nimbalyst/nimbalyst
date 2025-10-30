@@ -1,10 +1,16 @@
-# Release Notes - v0.42.58
+# Release Notes - v0.42.60
 
 ## Bug Fixes
-
-- Fixed Plans feature not working in packaged DMG builds
+- Fixed file selection not clearing when tab is closed
+- Fixed tracker document header not appearing on initial load
+- Fixed files not marked dirty when tracker updates frontmatter
+- Fixed error handling for missing directories in folder contents retrieval
 
 ## Improvements
+- Claude Code now updates database and notifies panel to check for updates
+- MCP stream tool now operates synchronously for better reliability
+- AI tools now require explicit file paths for better clarity
 
-- Added copyable support ID to the About page for easier troubleshooting
-- Simplified analytics settings by removing opt-out option (analytics remain anonymous)
+## Refactoring
+- Modernized end-to-end test infrastructure
+- Removed deprecated getDocument tool
