@@ -1,5 +1,4 @@
 #!/bin/bash
-#!/bin/bash
 
 set -e
 
@@ -37,24 +36,82 @@ cd ../..
 # Update root package-lock.json
 npm install --package-lock-only
 
-# Read release notes
-RELEASE_NOTES=$(cat packages/electron/RELEASE_NOTES.md)
+# Check if CHANGELOG.md exists
+if [ ! -f "CHANGELOG.md" ]; then
+  echo "Error: CHANGELOG.md not found in repository root"
+  exit 1
+fi
+
+# Extract release notes from [Unreleased] section
+RELEASE_NOTES=$(awk '/^## \[Unreleased\]/,/^## \[/ {
+  if (/^## \[Unreleased\]/) next
+  if (/^## \[/) exit
+  print
+}' CHANGELOG.md | sed '/^$/d' | sed '/^###/d' | sed '/^<!--/d')
+
+if [ -z "$RELEASE_NOTES" ]; then
+  echo "Error: No release notes found in [Unreleased] section of CHANGELOG.md"
+  echo "Please add release notes before creating a release."
+  exit 1
+fi
+
+# Get current date
+RELEASE_DATE=$(date +%Y-%m-%d)
+
+# Create new release entry
+NEW_ENTRY="## [$NEW_VERSION] - $RELEASE_DATE
+
+$(awk '/^## \[Unreleased\]/,/^## \[/ {print}' CHANGELOG.md | sed '1d' | sed '/^## \[/d')
+"
+
+# Update CHANGELOG.md: replace [Unreleased] section with new release and empty [Unreleased]
+awk -v new_entry="$NEW_ENTRY" '
+/^## \[Unreleased\]/ {
+  print "## [Unreleased]"
+  print ""
+  print "### Added"
+  print "<!-- New features go here -->"
+  print ""
+  print "### Changed"
+  print "<!-- Changes to existing functionality go here -->"
+  print ""
+  print "### Fixed"
+  print "<!-- Bug fixes go here -->"
+  print ""
+  print "### Removed"
+  print "<!-- Removed features go here -->"
+  print ""
+  print new_entry
+  skip=1
+  next
+}
+/^## \[/ && skip {
+  skip=0
+}
+!skip {print}
+' CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
+
+# Format release notes for commit message (remove HTML comments)
+COMMIT_NOTES=$(echo "$RELEASE_NOTES" | sed '/^<!--/d')
 
 # Create commit with release notes
-git add packages/electron/package.json package-lock.json
+git add packages/electron/package.json package-lock.json CHANGELOG.md
 git commit -m "Release v$NEW_VERSION
 
-$RELEASE_NOTES"
+$COMMIT_NOTES"
 
-# Create git tag
-git tag "v$NEW_VERSION"
+# Create annotated git tag with release notes
+git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION
+
+$COMMIT_NOTES"
 
 echo ""
 echo "Release v$NEW_VERSION created successfully!"
 echo ""
 echo "Next steps:"
 echo "1. Review the commit: git show HEAD"
-echo "2. Push the commit: git push origin main"
-echo "3. Push the tag to trigger CI: git push origin v$NEW_VERSION"
+echo "2. Review the tag: git show v$NEW_VERSION"
+echo "3. Push the commit: git push origin main"
+echo "4. Push the tag to trigger CI: git push origin v$NEW_VERSION"
 echo ""
 echo "The GitHub Actions workflow will automatically build and publish the release."

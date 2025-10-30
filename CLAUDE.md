@@ -19,38 +19,13 @@ This is Nimbalyst - a rich text editor built with Meta's Lexical framework. Orig
 
 ## Releases
 
-When the user requests "prepare a [patch|minor|major] release", follow this workflow:
+For detailed release instructions, see [RELEASING.md](RELEASING.md).
 
-### Release Preparation Process
-1. **Get commits since last release**:
-  - Find the last git tag: `git describe --tags --abbrev=0`
-  - Get commits since that tag: `git log [last-tag]..HEAD --oneline`
-
-2. **Generate release notes**:
-  - Create concise bullet-point release notes summarizing the most important changes
-  - Focus on user-facing changes (features, fixes, improvements)
-  - Filter out trivial changes (chore, docs, minor refactors)
-  - Keep it brief - internal notes only
-  - Follow commit message conventions (feat:, fix:, refactor:)
-
-3. **Save release notes**:
-  - Write notes to `packages/electron/RELEASE_NOTES.md`
-  - Show the user the notes for approval
-
-4. **Execute release** (after user approval):
-  - Run `./scripts/release.sh [patch|minor|major]`
-  - The script will:
-    - Bump version in `packages/electron/package.json`
-    - Update package-lock.json
-    - Create commit with release notes
-    - Create git tag with version number
-    - Display next steps for pushing to trigger CI
-
-### Release Script
-- **Location**: `./scripts/release.sh`
-- **Usage**: `./scripts/release.sh [patch|minor|major]`
-- **What it does**: Automates version bumping, committing, and tagging
-- **Trigger**: Manual push of tag triggers GitHub Actions to build and publish
+**Quick reference for Claude Code:**
+- Use the `/release [patch|minor|major]` command
+- The command will guide you through updating CHANGELOG.md and creating the release
+- All release notes go in the `[Unreleased]` section of `CHANGELOG.md`
+- The release script automatically creates versioned entries and annotated git tags
 
 ## Testing
 

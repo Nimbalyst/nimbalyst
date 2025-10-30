@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - 'release/**'
+  pull_request:
+    branches:
+      - 'release'
   workflow_dispatch:
     inputs:
       release:
@@ -231,22 +236,27 @@ jobs:
             exit 0
           fi
 
-          # Extract release notes from git tag annotation
+          # Extract release notes from git tag annotation (created by release.sh)
           NOTES=$(git tag -l --format='%(contents:body)' "$VERSION" || echo "")
 
-          # If tag has no annotation or notes are empty, try RELEASE_NOTES.md
+          # If tag has no annotation or notes are empty, try CHANGELOG.md
           if [ -z "$NOTES" ]; then
-            RELEASE_NOTES_FILE="packages/electron/RELEASE_NOTES.md"
-            if [ -f "$RELEASE_NOTES_FILE" ]; then
-              # Extract notes for the current version
+            CHANGELOG_FILE="CHANGELOG.md"
+            if [ -f "$CHANGELOG_FILE" ]; then
+              # Extract notes for the current version from CHANGELOG.md
+              # Format: ## [0.42.60] - 2025-10-30
               VERSION_NO_V=${VERSION#v}
-              NOTES=$(awk "/^## v?${VERSION_NO_V}[^0-9]/,/^## v?[0-9]/ {if (/^## v?[0-9]/ && !/^## v?${VERSION_NO_V}[^0-9]/) exit; print}" "$RELEASE_NOTES_FILE" | sed '1d' | sed '/^$/d')
+              NOTES=$(awk "/^## \[${VERSION_NO_V}\]/,/^## \[/ {
+                if (/^## \[${VERSION_NO_V}\]/) next
+                if (/^## \[/) exit
+                print
+              }" "$CHANGELOG_FILE" | sed '/^$/d')
             fi
           fi
 
           # Final fallback if still no notes
           if [ -z "$NOTES" ]; then
-            NOTES="See [RELEASE_NOTES.md](https://github.com/nimbalyst/nimbalyst-code/blob/main/packages/electron/RELEASE_NOTES.md) for details."
+            NOTES="See [CHANGELOG.md](https://github.com/nimbalyst/nimbalyst-code/blob/main/CHANGELOG.md) for details."
           fi
 
           # NOTE: This step should normally NOT run because electron-builder publishes to nimbalyst

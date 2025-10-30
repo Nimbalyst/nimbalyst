@@ -11,20 +11,42 @@ Prepare a {{arg1}} release following this workflow:
   - Create concise bullet-point release notes summarizing the most important changes
   - Focus on user-facing changes (features, fixes, improvements)
   - Filter out trivial changes (chore, docs, minor refactors)
-  - Keep it brief - internal notes only
-  - Follow commit message conventions (feat:, fix:, refactor:)
+  - Keep it brief and clear
+  - Categorize changes using these sections:
+    - **Added**: New features
+    - **Changed**: Changes to existing functionality
+    - **Fixed**: Bug fixes
+    - **Removed**: Removed features
 
-3. **Save release notes**:
-  - Write notes to `packages/electron/RELEASE_NOTES.md`
-  - Show the user the notes for approval
+3. **Update CHANGELOG.md**:
+  - Add notes to the `[Unreleased]` section in `CHANGELOG.md` (repository root)
+  - Use the standard format with ### headings for each category
+  - Only include categories that have changes
+  - Show the user the updated CHANGELOG for approval
 
 4. **Execute release** (after user approval):
   - Run `./scripts/release.sh {{arg1}}`
   - The script will:
     - Bump version in `packages/electron/package.json`
     - Update package-lock.json
+    - Move [Unreleased] notes to a new versioned release section in CHANGELOG.md
     - Create commit with release notes
-    - Create git tag with version number
+    - Create annotated git tag with release notes
     - Display next steps for pushing to trigger CI
 
 Valid release types: patch, minor, major
+
+Example CHANGELOG.md format:
+```markdown
+## [Unreleased]
+
+### Added
+- New AI model support for GPT-4o
+
+### Fixed
+- Fixed crash when opening large files
+- Fixed memory leak in file watcher
+
+## [0.42.60] - 2025-10-30
+...
+```

@@ -412,6 +412,10 @@ import { Nimbalyst, type EditorConfig } from 'nimbalyst';
 4. Add tests if applicable
 5. Submit a pull request
 
+### Releasing
+
+See [RELEASING.md](RELEASING.md) for complete release process documentation.
+
 ## License
 
 This project is based on Meta's Lexical playground and maintains the same MIT license. See the LICENSE file in the root directory for details.
