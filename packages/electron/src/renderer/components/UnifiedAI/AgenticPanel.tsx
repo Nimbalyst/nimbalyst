@@ -85,6 +85,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const sendingSessionsRef = useRef<Set<string>>(new Set());
 
   // Prompt history navigation state (per session)
   const [historyPosition, setHistoryPosition] = useState<Map<string, number>>(new Map());
@@ -96,8 +97,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
   const [sessionHistoryRefreshTrigger, setSessionHistoryRefreshTrigger] = useState(0);
 
-  // Debounce timer for database reloads
-  const reloadDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  // Reload coordination for database-backed session state
+  const reloadTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const lastReloadAtRef = useRef<Map<string, number>>(new Map());
 
   // Initialization
   const initializedRef = useRef(false);
@@ -185,6 +187,90 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       console.error('[AgenticPanel] Failed to load sessions:', err);
     }
   }, [workspacePath, mode]);
+
+  const scheduleSessionReload = useCallback((
+    sessionId: string,
+    options: { immediate?: boolean; reason?: string; minInterval?: number } = {}
+  ) => {
+    if (!sessionId || typeof window === 'undefined' || !window.electronAPI?.aiLoadSession) {
+      return;
+    }
+
+    const { immediate = false, reason, minInterval = 200 } = options;
+    const timers = reloadTimersRef.current;
+    const lastReloadMap = lastReloadAtRef.current;
+
+    const executeReload = async () => {
+      timers.delete(sessionId);
+      lastReloadMap.set(sessionId, Date.now());
+      try {
+        const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+        if (sessionData) {
+          setSessionTabs(prev => prev.map(tab => {
+            if (tab.id !== sessionId) {
+              return tab;
+            }
+
+            const previousThinking = [...tab.sessionData.messages]
+              .reverse()
+              .find(message => message.isThinking);
+
+            let messages = [...sessionData.messages];
+
+            if (previousThinking && sendingSessionsRef.current.has(sessionId)) {
+              const hasExistingThinking = messages.some(message => message.isThinking);
+              if (!hasExistingThinking) {
+                messages = [...messages, previousThinking];
+              }
+            }
+
+            return {
+              ...tab,
+              sessionData: {
+                ...sessionData,
+                messages
+              }
+            };
+          }));
+        }
+      } catch (err) {
+        console.error(`[AgenticPanel] Failed to reload session${reason ? ` (${reason})` : ''}:`, err);
+      }
+    };
+
+    const now = Date.now();
+    const lastReload = lastReloadMap.get(sessionId) ?? 0;
+
+    if (immediate) {
+      const existing = timers.get(sessionId);
+      if (existing) {
+        clearTimeout(existing);
+        timers.delete(sessionId);
+      }
+      void executeReload();
+      return;
+    }
+
+    if (now - lastReload >= minInterval) {
+      const existing = timers.get(sessionId);
+      if (existing) {
+        clearTimeout(existing);
+        timers.delete(sessionId);
+      }
+      void executeReload();
+      return;
+    }
+
+    const delay = Math.max(0, minInterval - (now - lastReload));
+    const existing = timers.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+    }
+    timers.set(sessionId, setTimeout(() => {
+      timers.delete(sessionId);
+      void executeReload();
+    }, delay));
+  }, [workspacePath]);
 
   // Open a session in a new tab (agent mode) or load it (chat mode)
   const openSessionInTab = useCallback(async (sessionId: string) => {
@@ -519,60 +605,23 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     return () => clearTimeout(timer);
   }, [sessionTabs, activeTabId, closedSessions, mode, workspacePath]);
 
-  // Listen for database updates and reload session (debounced)
+  // Listen for database updates and reload session
   useEffect(() => {
-    const handleMessageLogged = async (data: { sessionId: string; direction: string }) => {
-      // Check if this is for the active session or any open session
-      // Also check activeTabId to handle race condition where sessionTabs state hasn't updated yet
+    if (!window.electronAPI?.on) return;
+
+    const handleMessageLogged = (data: { sessionId: string; direction: string }) => {
       const isRelevantSession = sessionTabs.some(tab => tab.id === data.sessionId) || data.sessionId === activeTabId;
       if (!isRelevantSession) return;
 
-      // Debounce reloads to avoid excessive database queries
-      if (reloadDebounceRef.current) {
-        clearTimeout(reloadDebounceRef.current);
-      }
-
-      reloadDebounceRef.current = setTimeout(async () => {
-        // Skip reload if we're currently sending (streaming in progress)
-        // The streaming handler will update the UI, and completion handler will do final reload
-        if (isSending && data.sessionId === activeTabId) {
-          console.log('[AgenticPanel] Skipping database reload during active streaming');
-          return;
-        }
-
-        try {
-          const sessionData = await window.electronAPI.aiLoadSession(data.sessionId, workspacePath);
-          if (sessionData) {
-            setSessionTabs(prev => prev.map(tab => {
-              if (tab.id === data.sessionId) {
-                // Preserve thinking message if it exists in current state
-                const hasThinkingMessage = tab.sessionData.messages.some(m => m.isThinking);
-                if (hasThinkingMessage && isSending) {
-                  // Don't replace session data while thinking message is showing
-                  // The completion handler will reload the session when done
-                  return tab;
-                }
-                return { ...tab, sessionData };
-              }
-              return tab;
-            }));
-          }
-        } catch (err) {
-          console.error('[AgenticPanel] Failed to reload session after message logged:', err);
-        }
-      }, 50); // Debounce by 50ms - will batch rapid writes together
+      scheduleSessionReload(data.sessionId, { reason: 'message-logged', minInterval: 120 });
     };
 
-    // Listen for message:logged events from main process
     const cleanup = window.electronAPI.on('ai:message-logged', handleMessageLogged);
 
     return () => {
-      if (reloadDebounceRef.current) {
-        clearTimeout(reloadDebounceRef.current);
-      }
-      if (cleanup) cleanup();
+      cleanup?.();
     };
-  }, [sessionTabs, workspacePath, isSending, activeTabId]);
+  }, [sessionTabs, activeTabId, scheduleSessionReload]);
 
   // Listen for streaming responses and completion
   // This handles real-time updates during AI streaming:
@@ -588,7 +637,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       hasOnAIStreamResponse: typeof window.electronAPI?.onAIStreamResponse === 'function'
     });
 
-    const handleStreamResponse = async (data: any) => {
+    const handleStreamResponse = (data: any) => {
       console.log(`[AgenticPanel-${handlerId}] handleStreamResponse called:`, {
         sessionId: data.sessionId,
         hasActiveTabId: !!activeTabId,
@@ -606,123 +655,18 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         return;
       }
 
-      // Handle streaming content updates (not complete)
-      if (!data.isComplete) {
-        console.log('[AgenticPanel] Processing streaming update for session:', data.sessionId);
-        setSessionTabs(prev => prev.map(tab => {
-          // Update the tab that matches this session, not just the active tab
-          if (tab.id !== data.sessionId) return tab;
+      const reason = data.isComplete ? 'stream-complete' : 'stream-update';
 
-          const sessionData = { ...tab.sessionData };
-          const messages = [...sessionData.messages];
-
-          // Find the last assistant message (could be thinking message)
-          let lastAssistantIdx = messages.length - 1;
-          while (lastAssistantIdx >= 0 && messages[lastAssistantIdx].role !== 'assistant') {
-            lastAssistantIdx--;
-          }
-
-          console.log('[AgenticPanel] Message analysis:', {
-            totalMessages: messages.length,
-            lastAssistantIdx,
-            lastAssistantIsThinking: lastAssistantIdx >= 0 ? messages[lastAssistantIdx].isThinking : false
-          });
-
-          // If we have streaming text content, update the assistant message
-          if (data.partial) {
-            console.log('[AgenticPanel] Updating text content:', {
-              lastAssistantIdx,
-              partialLength: data.partial.length,
-              partialPreview: data.partial.substring(0, 100)
-            });
-
-            if (lastAssistantIdx >= 0) {
-              // Replace thinking message or update existing message
-              messages[lastAssistantIdx] = {
-                ...messages[lastAssistantIdx],
-                content: data.partial,
-                isThinking: false  // Clear thinking flag when we have actual content
-              };
-              console.log('[AgenticPanel] Updated existing assistant message at index', lastAssistantIdx);
-            } else {
-              // Create new assistant message
-              messages.push({
-                role: 'assistant',
-                content: data.partial,
-                timestamp: Date.now()
-              });
-              console.log('[AgenticPanel] Created new assistant message');
-            }
-          }
-
-          // Handle tool calls from streaming
-          if (data.toolCalls && Array.isArray(data.toolCalls)) {
-            for (const toolCall of data.toolCalls) {
-              // Check if this tool call already exists in messages
-              const existingToolCall = messages.find(
-                msg => msg.role === 'assistant' &&
-                       msg.toolCall?.id === toolCall.id
-              );
-
-              if (!existingToolCall && toolCall.name) {
-                // Add new tool call message
-                messages.push({
-                  role: 'assistant',
-                  content: '',
-                  timestamp: Date.now(),
-                  toolCall: {
-                    id: toolCall.id,
-                    name: toolCall.name,
-                    arguments: toolCall.arguments,
-                    result: toolCall.result,
-                    targetFilePath: toolCall.targetFilePath
-                  }
-                });
-              } else if (existingToolCall && toolCall.result !== undefined) {
-                // Update existing tool call with result
-                const idx = messages.indexOf(existingToolCall);
-                messages[idx] = {
-                  ...messages[idx],
-                  toolCall: {
-                    ...messages[idx].toolCall!,
-                    result: toolCall.result
-                  }
-                };
-              }
-            }
-          }
-
-          return {
-            ...tab,
-            sessionData: {
-              ...sessionData,
-              messages
-            }
-          };
-        }));
-      }
-
-      // Handle completion
       if (data.isComplete) {
-        try {
-          const sessionData = await window.electronAPI.aiLoadSession(data.sessionId, workspacePath);
-          if (sessionData) {
-            setSessionTabs(prev => prev.map(tab => {
-              if (tab.id === data.sessionId) {
-                return { ...tab, sessionData };
-              }
-              return tab;
-            }));
-          }
-        } catch (err) {
-          console.error('[AgenticPanel] Failed to reload session after completion:', err);
-        } finally {
-          // Only clear sending state if this was the active tab
-          if (data.sessionId === activeTabId) {
-            setIsSending(false);
-          }
+        sendingSessionsRef.current.delete(data.sessionId);
+        scheduleSessionReload(data.sessionId, { immediate: true, reason });
+        if (data.sessionId === activeTabId) {
+          setIsSending(false);
         }
+        return;
       }
+
+      scheduleSessionReload(data.sessionId, { reason, minInterval: 150 });
     };
 
     const handleStreamError = (error: any) => {
@@ -730,6 +674,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Don't set panel-level error state - that's for session loading errors
       // Streaming errors are saved to the database and will appear via message-logged event
       setIsSending(false);
+      if (typeof error?.sessionId === 'string') {
+        sendingSessionsRef.current.delete(error.sessionId);
+      }
     };
 
     const cleanupStreamResponse = window.electronAPI.onAIStreamResponse(handleStreamResponse);
@@ -740,7 +687,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       cleanupStreamResponse();
       cleanupError();
     };
-  }, [activeTabId, workspacePath]);
+  }, [activeTabId, workspacePath, sessionTabs, scheduleSessionReload]);
+
+  useEffect(() => {
+    return () => {
+      reloadTimersRef.current.forEach(timer => clearTimeout(timer));
+      reloadTimersRef.current.clear();
+      lastReloadAtRef.current.clear();
+    };
+  }, []);
 
   // Handle draft input change
   const handleDraftInputChange = useCallback((sessionId: string, value: string) => {
@@ -887,6 +842,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     });
 
     setIsSending(true);
+    sendingSessionsRef.current.add(sessionId);
 
     // Get the session to determine sessionType
     const currentTab = sessionTabs.find(tab => tab.id === sessionId);
@@ -960,6 +916,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       console.error('[AgenticPanel] Failed to send message:', err);
       setError(String(err));
       setIsSending(false);
+      sendingSessionsRef.current.delete(sessionId);
 
       // Remove thinking message on error
       setSessionTabs(prev => prev.map(tab => {
@@ -983,6 +940,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       const result = await window.electronAPI.aiCancelRequest();
       if (result.success) {
         setIsSending(false);
+        sendingSessionsRef.current.delete(sessionId);
 
         // Remove thinking message
         setSessionTabs(prev => prev.map(tab => {
