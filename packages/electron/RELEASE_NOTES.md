@@ -1,16 +1,10 @@
-# Release Notes - v0.42.57
-
-## Improvements
-
-- Enhanced Claude Code integration logging for better debugging
-- Improved analytics tracking with Nimbalyst version in user profile
-- Added dev install detection to differentiate development vs production usage
+# Release Notes - v0.42.58
 
 ## Bug Fixes
 
-- Fixed analytics event interference during Playwright test execution
-- Cleaned up test dependencies by removing unused happy-dom package
+- Fixed Plans feature not working in packaged DMG builds
 
-## Internal Changes
+## Improvements
 
-- Enabled PostHog debug mode for development installations
+- Added copyable support ID to the About page for easier troubleshooting
+- Simplified analytics settings by removing opt-out option (analytics remain anonymous)
