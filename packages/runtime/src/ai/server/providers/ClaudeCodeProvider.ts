@@ -765,14 +765,47 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 toolCount: chunk.tools?.length || 0,
                 mcpServers: chunk.mcp_servers || [],
                 apiKeySource: chunk.apiKeySource,
-                slashCommands: chunk.slash_commands || []
+                slashCommands: chunk.slash_commands || [],
+                agents: chunk.agents || [],
+                skills: chunk.skills || [],
+                plugins: chunk.plugins || []
               });
+
+              // Log all chunk properties to discover what's available
+              console.log('[CLAUDE-CODE] Full init chunk keys:', Object.keys(chunk));
 
               // Capture available slash commands
               if (chunk.slash_commands && Array.isArray(chunk.slash_commands)) {
                 this.slashCommands = chunk.slash_commands;
                 console.log('[CLAUDE-CODE] Available slash commands:', this.slashCommands);
               }
+
+              // Track session initialization with MCP, slash commands, agents, skills, and plugins counts
+              // This will be picked up by AIService which has access to analytics
+              const mcpServerCount = Array.isArray(chunk.mcp_servers) ? chunk.mcp_servers.length : 0;
+              const slashCommandCount = Array.isArray(chunk.slash_commands) ? chunk.slash_commands.length : 0;
+              const agentCount = Array.isArray(chunk.agents) ? chunk.agents.length : 0;
+              const skillCount = Array.isArray(chunk.skills) ? chunk.skills.length : 0;
+              const pluginCount = Array.isArray(chunk.plugins) ? chunk.plugins.length : 0;
+
+              // Store initialization data for AIService to retrieve
+              (this as any)._initData = {
+                mcpServerCount,
+                slashCommandCount,
+                agentCount,
+                skillCount,
+                pluginCount,
+                toolCount: chunk.tools?.length || 0
+              };
+
+              console.log('[CLAUDE-CODE] Session initialization data:', {
+                mcpServerCount,
+                slashCommandCount,
+                agentCount,
+                skillCount,
+                pluginCount,
+                toolCount: chunk.tools?.length || 0
+              });
 
               // Warn if API key source is "none" - this means Claude Code didn't find credentials
               if (chunk.apiKeySource === 'none') {
@@ -1309,5 +1342,20 @@ When asked about your identity, be truthful about which AI model you are - do no
       'review',
       'security-review'
     ];
+  }
+
+  /**
+   * Get initialization data for analytics tracking
+   * Returns counts for MCP servers, slash commands, agents, skills, plugins, and tools
+   */
+  getInitData(): {
+    mcpServerCount: number;
+    slashCommandCount: number;
+    agentCount: number;
+    skillCount: number;
+    pluginCount: number;
+    toolCount: number;
+  } | null {
+    return (this as any)._initData || null;
   }
 }

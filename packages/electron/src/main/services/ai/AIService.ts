@@ -1050,6 +1050,22 @@ export class AIService {
                 }
               }
 
+              // Track Claude Code session initialization if this is the first message
+              if (session.provider === 'claude-code' && session.messages.length === 0) {
+                const initData = (provider as any).getInitData?.();
+                if (initData) {
+                  console.log('[AIService] Tracking Claude Code session initialization:', initData);
+                  this.analytics.sendEvent('claude_code_session_started', {
+                    mcpServerCount: initData.mcpServerCount,
+                    slashCommandCount: initData.slashCommandCount,
+                    agentCount: initData.agentCount,
+                    skillCount: initData.skillCount,
+                    pluginCount: initData.pluginCount,
+                    toolCount: initData.toolCount
+                  });
+                }
+              }
+
               // Send complete response
               console.log('[AIService] Sending FINAL ai:streamResponse with isComplete=true, content length:', fullResponse.length);
               event.sender.send('ai:streamResponse', {
