@@ -605,31 +605,27 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
           const transformers = getEditorTransformers();
 
-          // Update internal state BEFORE editor update to prevent race condition
-          initialContentRef.current = newContent;
-          lastSavedContentRef.current = newContent;
-          contentRef.current = newContent;
-
           editorRef.current.update(() => {
             const root = $getRoot();
             root.clear();
             $convertFromEnhancedMarkdownString(newContent, transformers);
           }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
 
-          // Update React state and clear dirty flag
+          // Update React state and mark as dirty so autosave will persist
           setContent(newContent);
-          setLastSavedContent(newContent);
-          setIsDirty(false);
-          isDirtyRef.current = false;
+          contentRef.current = newContent;
+          setIsDirty(true);
+          isDirtyRef.current = true;
 
-          // Notify parent that we're no longer dirty
-          onDirtyChange?.(false);
+          // Notify parent that content changed and is dirty
+          onDirtyChange?.(true);
+          onContentChange?.();
         } catch (error) {
           logger.ui.error(`[TabEditor] Failed to update content from document header:`, error);
         }
       })();
     }
-  }, [onDirtyChange]);
+  }, [onDirtyChange, onContentChange]);
 
   // Image interaction callbacks
   const handleImageDoubleClick = useCallback(async (src: string, nodeKey: string) => {
