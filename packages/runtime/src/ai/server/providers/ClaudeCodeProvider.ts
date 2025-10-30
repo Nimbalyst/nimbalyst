@@ -190,11 +190,88 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // In production, we need to spawn claude-code differently
       // The SDK expects to spawn with 'node', but we need to use Electron in node mode
       if (app.isPackaged) {
-        // Set environment to run Electron as Node
+        const os = require('os');
+        const homedir = os.homedir();
+        const username = os.userInfo().username;
+        const platform = process.platform;
+
+        // Enhanced environment variables (cross-platform)
+        if (platform === 'win32') {
+          // Windows environment setup
+          env.USERPROFILE = homedir;
+          env.USERNAME = username;
+          env.TEMP = env.TEMP || path.join(homedir, 'AppData', 'Local', 'Temp');
+          env.TMP = env.TMP || env.TEMP;
+
+          // Windows PATH - preserve existing and add common locations
+          const pathSeparator = ';';
+          const commonPaths = [
+            env.PATH || '',
+            path.join(homedir, 'AppData', 'Local', 'Programs'),
+            'C:\\Program Files\\nodejs',
+            'C:\\Program Files (x86)\\nodejs',
+          ].filter(Boolean);
+          env.PATH = commonPaths.join(pathSeparator);
+        } else {
+          // Unix-like (macOS/Linux) environment setup
+          env.HOME = homedir;
+          env.USER = username;
+          env.LOGNAME = username;
+          env.SHELL = env.SHELL || process.env.SHELL || '/bin/bash';
+          env.TMPDIR = env.TMPDIR || os.tmpdir() || '/tmp';
+
+          // Unix PATH - preserve existing and add common locations
+          const pathSeparator = ':';
+          const commonPaths = [
+            env.PATH || '',
+            '/usr/local/bin',
+            '/usr/bin',
+            '/bin',
+            '/usr/sbin',
+            '/sbin',
+            path.join(homedir, '.local', 'bin'),
+            path.join(homedir, 'bin'),
+            '/opt/homebrew/bin',
+            '/opt/local/bin',
+          ].filter(Boolean);
+          env.PATH = commonPaths.join(pathSeparator);
+        }
+
+        // CRITICAL FIX: Set NODE_PATH to unpacked modules
+        const appPath = app.getAppPath();
+        const unpackedPath = appPath.includes('app.asar')
+          ? appPath.replace(/app\.asar(?=[\/\\]|$)/, 'app.asar.unpacked')
+          : appPath;
+
+        env.NODE_PATH = path.join(unpackedPath, 'node_modules');
+        console.log(`[CLAUDE-CODE] Platform: ${platform}`);
+        console.log(`[CLAUDE-CODE] Set NODE_PATH for module resolution: ${env.NODE_PATH}`);
+
+        // Verify the unpacked node_modules directory exists
+        if (!fs.existsSync(env.NODE_PATH)) {
+          const error = `Unpacked node_modules directory not found at: ${env.NODE_PATH}. ` +
+                       `This indicates a build configuration issue. The Claude Agent SDK must be unpacked during the build process.`;
+          console.error(`[CLAUDE-CODE] ✗ CRITICAL ERROR: ${error}`);
+          throw new Error(error);
+        }
+        console.log(`[CLAUDE-CODE] ✓ Verified unpacked node_modules exists`);
+
+        // Use Electron as Node
         env.ELECTRON_RUN_AS_NODE = '1';
         options.executable = process.execPath;
         options.executableArgs = [];
-        console.log('[CLAUDE-CODE] Using Electron as node with ELECTRON_RUN_AS_NODE=1');
+        console.log(`[CLAUDE-CODE] Using Electron as Node: ${process.execPath}`);
+
+        console.log('[CLAUDE-CODE] Enhanced environment for packaged build:', {
+          platform,
+          HOME: env.HOME || env.USERPROFILE,
+          USER: env.USER || env.USERNAME,
+          SHELL: env.SHELL,
+          PATH: env.PATH.substring(0, 100) + '...',
+          NODE_PATH: env.NODE_PATH,
+          executable: options.executable,
+          cwd: workspacePath
+        });
       }
 
       options.env = env;
@@ -1074,20 +1151,63 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   private async findCliPath(): Promise<string> {
-    // Use bundled CLI from the package
     try {
       const claudeAgentPath = require.resolve('@anthropic-ai/claude-agent-sdk');
       const claudeAgentDir = path.dirname(claudeAgentPath);
-      const cliPath = path.join(claudeAgentDir, 'cli.js');
+      let cliPath = path.join(claudeAgentDir, 'cli.js');
 
-      if (fs.existsSync(cliPath)) {
-        console.log(`[CLAUDE-CODE] Found bundled CLI at: ${cliPath}`);
-        return cliPath;
+      // CRITICAL FIX: Use unpacked CLI path in production
+      // System Node.js cannot read from .asar archives
+      if (app.isPackaged && cliPath.includes('app.asar')) {
+        // Use regex to replace app.asar more safely (handles path separators)
+        const unpackedCliPath = cliPath.replace(/app\.asar(?=[\/\\]|$)/, 'app.asar.unpacked');
+
+        if (!fs.existsSync(unpackedCliPath)) {
+          const error = `Unpacked CLI not found at: ${unpackedCliPath}. ` +
+                       `This indicates a build configuration issue. The Claude Agent SDK must be unpacked during the build process.`;
+          console.error(`[CLAUDE-CODE] ✗ CRITICAL ERROR: ${error}`);
+          throw new Error(error);
+        }
+
+        console.log(`[CLAUDE-CODE] ✓ Using unpacked CLI at: ${unpackedCliPath}`);
+
+        // Verify the unpacked node_modules directory exists
+        const appPath = app.getAppPath();
+        const unpackedAppPath = appPath.includes('app.asar')
+          ? appPath.replace(/app\.asar(?=[\/\\]|$)/, 'app.asar.unpacked')
+          : appPath;
+        const unpackedNodeModules = path.join(unpackedAppPath, 'node_modules');
+
+        if (!fs.existsSync(unpackedNodeModules)) {
+          const error = `Unpacked node_modules not found at: ${unpackedNodeModules}. ` +
+                       `Build configuration must unpack node_modules for Claude Agent SDK.`;
+          console.error(`[CLAUDE-CODE] ✗ CRITICAL ERROR: ${error}`);
+          throw new Error(error);
+        }
+        console.log(`[CLAUDE-CODE] ✓ Unpacked node_modules directory exists`);
+
+        // Verify the SDK directory specifically
+        const unpackedSdkDir = path.join(unpackedNodeModules, '@anthropic-ai', 'claude-agent-sdk');
+        if (!fs.existsSync(unpackedSdkDir)) {
+          const error = `SDK directory not found at: ${unpackedSdkDir}. ` +
+                       `Build must unpack @anthropic-ai/claude-agent-sdk package.`;
+          console.error(`[CLAUDE-CODE] ✗ CRITICAL ERROR: ${error}`);
+          throw new Error(error);
+        }
+        console.log(`[CLAUDE-CODE] ✓ Unpacked SDK directory verified`);
+
+        cliPath = unpackedCliPath;
       }
 
-      throw new Error(`CLI not found at expected path: ${cliPath}`);
+      if (!fs.existsSync(cliPath)) {
+        throw new Error(`CLI not found at expected path: ${cliPath}`);
+      }
+
+      console.log(`[CLAUDE-CODE] Found CLI at: ${cliPath}`);
+      return cliPath;
     } catch (err) {
-      throw new Error(`Could not find bundled claude-agent-sdk CLI: ${err}`);
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`Could not find claude-agent-sdk CLI: ${message}`);
     }
   }
 
