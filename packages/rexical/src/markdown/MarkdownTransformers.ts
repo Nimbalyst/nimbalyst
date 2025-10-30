@@ -311,6 +311,11 @@ export const QUOTE: ElementTransformer = {
   type: 'element',
 };
 
+// Marker for code blocks without a language specification
+// We use 'plain' because undefined/null/empty string all get converted to undefined by CodeNode,
+// which Lexical then auto-sets to 'javascript'
+const NO_LANGUAGE_MARKER = 'plain';
+
 export const CODE: MultilineElementTransformer = {
   dependencies: [CodeNode],
   export: (node: LexicalNode) => {
@@ -318,9 +323,12 @@ export const CODE: MultilineElementTransformer = {
       return null;
     }
     const textContent = node.getTextContent();
+    const language = node.getLanguage();
+    // If language is our marker for no language, export without language
+    const langOutput = (language === NO_LANGUAGE_MARKER) ? '' : (language || '');
     return (
       '```' +
-      (node.getLanguage() || '') +
+      langOutput +
       (textContent ? '\n' + textContent : '') +
       '\n' +
       '```'
@@ -347,18 +355,18 @@ export const CODE: MultilineElementTransformer = {
         // Single-line code blocks
         if (endMatch) {
           // End match on same line. Example: ```markdown hello```. markdown should not be considered the language here.
-          codeBlockNode = $createCodeNode();
+          codeBlockNode = $createCodeNode(NO_LANGUAGE_MARKER);
           code = startMatch[1] + linesInBetween[0];
         } else {
           // No end match. We should assume the language is next to the backticks and that code will be typed on the next line in the future
-          codeBlockNode = $createCodeNode(startMatch[1]);
+          codeBlockNode = $createCodeNode(startMatch[1] || NO_LANGUAGE_MARKER);
           code = linesInBetween[0].startsWith(' ')
             ? linesInBetween[0].slice(1)
             : linesInBetween[0];
         }
       } else {
         // Treat multi-line code blocks as if they always have an end match
-        codeBlockNode = $createCodeNode(startMatch[1]);
+        codeBlockNode = $createCodeNode(startMatch[1] || NO_LANGUAGE_MARKER);
 
         if (linesInBetween[0].trim().length === 0) {
           // Filter out all start and end lines that are length 0 until we find the first line with content
@@ -387,7 +395,7 @@ export const CODE: MultilineElementTransformer = {
       rootNode.append(codeBlockNode);
     } else if (children) {
       createBlockNode((match) => {
-        return $createCodeNode(match ? match[1] : undefined);
+        return $createCodeNode(match && match[1] ? match[1] : NO_LANGUAGE_MARKER);
       })(rootNode, children, startMatch, isImport);
     }
   },

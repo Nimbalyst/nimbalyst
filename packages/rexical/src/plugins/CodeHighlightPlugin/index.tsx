@@ -14,7 +14,8 @@ import { $isCodeNode, CodeNode } from '@lexical/code';
 import { useTheme } from '../../context/ThemeContext';
 
 // Import Prism and necessary languages
-import 'prismjs';
+// @ts-ignore - prismjs doesn't have types
+import Prism from 'prismjs';
 import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-typescript';
 import 'prismjs/components/prism-jsx';
@@ -47,6 +48,8 @@ export default function CodeHighlightPlugin(): null {
   const { theme } = useTheme();
 
   useEffect(() => {
+    // Register standard code highlighting
+    // Code blocks without a language use 'plain' as a marker (set in MarkdownTransformers.ts)
     return registerCodeHighlighting(editor);
   }, [editor]);
 

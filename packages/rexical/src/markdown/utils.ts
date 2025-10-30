@@ -394,9 +394,12 @@ function codeBlockExport(node: LexicalNode) {
   }
 
   const textContent = node.getTextContent();
+  const language = node.getLanguage();
+  // If language is 'plain' (our marker for no language), export without language
+  const langOutput = (language === 'plain') ? '' : (language || '');
   return (
     '```' +
-    (node.getLanguage() || '') +
+    langOutput +
     (textContent ? '\n' + textContent : '') +
     '\n' +
     '```'
