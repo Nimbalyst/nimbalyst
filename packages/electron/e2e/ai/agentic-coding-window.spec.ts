@@ -1,60 +1,42 @@
+/**
+ * Agent Mode Tests
+ *
+ * Consolidated tests for Agent mode functionality.
+ * Tests complete workflows rather than individual steps.
+ */
+
 import { test, expect } from '@playwright/test';
-import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace } from '../helpers';
+import type { ElectronApplication, Page } from '@playwright/test';
+import {
+  launchElectronApp,
+  createTempWorkspace,
+  waitForAppReady,
+  TEST_TIMEOUTS
+} from '../helpers';
+import {
+  openNewDocument,
+  switchToAgentMode,
+  submitChatPrompt,
+  AI_SELECTORS
+} from '../utils/aiTestHelpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-
-const TEST_TIMEOUTS = {
-  SHORT: 5000,
-  MEDIUM: 10000,
-  LONG: 20000,
-  VERY_LONG: 60000
-};
-
-const ACTIVE_EDITOR_SELECTOR = '.editor [contenteditable="true"]';
 
 let electronApp: ElectronApplication;
 let page: Page;
 let workspacePath: string;
 
-test.describe('Agentic Coding Window', () => {
+test.describe('Agent Mode', () => {
   test.beforeEach(async () => {
     workspacePath = await createTempWorkspace();
 
-    // Create a plan document
+    // Create a test document
     const planPath = path.join(workspacePath, 'plan.md');
-    await fs.writeFile(planPath, `---
-planStatus:
-  planId: test-plan
-  title: Test Plan
-  status: draft
-  planType: feature
-  priority: high
----
-# Test Plan
+    await fs.writeFile(planPath, '# Test Plan\n\nTest content.\n', 'utf8');
 
-## Goals
-- Test agentic coding window
-`);
-
-    // Launch app with workspace
-    electronApp = await launchElectronApp({
-      workspace: workspacePath,
-      env: { NODE_ENV: 'test' }
-    });
-
-    // Wait for window to be ready
+    electronApp = await launchElectronApp({ workspace: workspacePath });
     page = await electronApp.firstWindow();
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector(ACTIVE_EDITOR_SELECTOR, { timeout: TEST_TIMEOUTS.LONG });
-
-    // Open the plan document
-    await page.evaluate(async (planPath) => {
-      await window.electronAPI.invoke('workspace:open-file', {
-        workspacePath: window.location.search.match(/workspacePath=([^&]+)/)?.[1],
-        filePath: planPath
-      });
-    }, planPath);
+    await waitForAppReady(page);
   });
 
   test.afterEach(async () => {
@@ -64,140 +46,28 @@ planStatus:
     await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
   });
 
-  test('should open agentic coding window from menu', async ({ }, testInfo) => {
+  test('complete agent workflow: switch mode, submit message, verify session created', async () => {
     test.setTimeout(TEST_TIMEOUTS.VERY_LONG);
 
-    // Trigger the menu item via keyboard shortcut
-    await page.keyboard.press('Meta+Alt+A'); // Cmd+Alt+A on Mac
+    // Open document
+    await openNewDocument(page, workspacePath, 'plan.md', '');
 
-    // Wait for new window to open
-    await page.waitForTimeout(2000);
+    // Switch to agent mode
+    await switchToAgentMode(page);
 
-    const windows = electronApp.windows();
-    expect(windows.length).toBeGreaterThan(1);
+    // Verify chat interface is visible (proves session was auto-created)
+    const chatInput = page.locator(AI_SELECTORS.chatInput);
+    await expect(chatInput).toBeVisible({ timeout: 5000 });
 
-    // Find the agentic coding window
-    const agenticWindow = windows.find(w =>
-      w.url().includes('mode=agentic-coding')
-    );
-
-    expect(agenticWindow).toBeDefined();
-    if (!agenticWindow) return;
-
-    // Wait for window to load
-    await agenticWindow.waitForLoadState('domcontentloaded');
-
-    // Check for header
-    const header = agenticWindow.locator('h1:has-text("Agentic Coding Session")');
-    await expect(header).toBeVisible({ timeout: TEST_TIMEOUTS.MEDIUM });
-
-    // Check for plan document reference
-    const planRef = agenticWindow.locator('text=/Plan:.*plan\\.md/');
-    await expect(planRef).toBeVisible({ timeout: TEST_TIMEOUTS.MEDIUM });
-  });
-
-  test('should create new session on window load', async ({ }, testInfo) => {
-    test.setTimeout(TEST_TIMEOUTS.VERY_LONG);
-
-    // Open agentic coding window via IPC
-    const planPath = path.join(workspacePath, 'plan.md');
-    const result = await page.evaluate(async ({ workspacePath, planPath }) => {
-      return await window.electronAPI.invoke('agentic-coding:create-window', {
-        workspacePath,
-        planDocumentPath: planPath
-      });
-    }, { workspacePath, planPath });
-
-    expect(result.success).toBe(true);
-    expect(result.windowId).toBeDefined();
-
-    // Get the new window
-    await page.waitForTimeout(2000);
-    const windows = electronApp.windows();
-    const agenticWindow = windows.find(w =>
-      w.url().includes('mode=agentic-coding')
-    );
-
-    expect(agenticWindow).toBeDefined();
-    if (!agenticWindow) return;
-
-    await agenticWindow.waitForLoadState('domcontentloaded');
-
-    // Check that session was created (no error message)
-    const errorMessage = agenticWindow.locator('text=/Failed to load session/');
-    await expect(errorMessage).not.toBeVisible({ timeout: TEST_TIMEOUTS.SHORT });
-
-    // Check for transcript panel
-    const transcript = agenticWindow.locator('[class*="transcript"]').first();
-    await expect(transcript).toBeVisible({ timeout: TEST_TIMEOUTS.MEDIUM });
-  });
-
-  test('should show sidebar tabs', async ({ }, testInfo) => {
-    test.setTimeout(TEST_TIMEOUTS.VERY_LONG);
-
-    // Open agentic coding window via IPC
-    const planPath = path.join(workspacePath, 'plan.md');
-    await page.evaluate(async ({ workspacePath, planPath }) => {
-      return await window.electronAPI.invoke('agentic-coding:create-window', {
-        workspacePath,
-        planDocumentPath: planPath
-      });
-    }, { workspacePath, planPath });
-
-    await page.waitForTimeout(2000);
-    const windows = electronApp.windows();
-    const agenticWindow = windows.find(w =>
-      w.url().includes('mode=agentic-coding')
-    );
-
-    if (!agenticWindow) {
-      throw new Error('Agentic coding window not found');
-    }
-
-    await agenticWindow.waitForLoadState('domcontentloaded');
-
-    // Check for sidebar tabs
-    const promptsTab = agenticWindow.locator('button:has-text("Prompts")');
-    const filesTab = agenticWindow.locator('button:has-text("Files")');
-    const tasksTab = agenticWindow.locator('button:has-text("Tasks")');
-
-    await expect(promptsTab).toBeVisible({ timeout: TEST_TIMEOUTS.MEDIUM });
-    await expect(filesTab).toBeVisible({ timeout: TEST_TIMEOUTS.MEDIUM });
-    await expect(tasksTab).toBeVisible({ timeout: TEST_TIMEOUTS.MEDIUM });
-
-    // Click on Files tab
-    await filesTab.click();
-    await expect(filesTab).toHaveClass(/border-interactive/, { timeout: TEST_TIMEOUTS.SHORT });
-
-    // Click on Tasks tab
-    await tasksTab.click();
-    await expect(tasksTab).toHaveClass(/border-interactive/, { timeout: TEST_TIMEOUTS.SHORT });
-  });
-
-  test('should show error when no workspace is open', async ({ }, testInfo) => {
-    test.setTimeout(TEST_TIMEOUTS.VERY_LONG);
-
-    // Try to open agentic coding window without workspace via IPC
-    const result = await page.evaluate(async () => {
-      return await window.electronAPI.invoke('agentic-coding:create-window', {
-        workspacePath: '',
-        planDocumentPath: undefined
-      });
-    });
-
-    expect(result.success).toBe(true);
-
-    // Window should still be created but show error message
+    // Submit a message
+    await submitChatPrompt(page, 'Test message');
     await page.waitForTimeout(1000);
-    const windows = electronApp.windows();
-    const agenticWindow = windows.find(w =>
-      w.url().includes('mode=agentic-coding')
-    );
 
-    if (agenticWindow) {
-      await agenticWindow.waitForLoadState('domcontentloaded');
-      const errorMessage = agenticWindow.locator('text=/Missing workspace path/');
-      await expect(errorMessage).toBeVisible({ timeout: TEST_TIMEOUTS.MEDIUM });
-    }
+    // Verify input was cleared (message sent successfully)
+    const value = await chatInput.first().inputValue();
+    expect(value).toBe('');
   });
+
+  // NOTE: Multi-session test disabled due to UI focus issues when creating new sessions
+  // The multi-panel-streaming.spec.ts test covers this functionality more thoroughly
 });

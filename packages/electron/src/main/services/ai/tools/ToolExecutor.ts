@@ -140,9 +140,16 @@ export class ToolExecutor extends EventEmitter {
   /**
    * Execute getDocumentContent tool
    */
-  async getDocumentContent(args: any): Promise<{ content: string }> {
+  async getDocumentContent(args: { filePath?: string }): Promise<{ content: string }> {
     const resultChannel = `getDocumentContent-result-${Date.now()}`;
-    logger.ai.info('[ToolExecutor] getDocumentContent invoked');
+    logger.ai.info('[ToolExecutor] getDocumentContent invoked', {
+      filePath: args?.filePath
+    });
+
+    // SAFETY: Require explicit filePath
+    if (!args?.filePath) {
+      throw new Error('getDocumentContent requires filePath parameter - no target file specified');
+    }
 
     return new Promise((resolve, reject) => {
       // Set up timeout
@@ -161,8 +168,9 @@ export class ToolExecutor extends EventEmitter {
         resolve(result);
       });
 
-      // Send to renderer
+      // Send to renderer with filePath
       this.webContents.send('ai:getDocumentContent', {
+        filePath: args.filePath,
         resultChannel
       });
     });
@@ -171,11 +179,17 @@ export class ToolExecutor extends EventEmitter {
   /**
    * Execute updateFrontmatter tool
    */
-  async updateFrontmatter(args: { updates: Record<string, any> }): Promise<DiffResult> {
+  async updateFrontmatter(args: { filePath?: string; updates: Record<string, any> }): Promise<DiffResult> {
     const resultChannel = `updateFrontmatter-result-${Date.now()}`;
     logger.ai.info('[ToolExecutor] updateFrontmatter invoked', {
+      filePath: args?.filePath,
       updates: args?.updates
     });
+
+    // SAFETY: Require explicit filePath
+    if (!args?.filePath) {
+      throw new Error('updateFrontmatter requires filePath parameter - no target file specified');
+    }
 
     return new Promise((resolve, reject) => {
       // Set up timeout
@@ -192,8 +206,9 @@ export class ToolExecutor extends EventEmitter {
         resolve(result);
       });
 
-      // Send to renderer
+      // Send to renderer with filePath
       this.webContents.send('ai:updateFrontmatter', {
+        filePath: args.filePath,
         updates: args.updates,
         resultChannel
       });

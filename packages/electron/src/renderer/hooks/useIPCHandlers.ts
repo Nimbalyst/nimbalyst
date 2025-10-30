@@ -636,13 +636,19 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     if (window.electronAPI.onMcpApplyDiff) {
       cleanupFns.push(window.electronAPI.onMcpApplyDiff(async ({ replacements, resultChannel, targetFilePath }) => {
         try {
-          // Use the explicit targetFilePath from the IPC message, or fall back to first registered editor
-          const filePath = targetFilePath || editorRegistry.getFilePaths()[0];
-
-          if (!filePath) {
-            console.error('[MCP] No target file path available for applyDiff');
+          // SAFETY: Require explicit targetFilePath - no fallbacks allowed
+          if (!targetFilePath) {
+            console.error('[MCP] applyDiff requires explicit targetFilePath - no target file specified');
+            if (window.electronAPI.sendMcpApplyDiffResult) {
+              window.electronAPI.sendMcpApplyDiffResult(resultChannel, {
+                success: false,
+                error: 'applyDiff requires explicit targetFilePath parameter'
+              });
+            }
             return;
           }
+
+          const filePath = targetFilePath;
 
           // Validate that the file is a markdown file
           if (!filePath.endsWith('.md')) {
@@ -780,14 +786,16 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     // Note: onAIApplyDiff is handled by aiApi.ts to avoid duplicate applications
 
     if (window.electronAPI.onAIGetDocumentContent) {
-      cleanupFns.push(window.electronAPI.onAIGetDocumentContent(async ({ resultChannel }) => {
-        console.log('AI getDocumentContent request');
+      cleanupFns.push(window.electronAPI.onAIGetDocumentContent(async ({ filePath, resultChannel }) => {
+        console.log('AI getDocumentContent request for:', filePath);
         try {
-          // Get content from the editor using the ref
-          let content = '';
-          if (getContentRef.current) {
-            content = getContentRef.current();
+          // SAFETY: Require explicit filePath
+          if (!filePath) {
+            throw new Error('getDocumentContent requires filePath parameter');
           }
+
+          // Get content from the editor registry for the specified file
+          const content = editorRegistry.getContent(filePath);
 
           if (window.electronAPI.sendAIGetDocumentContentResult) {
             window.electronAPI.sendAIGetDocumentContentResult(resultChannel, {
@@ -807,14 +815,15 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }
 
     if (window.electronAPI.onAIUpdateFrontmatter) {
-      cleanupFns.push(window.electronAPI.onAIUpdateFrontmatter(async ({ updates, resultChannel }) => {
-        console.log('AI updateFrontmatter request:', updates);
+      cleanupFns.push(window.electronAPI.onAIUpdateFrontmatter(async ({ filePath, updates, resultChannel }) => {
+        console.log('AI updateFrontmatter request for:', filePath, 'updates:', updates);
         try {
-          if (!currentFilePath) {
-            console.error('[AI] No file path available for updateFrontmatter');
-            return;
+          // SAFETY: Require explicit filePath
+          if (!filePath) {
+            throw new Error('updateFrontmatter requires filePath parameter');
           }
-          const currentContent = editorRegistry.getContent(currentFilePath);
+
+          const currentContent = editorRegistry.getContent(filePath);
           const { data: existingData } = parseFrontmatter(currentContent);
 
           const normalizedUpdates: Record<string, unknown> = { ...updates };
@@ -867,7 +876,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
           }
 
           // Apply the replacement
-          const result = await editorRegistry.applyReplacements(currentFilePath, replacements);
+          const result = await editorRegistry.applyReplacements(filePath, replacements);
           const finalResult = result || { success: false, error: 'Failed to update frontmatter' };
 
           if (window.electronAPI.sendAIUpdateFrontmatterResult) {

@@ -99,12 +99,12 @@ export class AIToolService {
       throw new Error('applyDiff requires replacements array');
     }
 
-    // Get the target file path - use from args, or get the first registered editor
-    const targetFilePath = args.targetFilePath || editorRegistry.getFilePaths()[0];
-
-    if (!targetFilePath) {
-      throw new Error('No target file path available and no editor registered');
+    // SAFETY: Require explicit targetFilePath - no fallbacks allowed
+    if (!args.targetFilePath) {
+      throw new Error('applyDiff requires explicit targetFilePath parameter - no target file specified');
     }
+
+    const targetFilePath = args.targetFilePath;
 
     const result = await editorRegistry.applyReplacements(targetFilePath, args.replacements);
 
@@ -139,12 +139,12 @@ export class AIToolService {
       throw new Error('updateFrontmatter requires updates object');
     }
 
-    // Get the target file path - use from args, or get the first registered editor
-    const targetFilePath = args.targetFilePath || editorRegistry.getFilePaths()[0];
-
-    if (!targetFilePath) {
-      throw new Error('No target file path available and no editor registered');
+    // SAFETY: Require explicit targetFilePath - no fallbacks allowed
+    if (!args.targetFilePath) {
+      throw new Error('updateFrontmatter requires explicit targetFilePath parameter - no target file specified');
     }
+
+    const targetFilePath = args.targetFilePath;
 
     const { parseFrontmatter, serializeWithFrontmatter } = await import('rexical');
     const currentContent = editorRegistry.getContent(targetFilePath);

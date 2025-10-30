@@ -299,8 +299,7 @@ export class RuntimeToolExecutor {
     if (args.filePath) {
       result = await editorRegistry.applyReplacements(args.filePath, args.replacements);
     } else {
-      // Fall back to current document via editorBridge
-      result = await applyReplacements(args.replacements);
+      throw Error("Document path not provided in applyDiff");
     }
 
     try {
@@ -339,10 +338,17 @@ export class RuntimeToolExecutor {
     return { success: true };
   }
 
-  private async executeGetDocumentContent(args: any): Promise<{ content: string }> {
+  private async executeGetDocumentContent(args: { filePath?: string }): Promise<{ content: string }> {
     try {
       // eslint-disable-next-line no-console
-      console.log('[runtime][tool] getDocumentContent called');
+      console.log('[runtime][tool] getDocumentContent called with filePath:', args?.filePath);
+
+      // SAFETY: Require explicit filePath
+      if (!args?.filePath) {
+        throw new Error('getDocumentContent requires filePath parameter - no target file specified');
+      }
+
+      // For now, use the global bridge function (this will need to be updated to support filePath)
       const content = getDocumentContent();
       // eslint-disable-next-line no-console
       console.log('[runtime][tool] Got content, length:', content?.length);
@@ -355,13 +361,19 @@ export class RuntimeToolExecutor {
   }
 
   private async executeUpdateFrontmatter(args: {
+    filePath?: string;
     updates: Record<string, any>;
   }): Promise<any> {
     // eslint-disable-next-line no-console
-    console.log('[runtime][tool] updateFrontmatter called with updates:', args?.updates);
+    console.log('[runtime][tool] updateFrontmatter called with filePath:', args?.filePath, 'updates:', args?.updates);
 
     if (!args || !args.updates) {
       throw new Error('updateFrontmatter requires updates object');
+    }
+
+    // SAFETY: Require explicit filePath
+    if (!args.filePath) {
+      throw new Error('updateFrontmatter requires filePath parameter - no target file specified');
     }
 
     try {

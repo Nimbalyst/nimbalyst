@@ -383,15 +383,15 @@ class AIApi {
     try {
       // If this is a diff edit with replacements, use the editor registry
       if (edit.type === 'diff' && 'replacements' in edit) {
-        // Get target file path - require it explicitly, or fall back to first registered editor
-        const filePath = targetFilePath || editorRegistry.getFilePaths()[0];
-
-        if (!filePath) {
+        // SAFETY: Require explicit targetFilePath - no fallbacks allowed
+        if (!targetFilePath) {
           return {
             success: false,
-            error: 'No target file path available and no editor registered'
+            error: 'applyEdit requires explicit targetFilePath parameter - no target file specified'
           };
         }
+
+        const filePath = targetFilePath;
 
         logger.api.info('applyEdit via registry', {
           replacements: Array.isArray((edit as any).replacements) ? (edit as any).replacements.length : undefined,

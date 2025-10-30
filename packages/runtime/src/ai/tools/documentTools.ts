@@ -3,27 +3,36 @@ import type { ToolDefinition } from './index';
 export const DOCUMENT_TOOLS: ToolDefinition[] = [
   {
     name: 'getDocumentContent',
-    description: 'Get the current content of the open document in the editor',
+    description: 'Get the content of a specific markdown document. IMPORTANT: You must provide the absolute file path.',
     parameters: {
       type: 'object',
-      properties: {},
-      required: [],
+      properties: {
+        filePath: {
+          type: 'string',
+          description: 'REQUIRED: Absolute path to the markdown file to read content from',
+        },
+      },
+      required: ['filePath'],
     },
     source: 'runtime',
   },
   {
     name: 'updateFrontmatter',
-    description: 'Update the frontmatter of a markdown document with new metadata',
+    description: 'Update the frontmatter of a specific markdown document with new metadata. IMPORTANT: You must provide the absolute file path.',
     parameters: {
       type: 'object',
       properties: {
+        filePath: {
+          type: 'string',
+          description: 'REQUIRED: Absolute path to the markdown file to update',
+        },
         updates: {
           type: 'object',
           description: 'Key-value pairs to update in the frontmatter (e.g., { status: "completed", title: "My Document" })',
           additionalProperties: true,
         },
       },
-      required: ['updates'],
+      required: ['filePath', 'updates'],
     },
     source: 'runtime',
   },
