@@ -8,6 +8,13 @@ import {
   sendAIPrompt,
   ACTIVE_EDITOR_SELECTOR
 } from '../helpers';
+import {
+  PLAYWRIGHT_TEST_SELECTORS,
+  waitForWorkspaceReady,
+  openFileFromTree,
+  switchToDocumentTab,
+  submitChatPrompt
+} from '../utils/testHelpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -74,7 +81,9 @@ This is the second document.
 
     page = await electronApp.firstWindow();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
+
+    // Wait for workspace using utility
+    await waitForWorkspaceReady(page);
 
     // Configure AI model first
     await configureAIModel(page, 'openai', 'GPT-4 Turbo');
@@ -96,16 +105,15 @@ This is the second document.
    * Helper to verify active tab by checking the tab bar
    */
   async function verifyActiveTab(fileName: string): Promise<void> {
-    const activeTab = page.locator('.tab.active');
+    const activeTab = page.locator(`${PLAYWRIGHT_TEST_SELECTORS.tab}.active`);
     await expect(activeTab).toContainText(fileName);
   }
 
   /**
-   * Helper to click a tab by file name
+   * Helper to click a tab by file name (wrapper around switchToDocumentTab)
    */
   async function clickTab(fileName: string): Promise<void> {
-    await page.click(`.tab:has-text("${fileName}")`);
-    await page.waitForTimeout(TEST_TIMEOUTS.TAB_SWITCH);
+    await switchToDocumentTab(page, fileName);
   }
 
   test('should pass correct document context to AI when switching tabs', async () => {
@@ -113,7 +121,7 @@ This is the second document.
     // It doesn't require AI to actually work, just checks the context being sent
 
     // Open first document
-    await page.click('text="document-1.md"');
+    await openFileFromTree(page, 'document-1.md');
     await page.waitForTimeout(TEST_TIMEOUTS.EDITOR_LOAD);
     await verifyActiveTab('document-1.md');
 
@@ -128,31 +136,26 @@ This is the second document.
     });
 
     // Start typing a message (don't send it yet)
-    const aiChatVisible = await page.locator('[data-testid="ai-chat-panel"]').isVisible().catch(() => false);
+    const aiChatVisible = await page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel).isVisible().catch(() => false);
     if (!aiChatVisible) {
       await page.keyboard.press('Meta+Shift+A');
       await page.waitForTimeout(200);
     }
 
     // Open second document in new tab
-    await page.click('text="document-2.md"');
+    await openFileFromTree(page, 'document-2.md');
     await page.waitForTimeout(TEST_TIMEOUTS.EDITOR_LOAD);
     await verifyActiveTab('document-2.md');
 
     // Verify we have 2 tabs
-    const tabs = page.locator('.file-tabs-container .tab');
+    const tabs = page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTabsContainer).locator(PLAYWRIGHT_TEST_SELECTORS.tab);
     await expect(tabs).toHaveCount(2);
 
     // Now send a message and check that document-2.md is in the context
-    const chatInput = page.locator('textarea[placeholder*="Ask"]').first();
-    await chatInput.waitFor({ state: 'visible' });
-    await chatInput.click();
-    await chatInput.fill('Test message');
-
     // Clear previous logs before sending
     logs.length = 0;
 
-    await page.keyboard.press('Enter');
+    await submitChatPrompt(page, 'Test message');
     await page.waitForTimeout(1000);
 
     // Check logs for document-2.md in the context
@@ -165,11 +168,8 @@ This is the second document.
     await verifyActiveTab('document-1.md');
 
     // Send another message and verify document-1.md is now in context
-    await chatInput.click();
-    await chatInput.fill('Another test message');
-
     logs.length = 0;
-    await page.keyboard.press('Enter');
+    await submitChatPrompt(page, 'Another test message');
     await page.waitForTimeout(1000);
 
     console.log('Context logs after switch:', logs);
@@ -188,7 +188,7 @@ This is the second document.
     test.setTimeout(90000);
 
     // Open first document
-    await page.click('text="document-1.md"');
+    await openFileFromTree(page, 'document-1.md');
     await page.waitForTimeout(TEST_TIMEOUTS.EDITOR_LOAD);
     await verifyActiveTab('document-1.md');
 
@@ -202,7 +202,7 @@ This is the second document.
     console.log('✓ Document 1 initial edit complete');
 
     // Now the CRITICAL test: Open Document 2, request edit, then IMMEDIATELY switch back
-    await page.click('text="document-2.md"');
+    await openFileFromTree(page, 'document-2.md');
     await page.waitForTimeout(TEST_TIMEOUTS.EDITOR_LOAD);
     await verifyActiveTab('document-2.md');
 
@@ -256,7 +256,7 @@ This is the second document.
     // The key validation is that edits target the correct document
     test.setTimeout(90000); // Extend timeout for this long test
     // Open first document
-    await page.click('text="document-1.md"');
+    await openFileFromTree(page, 'document-1.md');
     await page.waitForTimeout(TEST_TIMEOUTS.EDITOR_LOAD);
     await verifyActiveTab('document-1.md');
 
@@ -272,12 +272,12 @@ This is the second document.
     console.log('✓ Document 1 edited successfully');
 
     // Now open the second document (creating a second tab)
-    await page.click('text="document-2.md"');
+    await openFileFromTree(page, 'document-2.md');
     await page.waitForTimeout(TEST_TIMEOUTS.EDITOR_LOAD);
     await verifyActiveTab('document-2.md');
 
     // CRITICAL: Verify we're on Document 2 and Document 1 is still in a tab
-    const tabs = page.locator('.file-tabs-container .tab');
+    const tabs = page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTabsContainer).locator(PLAYWRIGHT_TEST_SELECTORS.tab);
     await expect(tabs).toHaveCount(2);
 
     // Edit Document 2: Add a task (in the SAME AI session)
@@ -343,7 +343,7 @@ This is the second document.
     expect(content1).toContain('Feature X');
 
     // Open second document in a new tab
-    await page.click('text="document-2.md"');
+    await openFileFromTree(page, 'document-2.md');
     await page.waitForTimeout(TEST_TIMEOUTS.EDITOR_LOAD);
     await verifyActiveTab('document-2.md');
 

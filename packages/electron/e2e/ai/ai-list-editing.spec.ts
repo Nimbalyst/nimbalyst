@@ -8,6 +8,11 @@ import {
   sendAIPrompt as sendAIPromptHelper,
   getEditorContent
 } from '../helpers';
+import {
+  PLAYWRIGHT_TEST_SELECTORS,
+  waitForWorkspaceReady,
+  openFileFromTree
+} from '../utils/testHelpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -61,13 +66,15 @@ test.describe('AI List Editing', () => {
 
     page = await electronApp.firstWindow();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
+
+    // Wait for workspace using utility
+    await waitForWorkspaceReady(page);
 
     // Preconfigure OpenAI provider with API key and models
     await configureAIProvider(page, 'openai', process.env.OPENAI_API_KEY || '', ['gpt-4-turbo']);
 
-    // Open the test file
-    await page.click(`text="list-test.md"`);
+    // Open the test file using utility
+    await openFileFromTree(page, 'list-test.md');
     await page.waitForTimeout(TEST_TIMEOUTS.EDITOR_LOAD);
   });
 
@@ -93,9 +100,9 @@ test.describe('AI List Editing', () => {
       waitForCompletion: true
     });
 
-    // Wait for diff to appear and accept it
+    // Wait for diff to appear and accept it using constant
     await page.waitForTimeout(2000);
-    const acceptButton = page.locator('button:has-text("Accept All")').first();
+    const acceptButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.acceptAllButton).first();
     await acceptButton.waitFor({ state: 'visible', timeout: 10000 });
     await acceptButton.click();
 

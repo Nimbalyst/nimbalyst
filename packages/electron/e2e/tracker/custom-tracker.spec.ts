@@ -100,12 +100,6 @@ inlineTemplate: "{icon} {name} ({role})"
   });
 
   test('should load custom character tracker from YAML file', async () => {
-    // Wait for custom trackers to load - need to wait for:
-    // 1. Workspace to be set (triggers useEffect)
-    // 2. loadCustomTrackers to run
-    // 3. Character to be registered
-    await page.waitForTimeout(5000);
-
     // Check if character.yaml still exists on disk
     const trackersDir = path.join(workspaceDir, '.nimbalyst', 'trackers');
     const filesAfterLaunch = await fs.readdir(trackersDir);
@@ -113,29 +107,23 @@ inlineTemplate: "{icon} {name} ({role})"
 
     // Open the test file
     await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
-    await page.waitForTimeout(500);
 
     // Wait for editor to be ready
     const editor = page.locator('.editor [contenteditable="true"]').first();
     await expect(editor).toBeVisible({ timeout: TEST_TIMEOUTS.EDITOR_LOAD });
 
-    // Click in editor to focus
-    await editor.click();
-    await page.waitForTimeout(200);
-
-    // Type # to trigger typeahead
-    await page.keyboard.type('#');
-
-    // Wait for menu to fully render
+    // Wait for custom trackers to load
     await page.waitForTimeout(2000);
 
-    // Take screenshot to verify Character appears
-    await page.screenshot({
-      path: path.join(workspaceDir, 'typeahead-screenshot.png'),
-      fullPage: false
-    });
+    // Click in editor and type # to trigger typeahead
+    await editor.click();
+    await page.keyboard.type('#');
 
-    // Verify Character option is in the menu by checking the DOM
+    // Wait for typeahead menu
+    const typeaheadMenu = page.locator('.typeahead-menu, [role="menu"]');
+    await typeaheadMenu.waitFor({ state: 'visible', timeout: 3000 });
+
+    // Verify Character option is in the menu
     const menuText = await page.locator('body').textContent();
     expect(menuText).toContain('Character');
     expect(menuText).toContain('Track a character');

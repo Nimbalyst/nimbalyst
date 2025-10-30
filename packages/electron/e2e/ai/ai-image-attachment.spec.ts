@@ -1,17 +1,19 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace } from '../helpers';
+import {
+  launchElectronApp,
+  createTempWorkspace,
+  TEST_TIMEOUTS,
+  ACTIVE_EDITOR_SELECTOR
+} from '../helpers';
+import {
+  PLAYWRIGHT_TEST_SELECTORS,
+  waitForWorkspaceReady,
+  openFileFromTree,
+  openAIChatWithSession
+} from '../utils/testHelpers';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-
-const TEST_TIMEOUTS = {
-  SHORT: 5000,
-  MEDIUM: 10000,
-  LONG: 20000,
-  VERY_LONG: 60000
-};
-
-const ACTIVE_EDITOR_SELECTOR = '.editor [contenteditable="true"]';
 
 let electronApp: ElectronApplication;
 let page: Page;
@@ -21,6 +23,10 @@ let testImagePath: string;
 test.describe('AI Image Attachment', () => {
   test.beforeEach(async () => {
     workspacePath = await createTempWorkspace();
+
+    // Create a test markdown file (required for editor to load)
+    const testFilePath = path.join(workspacePath, 'test.md');
+    await fs.writeFile(testFilePath, '# Test Document\n\nTest content.\n', 'utf8');
 
     // Create a test image (simple 1x1 PNG)
     testImagePath = path.join(workspacePath, 'test-image.png');
@@ -39,7 +45,13 @@ test.describe('AI Image Attachment', () => {
     // Wait for window to be ready
     page = await electronApp.firstWindow();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForSelector(ACTIVE_EDITOR_SELECTOR, { timeout: TEST_TIMEOUTS.LONG });
+
+    // Wait for workspace to load using utility function
+    await waitForWorkspaceReady(page);
+
+    // Open the test file so editor is available using utility function
+    await openFileFromTree(page, 'test.md');
+    await page.waitForSelector(ACTIVE_EDITOR_SELECTOR, { timeout: TEST_TIMEOUTS.EDITOR_LOAD });
   });
 
   test.afterEach(async () => {
@@ -49,12 +61,11 @@ test.describe('AI Image Attachment', () => {
     await fs.rm(workspacePath, { recursive: true, force: true }).catch(() => undefined);
   });
   test('should show attachment preview after dropping image', async () => {
-    // Open agentic coding window
-    await page.keyboard.press('Control+Shift+A');
-    await page.waitForTimeout(500);
+    // Open AI chat panel and create session using utility
+    await openAIChatWithSession(page);
 
-    // Find the chat input
-    const chatInput = page.locator('.ai-chat-input-field');
+    // Find the chat input using constant (use .first() since there may be multiple AI sessions)
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
     await expect(chatInput).toBeVisible();
 
     // Simulate file drop
@@ -69,29 +80,28 @@ test.describe('AI Image Attachment', () => {
     await chatInput.dispatchEvent('drop', { dataTransfer });
     await page.waitForTimeout(500);
 
-    // Check that attachment preview appears
-    const attachmentPreview = page.locator('.attachment-preview');
+    // Check that attachment preview appears using constant
+    const attachmentPreview = page.locator(PLAYWRIGHT_TEST_SELECTORS.attachmentPreview);
     await expect(attachmentPreview).toBeVisible({ timeout: 3000 });
 
-    // Check that filename is shown
-    const filename = page.locator('.attachment-filename');
+    // Check that filename is shown using constant
+    const filename = page.locator(PLAYWRIGHT_TEST_SELECTORS.attachmentFilename);
     await expect(filename).toContainText('test-image.png');
   });
 
   test('should allow removing attachment', async () => {
-    // Open agentic coding window
-    await page.keyboard.press('Control+Shift+A');
-    await page.waitForTimeout(500);
+    // Open AI chat panel and create session using utility
+    await openAIChatWithSession(page);
 
-    const chatInput = page.locator('.ai-chat-input-field');
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
     await expect(chatInput).toBeVisible();
 
     // Add an attachment (simplified - assume it's already added from previous test)
-    const attachmentPreview = page.locator('.attachment-preview').first();
+    const attachmentPreview = page.locator(PLAYWRIGHT_TEST_SELECTORS.attachmentPreview).first();
 
     if (await attachmentPreview.isVisible()) {
-      // Click remove button
-      const removeButton = page.locator('.attachment-remove');
+      // Click remove button using constant
+      const removeButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.attachmentRemoveButton);
       await removeButton.click();
       await page.waitForTimeout(300);
 
@@ -101,11 +111,10 @@ test.describe('AI Image Attachment', () => {
   });
 
   test('should insert @filename reference when attachment is added', async () => {
-    // Open agentic coding window
-    await page.keyboard.press('Control+Shift+A');
-    await page.waitForTimeout(500);
+    // Open AI chat panel and create session using utility
+    await openAIChatWithSession(page);
 
-    const chatInput = page.locator('.ai-chat-input-field');
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
     await expect(chatInput).toBeVisible();
 
     // Type some text first
@@ -134,11 +143,10 @@ test.describe('AI Image Attachment', () => {
     const largeBuffer = Buffer.alloc(6 * 1024 * 1024); // 6MB
     await fs.writeFile(largeImagePath, largeBuffer);
 
-    // Open agentic coding window
-    await page.keyboard.press('Control+Shift+A');
-    await page.waitForTimeout(500);
+    // Open AI chat panel and create session using utility
+    await openAIChatWithSession(page);
 
-    const chatInput = page.locator('.ai-chat-input-field');
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
     await expect(chatInput).toBeVisible();
 
     // Listen for alert
@@ -165,11 +173,10 @@ test.describe('AI Image Attachment', () => {
   });
 
   test('should support paste from clipboard', async () => {
-    // Open agentic coding window
-    await page.keyboard.press('Control+Shift+A');
-    await page.waitForTimeout(500);
+    // Open AI chat panel and create session using utility
+    await openAIChatWithSession(page);
 
-    const chatInput = page.locator('.ai-chat-input-field');
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
     await expect(chatInput).toBeVisible();
 
     // Focus input
@@ -197,17 +204,16 @@ test.describe('AI Image Attachment', () => {
 
     await page.waitForTimeout(500);
 
-    // Check that attachment preview appears
-    const attachmentPreview = page.locator('.attachment-preview');
+    // Check that attachment preview appears using constant
+    const attachmentPreview = page.locator(PLAYWRIGHT_TEST_SELECTORS.attachmentPreview);
     await expect(attachmentPreview).toBeVisible({ timeout: 3000 });
   });
 
   test('should clear attachments after sending message', async () => {
-    // Open agentic coding window
-    await page.keyboard.press('Control+Shift+A');
-    await page.waitForTimeout(500);
+    // Open AI chat panel and create session using utility
+    await openAIChatWithSession(page);
 
-    const chatInput = page.locator('.ai-chat-input-field');
+    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
     await expect(chatInput).toBeVisible();
 
     // Add an attachment
@@ -222,8 +228,8 @@ test.describe('AI Image Attachment', () => {
     await chatInput.dispatchEvent('drop', { dataTransfer });
     await page.waitForTimeout(500);
 
-    // Verify attachment is visible
-    const attachmentPreview = page.locator('.attachment-preview');
+    // Verify attachment is visible using constant
+    const attachmentPreview = page.locator(PLAYWRIGHT_TEST_SELECTORS.attachmentPreview);
     await expect(attachmentPreview).toBeVisible();
 
     // Type message and send

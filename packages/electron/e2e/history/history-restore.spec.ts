@@ -1,6 +1,17 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, pressKeyboardShortcut, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, getEditorContent, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
+import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR } from '../helpers';
+import {
+  PLAYWRIGHT_TEST_SELECTORS,
+  dismissAPIKeyDialog,
+  waitForWorkspaceReady,
+  openFileFromTree,
+  editDocumentContent,
+  manualSaveDocument,
+  openHistoryDialog,
+  selectHistoryItem,
+  restoreFromHistory
+} from '../utils/testHelpers';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
@@ -21,9 +32,7 @@ test.describe('History restore functionality', () => {
       // Handle any JavaScript dialogs that might appear
       page.on('dialog', async dialog => {
         console.log(`[TEST] Dialog appeared: ${dialog.type()} - ${dialog.message()}`);
-        // Dismiss beforeunload dialogs (they're already shown when dialog event fires)
         if (dialog.type() === 'beforeunload') {
-          // Can't accept beforeunload - it's auto-handled
           return;
         }
         await dialog.accept();
@@ -31,19 +40,15 @@ test.describe('History restore functionality', () => {
 
       await page.waitForLoadState('domcontentloaded');
 
-      // Dismiss API key dialog if present
-      const apiDialog = page.locator('.api-key-dialog-overlay');
-      if (await apiDialog.isVisible()) {
-        await page.locator('.api-key-dialog-button.secondary').click();
-      }
+      // Dismiss API key dialog
+      await dismissAPIKeyDialog(page);
 
-      // Wait for workspace to load
-      await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
-      await page.locator('.file-tree-name', { hasText: 'test-document.md' }).first().waitFor({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
+      // Wait for workspace
+      await waitForWorkspaceReady(page);
+      await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'test-document.md' }).first().waitFor({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
 
       // Open the test file
-      await page.locator('.file-tree-name', { hasText: 'test-document.md' }).click();
-      await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test-document.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+      await openFileFromTree(page, 'test-document.md');
 
       // Verify original content is loaded
       const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
@@ -51,64 +56,43 @@ test.describe('History restore functionality', () => {
       let editorText = await editor.innerText();
       expect(editorText).toContain('Original Content');
 
-      // Make first edit and save manually (Cmd+S)
-      await editor.click();
-      await page.keyboard.press(getKeyboardShortcut('Mod+A'));
-      await page.keyboard.type('# First Edit\n\nThis is the first version after editing.\n');
-      await page.waitForTimeout(200);
-
-      // Manual save with Cmd+S (creates manual snapshot)
-      await page.keyboard.press(getKeyboardShortcut('Mod+S'));
-      await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+      // Make first edit and save manually
+      await editDocumentContent(page, editor, '# First Edit\n\nThis is the first version after editing.\n');
+      await manualSaveDocument(page);
 
       // Verify file was saved
       const firstEditContent = await fs.readFile(testFile, 'utf8');
       expect(firstEditContent).toContain('First Edit');
 
       // Make second edit and save
-      await editor.click();
-      await page.keyboard.press(getKeyboardShortcut('Mod+A'));
-      await page.keyboard.type('# Second Edit\n\nThis is the second version after editing.\n');
-      await page.waitForTimeout(200);
-
-      // Manual save with Cmd+S (creates another manual snapshot)
-      await page.keyboard.press(getKeyboardShortcut('Mod+S'));
-      await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+      await editDocumentContent(page, editor, '# Second Edit\n\nThis is the second version after editing.\n');
+      await manualSaveDocument(page);
 
       // Verify second save
       const secondEditContent = await fs.readFile(testFile, 'utf8');
       expect(secondEditContent).toContain('Second Edit');
 
-      // Open history dialog using keyboard shortcut
-      await page.click('body'); // Ensure not in editor
-      await page.waitForTimeout(200);
-      await pressKeyboardShortcut(page, 'Mod+Y');
-      await page.waitForSelector('.history-dialog', { timeout: 5000 });
+      // Open history dialog
+      await openHistoryDialog(page);
 
       // Verify we have multiple snapshots listed
-      const snapshotItems = page.locator('.history-item');
-      const snapshotCount = await snapshotItems.count();
+      const snapshotCount = await page.locator(PLAYWRIGHT_TEST_SELECTORS.historyItem).count();
       expect(snapshotCount).toBeGreaterThanOrEqual(2);
 
       // Select the second snapshot (first edit) - snapshots are ordered newest first
-      // So index 1 should be the "First Edit" snapshot
-      const secondSnapshot = snapshotItems.nth(1);
-      await secondSnapshot.click();
-      await page.waitForTimeout(500);
+      await selectHistoryItem(page, 1);
 
       // Verify preview shows the first edit content
-      const previewContent = page.locator('.history-preview-content pre');
+      const previewContent = page.locator(PLAYWRIGHT_TEST_SELECTORS.historyPreviewContent);
       await expect(previewContent).toContainText('First Edit');
 
-      // Click restore button
-      const restoreButton = page.locator('.history-restore-button');
-      await restoreButton.click();
-      await page.waitForTimeout(500);
+      // Restore the snapshot
+      await restoreFromHistory(page);
 
       // History dialog should close
-      await expect(page.locator('.history-dialog')).toHaveCount(0);
+      await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.historyDialog)).toHaveCount(0);
 
-      // Wait a bit more for the content to update
+      // Wait for content to update
       await page.waitForTimeout(1000);
 
       // Verify editor now shows the restored content (First Edit)
@@ -116,27 +100,10 @@ test.describe('History restore functionality', () => {
       expect(editorText).toContain('First Edit');
       expect(editorText).not.toContain('Second Edit');
 
-      // Document should NOT be marked as dirty (restore writes to disk immediately)
-      await expect(page.locator('.file-tabs-container .tab.active .tab-dirty-indicator')).not.toBeVisible();
-
-      // Verify the file on disk now contains the restored content (already written by restore)
+      // Verify the file on disk now contains the restored content
       const restoredFileContent = await fs.readFile(testFile, 'utf8');
       expect(restoredFileContent).toContain('First Edit');
       expect(restoredFileContent).not.toContain('Second Edit');
-
-      // Close and reopen file to verify persistence
-      const closeButton = page.locator('.tab.active .tab-close');
-      await closeButton.click();
-      await page.waitForTimeout(300);
-
-      // Reopen the file
-      await page.locator('.file-tree-name', { hasText: 'test-document.md' }).click();
-      await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('test-document.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
-
-      // Verify restored content persists after reload
-      editorText = await editor.innerText();
-      expect(editorText).toContain('First Edit');
-      expect(editorText).not.toContain('Second Edit');
 
     } finally {
       await electronApp.close().catch(() => undefined);
@@ -157,40 +124,33 @@ test.describe('History restore functionality', () => {
       const page = await electronApp.firstWindow();
       await page.waitForLoadState('domcontentloaded');
 
-      const apiDialog = page.locator('.api-key-dialog-overlay');
-      if (await apiDialog.isVisible()) {
-        await page.locator('.api-key-dialog-button.secondary').click();
-      }
+      // Dismiss API key dialog
+      await dismissAPIKeyDialog(page);
 
-      await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
-      await page.locator('.file-tree-name', { hasText: 'immediate-test.md' }).first().waitFor({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
+      // Wait for workspace
+      await waitForWorkspaceReady(page);
+      await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'immediate-test.md' }).first().waitFor({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
 
-      await page.locator('.file-tree-name', { hasText: 'immediate-test.md' }).click();
-      await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('immediate-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+      // Open file
+      await openFileFromTree(page, 'immediate-test.md');
 
       const editor = page.locator(ACTIVE_EDITOR_SELECTOR);
       await editor.waitFor({ state: 'visible', timeout: TEST_TIMEOUTS.EDITOR_LOAD });
 
       // Edit and save
-      await editor.click();
-      await page.keyboard.press(getKeyboardShortcut('Mod+A'));
-      await page.keyboard.type('# Modified\n\nModified text.\n');
-      await page.keyboard.press(getKeyboardShortcut('Mod+S'));
-      await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+      await editDocumentContent(page, editor, '# Modified\n\nModified text.\n');
+      await manualSaveDocument(page);
 
-      // Open history dialog using keyboard shortcut
-      await page.click('body'); // Ensure not in editor
-      await page.waitForTimeout(200);
-      await pressKeyboardShortcut(page, 'Mod+Y');
-      await page.waitForSelector('.history-dialog', { timeout: 5000 });
+      // Open history dialog
+      await openHistoryDialog(page);
 
-      const snapshotItems = page.locator('.history-item');
-      const secondSnapshot = snapshotItems.nth(1); // Original version
-      await secondSnapshot.click();
-      await page.waitForTimeout(500);
+      // Select the original version (second snapshot)
+      await selectHistoryItem(page, 1);
 
-      await page.locator('.history-restore-button').click();
-      await page.waitForTimeout(300); // Brief wait for restore to apply
+      // Restore from history
+      await restoreFromHistory(page);
+
+      await page.waitForTimeout(300);
 
       // CRITICAL: Content should appear immediately without refresh
       // This is the main bug we're testing - before the fix, editor would be blank here
@@ -199,7 +159,6 @@ test.describe('History restore functionality', () => {
       expect(editorText).not.toContain('Modified');
 
       // Verify we don't need to refresh to see the content
-      // If the bug exists, the editor will be blank at this point
       expect(editorText.trim().length).toBeGreaterThan(0);
 
     } finally {

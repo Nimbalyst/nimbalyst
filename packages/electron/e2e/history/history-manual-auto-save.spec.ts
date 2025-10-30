@@ -1,6 +1,20 @@
 import { test, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from 'playwright';
-import { launchElectronApp, createTempWorkspace, getKeyboardShortcut, pressKeyboardShortcut, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR, ACTIVE_FILE_TAB_SELECTOR } from '../helpers';
+import { launchElectronApp, createTempWorkspace, TEST_TIMEOUTS, ACTIVE_EDITOR_SELECTOR } from '../helpers';
+import {
+  PLAYWRIGHT_TEST_SELECTORS,
+  dismissAPIKeyDialog,
+  waitForWorkspaceReady,
+  openFileFromTree,
+  editDocumentContent,
+  manualSaveDocument,
+  waitForAutosave,
+  openHistoryDialog,
+  getHistoryItemCount,
+  findHistoryItemByContent,
+  selectHistoryItem,
+  restoreFromHistory
+} from '../utils/testHelpers';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
@@ -26,19 +40,15 @@ test.describe('History - Manual and Auto Save Entries', () => {
     page = await electronApp.firstWindow();
     await page.waitForLoadState('domcontentloaded');
 
-    // Dismiss API key dialog if present
-    const apiDialog = page.locator('.api-key-dialog-overlay');
-    if (await apiDialog.isVisible()) {
-      await page.locator('.api-key-dialog-button.secondary').click();
-    }
+    // Dismiss API key dialog
+    await dismissAPIKeyDialog(page);
 
-    // Wait for workspace to load
-    await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
-    await page.locator('.file-tree-name', { hasText: 'history-test.md' }).first().waitFor({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
+    // Wait for workspace
+    await waitForWorkspaceReady(page);
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'history-test.md' }).first().waitFor({ timeout: TEST_TIMEOUTS.FILE_TREE_LOAD });
 
     // Open the test file
-    await page.locator('.file-tree-name', { hasText: 'history-test.md' }).click();
-    await expect(page.locator(ACTIVE_FILE_TAB_SELECTOR)).toContainText('history-test.md', { timeout: TEST_TIMEOUTS.TAB_SWITCH });
+    await openFileFromTree(page, 'history-test.md');
   });
 
   test.afterEach(async () => {
@@ -55,79 +65,42 @@ test.describe('History - Manual and Auto Save Entries', () => {
     expect(editorText).toContain('Initial content');
 
     // MANUAL SAVE #1: Make first edit and manually save
-    await editor.click();
-    await page.keyboard.press(getKeyboardShortcut('Mod+A'));
-    await page.keyboard.type('# History Test\n\nManual save #1.\n');
-    await page.waitForTimeout(200);
-
-    // Manual save with Cmd+S
-    await page.keyboard.press(getKeyboardShortcut('Mod+S'));
-    await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+    await editDocumentContent(page, editor, '# History Test\n\nManual save #1.\n');
+    await manualSaveDocument(page);
 
     // Verify file was saved
     const manualSave1Content = await fs.readFile(testFile, 'utf8');
     expect(manualSave1Content).toContain('Manual save #1');
 
     // AUTO SAVE #1: Make second edit and let it autosave
-    await editor.click();
-    await page.keyboard.press(getKeyboardShortcut('Mod+A'));
-    await page.keyboard.type('# History Test\n\nAuto save #1.\n');
-    await page.waitForTimeout(200);
-
-    // Verify dirty indicator appears
-    const tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'history-test.md' }) });
-    await expect(tab.locator('.tab-dirty-indicator')).toBeVisible({ timeout: 1000 });
-
-    // Wait for autosave (2s interval + 200ms debounce + buffer)
-    await page.waitForTimeout(3000);
-
-    // Verify dirty indicator is gone (autosave completed)
-    await expect(tab.locator('.tab-dirty-indicator')).toHaveCount(0, { timeout: 1000 });
+    await editDocumentContent(page, editor, '# History Test\n\nAuto save #1.\n');
+    await waitForAutosave(page, 'history-test.md');
 
     // Verify content was auto-saved
     const autoSave1Content = await fs.readFile(testFile, 'utf8');
     expect(autoSave1Content).toContain('Auto save #1');
 
     // MANUAL SAVE #2: Make third edit and manually save
-    await editor.click();
-    await page.keyboard.press(getKeyboardShortcut('Mod+A'));
-    await page.keyboard.type('# History Test\n\nManual save #2.\n');
-    await page.waitForTimeout(200);
-
-    await page.keyboard.press(getKeyboardShortcut('Mod+S'));
-    await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+    await editDocumentContent(page, editor, '# History Test\n\nManual save #2.\n');
+    await manualSaveDocument(page);
 
     // AUTO SAVE #2: Make fourth edit and let it autosave
-    await editor.click();
-    await page.keyboard.press(getKeyboardShortcut('Mod+A'));
-    await page.keyboard.type('# History Test\n\nAuto save #2.\n');
-    await page.waitForTimeout(200);
+    await editDocumentContent(page, editor, '# History Test\n\nAuto save #2.\n');
+    await waitForAutosave(page, 'history-test.md');
 
-    await expect(tab.locator('.tab-dirty-indicator')).toBeVisible({ timeout: 1000 });
-    await page.waitForTimeout(3000);
-    await expect(tab.locator('.tab-dirty-indicator')).toHaveCount(0, { timeout: 1000 });
-
-    // Now open history dialog using keyboard shortcut
-    // Make sure we're not focused in the editor (which might capture the shortcut)
-    await page.click('body');
-    await page.waitForTimeout(100);
-    await pressKeyboardShortcut(page, 'Mod+Y');
-    await page.waitForSelector('.history-dialog', { timeout: 5000 });
+    // Now open history dialog
+    await openHistoryDialog(page);
 
     // Get all history items
-    const historyItems = page.locator('.history-item');
-    const itemCount = await historyItems.count();
+    const itemCount = await getHistoryItemCount(page);
 
-    // We should have at least 5 entries:
-    // - Initial file creation
+    // We should have at least 4 entries:
     // - Manual save #1
     // - Auto save #1
     // - Manual save #2
     // - Auto save #2
     expect(itemCount).toBeGreaterThanOrEqual(4);
 
-    // Verify we can see different entries by checking preview content
-    // Click on different items and verify they show different content
     console.log(`Found ${itemCount} history items`);
   });
 
@@ -136,69 +109,38 @@ test.describe('History - Manual and Auto Save Entries', () => {
     await editor.waitFor({ state: 'visible', timeout: TEST_TIMEOUTS.EDITOR_LOAD });
 
     // Create manual save
-    await editor.click();
-    await page.keyboard.press(getKeyboardShortcut('Mod+A'));
-    await page.keyboard.type('# History Test\n\nManual save version.\n');
-    await page.keyboard.press(getKeyboardShortcut('Mod+S'));
-    await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+    await editDocumentContent(page, editor, '# History Test\n\nManual save version.\n');
+    await manualSaveDocument(page);
 
     // Create auto save with different content
     const autoSaveMarker = `Auto saved at ${Date.now()}`;
-    await editor.click();
-    await page.keyboard.press(getKeyboardShortcut('Mod+A'));
-    await page.keyboard.type(`# History Test\n\n${autoSaveMarker}\n`);
-    await page.waitForTimeout(200);
-
-    const tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: 'history-test.md' }) });
-    await expect(tab.locator('.tab-dirty-indicator')).toBeVisible({ timeout: 1000 });
-    await page.waitForTimeout(3000);
-    await expect(tab.locator('.tab-dirty-indicator')).toHaveCount(0, { timeout: 1000 });
+    await editDocumentContent(page, editor, `# History Test\n\n${autoSaveMarker}\n`);
+    await waitForAutosave(page, 'history-test.md');
 
     // Make one more change after auto save
-    await editor.click();
-    await page.keyboard.press(getKeyboardShortcut('Mod+A'));
-    await page.keyboard.type('# History Test\n\nNewest version.\n');
-    await page.keyboard.press(getKeyboardShortcut('Mod+S'));
-    await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+    await editDocumentContent(page, editor, '# History Test\n\nNewest version.\n');
+    await manualSaveDocument(page);
 
-    // Open history using keyboard shortcut
-    await page.click('body');
-    await page.waitForTimeout(100);
-    await pressKeyboardShortcut(page, 'Mod+Y');
-    await page.waitForSelector('.history-dialog', { timeout: 5000 });
+    // Open history
+    await openHistoryDialog(page);
 
-    // Find the auto save entry by clicking through items and checking preview
-    const historyItems = page.locator('.history-item');
-    const itemCount = await historyItems.count();
-
-    let autoSaveItemIndex = -1;
-    for (let i = 0; i < itemCount; i++) {
-      await historyItems.nth(i).click();
-      await page.waitForTimeout(300);
-
-      const previewContent = page.locator('.history-preview-content pre');
-      const preview = await previewContent.innerText().catch(() => '');
-
-      if (preview.includes(autoSaveMarker)) {
-        autoSaveItemIndex = i;
-        break;
-      }
-    }
-
+    // Find the auto save entry by searching for the marker
+    const autoSaveItemIndex = await findHistoryItemByContent(page, autoSaveMarker);
     expect(autoSaveItemIndex).toBeGreaterThanOrEqual(0);
 
     // Restore the auto save version
-    const restoreButton = page.locator('.history-restore-button');
-    await restoreButton.click();
-    await page.waitForTimeout(500);
+    await restoreFromHistory(page);
 
     // Verify editor shows restored content
     const editorText = await editor.innerText();
     expect(editorText).toContain(autoSaveMarker);
     expect(editorText).not.toContain('Newest version');
 
-    // Verify dirty indicator appears
-    await expect(tab.locator('.tab-dirty-indicator')).toBeVisible();
+    // Verify dirty indicator appears (since we restored but haven't saved)
+    const tab = page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTabsContainer).locator(PLAYWRIGHT_TEST_SELECTORS.tab, {
+      has: page.locator(PLAYWRIGHT_TEST_SELECTORS.tabTitle, { hasText: 'history-test.md' })
+    });
+    await expect(tab.locator(PLAYWRIGHT_TEST_SELECTORS.tabDirtyIndicator)).toBeVisible();
   });
 
   test('should restore from manual save entry', async () => {
@@ -208,49 +150,22 @@ test.describe('History - Manual and Auto Save Entries', () => {
     const manualSaveMarker = `Manual saved at ${Date.now()}`;
 
     // Create manual save
-    await editor.click();
-    await page.keyboard.press(getKeyboardShortcut('Mod+A'));
-    await page.keyboard.type(`# History Test\n\n${manualSaveMarker}\n`);
-    await page.keyboard.press(getKeyboardShortcut('Mod+S'));
-    await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+    await editDocumentContent(page, editor, `# History Test\n\n${manualSaveMarker}\n`);
+    await manualSaveDocument(page);
 
     // Create newer content
-    await editor.click();
-    await page.keyboard.press(getKeyboardShortcut('Mod+A'));
-    await page.keyboard.type('# History Test\n\nNewer content.\n');
-    await page.keyboard.press(getKeyboardShortcut('Mod+S'));
-    await page.waitForTimeout(TEST_TIMEOUTS.SAVE_OPERATION);
+    await editDocumentContent(page, editor, '# History Test\n\nNewer content.\n');
+    await manualSaveDocument(page);
 
     // Open history and restore manual save
-    await page.click('body');
-    await page.waitForTimeout(100);
-    await pressKeyboardShortcut(page, 'Mod+Y');
-    await page.waitForSelector('.history-dialog', { timeout: 5000 });
+    await openHistoryDialog(page);
 
     // Find the manual save entry
-    const historyItems = page.locator('.history-item');
-    const itemCount = await historyItems.count();
-
-    let manualSaveItemIndex = -1;
-    for (let i = 0; i < itemCount; i++) {
-      await historyItems.nth(i).click();
-      await page.waitForTimeout(300);
-
-      const previewContent = page.locator('.history-preview-content pre');
-      const preview = await previewContent.innerText().catch(() => '');
-
-      if (preview.includes(manualSaveMarker)) {
-        manualSaveItemIndex = i;
-        break;
-      }
-    }
-
+    const manualSaveItemIndex = await findHistoryItemByContent(page, manualSaveMarker);
     expect(manualSaveItemIndex).toBeGreaterThanOrEqual(0);
 
     // Restore the manual save version
-    const restoreButton = page.locator('.history-restore-button');
-    await restoreButton.click();
-    await page.waitForTimeout(500);
+    await restoreFromHistory(page);
 
     // Verify editor shows restored content
     const editorText = await editor.innerText();
