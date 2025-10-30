@@ -711,34 +711,60 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }
 
     if (window.electronAPI.onMcpStreamContent) {
-      cleanupFns.push(window.electronAPI.onMcpStreamContent(async ({ streamId, content, position, insertAfter, mode, targetFilePath }) => {
+      cleanupFns.push(window.electronAPI.onMcpStreamContent(async ({ streamId, content, position, insertAfter, mode, targetFilePath, resultChannel }) => {
         console.log('[MCP] streamContent request:', { streamId, position, mode, targetFilePath });
 
-        // Use the explicit targetFilePath from the IPC message, or fall back to first registered editor
-        const filePath = targetFilePath || editorRegistry.getFilePaths()[0];
+        try {
+          // Use the explicit targetFilePath from the IPC message, or fall back to first registered editor
+          const filePath = targetFilePath || editorRegistry.getFilePaths()[0];
 
-        if (!filePath) {
-          console.error('[MCP] No target file path available for streamContent');
-          return;
+          if (!filePath) {
+            console.error('[MCP] No target file path available for streamContent');
+            if (window.electronAPI.sendMcpStreamContentResult) {
+              window.electronAPI.sendMcpStreamContentResult(resultChannel, {
+                success: false,
+                error: 'No target file path available'
+              });
+            }
+            return;
+          }
+
+          // Start streaming
+          editorRegistry.startStreaming(filePath, {
+            id: streamId,
+            position: position || 'cursor',
+            mode: mode || 'append', // Default to 'append' mode for streaming
+            insertAfter,
+            // Handle both 'end' (from schema) and 'end of document' (AI sometimes ignores enum)
+            insertAtEnd: position === 'end' || position === 'end of document'
+          });
+
+          // Small delay to let the streaming processor register
+          await new Promise(resolve => setTimeout(resolve, 50));
+
+          // Stream the content
+          editorRegistry.streamContent(filePath, streamId, content);
+
+          // End streaming
+          editorRegistry.endStreaming(filePath, streamId);
+
+          // Send success result
+          if (window.electronAPI.sendMcpStreamContentResult) {
+            window.electronAPI.sendMcpStreamContentResult(resultChannel, {
+              success: true
+            });
+          }
+        } catch (error) {
+          console.error('[MCP] streamContent error:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+          if (window.electronAPI.sendMcpStreamContentResult) {
+            window.electronAPI.sendMcpStreamContentResult(resultChannel, {
+              success: false,
+              error: errorMessage
+            });
+          }
         }
-        // Start streaming
-        editorRegistry.startStreaming(filePath, {
-          id: streamId,
-          position: position || 'cursor',
-          mode: mode || 'append', // Default to 'append' mode for streaming
-          insertAfter,
-          // Handle both 'end' (from schema) and 'end of document' (AI sometimes ignores enum)
-          insertAtEnd: position === 'end' || position === 'end of document'
-        });
-
-        // Small delay to let the streaming processor register
-        await new Promise(resolve => setTimeout(resolve, 50));
-
-        // Stream the content
-        editorRegistry.streamContent(filePath, streamId, content);
-
-        // End streaming
-        editorRegistry.endStreaming(filePath, streamId);
       }));
     }
 

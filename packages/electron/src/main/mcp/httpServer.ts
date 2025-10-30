@@ -402,23 +402,57 @@ async function tryCreateServer(port: number): Promise<any> {
               // Generate a unique stream ID
               const streamId = `mcp-stream-${Date.now()}-${Math.random()}`;
 
-              // Send IPC message to renderer
-              windows[0].webContents.send('mcp:streamContent', {
-                streamId,
-                content: args?.content,
-                position: args?.position || 'end',
-                insertAfter: args?.insertAfter,
-                targetFilePath: targetFilePath
-              });
+              // Create a unique channel for the result
+              const resultChannel = `mcp-result-${Date.now()}-${Math.random()}`;
 
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Successfully streamed content to ${targetFilePath || 'active document'}`
-                  }
-                ]
-              };
+              // Set up a one-time listener for the result
+              return new Promise((resolve) => {
+                const timeout = setTimeout(() => {
+                  ipcMain.removeHandler(resultChannel);
+
+                  resolve({
+                    content: [
+                      {
+                        type: 'text',
+                        text: 'Timed out while waiting for content to stream. The operation may still be in progress.'
+                      }
+                    ],
+                    isError: true
+                  });
+                }, 30000);
+
+                ipcMain.once(resultChannel, (event, result) => {
+                  clearTimeout(timeout);
+
+                  const success = result?.success ?? false;
+                  const error = result?.error;
+
+                  // Use the targetFilePath we determined earlier
+                  const filePath = targetFilePath || 'untitled';
+
+                  resolve({
+                    content: [
+                      {
+                        type: 'text',
+                        text: success
+                          ? `Successfully streamed content to ${filePath}`
+                          : `Failed to stream content: ${error || 'Unknown error'}`
+                      }
+                    ],
+                    isError: !success
+                  });
+                });
+
+                // Send IPC message to renderer with result channel
+                windows[0].webContents.send('mcp:streamContent', {
+                  streamId,
+                  content: args?.content,
+                  position: args?.position || 'end',
+                  insertAfter: args?.insertAfter,
+                  targetFilePath: targetFilePath,
+                  resultChannel
+                });
+              });
             }
             return {
               content: [

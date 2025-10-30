@@ -402,7 +402,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('mcp:applyDiff', handler);
     return () => ipcRenderer.removeListener('mcp:applyDiff', handler);
   },
-  onMcpStreamContent: (callback: (data: { streamId: string, content: string, position: string, insertAfter?: string, mode?: string, targetFilePath?: string }) => void) => {
+  onMcpStreamContent: (callback: (data: { streamId: string, content: string, position: string, insertAfter?: string, mode?: string, targetFilePath?: string, resultChannel: string }) => void) => {
     const handler = (_event: any, data: any) => callback(data);
     ipcRenderer.on('mcp:streamContent', handler);
     return () => ipcRenderer.removeListener('mcp:streamContent', handler);
@@ -413,6 +413,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('mcp:navigateTo', handler);
   },
   sendMcpApplyDiffResult: (resultChannel: string, result: any) => {
+    // Ensure result has the required structure
+    const safeResult = {
+      success: result?.success ?? false,
+      error: result?.error || (result?.success === false ? 'Unknown error' : undefined)
+    };
+    ipcRenderer.send(resultChannel, safeResult);
+  },
+  sendMcpStreamContentResult: (resultChannel: string, result: any) => {
     // Ensure result has the required structure
     const safeResult = {
       success: result?.success ?? false,
