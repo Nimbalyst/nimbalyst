@@ -112,7 +112,21 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       }
     },
     onTabClose: (tab) => {
-      // EditorContainer handles save-on-close
+      // Clear currentFilePath if closing the currently active file
+      // onTabChange will update it if switching to another tab
+      if (tab.filePath === currentFilePath) {
+        setCurrentFilePath(null);
+        setCurrentFileName(null);
+        setIsDirty(false);
+
+        if (onCurrentFileChange) {
+          onCurrentFileChange(null, null, false);
+        }
+
+        if (window.electronAPI) {
+          window.electronAPI.setCurrentFile(null);
+        }
+      }
     }
   });
 
