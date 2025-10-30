@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { usePostHog } from 'posthog-js/react';
 import './ProjectSettingsScreen.css';
 import OnboardingService from '../../services/OnboardingService';
 
@@ -23,6 +24,7 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
   onClose,
   isFirstTime = false,
 }) => {
+  const posthog = usePostHog();
   const [actions, setActions] = useState<SetupAction[]>([]);
   const [commandsLocation, setCommandsLocation] = useState<'project' | 'global'>('project');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -155,6 +157,24 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
     loadSettings();
   }, [workspacePath]);
 
+  // Track screen open event with status of all items
+  useEffect(() => {
+    if (actions.length > 0) {
+      const statusProperties: Record<string, boolean> = {};
+      actions.forEach(action => {
+        statusProperties[action.id] = action.completed;
+      });
+
+      posthog?.capture('claude_code_setup_screen_opened', {
+        ...statusProperties,
+        commandsLocation,
+        isFirstTime,
+        completedCount: actions.filter(a => a.completed).length,
+        totalCount: actions.length,
+      });
+    }
+  }, [actions, commandsLocation, isFirstTime, posthog]);
+
   const handleChangeCommandsLocation = async (newLocation: 'project' | 'global') => {
     setError(null);
     setSuccess(null);
@@ -197,14 +217,55 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
       // Longer delay to ensure file system has synced and IPC has completed
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Refresh action status
+      // Check if status was correctly detected by re-checking the file directly
+      let statusDetected = false;
+      try {
+        if (actionId === 'plan-command') {
+          statusDetected = await checkFileExists('.claude/commands/plan.md');
+        } else if (actionId === 'track-command') {
+          statusDetected = await checkFileExists('.claude/commands/track.md');
+        } else if (actionId === 'claude-md') {
+          statusDetected = await checkCLAUDEmdConfigured();
+        } else if (actionId === 'bugs-tracker') {
+          statusDetected = await checkFileExists('nimbalyst-local/tracker/bugs.md');
+        } else if (actionId === 'tasks-tracker') {
+          statusDetected = await checkFileExists('nimbalyst-local/tracker/tasks.md');
+        } else if (actionId === 'ideas-tracker') {
+          statusDetected = await checkFileExists('nimbalyst-local/tracker/ideas.md');
+        } else if (actionId === 'decisions-tracker') {
+          statusDetected = await checkFileExists('nimbalyst-local/tracker/decisions.md');
+        }
+      } catch (err) {
+        console.error('Failed to check status after action:', err);
+      }
+
+      // Refresh action status for UI update
       await checkActionStatus();
+
+      // Track the action
+      posthog?.capture('claude_code_setup_action_executed', {
+        actionId,
+        actionType: actionId.includes('command') ? 'command' : 'tracker',
+        wasReinstall: wasCompleted,
+        success: true,
+        statusDetectedCorrectly: statusDetected,
+      });
 
       // Clear success message after 3 seconds (longer so user can see it)
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error(`Failed to execute action ${action.id}:`, err);
       setError(err instanceof Error ? err.message : `Failed to ${action.title}`);
+
+      // Track failure
+      posthog?.capture('claude_code_setup_action_executed', {
+        actionId,
+        actionType: actionId.includes('command') ? 'command' : 'tracker',
+        wasReinstall: wasCompleted,
+        success: false,
+        statusDetectedCorrectly: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -215,31 +276,95 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
     setSuccess(null);
     setIsProcessing(true);
 
+    const incompleteActionsBefore = actions.filter(a => !a.completed);
+    const incompleteActionIds = incompleteActionsBefore.map(a => a.id);
+    let installSuccess = true;
+    const failedActions: string[] = [];
+
     try {
       // Ensure base directories exist
       await OnboardingService.ensurePlansDirectory(workspacePath, 'nimbalyst-local/plans');
       await OnboardingService.configureGitignore(workspacePath, 'nimbalyst-local');
 
       // Run all incomplete actions
-      const incompleteActions = actions.filter(a => !a.completed);
-      for (const action of incompleteActions) {
+      for (const action of incompleteActionsBefore) {
         try {
           await action.action();
         } catch (err) {
           console.error(`Failed to ${action.title}:`, err);
+          installSuccess = false;
+          failedActions.push(action.id);
           // Continue with other actions even if one fails
         }
       }
 
       setSuccess('All setup actions completed!');
 
-      // Refresh action status
+      // Wait for file system to sync
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Re-check all action statuses directly to verify detection
+      const statusChecks = await Promise.all([
+        checkFileExists('.claude/commands/plan.md'),
+        checkFileExists('.claude/commands/track.md'),
+        checkCLAUDEmdConfigured(),
+        checkFileExists('nimbalyst-local/tracker/bugs.md'),
+        checkFileExists('nimbalyst-local/tracker/tasks.md'),
+        checkFileExists('nimbalyst-local/tracker/ideas.md'),
+        checkFileExists('nimbalyst-local/tracker/decisions.md'),
+      ]);
+
+      const actionIdsInOrder = [
+        'plan-command',
+        'track-command',
+        'claude-md',
+        'bugs-tracker',
+        'tasks-tracker',
+        'ideas-tracker',
+        'decisions-tracker',
+      ];
+
+      // Check which incomplete actions are now detected as complete
+      let detectedCount = 0;
+      incompleteActionIds.forEach(actionId => {
+        const index = actionIdsInOrder.indexOf(actionId);
+        if (index !== -1 && statusChecks[index]) {
+          detectedCount++;
+        }
+      });
+
+      const expectedDetected = incompleteActionIds.length - failedActions.length;
+      const statusDetectedCorrectly = detectedCount === expectedDetected;
+
+      // Refresh action status for UI update
       await checkActionStatus();
+
+      // Track the install all action
+      posthog?.capture('claude_code_setup_install_all', {
+        totalActions: incompleteActionIds.length,
+        succeededActions: incompleteActionIds.length - failedActions.length,
+        failedActions: failedActions.length,
+        detectedActions: detectedCount,
+        success: installSuccess,
+        statusDetectedCorrectly,
+        failedActionIds: failedActions,
+      });
 
       // Clear success message after 2 seconds
       setTimeout(() => setSuccess(null), 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to install all');
+
+      // Track failure
+      posthog?.capture('claude_code_setup_install_all', {
+        totalActions: incompleteActionIds.length,
+        succeededActions: 0,
+        failedActions: incompleteActionIds.length,
+        detectedActions: 0,
+        success: false,
+        statusDetectedCorrectly: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
     } finally {
       setIsProcessing(false);
     }
