@@ -40,8 +40,12 @@ export function getFolderContents(dirPath: string): FileTreeItem[] {
             }
             return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
         });
-    } catch (error) {
-        console.error('Error reading folder contents:', error);
+    } catch (error: any) {
+        // Silently handle ENOENT errors (directory doesn't exist)
+        // This is expected when scanning directories that may not be created yet
+        if (error.code !== 'ENOENT') {
+            console.error('Error reading folder contents:', error);
+        }
     }
     
     return result;
