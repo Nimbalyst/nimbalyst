@@ -121,6 +121,11 @@ btnInstallLater.addEventListener('click', () => {
 });
 
 btnRestart.addEventListener('click', () => {
+  // Disable button and update text to indicate restart is happening
+  btnRestart.disabled = true;
+  btnRestart.textContent = 'Restarting...';
+  btnInstallLater.disabled = true;
+
   window.electronAPI.send('update-window:install');
 });
 
