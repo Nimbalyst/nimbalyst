@@ -27,17 +27,19 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
   return (
     <div style={{
       display: 'flex',
-      transition: 'all 0.3s ease-in-out',
-      width: isCollapsed ? '0' : '16rem'
+      flex: 1,
+      height: '100%',
+      overflow: 'hidden'
     }}>
       {!isCollapsed && (
         <div style={{
-          width: '16rem',
+          width: '100%',
           backgroundColor: 'var(--surface-secondary)',
           borderLeft: '1px solid var(--border-primary)',
           display: 'flex',
           flexDirection: 'column',
-          height: '100%'
+          height: '100%',
+          boxSizing: 'border-box'
         }}>
           <div style={{
             padding: '0.75rem 1rem',
@@ -62,7 +64,9 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
 
           <div style={{
             flex: 1,
-            overflowY: 'auto'
+            overflowY: 'auto',
+            paddingTop: '0.5rem',
+            paddingBottom: '0.5rem'
           }}>
             {prompts.length === 0 ? (
               <div style={{
@@ -73,64 +77,79 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
                 No prompts yet. Start by entering a prompt.
               </div>
             ) : (
-              <div style={{ padding: '0.5rem' }}>
+              <>
                 {prompts.map((marker, index) => (
                   <button
                     key={marker.id}
                     onClick={() => handlePromptClick(marker)}
                     style={{
+                      display: 'block',
                       width: '100%',
+                      boxSizing: 'border-box',
                       textAlign: 'left',
-                      padding: '0.75rem',
-                      borderRadius: '0.375rem',
-                      marginBottom: '0.25rem',
-                      transition: 'background-color 0.2s',
+                      padding: '0.875rem 1rem',
+                      margin: 0,
+                      borderRadius: 0,
+                      transition: 'all 0.2s ease',
                       backgroundColor: selectedPromptId === marker.id
-                        ? 'color-mix(in srgb, var(--primary-color) 15%, transparent)'
+                        ? 'var(--surface-hover)'
                         : 'transparent',
-                      border: selectedPromptId === marker.id
+                      borderTop: '1px solid var(--border-primary)',
+                      borderBottom: selectedPromptId === marker.id
                         ? '1px solid var(--primary-color)'
                         : '1px solid transparent',
+                      borderLeft: selectedPromptId === marker.id
+                        ? '2px solid var(--primary-color)'
+                        : '2px solid transparent',
+                      borderRight: 'none',
                       cursor: 'pointer',
-                      color: 'inherit'
+                      color: 'inherit',
+                      fontFamily: 'inherit',
+                      outline: 'none'
                     }}
                     onMouseEnter={(e) => {
                       if (selectedPromptId !== marker.id) {
                         e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
+                        e.currentTarget.style.borderColor = 'var(--border-primary)';
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (selectedPromptId !== marker.id) {
                         e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.borderColor = 'var(--border-primary)';
                       }
                     }}
                   >
                     <div style={{
                       display: 'flex',
                       alignItems: 'flex-start',
-                      gap: '0.5rem'
+                      gap: '0.625rem',
+                      width: '100%'
                     }}>
                       <span style={{
                         color: 'var(--primary-color)',
                         fontFamily: 'monospace',
                         fontSize: '0.75rem',
-                        marginTop: '0.125rem',
-                        fontWeight: 600
+                        fontWeight: 600,
+                        flexShrink: 0
                       }}>
                         #{index + 1}
                       </span>
                       <div style={{
                         flex: 1,
-                        minWidth: 0
+                        minWidth: 0,
+                        overflow: 'hidden'
                       }}>
                         <div style={{
-                          fontSize: '0.8125rem',
+                          fontSize: '0.875rem',
                           color: 'var(--text-primary)',
-                          lineHeight: '1.4',
+                          lineHeight: '1.5',
+                          marginBottom: '0.5rem',
                           display: '-webkit-box',
-                          WebkitLineClamp: 2,
+                          WebkitLineClamp: 3,
                           WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden'
+                          overflow: 'hidden',
+                          wordBreak: 'break-word'
                         }}>
                           {marker.promptText}
                         </div>
@@ -138,16 +157,14 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
                           display: 'flex',
                           alignItems: 'center',
                           gap: '0.5rem',
-                          fontSize: '0.6875rem',
-                          color: 'var(--text-tertiary)',
-                          marginTop: '0.375rem'
+                          fontSize: '0.75rem',
+                          color: 'var(--text-tertiary)'
                         }}>
                           <span>{formatTimeAgo(marker.timestamp)}</span>
                           {marker.completionTimestamp && (
                             <>
                               <span>•</span>
                               <span style={{
-                                fontWeight: 500,
                                 color: 'var(--text-secondary)'
                               }}>
                                 {formatDuration(marker.timestamp, marker.completionTimestamp)}
@@ -159,7 +176,7 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
                     </div>
                   </button>
                 ))}
-              </div>
+              </>
             )}
           </div>
         </div>
