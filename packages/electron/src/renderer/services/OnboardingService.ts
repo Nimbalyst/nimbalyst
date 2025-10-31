@@ -124,7 +124,7 @@ export class OnboardingService {
 
     try {
       // Write config (create-document expects relative path)
-      await window.electronAPI.invoke('create-document', relativePath, JSON.stringify(config, null, 2));
+      await window.electronAPI.invoke('create-document', relativePath, JSON.stringify(config, null, 2), true /* overwrite */);
 
       this.currentConfig = config;
     } catch (error) {

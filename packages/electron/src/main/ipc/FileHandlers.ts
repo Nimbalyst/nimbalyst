@@ -366,7 +366,7 @@ export function registerFileHandlers() {
     });
 
     // Create document for AI tools
-    ipcMain.handle('create-document', async (event, relativePath: string, initialContent: string) => {
+    ipcMain.handle('create-document', async (event, relativePath: string, initialContent: string, overwriteIfExists: boolean = false) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {
             console.error('[CREATE_DOC] No window found for event sender');
@@ -401,11 +401,14 @@ export function registerFileHandlers() {
             // Check if file already exists
             if (existsSync(absolutePath)) {
                 console.log('[CREATE_DOC] File already exists:', absolutePath);
-                return {
+                if (!overwriteIfExists) {
+                  return {
                     success: false,
                     error: 'File already exists',
                     filePath: absolutePath
-                };
+                  };
+                }
+                console.log('[CREATE_DOC] Overwriting existing file');
             }
 
             // Write the initial content
