@@ -19,6 +19,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.0] - 2025-10-31
+
+
+### Added
+
+Welcome to the first public alpha release of Nimbalyst, a markdown editor with integrated Claude Code support.
+
+**Core Features:**
+- Rich markdown editing with Lexical framework
+- Native Claude Code integration for AI-assisted editing
+- Document history with version snapshots
+- Multi-workspace support
+- File tree navigation
+- Live preview and syntax highlighting
+
+**AI Capabilities:**
+- Chat with Claude directly in your documents
+- AI-powered diff review and approval
+- Multiple AI provider support (Claude, OpenAI, LM Studio)
+- Streaming edits with real-time preview
+
+**Built for developers:**
+- Clean, distraction-free interface
+- Fast local-first architecture
+- Cross-platform (macOS, Windows, Linux)
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.44.0] - 2025-10-31
 
 
