@@ -76,9 +76,11 @@ export class OnboardingService {
   async needsOnboarding(workspacePath: string): Promise<boolean> {
     try {
       const config = await this.loadConfig(workspacePath);
+      console.log(`${workspacePath} workspace onboarding needed: ${!config.onboardingCompleted}`);
       return !config.onboardingCompleted;
     } catch (error) {
       // If config doesn't exist or can't be read, assume onboarding is needed
+      console.log('Onboarding config not found, onboarding needed', error);
       return true;
     }
   }
