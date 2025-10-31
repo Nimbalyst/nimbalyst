@@ -43,7 +43,7 @@ if [ ! -f "CHANGELOG.md" ]; then
 fi
 
 # Extract release notes from [Unreleased] section
-RELEASE_NOTES=$(awk '/^## \[Unreleased\]/,/^## \[/ {
+RELEASE_NOTES=$(awk '/^## \[Unreleased\]/,0 {
   if (/^## \[Unreleased\]/) next
   if (/^## \[/) exit
   print
@@ -58,14 +58,13 @@ fi
 # Get current date
 RELEASE_DATE=$(date +%Y-%m-%d)
 
-# Create new release entry
-NEW_ENTRY="## [$NEW_VERSION] - $RELEASE_DATE
-
-$(awk '/^## \[Unreleased\]/,/^## \[/ {print}' CHANGELOG.md | sed '1d' | sed '/^## \[/d')
-"
+# Create new release entry and save to temp file
+echo "## [$NEW_VERSION] - $RELEASE_DATE" > /tmp/new_release_entry.txt
+echo "" >> /tmp/new_release_entry.txt
+awk '/^## \[Unreleased\]/,0 {if (/^## \[Unreleased\]/) next; if (/^## \[/) exit; print}' CHANGELOG.md >> /tmp/new_release_entry.txt
 
 # Update CHANGELOG.md: replace [Unreleased] section with new release and empty [Unreleased]
-awk -v new_entry="$NEW_ENTRY" '
+awk '
 /^## \[Unreleased\]/ {
   print "## [Unreleased]"
   print ""
@@ -81,7 +80,10 @@ awk -v new_entry="$NEW_ENTRY" '
   print "### Removed"
   print "<!-- Removed features go here -->"
   print ""
-  print new_entry
+  while ((getline line < "/tmp/new_release_entry.txt") > 0) {
+    print line
+  }
+  close("/tmp/new_release_entry.txt")
   skip=1
   next
 }
