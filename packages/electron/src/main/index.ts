@@ -36,7 +36,6 @@ import { setupForceQuit, cancelForceQuit } from './utils/forceQuit';
 import { stopAllFileWatchers } from './file/FileWatcher';
 import { stopAllWorkspaceWatchers } from './file/WorkspaceWatcher.ts';
 import { autoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
-import { migrateUserData } from './migration/dataMigration';
 import { initializeDatabase } from './database/initialize';
 import {AnalyticsService} from "./services/analytics/AnalyticsService.ts";
 import {registerAnalyticsHandlers} from "./ipc/AnalyticsHandlers.ts";
@@ -176,16 +175,6 @@ app.whenReady().then(async () => {
 
     // Initialize logging
     initializeLogging();
-
-    // Migrate user data from old location if needed
-    try {
-        const migrated = await migrateUserData();
-        if (migrated) {
-            logger.main.info('User data migration completed');
-        }
-    } catch (error) {
-        logger.main.error('Error during user data migration:', error);
-    }
 
     // Initialize PGLite database
     try {
