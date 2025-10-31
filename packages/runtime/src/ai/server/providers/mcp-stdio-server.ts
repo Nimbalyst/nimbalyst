@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Standalone MCP stdio server for Preditor
+ * Standalone MCP stdio server for Nimbalyst
  * This can be spawned by Codex as an MCP server
  */
 
@@ -24,7 +24,7 @@ function debug(...args: any[]): void {
   }
 }
 
-debug('Starting Preditor MCP stdio server...');
+debug('Starting Nimbalyst MCP stdio server...');
 
 // Define available tools
 const tools: Tool[] = [
@@ -208,7 +208,7 @@ async function handleToolCall(name: string, args: ToolArgs): Promise<any> {
 async function startServer(): Promise<void> {
   const server = new Server(
     {
-      name: 'preditor-mcp',
+      name: 'nimbalyst-mcp',
       version: '1.0.0'
     },
     {

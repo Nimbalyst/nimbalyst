@@ -111,7 +111,7 @@ export async function startStdioMcpServer() {
 
   const server = new Server(
     {
-      name: 'preditor-stdio',
+      name: 'nimbalyst-stdio',
       version: '1.0.0'
     },
     {

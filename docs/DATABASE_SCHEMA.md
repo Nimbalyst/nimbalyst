@@ -2,9 +2,9 @@
 
 ## Overview
 
-Preditor uses **PGLite** (PostgreSQL in WebAssembly) for all data persistence. The database runs in a Node.js worker thread and provides a robust, ACID-compliant storage system for the application.
+Nimbalyst uses **PGLite** (PostgreSQL in WebAssembly) for all data persistence. The database runs in a Node.js worker thread and provides a robust, ACID-compliant storage system for the application.
 
-**Database Location**: `~/Library/Application Support/@preditor/electron/pglite-db/` (macOS)
+**Database Location**: `~/Library/Application Support/@nimbalyst/electron/pglite-db/` (macOS)
 
 ## Entity-Relationship Diagram
 

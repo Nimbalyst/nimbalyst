@@ -77,7 +77,7 @@ export async function launchElectronApp(options?: {
 }
 
 export async function createTempWorkspace(): Promise<string> {
-  return await fs.mkdtemp(path.join(os.tmpdir(), 'preditor-test-'));
+  return await fs.mkdtemp(path.join(os.tmpdir(), 'nimbalyst-test-'));
 }
 
 export async function waitForAppReady(page: Page): Promise<void> {

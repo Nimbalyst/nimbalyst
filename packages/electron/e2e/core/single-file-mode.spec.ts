@@ -52,7 +52,7 @@ test.describe('Single File Mode', () => {
 
   test.beforeEach(async () => {
     // Create a temporary file for testing
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'preditor-single-file-'));
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nimbalyst-single-file-'));
     testFile = path.join(tempDir, 'test-document.md');
     await fs.writeFile(testFile, '# Single File Test\n\nThis is a test document in single-file mode.\n', 'utf8');
   });

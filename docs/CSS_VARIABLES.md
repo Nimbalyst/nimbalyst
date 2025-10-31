@@ -1,6 +1,6 @@
 # CSS Variables Guide
 
-This document provides an overview of the CSS variable system used across the Preditor editor project. All theme colors and design tokens are defined using CSS custom properties (variables) to ensure consistent styling and theming support.
+This document provides an overview of the CSS variable system used across the Nimbalyst editor project. All theme colors and design tokens are defined using CSS custom properties (variables) to ensure consistent styling and theming support.
 
 ## Core Principles
 

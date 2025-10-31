@@ -1257,7 +1257,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       return `Current date and time: ${dateStr} at ${timeStr}
 
-You are an AI assistant integrated into the Preditor editor's agentic coding workspace.
+You are an AI assistant integrated into the Nimbalyst editor's agentic coding workspace.
 When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
     }
 

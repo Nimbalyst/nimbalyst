@@ -6,17 +6,17 @@ Track a feature idea using Nimbalyst's inline tracker syntax.
 You should be context-aware when tracking ideas:
 
 1. **If working on a plan document** (file has `planStatus` frontmatter):
-   - Add the idea to the current plan file
-   - Add it in a relevant section (e.g., "Ideas", "Future Enhancements", "Improvements", etc.)
-   - If no such section exists, create a "## Future Ideas" section
+  - Add the idea to the current plan file
+  - Add it in a relevant section (e.g., "Ideas", "Future Enhancements", "Improvements", etc.)
+  - If no such section exists, create a "## Future Ideas" section
 
 2. **If the idea is related to a specific feature/component**:
-   - Check if there's a plan document for that feature in `nimbalyst-local/plans/`
-   - If found, add the idea there
+  - Check if there's a plan document for that feature in `nimbalyst-local/plans/`
+  - If found, add the idea there
 
 3. **Otherwise** (general idea or no specific context):
-   - Add the idea to `nimbalyst-local/tracker/ideas.md`
-   - If the file doesn't exist, create it with proper structure
+  - Add the idea to `nimbalyst-local/tracker/ideas.md`
+  - If the file doesn't exist, create it with proper structure
 
 ## Idea Tracker Syntax
 

@@ -9,7 +9,7 @@ export const VIRTUAL_DOC_PROTOCOL = 'virtual://';
 export const VIRTUAL_DOCS: Record<string, VirtualDocumentDescriptor> = {
   WELCOME: {
     id: 'welcome',
-    title: 'Welcome to Preditor',
+    title: 'Welcome to Nimbalyst',
     assetPath: 'assets/welcome.md',
     virtualPath: `${VIRTUAL_DOC_PROTOCOL}welcome`,
   },

@@ -39,9 +39,9 @@ test.describe('Welcome Modal', () => {
     const welcomeStep = page.locator('.welcome-step');
     await expect(welcomeStep).toBeVisible();
 
-    // Should show "Welcome to Preditor" heading
+    // Should show "Welcome to Nimbalyst" heading
     const heading = page.locator('.welcome-modal-header h2');
-    await expect(heading).toHaveText('Welcome to Preditor');
+    await expect(heading).toHaveText('Welcome to Nimbalyst');
 
     // Should show progress bar at ~16.67% (step 1 of 6)
     const progressBar = page.locator('.welcome-modal-progress-bar');
@@ -261,6 +261,6 @@ test.describe('Welcome Modal', () => {
     await page.waitForTimeout(500);
 
     // Should be back at welcome step
-    await expect(heading).toHaveText('Welcome to Preditor');
+    await expect(heading).toHaveText('Welcome to Nimbalyst');
   });
 });

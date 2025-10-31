@@ -18,7 +18,7 @@ npx playwright install --with-deps
 - `npx playwright test e2e/ai/diff-reliability.spec.ts` runs a specific test file.
 - `npx playwright test e2e/ai/diff-reliability.spec.ts:55` runs a specific test by line number.
 
-> **Build first:** make sure `npm run build --workspace @preditor/electron` has been executed so `packages/electron/out/main/index.js` exists before launching the Electron project.
+> **Build first:** make sure `npm run build --workspace @nimbalyst/electron` has been executed so `packages/electron/out/main/index.js` exists before launching the Electron project.
 
 Artifacts (traces, screenshots, videos) are captured on the first retry or failure and saved under `playwright-report/`.
 

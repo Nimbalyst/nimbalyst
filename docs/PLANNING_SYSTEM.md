@@ -1,8 +1,8 @@
-# Preditor Planning System
+# Nimbalyst Planning System
 
 ## Overview
 
-Preditor includes a comprehensive markdown-based planning system that enables developers and AI coding agents to collaboratively manage development workstreams. The system uses structured markdown files with YAML frontmatter to track features, bugs, refactors, and other development tasks.
+Nimbalyst includes a comprehensive markdown-based planning system that enables developers and AI coding agents to collaboratively manage development workstreams. The system uses structured markdown files with YAML frontmatter to track features, bugs, refactors, and other development tasks.
 
 ## Philosophy
 
@@ -81,12 +81,12 @@ The frontmatter includes:
 
 ## Real-Time Metadata Caching
 
-Preditor automatically scans, parses, and caches plan metadata for instant access throughout the application.
+Nimbalyst automatically scans, parses, and caches plan metadata for instant access throughout the application.
 
 ### How It Works
 
 1. **Document Service**: The `DocumentService` interface (`packages/runtime/src/core/DocumentService.ts`) provides platform-agnostic access to document metadata
-2. **Automatic Scanning**: On workspace load, Preditor scans all markdown files for YAML frontmatter
+2. **Automatic Scanning**: On workspace load, Nimbalyst scans all markdown files for YAML frontmatter
 3. **Metadata Extraction**: Files with `planStatus` frontmatter are identified as plan documents
 4. **Change Detection**: File watchers detect changes to plan files and automatically update the cache
 5. **Event System**: Components subscribe to metadata changes via `watchDocumentMetadata()`
@@ -210,7 +210,7 @@ This will provide a complete audit trail of all work done for each plan.
 
 ## Configuring AI Agents for Plans
 
-To ensure AI coding agents (like Claude Code) correctly create and maintain plan files, add instructions to your `CLAUDE.md` file. The Preditor repository includes a comprehensive "Agentic Planning System" section that explains:
+To ensure AI coding agents (like Claude Code) correctly create and maintain plan files, add instructions to your `CLAUDE.md` file. The Nimbalyst repository includes a comprehensive "Agentic Planning System" section that explains:
 
 - Plan document location and file naming
 - Complete frontmatter metadata structure
@@ -310,6 +310,6 @@ The planning system is actively evolving. Planned enhancements include:
 
 ## Summary
 
-The Preditor planning system transforms markdown files into a powerful project management tool. By combining structured metadata, real-time caching, UI integration, and agentic coding capabilities, it creates a seamless workflow where plans, code, and AI agents work together to move projects forward.
+The Nimbalyst planning system transforms markdown files into a powerful project management tool. By combining structured metadata, real-time caching, UI integration, and agentic coding capabilities, it creates a seamless workflow where plans, code, and AI agents work together to move projects forward.
 
 For the complete frontmatter specification and detailed guidelines, refer to the **Agentic Planning System** section in `CLAUDE.md`.

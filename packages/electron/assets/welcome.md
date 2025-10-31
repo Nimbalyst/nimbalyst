@@ -1,6 +1,6 @@
-# Welcome to Preditor
+# Welcome to Nimbalyst
 
-Welcome to **Preditor**, a powerful markdown editor built on Meta's Lexical framework. This guide will help you get started with the key features.
+Welcome to **Nimbalyst**, a powerful markdown editor built on Meta's Lexical framework. This guide will help you get started with the key features.
 
 ## Getting Started
 
@@ -17,7 +17,7 @@ Welcome to **Preditor**, a powerful markdown editor built on Meta's Lexical fram
 ## Key Features
 
 ### Rich Text Editing
-Preditor supports rich markdown formatting:
+Nimbalyst supports rich markdown formatting:
 - **Bold** and *italic* text
 - Headers at multiple levels
 - Lists (ordered and unordered)
@@ -49,7 +49,7 @@ Create and edit tables directly in your documents:
 ```javascript
 // Syntax highlighting for many languages
 function example() {
-  return "Hello, Preditor!";
+  return "Hello, Nimbalyst!";
 }
 ```
 
@@ -74,7 +74,7 @@ Every document maintains its edit history:
 
 ## Themes
 
-Preditor supports multiple themes:
+Nimbalyst supports multiple themes:
 - **Light** - Clean, bright theme
 - **Dark** - Warm dark theme
 - **Crystal Dark** - Premium dark theme
