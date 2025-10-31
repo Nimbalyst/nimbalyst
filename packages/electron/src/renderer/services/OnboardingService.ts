@@ -1,9 +1,15 @@
 // Helper to join paths (browser-compatible replacement for path.join)
+// TODO: this code is a liability - unclear why we don't leave all path joining to the Electron main process which has
+//  access to Node's platform-specific path module.
 function joinPath(...parts: string[]): string {
-  return parts
-    .map(part => part.replace(/^\/+|\/+$/g, '')) // Remove leading/trailing slashes
-    .filter(part => part.length > 0)
-    .join('/');
+  if (parts.length <= 1) {
+    return parts[0] || '';
+  }
+  let firstPart = parts[0].replace(/\/+$/g, ''); // Remove trailing slashes from first part
+  let remainingParts = parts.slice(1)
+    .map(part => part.replace(/^\/+|\/+$/g, '')) // Remove leading/trailing slashes from any remaining parts
+    .filter(part => part.length > 0);
+  return [firstPart, ...remainingParts].join('/');
 }
 
 export interface OnboardingConfig {
