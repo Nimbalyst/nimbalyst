@@ -918,6 +918,10 @@ export default function App() {
           hasShownOnboardingRef.current = true;
           setIsFirstTimeSetup(true);
           setActiveMode('settings');  // Use activeMode for full-width display
+
+          // Mark onboarding as shown to prevent it from appearing again
+          // even if the user dismisses without completing setup
+          await OnboardingService.markOnboardingShown(workspacePath);
         }
       } catch (error) {
         console.error('[SETTINGS] Failed to check setup status:', error);

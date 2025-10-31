@@ -2,6 +2,8 @@ import Store from 'electron-store';
 import { existsSync } from 'fs';
 import { RecentItem, SessionState, SessionWindow } from '../types';
 import { logger } from './logger';
+import type { OnboardingConfig } from '../../shared/types/workspace';
+import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
 
 export type AppTheme = 'dark' | 'light' | 'system' | 'crystal-dark';
 export type { SessionState, SessionWindow } from '../types';
@@ -66,6 +68,9 @@ export interface AgenticCodingWindowState {
   sessionHistoryLayout?: SessionHistoryLayout;
 }
 
+// Re-export OnboardingConfig for convenience
+export type { OnboardingConfig } from '../../shared/types/workspace';
+
 /**
  * Workspace state stored per workspace path.
  *
@@ -93,6 +98,8 @@ export interface WorkspaceState {
   // Tracker bottom panel state
   trackerBottomPanel?: 'plans' | 'bugs' | 'tasks' | 'ideas' | 'decisions' | null;
   trackerBottomPanelHeight?: number;
+  // Onboarding configuration
+  onboarding?: OnboardingConfig;
   lastUpdated: number;
 }
 
@@ -228,6 +235,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
     navigationHistory,
     trackerBottomPanel: raw.trackerBottomPanel ?? raw.bottomPanel ?? null,
     trackerBottomPanelHeight: raw.trackerBottomPanelHeight ?? raw.bottomPanelHeight ?? 300,
+    onboarding: raw.onboarding ? { ...raw.onboarding } : undefined,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),
   };
 }
@@ -275,6 +283,7 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
     } : undefined,
     trackerBottomPanel: state.trackerBottomPanel,
     trackerBottomPanelHeight: state.trackerBottomPanelHeight,
+    onboarding: state.onboarding ? { ...state.onboarding } : undefined,
     lastUpdated: state.lastUpdated,
   };
 }

@@ -1,34 +1,10 @@
-// Helper to join paths (browser-compatible replacement for path.join)
-// TODO: this code is a liability - unclear why we don't leave all path joining to the Electron main process which has
-//  access to Node's platform-specific path module.
-function joinPath(...parts: string[]): string {
-  if (parts.length <= 1) {
-    return parts[0] || '';
-  }
-  let firstPart = parts[0].replace(/\/+$/g, ''); // Remove trailing slashes from first part
-  let remainingParts = parts.slice(1)
-    .map(part => part.replace(/^\/+|\/+$/g, '')) // Remove leading/trailing slashes from any remaining parts
-    .filter(part => part.length > 0);
-  return [firstPart, ...remainingParts].join('/');
-}
+// NOTE: All onboarding configuration is now stored in WorkspaceState via Electron store.
+// This eliminates the need for separate config.json files and ensures consistent persistence.
 
-export interface OnboardingConfig {
-  version: string;
-  onboardingCompleted: boolean;
-  plansLocation: 'nimbalyst-local/plans' | 'plans' | string;
-  checkInPlans: boolean;
-  commandsLocation: 'project' | 'global'; // .claude/ vs ~/.claude/
-  claudeCodeIntegration: {
-    enabled: boolean;
-    planCommandInstalled: boolean;
-    trackCommandInstalled: boolean;
-    claudeMdConfigured: boolean;
-  };
-  features: {
-    analytics: boolean;
-    tracking: boolean;
-  };
-}
+// Import types from shared location (safe for renderer process)
+export type { OnboardingConfig } from '../../shared/types/workspace';
+import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
+import type { OnboardingConfig } from '../../shared/types/workspace';
 
 export interface OnboardingStep {
   id: string;
@@ -36,23 +12,7 @@ export interface OnboardingStep {
   completed: boolean;
 }
 
-const DEFAULT_CONFIG: OnboardingConfig = {
-  version: '1.0.0',
-  onboardingCompleted: false,
-  plansLocation: 'nimbalyst-local/plans',
-  checkInPlans: false,
-  commandsLocation: 'project', // Default to project-level .claude/
-  claudeCodeIntegration: {
-    enabled: false,
-    planCommandInstalled: false,
-    trackCommandInstalled: false,
-    claudeMdConfigured: false,
-  },
-  features: {
-    analytics: false,
-    tracking: true,
-  },
-};
+const DEFAULT_CONFIG = DEFAULT_ONBOARDING_CONFIG;
 
 /**
  * Service for managing first-time user onboarding experience
@@ -86,51 +46,57 @@ export class OnboardingService {
   }
 
   /**
-   * Load onboarding configuration from project
+   * Load onboarding configuration from workspace state
    */
   async loadConfig(workspacePath: string): Promise<OnboardingConfig> {
-    const configPath = joinPath(workspacePath, '.nimbalyst', 'config.json');
-
     try {
-      const result = await window.electronAPI.readFileContent(configPath);
-      if (!result || !result.content) {
+      const state = await window.electronAPI.invoke('workspace:get-state', workspacePath);
+
+      if (!state?.onboarding) {
         this.currentConfig = { ...DEFAULT_CONFIG };
         return this.currentConfig;
       }
 
-      const parsedConfig = JSON.parse(result.content);
+      const config = state.onboarding;
 
       // Migrate old configs that don't have commandsLocation
-      if (!parsedConfig.commandsLocation) {
-        parsedConfig.commandsLocation = 'project';
+      if (!config.commandsLocation) {
+        config.commandsLocation = 'project';
       }
 
-      this.currentConfig = parsedConfig;
-      return this.currentConfig;
+      this.currentConfig = config;
+      return config;
     } catch (error) {
-      // File doesn't exist or can't be read
-      console.log('No existing onboarding config, using defaults');
+      console.log('No existing onboarding config, using defaults', error);
       this.currentConfig = { ...DEFAULT_CONFIG };
       return this.currentConfig;
     }
   }
 
   /**
-   * Save onboarding configuration to project
+   * Save onboarding configuration to workspace state
    */
   async saveConfig(workspacePath: string, config: OnboardingConfig): Promise<void> {
-    const configPath = joinPath(workspacePath, '.nimbalyst', 'config.json');
-    const relativePath = '.nimbalyst/config.json'; // Relative to workspace
-
     try {
-      // Write config (create-document expects relative path)
-      await window.electronAPI.invoke('create-document', relativePath, JSON.stringify(config, null, 2), true /* overwrite */);
+      await window.electronAPI.invoke('workspace:update-state', workspacePath, {
+        onboarding: config
+      });
 
       this.currentConfig = config;
     } catch (error) {
       console.error('Failed to save onboarding config:', error);
       throw error;
     }
+  }
+
+  /**
+   * Mark onboarding as shown (called when dialog is displayed)
+   * This prevents the dialog from showing again, even if dismissed
+   */
+  async markOnboardingShown(workspacePath: string): Promise<void> {
+    const config = this.currentConfig || (await this.loadConfig(workspacePath));
+    config.onboardingCompleted = true;
+    await this.saveConfig(workspacePath, config);
   }
 
   /**
@@ -160,8 +126,7 @@ export class OnboardingService {
             return;
           }
         } else {
-          const planCommandPath = joinPath(workspacePath, '.claude', 'commands', 'plan.md');
-          const existing = await window.electronAPI.readFileContent(planCommandPath);
+          const existing = await window.electronAPI.readFileContent(`${workspacePath}/.claude/commands/plan.md`);
           if (existing && existing.content) {
             console.log('plan.md already exists in project .claude/, skipping installation');
             return;
@@ -208,8 +173,7 @@ export class OnboardingService {
             return;
           }
         } else {
-          const trackCommandPath = joinPath(workspacePath, '.claude', 'commands', 'track.md');
-          const existing = await window.electronAPI.readFileContent(trackCommandPath);
+          const existing = await window.electronAPI.readFileContent(`${workspacePath}/.claude/commands/track.md`);
           if (existing && existing.content) {
             console.log('track.md already exists in project .claude/, skipping installation');
             return;
@@ -256,8 +220,7 @@ export class OnboardingService {
             return;
           }
         } else {
-          const trackBugCommandPath = joinPath(workspacePath, '.claude', 'commands', 'track-bug.md');
-          const existing = await window.electronAPI.readFileContent(trackBugCommandPath);
+          const existing = await window.electronAPI.readFileContent(`${workspacePath}/.claude/commands/track-bug.md`);
           if (existing && existing.content) {
             console.log('track-bug.md already exists in project .claude/, skipping installation');
             return;
@@ -298,8 +261,7 @@ export class OnboardingService {
             return;
           }
         } else {
-          const trackIdeaCommandPath = joinPath(workspacePath, '.claude', 'commands', 'track-idea.md');
-          const existing = await window.electronAPI.readFileContent(trackIdeaCommandPath);
+          const existing = await window.electronAPI.readFileContent(`${workspacePath}/.claude/commands/track-idea.md`);
           if (existing && existing.content) {
             console.log('track-idea.md already exists in project .claude/, skipping installation');
             return;
@@ -326,7 +288,7 @@ export class OnboardingService {
    * Configure CLAUDE.md file
    */
   async configureCLAUDEmd(workspacePath: string): Promise<void> {
-    const claudeMdPath = joinPath(workspacePath, 'CLAUDE.md');
+    const claudeMdPath = `${workspacePath}/CLAUDE.md`;
     const relativePath = 'CLAUDE.md'; // Relative to workspace
 
     try {
@@ -385,8 +347,8 @@ ${preditorSection}`;
     const config = this.currentConfig || (await this.loadConfig(workspacePath));
     const location = plansLocation || config.plansLocation;
 
-    // Create a dummy file to ensure directory exists, then delete it
-    const dummyPath = joinPath(workspacePath, location, '.gitkeep');
+    // Create a dummy file to ensure directory exists
+    const dummyPath = `${workspacePath}/${location}/.gitkeep`;
     try {
       await window.electronAPI.invoke('create-document', dummyPath, '');
     } catch (error) {
@@ -401,7 +363,7 @@ ${preditorSection}`;
     const config = this.currentConfig || (await this.loadConfig(workspacePath));
     await this.ensurePlansDirectory(workspacePath);
 
-    const planPath = joinPath(workspacePath, config.plansLocation, 'example-feature.md');
+    const planPath = `${workspacePath}/${config.plansLocation}/example-feature.md`;
     const template = this.getExamplePlanTemplate();
 
     try {
@@ -420,7 +382,7 @@ ${preditorSection}`;
     const config = this.currentConfig || (await this.loadConfig(workspacePath));
     const directory = plansDirectory || config.plansLocation.split('/')[0];
 
-    const gitignorePath = joinPath(workspacePath, '.gitignore');
+    const gitignorePath = `${workspacePath}/.gitignore`;
     const ignoreEntry = `\n# Nimbalyst local plans (not checked into version control)\n${directory}/\n`;
 
     try {
@@ -1193,7 +1155,7 @@ When creating your own plans:
     workspacePath: string,
     type: 'bugs' | 'tasks' | 'ideas' | 'decisions'
   ): Promise<void> {
-    const trackerPath = joinPath(workspacePath, 'nimbalyst-local', 'tracker', `${type}.md`);
+    const trackerPath = `${workspacePath}/nimbalyst-local/tracker/${type}.md`;
     const relativePath = `nimbalyst-local/tracker/${type}.md`; // Relative to workspace
 
     try {
