@@ -176,7 +176,7 @@
       "icon": "icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "artifactName": "${productName}-macOS.${ext}",
       "target": [
         {
           "target": "dmg",
@@ -226,14 +226,16 @@
       ]
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "artifactName": "${productName}-Windows.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "packElevateHelper": false
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "artifactName": "${productName}-Linux.${ext}"
     },
     "buildVersion": "0.36.5"
   }
