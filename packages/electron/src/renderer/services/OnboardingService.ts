@@ -348,9 +348,10 @@ ${preditorSection}`;
     const location = plansLocation || config.plansLocation;
 
     // Create a dummy file to ensure directory exists
-    const dummyPath = `${workspacePath}/${location}/.gitkeep`;
+    // Use relative path - create-document handler will join with workspace path
+    const relativePath = `${location}/.gitkeep`;
     try {
-      await window.electronAPI.invoke('create-document', dummyPath, '');
+      await window.electronAPI.invoke('create-document', relativePath, '');
     } catch (error) {
       console.error('Failed to create plans directory:', error);
     }
@@ -363,12 +364,14 @@ ${preditorSection}`;
     const config = this.currentConfig || (await this.loadConfig(workspacePath));
     await this.ensurePlansDirectory(workspacePath);
 
-    const planPath = `${workspacePath}/${config.plansLocation}/example-feature.md`;
+    // Use relative path - create-document handler will join with workspace path
+    const relativePath = `${config.plansLocation}/example-feature.md`;
     const template = this.getExamplePlanTemplate();
 
     try {
-      await window.electronAPI.invoke('create-document', planPath, template);
-      return planPath;
+      await window.electronAPI.invoke('create-document', relativePath, template);
+      // Return absolute path for caller
+      return `${workspacePath}/${relativePath}`;
     } catch (error) {
       console.error('Failed to create example plan:', error);
       throw error;
@@ -405,7 +408,8 @@ ${preditorSection}`;
 
       // Append the ignore entry
       const finalContent = content + ignoreEntry;
-      await window.electronAPI.invoke('create-document', gitignorePath, finalContent);
+      // Use relative path - create-document handler will join with workspace path
+      await window.electronAPI.invoke('create-document', '.gitignore', finalContent);
     } catch (error) {
       console.error('Failed to configure .gitignore:', error);
       // Don't throw - this is not critical
