@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+// Expose PLAYWRIGHT flag to renderer for test detection
+if (process.env.PLAYWRIGHT === '1') {
+  contextBridge.exposeInMainWorld('PLAYWRIGHT', true);
+}
+
 // Capture console logs in development
 if (process.env.NODE_ENV !== 'production') {
   const originalConsole = {

@@ -34,6 +34,12 @@ export class OnboardingService {
    * Check if a project needs onboarding
    */
   async needsOnboarding(workspacePath: string): Promise<boolean> {
+    // Skip onboarding in Playwright tests
+    if (window.PLAYWRIGHT || (window as any).PLAYWRIGHT) {
+      console.log('Skipping onboarding (Playwright mode)');
+      return false;
+    }
+
     try {
       const config = await this.loadConfig(workspacePath);
       console.log(`${workspacePath} workspace onboarding needed: ${!config.onboardingCompleted}`);
