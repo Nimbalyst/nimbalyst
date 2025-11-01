@@ -39,6 +39,7 @@ import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
 import { registerTrackerPlugin } from './plugins/registerTrackerPlugin';
 import { registerDiffApprovalBarPlugin } from './plugins/registerDiffApprovalBarPlugin';
 import ProjectSettingsScreen from './components/ProjectSettingsScreen/ProjectSettingsScreen.tsx';
+import { loadCustomTrackers } from './services/CustomTrackerLoader';
 import './WorkspaceWelcome.css';
 import './components/GlobalSettings/GlobalSettingsScreen.css';
 
@@ -73,69 +74,6 @@ if (!pluginsRegistered) {
   registerAIChatPlugin();
   registerDiffApprovalBarPlugin(); // Diff approval bar in fixed tab header
   pluginsRegistered = true;
-}
-
-// Load custom trackers after workspace is available
-async function loadCustomTrackers(workspacePath: string) {
-  if (!workspacePath || !window.electronAPI?.getFolderContents || !window.electronAPI?.readFileContent) {
-    return;
-  }
-
-  try {
-    const { globalRegistry, parseTrackerYAML } = await import('@nimbalyst/runtime');
-
-    // Use simple path joining (works in browser)
-    const trackersDir = `${workspacePath}/.nimbalyst/trackers`;
-    console.log('[CustomTrackers] Loading from:', trackersDir);
-
-    // Try reading known tracker files directly instead of listing directory
-    // This avoids file tree caching issues
-    const knownTrackerFiles = ['character.yaml', 'recipe.yaml', 'research-paper.yaml'];
-
-    for (const fileName of knownTrackerFiles) {
-      try {
-        const filePath = `${trackersDir}/${fileName}`;
-        const result = await window.electronAPI.readFileContent(filePath);
-
-        if (result && result.content) {
-          const model = parseTrackerYAML(result.content);
-          globalRegistry.register(model);
-          console.log(`[CustomTrackers] Registered: ${model.type} (${model.displayName})`);
-        }
-      } catch (error) {
-        // File doesn't exist, skip silently
-      }
-    }
-
-    // Also scan directory for any other YAML files
-    try {
-      const files = await window.electronAPI.getFolderContents(trackersDir);
-      const yamlFiles = files.filter(f =>
-        f.type === 'file' &&
-        (f.name.endsWith('.yaml') || f.name.endsWith('.yml')) &&
-        !knownTrackerFiles.includes(f.name)
-      );
-
-      for (const file of yamlFiles) {
-        try {
-          const filePath = `${trackersDir}/${file.name}`;
-          const result = await window.electronAPI.readFileContent(filePath);
-
-          if (result && result.content) {
-            const model = parseTrackerYAML(result.content);
-            globalRegistry.register(model);
-            console.log(`[CustomTrackers] Registered: ${model.type} (${model.displayName})`);
-          }
-        } catch (error) {
-          console.error(`[CustomTrackers] Failed to load ${file.name}:`, error);
-        }
-      }
-    } catch (error) {
-      console.log('[CustomTrackers] Could not scan directory, relying on known files');
-    }
-  } catch (error) {
-    console.error('[CustomTrackers] Failed to load custom trackers:', error);
-  }
 }
 
 export default function App() {
@@ -278,11 +216,7 @@ export default function App() {
   // Load custom trackers when workspace is available
   useEffect(() => {
     if (workspacePath) {
-      console.log('[App Layout] Loading custom trackers for workspace:', workspacePath);
-      // Load immediately - we read files directly now, no cache issues
-      loadCustomTrackers(workspacePath).catch(error => {
-        console.error('[App Layout] Failed to load custom trackers:', error);
-      });
+      loadCustomTrackers(workspacePath);
     }
   }, [workspacePath]);
 
@@ -308,15 +242,15 @@ export default function App() {
 
   // Save active mode when it changes
   useEffect(() => {
-    console.log('[App Layout] Active mode changed to:', activeMode, 'workspacePath:', workspacePath);
+    // console.log('[App Layout] Active mode changed to:', activeMode, 'workspacePath:', workspacePath);
 
     if (!workspacePath || !window.electronAPI?.invoke) return;
 
     const updates = { activeMode };
-    console.log('[App Layout] Saving updates:', JSON.stringify(updates));
+    // console.log('[App Layout] Saving updates:', JSON.stringify(updates));
     window.electronAPI.invoke('workspace:update-state', workspacePath, updates)
       .then((result) => {
-        console.log('[App Layout] Successfully saved active mode:', activeMode, 'result:', result);
+        // console.log('[App Layout] Successfully saved active mode:', activeMode, 'result:', result);
       })
       .catch(error => {
         console.error('[ContentMode] Failed to save active mode:', error);
