@@ -8,7 +8,8 @@
  */
 
 export { AIInput } from './AIInput';
+export type { AIInputRef } from './AIInput';
 export { AISessionView } from './AISessionView';
-export type { AISessionViewProps } from './AISessionView';
+export type { AISessionViewProps, AISessionViewRef } from './AISessionView';
 export { default as AgenticPanel } from './AgenticPanel'
-export type { AgenticPanelProps } from './AgenticPanel';
+export type { AgenticPanelProps, AgenticPanelRef } from './AgenticPanel';

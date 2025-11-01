@@ -7,6 +7,11 @@ import { ModeTag, AIMode } from './ModeTag';
 import { ModelSelector } from './ModelSelector';
 import '../AIChat/AIChat.css';
 
+export interface AIInputRef {
+  focus: () => void;
+  textarea: HTMLTextAreaElement | null;
+}
+
 interface AIInputProps {
   value: string;
   onChange: (value: string) => void;
@@ -53,7 +58,7 @@ interface AIInputProps {
  * - Auto-resize
  * - Send/Cancel buttons
  */
-export const AIInput = forwardRef<HTMLTextAreaElement, AIInputProps>(
+export const AIInput = forwardRef<AIInputRef, AIInputProps>(
   ({
     value,
     onChange,
@@ -85,8 +90,15 @@ export const AIInput = forwardRef<HTMLTextAreaElement, AIInputProps>(
     const [allSlashCommands, setAllSlashCommands] = useState<any[]>([]);
     const [dragActive, setDragActive] = useState(false);
 
-    // Expose the textarea element through the ref
-    useImperativeHandle(ref, () => textareaRef.current!);
+    // Expose focus method and textarea element through the ref
+    useImperativeHandle(ref, () => ({
+      focus: () => {
+        textareaRef.current?.focus();
+      },
+      get textarea() {
+        return textareaRef.current;
+      }
+    }));
 
     // Auto-resize textarea
     useEffect(() => {

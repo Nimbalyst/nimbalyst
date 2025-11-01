@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef, createRef } from 'react';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
-import { AISessionView } from './AISessionView';
+import { AISessionView, AISessionViewRef } from './AISessionView';
 import { SessionDropdown } from '../AIChat/SessionDropdown';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
 import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
@@ -103,6 +103,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const sessionTabsRef = useRef<SessionTab[]>(sessionTabs);
   const workspacePathRef = useRef(workspacePath);
 
+  // Session view refs for focusing input
+  const sessionViewRefsRef = useRef<Map<string, React.RefObject<AISessionViewRef>>>(new Map());
+
   // Initialization
   const initializedRef = useRef(false);
 
@@ -117,6 +120,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Constants
   const MAX_CLOSED_SESSION_HISTORY = 10;
+
+  // Helper to get or create ref for a session
+  const getSessionViewRef = useCallback((sessionId: string) => {
+    const refsMap = sessionViewRefsRef.current;
+    if (!refsMap.has(sessionId)) {
+      refsMap.set(sessionId, createRef<AISessionViewRef>());
+    }
+    return refsMap.get(sessionId)!;
+  }, []);
 
   // File mention support
   const {
@@ -415,6 +427,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     if (onSessionChange) {
       onSessionChange(sessionData.id);
     }
+
+    // Focus the input after a brief delay to ensure the component is rendered
+    setTimeout(() => {
+      const ref = sessionViewRefsRef.current.get(sessionData.id);
+      ref?.current?.focusInput();
+    }, 50);
 
     return sessionData;
   }, [sessionTabs, workspacePath, mode, loadSessions, onSessionChange]);
@@ -1150,6 +1168,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         {/* Session view or empty state */}
         {activeTab ? (
           <AISessionView
+            ref={getSessionViewRef(activeTab.id)}
             sessionId={activeTab.id}
             sessionData={activeTab.sessionData}
             isActive={true}
@@ -1249,6 +1268,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             {sessionTabs.map(tab => (
               <AISessionView
                 key={tab.id}
+                ref={getSessionViewRef(tab.id)}
                 sessionId={tab.id}
                 sessionData={tab.sessionData}
                 isActive={tab.id === activeTabId}

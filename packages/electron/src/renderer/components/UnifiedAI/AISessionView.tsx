@@ -1,10 +1,14 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
 import { AgentTranscriptPanel, TodoItem, FileEditSummary } from '@nimbalyst/runtime';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
-import { AIInput } from './AIInput';
+import { AIInput, AIInputRef } from './AIInput';
 import { FileGutter } from '../AIChat/FileGutter';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
+
+export interface AISessionViewRef {
+  focusInput: () => void;
+}
 
 export interface AISessionViewProps {
   // Identity
@@ -66,7 +70,7 @@ export interface AISessionViewProps {
  * The component uses `display: none` when not active instead of unmounting,
  * which allows background streaming to continue and provides instant tab switching.
  */
-export function AISessionView({
+export const AISessionView = forwardRef<AISessionViewRef, AISessionViewProps>(({
   sessionId,
   sessionData,
   isActive,
@@ -90,7 +94,15 @@ export function AISessionView({
   onAIModeChange,
   currentModel,
   onModelChange
-}: AISessionViewProps) {
+}, ref) => {
+  const inputRef = useRef<AIInputRef>(null);
+
+  // Expose focusInput method through ref
+  useImperativeHandle(ref, () => ({
+    focusInput: () => {
+      inputRef.current?.focus();
+    }
+  }));
   // Handle input change
   const handleInputChange = useCallback((value: string) => {
     if (onDraftInputChange) {
@@ -211,6 +223,7 @@ export function AISessionView({
 
       {/* Input area */}
       <AIInput
+        ref={inputRef}
         value={draftInput}
         onChange={handleInputChange}
         onSend={handleSend}
@@ -240,4 +253,4 @@ export function AISessionView({
       />
     </div>
   );
-}
+});
