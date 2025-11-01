@@ -9,6 +9,7 @@ interface AgenticCodingWindowProps {
 
 /**
  * AgenticCodingWindow - Separate window for agentic coding sessions
+ * @Deprecated Use AgenticPanel in unified project window App.tsx
  *
  * This is a thin wrapper around AgenticPanel configured for agent mode.
  * Used when opening agentic coding in a separate window (vs integrated in main window).
