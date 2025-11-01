@@ -100,12 +100,17 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       }
     }));
 
-    // Auto-resize textarea
+    // Auto-resize textarea (use RAF to batch DOM operations)
     useEffect(() => {
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
-      }
+      if (!textareaRef.current) return;
+
+      const textarea = textareaRef.current;
+      const rafId = requestAnimationFrame(() => {
+        textarea.style.height = 'auto';
+        textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+      });
+
+      return () => cancelAnimationFrame(rafId);
     }, [value]);
 
     // Fetch slash commands on mount and when workspace changes (if enabled)
@@ -182,7 +187,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       setSlashCommandOptions(filtered);
     }, [allSlashCommands]);
 
-    // Check for typeahead trigger when value or cursor changes
+    // Check for typeahead trigger when value or cursor changes (debounced for performance)
     useEffect(() => {
       if (!textareaRef.current) return;
 
@@ -199,21 +204,27 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         return;
       }
 
+      // Debounce expensive typeahead operations (but allow immediate trigger detection)
       const match = extractTriggerMatch(value, pos, triggers);
 
       if (match) {
         setTypeaheadMatch(match);
         setCursorPosition(pos);
 
-        if (match.trigger === '@' && onFileMentionSearch) {
-          onFileMentionSearch(match.query);
-          if (fileMentionOptions.length > 0) {
+        // Debounce the expensive filtering operations
+        const timerId = setTimeout(() => {
+          if (match.trigger === '@' && onFileMentionSearch) {
+            onFileMentionSearch(match.query);
+            if (fileMentionOptions.length > 0) {
+              setSelectedIndex(0);
+            }
+          } else if (match.trigger === '/' && enableSlashCommands) {
+            filterSlashCommands(match.query);
             setSelectedIndex(0);
           }
-        } else if (match.trigger === '/' && enableSlashCommands) {
-          filterSlashCommands(match.query);
-          setSelectedIndex(0);
-        }
+        }, 150); // 150ms debounce - fast enough to feel instant, slow enough to skip intermediate keystrokes
+
+        return () => clearTimeout(timerId);
       } else {
         setTypeaheadMatch(null);
         setSelectedIndex(null);

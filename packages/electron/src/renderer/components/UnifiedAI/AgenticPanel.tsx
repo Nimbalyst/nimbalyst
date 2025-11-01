@@ -706,18 +706,30 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
   }, []);
 
-  // Handle draft input change
+  // Handle draft input change (optimized to avoid recreating all tabs)
   const handleDraftInputChange = useCallback((sessionId: string, value: string) => {
-    setSessionTabs(prev => prev.map(tab =>
-      tab.id === sessionId ? { ...tab, draftInput: value } : tab
-    ));
+    setSessionTabs(prev => {
+      const index = prev.findIndex(tab => tab.id === sessionId);
+      if (index === -1 || prev[index].draftInput === value) {
+        return prev;
+      }
+
+      const newTabs = [...prev];
+      newTabs[index] = { ...prev[index], draftInput: value };
+      return newTabs;
+    });
   }, []);
 
-  // Handle draft attachments change
+  // Handle draft attachments change (optimized to avoid recreating all tabs)
   const handleDraftAttachmentsChange = useCallback((sessionId: string, attachments: ChatAttachment[]) => {
-    setSessionTabs(prev => prev.map(tab =>
-      tab.id === sessionId ? { ...tab, draftAttachments: attachments } : tab
-    ));
+    setSessionTabs(prev => {
+      const index = prev.findIndex(tab => tab.id === sessionId);
+      if (index === -1 || prev[index].draftAttachments === attachments) return prev;
+
+      const newTabs = [...prev];
+      newTabs[index] = { ...prev[index], draftAttachments: attachments };
+      return newTabs;
+    });
   }, []);
 
   // Handle history navigation (up/down arrow in input)

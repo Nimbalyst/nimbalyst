@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useImperativeHandle, forwardRef } from 'react';
+import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect } from 'react';
 import { AgentTranscriptPanel, TodoItem, FileEditSummary } from '@nimbalyst/runtime';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AIInput, AIInputRef } from './AIInput';
@@ -70,7 +70,7 @@ export interface AISessionViewProps {
  * The component uses `display: none` when not active instead of unmounting,
  * which allows background streaming to continue and provides instant tab switching.
  */
-export const AISessionView = forwardRef<AISessionViewRef, AISessionViewProps>(({
+const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(({
   sessionId,
   sessionData,
   isActive,
@@ -252,5 +252,22 @@ export const AISessionView = forwardRef<AISessionViewRef, AISessionViewProps>(({
         onModelChange={onModelChange}
       />
     </div>
+  );
+});
+
+AISessionViewComponent.displayName = 'AISessionView';
+
+// Memoize to prevent re-renders when props haven't changed
+// This is critical for performance when multiple session tabs are open
+export const AISessionView = React.memo(AISessionViewComponent, (prevProps, nextProps) => {
+  // Re-render if any of these props change
+  return (
+    prevProps.sessionId === nextProps.sessionId &&
+    prevProps.isActive === nextProps.isActive &&
+    prevProps.draftInput === nextProps.draftInput &&
+    prevProps.isLoading === nextProps.isLoading &&
+    prevProps.sessionData === nextProps.sessionData &&
+    prevProps.aiMode === nextProps.aiMode &&
+    prevProps.currentModel === nextProps.currentModel
   );
 });
