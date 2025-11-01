@@ -28,6 +28,8 @@ interface AppStoreSchema {
   // Sound notifications
   completionSoundEnabled?: boolean;
   completionSoundType?: CompletionSoundType;
+  // OS notifications
+  osNotificationsEnabled?: boolean;
 }
 
 export interface TabState {
@@ -609,4 +611,13 @@ export function getCompletionSoundType(): CompletionSoundType {
 
 export function setCompletionSoundType(soundType: CompletionSoundType): void {
   appStore.set('completionSoundType', soundType);
+}
+
+// OS Notifications Settings
+export function isOSNotificationsEnabled(): boolean {
+  return appStore.get('osNotificationsEnabled', false);
+}
+
+export function setOSNotificationsEnabled(enabled: boolean): void {
+  appStore.set('osNotificationsEnabled', enabled);
 }

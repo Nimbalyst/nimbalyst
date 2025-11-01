@@ -8,13 +8,17 @@ interface NotificationsPanelProps {
   onCompletionSoundEnabledChange: (value: boolean) => void;
   completionSoundType: CompletionSoundType;
   onCompletionSoundTypeChange: (value: CompletionSoundType) => void;
+  osNotificationsEnabled: boolean;
+  onOSNotificationsEnabledChange: (value: boolean) => void;
 }
 
 export function NotificationsPanel({
   completionSoundEnabled,
   onCompletionSoundEnabledChange,
   completionSoundType,
-  onCompletionSoundTypeChange
+  onCompletionSoundTypeChange,
+  osNotificationsEnabled,
+  onOSNotificationsEnabledChange
 }: NotificationsPanelProps) {
   const [isTestPlaying, setIsTestPlaying] = useState(false);
 
@@ -124,6 +128,31 @@ export function NotificationsPanel({
             </button>
           </div>
         )}
+      </div>
+
+      <div className="provider-panel-section" style={{ marginTop: '24px' }}>
+        <h4 className="provider-panel-section-title">OS Notifications</h4>
+        <p className="provider-panel-hint">
+          Show system notifications when AI responses complete while the app is in the background.
+        </p>
+
+        <div className="setting-item">
+          <label className="setting-label">
+            <input
+              type="checkbox"
+              checked={osNotificationsEnabled}
+              onChange={(e) => onOSNotificationsEnabledChange(e.target.checked)}
+              className="setting-checkbox"
+            />
+            <div className="setting-text">
+              <span className="setting-name">Enable OS Notifications</span>
+              <span className="setting-description">
+                Display native system notifications when AI completes a response and the app window is not focused.
+                Respects system Do Not Disturb settings.
+              </span>
+            </div>
+          </label>
+        </div>
       </div>
     </div>
   );

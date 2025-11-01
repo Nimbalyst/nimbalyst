@@ -19,6 +19,7 @@ import type {
 import { updateDocumentState } from '../../mcp/httpServer';
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 import { SoundNotificationService } from '../SoundNotificationService';
+import { notificationService } from '../NotificationService';
 import { logger } from '../../utils/logger';
 import { windowStates } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
@@ -1079,6 +1080,21 @@ export class AIService {
               // Play completion sound if enabled
               const soundService = SoundNotificationService.getInstance();
               soundService.playCompletionSound(event.sender.id);
+
+              // Show OS notification if enabled and window not focused
+              const notificationBody = fullResponse.length > 0
+                ? fullResponse.substring(0, 100) + (fullResponse.length > 100 ? '...' : '')
+                : 'Response complete';
+
+              console.log('[AIService] Calling notification service for session:', session.id);
+              await notificationService.showNotification({
+                title: 'Nimbalyst AI Response Ready',
+                body: `${session.provider}: ${notificationBody}`,
+                sessionId: session.id,
+                windowId: event.sender.id,
+                provider: session.provider
+              });
+              console.log('[AIService] Notification service call completed');
 
               break;
           }

@@ -122,6 +122,8 @@ class PGLiteWorker {
         token_usage JSONB DEFAULT '{}',
         total_tokens JSONB DEFAULT '{"input": 0, "output": 0, "total": 0}',
         metadata JSONB DEFAULT '{}',
+        last_read_message_id TEXT,
+        last_read_timestamp TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -129,6 +131,26 @@ class PGLiteWorker {
       CREATE INDEX IF NOT EXISTS idx_ai_sessions_workspace ON ai_sessions(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_ai_sessions_created ON ai_sessions(created_at);
       CREATE INDEX IF NOT EXISTS idx_ai_sessions_type ON ai_sessions(session_type);
+    `);
+
+    // Add read state columns to existing ai_sessions tables (migration)
+    await this.db.exec(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'ai_sessions' AND column_name = 'last_read_message_id'
+        ) THEN
+          ALTER TABLE ai_sessions ADD COLUMN last_read_message_id TEXT;
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'ai_sessions' AND column_name = 'last_read_timestamp'
+        ) THEN
+          ALTER TABLE ai_sessions ADD COLUMN last_read_timestamp TIMESTAMP;
+        END IF;
+      END $$;
     `);
 
     // Document History table

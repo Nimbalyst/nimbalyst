@@ -194,6 +194,7 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
   const [aiDebugLogging, setAiDebugLogging] = useState(false);
   const [completionSoundEnabled, setCompletionSoundEnabled] = useState(false);
   const [completionSoundType, setCompletionSoundType] = useState<'chime' | 'bell' | 'pop' | 'none'>('chime');
+  const [osNotificationsEnabled, setOSNotificationsEnabled] = useState(false);
 
   // Load current settings on mount
   useEffect(() => {
@@ -231,6 +232,10 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
       const soundType = await window.electronAPI.invoke('completion-sound:get-type');
       setCompletionSoundEnabled(soundEnabled);
       setCompletionSoundType(soundType);
+
+      // Load OS notifications settings
+      const osNotifEnabled = await window.electronAPI.invoke('notifications:get-enabled');
+      setOSNotificationsEnabled(osNotifEnabled);
 
       // Fetch ALL models once
       try {
@@ -325,6 +330,9 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
     // Save completion sound settings
     await window.electronAPI.invoke('completion-sound:set-enabled', completionSoundEnabled);
     await window.electronAPI.invoke('completion-sound:set-type', completionSoundType);
+
+    // Save OS notifications settings
+    await window.electronAPI.invoke('notifications:set-enabled', osNotificationsEnabled);
 
     // Clear the model cache to force refresh with new API keys
     await window.electronAPI.aiClearModelCache?.();
@@ -474,6 +482,11 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
           completionSoundType={completionSoundType}
           onCompletionSoundTypeChange={(value) => {
             setCompletionSoundType(value);
+            setHasChanges(true);
+          }}
+          osNotificationsEnabled={osNotificationsEnabled}
+          onOSNotificationsEnabledChange={(value) => {
+            setOSNotificationsEnabled(value);
             setHasChanges(true);
           }}
         />;

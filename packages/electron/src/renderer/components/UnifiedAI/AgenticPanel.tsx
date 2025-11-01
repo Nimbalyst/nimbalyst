@@ -652,6 +652,28 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
   }, [activeTabId, scheduleSessionReload]);
 
+  // Listen for notification clicks to switch to session
+  useEffect(() => {
+    const handleNotificationClick = (data: { sessionId: string }) => {
+      // Find the session tab
+      const sessionTab = sessionTabs.find(tab => tab.id === data.sessionId);
+
+      if (sessionTab) {
+        // Session already open - just switch to it
+        setActiveTabId(data.sessionId);
+      } else {
+        // Session not open - load it
+        openSessionInTab(data.sessionId);
+      }
+    };
+
+    const cleanup = window.electronAPI.on('notification-clicked', handleNotificationClick);
+
+    return () => {
+      cleanup?.();
+    };
+  }, [sessionTabs, openSessionInTab]);
+
   // Listen for streaming responses and completion
   // This handles real-time updates during AI streaming:
   // - Updates assistant message content as it streams in
