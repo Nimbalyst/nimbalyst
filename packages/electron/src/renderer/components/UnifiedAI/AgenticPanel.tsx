@@ -100,9 +100,20 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Reload coordination for database-backed session state
   const reloadTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastReloadAtRef = useRef<Map<string, number>>(new Map());
+  const sessionTabsRef = useRef<SessionTab[]>(sessionTabs);
+  const workspacePathRef = useRef(workspacePath);
 
   // Initialization
   const initializedRef = useRef(false);
+
+  // Keep refs in sync with state/props
+  useEffect(() => {
+    sessionTabsRef.current = sessionTabs;
+  }, [sessionTabs]);
+
+  useEffect(() => {
+    workspacePathRef.current = workspacePath;
+  }, [workspacePath]);
 
   // Constants
   const MAX_CLOSED_SESSION_HISTORY = 10;
@@ -204,7 +215,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       timers.delete(sessionId);
       lastReloadMap.set(sessionId, Date.now());
       try {
-        const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+        const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePathRef.current);
         if (sessionData) {
           setSessionTabs(prev => prev.map(tab => {
             if (tab.id !== sessionId) {
@@ -270,7 +281,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       timers.delete(sessionId);
       void executeReload();
     }, delay));
-  }, [workspacePath]);
+  }, []); // No dependencies - uses refs for all values
 
   // Open a session in a new tab (agent mode) or load it (chat mode)
   const openSessionInTab = useCallback(async (sessionId: string) => {
@@ -610,7 +621,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     if (!window.electronAPI?.on) return;
 
     const handleMessageLogged = (data: { sessionId: string; direction: string }) => {
-      const isRelevantSession = sessionTabs.some(tab => tab.id === data.sessionId) || data.sessionId === activeTabId;
+      const isRelevantSession = sessionTabsRef.current.some(tab => tab.id === data.sessionId) || data.sessionId === activeTabId;
       if (!isRelevantSession) return;
 
       scheduleSessionReload(data.sessionId, { reason: 'message-logged', minInterval: 120 });
@@ -621,7 +632,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     return () => {
       cleanup?.();
     };
-  }, [sessionTabs, activeTabId, scheduleSessionReload]);
+  }, [activeTabId, scheduleSessionReload]);
 
   // Listen for streaming responses and completion
   // This handles real-time updates during AI streaming:
@@ -629,29 +640,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // - Adds tool calls as they execute
   // - Final completion triggers database reload for consistency
   useEffect(() => {
-    const handlerId = Math.random().toString(36).substring(7);
-    console.log(`[AgenticPanel] useEffect REGISTER handlers ${handlerId}`, {
-      activeTabId,
-      workspacePath: !!workspacePath,
-      hasElectronAPI: !!window.electronAPI,
-      hasOnAIStreamResponse: typeof window.electronAPI?.onAIStreamResponse === 'function'
-    });
-
     const handleStreamResponse = (data: any) => {
-      console.log(`[AgenticPanel-${handlerId}] handleStreamResponse called:`, {
-        sessionId: data.sessionId,
-        hasActiveTabId: !!activeTabId,
-        isComplete: data.isComplete,
-        hasPartial: !!data.partial,
-        partialLength: data.partial?.length,
-        hasToolCalls: !!data.toolCalls,
-        toolCallsCount: data.toolCalls?.length
-      });
-
       // Check if this session is relevant to this panel (any open tab)
-      const isRelevantSession = sessionTabs.some(tab => tab.id === data.sessionId);
+      const isRelevantSession = sessionTabsRef.current.some(tab => tab.id === data.sessionId);
       if (!isRelevantSession) {
-        console.log('[AgenticPanel] Ignoring stream for session not in this panel:', data.sessionId);
         return;
       }
 
@@ -683,11 +675,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const cleanupError = window.electronAPI.onAIError(handleStreamError);
 
     return () => {
-      console.log(`[AgenticPanel] useEffect CLEANUP handlers ${handlerId}`);
       cleanupStreamResponse();
       cleanupError();
     };
-  }, [activeTabId, workspacePath, sessionTabs, scheduleSessionReload]);
+  }, [activeTabId, workspacePath, scheduleSessionReload]);
 
   useEffect(() => {
     return () => {
