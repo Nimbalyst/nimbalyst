@@ -18,6 +18,7 @@ import type {
 } from '@nimbalyst/runtime/ai/server/types';
 import { updateDocumentState } from '../../mcp/httpServer';
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
+import { SoundNotificationService } from '../SoundNotificationService';
 import { logger } from '../../utils/logger';
 import { windowStates } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
@@ -1074,6 +1075,11 @@ export class AIService {
                 isComplete: true
               });
               console.log('[AIService] COMPLETION SIGNAL SENT TO UI!');
+
+              // Play completion sound if enabled
+              const soundService = SoundNotificationService.getInstance();
+              soundService.playCompletionSound(event.sender.id);
+
               break;
           }
         }

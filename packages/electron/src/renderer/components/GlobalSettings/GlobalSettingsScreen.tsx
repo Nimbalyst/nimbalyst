@@ -12,6 +12,7 @@ import { LMStudioPanel } from './panels/LMStudioPanel';
 import { AdvancedPanel } from './panels/AdvancedPanel';
 import {AnalyticsSettingsPanel} from "./panels/AnalyticsPanel.tsx";
 import { GettingStartedPanel } from './GettingStartedPanel.tsx';
+import { NotificationsPanel } from './panels/NotificationsPanel';
 
 // Apply theme IMMEDIATELY when module loads - BEFORE React renders
 // This prevents flash of wrong theme
@@ -103,7 +104,7 @@ interface AIModelsProps {
   onClose: () => void;
 }
 
-type ProviderId = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio' | 'advanced' | 'analytics';
+type ProviderId = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio' | 'advanced' | 'analytics' | 'notifications';
 type NavItemId = 'getting-started' | ProviderId;
 
 interface Provider {
@@ -191,6 +192,8 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
   const [hasChanges, setHasChanges] = useState(false);
   const [showToolCalls, setShowToolCalls] = useState(false);
   const [aiDebugLogging, setAiDebugLogging] = useState(false);
+  const [completionSoundEnabled, setCompletionSoundEnabled] = useState(false);
+  const [completionSoundType, setCompletionSoundType] = useState<'chime' | 'bell' | 'pop' | 'none'>('chime');
 
   // Load current settings on mount
   useEffect(() => {
@@ -222,6 +225,12 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
       if (settings.aiDebugLogging !== undefined) {
         setAiDebugLogging(settings.aiDebugLogging);
       }
+
+      // Load completion sound settings
+      const soundEnabled = await window.electronAPI.invoke('completion-sound:is-enabled');
+      const soundType = await window.electronAPI.invoke('completion-sound:get-type');
+      setCompletionSoundEnabled(soundEnabled);
+      setCompletionSoundType(soundType);
 
       // Fetch ALL models once
       try {
@@ -312,6 +321,10 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
     };
 
     await window.electronAPI.aiSaveSettings(settings);
+
+    // Save completion sound settings
+    await window.electronAPI.invoke('completion-sound:set-enabled', completionSoundEnabled);
+    await window.electronAPI.invoke('completion-sound:set-type', completionSoundType);
 
     // Clear the model cache to force refresh with new API keys
     await window.electronAPI.aiClearModelCache?.();
@@ -451,6 +464,19 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
             setHasChanges(true);
           }}
         />;
+      case 'notifications':
+        return <NotificationsPanel
+          completionSoundEnabled={completionSoundEnabled}
+          onCompletionSoundEnabledChange={(value) => {
+            setCompletionSoundEnabled(value);
+            setHasChanges(true);
+          }}
+          completionSoundType={completionSoundType}
+          onCompletionSoundTypeChange={(value) => {
+            setCompletionSoundType(value);
+            setHasChanges(true);
+          }}
+        />;
       default:
         return null;
     }
@@ -565,6 +591,12 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
           </div>
 
           <div className="nav-section nav-section-bottom">
+            <button
+              className={`nav-action-button ${selectedNav === 'notifications' ? 'active' : ''}`}
+              onClick={() => setSelectedNav('notifications')}
+            >
+              Notifications
+            </button>
             <button
               className={`nav-action-button ${selectedNav === 'advanced' ? 'active' : ''}`}
               onClick={() => setSelectedNav('advanced')}

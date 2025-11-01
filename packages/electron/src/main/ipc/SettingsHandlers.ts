@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, isFirstLaunch, markAppLaunched, isSettingsCompleted, markSettingsCompleted } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, isFirstLaunch, markAppLaunched, isSettingsCompleted, markSettingsCompleted, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType } from '../utils/store';
 import { logger } from '../utils/logger';
+import { SoundNotificationService } from '../services/SoundNotificationService';
 
 export function registerSettingsHandlers() {
     // Get sidebar width
@@ -56,5 +57,27 @@ export function registerSettingsHandlers() {
 
     ipcMain.handle('first-launch:mark-settings-completed', () => {
         markSettingsCompleted();
+    });
+
+    // Completion sound settings
+    ipcMain.handle('completion-sound:is-enabled', () => {
+        return isCompletionSoundEnabled();
+    });
+
+    ipcMain.handle('completion-sound:set-enabled', (_event, enabled: boolean) => {
+        setCompletionSoundEnabled(enabled);
+    });
+
+    ipcMain.handle('completion-sound:get-type', () => {
+        return getCompletionSoundType();
+    });
+
+    ipcMain.handle('completion-sound:set-type', (_event, soundType: CompletionSoundType) => {
+        setCompletionSoundType(soundType);
+    });
+
+    ipcMain.handle('completion-sound:test', (_event, soundType: CompletionSoundType) => {
+        const soundService = SoundNotificationService.getInstance();
+        soundService.testSound(soundType);
     });
 }

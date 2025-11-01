@@ -8,6 +8,8 @@ import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
 export type AppTheme = 'dark' | 'light' | 'system' | 'crystal-dark';
 export type { SessionState, SessionWindow } from '../types';
 
+export type CompletionSoundType = 'chime' | 'bell' | 'pop' | 'none';
+
 interface AppStoreSchema {
   theme: AppTheme;
   recent: {
@@ -23,6 +25,9 @@ interface AppStoreSchema {
   // First launch tracking
   hasLaunched?: boolean;
   settingsCompleted?: boolean;
+  // Sound notifications
+  completionSoundEnabled?: boolean;
+  completionSoundType?: CompletionSoundType;
 }
 
 export interface TabState {
@@ -587,4 +592,21 @@ export function isSettingsCompleted(): boolean {
 
 export function markSettingsCompleted(): void {
   appStore.set('settingsCompleted', true);
+}
+
+// Completion Sound Settings
+export function isCompletionSoundEnabled(): boolean {
+  return appStore.get('completionSoundEnabled', false);
+}
+
+export function setCompletionSoundEnabled(enabled: boolean): void {
+  appStore.set('completionSoundEnabled', enabled);
+}
+
+export function getCompletionSoundType(): CompletionSoundType {
+  return appStore.get('completionSoundType', 'chime');
+}
+
+export function setCompletionSoundType(soundType: CompletionSoundType): void {
+  appStore.set('completionSoundType', soundType);
 }

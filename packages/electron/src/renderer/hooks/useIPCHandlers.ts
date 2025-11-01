@@ -10,6 +10,7 @@ import {
 } from 'rexical';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { aiApi } from '../services/aiApi';
+import { getSoundPlayer } from '../services/SoundPlayer';
 
 const PLAN_STATUS_KEYS = new Set([
   'planId',
@@ -1054,6 +1055,18 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     aiApi.on('streamEditStart', handleStreamEditStart);
     aiApi.on('streamEditContent', handleStreamEditContent);
     aiApi.on('streamEditEnd', handleStreamEditEnd);
+
+    // Handle completion sound playback from main process
+    const handlePlayCompletionSound = (soundType: string) => {
+      const soundPlayer = getSoundPlayer();
+      soundPlayer.playSound(soundType as any).catch(err => {
+        console.error('Failed to play completion sound:', err);
+      });
+    };
+
+    if (window.electronAPI?.on) {
+      cleanupFns.push(window.electronAPI.on('play-completion-sound', handlePlayCompletionSound));
+    }
 
     // Clean up listeners when dependencies change
     return () => {
