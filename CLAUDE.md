@@ -386,3 +386,59 @@ After the frontmatter, plans should include:
 - For playwrite - write one playwright test case and get it working before writing more and see @docs/PLAYWRIGHT.md
 - if your editor is scrolling on load when it shouldn't you probably are missing this from an editor.update - { tag: SKIP_SCROLL_INTO_VIEW_TAG }
 - Markdown import and export should use our enhance conversion system $convertFromEnhancedMarkdownString and $convertToEnhancedMarkdownString
+
+## Error Handling and Defensive Coding
+
+**CRITICAL: Fail fast, fail loud. Never hide failures.**
+
+### Required Error Handling Patterns
+
+1. **Never log-and-continue for required parameters**
+```typescript
+   // BAD: Logs but continues with broken state
+   if (!workspacePath) {
+     this.log.error('Missing workspacePath');
+     return;
+   }
+
+   // GOOD: Throws immediately
+   if (!workspacePath) {
+     throw new Error('workspacePath is required');
+   }
+```
+
+2. **Never fall back to default values that mask routing issues**
+```typescript
+   // BAD: Silently uses wrong window
+   const window = this.findWindowByWorkspace(path) || windows[0];
+
+   // GOOD: Fails if routing is broken
+   const window = this.findWindowByWorkspace(path);
+   if (!window) {
+     throw new Error(`No window found for workspace: ${path}`);
+   }
+```
+
+3. **Always use stable identifiers for routing**
+  - Use workspace paths (stable) not window IDs (transient)
+  - Use canonical file paths not relative paths
+  - Document which IDs are stable vs transient
+
+4. **Validate at boundaries**
+  - All IPC handlers MUST validate required parameters
+  - All service methods MUST validate required parameters
+  - Throw on missing required fields, don't provide defaults
+
+5. **Single path for state updates**
+  - State updates go through IPC handlers (main ↔ renderer)
+  - Services call IPC handlers, never update state directly
+  - No bypassing the canonical update path
+
+### When Defensive Coding Is Wrong
+
+Defensive coding that masks failures is worse than crashing:
+- Better to crash immediately at the root cause
+- Better to show "cannot route to window" than silently route to wrong window
+- Better to throw "missing workspacePath" than to guess
+
+**Rule of thumb:** If you're adding code to "handle" missing required data, you're probably hiding a bug. Throw instead.
