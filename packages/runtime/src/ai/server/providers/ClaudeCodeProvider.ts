@@ -1173,12 +1173,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     }
 
     // Connect to MCP server running in Electron
-    console.log('[CLAUDE-CODE] Including nimbalyst MCP server configuration');
+    // Use the actual port the MCP server started on (falls back to 3456 if not set)
+    const mcpPort = (global as any).mcpServerPort || 3456;
+    console.log('[CLAUDE-CODE] Including nimbalyst MCP server configuration on port:', mcpPort);
     return {
       "nimbalyst": {
         "type": "sse",
         "transport": "sse",
-        "url": "http://127.0.0.1:3456/mcp"
+        "url": `http://127.0.0.1:${mcpPort}/mcp`
       }
     };
   }

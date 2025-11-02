@@ -930,6 +930,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
         contextToSend = {
           ...serializableContext,
+          workspacePath,  // CRITICAL: Add workspacePath for MCP tool routing
           sessionType,  // Include sessionType for MCP tool availability
           attachments: attachments.length > 0 ? attachments : undefined
         };
@@ -938,15 +939,16 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         console.log('[AgenticPanel] Sending document context:', {
           hasFilePath: !!contextToSend.filePath,
           filePath: contextToSend.filePath,
+          workspacePath: contextToSend.workspacePath,  // Log workspacePath
           sessionType: contextToSend.sessionType,
           hasContent: !!contextToSend.content,
           contentLength: contextToSend.content?.length
         });
       } else if (attachments.length > 0) {
-        contextToSend = { attachments, sessionType };
+        contextToSend = { attachments, sessionType, workspacePath };  // Include workspacePath even without document
       } else {
-        // Even without document context or attachments, pass sessionType
-        contextToSend = { sessionType };
+        // Even without document context or attachments, pass sessionType and workspacePath
+        contextToSend = { sessionType, workspacePath };  // Include workspacePath for routing
       }
 
       await window.electronAPI.aiSendMessage(

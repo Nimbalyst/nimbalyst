@@ -234,9 +234,12 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
   };
 
   useEffect(() => {
+    console.log('[IPC] useIPCHandlers effect running');
     if (!window.electronAPI) {
+      console.log('[IPC] No electronAPI available!');
       return;
     }
+    console.log('[IPC] electronAPI available, setting up handlers');
 
     // COMMENTED OUT - API key dialog no longer needed, using claude-code login
     // Check for first launch (no API key configured)
@@ -718,15 +721,25 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }
 
     if (window.electronAPI.onMcpStreamContent) {
+      console.log('[MCP] Registering onMcpStreamContent handler');
       cleanupFns.push(window.electronAPI.onMcpStreamContent(async ({ streamId, content, position, insertAfter, mode, targetFilePath, resultChannel }) => {
-        console.log('[MCP] streamContent request:', { streamId, position, mode, targetFilePath });
+        console.log('[MCP] ==========================================');
+        console.log('[MCP] streamContent IPC RECEIVED');
+        console.log('[MCP] streamId:', streamId);
+        console.log('[MCP] position:', position);
+        console.log('[MCP] mode:', mode);
+        console.log('[MCP] targetFilePath:', targetFilePath);
+        console.log('[MCP] content preview:', content?.substring(0, 100));
+        console.log('[MCP] resultChannel:', resultChannel);
+        console.log('[MCP] ==========================================');
 
         try {
           // Use the explicit targetFilePath from the IPC message, or fall back to first registered editor
           const filePath = targetFilePath || editorRegistry.getFilePaths()[0];
 
           if (!filePath) {
-            console.error('[MCP] No target file path available for streamContent');
+            console.error('[MCP] ERROR: No target file path available for streamContent');
+            console.error('[MCP] Registered file paths:', editorRegistry.getFilePaths());
             if (window.electronAPI.sendMcpStreamContentResult) {
               window.electronAPI.sendMcpStreamContentResult(resultChannel, {
                 success: false,
@@ -736,7 +749,11 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
             return;
           }
 
+          console.log('[MCP] Using filePath:', filePath);
+          console.log('[MCP] Registered editors:', editorRegistry.getFilePaths());
+
           // Start streaming
+          console.log('[MCP] Calling startStreaming...');
           editorRegistry.startStreaming(filePath, {
             id: streamId,
             position: position || 'cursor',
@@ -750,10 +767,14 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
           await new Promise(resolve => setTimeout(resolve, 50));
 
           // Stream the content
+          console.log('[MCP] Calling streamContent...');
           editorRegistry.streamContent(filePath, streamId, content);
 
           // End streaming
+          console.log('[MCP] Calling endStreaming...');
           editorRegistry.endStreaming(filePath, streamId);
+
+          console.log('[MCP] Streaming complete, sending success result');
 
           // Send success result
           if (window.electronAPI.sendMcpStreamContentResult) {
@@ -761,6 +782,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
               success: true
             });
           }
+
+          console.log('[MCP] Success result sent');
         } catch (error) {
           console.error('[MCP] streamContent error:', error);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -991,14 +1014,25 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     const updateDocumentState = () => {
       if (window.electronAPI?.updateMcpDocumentState && getContentRef.current) {
         const content = getContentRef.current();
-        window.electronAPI.updateMcpDocumentState({
+        const docState = {
           content,
           filePath: stateRef.current.currentFilePath || 'untitled.md',
           fileType: 'markdown',
+          workspacePath: stateRef.current.workspacePath, // Use workspace path for window routing
           // TODO: Get actual cursor position and selection from editor
           cursorPosition: undefined,
           selection: undefined
+        };
+
+        // DEFENSIVE: Log what we're sending
+        console.log('[Renderer] Sending MCP document state:', {
+          filePath: docState.filePath,
+          workspacePath: docState.workspacePath,
+          hasWorkspacePath: !!docState.workspacePath,
+          workspaceMode: stateRef.current.workspaceMode
         });
+
+        window.electronAPI.updateMcpDocumentState(docState);
       }
     };
 

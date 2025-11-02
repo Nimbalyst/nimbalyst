@@ -17,17 +17,141 @@ let mcpServer: Server | null = null;
 // Store active SSE transports by session ID
 const activeTransports = new Map<string, SSEServerTransport>();
 
+// Map workspace paths to window IDs for routing
+// This is populated when we receive document state updates
+const workspaceToWindowMap = new Map<string, number>();
+
 export function updateDocumentState(state: any, sessionId?: string) {
   if (!sessionId) {
     // console.warn('[MCP Server] No sessionId provided for document state update - using "default"');
     sessionId = 'default';
   }
+
+  // CRITICAL: Workspace path is REQUIRED for routing
+  if (!state?.workspacePath) {
+    const error = new Error(`[MCP Server] CRITICAL: No workspacePath in document state for session ${sessionId}! Cannot route MCP tools without workspace path. State keys: ${Object.keys(state || {}).join(', ')}`);
+    console.error(error.message);
+    throw error;
+  }
+
+  if (!state?.filePath) {
+    const error = new Error(`[MCP Server] CRITICAL: No filePath in document state for session ${sessionId}! State keys: ${Object.keys(state || {}).join(', ')}`);
+    console.error(error.message);
+    throw error;
+  }
+
+  // DEFENSIVE LOGGING: Log exactly what we received
+  console.log(`[MCP Server] Received document state update:`, {
+    sessionId,
+    filePath: state.filePath,
+    workspacePath: state.workspacePath,
+    stateKeys: Object.keys(state || {})
+  });
+
   documentStateBySession.set(sessionId, state);
-  // console.log(`[MCP Server] Document state updated for session ${sessionId}`);
+  console.log(`[MCP Server] Session ${sessionId} associated with workspace: ${state.workspacePath}`);
+}
+
+/**
+ * Register a workspace path to window mapping
+ * This should be called from the main process when document state is updated
+ */
+export function registerWorkspaceWindow(workspacePath: string, windowId: number) {
+  workspaceToWindowMap.set(workspacePath, windowId);
+  console.log(`[MCP Server] Registered workspace ${workspacePath} -> window ${windowId}`);
 }
 
 // Store the HTTP server instance
 let httpServerInstance: any = null;
+
+/**
+ * Find the correct window for a given file path by matching the workspace
+ * This is critical for multi-window support - we need to send IPC to the window that has the file open
+ *
+ * Uses workspace path as the canonical identifier since it's stable across app restarts,
+ * unlike windowId which changes every time.
+ */
+function findWindowForFilePath(filePath: string | undefined): BrowserWindow | null {
+  if (!filePath) {
+    throw new Error('[MCP Server] CRITICAL: No file path provided to findWindowForFilePath, cannot determine target window');
+  }
+
+  console.log(`[MCP Server] Looking for window with file: ${filePath}`);
+
+  // DEFENSIVE: Log ALL document states in detail
+  const stateDetails = Array.from(documentStateBySession.entries()).map(([id, state]) => ({
+    sessionId: id,
+    filePath: state?.filePath,
+    workspacePath: state?.workspacePath,
+    hasFilePath: !!state?.filePath,
+    hasWorkspacePath: !!state?.workspacePath,
+    filePathMatches: state?.filePath === filePath
+  }));
+  console.log(`[MCP Server] Document states (${stateDetails.length}):`, JSON.stringify(stateDetails, null, 2));
+
+  // First, find which workspace this file belongs to
+  let targetWorkspacePath: string | undefined;
+  for (const [sessionId, state] of documentStateBySession.entries()) {
+    console.log(`[MCP Server] Checking session ${sessionId}:`, {
+      stateFilePath: state?.filePath,
+      targetFilePath: filePath,
+      matches: state?.filePath === filePath,
+      hasWorkspacePath: !!state?.workspacePath,
+      workspacePath: state?.workspacePath
+    });
+
+    if (state?.filePath === filePath) {
+      if (!state?.workspacePath) {
+        // This should never happen because updateDocumentState throws if workspacePath is missing
+        throw new Error(`[MCP Server] CRITICAL: Found matching file ${filePath} but NO WORKSPACE PATH in state! This should be impossible - updateDocumentState should have thrown. State keys: ${Object.keys(state || {}).join(', ')}`);
+      }
+
+      targetWorkspacePath = state.workspacePath;
+      console.log(`[MCP Server] File belongs to workspace: ${targetWorkspacePath}`);
+      break;
+    }
+  }
+
+  if (!targetWorkspacePath) {
+    const availableSessions = Array.from(documentStateBySession.entries()).map(([id, state]) =>
+      `${id}: ${state?.filePath || 'NO FILE'}`
+    ).join(', ');
+    throw new Error(`[MCP Server] CRITICAL: Could not determine workspace for file: ${filePath}. Available sessions (${documentStateBySession.size}): ${availableSessions}`);
+  }
+
+  // Look up the window ID for this workspace path
+  const windowId = workspaceToWindowMap.get(targetWorkspacePath);
+  if (!windowId) {
+    const availableWorkspaces = Array.from(workspaceToWindowMap.entries()).map(([path, id]) =>
+      `${path} -> window ${id}`
+    ).join(', ');
+    throw new Error(`[MCP Server] CRITICAL: No window registered for workspace: ${targetWorkspacePath}. Available workspaces: ${availableWorkspaces || 'NONE'}`);
+  }
+
+  // Get the window by ID
+  const window = BrowserWindow.fromId(windowId);
+  if (!window) {
+    // Clean up stale mapping
+    workspaceToWindowMap.delete(targetWorkspacePath);
+    throw new Error(`[MCP Server] CRITICAL: Window ${windowId} for workspace ${targetWorkspacePath} no longer exists (window was closed)`);
+  }
+
+  console.log(`[MCP Server] Found window ${windowId} for workspace: ${targetWorkspacePath}`);
+  return window;
+}
+
+/**
+ * Remove a window from the workspace mapping when it's closed
+ */
+export function unregisterWindow(windowId: number) {
+  // Find and remove any workspace mappings for this window
+  for (const [workspacePath, mappedWindowId] of workspaceToWindowMap.entries()) {
+    if (mappedWindowId === windowId) {
+      workspaceToWindowMap.delete(workspacePath);
+      console.log(`[MCP Server] Unregistered workspace ${workspacePath} from window ${windowId}`);
+    }
+  }
+}
 
 export function cleanupMcpServer() {
   // Close all active SSE transports
@@ -257,19 +381,25 @@ async function tryCreateServer(port: number): Promise<any> {
         const { name, arguments: args } = request.params;
         console.log(`[MCP Server] Tool called: ${name}`, args);
 
-        switch (name) {
-          case 'applyDiff': {
-            const windows = BrowserWindow.getAllWindows();
-            if (windows.length > 0) {
-              // Use explicit filePath from args, or fall back to current document state
-              let targetFilePath = args?.filePath;
+        // Strip MCP server prefix if present (Claude Code sends tools as mcp__nimbalyst__toolName)
+        const toolName = name.replace(/^mcp__nimbalyst__/, '');
+        console.log(`[MCP Server] Resolved tool name: ${toolName} (original: ${name})`);
 
-              if (!targetFilePath) {
-                // Get the current document state for file path
-                const states = Array.from(documentStateBySession.values());
-                const currentDocState = states[states.length - 1];
-                targetFilePath = currentDocState?.filePath;
-              }
+        switch (toolName) {
+          case 'applyDiff': {
+            // Use explicit filePath from args, or fall back to current document state
+            let targetFilePath = args?.filePath;
+
+            if (!targetFilePath) {
+              // Get the current document state for file path
+              const states = Array.from(documentStateBySession.values());
+              const currentDocState = states[states.length - 1];
+              targetFilePath = currentDocState?.filePath;
+            }
+
+            // Find the correct window for this file
+            const targetWindow = findWindowForFilePath(targetFilePath);
+            if (targetWindow) {
 
               // Validate that the file is a markdown file
               if (targetFilePath && !targetFilePath.endsWith('.md')) {
@@ -326,28 +456,39 @@ async function tryCreateServer(port: number): Promise<any> {
                 });
 
                 // Send the request with the result channel and target file path
-                windows[0].webContents.send('mcp:applyDiff', {
+                console.log('[MCP Server] Sending applyDiff to window', targetWindow.id);
+                targetWindow.webContents.send('mcp:applyDiff', {
                   replacements: args?.replacements,
                   resultChannel,
                   targetFilePath: targetFilePath
                 });
               });
             }
-            return { success: false, error: 'No window available' };
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: 'Error: No window available for target file'
+                }
+              ],
+              isError: true
+            };
           }
 
           case 'streamContent': {
-            const windows = BrowserWindow.getAllWindows();
-            if (windows.length > 0) {
-              // Use explicit filePath from args, or fall back to current document state
-              let targetFilePath = args?.filePath;
+            // Use explicit filePath from args, or fall back to current document state
+            let targetFilePath = args?.filePath;
 
-              if (!targetFilePath) {
-                // Get the current document state for file path
-                const states = Array.from(documentStateBySession.values());
-                const currentDocState = states[states.length - 1];
-                targetFilePath = currentDocState?.filePath;
-              }
+            if (!targetFilePath) {
+              // Get the current document state for file path
+              const states = Array.from(documentStateBySession.values());
+              const currentDocState = states[states.length - 1];
+              targetFilePath = currentDocState?.filePath;
+            }
+
+            // Find the correct window for this file
+            const targetWindow = findWindowForFilePath(targetFilePath);
+            if (targetWindow) {
 
               // Generate a unique stream ID
               const streamId = `mcp-stream-${Date.now()}-${Math.random()}`;
@@ -394,7 +535,17 @@ async function tryCreateServer(port: number): Promise<any> {
                 });
 
                 // Send IPC message to renderer with result channel
-                windows[0].webContents.send('mcp:streamContent', {
+                console.log('[MCP Server] ==========================================');
+                console.log('[MCP Server] Sending mcp:streamContent IPC to renderer');
+                console.log('[MCP Server] Target window ID:', targetWindow.id);
+                console.log('[MCP Server] streamId:', streamId);
+                console.log('[MCP Server] targetFilePath:', targetFilePath);
+                console.log('[MCP Server] position:', args?.position || 'end');
+                console.log('[MCP Server] content length:', args?.content?.length);
+                console.log('[MCP Server] content preview:', args?.content?.substring(0, 100));
+                console.log('[MCP Server] ==========================================');
+
+                targetWindow.webContents.send('mcp:streamContent', {
                   streamId,
                   content: args?.content,
                   position: args?.position || 'end',
@@ -402,13 +553,15 @@ async function tryCreateServer(port: number): Promise<any> {
                   targetFilePath: targetFilePath,
                   resultChannel
                 });
+
+                console.log('[MCP Server] IPC message sent to window', targetWindow.id);
               });
             }
             return {
               content: [
                 {
                   type: 'text',
-                  text: 'Error: No window available'
+                  text: 'Error: No window available for target file'
                 }
               ],
               isError: true

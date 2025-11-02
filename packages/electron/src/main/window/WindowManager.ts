@@ -333,6 +333,13 @@ export function createWindow(
             stopFileWatcher(windowId);
             stopWorkspaceWatcher(windowId);
 
+            // Clean up MCP workspace-to-window mapping
+            import('../mcp/httpServer').then(({ unregisterWindow }) => {
+                unregisterWindow(windowId);
+            }).catch(err => {
+                console.error('[MAIN] Error unregistering window from MCP:', err);
+            });
+
             // Clean up navigation history for this window
             navigationHistoryService.removeWindow(windowId);
 

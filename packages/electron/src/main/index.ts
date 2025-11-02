@@ -30,7 +30,7 @@ import { getTheme, setTheme, incrementLaunchCount, shouldShowDiscordInvitation, 
 import { AIService } from './services/ai/AIService';
 import { AgentService } from './services/agents/AgentService';
 import { cliManager } from './services/CLIManager';
-import { startMcpHttpServer, updateDocumentState, cleanupMcpServer, shutdownHttpServer } from './mcp/httpServer';
+import { startMcpHttpServer, updateDocumentState, registerWorkspaceWindow, cleanupMcpServer, shutdownHttpServer } from './mcp/httpServer';
 import { logger, overrideConsole } from './utils/logger';
 import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
 import { setupForceQuit, cancelForceQuit } from './utils/forceQuit';
@@ -243,12 +243,28 @@ app.whenReady().then(async () => {
         const result = await startMcpHttpServer(3456);
         mcpHttpServer = result.httpServer;
         logger.mcp.info('MCP SSE server started on port', result.port);
+
+        // Store the actual port for providers to use
+        (global as any).mcpServerPort = result.port;
     } catch (error) {
             logger.mcp.error('Failed to start MCP SSE server:', error);
     }
 
     // Set up IPC handler to update document state for MCP
     ipcMain.on('mcp:updateDocumentState', (event, state) => {
+        // Get the window that sent this message
+        const window = BrowserWindow.fromWebContents(event.sender);
+        const windowId = window?.id;
+
+        // Register the workspace-to-window mapping for routing
+        if (state?.workspacePath && windowId) {
+            logger.mcp.info(`Registering workspace ${state.workspacePath} -> window ${windowId}`);
+            registerWorkspaceWindow(state.workspacePath, windowId);
+        } else {
+            logger.mcp.warn(`Cannot register workspace: workspacePath=${state?.workspacePath}, windowId=${windowId}`);
+        }
+
+        // Update document state with the workspace path (canonical identifier)
         updateDocumentState(state);
     });
 

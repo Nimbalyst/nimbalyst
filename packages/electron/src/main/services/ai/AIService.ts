@@ -16,7 +16,7 @@ import type {
   AIProviderType,
   AIModel,
 } from '@nimbalyst/runtime/ai/server/types';
-import { updateDocumentState } from '../../mcp/httpServer';
+import { updateDocumentState, registerWorkspaceWindow } from '../../mcp/httpServer';
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 import { SoundNotificationService } from '../SoundNotificationService';
 import { notificationService } from '../NotificationService';
@@ -359,6 +359,13 @@ export class AIService {
       // Update MCP document state if provided
       if (documentContext) {
         updateDocumentState(documentContext, session.id);
+
+        // Register workspace-to-window mapping for MCP tool routing
+        if (documentContext.workspacePath) {
+          const windowId = event.sender.id;
+          logger.ai.info(`[AIService] Registering workspace ${documentContext.workspacePath} -> window ${windowId}`);
+          registerWorkspaceWindow(documentContext.workspacePath, windowId);
+        }
       }
 
       this.analytics.sendEvent('create_ai_session', { provider });
@@ -469,6 +476,13 @@ export class AIService {
       // Update MCP document state if provided
       if (documentContext) {
         updateDocumentState(documentContext, sessionId);
+
+        // Register workspace-to-window mapping for MCP tool routing
+        if (documentContext.workspacePath) {
+          const windowId = event.sender.id;
+          logger.ai.info(`[AIService] Registering workspace ${documentContext.workspacePath} -> window ${windowId} for sendMessage`);
+          registerWorkspaceWindow(documentContext.workspacePath, windowId);
+        }
       }
 
       // Get or create provider for this session
