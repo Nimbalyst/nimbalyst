@@ -152,26 +152,20 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
     async list(workspaceId: string): Promise<SessionListItem[]> {
       await ensureReady();
       const { rows } = await db.query<any>(
-        `SELECT id, provider, model, session_type, title, workspace_id, created_at, updated_at
-         FROM ai_sessions
-         WHERE workspace_id=$1
-         ORDER BY updated_at DESC`,
+        `SELECT s.id, s.provider, s.model, s.session_type, s.title, s.workspace_id,
+                s.created_at, s.updated_at, COUNT(m.id) as message_count
+         FROM ai_sessions s
+         LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input'
+         WHERE s.workspace_id=$1
+         GROUP BY s.id, s.provider, s.model, s.session_type, s.title, s.workspace_id,
+                  s.created_at, s.updated_at
+         ORDER BY s.updated_at DESC`,
         [workspaceId]
       );
       return rows.map(row => {
         const createdAt = toMillis(row.created_at);
         const updatedAt = toMillis(row.updated_at);
-        // console.log('[PGLiteSessionStore] Session dates:', {
-        //   id: row.id.substring(0, 8),
-        //   raw_created_at: row.created_at,
-        //   raw_updated_at: row.updated_at,
-        //   created_at_type: typeof row.created_at,
-        //   updated_at_type: typeof row.updated_at,
-        //   createdAt,
-        //   updatedAt,
-        //   created_date: new Date(createdAt).toISOString(),
-        //   updated_date: new Date(updatedAt).toISOString()
-        // });
+        const messageCount = parseInt(row.message_count) || 0;
         return {
           id: row.id,
           provider: row.provider,
@@ -181,6 +175,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           workspaceId: row.workspace_id,
           createdAt,
           updatedAt,
+          messageCount,
         };
       });
     },

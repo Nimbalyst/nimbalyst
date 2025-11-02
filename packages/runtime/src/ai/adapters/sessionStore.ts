@@ -13,6 +13,7 @@ export interface SessionListItem {
   workspaceId: string;
   createdAt: number;
   updatedAt: number;
+  messageCount?: number;
 }
 
 export interface CreateSessionPayload {

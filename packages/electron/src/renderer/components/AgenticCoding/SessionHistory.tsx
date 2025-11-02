@@ -79,7 +79,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           provider: s.provider || 'claude',
           model: s.model,
           sessionType: s.sessionType || 'chat',
-          messageCount: Array.isArray(s.messages) ? s.messages.length : 0
+          messageCount: s.messageCount || 0
         }));
         setSessions(allSessions);
       }

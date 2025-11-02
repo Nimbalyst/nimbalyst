@@ -202,7 +202,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             title: s.title,
             provider: s.provider,
             model: s.model,
-            messageCount: 0 // TODO: Get actual count
+            messageCount: s.messageCount || 0
           }));
         setAvailableSessions(sessions);
       }
@@ -249,6 +249,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
             return {
               ...tab,
+              name: sessionData.title || tab.name,
               sessionData: {
                 ...sessionData,
                 messages
@@ -648,6 +649,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       if (!isRelevantSession) return;
 
       scheduleSessionReload(data.sessionId, { reason: 'message-logged', minInterval: 120 });
+
+      // Also reload the session list to update message counts and titles
+      loadSessions();
     };
 
     const cleanup = window.electronAPI.on('ai:message-logged', handleMessageLogged);
@@ -655,7 +659,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     return () => {
       cleanup?.();
     };
-  }, [activeTabId, scheduleSessionReload]);
+  }, [activeTabId, scheduleSessionReload, loadSessions]);
 
   // Listen for notification clicks to switch to session
   useEffect(() => {

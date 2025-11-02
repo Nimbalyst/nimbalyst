@@ -232,7 +232,7 @@ ipcMain.handle('sessions:list', async (_event, workspacePath: string) => {
           provider: session.provider,
           model: session.model,
           sessionType: session.sessionType || 'chat',
-          messageCount: session.messages?.length || 0,
+          messageCount: entry.messageCount || 0, // Use messageCount from list entry, not session.messages
           metadata: session.metadata || {}
         });
       }
