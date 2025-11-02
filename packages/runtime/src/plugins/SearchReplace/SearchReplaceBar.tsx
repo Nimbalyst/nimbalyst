@@ -447,6 +447,11 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
   // Handle keyboard shortcuts in search input
   const handleSearchKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Let Cmd/Ctrl+Number shortcuts bubble up to menu handlers for tab switching
+      if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '9') {
+        return; // Don't prevent default or stop propagation
+      }
+
       if (e.key === 'Enter') {
         e.preventDefault();
         if (e.shiftKey) {
@@ -465,6 +470,11 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
   // Handle keyboard shortcuts in replace input
   const handleReplaceKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Let Cmd/Ctrl+Number shortcuts bubble up to menu handlers for tab switching
+      if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '9') {
+        return; // Don't prevent default or stop propagation
+      }
+
       if (e.key === 'Enter') {
         e.preventDefault();
         if (e.metaKey || e.ctrlKey) {
@@ -509,7 +519,16 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
             value={searchString}
             onChange={(e) => handleSearchChange(e.target.value)}
             onKeyDown={(e) => {
-              e.stopPropagation();
+              // Only stop propagation if we're actually handling the event
+              // Let Cmd+Number and other unhandled shortcuts bubble up
+              const shouldHandle = (
+                e.key === 'Enter' ||
+                e.key === 'Escape' ||
+                (!((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '9'))
+              );
+              if (shouldHandle && e.key !== 'Enter' && e.key !== 'Escape') {
+                e.stopPropagation();
+              }
               handleSearchKeyDown(e);
             }}
             data-testid="search-input"
@@ -603,7 +622,16 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
             value={replaceString}
             onChange={(e) => handleReplaceChange(e.target.value)}
             onKeyDown={(e) => {
-              e.stopPropagation();
+              // Only stop propagation if we're actually handling the event
+              // Let Cmd+Number and other unhandled shortcuts bubble up
+              const shouldHandle = (
+                e.key === 'Enter' ||
+                e.key === 'Escape' ||
+                (!((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '9'))
+              );
+              if (shouldHandle && e.key !== 'Enter' && e.key !== 'Escape') {
+                e.stopPropagation();
+              }
               handleReplaceKeyDown(e);
             }}
             data-testid="replace-input"
