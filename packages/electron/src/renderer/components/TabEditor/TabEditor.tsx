@@ -488,11 +488,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Skip if already processing a change
       // This prevents duplicate processing when chokidar fires multiple events
       if (processingFileChangeRef.current) {
-        console.log('[TabEditor] Skipping duplicate file-changed event');
+        console.log('[TabEditor] Skipping duplicate file-changed event - another change is already processing');
         return;
       }
       processingFileChangeRef.current = true;
       console.log('[TabEditor] Processing file-changed event for:', data.path);
+      console.log('[TabEditor] Processing flag set to true');
 
       try {
         const result = await window.electronAPI.readFileContent(data.path);
@@ -506,6 +507,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         // Check if disk content matches current editor content
         if (newContent === currentContent) {
+          console.log('[TabEditor] Skipping - disk content matches current editor content');
           processingFileChangeRef.current = false;
           return;
         }
@@ -516,18 +518,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         const contentMatchesLastSave = newContent === lastSavedContentRef.current;
 
         if (contentMatchesLastSave) {
+          console.log('[TabEditor] Skipping - disk content matches last saved content');
           processingFileChangeRef.current = false;
           return;
         }
 
-        // Also check time-based heuristic as a fallback
-        const timeSinceLastSave = lastSaveTimeRef.current ? Date.now() - lastSaveTimeRef.current : Infinity;
-        if (timeSinceLastSave < 2000) {
-          processingFileChangeRef.current = false;
-          return;
-        }
-
-        // CRITICAL: Check for pending AI edit tags FIRST before showing any dialogs
+        // CRITICAL: Check for pending AI edit tags FIRST before applying time-based heuristic
+        // We need to process AI edits even if they happen shortly after a save
         let pendingTags: any[] = [];
         try {
           if (window.electronAPI?.history) {
@@ -543,25 +540,47 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
           // Check if we're ALREADY in diff mode for this tag
           const alreadyInDiffMode = pendingAIEditTagRef.current?.tagId === pendingTags[0].id;
+          console.log(`[TabEditor] Pending tag found. alreadyInDiffMode: ${alreadyInDiffMode}, current tagId: ${pendingAIEditTagRef.current?.tagId}, pending tagId: ${pendingTags[0].id}`);
 
           if (alreadyInDiffMode) {
-            // Already showing diff - just update with new content
+            // Already showing diff - reset editor and update with new content
             console.log(`[TabEditor] Updating existing diff with new content - tagged: ${oldContent.length}, new: ${newContent.length}`);
 
-            if (editorRef.current) {
-              try {
-                // Update the diff with the new content without reloading the editor
-                const replacements: TextReplacement[] = [{
-                  oldText: oldContent,
-                  newText: newContent
-                }];
+            setContent(oldContent);
+            contentRef.current = oldContent;
 
-                const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
-                editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
-                console.log(`[TabEditor] Updated diff with new edits`);
-              } catch (error) {
-                logger.ui.error(`[TabEditor] Failed to update diff:`, error);
-              }
+            // Schedule the diff update asynchronously to avoid holding the processing lock
+            if (editorRef.current) {
+              const editorToUpdate = editorRef.current;
+              setTimeout(async () => {
+                try {
+                  // FIRST: Reset editor to old (tagged) content to clear existing diff nodes
+                  const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+                  const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+                  const transformers = getEditorTransformers();
+
+                  editorToUpdate.update(() => {
+                    const root = $getRoot();
+                    root.clear();
+                    $convertFromEnhancedMarkdownString(oldContent, transformers);
+                  }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+
+                  // THEN: Apply the new diff replacement
+                  const replacements: TextReplacement[] = [{
+                    oldText: oldContent,
+                    newText: newContent
+                  }];
+
+                  // Wait a tick for the editor to update
+                  await new Promise(resolve => setTimeout(resolve, 100));
+
+                  const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
+                  editorToUpdate.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+                  console.log(`[TabEditor] Updated diff with new edits`);
+                } catch (error) {
+                  logger.ui.error(`[TabEditor] Failed to update diff:`, error);
+                }
+              }, 0);
             }
           } else {
             // First time showing diff for this tag
@@ -609,6 +628,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           }
 
           // AI edit applied successfully - don't show any dialog, just return
+          return;
+        }
+
+        // No pending AI edit tags - apply time-based heuristic to avoid reloading after own save
+        const timeSinceLastSave = lastSaveTimeRef.current ? Date.now() - lastSaveTimeRef.current : Infinity;
+        if (timeSinceLastSave < 2000) {
+          console.log(`[TabEditor] Skipping - recent save (${timeSinceLastSave}ms ago) and no pending AI edits`);
+          processingFileChangeRef.current = false;
           return;
         }
 
@@ -721,7 +748,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       } finally {
         // Release the lock after processing is complete
         processingFileChangeRef.current = false;
-        console.log('[TabEditor] Finished processing file-changed event');
+        console.log('[TabEditor] Finished processing file-changed event - processing flag set to false');
       }
     };
 
