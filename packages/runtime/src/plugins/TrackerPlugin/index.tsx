@@ -571,16 +571,45 @@ function TrackerPlugin(): JSX.Element | null {
   }, [editor]);
 
   // Typeahead trigger function
-  const trackerTriggerFn: TriggerFunction = useCallback((text: string) => {
+  const trackerTriggerFn: TriggerFunction = useCallback((text: string, editor: LexicalEditor) => {
     const match = text.match(/#(\w*)$/);
     if (match) {
-      // Capture the text before the # trigger
-      capturedTextRef.current = text.substring(0, match.index).trim();
-      return {
-        leadOffset: match.index!,
-        matchingString: match[1],
-        replaceableString: match[0],
-      };
+      // Get the full paragraph/list item text by reading from editor state
+      let fullText = text;
+
+      editor.getEditorState().read(() => {
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) {
+          const anchorNode = selection.anchor.getNode();
+
+          // Find the paragraph or list item parent to get full text context
+          // This is necessary because typing "#" creates a hashtag node, and we need
+          // the full context from the parent to capture text before the "#"
+          let node: LexicalNode | null = anchorNode;
+          while (node) {
+            const parent = node.getParent();
+            // Stop at paragraph or list item - these contain the full text we need
+            if (parent && ($isListItemNode(parent) || parent.getType() === 'paragraph')) {
+              fullText = parent.getTextContent();
+              break;
+            }
+            node = parent;
+          }
+        }
+      });
+
+      // Now match against the full text
+      const fullMatch = fullText.match(/#(\w*)$/);
+      if (fullMatch) {
+        const textBeforeHash = fullText.substring(0, fullMatch.index);
+        capturedTextRef.current = textBeforeHash.trim();
+
+        return {
+          leadOffset: match.index!,
+          matchingString: fullMatch[1],
+          replaceableString: match[0],
+        };
+      }
     }
     return null;
   }, []);
