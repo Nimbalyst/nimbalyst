@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, isFirstLaunch, markAppLaunched, isSettingsCompleted, markSettingsCompleted, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isFirstLaunch, markAppLaunched, isSettingsCompleted, markSettingsCompleted, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 
@@ -29,8 +29,9 @@ export function registerSettingsHandlers() {
     });
 
     // Get theme (sync) - for immediate HTML script use
+    // CRITICAL: Must use getThemeSync() to resolve 'system' to actual theme
     ipcMain.on('get-theme-sync', (event) => {
-        event.returnValue = getTheme();
+        event.returnValue = getThemeSync();
     });
 
     // Get app version (from app.getVersion)

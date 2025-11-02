@@ -26,95 +26,32 @@ interface ThemeProviderProps {
 }
 
 export function ThemeProvider({children, initialTheme = 'auto'}: ThemeProviderProps): JSX.Element {
+  // Simple state that just tracks what the parent tells us
   const [theme, setThemeState] = useState<Theme>(() => {
-    // If a specific theme is configured, use it (this takes priority over everything)
-    if (initialTheme && (initialTheme === 'light' || initialTheme === 'dark' || initialTheme === 'crystal-dark')) {
+    // Parent explicitly set a theme
+    if (initialTheme === 'light' || initialTheme === 'dark' || initialTheme === 'crystal-dark') {
       return initialTheme;
     }
-
-    // Only check localStorage/system if no explicit theme provided
-    if (initialTheme === 'auto' || !initialTheme) {
-      // Check localStorage first, then system preference
-      const savedTheme = localStorage.getItem('stravu-editor-theme') as Theme;
-      if (savedTheme && (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'crystal-dark')) {
-        return savedTheme;
-      }
-
-      // Check system preference
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        return 'dark';
-      }
-    }
-
+    // Fallback for 'auto' or undefined
     return 'light';
   });
 
-  // Update theme when initialTheme prop changes (for parent-managed themes)
+  // Update theme when initialTheme prop changes (parent controls theme)
   useEffect(() => {
     if (initialTheme === 'light' || initialTheme === 'dark' || initialTheme === 'crystal-dark') {
       setThemeState(initialTheme);
-    } else if (initialTheme === 'auto') {
-      // In auto mode, respect system preference
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      setThemeState(systemTheme);
     }
   }, [initialTheme]);
 
+  // These are no-op - parent controls theme
   const setTheme = (newTheme: Theme) => {
+    // Theme is controlled by parent, but update state for legacy code
     setThemeState(newTheme);
-    localStorage.setItem('stravu-editor-theme', newTheme);
-    // Also set on document for components rendered outside editor (like typeahead)
-    document.documentElement.setAttribute('data-theme', newTheme);
   };
 
   const toggleTheme = () => {
-    if (theme === 'light') {
-      setTheme('dark');
-    } else if (theme === 'dark') {
-      setTheme('crystal-dark');
-    } else {
-      setTheme('light');
-    }
+    // No-op - theme switching happens at app level, not within editor
   };
-
-  // Apply theme on mount and when it changes (for components outside editor)
-  // ONLY if initialTheme was NOT provided (meaning we're managing global theme, not a specific editor)
-  useEffect(() => {
-    // If initialTheme was explicitly provided, the parent is managing the document theme
-    // Don't interfere with document-level theme management
-    if (initialTheme && initialTheme !== 'auto') {
-      return;
-    }
-
-    document.documentElement.setAttribute('data-theme', theme);
-
-    // Add/remove dark-theme class for shared dark styling
-    if (theme === 'dark' || theme === 'crystal-dark') {
-      document.documentElement.classList.add('dark-theme');
-    } else {
-      document.documentElement.classList.remove('dark-theme');
-    }
-  }, [theme, initialTheme]);
-
-  // Listen for system theme changes
-  useEffect(() => {
-    // Only listen for system changes if theme is set to 'auto'
-    if (initialTheme !== 'auto') {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    
-    const handleChange = (e: MediaQueryListEvent) => {
-      // Only update if no theme is saved in localStorage and we're in auto mode
-      if (!localStorage.getItem('stravu-editor-theme')) {
-        setTheme(e.matches ? 'dark' : 'light');
-      }
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, [initialTheme]);
 
   return (
     <ThemeContext.Provider value={{theme, toggleTheme, setTheme}}>
