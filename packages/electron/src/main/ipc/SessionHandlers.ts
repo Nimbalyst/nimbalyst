@@ -85,6 +85,11 @@ export async function registerSessionHandlers() {
         await sessionManager.updateSessionProviderAndModel(sessionId, provider, model);
     });
 
+    // Update session draft input
+    ipcMain.handle('sessions:update-draft-input', async (event, sessionId: string, draftInput: string) => {
+        await sessionManager.updateSessionDraftInput(sessionId, draftInput);
+    });
+
     // Get active session - not implemented, returns null
     ipcMain.handle('session:get-active', async (event, filePath: string) => {
         // This API doesn't exist in current SessionManager

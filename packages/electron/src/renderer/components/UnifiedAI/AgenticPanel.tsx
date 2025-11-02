@@ -316,6 +316,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           id: sessionData.id,
           name: tabName,
           sessionData,
+          draftInput: sessionData.draftInput,
           mode: 'plan',
           model: sessionData.model || sessionData.provider || 'claude-code'
         };
@@ -400,6 +401,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       id: sessionData.id,
       name: tabName,
       sessionData,
+      draftInput: sessionData.draftInput,
       mode: 'plan',
       model: sessionData.model || sessionData.provider || 'claude-code'
     };
@@ -469,6 +471,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                     name: savedTab.fileName,
                     sessionData,
                     isPinned: savedTab.isPinned,
+                    draftInput: sessionData.draftInput,
                     mode: 'plan',
                     model: sessionData.model || sessionData.provider || 'claude-code'
                   });
@@ -504,6 +507,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                   id: sessionData.id,
                   name: sessionData.title || 'Session',
                   sessionData,
+                  draftInput: sessionData.draftInput,
                   mode: 'plan',
                   model: sessionData.model || sessionData.provider || 'claude-code'
                 };
@@ -537,6 +541,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
               id: sessionData.id,
               name: tabName,
               sessionData,
+              draftInput: sessionData.draftInput,
               mode: 'plan',
               model: sessionData.model || sessionData.provider || 'claude-code'
             };
@@ -741,6 +746,36 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       return newTabs;
     });
   }, []);
+
+  // Persist draft input to database (debounced)
+  useEffect(() => {
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+    sessionTabs.forEach(tab => {
+      if (tab.draftInput !== undefined) {
+        // Clear existing timer for this session
+        const existingTimer = timers.get(tab.id);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+
+        // Set new timer to save after 500ms of inactivity
+        const timer = setTimeout(async () => {
+          try {
+            await window.electronAPI.invoke('sessions:update-draft-input', tab.id, tab.draftInput || '');
+          } catch (err) {
+            console.error('[AgenticPanel] Failed to save draft input:', err);
+          }
+        }, 500);
+
+        timers.set(tab.id, timer);
+      }
+    });
+
+    return () => {
+      timers.forEach(timer => clearTimeout(timer));
+    };
+  }, [sessionTabs]);
 
   // Handle draft attachments change (optimized to avoid recreating all tabs)
   const handleDraftAttachmentsChange = useCallback((sessionId: string, attachments: ChatAttachment[]) => {

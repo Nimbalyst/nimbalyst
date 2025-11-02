@@ -536,4 +536,11 @@ export class SessionManager {
       };
     }
   }
+
+  async updateSessionDraftInput(sessionId: string, draftInput: string): Promise<void> {
+    await AISessionsRepository.updateMetadata(sessionId, { draftInput });
+    if (this.currentSession?.id === sessionId) {
+      this.currentSession = { ...this.currentSession, draftInput };
+    }
+  }
 }
