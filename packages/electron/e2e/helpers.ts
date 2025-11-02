@@ -13,6 +13,7 @@ export const TEST_TIMEOUTS = {
   EDITOR_LOAD: 3000,      // Editor loads quickly
   SAVE_OPERATION: 2000,   // Saves are fast
   DEFAULT_WAIT: 500,      // Standard wait between operations
+  VERY_LONG: 60000,       // For long-running operations like AI interactions
 };
 
 // Selector for the active editor (accounts for multi-editor architecture)

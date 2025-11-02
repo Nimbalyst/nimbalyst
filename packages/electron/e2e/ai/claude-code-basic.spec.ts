@@ -42,29 +42,29 @@ test.describe('Claude Code CLI Basic Tests', () => {
           });
 
           let output = '';
-          claudeProcess.stdout?.on('data', (data) => {
+          claudeProcess.stdout?.on('data', (data: Buffer) => {
             output += data.toString();
           });
 
-          claudeProcess.on('close', (code) => {
+          claudeProcess.on('close', (code: number | null) => {
             resolve({ success: code === 0, output, code });
           });
 
-          claudeProcess.on('error', (error) => {
+          claudeProcess.on('error', (error: Error) => {
             resolve({ success: false, error: error.message });
           });
         } catch (error) {
-          resolve({ success: false, error: error.message });
+          resolve({ success: false, error: (error as Error).message });
         }
       });
     });
 
     console.log('Claude CLI test result:', testResult);
 
-    if (testResult.success) {
+    if ((testResult as any).success) {
       console.log('✅ Claude CLI is available');
     } else {
-      console.log('❌ Claude CLI not available:', testResult.error);
+      console.log('❌ Claude CLI not available:', (testResult as any).error);
     }
   });
 
@@ -123,12 +123,12 @@ test.describe('Claude Code CLI Basic Tests', () => {
         } catch (error) {
           return {
             success: false,
-            error: error.message,
+            error: (error as Error).message,
             details: 'Failed to create AI session'
           };
         }
       } catch (error) {
-        return { success: false, error: error.message };
+        return { success: false, error: (error as Error).message };
       }
     });
 

@@ -75,7 +75,7 @@ This is the second document.
       workspace: workspaceDir,
       env: {
         NODE_ENV: 'test',
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
       }
     });
 

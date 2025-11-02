@@ -21,6 +21,6 @@
     "jsx": "react-jsx",
     "types": []
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist", "out"]
+  "include": ["src", "src/renderer/electron.d.ts"],
+  "exclude": ["node_modules", "dist", "out", "e2e"]
 }

@@ -8,13 +8,21 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": []
+    "types": [],
+    "paths": {
+      "@nimbalyst/runtime": ["./packages/runtime/src/index.ts"],
+      "@nimbalyst/runtime/*": ["./packages/runtime/src/*"],
+      "rexical": ["./packages/rexical/src/index.ts"],
+      "rexical/*": ["./packages/rexical/src/*"]
+    }
   },
   "exclude": [
     "**/node_modules",
     "**/dist",
     "**/*.d.ts",
+    "**/e2e/**",
     "packages/capacitor",
     "packages/tauri",
     "packages/playground",

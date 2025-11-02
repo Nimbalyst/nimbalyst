@@ -145,7 +145,7 @@ This is the third paragraph.
       const allParagraphs = document.querySelectorAll('.PlaygroundEditorTheme__paragraph');
 
       const paragraphs = Array.from(allParagraphs).map((p: any) => {
-        const classList = Array.from(p.classList);
+        const classList = Array.from(p.classList) as string[];
         const text = p.textContent || '';
         const isEmpty = text.trim().length === 0;
         const hasDiff = classList.some((c: string) => c.includes('diff') || c.includes('add') || c.includes('remove'));

@@ -63,6 +63,10 @@
     "./plugins/shared/fixedTabHeader": {
       "import": "./dist/plugins/shared/fixedTabHeader/index.js",
       "types": "./dist/plugins/shared/fixedTabHeader/index.d.ts"
+    },
+    "./storage/repositories/AgentMessagesRepository": {
+      "import": "./dist/storage/repositories/AgentMessagesRepository.js",
+      "types": "./dist/storage/repositories/AgentMessagesRepository.d.ts"
     }
   },
   "files": [

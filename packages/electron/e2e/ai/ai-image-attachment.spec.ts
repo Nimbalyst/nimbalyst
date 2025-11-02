@@ -14,6 +14,7 @@ import {
 } from '../utils/testHelpers';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 
 let electronApp: ElectronApplication;
 let page: Page;
@@ -217,8 +218,8 @@ test.describe('AI Image Attachment', () => {
     await expect(chatInput).toBeVisible();
 
     // Add an attachment
-    const fileBuffer = fs.readFileSync(testImagePath);
-    const dataTransfer = await page.evaluateHandle((data) => {
+    const fileBuffer = fsSync.readFileSync(testImagePath);
+    const dataTransfer = await page.evaluateHandle((data: number[]) => {
       const dt = new DataTransfer();
       const file = new File([new Uint8Array(data)], 'test-image.png', { type: 'image/png' });
       dt.items.add(file);
