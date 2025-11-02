@@ -1194,6 +1194,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   if (mode === 'chat') {
     const activeTab = sessionTabs.find(tab => tab.id === activeTabId);
 
+    console.log('[AgenticPanel] Chat mode - onContentModeChange available:', !!onContentModeChange);
+
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
         {/* Header with session dropdown */}
@@ -1204,7 +1206,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onSessionSelect={openSessionInTab}
             onNewSession={() => createNewSession()}
             onDeleteSession={deleteSession}
-            onOpenSessionManager={() => window.electronAPI.invoke('open-session-manager', workspacePath)}
+            onOpenSessionManager={onContentModeChange ? () => {
+              console.log('[AgenticPanel] All Sessions clicked, switching to agent mode');
+              onContentModeChange('agent');
+            } : undefined}
           />
           {import.meta.env.DEV && (
               <DiffTestDropdown documentContext={documentContext} />

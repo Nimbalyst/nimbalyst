@@ -12,7 +12,6 @@ const { writeFile, mkdir, rename, unlink, rmdir, copyFile, readFile, rm, stat, c
 
 const execAsync = promisify(exec);
 import { windowStates, getWindowId, createWindow } from '../window/WindowManager';
-import { createSessionManagerWindow } from '../window/SessionManagerWindow';
 import { createAgenticCodingWindow, getAgenticCodingWindow } from '../window/AgenticCodingWindow';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { getFolderContents } from '../utils/FileTree';
@@ -833,15 +832,17 @@ export function registerWorkspaceHandlers() {
         }
     });
 
-    ipcMain.handle('open-session-manager', async (event, filterWorkspace?: string) => {
-        try {
-            createSessionManagerWindow(filterWorkspace);
-            return { success: true };
-        } catch (error: any) {
-            console.error('Error opening session manager:', error);
-            return { success: false, error: error.message };
-        }
-    });
+    // DEPRECATED: Session manager window replaced by agent mode
+    // Use AgenticPanel in agent mode instead
+    // ipcMain.handle('open-session-manager', async (event, filterWorkspace?: string) => {
+    //     try {
+    //         createSessionManagerWindow(filterWorkspace);
+    //         return { success: true };
+    //     } catch (error: any) {
+    //         console.error('Error opening session manager:', error);
+    //         return { success: false, error: error.message };
+    //     }
+    // });
 
     ipcMain.handle('open-agentic-coding-window', async (event, options: { workspacePath: string; sessionId?: string; planDocumentPath?: string }) => {
         try {

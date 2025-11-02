@@ -17,6 +17,7 @@ interface AIChatProps {
   onSessionLoaded?: () => void;
   onSessionIdChange?: (sessionId: string | null) => void;
   onShowApiKeyError?: () => void;
+  onContentModeChange?: (mode: string) => void;
 }
 
 /**
@@ -28,6 +29,7 @@ interface AIChatProps {
 export function AIChat({
   isCollapsed,
   onToggleCollapse,
+  onContentModeChange,
   width,
   onWidthChange,
   planningModeEnabled = true,
@@ -112,6 +114,7 @@ export function AIChat({
             workspacePath={workspacePath}
             documentContext={documentContext}
             onSessionChange={onSessionIdChange}
+            onContentModeChange={onContentModeChange}
           />
         </div>
       )}

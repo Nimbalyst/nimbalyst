@@ -12,7 +12,6 @@ import { createAIModelsWindow } from './window/AIModelsWindow';
 import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
 import { saveSessionState, restoreSessionState } from './session/SessionState';
 import { createWorkspaceManagerWindow, setupWorkspaceManagerHandlers } from './window/WorkspaceManagerWindow.ts';
-import { registerSessionManagerHandlers } from './window/SessionManagerWindow';
 import './window/AgenticCodingWindow'; // Register IPC handlers
 import { registerFileHandlers } from './ipc/FileHandlers';
 import { registerWorkspaceHandlers } from './ipc/WorkspaceHandlers.ts';
@@ -220,7 +219,6 @@ app.whenReady().then(async () => {
     registerWindowHandlers();
     await registerHistoryHandlers();
     await registerSessionHandlers();
-    registerSessionManagerHandlers();
     setupWorkspaceManagerHandlers();
     setupSessionFileHandlers();
     registerSlashCommandHandlers();

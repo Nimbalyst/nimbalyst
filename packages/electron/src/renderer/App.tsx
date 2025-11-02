@@ -25,7 +25,6 @@ import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
 import { ApiKeyDialog } from './components/ApiKeyDialog';
 import { GlobalSettingsScreen as AIModels } from './components/GlobalSettings/GlobalSettingsScreen.tsx';
-import { SessionManager } from './components/SessionManager/SessionManager';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { AgenticCodingWindow } from './components/AgenticCodingWindow';
 import { AgenticPanel, type AgenticPanelRef } from './components/UnifiedAI';
@@ -125,17 +124,6 @@ export default function App() {
         planDocumentPath={planDocumentPath}
       />
     );
-  }
-
-  if (windowMode === 'session-manager') {
-    // Set window title for Session Manager
-    React.useEffect(() => {
-      if (window.electronAPI) {
-        window.electronAPI.setTitle('AI Chat Sessions - All Workspaces');
-      }
-    }, []);
-    const filterWorkspace = urlParams.get('filterWorkspace') || undefined;
-    return <SessionManager filterWorkspace={filterWorkspace} />;
   }
 
   if (windowMode === 'workspace-manager') {
@@ -1066,9 +1054,8 @@ export default function App() {
         contentMode={activeMode}
         onContentModeChange={setActiveMode}
         onOpenHistory={() => {
-          if (window.electronAPI) {
-            window.electronAPI.invoke('open-session-manager', workspacePath);
-          }
+          // Switch to agent mode instead of opening old session manager
+          setActiveMode('agent');
         }}
         onTogglePlansPanel={() => {
           setBottomPanel(prev => prev === 'plan' ? null : 'plan');
@@ -1118,6 +1105,7 @@ export default function App() {
                   workspaceName={workspaceName}
                   theme={theme}
                   isActive={activeMode === 'files' || activeMode === 'plan'}
+                  onModeChange={setActiveMode}
                   onCurrentFileChange={(filePath, fileName, isDirty) => {
                     setCurrentFilePath(filePath);
                     setCurrentFileName(fileName);

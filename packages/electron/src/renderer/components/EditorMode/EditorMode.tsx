@@ -563,6 +563,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
             onSessionIdChange={setCurrentAISessionId}
             onShowApiKeyError={() => {}}
             documentContext={documentContext}
+            onContentModeChange={onModeChange}
             onApplyEdit={(edit, prompt, aiResponse) => {
               console.log('Edit already applied by AIChat component, updating UI state');
             }}
