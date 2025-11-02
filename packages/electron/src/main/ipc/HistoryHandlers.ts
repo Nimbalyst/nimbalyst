@@ -32,6 +32,31 @@ export async function registerHistoryHandlers() {
     ipcMain.handle('history:delete-snapshot', async (event, filePath: string, timestamp: string) => {
         await historyManager.deleteSnapshot(filePath, timestamp);
     });
+
+    // PHASE 4/5: Get pending AI edit tags
+    ipcMain.handle('history:get-pending-tags', async (event, filePath?: string) => {
+        return await historyManager.getPendingTags(filePath);
+    });
+
+    // PHASE 5: Create tag (for testing)
+    ipcMain.handle('history:create-tag', async (event, filePath: string, tagId: string, content: string, sessionId: string, toolUseId: string) => {
+        await historyManager.createTag(filePath, tagId, content, sessionId, toolUseId);
+    });
+
+    // PHASE 5: Get tag (for testing)
+    ipcMain.handle('history:get-tag', async (event, filePath: string, tagId: string) => {
+        return await historyManager.getTag(filePath, tagId);
+    });
+
+    // PHASE 5: Update tag status
+    ipcMain.handle('history:update-tag-status', async (event, filePath: string, tagId: string, status: string) => {
+        await historyManager.updateTagStatus(filePath, tagId, status as any);
+    });
+
+    // PHASE 5: Update tag content
+    ipcMain.handle('history:update-tag-content', async (event, filePath: string, tagId: string, content: string) => {
+        await historyManager.updateTagContent(filePath, tagId, content);
+    });
 }
 
 export { historyManager };

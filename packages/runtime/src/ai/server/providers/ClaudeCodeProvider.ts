@@ -131,7 +131,21 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         cwd: workspacePath,
         abortController: this.abortController,
         model: 'sonnet',
-        permissionMode: 'bypassPermissions'
+        permissionMode: 'bypassPermissions',
+        // PHASE 3: PreToolUse hook for tagging "before" state
+        // PostToolUse hook for saving "after" state
+        hooks: {
+          'PreToolUse': [
+            {
+              hooks: [this.createPreToolUseHook(workspacePath, sessionId)]
+            }
+          ],
+          'PostToolUse': [
+            {
+              hooks: [this.createPostToolUseHook(workspacePath, sessionId)]
+            }
+          ]
+        },
         // API key is passed via environment variable if configured (see env setup below)
       };
 
@@ -178,7 +192,13 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // Set up environment variables for the SDK
       // If user has configured a claude-code API key, pass it via environment
-      const env: any = { ...process.env };
+      const env: any = {
+        ...process.env,
+        // PHASE 2: Force disable MCP completely
+        CLAUDE_MCP_DISABLED: '1',
+        DISABLE_MCP: '1',
+        NO_MCP: '1'
+      };
 
       if (this.config.apiKey) {
         console.log('[CLAUDE-CODE] Using API key from config');
@@ -1165,23 +1185,253 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   }
 
   private getMcpServersConfig() {
-    // letting the agent work for coding
-    // Don't include MCP servers for agentic coding sessions
-    if (this.currentSessionType === 'coding') {
-      console.log('[CLAUDE-CODE] Agentic coding session - excluding MCP server configuration');
-      return {};
-    }
+    // PHASE 2: MCP server disabled for file-watcher-based diff approval
+    // Don't include MCP servers - let Claude use native Edit/Write tools
+    // The PreToolUse hook will capture "before" state and file watcher will show diffs
+    console.log('[CLAUDE-CODE] MCP server disabled - using native tools with file-watcher diff approval');
+    return {};
+  }
 
-    // Connect to MCP server running in Electron
-    // Use the actual port the MCP server started on (falls back to 3456 if not set)
-    const mcpPort = (global as any).mcpServerPort || 3456;
-    console.log('[CLAUDE-CODE] Including nimbalyst MCP server configuration on port:', mcpPort);
-    return {
-      "nimbalyst": {
-        "type": "sse",
-        "transport": "sse",
-        "url": `http://127.0.0.1:${mcpPort}/mcp`
+  /**
+   * PHASE 3: Create PreToolUse hook for tagging file state before edits
+   * This hook intercepts Edit/Write/MultiEdit tools, tags the current file state,
+   * and returns 'allow' to let the edit proceed immediately.
+   */
+  private createPreToolUseHook(workspacePath: string, sessionId?: string) {
+    const fs = require('fs');
+    const path = require('path');
+
+    return async (input: any, toolUseID: string | undefined, options: { signal: AbortSignal }) => {
+      const toolName = input.tool_name;
+      const toolInput = input.tool_input;
+
+      console.log(`[CLAUDE-CODE] PreToolUse hook: ${toolName}`, { toolUseID, toolInput });
+
+      // Only intercept file editing tools
+      if (toolName !== 'Edit' && toolName !== 'Write' && toolName !== 'MultiEdit') {
+        console.log(`[CLAUDE-CODE] PreToolUse: Not a file editing tool, allowing`);
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse' as const,
+            permissionDecision: 'allow' as const
+          }
+        };
       }
+
+      try {
+        // Extract file path from tool arguments
+        let filePath: string | undefined;
+        if (toolName === 'Edit' || toolName === 'Write') {
+          filePath = toolInput.file_path || toolInput.filePath;
+        } else if (toolName === 'MultiEdit') {
+          // MultiEdit might have multiple files - tag each one
+          const edits = toolInput.edits || [];
+          for (const edit of edits) {
+            const editFilePath = edit.file_path || edit.filePath;
+            if (editFilePath) {
+              await this.tagFileBeforeEdit(editFilePath, workspacePath, sessionId, toolUseID || `${toolName}-${Date.now()}`);
+            }
+          }
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse' as const,
+              permissionDecision: 'allow' as const
+            }
+          };
+        }
+
+        if (!filePath) {
+          console.warn('[CLAUDE-CODE] PreToolUse: No file path found in tool arguments');
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse' as const,
+              permissionDecision: 'allow' as const
+            }
+          };
+        }
+
+        // Make file path absolute if relative
+        if (!path.isAbsolute(filePath)) {
+          filePath = path.join(workspacePath, filePath);
+        }
+
+        // Read current file content (if file exists)
+        let content = '';
+        try {
+          content = fs.readFileSync(filePath, 'utf-8');
+        } catch (error) {
+          // File might not exist yet (Write tool creating new file)
+          console.log(`[CLAUDE-CODE] PreToolUse: File doesn't exist yet, no tag needed:`, filePath);
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse' as const,
+              permissionDecision: 'allow' as const
+            }
+          };
+        }
+
+        // Create unique tag ID for this edit
+        const actualToolUseId = toolUseID || `tool-${Date.now()}`;
+        await this.tagFileBeforeEdit(filePath, workspacePath, sessionId, actualToolUseId);
+
+      } catch (error) {
+        console.error('[CLAUDE-CODE] PreToolUse hook error:', error);
+        // Don't block the edit if tagging fails
+      }
+
+      // Always return 'allow' to let the edit proceed
+      return {
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse' as const,
+          permissionDecision: 'allow' as const
+        }
+      };
+    };
+  }
+
+  /**
+   * Tag a file's current state before an AI edit
+   */
+  private async tagFileBeforeEdit(
+    filePath: string,
+    workspacePath: string,
+    sessionId: string | undefined,
+    toolUseId: string
+  ): Promise<void> {
+    const fs = require('fs');
+
+    try {
+      // Import historyManager dynamically if we're in the main process context
+      try {
+        const { historyManager } = await import('../../../../../electron/src/main/HistoryManager');
+
+        // CRITICAL: Check if there are already pending tags for this file
+        // If yes, skip creating a new tag - we want to show ALL edits together as one diff
+        console.log(`[CLAUDE-CODE] PreToolUse: Checking for existing pending tags for:`, filePath);
+        const pendingTags = await historyManager.getPendingTags(filePath);
+        console.log(`[CLAUDE-CODE] PreToolUse: Found ${pendingTags?.length || 0} pending tags`);
+
+        if (pendingTags && pendingTags.length > 0) {
+          console.log(`[CLAUDE-CODE] PreToolUse: File already has pending tag, skipping new tag:`, {
+            filePath,
+            existingTagId: pendingTags[0].id,
+            existingStatus: pendingTags[0].status,
+            requestedToolUseId: toolUseId
+          });
+          // Don't create a new tag - the existing one covers all edits until user approves/rejects
+          return;
+        }
+
+        console.log(`[CLAUDE-CODE] PreToolUse: No pending tags found, creating new tag`);
+
+        // No pending tags - create the first one for this edit session
+        // Read current file content
+        const content = fs.readFileSync(filePath, 'utf-8');
+
+        // Create tag ID
+        const tagId = `ai-edit-pending-${sessionId || 'unknown'}-${toolUseId}`;
+
+        console.log(`[CLAUDE-CODE] PreToolUse: Creating first tag for file:`, {
+          filePath,
+          tagId,
+          contentLength: content.length
+        });
+
+        await historyManager.createTag(
+          filePath,
+          tagId,
+          content,
+          sessionId || 'unknown',
+          toolUseId
+        );
+        console.log(`[CLAUDE-CODE] PreToolUse: Tag created successfully`);
+      } catch (importError) {
+        console.warn('[CLAUDE-CODE] PreToolUse: Could not import historyManager (might be in renderer process):',  importError);
+        // If we're not in the main process, we'll need to use IPC
+        // This will be implemented when we integrate with the IPC layer
+      }
+
+    } catch (error) {
+      console.error('[CLAUDE-CODE] PreToolUse: Failed to tag file:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * PostToolUse hook to save AI edit as a snapshot
+   * This creates the "after" version and coalesces with any previous edits
+   */
+  private createPostToolUseHook(workspacePath: string, sessionId?: string) {
+    const fs = require('fs');
+    const path = require('path');
+
+    return async (input: any, toolUseID: string | undefined, options: { signal: AbortSignal }) => {
+      const toolName = input.tool_name;
+      const toolInput = input.tool_input;
+      const toolResponse = input.tool_response;
+
+      console.log(`[CLAUDE-CODE] PostToolUse hook: ${toolName}`, { toolUseID });
+
+      // Only intercept file editing tools
+      if (toolName !== 'Edit' && toolName !== 'Write' && toolName !== 'MultiEdit') {
+        console.log(`[CLAUDE-CODE] PostToolUse: Not a file editing tool, skipping`);
+        return {};
+      }
+
+      try {
+        // Extract file paths that were edited
+        const filePaths: string[] = [];
+        if (toolName === 'Edit' || toolName === 'Write') {
+          const filePath = toolInput.file_path || toolInput.filePath;
+          if (filePath) {
+            filePaths.push(filePath);
+          }
+        } else if (toolName === 'MultiEdit') {
+          const edits = toolInput.edits || [];
+          for (const edit of edits) {
+            const editFilePath = edit.file_path || edit.filePath;
+            if (editFilePath) {
+              filePaths.push(editFilePath);
+            }
+          }
+        }
+
+        // Save snapshot for each edited file
+        for (let filePath of filePaths) {
+          // Make file path absolute if relative
+          if (!path.isAbsolute(filePath)) {
+            filePath = path.join(workspacePath, filePath);
+          }
+
+          // Read the new content that was just written
+          let newContent = '';
+          try {
+            newContent = fs.readFileSync(filePath, 'utf-8');
+          } catch (error) {
+            console.warn(`[CLAUDE-CODE] PostToolUse: Could not read file after edit:`, filePath);
+            continue;
+          }
+
+          // Save as 'ai-edit' snapshot in history
+          try {
+            const { historyManager } = await import('../../../../../electron/src/main/HistoryManager');
+            await historyManager.createSnapshot(
+              filePath,
+              newContent,
+              'ai-edit',
+              `AI edit via ${toolName} (session: ${sessionId || 'unknown'})`
+            );
+            console.log(`[CLAUDE-CODE] PostToolUse: Saved ai-edit snapshot for ${filePath}`);
+          } catch (importError) {
+            console.warn('[CLAUDE-CODE] PostToolUse: Could not import historyManager:', importError);
+          }
+        }
+
+      } catch (error) {
+        console.error('[CLAUDE-CODE] PostToolUse hook error:', error);
+      }
+
+      return {};
     };
   }
 

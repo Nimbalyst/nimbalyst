@@ -93,6 +93,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const pendingSaveIdsRef = useRef<Set<number>>(new Set());
   const instanceIdRef = useRef<number>(Math.floor(Math.random() * 10000));
   const hasInitialContentSyncRef = useRef<boolean>(false);
+  const pendingAIEditTagRef = useRef<{tagId: string, filePath: string} | null>(null);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -123,6 +124,22 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         const currentContent = contentRef.current;
 
         if (diskContent !== currentContent && diskContent !== lastSavedContentRef.current) {
+          // CRITICAL: Check for pending AI edit tags FIRST
+          let pendingTags: any[] = [];
+          try {
+            if (window.electronAPI?.history) {
+              pendingTags = await window.electronAPI.history.getPendingTags(filePath);
+            }
+          } catch (error) {
+            logger.ui.error(`[TabEditor] Failed to check for pending tags on tab activation:`, error);
+          }
+
+          // If this is an AI edit, don't show background dialog - the file watcher will handle it
+          if (pendingTags && pendingTags.length > 0) {
+            console.log(`[TabEditor] AI edit detected on tab activation - skipping background dialog`);
+            return;
+          }
+
           // If there are unsaved changes, show dialog
           if (isDirtyRef.current) {
             setBackgroundChangeContent(diskContent);
@@ -382,8 +399,72 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     return () => clearInterval(timer);
   }, [periodicSnapshotInterval, filePath, fileName]);
 
+  // Check for pending AI edit tags on mount
+  const hasCheckedForPendingTagsRef = useRef(false);
+
+  useEffect(() => {
+    if (hasCheckedForPendingTagsRef.current) return;
+    if (!window.electronAPI?.history) return;
+    if (!editorRef.current) return;
+
+    hasCheckedForPendingTagsRef.current = true;
+
+    const checkForPendingTags = async () => {
+      try {
+        const pendingTags = await window.electronAPI.history.getPendingTags(filePath);
+
+        if (pendingTags && pendingTags.length > 0) {
+          console.log(`[TabEditor] Found pending AI edit tag on mount - restoring diff mode`);
+
+          // Load the tagged (old) content first
+          const oldContent = pendingTags[0].content;
+          const newContent = initialContent; // Current disk content
+
+          setContent(oldContent);
+          contentRef.current = oldContent;
+
+          // Update editor with old content
+          const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+          const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+          const transformers = getEditorTransformers();
+
+          editorRef.current.update(() => {
+            const root = $getRoot();
+            root.clear();
+            $convertFromEnhancedMarkdownString(oldContent, transformers);
+          }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+
+          // Apply the diff
+          const replacements: TextReplacement[] = [{
+            oldText: oldContent,
+            newText: newContent
+          }];
+
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
+          editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+
+          // Store tag info for approval
+          pendingAIEditTagRef.current = {
+            tagId: pendingTags[0].id,
+            filePath: filePath
+          };
+
+          console.log(`[TabEditor] Restored diff mode on mount`);
+        }
+      } catch (error) {
+        logger.ui.error(`[TabEditor] Failed to check for pending tags on mount:`, error);
+      }
+    };
+
+    checkForPendingTags();
+  }, [filePath, initialContent]);
+
   // File watching - use ref to ensure we only register once
   const fileWatcherRegisteredRef = useRef(false);
+  // Track if we're currently processing a file change (prevent duplicate processing)
+  const processingFileChangeRef = useRef(false);
 
   useEffect(() => {
     if (!window.electronAPI) {
@@ -397,8 +478,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
     fileWatcherRegisteredRef.current = true;
 
-    const processingChangeRef = { current: false };
-
     // Create a stable handler function that we can properly clean up
     const handleFileChanged = async (data: { path: string }) => {
       // Only handle changes for this file
@@ -406,17 +485,19 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         return;
       }
 
-      // Skip if already processing THIS SPECIFIC CHANGE
-      // Don't use a long timeout - we want to process subsequent changes
-      if (processingChangeRef.current) {
+      // Skip if already processing a change
+      // This prevents duplicate processing when chokidar fires multiple events
+      if (processingFileChangeRef.current) {
+        console.log('[TabEditor] Skipping duplicate file-changed event');
         return;
       }
-      processingChangeRef.current = true;
+      processingFileChangeRef.current = true;
+      console.log('[TabEditor] Processing file-changed event for:', data.path);
 
       try {
         const result = await window.electronAPI.readFileContent(data.path);
         if (!result || typeof result !== 'object' || !('content' in result)) {
-          processingChangeRef.current = false;
+          processingFileChangeRef.current = false;
           return;
         }
 
@@ -425,7 +506,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         // Check if disk content matches current editor content
         if (newContent === currentContent) {
-          processingChangeRef.current = false;
+          processingFileChangeRef.current = false;
           return;
         }
 
@@ -435,18 +516,155 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         const contentMatchesLastSave = newContent === lastSavedContentRef.current;
 
         if (contentMatchesLastSave) {
-          processingChangeRef.current = false;
+          processingFileChangeRef.current = false;
           return;
         }
 
         // Also check time-based heuristic as a fallback
         const timeSinceLastSave = lastSaveTimeRef.current ? Date.now() - lastSaveTimeRef.current : Infinity;
         if (timeSinceLastSave < 2000) {
-          processingChangeRef.current = false;
+          processingFileChangeRef.current = false;
+          return;
+        }
+
+        // CRITICAL: Check for pending AI edit tags FIRST before showing any dialogs
+        let pendingTags: any[] = [];
+        try {
+          if (window.electronAPI?.history) {
+            pendingTags = await window.electronAPI.history.getPendingTags(data.path);
+          }
+        } catch (error) {
+          logger.ui.error(`[TabEditor] Failed to check for pending tags:`, error);
+        }
+
+        // If there are pending AI edit tags, apply diff mode (skip conflict dialog)
+        if (pendingTags && pendingTags.length > 0) {
+          const oldContent = pendingTags[0].content;
+
+          // Check if we're ALREADY in diff mode for this tag
+          const alreadyInDiffMode = pendingAIEditTagRef.current?.tagId === pendingTags[0].id;
+
+          if (alreadyInDiffMode) {
+            // Already showing diff - just update with new content
+            console.log(`[TabEditor] Updating existing diff with new content - tagged: ${oldContent.length}, new: ${newContent.length}`);
+
+            if (editorRef.current) {
+              try {
+                // Update the diff with the new content without reloading the editor
+                const replacements: TextReplacement[] = [{
+                  oldText: oldContent,
+                  newText: newContent
+                }];
+
+                const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
+                editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+                console.log(`[TabEditor] Updated diff with new edits`);
+              } catch (error) {
+                logger.ui.error(`[TabEditor] Failed to update diff:`, error);
+              }
+            }
+          } else {
+            // First time showing diff for this tag
+            logger.ui.info(`[TabEditor] AI edit pending for ${fileName}, applying diff mode (skipping conflict dialog)`);
+            console.log(`[TabEditor] AI edit pending - tagged content length: ${oldContent.length}, new content length: ${newContent.length}`);
+
+            setContent(oldContent);
+            contentRef.current = oldContent;
+
+            // Update editor with old content
+            if (editorRef.current) {
+              try {
+                const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+                const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+                const transformers = getEditorTransformers();
+
+                editorRef.current.update(() => {
+                  const root = $getRoot();
+                  root.clear();
+                  $convertFromEnhancedMarkdownString(oldContent, transformers);
+                }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+
+                // THEN: Apply the diff replacement
+                const replacements: TextReplacement[] = [{
+                  oldText: oldContent,
+                  newText: newContent
+                }];
+
+                // Wait a tick for the editor to update
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
+                editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+                console.log(`[TabEditor] Dispatched APPLY_MARKDOWN_REPLACE_COMMAND`);
+
+                // Store tag info so we can mark it as reviewed when user approves
+                pendingAIEditTagRef.current = {
+                  tagId: pendingTags[0].id,
+                  filePath: data.path
+                };
+              } catch (error) {
+                logger.ui.error(`[TabEditor] Failed to apply AI diff:`, error);
+              }
+            }
+          }
+
+          // AI edit applied successfully - don't show any dialog, just return
           return;
         }
 
         const applyReload = async () => {
+          // No pending tags - handle as normal file change
+          if (false) {  // This block is now dead code - will be cleaned up
+            // AI edit detected - apply diff mode in the editor
+            logger.ui.info(`[TabEditor] AI edit pending for ${fileName}, applying diff mode`);
+            console.log(`[TabEditor] AI edit pending - tagged content length: ${pendingTags[0].content.length}, new content length: ${newContent.length}`);
+
+            // FIRST: Load the tagged (old) content into the editor
+            const oldContent = pendingTags[0].content;
+            setContent(oldContent);
+            contentRef.current = oldContent;
+
+            // Update editor with old content
+            if (editorRef.current) {
+              try {
+                const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+                const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+                const transformers = getEditorTransformers();
+
+                editorRef.current.update(() => {
+                  const root = $getRoot();
+                  root.clear();
+                  $convertFromEnhancedMarkdownString(oldContent, transformers);
+                }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+
+                // THEN: Apply the diff replacement
+                const replacements: TextReplacement[] = [{
+                  oldText: oldContent,
+                  newText: newContent
+                }];
+
+                // Wait a tick for the editor to update
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
+                editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+                console.log(`[TabEditor] Dispatched APPLY_MARKDOWN_REPLACE_COMMAND`);
+
+                // Store tag info so we can mark it as reviewed when user approves
+                pendingAIEditTagRef.current = {
+                  tagId: pendingTags[0].id,
+                  filePath: data.path
+                };
+              } catch (error) {
+                logger.ui.error(`[TabEditor] Failed to apply AI diff:`, error);
+              }
+            }
+
+            // Don't reset the flag here - it will be reset in the finally block
+            return;
+          }
+
+          // No pending tags - normal file change (user edit or external change)
           // Create history snapshot of external change
           if (window.electronAPI?.history && newContent) {
             try {
@@ -495,15 +713,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // Store the new content and show dialog
           setConflictDialogContent(newContent);
           setShowConflictDialog(true);
-          processingChangeRef.current = false;
+          // Don't reset flag yet - let finally block handle it
           return;
         }
 
         await applyReload();
       } finally {
-        // Release the lock immediately after processing
-        // This allows rapid successive changes to be processed
-        processingChangeRef.current = false;
+        // Release the lock after processing is complete
+        processingFileChangeRef.current = false;
+        console.log('[TabEditor] Finished processing file-changed event');
       }
     };
 
@@ -628,6 +846,136 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       })();
     }
   }, [onDirtyChange, onContentChange]);
+
+  // PHASE 5: Listen for diff approve/reject commands to update tag status
+  useEffect(() => {
+    if (!editorRef.current) return;
+
+    const editor = editorRef.current;
+
+    const handleApprove = async () => {
+      if (pendingAIEditTagRef.current) {
+        const { tagId, filePath } = pendingAIEditTagRef.current;
+        try {
+          // Mark tag as reviewed
+          await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed');
+          logger.ui.info(`[TabEditor] Marked AI edit tag as reviewed: ${tagId}`);
+
+          // Clear the pending tag reference
+          pendingAIEditTagRef.current = null;
+
+          // Exit diff mode - reload the editor with current disk content
+          const result = await window.electronAPI.readFileContent(filePath);
+          if (result && result.content) {
+            const currentContent = result.content;
+            setContent(currentContent);
+            contentRef.current = currentContent;
+            initialContentRef.current = currentContent;
+            setLastSavedContent(currentContent);
+            lastSavedContentRef.current = currentContent;
+
+            // Update editor to show final content (no diff)
+            if (editorRef.current) {
+              const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+              const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+              const transformers = getEditorTransformers();
+
+              editorRef.current.update(() => {
+                const root = $getRoot();
+                root.clear();
+                $convertFromEnhancedMarkdownString(currentContent, transformers);
+              }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+            }
+          }
+        } catch (error) {
+          logger.ui.error(`[TabEditor] Failed to update tag status:`, error);
+        }
+      }
+    };
+
+    const handleReject = async () => {
+      if (pendingAIEditTagRef.current) {
+        const { tagId, filePath } = pendingAIEditTagRef.current;
+        try {
+          // Get the tagged (original) content
+          const tag = await window.electronAPI.history.getTag(filePath, tagId);
+          if (!tag) {
+            logger.ui.warn(`[TabEditor] Tag not found for rejection: ${tagId}`);
+            return;
+          }
+
+          // Mark tag as reviewed (user rejected, so we're done with it)
+          await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed');
+          logger.ui.info(`[TabEditor] Marked rejected AI edit tag as reviewed: ${tagId}`);
+
+          // Clear the pending tag reference
+          pendingAIEditTagRef.current = null;
+
+          // Restore the original (tagged) content - reject the AI edits
+          const originalContent = tag.content;
+          setContent(originalContent);
+          contentRef.current = originalContent;
+          initialContentRef.current = originalContent;
+          setLastSavedContent(originalContent);
+          lastSavedContentRef.current = originalContent;
+
+          // Write original content back to disk
+          await window.electronAPI.saveFile(originalContent, filePath);
+
+          // Update editor to show original content (no diff)
+          if (editorRef.current) {
+            const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+            const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+            const transformers = getEditorTransformers();
+
+            editorRef.current.update(() => {
+              const root = $getRoot();
+              root.clear();
+              $convertFromEnhancedMarkdownString(originalContent, transformers);
+            }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+          }
+        } catch (error) {
+          logger.ui.error(`[TabEditor] Failed to reject edits:`, error);
+        }
+      }
+    };
+
+    // Register command listeners
+    const importCommands = async () => {
+      const { APPROVE_DIFF_COMMAND, REJECT_DIFF_COMMAND } = await import('rexical');
+      const { COMMAND_PRIORITY_LOW } = await import('lexical');
+
+      const unregisterApprove = editor.registerCommand(
+        APPROVE_DIFF_COMMAND,
+        () => {
+          handleApprove();
+          return false; // Let other handlers run
+        },
+        COMMAND_PRIORITY_LOW
+      );
+
+      const unregisterReject = editor.registerCommand(
+        REJECT_DIFF_COMMAND,
+        () => {
+          handleReject();
+          return false; // Let other handlers run
+        },
+        COMMAND_PRIORITY_LOW
+      );
+
+      return () => {
+        unregisterApprove();
+        unregisterReject();
+      };
+    };
+
+    let cleanup: (() => void) | undefined;
+    importCommands().then(fn => { cleanup = fn; });
+
+    return () => {
+      if (cleanup) cleanup();
+    };
+  }, [filePath]);
 
   // Image interaction callbacks
   const handleImageDoubleClick = useCallback(async (src: string, nodeKey: string) => {

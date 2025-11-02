@@ -168,6 +168,29 @@ class PGLiteWorker {
 
       CREATE INDEX IF NOT EXISTS idx_history_workspace_file ON document_history(workspace_id, file_path);
       CREATE INDEX IF NOT EXISTS idx_history_timestamp ON document_history(timestamp);
+
+      -- Migration: Clean up duplicate pending pre-edit tags before creating unique index
+      -- Keep only the most recent pending tag per file
+      DELETE FROM document_history
+      WHERE id IN (
+        SELECT id FROM (
+          SELECT id,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY file_path
+                   ORDER BY timestamp DESC
+                 ) as rn
+          FROM document_history
+          WHERE metadata->>'type' = 'pre-edit'
+            AND metadata->>'status' = 'pending-review'
+        ) t
+        WHERE rn > 1
+      );
+
+      -- Partial unique index: only one pending pre-edit tag per file at a time
+      -- This prevents race conditions when AI makes multiple rapid edits
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_history_pending_pre_edit_per_file
+        ON document_history(file_path)
+        WHERE metadata->>'type' = 'pre-edit' AND metadata->>'status' = 'pending-review';
     `);
 
     // Session Files table

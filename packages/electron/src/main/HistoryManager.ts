@@ -20,6 +20,19 @@ export interface Snapshot {
   metadata?: any;
 }
 
+export type TagStatus = 'pending-review' | 'reviewed' | 'archived';
+
+export interface HistoryTag {
+  id: string;                    // "pre-ai-edit-${sessionId}-${toolUseId}"
+  filePath: string;
+  content: string;               // The tagged content
+  status: TagStatus;
+  sessionId: string;
+  toolUseId: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export class HistoryManager {
   private maxSnapshots = 50;
   private maxAgeDays = 30;
@@ -236,6 +249,268 @@ export class HistoryManager {
       logger.main.info('[HistoryManager] Deleted history for workspace:', workspacePath);
     } catch (error) {
       logger.main.error('[HistoryManager] Failed to delete workspace history:', error);
+    }
+  }
+
+  /**
+   * Create a tag for a document version (Phase 1 of file-watcher diff approval)
+   * Tags are permanent records that mark specific document states
+   */
+  async createTag(
+    filePath: string,
+    tagId: string,
+    content: string,
+    sessionId: string,
+    toolUseId: string
+  ): Promise<void> {
+    try {
+      // Ensure database is initialized
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const now = Date.now();
+      const compressed = await gzip(Buffer.from(content, 'utf-8'));
+
+      // Determine workspace ID
+      let workspaceId: string | null = null;
+      const dirPath = path.dirname(filePath);
+      if (dirPath !== '/' && dirPath !== path.parse(dirPath).root) {
+        workspaceId = dirPath;
+      }
+
+      // Store tag as a special history entry with tag metadata
+      await database.query(`
+        INSERT INTO document_history (
+          workspace_id,
+          file_path,
+          content,
+          size_bytes,
+          timestamp,
+          version,
+          metadata
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, [
+        workspaceId,
+        filePath,
+        compressed,
+        compressed.length,
+        now,
+        1,
+        {
+          type: 'pre-edit',
+          tagId,
+          status: 'pending-review' as TagStatus,
+          sessionId,
+          toolUseId,
+          createdAt: now,
+          updatedAt: now
+        }
+      ]);
+
+      logger.main.info('[HistoryManager] Created tag:', { filePath, tagId, sessionId, toolUseId });
+    } catch (error: any) {
+      // Check if this is a unique constraint violation (duplicate pending pre-edit tag)
+      if (error.code === '23505' || error.message?.includes('idx_history_pending_pre_edit_per_file')) {
+        logger.main.info('[HistoryManager] Skipping tag creation - file already has pending pre-edit tag:', { filePath });
+        // This is expected when AI makes multiple rapid edits - silently ignore
+        return;
+      }
+
+      logger.main.error('[HistoryManager] Failed to create tag:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get a specific tag by ID
+   */
+  async getTag(filePath: string, tagId: string): Promise<HistoryTag | null> {
+    try {
+      // Ensure database is initialized
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const result = await database.query<{
+        content: Buffer;
+        metadata: any;
+      }>(`
+        SELECT content, metadata
+        FROM document_history
+        WHERE file_path = $1
+          AND metadata->>'tagId' = $2
+          AND metadata->>'type' = 'pre-edit'
+        ORDER BY timestamp DESC
+        LIMIT 1
+      `, [filePath, tagId]);
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0];
+      const compressed = row.content;
+      const decompressed = await gunzip(compressed);
+      const content = decompressed.toString('utf-8');
+
+      return {
+        id: tagId,
+        filePath,
+        content,
+        status: row.metadata.status,
+        sessionId: row.metadata.sessionId,
+        toolUseId: row.metadata.toolUseId,
+        createdAt: new Date(row.metadata.createdAt),
+        updatedAt: new Date(row.metadata.updatedAt)
+      };
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to get tag:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update tag content (used during incremental accept/reject)
+   */
+  async updateTagContent(filePath: string, tagId: string, newContent: string): Promise<void> {
+    try {
+      // Ensure database is initialized
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const compressed = await gzip(Buffer.from(newContent, 'utf-8'));
+      const now = Date.now();
+
+      await database.query(`
+        UPDATE document_history
+        SET content = $1,
+            size_bytes = $2,
+            metadata = jsonb_set(metadata, '{updatedAt}', to_jsonb($3::bigint))
+        WHERE file_path = $4
+          AND metadata->>'tagId' = $5
+          AND metadata->>'type' = 'pre-edit'
+      `, [compressed, compressed.length, now, filePath, tagId]);
+
+      logger.main.debug('[HistoryManager] Updated tag content:', { filePath, tagId });
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to update tag content:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update tag status (pending-review -> reviewed -> archived)
+   */
+  async updateTagStatus(filePath: string, tagId: string, status: TagStatus): Promise<void> {
+    try {
+      // Ensure database is initialized
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const now = Date.now();
+
+      await database.query(`
+        UPDATE document_history
+        SET metadata = jsonb_set(
+              jsonb_set(metadata, '{status}', to_jsonb($1::text)),
+              '{updatedAt}', to_jsonb($2::bigint)
+            )
+        WHERE file_path = $3
+          AND metadata->>'tagId' = $4
+          AND metadata->>'type' = 'pre-edit'
+      `, [status, now, filePath, tagId]);
+
+      logger.main.info('[HistoryManager] Updated tag status:', { filePath, tagId, status });
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to update tag status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all pending tags (status='pending-review') for a file or all files
+   */
+  async getPendingTags(filePath?: string): Promise<HistoryTag[]> {
+    try {
+      // Ensure database is initialized
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const query = filePath
+        ? `
+          SELECT file_path, content, metadata
+          FROM document_history
+          WHERE file_path = $1
+            AND metadata->>'type' = 'pre-edit'
+            AND metadata->>'status' = 'pending-review'
+          ORDER BY timestamp DESC
+        `
+        : `
+          SELECT file_path, content, metadata
+          FROM document_history
+          WHERE metadata->>'type' = 'pre-edit'
+            AND metadata->>'status' = 'pending-review'
+          ORDER BY timestamp DESC
+        `;
+
+      const params = filePath ? [filePath] : [];
+      const result = await database.query<{
+        file_path: string;
+        content: Buffer;
+        metadata: any;
+      }>(query, params);
+
+      const tags: HistoryTag[] = [];
+      for (const row of result.rows) {
+        const compressed = row.content;
+        const decompressed = await gunzip(compressed);
+        const content = decompressed.toString('utf-8');
+
+        tags.push({
+          id: row.metadata.tagId,
+          filePath: row.file_path,
+          content,
+          status: row.metadata.status,
+          sessionId: row.metadata.sessionId,
+          toolUseId: row.metadata.toolUseId,
+          createdAt: new Date(row.metadata.createdAt),
+          updatedAt: new Date(row.metadata.updatedAt)
+        });
+      }
+
+      return tags;
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to get pending tags:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Check if a tag exists
+   */
+  async hasTag(filePath: string, tagId: string): Promise<boolean> {
+    try {
+      // Ensure database is initialized
+      if (!database.isInitialized()) {
+        await database.initialize();
+      }
+
+      const result = await database.query<{ count: number }>(`
+        SELECT COUNT(*) as count
+        FROM document_history
+        WHERE file_path = $1
+          AND metadata->>'tagId' = $2
+          AND metadata->>'type' = 'pre-edit'
+      `, [filePath, tagId]);
+
+      return result.rows[0]?.count > 0;
+    } catch (error) {
+      logger.main.error('[HistoryManager] Failed to check tag existence:', error);
+      return false;
     }
   }
 }
