@@ -648,17 +648,7 @@ export async function createApplicationMenu() {
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
-                            focused.webContents.send('find');
-                        }
-                    }
-                },
-                {
-                    label: 'Find and Replace...',
-                    accelerator: KeyboardShortcuts.edit.findAndReplace,
-                    click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
-                        if (focused) {
-                            focused.webContents.send('find-and-replace');
+                            focused.webContents.send('toggle-search-replace');
                         }
                     }
                 },

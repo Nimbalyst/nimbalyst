@@ -1,0 +1,213 @@
+.search-replace-bar {
+  background-color: var(--surface-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  padding: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-replace-bar-content {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+}
+
+/* First row: search input + options + navigation + close */
+.search-replace-bar-content:first-child {
+  display: flex;
+  align-items: center;
+}
+
+/* Second row: replace input + actions */
+.search-replace-bar-content:last-child {
+  display: flex;
+  align-items: center;
+}
+
+.search-replace-bar-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.search-replace-input-group {
+  flex: 1 1 auto;
+  min-width: 120px;
+  max-width: 400px;
+}
+
+.search-replace-input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background-color: var(--surface-primary);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.search-replace-input:focus {
+  border-color: var(--primary-color);
+}
+
+.search-replace-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.search-replace-options {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.search-option-button {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.search-option-button:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.search-option-button.active {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.search-replace-navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.search-nav-button {
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-primary);
+  padding: 0;
+  transition: background-color 0.15s ease;
+}
+
+.search-nav-button:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
+.search-nav-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.search-match-counter {
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 80px;
+  text-align: center;
+  user-select: none;
+}
+
+.search-replace-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.search-replace-button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.search-replace-button:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
+.search-replace-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.search-replace-close {
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 0;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.search-replace-close:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* Search highlight styles */
+.search-highlights-wrapper {
+  position: relative;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.search-highlight {
+  background-color: rgba(255, 235, 59, 0.4);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.search-highlight-current {
+  background-color: rgba(255, 152, 0, 0.6);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* Dark mode support for highlights */
+[data-theme="dark"] .search-highlight,
+[data-theme="crystal-dark"] .search-highlight {
+  background-color: rgba(255, 235, 59, 0.3);
+}
+
+[data-theme="dark"] .search-highlight-current,
+[data-theme="crystal-dark"] .search-highlight-current {
+  background-color: rgba(255, 152, 0, 0.5);
+}

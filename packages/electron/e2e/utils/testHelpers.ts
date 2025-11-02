@@ -69,6 +69,14 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   historyItem: '.history-item',
   historyPreviewContent: '.history-preview-content pre',
   historyRestoreButton: '.history-restore-button',
+
+  // Search/Replace bar
+  searchReplaceBar: '[data-testid="search-replace-bar"]',
+  searchInput: '[data-testid="search-input"]',
+  replaceInput: '[data-testid="replace-input"]',
+  caseToggle: '[data-testid="case-toggle"]',
+  regexToggle: '[data-testid="regex-toggle"]',
+  matchCounter: '[data-testid="match-counter"]',
 };
 
 /**

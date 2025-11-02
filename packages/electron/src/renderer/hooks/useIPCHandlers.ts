@@ -9,6 +9,7 @@ import {
   type FrontmatterData,
 } from 'rexical';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
+import { SearchReplaceStateManager } from '@nimbalyst/runtime';
 import { aiApi } from '../services/aiApi';
 import { getSoundPlayer } from '../services/SoundPlayer';
 
@@ -420,14 +421,16 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }));
     cleanupFns.push(window.electronAPI.onToggleSearch(() => {
       console.log('Toggle search command received');
-      if (editorRef.current && searchCommandRef.current) {
-        editorRef.current.dispatchCommand(searchCommandRef.current, undefined);
+      const activeFilePath = editorRegistry.getActiveFilePath();
+      if (activeFilePath) {
+        SearchReplaceStateManager.toggle(activeFilePath);
       }
     }));
     cleanupFns.push(window.electronAPI.onToggleSearchReplace(() => {
       console.log('Toggle search replace command received');
-      if (editorRef.current && searchCommandRef.current) {
-        editorRef.current.dispatchCommand(searchCommandRef.current, undefined);
+      const activeFilePath = editorRegistry.getActiveFilePath();
+      if (activeFilePath) {
+        SearchReplaceStateManager.toggle(activeFilePath);
       }
     }));
     cleanupFns.push(window.electronAPI.onFileDeleted((data) => {

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 
 export interface TabData {
   id: string;
@@ -433,6 +434,11 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     if (activeTabId && currentActiveTab && onTabChangeRef.current) {
       // // console.log('[useTabs] Calling onTabChange for:', currentActiveTab.fileName);
       onTabChangeRef.current(currentActiveTab);
+    }
+
+    // Update EditorRegistry with the active file path
+    if (currentActiveTab) {
+      editorRegistry.setActive(currentActiveTab.filePath);
     }
   }, [activeTabId]);
 

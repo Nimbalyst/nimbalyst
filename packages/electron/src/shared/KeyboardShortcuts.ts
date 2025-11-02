@@ -26,7 +26,7 @@ export const KeyboardShortcuts = {
     paste: 'Cmd+V',
     selectAll: 'Cmd+A',
     find: 'Cmd+F',
-    findAndReplace: 'Cmd+Alt+F',
+    findAndReplace: 'Cmd+F', // Same as find - both open search/replace bar now
     viewHistory: 'Cmd+Y',
     approve: 'Cmd+Enter',
     reject: 'Cmd+Shift+Backspace'

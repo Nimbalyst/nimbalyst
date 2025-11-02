@@ -38,6 +38,7 @@ import { registerDocumentLinkPlugin } from './plugins/registerDocumentLinkPlugin
 import { registerAIChatPlugin } from './plugins/registerAIChatPlugin';
 import { registerTrackerPlugin } from './plugins/registerTrackerPlugin';
 import { registerDiffApprovalBarPlugin } from './plugins/registerDiffApprovalBarPlugin';
+import { registerSearchReplacePlugin } from './plugins/registerSearchReplacePlugin';
 import ProjectSettingsScreen from './components/ProjectSettingsScreen/ProjectSettingsScreen.tsx';
 import { loadCustomTrackers } from './services/CustomTrackerLoader';
 import './WorkspaceWelcome.css';
@@ -73,6 +74,7 @@ if (!pluginsRegistered) {
   registerTrackerPlugin(null); // Load built-in trackers now, custom trackers loaded in AppLayout
   registerAIChatPlugin();
   registerDiffApprovalBarPlugin(); // Diff approval bar in fixed tab header
+  registerSearchReplacePlugin(); // Search/replace bar in fixed tab header
   pluginsRegistered = true;
 }
 

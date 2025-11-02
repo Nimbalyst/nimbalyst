@@ -233,7 +233,8 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
           onSaveRequest={onSaveRequest}
         />
       )}
-      {isRichText && editable && <SearchReplacePlugin />}
+      {/* SearchReplacePlugin disabled - now uses fixed tab header implementation in runtime */}
+      {/* {isRichText && editable && <SearchReplacePlugin />} */}
       <div
         className={`editor-container ${(runtimeSettings.settings.showTreeView || config.showTreeView) ? 'tree-view' : ''} ${
           !isRichText ? 'plain-text' : ''
