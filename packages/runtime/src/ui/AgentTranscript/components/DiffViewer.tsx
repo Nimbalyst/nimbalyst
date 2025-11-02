@@ -30,9 +30,9 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
               </div>
               <div className="diff-content">
                 {/* Show removed lines */}
-                {oldLines.length > 0 && oldLines.some(line => line.trim()) && (
+                {oldLines.length > 0 && oldLines.some((line: string) => line.trim()) && (
                   <>
-                    {oldLines.map((line, i) => (
+                    {oldLines.map((line: string, i: number) => (
                       <div key={`old-${i}`} className="diff-line removed">
                         <span className="diff-line-marker">-</span>
                         <span className="diff-line-content">{line || ' '}</span>
@@ -42,9 +42,9 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
                 )}
 
                 {/* Show added lines */}
-                {newLines.length > 0 && newLines.some(line => line.trim()) && (
+                {newLines.length > 0 && newLines.some((line: string) => line.trim()) && (
                   <>
-                    {newLines.map((line, i) => (
+                    {newLines.map((line: string, i: number) => (
                       <div key={`new-${i}`} className="diff-line added">
                         <span className="diff-line-marker">+</span>
                         <span className="diff-line-content">{line || ' '}</span>
@@ -67,7 +67,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
       <div className="diff-viewer" style={{ maxHeight }}>
         <div className="diff-file-header">{filePath}</div>
         <div className="diff-content">
-          {lines.map((line, i) => (
+          {lines.map((line: string, i: number) => (
             <div key={`add-${i}`} className="diff-line added">
               <span className="diff-line-marker">+</span>
               <span className="diff-line-content">{line || ' '}</span>

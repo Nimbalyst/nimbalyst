@@ -12,5 +12,5 @@
     "noEmit": true,
     "types": []
   },
-  "include": ["src"]
+  "include": ["src", "src/types/optional-deps.d.ts", "src/types/vite.d.ts"]
 }

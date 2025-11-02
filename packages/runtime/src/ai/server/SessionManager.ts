@@ -103,7 +103,7 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                   // Search backwards for the tool message with this ID
                   for (let i = uiMessages.length - 1; i >= 0; i--) {
                     const uiMsg = uiMessages[i];
-                    if (uiMsg.role === 'tool' && uiMsg.toolCall?.id === toolUseId) {
+                    if (uiMsg.role === 'tool' && uiMsg.toolCall && uiMsg.toolCall.id === toolUseId) {
                       // Add the result to this tool call
                       uiMsg.toolCall.result = resultText;
                       break;
@@ -181,7 +181,7 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                   // Search backwards for the tool message with this ID
                   for (let i = uiMessages.length - 1; i >= 0; i--) {
                     const msg = uiMessages[i];
-                    if (msg.role === 'tool' && msg.toolCall?.id === toolUseId) {
+                    if (msg.role === 'tool' && msg.toolCall && msg.toolCall.id === toolUseId) {
                       // Add the result to this tool call
                       msg.toolCall.result = block.content;
                       if (block.is_error) {
@@ -226,7 +226,7 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                   // Search backwards for the tool message with this ID
                   for (let i = uiMessages.length - 1; i >= 0; i--) {
                     const uiMsg = uiMessages[i];
-                    if (uiMsg.role === 'tool' && uiMsg.toolCall?.id === toolUseId) {
+                    if (uiMsg.role === 'tool' && uiMsg.toolCall && uiMsg.toolCall.id === toolUseId) {
                       // Add the result to this tool call
                       uiMsg.toolCall.result = resultText;
                       break;

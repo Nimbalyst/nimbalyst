@@ -225,7 +225,7 @@ async function startServer(): Promise<void> {
   });
 
   // Register tool call handler
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
     debug('Tool call request:', request.params.name);
 
     const { name, arguments: args } = request.params;

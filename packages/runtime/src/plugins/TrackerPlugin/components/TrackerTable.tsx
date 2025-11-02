@@ -165,10 +165,8 @@ export function TrackerTable({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<TrackerItemType | 'all'>(filterType || 'all');
   const posthog = usePostHog();
-
-  // Use filterType prop directly instead of local state so it updates when prop changes
-  const typeFilter = filterType;
 
   useEffect(() => {
     let unsubscribeTracker: (() => void) | null = null;
@@ -210,7 +208,7 @@ export function TrackerTable({
           let actualDate: Date | null = null;
 
           if (dateSource) {
-            if (dateSource instanceof Date) {
+            if (typeof dateSource === 'object' && dateSource !== null && dateSource instanceof Date) {
               actualDate = dateSource;
             } else if (typeof dateSource === 'number') {
               actualDate = new Date(dateSource);

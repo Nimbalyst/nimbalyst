@@ -52,7 +52,7 @@ interface TrackerEditorState {
   position: { x: number; y: number };
 }
 
-type TriggerFunction = (text: string) => {
+type TriggerFunction = (text: string, editor: LexicalEditor) => {
   leadOffset: number;
   matchingString: string;
   replaceableString: string;
@@ -306,7 +306,8 @@ function TrackerPlugin(): JSX.Element | null {
   useReactEffect(() => {
     return editor.registerCommand(
       CONTROLLED_TEXT_INSERTION_COMMAND,
-      (text) => {
+      (text: string | InputEvent) => {
+        if (typeof text !== 'string') return false;
         const selection = $getSelection();
         if (!$isRangeSelection(selection)) {
           return false;
@@ -334,8 +335,9 @@ function TrackerPlugin(): JSX.Element | null {
         if (textContent === ' ') {
           const children = trackerNode.getChildren();
           if (children.length === 1 && $isTextNode(children[0])) {
-            children[0].setTextContent(text);
-            children[0].select(text.length, text.length);
+            const textNode = children[0] as any;
+            textNode.setTextContent(text);
+            textNode.select(text.length, text.length);
             return true;
           }
         }
@@ -587,7 +589,7 @@ function TrackerPlugin(): JSX.Element | null {
           // the full context from the parent to capture text before the "#"
           let node: LexicalNode | null = anchorNode;
           while (node) {
-            const parent = node.getParent();
+            const parent: LexicalNode | null = node.getParent();
             // Stop at paragraph or list item - these contain the full text we need
             if (parent && ($isListItemNode(parent) || parent.getType() === 'paragraph')) {
               fullText = parent.getTextContent();

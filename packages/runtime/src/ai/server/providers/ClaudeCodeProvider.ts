@@ -1272,7 +1272,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
         // Create unique tag ID for this edit
         const actualToolUseId = toolUseID || `tool-${Date.now()}`;
-        await this.tagFileBeforeEdit(filePath, workspacePath, sessionId, actualToolUseId);
+        await this.tagFileBeforeEdit(filePath, workspacePath!, sessionId, actualToolUseId);
 
       } catch (error) {
         console.error('[CLAUDE-CODE] PreToolUse hook error:', error);
