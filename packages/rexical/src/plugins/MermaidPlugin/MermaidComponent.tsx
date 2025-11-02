@@ -27,7 +27,7 @@ async function loadMermaid(isDarkTheme: boolean) {
   if (!mermaidInstance || currentTheme !== theme) {
     const module = await import('mermaid');
     // In mermaid v11+, use the named export or default
-    mermaidInstance = module.default || module.mermaid || module;
+    mermaidInstance = module.default || (module as any).mermaid || module;
 
     // Check if we got a valid mermaid instance
     if (typeof mermaidInstance.initialize !== 'function') {

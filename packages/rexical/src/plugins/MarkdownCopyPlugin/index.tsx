@@ -13,6 +13,7 @@ import {
   COMMAND_PRIORITY_EDITOR,
   createCommand,
   LexicalCommand,
+  LexicalNode,
   KEY_MODIFIER_COMMAND,
 } from 'lexical';
 import { useEffect } from 'react';
@@ -92,9 +93,9 @@ export default function MarkdownCopyPlugin({
                 const selectedRootNodes = new Set();
                 nodes.forEach(node => {
                   // Find the top-level parent (direct child of root)
-                  let topNode = node;
+                  let topNode: LexicalNode = node;
                   while (topNode.getParent() !== null && topNode.getParent() !== root) {
-                    topNode = topNode.getParent();
+                    topNode = topNode.getParent()!;
                   }
                   if (topNode.getParent() === root) {
                     selectedRootNodes.add(topNode.getKey());
