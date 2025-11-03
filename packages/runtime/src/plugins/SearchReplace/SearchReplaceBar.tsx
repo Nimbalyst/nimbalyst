@@ -171,7 +171,7 @@ class HighlightManager {
 }
 
 export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
-  console.log('[SearchReplaceBar] RENDER - filePath:', filePath);
+  // console.log('[SearchReplaceBar] RENDER - filePath:', filePath);
 
   // Use filePath as the tabId for consistency with the registry's shouldRender check
   // Note: This means tabs with the same file will share search state

@@ -1198,7 +1198,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   if (mode === 'chat') {
     const activeTab = sessionTabs.find(tab => tab.id === activeTabId);
 
-    console.log('[AgenticPanel] Chat mode - onContentModeChange available:', !!onContentModeChange);
+    // console.log('[AgenticPanel] Chat mode - onContentModeChange available:', !!onContentModeChange);
 
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>

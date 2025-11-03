@@ -155,9 +155,9 @@ export function registerFileHandlers() {
 
             // Mark that we're saving to prevent file watcher from reacting
             savingWindows.add(windowId);
-            console.log('[SAVE] Marked window as saving:', windowId);
+            // console.log('[SAVE] Marked window as saving:', windowId);
 
-            console.log('[SAVE] Writing to file:', filePath);
+            // console.log('[SAVE] Writing to file:', filePath);
             saveFile(filePath, content);
 
             if (state) {
