@@ -118,10 +118,11 @@ jobs:
           # Windows signing
           WIN_CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PWD }}
-          # CRITICAL: GH_TOKEN is required for electron-builder to publish to nimbalyst repo
-          # The package.json "publish" config points to nimbalyst/nimbalyst (public repo)
-          # DO NOT REMOVE THIS - it enables electron-builder to create releases in the public repo
-          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
+          # CRITICAL: GH_TOKEN is required for electron-builder to publish releases
+          # The package.json "publish" config points to nimbalyst/nimbalyst-code (private repo)
+          # This enables electron-builder to create releases in the PRIVATE repo for internal testing
+          # Public releases are created separately via the publish-public.yml workflow
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Require notarization for release builds
           REQUIRE_NOTARIZE: ${{ github.event_name == 'push' || github.event.inputs.release == 'true' }}
         working-directory: packages/electron
@@ -215,80 +216,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Publish to public repository
-      - name: Publish to Public Repository
-        if: success()
-        env:
-          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
+      # NOTE: Public repository publishing is now a separate manual step
+      # After testing the internal build, use the /release-public command or workflow
+      # This separates internal testing from public release
+      - name: Internal Release Complete
         run: |
-          # Check if PAT is configured
-          if [ -z "$GH_TOKEN" ]; then
-            echo "PUBLIC_REPO_PAT secret not configured. Skipping public release."
-            echo "To enable public releases, create a PAT with 'repo' scope and add it as PUBLIC_REPO_PAT secret."
-            exit 0
-          fi
-
           VERSION="${{ steps.get_version.outputs.VERSION }}"
-
-          # Check if release already exists in public repo
-          if gh release view "$VERSION" --repo nimbalyst/nimbalyst &>/dev/null; then
-            echo "Release $VERSION already exists in public repository"
-            exit 0
-          fi
-
-          # Extract release notes from git tag annotation (created by release.sh)
-          NOTES=$(git tag -l --format='%(contents:body)' "$VERSION" || echo "")
-
-          # If tag has no annotation or notes are empty, try CHANGELOG.md
-          if [ -z "$NOTES" ]; then
-            CHANGELOG_FILE="CHANGELOG.md"
-            if [ -f "$CHANGELOG_FILE" ]; then
-              # Extract notes for the current version from CHANGELOG.md
-              # Format: ## [0.42.60] - 2025-10-30
-              VERSION_NO_V=${VERSION#v}
-              NOTES=$(awk "/^## \[${VERSION_NO_V}\]/,/^## \[/ {
-                if (/^## \[${VERSION_NO_V}\]/) next
-                if (/^## \[/) exit
-                print
-              }" "$CHANGELOG_FILE" | sed '/^$/d')
-            fi
-          fi
-
-          # Final fallback if still no notes
-          if [ -z "$NOTES" ]; then
-            NOTES="See [CHANGELOG.md](https://github.com/nimbalyst/nimbalyst-code/blob/main/CHANGELOG.md) for details."
-          fi
-
-          # NOTE: This step should normally NOT run because electron-builder publishes to nimbalyst
-          # It's a fallback in case electron-builder fails to publish for any reason
-          echo "WARNING: Creating release manually in public repository (electron-builder should have done this)"
-          echo "Available files to upload:"
-          ls -la release-files/ || echo "ERROR: release-files directory not found"
-
-          # Create release in public repository with update manifests
-          if gh release create "$VERSION" \
-            --repo nimbalyst/nimbalyst \
-            --title "Nimbalyst $VERSION" \
-            --notes "${NOTES}
-
-          ### Installation
-          - **macOS**: Download and open the .dmg file, drag Nimbalyst to Applications
-          - **Windows**: Download and run the .exe installer
-          - **Linux**: Download the .AppImage, make it executable, and run it
-
-          The app will automatically check for updates." \
-            release-files/*.dmg \
-            release-files/*.zip \
-            release-files/*.exe \
-            release-files/*.AppImage \
-            release-files/*.yml \
-            release-files/*.yaml; then
-            echo "Successfully created release in public repository"
-          else
-            echo "ERROR: Failed to create release in public repository"
-            echo "Possible causes:"
-            echo "  - Release files missing or incorrect glob patterns"
-            echo "  - PUBLIC_REPO_PAT lacks permissions"
-            echo "  - Network issues or rate limiting"
-            exit 1
-          fi
+          echo "✅ Internal release $VERSION complete!"
+          echo ""
+          echo "📦 Build artifacts available at:"
+          echo "   https://github.com/nimbalyst/nimbalyst-code/releases/tag/$VERSION"
+          echo ""
+          echo "🧪 Next steps:"
+          echo "   1. Download and test the build artifacts"
+          echo "   2. Verify all features work as expected"
+          echo "   3. When ready, use /release-public command to publish to public repo"
+          echo ""
+          echo "ℹ️  Public repo release is now a separate manual step to allow for testing."

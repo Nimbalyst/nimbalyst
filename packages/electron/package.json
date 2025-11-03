@@ -112,7 +112,7 @@
       {
         "provider": "github",
         "owner": "nimbalyst",
-        "repo": "nimbalyst",
+        "repo": "nimbalyst-code",
         "releaseType": "release"
       }
     ],

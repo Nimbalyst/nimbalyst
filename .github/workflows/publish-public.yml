@@ -1,0 +1,173 @@
+name: Publish to Public Repository
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., v0.42.61)'
+        required: true
+        type: string
+      release_notes:
+        description: 'User-facing release notes (paste from /release-public command)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version exists
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! git tag -l | grep -q "^${VERSION}$"; then
+            echo "❌ Error: Version tag $VERSION does not exist"
+            echo "Available tags:"
+            git tag -l | tail -10
+            exit 1
+          fi
+          echo "✅ Version tag $VERSION exists"
+
+      - name: Check if release exists in private repo
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! gh release view "$VERSION" --repo nimbalyst/nimbalyst-code &>/dev/null; then
+            echo "❌ Error: Release $VERSION not found in private repo (nimbalyst/nimbalyst-code)"
+            echo "Please create the internal release first using /release command"
+            exit 1
+          fi
+          echo "✅ Release $VERSION exists in private repo"
+
+      - name: Download release artifacts from private repo
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          # Create directory for artifacts
+          mkdir -p public-release-files
+
+          # Download release assets from private repo
+          gh release download "$VERSION" \
+            --repo nimbalyst/nimbalyst-code \
+            --pattern "*.dmg" \
+            --pattern "*.zip" \
+            --pattern "*.exe" \
+            --pattern "*.AppImage" \
+            --pattern "*.yml" \
+            --pattern "*.yaml" \
+            --dir public-release-files || true
+
+          echo "Downloaded artifacts:"
+          ls -lh public-release-files/
+
+      - name: Check if release already exists in public repo
+        id: check_public
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if gh release view "$VERSION" --repo nimbalyst/nimbalyst &>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Release $VERSION already exists in public repo"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "✅ Release $VERSION does not exist in public repo yet"
+          fi
+
+      - name: Create release in public repository
+        if: steps.check_public.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
+          VERSION: ${{ inputs.version }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          # Verify we have artifacts to upload
+          if [ ! -d "public-release-files" ] || [ -z "$(ls -A public-release-files)" ]; then
+            echo "❌ Error: No artifacts found to upload"
+            exit 1
+          fi
+
+          # Create the release body with user-provided notes and installation instructions
+          RELEASE_BODY="${RELEASE_NOTES}
+
+          ### Installation
+          - **macOS**: Download and open the .dmg file, drag Nimbalyst to Applications
+          - **Windows**: Download and run the .exe installer
+          - **Linux**: Download the .AppImage, make it executable, and run it
+
+          The app will automatically check for updates."
+
+          # Create release in public repository
+          if gh release create "$VERSION" \
+            --repo nimbalyst/nimbalyst \
+            --title "Nimbalyst $VERSION" \
+            --notes "${RELEASE_BODY}" \
+            public-release-files/*; then
+            echo "✅ Successfully created release in public repository!"
+            echo ""
+            echo "📦 Public release available at:"
+            echo "   https://github.com/nimbalyst/nimbalyst/releases/tag/$VERSION"
+          else
+            echo "❌ Failed to create release in public repository"
+            echo "Possible causes:"
+            echo "  - Release files missing"
+            echo "  - PUBLIC_REPO_PAT lacks 'repo' permissions"
+            echo "  - Network issues or rate limiting"
+            exit 1
+          fi
+
+      - name: Update existing release (if it exists)
+        if: steps.check_public.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
+          VERSION: ${{ inputs.version }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          echo "ℹ️  Release already exists. Updating release notes..."
+
+          # Update the release body
+          RELEASE_BODY="${RELEASE_NOTES}
+
+          ### Installation
+          - **macOS**: Download and open the .dmg file, drag Nimbalyst to Applications
+          - **Windows**: Download and run the .exe installer
+          - **Linux**: Download the .AppImage, make it executable, and run it
+
+          The app will automatically check for updates."
+
+          if gh release edit "$VERSION" \
+            --repo nimbalyst/nimbalyst \
+            --notes "${RELEASE_BODY}"; then
+            echo "✅ Successfully updated release notes in public repository"
+            echo ""
+            echo "📦 Public release available at:"
+            echo "   https://github.com/nimbalyst/nimbalyst/releases/tag/$VERSION"
+          else
+            echo "❌ Failed to update release in public repository"
+            exit 1
+          fi
+
+      - name: Summary
+        run: |
+          VERSION="${{ inputs.version }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ Public Release Complete!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "📦 Version: $VERSION"
+          echo "🔗 Public Release: https://github.com/nimbalyst/nimbalyst/releases/tag/$VERSION"
+          echo "🔗 Private Release: https://github.com/nimbalyst/nimbalyst-code/releases/tag/$VERSION"
+          echo ""
+          echo "🎉 Users can now download the latest version!"
+          echo ""

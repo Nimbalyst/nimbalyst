@@ -1,7 +1,9 @@
 ---
 description: Prepare and execute a release (patch/minor/major)
 ---
-Prepare a {{arg1}} release following this workflow:
+Prepare a {{arg1}} release following this two-phase workflow:
+
+## PHASE 1: INTERNAL RELEASE
 
 1. **Get commits since last release**:
   - Find the last git tag: `git describe --tags --abbrev=0`
@@ -43,7 +45,7 @@ Prepare a {{arg1}} release following this workflow:
   - Display the PUBLIC release notes separately (user-facing only)
   - Ask for approval before proceeding
 
-5. **Execute release** (after user approval):
+5. **Execute internal release** (after user approval):
   - Run `./scripts/release.sh {{arg1}}`
   - The script will:
     - Bump version in `packages/electron/package.json`
@@ -51,9 +53,39 @@ Prepare a {{arg1}} release following this workflow:
     - Move [Unreleased] notes to a new versioned release section in CHANGELOG.md
     - Create commit with release notes
     - Create annotated git tag with release notes
-    - Display next steps for pushing to trigger CI
-  - Show the PUBLIC release notes again after release is created
-  - User can copy these to update the GitHub release that CI creates
+
+6. **Push to private repo for internal build**:
+  - Show commands to push for internal build:
+    ```bash
+    git push origin main
+    git push origin v[VERSION]
+    ```
+  - Explain: "This will trigger GitHub Actions to build the release on the PRIVATE repo (nimbalyst/nimbalyst-code)"
+  - Explain: "After the build completes, download and test the build before proceeding to Phase 2"
+  - Provide link to GitHub Actions: https://github.com/nimbalyst/nimbalyst-code/actions
+
+7. **Stop here and wait for testing**:
+  - User should test the internal build
+  - When ready to publish publicly, user will run Phase 2
+
+## PHASE 2: PUBLIC RELEASE
+
+This phase is executed AFTER testing the internal build. Create a separate command or continuation:
+
+1. **Verify internal build tested**:
+  - Confirm user has downloaded and tested the internal build
+  - Confirm no issues found
+
+2. **Publish to public repo**:
+  - Show the PUBLIC release notes again
+  - Provide instructions to publish:
+    - Option A: Manually create GitHub release on public repo with the public notes
+    - Option B: Use GitHub Actions to sync from private to public repo
+  - Public repo: https://github.com/nimbalyst/nimbalyst
+
+3. **Update public release with user-friendly notes**:
+  - User copies the PUBLIC release notes to the GitHub release description
+  - Ensures only user-facing changes are visible to the public
 
 Valid release types: patch, minor, major
 
@@ -71,3 +103,7 @@ Example CHANGELOG.md format:
 ## [0.42.60] - 2025-10-30
 ...
 ```
+
+---
+
+**Note**: After Phase 1 completes, the user should test the internal build. Once testing is complete, they can proceed with Phase 2 to publish to the public repo. The two phases are separate to allow for internal testing before public release.
