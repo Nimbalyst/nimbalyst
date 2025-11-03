@@ -71,9 +71,20 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
     >
       <div className="session-list-item-icon">
         <ProviderIcon provider={provider || 'claude'} size={16} />
-        {isProcessing && (
-          <div className="session-list-item-processing-indicator" title="Processing...">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {isLoaded && !isActive && (
+          <div className="session-list-item-loaded-indicator" title="Loaded in tab" />
+        )}
+      </div>
+      <div className="session-list-item-content">
+        <div className="session-list-item-title">{truncatedTitle}</div>
+        <div className="session-list-item-meta">
+          {displayModel && <span className="session-list-item-model">{displayModel}</span>}
+        </div>
+      </div>
+      <div className="session-list-item-right">
+        {isProcessing ? (
+          <div className="session-list-item-status processing" title="Processing...">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32 16" strokeLinecap="round">
                 <animateTransform
                   attributeName="transform"
@@ -86,24 +97,15 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
               </circle>
             </svg>
           </div>
-        )}
-        {hasUnread && !isProcessing && (
-          <div className="session-list-item-unread-indicator" title="Unread response" />
-        )}
-        {isLoaded && !isActive && !isProcessing && !hasUnread && (
-          <div className="session-list-item-loaded-indicator" title="Loaded in tab" />
-        )}
-      </div>
-      <div className="session-list-item-content">
-        <div className="session-list-item-title">{truncatedTitle}</div>
-        <div className="session-list-item-meta">
-          {displayModel && <span className="session-list-item-model">{displayModel}</span>}
-        </div>
-      </div>
-      <div className="session-list-item-right">
-        {messageCount !== undefined && (
+        ) : hasUnread ? (
+          <div className="session-list-item-status unread" title="Unread response">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="8" cy="8" r="4" fill="currentColor" />
+            </svg>
+          </div>
+        ) : messageCount !== undefined ? (
           <span className="session-list-item-message-count">{messageCount}</span>
-        )}
+        ) : null}
         {onDelete && (
           <button
             className={`session-list-item-delete ${isHovering && !isActive ? 'visible' : ''}`}

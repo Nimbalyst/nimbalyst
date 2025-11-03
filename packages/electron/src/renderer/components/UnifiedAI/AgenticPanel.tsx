@@ -134,6 +134,42 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     return refsMap.get(sessionId)!;
   }, []);
 
+  // Mark a session as read - called whenever a session becomes active
+  const markSessionAsRead = useCallback(async (sessionId: string) => {
+    const tab = sessionTabsRef.current.find(t => t.id === sessionId);
+    if (!tab) return;
+
+    const messages = tab.sessionData.messages || [];
+    const lastMessage = messages[messages.length - 1];
+    const lastMessageTimestamp = lastMessage?.timestamp ?? null;
+
+    // Update ref IMMEDIATELY (synchronous) so it's available before React state updates
+    readStateRef.current.set(sessionId, {
+      lastReadMessageTimestamp: lastMessageTimestamp
+    });
+
+    // Update local state for persistence
+    setSessionTabs(prev => prev.map(t => {
+      if (t.id === sessionId) {
+        return {
+          ...t,
+          sessionData: {
+            ...t.sessionData,
+            lastReadMessageTimestamp: lastMessageTimestamp
+          }
+        };
+      }
+      return t;
+    }));
+
+    // Persist to database
+    try {
+      await window.electronAPI.invoke('sessions:mark-read', sessionId, lastMessageTimestamp);
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to mark session as read:', err);
+    }
+  }, []);
+
   // File mention support
   const {
     options: fileMentionOptions,
@@ -330,6 +366,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const existingTab = sessionTabs.find(tab => tab.id === sessionId);
     if (existingTab) {
       setActiveTabId(sessionId);
+      if (onSessionChange) {
+        onSessionChange(sessionId);
+      }
+      // Mark as read when switching to it
+      await markSessionAsRead(sessionId);
       return;
     }
 
@@ -363,11 +404,14 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         if (onSessionChange) {
           onSessionChange(sessionData.id);
         }
+
+        // Mark as read when opening a new session
+        await markSessionAsRead(sessionData.id);
       }
     } catch (err) {
       console.error('[AgenticPanel] Failed to load session:', err);
     }
-  }, [sessionTabs, workspacePath, mode, onSessionChange]);
+  }, [sessionTabs, workspacePath, mode, onSessionChange, markSessionAsRead]);
 
   // Delete a session
   const deleteSession = useCallback(async (sessionId: string) => {
@@ -1183,52 +1227,14 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Tab management (agent mode only)
   const handleTabSelect = useCallback(async (tabId: string) => {
-    // console.log(`[AgenticPanel] handleTabSelect: switching to tab ${tabId}`);
     setActiveTabId(tabId);
     if (onSessionChange) {
       onSessionChange(tabId);
     }
 
     // Mark the session as read when switching to it
-    const tab = sessionTabs.find(t => t.id === tabId);
-    if (tab) {
-      const messages = tab.sessionData.messages || [];
-      const lastMessage = messages[messages.length - 1];
-      const lastMessageTimestamp = lastMessage?.timestamp ?? null;
-
-      // console.log(`[AgenticPanel] Marking session ${tabId} as read with lastMessageTimestamp: ${lastMessageTimestamp}`);
-
-      // Update ref IMMEDIATELY (synchronous) so it's available before React state updates
-      readStateRef.current.set(tabId, {
-        lastReadMessageTimestamp: lastMessageTimestamp
-      });
-      // console.log(`[AgenticPanel] Set readStateRef for session ${tabId} - lastReadMessageTimestamp: ${lastMessageTimestamp}`);
-
-      // Update local state for persistence
-      setSessionTabs(prev => prev.map(t => {
-        if (t.id === tabId) {
-          return {
-            ...t,
-            sessionData: {
-              ...t.sessionData,
-              lastReadMessageTimestamp: lastMessageTimestamp
-            }
-          };
-        }
-        return t;
-      }));
-
-      // console.log(`[AgenticPanel] Updated local state for session ${tabId} - lastReadMessageTimestamp: ${lastMessageTimestamp}`);
-
-      // Persist to database
-      try {
-        await window.electronAPI.invoke('sessions:mark-read', tabId, lastMessageTimestamp);
-        // console.log(`[AgenticPanel] Successfully persisted read state for session ${tabId} to database`);
-      } catch (err) {
-        console.error('[AgenticPanel] Failed to mark session as read:', err);
-      }
-    }
-  }, [onSessionChange, sessionTabs]);
+    await markSessionAsRead(tabId);
+  }, [onSessionChange, markSessionAsRead]);
 
   const handleTabClose = useCallback((tabId: string) => {
     const closingTab = sessionTabs.find(t => t.id === tabId);
@@ -1365,11 +1371,24 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }, []);
 
   // Get sets of processing and unread session IDs
-  const getProcessingSessions = useCallback((): Set<string> => {
+  // Memoize these Sets to prevent unnecessary re-renders of SessionHistory
+  const processingSessions = React.useMemo(() => {
     return new Set(sendingSessions);
   }, [sendingSessions]);
 
-  const getUnreadSessions = useCallback((): Set<string> => {
+  // Create a stable key for unread sessions based only on message state, not draft input
+  // This prevents re-computation when only draft input changes (typing in the input field)
+  const unreadSessionsKey = React.useMemo(() => {
+    return sessionTabs.map(tab => {
+      const messages = tab.sessionData.messages || [];
+      const lastMessage = messages[messages.length - 1];
+      const refReadState = readStateRef.current.get(tab.id);
+      const lastReadTimestamp = refReadState?.lastReadMessageTimestamp ?? tab.sessionData.lastReadMessageTimestamp;
+      return `${tab.id}:${lastMessage?.timestamp ?? 0}:${lastReadTimestamp ?? 0}:${sendingSessions.has(tab.id)}`;
+    }).join('|');
+  }, [sessionTabs, sendingSessions]);
+
+  const unreadSessions = React.useMemo(() => {
     const unreadIds = new Set<string>();
     sessionTabs.forEach(tab => {
       if (hasUnreadMessages(tab) && !sendingSessions.has(tab.id)) {
@@ -1377,7 +1396,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
     });
     return unreadIds;
-  }, [sessionTabs, sendingSessions, hasUnreadMessages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unreadSessionsKey]);
 
   // Convert SessionTab to Tab format for TabBar
   const convertToTabs = (sessionTabs: SessionTab[]): Tab[] => {
@@ -1534,8 +1554,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             workspacePath={workspacePath}
             activeSessionId={activeTabId}
             loadedSessionIds={sessionTabs.map(tab => tab.id)}
-            processingSessions={getProcessingSessions()}
-            unreadSessions={getUnreadSessions()}
+            processingSessions={processingSessions}
+            unreadSessions={unreadSessions}
             onSessionSelect={openSessionInTab}
             onSessionDelete={deleteSession}
             onNewSession={() => createNewSession()}

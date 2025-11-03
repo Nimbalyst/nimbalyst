@@ -47,26 +47,21 @@
   border: 1.5px solid var(--surface-primary);
 }
 
-.session-list-item-processing-indicator {
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
+.session-list-item-status {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 20px;
+  height: 20px;
   color: var(--primary-color);
+}
+
+.session-list-item-status.processing {
   opacity: 0.8;
 }
 
-.session-list-item-unread-indicator {
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--primary-color);
-  border: 1.5px solid var(--surface-primary);
+.session-list-item-status.unread {
+  opacity: 1;
 }
 
 .session-list-item-content {
