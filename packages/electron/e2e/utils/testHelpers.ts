@@ -27,8 +27,12 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
 
   // Tabs
   tab: '.tab',
+  sessionTab: '.tab[data-tab-type="session"]',
+  documentTab: '.tab[data-tab-type="document"]',
   tabTitle: '.tab-title',
   tabDirtyIndicator: '.tab-dirty-indicator',
+  tabProcessingIndicator: '.tab-processing-indicator',
+  tabUnreadIndicator: '.tab-unread-indicator',
   fileTabsContainer: '.file-tabs-container',
 
   // API key dialog
@@ -38,7 +42,7 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   // AI Chat
   aiChatPanel: '[data-testid="ai-chat-panel"]',
   chatInput: 'textarea.ai-chat-input-field',
-  newSessionButton: 'button:has-text("New Session")',
+  newSessionButton: '.session-history-new-button',
   noSessionSelected: 'text="No session selected"',
 
   // Active session (more specific to avoid matching editor tabs)

@@ -106,7 +106,7 @@ export function registerWindowHandlers() {
             }
 
             state.filePath = filePath;
-            console.log('[SET_FILE] Window state after update:', { windowId, filePath: state.filePath });
+            // console.log('[SET_FILE] Window state after update:', { windowId, filePath: state.filePath });
 
             // Update menu to reflect new file
             updateApplicationMenu().catch(err => console.error("Error updating menu:", err));

@@ -81,6 +81,31 @@ export async function createTempWorkspace(): Promise<string> {
   return await fs.mkdtemp(path.join(os.tmpdir(), 'nimbalyst-test-'));
 }
 
+/**
+ * Setup page with console log capturing for debugging
+ * Call this after getting the page from electronApp
+ */
+export async function setupPageWithLogging(page: Page): Promise<void> {
+  // Capture console messages from the renderer process
+  page.on('console', msg => {
+    const type = msg.type();
+    const text = msg.text();
+
+    // Filter out noisy messages
+    if (text.includes('Download the React DevTools')) return;
+    if (text.includes('Lit is in dev mode')) return;
+
+    // Format the console message with color
+    const prefix = type === 'error' ? '❌' : type === 'warning' ? '⚠️' : '🔍';
+    console.log(`${prefix} [Browser ${type}]`, text);
+  });
+
+  // Capture page errors
+  page.on('pageerror', error => {
+    console.error('❌ [Browser Error]', error.message);
+  });
+}
+
 export async function waitForAppReady(page: Page): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
   await page.waitForSelector('.workspace-sidebar', { timeout: TEST_TIMEOUTS.SIDEBAR_LOAD });
