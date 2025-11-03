@@ -78,27 +78,114 @@ class PGLiteWorker {
       };
     }
 
-    // Create PGlite instance
-    // Use file-based storage for persistent data
-    this.db = new PGlite({
-      dataDir: this.dataDir,
-      debug: 0  // Disable PGLite debug logging
-    });
+    try {
+      // Create PGlite instance
+      // Use file-based storage for persistent data
+      this.db = new PGlite({
+        dataDir: this.dataDir,
+        debug: 0  // Disable PGLite debug logging
+      });
 
-    // Wait for database to be ready
-    await this.db.waitReady;
+      // Wait for database to be ready
+      await this.db.waitReady;
 
-    // Create schemas
-    await this.createSchemas();
+      // Create schemas
+      await this.createSchemas();
 
-    return {
-      id: message.id,
-      success: true,
-      data: {
-        message: 'Database initialized successfully',
-        dataDir: this.dataDir
+      return {
+        id: message.id,
+        success: true,
+        data: {
+          message: 'Database initialized successfully',
+          dataDir: this.dataDir
+        }
+      };
+    } catch (error) {
+      // Capture ALL error properties for debugging
+      const errorStr = String(error?.message || error);
+      const errorStack = error?.stack || '';
+      const errorName = error?.name || error?.constructor?.name || 'UnknownError';
+
+      // Log full error details for diagnosis
+      console.error('[PGLite Worker] Full error object:', {
+        message: error?.message,
+        name: errorName,
+        stack: errorStack,
+        code: error?.code,
+        errno: error?.errno,
+        syscall: error?.syscall,
+        path: error?.path,
+        // PGlite DatabaseError fields if present
+        severity: error?.severity,
+        detail: error?.detail,
+        hint: error?.hint,
+        // All other properties
+        ...error
+      });
+
+      // Check for specific error types we can identify
+      const fs = require('fs');
+      let lockInfo = '';
+
+      // Check for file system lock indicators
+      try {
+        const lockPath = path.join(this.dataDir, 'postmaster.pid');
+        if (fs.existsSync(lockPath)) {
+          lockInfo = `\n\nPostgreSQL lock file found at: ${lockPath}`;
+        }
+      } catch (e) {
+        // Ignore lock check errors
       }
-    };
+
+      // Check if database directory is accessible
+      let accessInfo = '';
+      try {
+        fs.accessSync(this.dataDir, fs.constants.R_OK | fs.constants.W_OK);
+      } catch (e) {
+        accessInfo = `\n\nDirectory access error: ${e.message}`;
+      }
+
+      // Detect specific error patterns
+      if (errorStr.includes('Aborted') || errorName === 'RuntimeError') {
+        // WebAssembly abort - likely file lock or corruption
+        throw new Error(
+          `DATABASE_INIT_FAILED: WebAssembly abort during PGlite initialization\n\n` +
+          `Database path: ${this.dataDir}\n` +
+          `Error: ${errorStr}\n` +
+          lockInfo +
+          accessInfo +
+          `\n\nThis usually indicates:\n` +
+          `1. Another process has the database locked\n` +
+          `2. Database files are corrupted\n` +
+          `3. Insufficient file system permissions\n` +
+          `\nStack trace:\n${errorStack}`
+        );
+      }
+
+      if (error?.code === 'EBUSY' || error?.code === 'EACCES' || error?.code === 'EPERM') {
+        // File system permission/lock error
+        throw new Error(
+          `DATABASE_LOCKED: File system error (${error.code})\n\n` +
+          `Database path: ${this.dataDir}\n` +
+          `Syscall: ${error.syscall || 'unknown'}\n` +
+          `Target: ${error.path || 'unknown'}\n` +
+          lockInfo +
+          `\n\nAnother process is using this database or you lack permissions.`
+        );
+      }
+
+      // Generic error with full context
+      throw new Error(
+        `Failed to initialize PGlite\n\n` +
+        `Database path: ${this.dataDir}\n` +
+        `Error type: ${errorName}\n` +
+        `Error: ${errorStr}\n` +
+        (error?.code ? `Code: ${error.code}\n` : '') +
+        lockInfo +
+        accessInfo +
+        `\n\nStack trace:\n${errorStack}`
+      );
+    }
   }
 
 

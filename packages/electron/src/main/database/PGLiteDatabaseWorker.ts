@@ -84,7 +84,7 @@ export class PGLiteDatabaseWorker {
       // Set up error handler
       this.worker.on('error', (error) => {
         logger.main.error('[PGLite Worker] Worker error:', error);
-        // Reject all pending requests
+        // Reject all pending requests with the original error
         this.pendingRequests.forEach((pending) => {
           pending.reject(error);
         });
@@ -117,6 +117,9 @@ export class PGLiteDatabaseWorker {
     } catch (error) {
       logger.main.error('[PGLite Worker] Failed to initialize:', error);
       this.initPromise = null;
+
+      // The worker should have already provided a detailed error message
+      // Just re-throw it
       throw error;
     }
   }
