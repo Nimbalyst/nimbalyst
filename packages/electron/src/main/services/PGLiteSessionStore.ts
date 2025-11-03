@@ -104,6 +104,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       if (metadata.providerSessionId !== undefined) pushUpdate('provider_session_id =', metadata.providerSessionId ?? null);
       if (metadata.documentContext !== undefined) pushUpdate('document_context =', metadata.documentContext ?? null);
       if (metadata.draftInput !== undefined) pushUpdate('draft_input =', metadata.draftInput ?? null);
+      if ((metadata as any).tokenUsage !== undefined) pushUpdate('token_usage =', (metadata as any).tokenUsage ?? null);
       if ((metadata as any).metadata !== undefined) pushUpdate('metadata =', (metadata as any).metadata ?? {});
 
       if (!updates.length) {
@@ -133,6 +134,12 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       const row = rows[0];
       if (!row) return null;
 
+      // Merge tokenUsage from dedicated column into metadata for compatibility
+      const metadata = row.metadata ?? {};
+      if (row.token_usage) {
+        metadata.tokenUsage = row.token_usage;
+      }
+
       return {
         id: row.id,
         provider: row.provider,
@@ -144,7 +151,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         workspacePath: row.workspace_id,
         createdAt: toMillis(row.created_at),
         updatedAt: toMillis(row.updated_at),
-        metadata: row.metadata ?? {},
+        metadata,
         documentContext: row.document_context ?? undefined,
         providerConfig: row.provider_config ?? undefined,
         providerSessionId: row.provider_session_id ?? undefined,

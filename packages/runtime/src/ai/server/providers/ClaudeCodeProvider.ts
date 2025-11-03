@@ -363,6 +363,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       let toolCallCount = 0;
       // Track tool calls by ID so we can update them with results
       const toolCallsById: Map<string, any> = new Map();
+      // Track usage data from the SDK
+      let usageData: { input_tokens?: number; output_tokens?: number } | undefined;
 
       console.log('[CLAUDE-CODE] Starting to iterate over query response...');
 
@@ -423,6 +425,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             }
 
             if (chunk.type === 'assistant' && chunk.message) {
+            // Capture usage data from the message if available
+            if (chunk.message.usage) {
+              usageData = chunk.message.usage;
+            }
+
             const content = chunk.message.content as any;
             if (Array.isArray(content)) {
               for (const rawBlock of content) {
@@ -725,8 +732,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               content: text
             };
           } else if (chunk.type === 'result') {
-            // Final result
+            // Final result - capture comprehensive usage data if available
             console.log(`[CLAUDE-CODE] Result chunk received, is_error: ${chunk.is_error}`);
+
+            // The result chunk often has the most complete usage data
+            if (chunk.usage) {
+              usageData = chunk.usage;
+            }
+
             if (chunk.is_error) {
               console.error('[CLAUDE-CODE] Result error:', chunk);
 
@@ -1118,7 +1131,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         type: 'complete',
         // Don't send content here - it's already been sent in chunks
         // The AIService accumulates the chunks itself
-        isComplete: true
+        isComplete: true,
+        ...(usageData ? {
+          usage: {
+            input_tokens: usageData.input_tokens || 0,
+            output_tokens: usageData.output_tokens || 0,
+            cache_read_input_tokens: usageData.cache_read_input_tokens || 0,
+            cache_creation_input_tokens: usageData.cache_creation_input_tokens || 0,
+            total_tokens: (usageData.input_tokens || 0) + (usageData.output_tokens || 0)
+          }
+        } : {})
       };
 
       console.log('[CLAUDE-CODE] Complete event yielded');

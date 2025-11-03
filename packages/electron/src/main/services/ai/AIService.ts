@@ -986,6 +986,36 @@ export class AIService {
                 totalLength: bucketContentLength(fullResponse.length)
               });
 
+              // Update session token usage if available
+              if (tokenUsage) {
+                // Calculate cumulative usage
+                // Check if tokenUsage has valid properties, not just if it exists
+                const currentUsage = (session.tokenUsage && typeof session.tokenUsage.inputTokens === 'number')
+                  ? session.tokenUsage
+                  : {
+                      inputTokens: 0,
+                      outputTokens: 0,
+                      totalTokens: 0
+                    };
+
+                // Calculate input tokens including cache tokens
+                const inputTokens = (tokenUsage.input_tokens || 0) +
+                                   (tokenUsage.cache_read_input_tokens || 0) +
+                                   (tokenUsage.cache_creation_input_tokens || 0);
+
+                const outputTokens = tokenUsage.output_tokens || 0;
+                const totalTokens = inputTokens + outputTokens;
+
+                const updatedUsage = {
+                  inputTokens: currentUsage.inputTokens + inputTokens,
+                  outputTokens: currentUsage.outputTokens + outputTokens,
+                  totalTokens: currentUsage.totalTokens + totalTokens,
+                  contextWindow: 200000 // Claude Code default context window
+                };
+
+                await this.sessionManager.updateSessionTokenUsage(session.id, updatedUsage);
+              }
+
               // Only add assistant message if there's actual content or edits
               if (fullResponse && fullResponse.trim() !== '') {
                 const assistantMessage: Message = {

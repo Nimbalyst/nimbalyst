@@ -250,6 +250,8 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         onModeChange={onAIModeChange}
         currentModel={currentModel}
         onModelChange={onModelChange}
+        tokenUsage={sessionData.tokenUsage}
+        provider={sessionData.provider}
       />
     </div>
   );

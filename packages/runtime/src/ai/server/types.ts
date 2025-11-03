@@ -92,6 +92,14 @@ export interface SessionData {
   // Read state tracking
   lastReadMessageTimestamp?: number;  // Timestamp of the last message the user has read
 
+  // Token usage tracking (for providers that support it)
+  tokenUsage?: {
+    inputTokens: number;      // Total input tokens used
+    outputTokens: number;     // Total output tokens used
+    totalTokens: number;      // Total tokens (input + output)
+    contextWindow?: number;   // Max context window size for the model
+  };
+
   // Additional metadata
   metadata?: Record<string, unknown>;
 

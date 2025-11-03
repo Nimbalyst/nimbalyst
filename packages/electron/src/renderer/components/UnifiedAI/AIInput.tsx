@@ -5,6 +5,7 @@ import type { ChatAttachment } from '@nimbalyst/runtime';
 import { AttachmentPreviewList } from '../AgenticCoding/AttachmentPreviewList';
 import { ModeTag, AIMode } from './ModeTag';
 import { ModelSelector } from './ModelSelector';
+import { ContextUsageDisplay } from './ContextUsageDisplay';
 import '../AIChat/AIChat.css';
 
 export interface AIInputRef {
@@ -46,6 +47,15 @@ interface AIInputProps {
   // Model selection support
   currentModel?: string;
   onModelChange?: (modelId: string) => void;
+
+  // Token usage display support (for Claude Code)
+  tokenUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    contextWindow?: number;
+  };
+  provider?: string; // Provider ID to determine if we should show token usage
 }
 
 /**
@@ -80,7 +90,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     mode = 'plan',
     onModeChange,
     currentModel,
-    onModelChange
+    onModelChange,
+    tokenUsage,
+    provider
   }, ref) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [typeaheadMatch, setTypeaheadMatch] = useState<TriggerMatch | null>(null);
@@ -483,7 +495,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         )}
 
         {/* Inline controls row */}
-        {(onModeChange || onModelChange) && (
+        {(onModeChange || onModelChange || (tokenUsage && provider === 'claude-code')) && (
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -493,6 +505,15 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           }}>
             {onModeChange && <ModeTag mode={mode} onModeChange={onModeChange} />}
             {onModelChange && currentModel && <ModelSelector currentModel={currentModel} onModelChange={onModelChange} />}
+            {/* Show context usage only for Claude Code provider */}
+            {tokenUsage && provider === 'claude-code' && tokenUsage.contextWindow && (
+              <ContextUsageDisplay
+                inputTokens={tokenUsage.inputTokens}
+                outputTokens={tokenUsage.outputTokens}
+                totalTokens={tokenUsage.totalTokens}
+                contextWindow={tokenUsage.contextWindow}
+              />
+            )}
           </div>
         )}
 

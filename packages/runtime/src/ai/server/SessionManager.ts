@@ -38,6 +38,7 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
   const providerConfig = metadata.providerConfig as SessionData['providerConfig'];
   // CRITICAL: providerSessionId is stored at top-level, not in metadata
   const providerSessionId = session.providerSessionId ?? (metadata.providerSessionId as string | undefined);
+  const tokenUsage = metadata.tokenUsage as SessionData['tokenUsage'];
 
   return {
     id: session.id,
@@ -54,6 +55,7 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     providerConfig,
     providerSessionId,
     lastReadMessageTimestamp: session.lastReadMessageTimestamp ?? undefined,
+    tokenUsage,
   } satisfies SessionData;
 }
 
@@ -542,6 +544,21 @@ export class SessionManager {
     await AISessionsRepository.updateMetadata(sessionId, { draftInput });
     if (this.currentSession?.id === sessionId) {
       this.currentSession = { ...this.currentSession, draftInput };
+    }
+  }
+
+  async updateSessionTokenUsage(
+    sessionId: string,
+    tokenUsage: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      contextWindow?: number;
+    }
+  ): Promise<void> {
+    await AISessionsRepository.updateMetadata(sessionId, { tokenUsage });
+    if (this.currentSession?.id === sessionId) {
+      this.currentSession = { ...this.currentSession, tokenUsage };
     }
   }
 }
