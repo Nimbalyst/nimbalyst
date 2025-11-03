@@ -598,7 +598,7 @@ export function markSettingsCompleted(): void {
 
 // Completion Sound Settings
 export function isCompletionSoundEnabled(): boolean {
-  return appStore.get('completionSoundEnabled', false);
+  return appStore.get('completionSoundEnabled', true);
 }
 
 export function setCompletionSoundEnabled(enabled: boolean): void {
@@ -615,7 +615,7 @@ export function setCompletionSoundType(soundType: CompletionSoundType): void {
 
 // OS Notifications Settings
 export function isOSNotificationsEnabled(): boolean {
-  return appStore.get('osNotificationsEnabled', false);
+  return appStore.get('osNotificationsEnabled', true);
 }
 
 export function setOSNotificationsEnabled(enabled: boolean): void {
