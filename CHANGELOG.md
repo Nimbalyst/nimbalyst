@@ -19,6 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.2] - 2025-11-03
+
+
+### Added
+- Separate /release-public command for public release phase
+- GitHub Actions workflow for publishing to public repository
+- Two-phase release process (internal testing, then public release)
+
+### Changed
+- Split /release command into two phases for internal testing
+- Updated electron-builder to publish to private repo first
+- Release workflow now publishes to nimbalyst-code (private) before nimbalyst (public)
+
+### Fixed
+- Session unread indicators now use timestamp-based tracking
+- PGlite database initialization error handling improved
+- Concurrent AI sessions now work properly in agent mode
+- Enhanced test helpers with better logging and tab selectors
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.1] - 2025-11-02
 
 
