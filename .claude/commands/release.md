@@ -8,23 +8,42 @@ Prepare a {{arg1}} release following this workflow:
   - Get commits since that tag: `git log [last-tag]..HEAD --oneline`
 
 2. **Generate release notes**:
-  - Create concise bullet-point release notes summarizing the most important changes
-  - Focus on user-facing changes (features, fixes, improvements)
-  - Filter out trivial changes (chore, docs, minor refactors)
-  - Keep it brief and clear
-  - Categorize changes using these sections:
-    - **Added**: New features
-    - **Changed**: Changes to existing functionality
-    - **Fixed**: Bug fixes
-    - **Removed**: Removed features
+  - Create TWO versions of release notes:
+
+    **A. Developer CHANGELOG (for CHANGELOG.md)**:
+    - Include all meaningful changes (features, fixes, improvements, refactors)
+    - Can include internal changes (TypeScript fixes, optimizations, deprecations)
+    - Technical language is fine
+    - Categorize using: Added, Changed, Fixed, Removed
+
+    **B. Public Release Notes (for GitHub Releases)**:
+    - ONLY user-facing changes that affect the user experience
+    - Write in marketing/user-friendly language
+    - Each bullet should answer "what can I now do?" or "what problem is fixed?"
+    - Filter out ALL internal details:
+      - NO code quality metrics (TypeScript errors, type improvements)
+      - NO internal refactoring (component deprecations, architecture changes)
+      - NO performance optimizations unless user-perceptible
+      - NO developer tooling changes
+    - Focus on tangible benefits:
+      - New features users can try
+      - Bugs that were annoying users
+      - UI/UX improvements
+    - Keep it brief and exciting
+    - Use present tense ("Find and replace text in documents" not "Added find/replace")
+    - No category headers needed for public notes
 
 3. **Update CHANGELOG.md**:
-  - Add notes to the `[Unreleased]` section in `CHANGELOG.md` (repository root)
+  - Add DEVELOPER CHANGELOG notes to the `[Unreleased]` section in `CHANGELOG.md` (repository root)
   - Use the standard format with ### headings for each category
   - Only include categories that have changes
-  - Show the user the updated CHANGELOG for approval
 
-4. **Execute release** (after user approval):
+4. **Show BOTH versions to user**:
+  - Display the developer CHANGELOG (what will go in CHANGELOG.md)
+  - Display the PUBLIC release notes separately (user-facing only)
+  - Ask for approval before proceeding
+
+5. **Execute release** (after user approval):
   - Run `./scripts/release.sh {{arg1}}`
   - The script will:
     - Bump version in `packages/electron/package.json`
@@ -33,6 +52,8 @@ Prepare a {{arg1}} release following this workflow:
     - Create commit with release notes
     - Create annotated git tag with release notes
     - Display next steps for pushing to trigger CI
+  - Show the PUBLIC release notes again after release is created
+  - User can copy these to update the GitHub release that CI creates
 
 Valid release types: patch, minor, major
 
