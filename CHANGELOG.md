@@ -19,6 +19,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.1] - 2025-11-02
+
+
+### Added
+- Find/replace bar now integrated in fixed tab header
+- File-watcher-based diff approval for AI edits
+- OS notification support for AI completion
+- Completion sound notifications for AI responses
+- Auto-focus AI input when creating new session
+- Agent mode replacing separate session manager window
+
+### Changed
+- AI chat draft input now persisted to database
+- AgenticCodingWindow deprecated in favor of AgenticPanel
+- Optimized AgenticPanel event handler registrations
+- Memoized AISessionView to prevent unnecessary re-renders
+- Custom tracker loading extracted to separate service
+
+### Fixed
+- Reduced runtime package TypeScript errors from 33 to 9
+- Achieved zero TypeScript compilation errors in rexical
+- Improved TypeScript compilation with path mappings
+- Capture full text context for tracker item titles with whitespace
+- Consecutive AI edits now update diff view properly
+- Display user message count in agent session list
+- Resolve system theme to actual theme before rendering
+- Allow tab switching shortcuts when search bar focused
+- Route MCP tools to correct window using workspace path
+- Use relative paths in onboarding service file creation
+
 ## [0.45.0] - 2025-10-31
 
 
