@@ -89,6 +89,9 @@ export interface SessionData {
   createdAt: number;  // Creation timestamp
   updatedAt: number;  // Last update timestamp
 
+  // Read state tracking
+  lastReadMessageTimestamp?: number;  // Timestamp of the last message the user has read
+
   // Additional metadata
   metadata?: Record<string, unknown>;
 

@@ -9,6 +9,8 @@ interface SessionListItemProps {
   createdAt: number;
   isActive: boolean;
   isLoaded?: boolean; // Whether session is loaded in a tab
+  isProcessing?: boolean; // Whether session is actively processing
+  hasUnread?: boolean; // Whether session has unread messages
   onClick: () => void;
   onDelete?: () => void;
   provider?: string;
@@ -22,6 +24,8 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   createdAt,
   isActive,
   isLoaded = false,
+  isProcessing = false,
+  hasUnread = false,
   onClick,
   onDelete,
   provider,
@@ -67,7 +71,28 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
     >
       <div className="session-list-item-icon">
         <ProviderIcon provider={provider || 'claude'} size={16} />
-        {isLoaded && !isActive && <div className="session-list-item-loaded-indicator" title="Loaded in tab" />}
+        {isProcessing && (
+          <div className="session-list-item-processing-indicator" title="Processing...">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32 16" strokeLinecap="round">
+                <animateTransform
+                  attributeName="transform"
+                  type="rotate"
+                  from="0 12 12"
+                  to="360 12 12"
+                  dur="1s"
+                  repeatCount="indefinite"
+                />
+              </circle>
+            </svg>
+          </div>
+        )}
+        {hasUnread && !isProcessing && (
+          <div className="session-list-item-unread-indicator" title="Unread response" />
+        )}
+        {isLoaded && !isActive && !isProcessing && !hasUnread && (
+          <div className="session-list-item-loaded-indicator" title="Loaded in tab" />
+        )}
       </div>
       <div className="session-list-item-content">
         <div className="session-list-item-title">{truncatedTitle}</div>

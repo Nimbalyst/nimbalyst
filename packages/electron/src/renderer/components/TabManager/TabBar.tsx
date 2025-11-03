@@ -416,6 +416,8 @@ export const TabBar: React.FC<TabBarProps> = ({
                 }
               }}
               className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isDirty ? 'dirty' : ''} ${tab.isPinned ? 'pinned' : ''} ${draggedIndex === index ? 'dragging' : ''} ${dragOverIndex === index ? 'drag-over' : ''}`}
+              data-tab-type={tab.isVirtual ? 'session' : 'document'}
+              data-tab-id={tab.id}
               draggable={true}
               onDragStart={(e) => handleDragStart(e, index)}
               onDragOver={(e) => handleDragOver(e, index)}
@@ -438,6 +440,25 @@ export const TabBar: React.FC<TabBarProps> = ({
               title={tab.filePath}
             >
               {tab.isPinned && <span className="tab-pin-icon">📌</span>}
+              {tab.isProcessing && (
+                <span className="tab-processing-indicator" title="Processing...">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32 16" strokeLinecap="round">
+                      <animateTransform
+                        attributeName="transform"
+                        type="rotate"
+                        from="0 12 12"
+                        to="360 12 12"
+                        dur="1s"
+                        repeatCount="indefinite"
+                      />
+                    </circle>
+                  </svg>
+                </span>
+              )}
+              {tab.hasUnread && !tab.isProcessing && (
+                <span className="tab-unread-indicator" title="Unread response"></span>
+              )}
               {editingTabId === tab.id ? (
                 <input
                   ref={editInputRef}

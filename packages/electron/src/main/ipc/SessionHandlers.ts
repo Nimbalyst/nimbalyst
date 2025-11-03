@@ -90,6 +90,33 @@ export async function registerSessionHandlers() {
         await sessionManager.updateSessionDraftInput(sessionId, draftInput);
     });
 
+    // Mark session as read (update read state)
+    ipcMain.handle('sessions:mark-read', async (event, sessionId: string, lastMessageTimestamp: number | null) => {
+        try {
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+            // Store timestamp using to_timestamp() to avoid timezone issues
+            if (lastMessageTimestamp) {
+                await database.query(
+                    `UPDATE ai_sessions
+                     SET last_read_timestamp = to_timestamp($1 / 1000.0), last_read_message_id = NULL
+                     WHERE id = $2`,
+                    [lastMessageTimestamp, sessionId]
+                );
+            } else {
+                await database.query(
+                    `UPDATE ai_sessions
+                     SET last_read_timestamp = NULL, last_read_message_id = NULL
+                     WHERE id = $2`,
+                    [sessionId]
+                );
+            }
+            return { success: true };
+        } catch (error) {
+            console.error('[SessionHandlers] Error marking session as read:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
     // Get active session - not implemented, returns null
     ipcMain.handle('session:get-active', async (event, filePath: string) => {
         // This API doesn't exist in current SessionManager
@@ -117,6 +144,19 @@ export async function registerSessionHandlers() {
     // Create checkpoint - not implemented, no-op
     ipcMain.handle('session:create-checkpoint', async (event, sessionId: string, state: string) => {
         // Checkpoints aren't implemented in current system
+    });
+
+    // Test-only: Query database directly (for e2e tests and debugging)
+    // This handler is safe to leave registered as it's read-only
+    ipcMain.handle('test:query-db', async (event, sql: string, params?: any[]) => {
+        try {
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+            const result = await database.query(sql, params);
+            return result;
+        } catch (error) {
+            console.error('[SessionHandlers] Test query error:', error);
+            return { error: String(error) };
+        }
     });
 }
 

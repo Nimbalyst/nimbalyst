@@ -125,7 +125,9 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
     async get(sessionId: string): Promise<ChatSession | null> {
       await ensureReady();
       const { rows } = await db.query<any>(
-        'SELECT * FROM ai_sessions WHERE id=$1 LIMIT 1',
+        `SELECT *,
+         EXTRACT(EPOCH FROM last_read_timestamp) * 1000 AS last_read_ms
+         FROM ai_sessions WHERE id=$1 LIMIT 1`,
         [sessionId]
       );
       const row = rows[0];
@@ -146,6 +148,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         documentContext: row.document_context ?? undefined,
         providerConfig: row.provider_config ?? undefined,
         providerSessionId: row.provider_session_id ?? undefined,
+        lastReadMessageTimestamp: row.last_read_ms ? Number(row.last_read_ms) : undefined,
       } satisfies ChatSession;
     },
 

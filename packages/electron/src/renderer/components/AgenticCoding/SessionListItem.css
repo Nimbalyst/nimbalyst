@@ -47,6 +47,28 @@
   border: 1.5px solid var(--surface-primary);
 }
 
+.session-list-item-processing-indicator {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
+  opacity: 0.8;
+}
+
+.session-list-item-unread-indicator {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  border: 1.5px solid var(--surface-primary);
+}
+
 .session-list-item-content {
   flex: 1;
   min-width: 0;

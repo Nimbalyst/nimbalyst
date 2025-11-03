@@ -12,12 +12,16 @@ interface SessionItem {
   model?: string;
   sessionType?: 'chat' | 'planning' | 'coding';
   messageCount: number;
+  isProcessing?: boolean;
+  hasUnread?: boolean;
 }
 
 interface SessionHistoryProps {
   workspacePath: string;
   activeSessionId: string | null;
   loadedSessionIds?: string[]; // IDs of sessions loaded in tabs
+  processingSessions?: Set<string>; // IDs of sessions currently processing
+  unreadSessions?: Set<string>; // IDs of sessions with unread messages
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete?: (sessionId: string) => void;
   onNewSession?: () => void;
@@ -44,6 +48,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   workspacePath,
   activeSessionId,
   loadedSessionIds = [],
+  processingSessions = new Set(),
+  unreadSessions = new Set(),
   onSessionSelect,
   onSessionDelete,
   onNewSession,
@@ -71,7 +77,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       const result = await window.electronAPI.invoke('sessions:list', workspacePath);
 
       if (result.success && Array.isArray(result.sessions)) {
-        // Map all sessions with full data
+        // Map all sessions with full data including processing and unread states
         const allSessions = result.sessions.map((s: any) => ({
           id: s.id,
           title: s.title || s.name || 'Untitled Session',
@@ -79,7 +85,9 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           provider: s.provider || 'claude',
           model: s.model,
           sessionType: s.sessionType || 'chat',
-          messageCount: s.messageCount || 0
+          messageCount: s.messageCount || 0,
+          isProcessing: processingSessions.has(s.id),
+          hasUnread: unreadSessions.has(s.id)
         }));
         setSessions(allSessions);
       }
@@ -89,11 +97,11 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [workspacePath]);
+  }, [workspacePath, processingSessions, unreadSessions]);
 
   useEffect(() => {
     loadSessions();
-  }, [loadSessions, refreshTrigger]);
+  }, [loadSessions, refreshTrigger, processingSessions, unreadSessions]);
 
   const handleToggleGroup = (groupName: string) => {
     if (collapsedGroups.includes(groupName)) {
@@ -330,6 +338,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
                   provider={session.provider}
                   model={session.model}
                   messageCount={session.messageCount}
+                  isProcessing={session.isProcessing}
+                  hasUnread={session.hasUnread}
                 />
               ))}
             </CollapsibleGroup>

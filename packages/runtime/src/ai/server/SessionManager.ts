@@ -53,6 +53,7 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     draftInput: session.draftInput ?? undefined,
     providerConfig,
     providerSessionId,
+    lastReadMessageTimestamp: session.lastReadMessageTimestamp ?? undefined,
   } satisfies SessionData;
 }
 

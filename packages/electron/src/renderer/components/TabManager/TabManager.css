@@ -393,3 +393,24 @@
   --menu-selected-bg: var(--surface-tertiary);
   --menu-selected-border: var(--primary-color);
 }
+
+/* Processing Indicator */
+.tab-processing-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+  color: var(--primary-color);
+  opacity: 0.8;
+}
+
+/* Unread Indicator */
+.tab-unread-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  margin-right: 6px;
+  flex-shrink: 0;
+}

@@ -104,6 +104,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const sessionTabsRef = useRef<SessionTab[]>(sessionTabs);
   const workspacePathRef = useRef(workspacePath);
 
+  // Read state tracking - synchronous ref to avoid React state update delay
+  const readStateRef = useRef<Map<string, { lastReadMessageTimestamp: number | null }>>(new Map());
+
   // Session view refs for focusing input
   const sessionViewRefsRef = useRef<Map<string, React.RefObject<AISessionViewRef>>>(new Map());
 
@@ -256,12 +259,26 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
               }
             }
 
+            // Preserve read state from ref (most recent), then tab state, then database
+            const refReadState = readStateRef.current.get(sessionId);
+            const preservedTimestamp = refReadState?.lastReadMessageTimestamp ?? tab.sessionData.lastReadMessageTimestamp ?? 0;
+            const dbTimestamp = sessionData.lastReadMessageTimestamp || 0;
+
+            // Use the most recent read state
+            const finalTimestamp = Math.max(preservedTimestamp, dbTimestamp);
+
+            // Update ref with the final read state
+            if (finalTimestamp > 0) {
+              readStateRef.current.set(sessionId, { lastReadMessageTimestamp: finalTimestamp });
+            }
+
             return {
               ...tab,
               name: sessionData.title || tab.name,
               sessionData: {
                 ...sessionData,
-                messages
+                messages,
+                lastReadMessageTimestamp: finalTimestamp
               }
             };
           }));
@@ -661,6 +678,43 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
       scheduleSessionReload(data.sessionId, { reason: 'message-logged', minInterval: 120 });
 
+      // If this is the active tab, auto-mark as read after message completion
+      // Use a delay to ensure the reload completes first
+      if (data.sessionId === activeTabId) {
+        setTimeout(async () => {
+          const tab = sessionTabsRef.current.find(t => t.id === data.sessionId);
+          if (tab) {
+            const messages = tab.sessionData.messages || [];
+            const lastMessage = messages[messages.length - 1];
+            const lastMessageTimestamp = lastMessage?.timestamp ?? null;
+
+            console.log(`[AgenticPanel] Auto-marking active session ${data.sessionId} as read after message completion (timestamp: ${lastMessageTimestamp})`);
+
+            // Update ref immediately
+            readStateRef.current.set(data.sessionId, {
+              lastReadMessageTimestamp: lastMessageTimestamp
+            });
+
+            // Update state
+            setSessionTabs(prev => prev.map(t => {
+              if (t.id === data.sessionId) {
+                return {
+                  ...t,
+                  sessionData: {
+                    ...t.sessionData,
+                    lastReadMessageTimestamp: lastMessageTimestamp
+                  }
+                };
+              }
+              return t;
+            }));
+
+            // Persist to database
+            await window.electronAPI.invoke('sessions:mark-read', data.sessionId, lastMessageTimestamp);
+          }
+        }, 300); // Delay to allow reload to complete
+      }
+
       // Also reload the session list to update message counts and titles
       loadSessions();
     };
@@ -700,7 +754,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // - Adds tool calls as they execute
   // - Final completion triggers database reload for consistency
   useEffect(() => {
-    const handleStreamResponse = (data: any) => {
+    const handleStreamResponse = async (data: any) => {
       // Check if this session is relevant to this panel (any open tab)
       const isRelevantSession = sessionTabsRef.current.some(tab => tab.id === data.sessionId);
       if (!isRelevantSession) {
@@ -716,7 +770,47 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           next.delete(data.sessionId);
           return next;
         });
+        // Schedule reload to get the latest message from database
         scheduleSessionReload(data.sessionId, { immediate: true, reason });
+
+        // If this is the active tab, mark it as read immediately (after reload completes)
+        // We need to wait a tiny bit for the reload to populate the message with an ID
+        if (data.sessionId === activeTabId) {
+          setTimeout(async () => {
+            const tab = sessionTabsRef.current.find(t => t.id === data.sessionId);
+            if (tab) {
+              const messages = tab.sessionData.messages || [];
+              const lastMessage = messages[messages.length - 1];
+              const lastMessageTimestamp = lastMessage?.timestamp ?? null;
+
+              if (lastMessageTimestamp) {
+                // Update ref immediately (synchronous)
+                readStateRef.current.set(data.sessionId, {
+                  lastReadMessageTimestamp: lastMessageTimestamp
+                });
+
+                // Update local state immediately for responsive UI
+                setSessionTabs(prev => prev.map(t => {
+                  if (t.id === data.sessionId) {
+                    return {
+                      ...t,
+                      sessionData: {
+                        ...t.sessionData,
+                        lastReadMessageTimestamp: lastMessageTimestamp
+                      }
+                    };
+                  }
+                  return t;
+                }));
+
+                // Persist to database (don't await, fire and forget)
+                window.electronAPI.invoke('sessions:mark-read', data.sessionId, lastMessageTimestamp).catch(err => {
+                  console.error('[AgenticPanel] Failed to mark active session as read:', err);
+                });
+              }
+            }
+          }, 200); // Just enough time for the reload to complete
+        }
         return;
       }
 
@@ -1088,12 +1182,53 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }, [workspacePath, onContentModeChange]);
 
   // Tab management (agent mode only)
-  const handleTabSelect = useCallback((tabId: string) => {
+  const handleTabSelect = useCallback(async (tabId: string) => {
+    // console.log(`[AgenticPanel] handleTabSelect: switching to tab ${tabId}`);
     setActiveTabId(tabId);
     if (onSessionChange) {
       onSessionChange(tabId);
     }
-  }, [onSessionChange]);
+
+    // Mark the session as read when switching to it
+    const tab = sessionTabs.find(t => t.id === tabId);
+    if (tab) {
+      const messages = tab.sessionData.messages || [];
+      const lastMessage = messages[messages.length - 1];
+      const lastMessageTimestamp = lastMessage?.timestamp ?? null;
+
+      // console.log(`[AgenticPanel] Marking session ${tabId} as read with lastMessageTimestamp: ${lastMessageTimestamp}`);
+
+      // Update ref IMMEDIATELY (synchronous) so it's available before React state updates
+      readStateRef.current.set(tabId, {
+        lastReadMessageTimestamp: lastMessageTimestamp
+      });
+      // console.log(`[AgenticPanel] Set readStateRef for session ${tabId} - lastReadMessageTimestamp: ${lastMessageTimestamp}`);
+
+      // Update local state for persistence
+      setSessionTabs(prev => prev.map(t => {
+        if (t.id === tabId) {
+          return {
+            ...t,
+            sessionData: {
+              ...t.sessionData,
+              lastReadMessageTimestamp: lastMessageTimestamp
+            }
+          };
+        }
+        return t;
+      }));
+
+      // console.log(`[AgenticPanel] Updated local state for session ${tabId} - lastReadMessageTimestamp: ${lastMessageTimestamp}`);
+
+      // Persist to database
+      try {
+        await window.electronAPI.invoke('sessions:mark-read', tabId, lastMessageTimestamp);
+        // console.log(`[AgenticPanel] Successfully persisted read state for session ${tabId} to database`);
+      } catch (err) {
+        console.error('[AgenticPanel] Failed to mark session as read:', err);
+      }
+    }
+  }, [onSessionChange, sessionTabs]);
 
   const handleTabClose = useCallback((tabId: string) => {
     const closingTab = sessionTabs.find(t => t.id === tabId);
@@ -1188,6 +1323,62 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     await openSessionInTab(lastClosed.id);
   }, [closedSessions, openSessionInTab]);
 
+  // Helper to determine if a session has unread messages
+  const hasUnreadMessages = useCallback((tab: SessionTab): boolean => {
+    const messages = tab.sessionData.messages || [];
+    if (messages.length === 0) return false;
+
+    // Get the last message
+    const lastMessage = messages[messages.length - 1];
+
+    // Only consider it unread if:
+    // 1. Last message is from assistant
+    // 2. It's not a thinking message
+    if (lastMessage.role !== 'assistant' || lastMessage.isThinking) {
+      return false;
+    }
+
+    // Check read state from ref first (synchronous, most up-to-date)
+    // Fall back to session data if ref doesn't have it
+    const refReadState = readStateRef.current.get(tab.id);
+    const lastReadMessageTimestamp = refReadState?.lastReadMessageTimestamp ?? tab.sessionData.lastReadMessageTimestamp;
+    const lastMessageTimestamp = lastMessage.timestamp;
+
+    // console.log(`[AgenticPanel] hasUnreadMessages check for session ${tab.id}:`, {
+    //   lastMessageTimestamp,
+    //   lastReadMessageTimestamp,
+    //   refHasData: !!refReadState,
+    //   messagesLength: messages.length
+    // });
+
+    // If no read state is tracked yet (undefined or null), consider it unread
+    if (!lastReadMessageTimestamp) {
+      console.log(`[AgenticPanel] Session ${tab.id} has no read state - marking as unread`);
+      return true;
+    }
+
+    // Check if the last message is newer than the last read message
+    const isUnread = lastMessageTimestamp > lastReadMessageTimestamp;
+    // console.log(`[AgenticPanel] Session ${tab.id} unread status: ${isUnread} (last message: ${lastMessageTimestamp}, last read: ${lastReadMessageTimestamp})`);
+
+    return isUnread;
+  }, []);
+
+  // Get sets of processing and unread session IDs
+  const getProcessingSessions = useCallback((): Set<string> => {
+    return new Set(sendingSessions);
+  }, [sendingSessions]);
+
+  const getUnreadSessions = useCallback((): Set<string> => {
+    const unreadIds = new Set<string>();
+    sessionTabs.forEach(tab => {
+      if (hasUnreadMessages(tab) && !sendingSessions.has(tab.id)) {
+        unreadIds.add(tab.id);
+      }
+    });
+    return unreadIds;
+  }, [sessionTabs, sendingSessions, hasUnreadMessages]);
+
   // Convert SessionTab to Tab format for TabBar
   const convertToTabs = (sessionTabs: SessionTab[]): Tab[] => {
     return sessionTabs.map(tab => ({
@@ -1197,7 +1388,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       content: '',
       isDirty: false,
       isPinned: tab.isPinned || false,
-      isVirtual: true
+      isVirtual: true,
+      isProcessing: sendingSessions.has(tab.id),
+      // Only show unread for inactive tabs that aren't processing
+      hasUnread: tab.id !== activeTabId && !sendingSessions.has(tab.id) && hasUnreadMessages(tab)
     }));
   };
 
@@ -1340,6 +1534,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             workspacePath={workspacePath}
             activeSessionId={activeTabId}
             loadedSessionIds={sessionTabs.map(tab => tab.id)}
+            processingSessions={getProcessingSessions()}
+            unreadSessions={getUnreadSessions()}
             onSessionSelect={openSessionInTab}
             onSessionDelete={deleteSession}
             onNewSession={() => createNewSession()}

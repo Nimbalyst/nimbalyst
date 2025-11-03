@@ -11,6 +11,8 @@ export interface Tab {
   isPinned: boolean;
   lastSaved?: Date;
   isVirtual?: boolean;
+  isProcessing?: boolean; // Session is actively processing AI response
+  hasUnread?: boolean; // Session has unread AI response
 }
 
 interface TabManagerProps {
