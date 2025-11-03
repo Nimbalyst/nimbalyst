@@ -370,6 +370,73 @@
   background: var(--primary-color, #3b82f6);
 }
 
+.diff-navigation-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 12px;
+}
+
+.diff-nav-button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-primary, #e5e7eb);
+  background: var(--surface-primary, white);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary, #6b7280);
+  transition: all 0.2s;
+}
+
+.diff-nav-button:hover:not(:disabled) {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.04));
+  color: var(--text-primary, #111827);
+  border-color: var(--border-primary, #d1d5db);
+}
+
+.diff-nav-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.diff-change-counter {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary, #6b7280);
+  min-width: 50px;
+  text-align: center;
+}
+
+.diff-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border-primary, #e5e7eb);
+}
+
+.diff-stat {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.diff-stat-added {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.diff-stat-removed {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
 .history-restore-button {
   padding: 6px 16px;
   background: var(--primary-color, #3b82f6);

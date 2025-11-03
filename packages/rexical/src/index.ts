@@ -130,6 +130,7 @@ export {
   $getDiffState,
   APPROVE_DIFF_COMMAND,
   REJECT_DIFF_COMMAND,
+  generateUnifiedDiff,
   type TextReplacement
 } from './plugins/DiffPlugin/core/exports';
 export type { DiffChangeGroup } from './plugins/DiffPlugin/core/exports';

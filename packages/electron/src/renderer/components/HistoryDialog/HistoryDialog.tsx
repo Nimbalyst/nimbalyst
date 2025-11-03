@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useHistory } from '../../hooks/useHistory';
-import { DiffPreviewEditor } from './DiffPreviewEditor';
-import { TextDiffViewer } from './TextDiffViewer';
+import { DiffPreviewEditor, type DiffNavigationState } from './DiffPreviewEditor';
+import { TextDiffViewer, type TextDiffNavigationState } from './TextDiffViewer';
 import './HistoryDialog.css';
 
 interface HistoryDialogProps {
@@ -26,6 +26,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
   const [compactView, setCompactView] = useState(true);
   const [versionAContent, setVersionAContent] = useState<string>('');
   const [versionBContent, setVersionBContent] = useState<string>('');
+  const [navigationState, setNavigationState] = useState<DiffNavigationState | TextDiffNavigationState | null>(null);
 
   const displayedSnapshots = useMemo(() => {
     if (!compactView || snapshots.length === 0) {
@@ -297,6 +298,27 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
     }
   };
 
+  // Navigation handlers
+  const handleNavigatePrevious = useCallback(() => {
+    if (diffViewMode === 'rich') {
+      (window as any).__richDiffNavigatePrevious?.();
+    } else {
+      (window as any).__textDiffNavigatePrevious?.();
+    }
+  }, [diffViewMode]);
+
+  const handleNavigateNext = useCallback(() => {
+    if (diffViewMode === 'rich') {
+      (window as any).__richDiffNavigateNext?.();
+    } else {
+      (window as any).__textDiffNavigateNext?.();
+    }
+  }, [diffViewMode]);
+
+  const handleNavigationStateChange = useCallback((state: DiffNavigationState | TextDiffNavigationState) => {
+    setNavigationState(state);
+  }, []);
+
   if (!isOpen) return null;
 
   return (
@@ -381,20 +403,55 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
               <div className="history-preview-header-left">
                 <h3>{diffMode ? 'Diff Preview' : 'Preview'}</h3>
                 {diffMode && (
-                  <div className="diff-mode-toggle">
-                    <button
-                      className={`diff-mode-button ${diffViewMode === 'rich' ? 'active' : ''}`}
-                      onClick={() => setDiffViewMode('rich')}
-                    >
-                      Rich
-                    </button>
-                    <button
-                      className={`diff-mode-button ${diffViewMode === 'text' ? 'active' : ''}`}
-                      onClick={() => setDiffViewMode('text')}
-                    >
-                      Text
-                    </button>
-                  </div>
+                  <>
+                    <div className="diff-mode-toggle">
+                      <button
+                        className={`diff-mode-button ${diffViewMode === 'rich' ? 'active' : ''}`}
+                        onClick={() => setDiffViewMode('rich')}
+                      >
+                        Rich
+                      </button>
+                      <button
+                        className={`diff-mode-button ${diffViewMode === 'text' ? 'active' : ''}`}
+                        onClick={() => setDiffViewMode('text')}
+                      >
+                        Text
+                      </button>
+                    </div>
+                    {navigationState && navigationState.totalGroups > 0 && (
+                      <div className="diff-navigation-controls">
+                        <button
+                          className="diff-nav-button"
+                          onClick={handleNavigatePrevious}
+                          disabled={!navigationState.canGoPrevious}
+                          title="Previous change"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                            <path d="M6 9L3 6L6 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                        <span className="diff-change-counter">
+                          {navigationState.currentIndex + 1} / {navigationState.totalGroups}
+                        </span>
+                        <button
+                          className="diff-nav-button"
+                          onClick={handleNavigateNext}
+                          disabled={!navigationState.canGoNext}
+                          title="Next change"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                            <path d="M6 3L9 6L6 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                        {diffViewMode === 'text' && 'addedLines' in navigationState && (
+                          <div className="diff-stats">
+                            <span className="diff-stat diff-stat-added">+{navigationState.addedLines}</span>
+                            <span className="diff-stat diff-stat-removed">-{navigationState.removedLines}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
               {selectedVersions.length === 1 && (
@@ -414,11 +471,17 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
                   <DiffPreviewEditor
                     oldMarkdown={versionAContent}
                     newMarkdown={versionBContent}
+                    onNavigationStateChange={handleNavigationStateChange}
+                    onNavigatePrevious={() => {}}
+                    onNavigateNext={() => {}}
                   />
                 ) : (
                   <TextDiffViewer
                     oldText={versionAContent}
                     newText={versionBContent}
+                    onNavigationStateChange={handleNavigationStateChange}
+                    onNavigatePrevious={() => {}}
+                    onNavigateNext={() => {}}
                   />
                 )}
               </div>
