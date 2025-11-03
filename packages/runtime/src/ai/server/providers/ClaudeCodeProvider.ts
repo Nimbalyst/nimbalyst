@@ -19,6 +19,7 @@ import { app } from 'electron';
 import { buildClaudeCodeSystemPromptAddendum } from '../../prompt';
 
 export class ClaudeCodeProvider extends BaseAIProvider {
+  // Single abort controller - each provider instance is per-session via ProviderFactory
   private abortController: AbortController | null = null;
   private claudeSessionIds: Map<string, string> = new Map(); // Our session ID -> Claude session ID
   private currentSessionType?: string; // Track session type for prompt customization
@@ -95,6 +96,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         message = `I have attached the following image files for you to examine:\n${attachmentsList}\n\nPlease use your Read tool to view these images.\n\n${message}`;
         console.log(`[CLAUDE-CODE] Updated message with ${attachmentRefs.length} attachment references`);
       }
+    }
+
+    // Abort any existing request before starting a new one
+    if (this.abortController) {
+      console.log(`[CLAUDE-CODE] Aborting existing request for session ${sessionId}`);
+      this.abortController.abort();
     }
 
     // Create abort controller for this request

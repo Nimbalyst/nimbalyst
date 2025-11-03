@@ -16,7 +16,7 @@ import type {
   AIProviderType,
   AIModel,
 } from '@nimbalyst/runtime/ai/server/types';
-import { updateDocumentState, registerWorkspaceWindow } from '../../mcp/httpServer';
+// MCP imports removed - no longer using MCP HTTP server
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
 import { SoundNotificationService } from '../SoundNotificationService';
 import { notificationService } from '../NotificationService';
@@ -94,8 +94,8 @@ export class AIService {
   private sessionManager: SessionManager;
   private settingsStore: Store<Record<string, unknown>> | null = null;
   private readonly analytics = AnalyticsService.getInstance();
-  // Track providers per window to avoid cross-window conflicts
-  private providersByWindow: Map<number, AIProvider> = new Map();
+  // NOTE: Providers are now tracked per-session in ProviderFactory, not per-window
+  // This allows multiple concurrent sessions in the same window (e.g., agent mode tabs)
 
   constructor(sessionStore: SessionStore) {
     this.sessionManager = new SessionManager(sessionStore);
@@ -353,20 +353,8 @@ export class AIService {
       const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, workspacePath);
       providerInstance.registerToolHandler(toolHandler);
 
-      // Track provider for this window
-      this.providersByWindow.set(event.sender.id, providerInstance);
-
-      // Update MCP document state if provided
-      if (documentContext) {
-        updateDocumentState(documentContext, session.id);
-
-        // Register workspace-to-window mapping for MCP tool routing
-        if (documentContext.workspacePath) {
-          const windowId = event.sender.id;
-          logger.ai.info(`[AIService] Registering workspace ${documentContext.workspacePath} -> window ${windowId}`);
-          registerWorkspaceWindow(documentContext.workspacePath, windowId);
-        }
-      }
+      // NOTE: No longer tracking provider per-window - ProviderFactory handles per-session tracking
+      // This allows multiple concurrent sessions in the same window
 
       this.analytics.sendEvent('create_ai_session', { provider });
       return session;
@@ -471,18 +459,6 @@ export class AIService {
         // Generate a title from the first message (truncate to 100 chars)
         const title = message.length > 100 ? message.substring(0, 97) + '...' : message;
         await this.sessionManager.updateSessionTitle(session.id, title);
-      }
-
-      // Update MCP document state if provided
-      if (documentContext) {
-        updateDocumentState(documentContext, sessionId);
-
-        // Register workspace-to-window mapping for MCP tool routing
-        if (documentContext.workspacePath) {
-          const windowId = event.sender.id;
-          logger.ai.info(`[AIService] Registering workspace ${documentContext.workspacePath} -> window ${windowId} for sendMessage`);
-          registerWorkspaceWindow(documentContext.workspacePath, windowId);
-        }
       }
 
       // Get or create provider for this session
@@ -615,9 +591,8 @@ export class AIService {
         provider.registerToolHandler(toolHandler);
       }
 
-      // Track provider for this window to avoid cross-window conflicts
-      this.providersByWindow.set(event.sender.id, provider);
-      console.log(`[AIService] Set provider for window ${event.sender.id}: ${session.provider}`);
+      // NOTE: No longer tracking provider per-window - each session has its own provider instance
+      console.log(`[AIService] Using provider for session ${session.id}: ${session.provider}`);
 
       // Re-register tool handler with the CURRENT document context from this message
       // This ensures applyDiff targets the correct file even when switching tabs
@@ -1196,16 +1171,20 @@ export class AIService {
     });
 
     // Clear session
-    ipcMain.handle('ai:clearSession', async (event) => {
+    ipcMain.handle('ai:clearSession', async (event, sessionId?: string) => {
       this.sessionManager.clearCurrentSession();
 
-      // Abort any ongoing request
-      // Abort the provider for this specific window
-      const windowId = event.sender.id;
-      const provider = this.providersByWindow.get(windowId);
-      if (provider) {
-        provider.abort();
-        console.log(`[AIService] Aborted provider for window ${windowId}`);
+      // Abort any ongoing request for the specific session
+      if (sessionId) {
+        // Get provider from ProviderFactory using sessionId
+        const session = await this.sessionManager.loadSession(sessionId);
+        if (session) {
+          const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
+          if (provider) {
+            provider.abort();
+            console.log(`[AIService] Aborted provider for session ${sessionId}`);
+          }
+        }
       }
 
       return { success: true };
@@ -1253,10 +1232,18 @@ export class AIService {
     });
 
     // Cancel current request
-    ipcMain.handle('ai:cancelRequest', async (event, chunksReceived?: number) => {
-      // Abort the provider for this specific window
-      const windowId = event.sender.id;
-      const provider = this.providersByWindow.get(windowId);
+    ipcMain.handle('ai:cancelRequest', async (event, sessionId: string, chunksReceived?: number) => {
+      // Abort the provider for the specific session
+      if (!sessionId) {
+        throw new Error('Session ID is required to cancel request');
+      }
+
+      const session = await this.sessionManager.loadSession(sessionId);
+      if (!session) {
+        return { success: false, error: 'Session not found' };
+      }
+
+      const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
       if (provider) {
         // Get provider type
         const providerType = (provider as any).providerType || 'unknown';
@@ -1269,11 +1256,11 @@ export class AIService {
         });
 
         provider.abort();
-        console.log(`[AIService] Cancelled request for window ${windowId}`);
+        console.log(`[AIService] Cancelled request for session ${sessionId}`);
         this.analytics.sendEvent('cancel_ai_request', {provider: providerType})
         return { success: true };
       }
-      return { success: false, error: 'No active request to cancel' };
+      return { success: false, error: 'No active provider for session' };
     });
 
     // Settings handlers
@@ -1505,15 +1492,10 @@ export class AIService {
       try {
         console.log('[AIService] ai:getSlashCommands called with sessionId:', sessionId);
 
-        // Try to get provider from window first
-        const windowId = event.sender.id;
-        console.log('[AIService] Looking for provider for window:', windowId);
-        let provider = this.providersByWindow.get(windowId);
-        console.log('[AIService] Provider from window:', provider ? 'found' : 'not found');
-
-        // If no provider for window, try to get from session
-        if (!provider && sessionId) {
-          console.log('[AIService] Trying to get provider from ProviderFactory with sessionId:', sessionId);
+        // Get provider from session
+        let provider: AIProvider | undefined;
+        if (sessionId) {
+          console.log('[AIService] Getting provider from ProviderFactory with sessionId:', sessionId);
           provider = ProviderFactory.getProvider('claude-code', sessionId) ?? undefined;
           console.log('[AIService] Provider from ProviderFactory:', provider ? 'found' : 'not found');
         }

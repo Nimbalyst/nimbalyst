@@ -84,7 +84,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // UI state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isSending, setIsSending] = useState(false);
+  const [sendingSessions, setSendingSessions] = useState<Set<string>>(new Set());
   const sendingSessionsRef = useRef<Set<string>>(new Set());
 
   // Prompt history navigation state (per session)
@@ -100,6 +100,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Reload coordination for database-backed session state
   const reloadTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastReloadAtRef = useRef<Map<string, number>>(new Map());
+  const reloadInProgressRef = useRef<Set<string>>(new Set()); // Track in-flight reloads
   const sessionTabsRef = useRef<SessionTab[]>(sessionTabs);
   const workspacePathRef = useRef(workspacePath);
 
@@ -224,8 +225,16 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const lastReloadMap = lastReloadAtRef.current;
 
     const executeReload = async () => {
+      // Guard against concurrent reloads for the same session
+      if (reloadInProgressRef.current.has(sessionId)) {
+        console.log(`[AgenticPanel] Reload already in progress for session ${sessionId}, skipping`);
+        return;
+      }
+
       timers.delete(sessionId);
       lastReloadMap.set(sessionId, Date.now());
+      reloadInProgressRef.current.add(sessionId);
+
       try {
         const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePathRef.current);
         if (sessionData) {
@@ -259,6 +268,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         }
       } catch (err) {
         console.error(`[AgenticPanel] Failed to reload session${reason ? ` (${reason})` : ''}:`, err);
+      } finally {
+        reloadInProgressRef.current.delete(sessionId);
       }
     };
 
@@ -700,10 +711,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
       if (data.isComplete) {
         sendingSessionsRef.current.delete(data.sessionId);
+        setSendingSessions(prev => {
+          const next = new Set(prev);
+          next.delete(data.sessionId);
+          return next;
+        });
         scheduleSessionReload(data.sessionId, { immediate: true, reason });
-        if (data.sessionId === activeTabId) {
-          setIsSending(false);
-        }
         return;
       }
 
@@ -714,9 +727,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       console.error('[AgenticPanel] AI error:', error);
       // Don't set panel-level error state - that's for session loading errors
       // Streaming errors are saved to the database and will appear via message-logged event
-      setIsSending(false);
       if (typeof error?.sessionId === 'string') {
         sendingSessionsRef.current.delete(error.sessionId);
+        setSendingSessions(prev => {
+          const next = new Set(prev);
+          next.delete(error.sessionId);
+          return next;
+        });
       }
     };
 
@@ -734,6 +751,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       reloadTimersRef.current.forEach(timer => clearTimeout(timer));
       reloadTimersRef.current.clear();
       lastReloadAtRef.current.clear();
+      reloadInProgressRef.current.clear();
     };
   }, []);
 
@@ -923,8 +941,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       return newMap;
     });
 
-    setIsSending(true);
     sendingSessionsRef.current.add(sessionId);
+    setSendingSessions(prev => new Set(prev).add(sessionId));
 
     // Get the session to determine sessionType
     const currentTab = sessionTabs.find(tab => tab.id === sessionId);
@@ -999,8 +1017,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     } catch (err) {
       console.error('[AgenticPanel] Failed to send message:', err);
       setError(String(err));
-      setIsSending(false);
       sendingSessionsRef.current.delete(sessionId);
+      setSendingSessions(prev => {
+        const next = new Set(prev);
+        next.delete(sessionId);
+        return next;
+      });
 
       // Remove thinking message on error
       setSessionTabs(prev => prev.map(tab => {
@@ -1021,10 +1043,14 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Handle cancel request
   const handleCancelRequest = useCallback(async (sessionId: string) => {
     try {
-      const result = await window.electronAPI.aiCancelRequest();
+      const result = await window.electronAPI.aiCancelRequest(sessionId);
       if (result.success) {
-        setIsSending(false);
         sendingSessionsRef.current.delete(sessionId);
+        setSendingSessions(prev => {
+          const next = new Set(prev);
+          next.delete(sessionId);
+          return next;
+        });
 
         // Remove thinking message
         setSessionTabs(prev => prev.map(tab => {
@@ -1266,7 +1292,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onFileMentionSearch={handleFileMentionSearch}
             onFileMentionSelect={handleFileMentionSelect}
             onFileClick={handleFileClick}
-            isLoading={isSending}
+            isLoading={sendingSessions.has(activeTab.id)}
             aiMode={activeTab.mode || 'plan'}
             onAIModeChange={(newMode) => handleModeChange(activeTab.id, newMode)}
             currentModel={activeTab.model || activeTab.sessionData.model || 'claude-code'}
@@ -1366,7 +1392,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                 onFileMentionSearch={handleFileMentionSearch}
                 onFileMentionSelect={handleFileMentionSelect}
                 onFileClick={handleFileClick}
-                isLoading={isSending && tab.id === activeTabId}
+                isLoading={sendingSessions.has(tab.id)}
                 aiMode={tab.mode || 'plan'}
                 onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
                 currentModel={tab.model || tab.sessionData.model || 'claude-code'}
