@@ -94,6 +94,49 @@ export function groupDiffChanges(editor: LexicalEditor): DiffChangeGroup[] {
       return text.trim().length === 0;
     };
 
+    // Helper to check if two nodes are adjacent in the document
+    // Uses sibling relationships to determine visual proximity
+    const areNodesAdjacent = (node1: LexicalNode, node2: LexicalNode): boolean => {
+      // Direct siblings are always adjacent
+      const nextSibling = node1.getNextSibling();
+      if (nextSibling && nextSibling.getKey() === node2.getKey()) {
+        return true;
+      }
+
+      // Check if they're consecutive children of the same parent
+      const parent1 = node1.getParent();
+      const parent2 = node2.getParent();
+
+      if (!parent1 || !parent2) return false;
+
+      // Same parent means they're siblings
+      if (parent1.getKey() === parent2.getKey()) {
+        // Already checked direct sibling above, so if we're here
+        // they have the same parent but aren't direct siblings
+        // Check if there's anything between them
+        const children = parent1.getChildren();
+        const idx1 = children.findIndex(c => c.getKey() === node1.getKey());
+        const idx2 = children.findIndex(c => c.getKey() === node2.getKey());
+
+        if (idx1 === -1 || idx2 === -1) return false;
+
+        // Adjacent if they're consecutive in the children array
+        return idx2 === idx1 + 1;
+      }
+
+      // Different parents - check if parent2 immediately follows parent1
+      // This handles cases like consecutive list items in different lists
+      const grandParent1 = parent1.getParent();
+      const grandParent2 = parent2.getParent();
+
+      if (grandParent1 && grandParent1.getKey() === grandParent2?.getKey()) {
+        const parentNextSibling = parent1.getNextSibling();
+        return parentNextSibling && parentNextSibling.getKey() === parent2.getKey();
+      }
+
+      return false;
+    };
+
     // Now group them intelligently
     let i = 0;
     while (i < allDiffNodes.length) {
@@ -105,32 +148,61 @@ export function groupDiffChanges(editor: LexicalEditor): DiffChangeGroup[] {
       if (current.state === 'removed' && i + 1 < allDiffNodes.length) {
         const next = allDiffNodes[i + 1];
 
-        // If next is 'added', group them together as a replacement
-        if (next.state === 'added') {
+        // If next is 'added' and adjacent, group them together as a replacement
+        if (next.state === 'added' && areNodesAdjacent(current.node, next.node)) {
           nodes.push(next.node);
           types.add(next.state);
           i += 2; // Skip both nodes
 
-          // Continue grouping if subsequent nodes are also added (whitespace handling)
-          while (i < allDiffNodes.length && allDiffNodes[i].state === 'added') {
+          // Continue grouping if subsequent nodes are also added and adjacent
+          while (i < allDiffNodes.length &&
+                 allDiffNodes[i].state === 'added' &&
+                 areNodesAdjacent(nodes[nodes.length - 1], allDiffNodes[i].node)) {
             nodes.push(allDiffNodes[i].node);
             types.add(allDiffNodes[i].state);
             i++;
           }
         } else {
-          i += 1; // Just this node
+          // Not a replacement - fall through to group with other same-state nodes
+          i += 1; // Start with current node
+
+          // Look ahead for adjacent nodes with the same state
+          while (i < allDiffNodes.length) {
+            const nextNode = allDiffNodes[i];
+
+            if (nextNode.state !== current.state) {
+              break;
+            }
+
+            if (!areNodesAdjacent(nodes[nodes.length - 1], nextNode.node)) {
+              break;
+            }
+
+            nodes.push(nextNode.node);
+            types.add(nextNode.state);
+            i++;
+          }
         }
       }
-      // Group consecutive nodes with the same state
+      // Group consecutive nodes with the same state IF they're adjacent
       else {
         i += 1; // Start with current node
 
         // Look ahead for adjacent nodes with the same state
-        // Group ALL consecutive nodes with the same diff state together
-        // This handles: whitespace + content, multiple content nodes, etc.
-        while (i < allDiffNodes.length && allDiffNodes[i].state === current.state) {
-          nodes.push(allDiffNodes[i].node);
-          types.add(allDiffNodes[i].state);
+        // Only group if they're actually next to each other in the document
+        while (i < allDiffNodes.length) {
+          const nextNode = allDiffNodes[i];
+
+          if (nextNode.state !== current.state) {
+            break;
+          }
+
+          if (!areNodesAdjacent(nodes[nodes.length - 1], nextNode.node)) {
+            break;
+          }
+
+          nodes.push(nextNode.node);
+          types.add(nextNode.state);
           i++;
         }
       }

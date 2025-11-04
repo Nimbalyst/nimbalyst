@@ -226,16 +226,27 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
     // Directly set the index
     setCurrentGroupIndex(newIndex);
 
+    // Scroll to the group first (before trying to select)
+    scrollToChangeGroup(editor, newIndex, changeGroups);
+
     // Move the Lexical selection to this group for visual feedback
+    // Try to select any node in the group that's selectable
     editor.update(() => {
       try {
-        targetGroup.startNode.selectStart();
+        // Try each node in the group until one succeeds
+        for (const node of targetGroup.nodes) {
+          try {
+            node.selectStart();
+            break; // Success, stop trying
+          } catch (e) {
+            // This node isn't selectable, try next one
+            continue;
+          }
+        }
       } catch (e) {
         console.warn('Failed to move selection to previous group:', e);
       }
     });
-
-    scrollToChangeGroup(editor, newIndex, changeGroups);
 
     // Reset flag after a brief delay
     setTimeout(() => {
@@ -259,16 +270,27 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
     // Directly set the index
     setCurrentGroupIndex(newIndex);
 
+    // Scroll to the group first (before trying to select)
+    scrollToChangeGroup(editor, newIndex, changeGroups);
+
     // Move the Lexical selection to this group for visual feedback
+    // Try to select any node in the group that's selectable
     editor.update(() => {
       try {
-        targetGroup.startNode.selectStart();
+        // Try each node in the group until one succeeds
+        for (const node of targetGroup.nodes) {
+          try {
+            node.selectStart();
+            break; // Success, stop trying
+          } catch (e) {
+            // This node isn't selectable, try next one
+            continue;
+          }
+        }
       } catch (e) {
         console.warn('Failed to move selection to next group:', e);
       }
     });
-
-    scrollToChangeGroup(editor, newIndex, changeGroups);
 
     // Reset flag after a brief delay
     setTimeout(() => {
@@ -299,10 +321,19 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
         const nextGroup = updatedGroups[newIndex];
 
         // Move the actual Lexical selection to the next group
+        // Try to select any node in the group that's selectable
         editor.update(() => {
-          const startNode = nextGroup.startNode;
           try {
-            startNode.selectStart();
+            // Try each node in the group until one succeeds
+            for (const node of nextGroup.nodes) {
+              try {
+                node.selectStart();
+                break; // Success, stop trying
+              } catch (e) {
+                // This node isn't selectable, try next one
+                continue;
+              }
+            }
           } catch (e) {
             console.warn('Failed to move selection to next group:', e);
           }
@@ -334,10 +365,19 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
         const nextGroup = updatedGroups[newIndex];
 
         // Move the actual Lexical selection to the next group
+        // Try to select any node in the group that's selectable
         editor.update(() => {
-          const startNode = nextGroup.startNode;
           try {
-            startNode.selectStart();
+            // Try each node in the group until one succeeds
+            for (const node of nextGroup.nodes) {
+              try {
+                node.selectStart();
+                break; // Success, stop trying
+              } catch (e) {
+                // This node isn't selectable, try next one
+                continue;
+              }
+            }
           } catch (e) {
             console.warn('Failed to move selection to next group:', e);
           }
