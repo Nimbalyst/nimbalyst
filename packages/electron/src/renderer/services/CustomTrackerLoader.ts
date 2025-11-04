@@ -20,7 +20,7 @@ export async function loadCustomTrackers(workspacePath: string): Promise<void> {
 
     // Use simple path joining (works in browser)
     const trackersDir = `${workspacePath}/.nimbalyst/trackers`;
-    log.info('[CustomTrackers] Loading from:', trackersDir);
+    // log.info('[CustomTrackers] Loading from:', trackersDir);
 
     // Try reading known tracker files directly instead of listing directory
     // This avoids file tree caching issues

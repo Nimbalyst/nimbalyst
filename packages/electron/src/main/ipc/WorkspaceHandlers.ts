@@ -83,7 +83,7 @@ export function registerWorkspaceHandlers() {
         }
 
         if (!existsSync(filePath)) {
-            console.log('[READ_FILE] File does not exist:', filePath);
+            // console.log('[READ_FILE] File does not exist:', filePath);
             return null;
         }
 
