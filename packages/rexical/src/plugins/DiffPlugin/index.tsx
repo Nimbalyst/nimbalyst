@@ -184,7 +184,6 @@ export function DiffPlugin(): JSX.Element | null {
     const applyMarkdownReplaceUnregister = editor.registerCommand<ApplyMarkdownReplacePayload>(
       APPLY_MARKDOWN_REPLACE_COMMAND,
       (payload) => {
-        // console.log('[DiffPlugin] APPLY_MARKDOWN_REPLACE_COMMAND handler called!', payload);
         // Handle both old format (array) and new format (object with replacements + requestId)
         const replacements = Array.isArray(payload) ? payload : payload?.replacements;
         const requestId = Array.isArray(payload) ? undefined : payload?.requestId;

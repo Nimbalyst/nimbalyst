@@ -5,6 +5,7 @@ import {
   groupDiffChanges,
   scrollToChangeGroup,
   $getDiffState,
+  $hasDiffNodes,
   type DiffChangeGroup
 } from 'rexical';
 import type { LexicalEditor } from 'lexical';
@@ -43,11 +44,6 @@ export function DiffPreviewEditor({
   const [currentGroupIndex, setCurrentGroupIndex] = useState(0);
   const isNavigatingRef = useRef(false);
 
-  // Debug: Log what nodes are in the registry
-  useEffect(() => {
-    console.log('[DiffPreviewEditor] Plugin registry nodes:', pluginRegistry.getAllNodes().map(n => n.name));
-    console.log('[DiffPreviewEditor] All plugins:', pluginRegistry.getAll().map(p => p.name));
-  }, []);
 
   // Update groups whenever editor changes
   const updateGroups = useCallback(() => {
@@ -196,29 +192,40 @@ export function DiffPreviewEditor({
     if (appliedRef.current) return;
     appliedRef.current = true;
 
-    // Wait for markdown to be loaded and plugins to register
-    setTimeout(() => {
-      const replacements = [{ oldText: oldMarkdown, newText: newMarkdown }];
+    // Check if markdown is actually different
+    if (oldMarkdown === newMarkdown) {
+      setIsReady(true);
+      return;
+    }
 
-      try {
-        console.log('[DiffPreviewEditor] Applying diff replacements:', replacements);
-        console.log('[DiffPreviewEditor] Old markdown length:', oldMarkdown.length);
-        console.log('[DiffPreviewEditor] New markdown length:', newMarkdown.length);
+    // Wait for DiffPlugin to register its command handler
+    // We need to wait for React to complete the render cycle and run all useEffect hooks
+    // Use multiple animation frames to ensure all plugins have initialized
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const replacements = [{ oldText: oldMarkdown, newText: newMarkdown }];
 
-        const result = editor.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
-        console.log('[DiffPreviewEditor] Command dispatch result:', result);
+          try {
+            const result = editor.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
 
-        // Show the editor after diff is applied
-        setTimeout(() => {
-          setIsReady(true);
-          // Initial groups update after diff is applied
-          updateGroups();
-        }, 100);
-      } catch (error) {
-        console.error('[DiffPreviewEditor] Failed to apply diff in preview:', error);
-        setIsReady(true); // Show anyway if there's an error
-      }
-    }, 1000);
+            if (!result) {
+              console.error('[DiffPreviewEditor] Failed to apply diff - command not handled');
+            }
+
+            // Show the editor after diff is applied
+            requestAnimationFrame(() => {
+              setIsReady(true);
+              // Initial groups update after diff is applied
+              updateGroups();
+            });
+          } catch (error) {
+            console.error('[DiffPreviewEditor] Failed to apply diff in preview:', error);
+            setIsReady(true); // Show anyway if there's an error
+          }
+        });
+      });
+    });
   };
 
   return (
