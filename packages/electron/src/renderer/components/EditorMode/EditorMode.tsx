@@ -59,6 +59,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   // File tree state
   const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
+  const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null);
 
   // Current file state
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
@@ -371,6 +372,21 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     return undefined;
   }, [workspacePath]);
 
+  // Listen for file-new-in-workspace IPC event from menu (Cmd+N in files mode)
+  useEffect(() => {
+    if (!window.electronAPI?.onFileNewInWorkspace) return undefined;
+
+    const cleanup = window.electronAPI.onFileNewInWorkspace(() => {
+      // Set the target directory to the selected folder if one is selected
+      if (selectedFolderPath) {
+        setNewFileDirectory(selectedFolderPath);
+      }
+      setIsNewFileDialogOpen(true);
+    });
+
+    return cleanup;
+  }, [selectedFolderPath]);
+
   // Handle new file creation
   const handleNewFile = useCallback(async (fileName: string) => {
     if (!workspacePath || !window.electronAPI) return;
@@ -448,6 +464,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
             onViewHistory={(filePath) => {
               setIsHistoryDialogOpen(true);
             }}
+            onSelectedFolderChange={setSelectedFolderPath}
           />
         </div>
 

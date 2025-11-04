@@ -368,18 +368,13 @@ export async function createApplicationMenu() {
                     label: 'New',
                     accelerator: KeyboardShortcuts.file.new,
                     click: async () => {
-                        console.log('[File->New] Menu clicked');
                         const focusedWindow = BrowserWindow.getFocusedWindow();
-                        console.log('[File->New] Focused window:', focusedWindow ? `Electron ID: ${focusedWindow.id}` : 'none');
 
                         if (focusedWindow) {
-                            // Find the custom window ID used by WindowManager
                             const windowId = getWindowId(focusedWindow);
-                            console.log('[File->New] Custom window ID:', windowId);
 
                             if (windowId !== null) {
                                 const state = windowStates.get(windowId);
-                                console.log('[File->New] Window state:', state);
 
                                 if (state?.mode === 'workspace') {
                                     // In workspace mode, check activeMode to determine action
@@ -387,37 +382,28 @@ export async function createApplicationMenu() {
                                     if (workspacePath) {
                                         const workspaceState = getWorkspaceState(workspacePath);
                                         const activeMode = workspaceState?.activeMode;
-                                        console.log('[File->New] Active mode:', activeMode, 'workspace path:', workspacePath);
 
                                         if (activeMode === 'agent') {
                                             // In agent mode, create new AI session
-                                            console.log('[File->New] Agent mode detected, sending agent-new-session event');
                                             focusedWindow.webContents.send('agent-new-session');
                                         } else {
                                             // In files/plan mode, create new file
-                                            console.log('[File->New] Files/Plan mode detected, sending file-new-in-workspace event');
                                             focusedWindow.webContents.send('file-new-in-workspace');
                                         }
                                     } else {
                                         // No workspace path, default to new file
-                                        console.log('[File->New] No workspace path, sending file-new-in-workspace event');
                                         focusedWindow.webContents.send('file-new-in-workspace');
                                     }
                                 } else {
                                     // In document mode, create new window
-                                    console.log('[File->New] Document mode or no mode, creating new window');
                                     createWindow();
                                 }
                             } else {
                                 // Window not found in our map, create new window
-                                console.log('[File->New] ERROR: Window not found in windows Map!');
-                                console.log('[File->New] Windows Map size:', windows.size);
-                                console.log('[File->New] Creating new window as fallback');
                                 createWindow();
                             }
                         } else {
                             // No focused window, create new window
-                            console.log('[File->New] No focused window, creating new window');
                             createWindow();
                         }
                     }

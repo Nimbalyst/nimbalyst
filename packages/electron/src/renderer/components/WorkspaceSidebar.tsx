@@ -25,6 +25,7 @@ interface WorkspaceSidebarProps {
   onViewHistory?: (filePath: string) => void;
   onNewPlan?: () => void;
   onOpenPlansTable?: () => void;
+  onSelectedFolderChange?: (folderPath: string | null) => void;
 }
 
 // Generate a consistent color based on workspace path
@@ -53,13 +54,20 @@ export function WorkspaceSidebar({
   onRefreshFileTree,
   onViewHistory,
   onNewPlan,
-  onOpenPlansTable
+  onOpenPlansTable,
+  onSelectedFolderChange
 }: WorkspaceSidebarProps) {
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const [isDragOverRoot, setIsDragOverRoot] = useState(false);
   const [draggedItem, setDraggedItem] = useState<any | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+
+  // Notify parent when selected folder changes
+  const handleSelectedFolderChange = (folderPath: string | null) => {
+    setSelectedFolder(folderPath);
+    onSelectedFolderChange?.(folderPath);
+  };
 
   const handleNewFile = () => {
     // Priority: selected folder > parent of current file > workspace root
@@ -151,7 +159,7 @@ export function WorkspaceSidebar({
   };
 
   const handleFileSelect = (filePath: string) => {
-    setSelectedFolder(null); // Clear folder selection when a file is selected
+    handleSelectedFolderChange(null); // Clear folder selection when a file is selected
     onFileSelect(filePath);
   };
 
@@ -328,7 +336,7 @@ export function WorkspaceSidebar({
               onRefreshFileTree={onRefreshFileTree}
               onViewHistory={onViewHistory}
               selectedFolder={selectedFolder}
-              onFolderSelect={setSelectedFolder}
+              onFolderSelect={handleSelectedFolderChange}
             />
             {isDragOverRoot && (
               <div className="root-drop-indicator">
