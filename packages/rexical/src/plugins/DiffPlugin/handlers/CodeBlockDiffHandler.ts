@@ -38,39 +38,39 @@ export class CodeBlockDiffHandler implements DiffNodeHandler {
     // Get the text content of source and target code blocks
     const sourceText = this.getCodeBlockText(sourceNode);
     const targetText = this.getCodeBlockText(targetNode);
-    
+
     // Also check if language changed
     const sourceLang = (sourceNode as any).language || '';
     const targetLang = (targetNode as any).language || '';
 
     // If content or language is different, treat as full replacement
     if (sourceText !== targetText || sourceLang !== targetLang) {
-      console.log(`Code block change detected - replacing entire block`);
-      console.log(`  Source (${sourceLang}): ${sourceText.substring(0, 50)}...`);
-      console.log(`  Target (${targetLang}): ${targetText.substring(0, 50)}...`);
-      
+      // console.log(`Code block change detected - replacing entire block`);
+      // console.log(`  Source (${sourceLang}): ${sourceText.substring(0, 50)}...`);
+      // console.log(`  Target (${targetLang}): ${targetText.substring(0, 50)}...`);
+
       // Mark the existing code block as removed
       $setDiffState(liveNode, 'removed');
-      
+
       // Create a new code block with the target content
       const newCodeBlock = createNodeFromSerialized(targetNode);
       if ($isElementNode(newCodeBlock)) {
         // Mark the new code block as added
         $setDiffState(newCodeBlock, 'added');
-        
+
         // Insert the new code block after the old one
         liveNode.insertAfter(newCodeBlock);
-        
+
         // Both blocks will be visible in the diff view:
         // - Old block (removed) with red background/strike-through
         // - New block (added) with green background
-        
+
         return {handled: true, skipChildren: true};
       }
     }
-    
+
     // Content is identical - no changes needed
-    console.log('Code block content identical - no diff needed');
+    // console.log('Code block content identical - no diff needed');
     return {handled: true, skipChildren: true};
   }
 
@@ -146,7 +146,7 @@ export class CodeBlockDiffHandler implements DiffNodeHandler {
    */
   private processCodeBlockApproval(element: ElementNode): void {
     const diffState = $getDiffState(element);
-    
+
     if (diffState === 'added') {
       // Approve addition - clear diff state
       $clearDiffState(element);
@@ -164,7 +164,7 @@ export class CodeBlockDiffHandler implements DiffNodeHandler {
    */
   private processCodeBlockRejection(element: ElementNode): void {
     const diffState = $getDiffState(element);
-    
+
     if (diffState === 'added') {
       // Reject addition - remove the node
       element.remove();
@@ -183,17 +183,17 @@ export class CodeBlockDiffHandler implements DiffNodeHandler {
   private getCodeBlockText(node: SerializedLexicalNode): string {
     // Code blocks store their text in different ways depending on structure
     // They might have text directly or in child nodes
-    
+
     // First check for direct text content
     if ('text' in node && typeof node.text === 'string') {
       return node.text;
     }
-    
+
     // If not, recursively collect text from children
     if ('children' in node && Array.isArray(node.children)) {
       return this.collectTextFromChildren(node.children);
     }
-    
+
     return '';
   }
 
@@ -202,7 +202,7 @@ export class CodeBlockDiffHandler implements DiffNodeHandler {
    */
   private collectTextFromChildren(children: SerializedLexicalNode[]): string {
     let text = '';
-    
+
     for (const child of children) {
       // Handle text nodes
       if (child.type === 'text' && 'text' in child) {
@@ -221,7 +221,7 @@ export class CodeBlockDiffHandler implements DiffNodeHandler {
         text += this.collectTextFromChildren(child.children);
       }
     }
-    
+
     return text;
   }
 }

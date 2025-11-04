@@ -865,8 +865,8 @@ export function $applyNodeDiff(
   switch (diff.changeType) {
     case 'remove': {
       // Find the live node by its markdown content
-      console.log('  Looking for live node with markdown:', diff.sourceMarkdown?.substring(0, 100));
-      console.log('  Available live nodes:', Array.from(liveNodesByMarkdown.keys()).map(k => k.substring(0, 50)));
+      // console.log('  Looking for live node with markdown:', diff.sourceMarkdown?.substring(0, 100));
+      // console.log('  Available live nodes:', Array.from(liveNodesByMarkdown.keys()).map(k => k.substring(0, 50)));
       const liveNodeKey = liveNodesByMarkdown.get(diff.sourceMarkdown);
       if (!liveNodeKey) {
         console.warn(
@@ -874,7 +874,7 @@ export function $applyNodeDiff(
         );
         return;
       }
-      console.log('  Found live node:', liveNodeKey);
+      // console.log('  Found live node:', liveNodeKey);
 
       const liveNode = $getNodeByKey(liveNodeKey);
       if (!liveNode) {
@@ -886,10 +886,10 @@ export function $applyNodeDiff(
       if ($isElementNode(liveNode)) {
         // Set diff state to 'removed' - preserve original content for reject functionality
         $setDiffState(liveNode, 'removed');
-        console.log('  ✅ Set diff state to REMOVED on node:', liveNode.getKey(), liveNode.getType());
+        // console.log('  ✅ Set diff state to REMOVED on node:', liveNode.getKey(), liveNode.getType());
         // Verify it was set
         const verifyState = $getDiffState(liveNode);
-        console.log('  🔍 Verified diff state immediately:', verifyState);
+        // console.log('  🔍 Verified diff state immediately:', verifyState);
         // NOTE: We don't call $markNodeAsRemoved here because we want to preserve
         // the original content for proper reject functionality. The NodeState is
         // sufficient for tracking that this node should be removed on approve.
@@ -939,14 +939,14 @@ export function $applyNodeDiff(
     case 'update': {
       // Find the live node by its markdown content
       const liveNodeKey = liveNodesByMarkdown.get(diff.sourceMarkdown);
-      console.log('  Looking for node with markdown:', diff.sourceMarkdown?.substring(0, 50));
-      console.log('  Found key:', liveNodeKey);
+      // console.log('  Looking for node with markdown:', diff.sourceMarkdown?.substring(0, 50));
+      // console.log('  Found key:', liveNodeKey);
 
       if (!liveNodeKey) {
         console.warn(
           `Could not find live node with markdown: ${diff.sourceMarkdown}`,
         );
-        console.log('  Available keys in liveNodesByMarkdown:', Array.from(liveNodesByMarkdown.keys()).map(k => k.substring(0, 50)));
+        // console.log('  Available keys in liveNodesByMarkdown:', Array.from(liveNodesByMarkdown.keys()).map(k => k.substring(0, 50)));
         return;
       }
 
@@ -956,7 +956,7 @@ export function $applyNodeDiff(
         return;
       }
 
-      console.log('  Found live node:', liveNode.getType());
+      // console.log('  Found live node:', liveNode.getType());
 
       // Only mark as modified if it's not an exact match
       // Exact matches from TreeMatcher should remain unchanged for clean visual diffs
@@ -1014,7 +1014,7 @@ export function $applySubTreeDiff(
   targetEditor: LexicalEditor,
   transformers: Array<Transformer>,
 ): void {
-  console.log('\n🔍 STARTING SUB-TREE DIFF APPLICATION...');
+  // console.log('\n🔍 STARTING SUB-TREE DIFF APPLICATION...');
 
   // Extract children from serialized nodes
   const sourceChildren =
@@ -1031,12 +1031,12 @@ export function $applySubTreeDiff(
     return;
   }
 
-  console.log(
-    `Source children: ${sourceChildren.length}, Target children: ${targetChildren.length}`,
-  );
+  // console.log(
+  //   `Source children: ${sourceChildren.length}, Target children: ${targetChildren.length}`,
+  // );
 
   if (sourceChildren.length === 0 && targetChildren.length === 0) {
-    console.log('No child nodes found for sub-tree matching');
+    // console.log('No child nodes found for sub-tree matching');
     return;
   }
 
@@ -1105,9 +1105,9 @@ export function $applySubTreeDiff(
     targetChildrenWithMarkdown,
   );
 
-  console.log(
-    `Sub-tree matching found ${childMatchResult.diffs.length} diffs, ${childMatchResult.sequence.length} total operations`,
-  );
+  // console.log(
+  //   `Sub-tree matching found ${childMatchResult.diffs.length} diffs, ${childMatchResult.sequence.length} total operations`,
+  // );
 
   // Create position tracking for child nodes by their markdown content
   const liveChildNodesByMarkdown = new Map<string, string>();
@@ -1130,19 +1130,19 @@ export function $applySubTreeDiff(
       }
 
       liveChildNodesByMarkdown.set(markdown, child.getKey());
-      console.log(`  Mapped child node: "${markdown}" -> ${child.getKey()}`);
+      // console.log(`  Mapped child node: "${markdown}" -> ${child.getKey()}`);
     }
   }
 
-  console.log(
-    `Mapped ${liveChildNodesByMarkdown.size} live child nodes by markdown`,
-  );
+  // console.log(
+  //   `Mapped ${liveChildNodesByMarkdown.size} live child nodes by markdown`,
+  // );
 
   // Apply the child node diffs in reverse order to prevent position shift issues
   for (const diff of [...childMatchResult.sequence].reverse()) {
-    console.log(
-      `Applying child diff: ${diff.changeType} at sourceIndex ${diff.sourceIndex}, targetIndex ${diff.targetIndex}`,
-    );
+    // console.log(
+    //   `Applying child diff: ${diff.changeType} at sourceIndex ${diff.sourceIndex}, targetIndex ${diff.targetIndex}`,
+    // );
     $applyChildNodeDiff(
       liveParentNode,
       diff,
@@ -1154,7 +1154,7 @@ export function $applySubTreeDiff(
     );
   }
 
-  console.log('✅ Sub-tree diff application completed');
+  // console.log('✅ Sub-tree diff application completed');
 }
 
 /**

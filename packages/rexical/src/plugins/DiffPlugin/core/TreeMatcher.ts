@@ -314,10 +314,10 @@ export class WindowedTreeMatcher {
     const sourceNodesWithMarkdown = this.sourceEditor.getEditorState().read(() => {
       const root = $getRoot();
       const children = root.getChildren();
-      console.log('🔍 SOURCE EDITOR: Processing', children.length, 'root children');
-      children.forEach((child, idx) => {
-        console.log(`  [${idx}] ${child.getType()} (key: ${child.getKey()})`);
-      });
+      // console.log('🔍 SOURCE EDITOR: Processing', children.length, 'root children');
+      // children.forEach((child, idx) => {
+      //   console.log(`  [${idx}] ${child.getType()} (key: ${child.getKey()})`);
+      // });
       const results: NodeWithMarkdown[] = [];
 
       for (const child of children) {
@@ -327,27 +327,27 @@ export class WindowedTreeMatcher {
 
           if ($isElementNode(child)) {
             if (child.getType() === 'table') {
-              console.log('🔍 SOURCE: Converting table node to markdown');
-              console.log('  Number of transformers:', this.config.transformers.length);
+              // console.log('🔍 SOURCE: Converting table node to markdown');
+              // console.log('  Number of transformers:', this.config.transformers.length);
               const tableTransformer = this.config.transformers.find(t =>
                 t.type === 'element' && t.dependencies?.some?.(d =>
                   typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
                 )
               );
-              console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
-              if (tableTransformer) {
-                console.log('  Transformer export function exists:', !!('export' in tableTransformer && tableTransformer.export));
-              }
+              // console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
+              // if (tableTransformer) {
+              //   console.log('  Transformer export function exists:', !!('export' in tableTransformer && tableTransformer.export));
+              // }
             }
             // Debug: check if transformers include TABLE_TRANSFORMER
             if (child.getType() === 'table') {
-              console.log('  Calling $convertNodeToMarkdownString with', this.config.transformers.length, 'transformers');
+              // console.log('  Calling $convertNodeToMarkdownString with', this.config.transformers.length, 'transformers');
               const hasTableTransformer = this.config.transformers.some(t =>
                 t.type === 'element' && t.dependencies?.some?.(d =>
                   typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
                 )
               );
-              console.log('  Has TABLE_TRANSFORMER?', hasTableTransformer);
+              // console.log('  Has TABLE_TRANSFORMER?', hasTableTransformer);
             }
             markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, child);
             // try {
@@ -356,10 +356,10 @@ export class WindowedTreeMatcher {
             //   console.error('  Error converting node to markdown:', error);
             //   markdown = child.getTextContent();
             // }
-            if (child.getType() === 'table') {
-              console.log('  Result markdown before trim:', markdown);
-              console.log('  Result markdown after trim:', markdown.trim());
-            }
+            // if (child.getType() === 'table') {
+            //   console.log('  Result markdown before trim:', markdown);
+            //   console.log('  Result markdown after trim:', markdown.trim());
+            // }
           } else if ($isDecoratorNode(child)) {
             // For decorator nodes, try each transformer to see if it can export this node
             let exported = false;
@@ -410,10 +410,10 @@ export class WindowedTreeMatcher {
     const targetNodesWithMarkdown = this.targetEditor.getEditorState().read(() => {
       const root = $getRoot();
       const children = root.getChildren();
-      console.log('🔍 TARGET EDITOR: Processing', children.length, 'root children');
-      children.forEach((child, idx) => {
-        console.log(`  [${idx}] ${child.getType()} (key: ${child.getKey()})`);
-      });
+      // console.log('🔍 TARGET EDITOR: Processing', children.length, 'root children');
+      // children.forEach((child, idx) => {
+      //   console.log(`  [${idx}] ${child.getType()} (key: ${child.getKey()})`);
+      // });
       const results: NodeWithMarkdown[] = [];
 
       for (const child of children) {
@@ -423,27 +423,27 @@ export class WindowedTreeMatcher {
 
           if ($isElementNode(child)) {
             if (child.getType() === 'table') {
-              console.log('🔍 TARGET: Converting table node to markdown');
-              console.log('  Number of transformers:', this.config.transformers.length);
+              // console.log('🔍 TARGET: Converting table node to markdown');
+              // console.log('  Number of transformers:', this.config.transformers.length);
               const tableTransformer = this.config.transformers.find(t =>
                 t.type === 'element' && t.dependencies?.some?.(d =>
                   typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
                 )
               );
-              console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
-              if (tableTransformer) {
-                console.log('  Transformer export function exists:', !!('export' in tableTransformer && tableTransformer.export));
-              }
+              // console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
+              // if (tableTransformer) {
+              //   console.log('  Transformer export function exists:', !!('export' in tableTransformer && tableTransformer.export));
+              // }
             }
             // Debug: check if transformers include TABLE_TRANSFORMER
             if (child.getType() === 'table') {
-              console.log('  Calling $convertNodeToMarkdownString with', this.config.transformers.length, 'transformers');
+              // console.log('  Calling $convertNodeToMarkdownString with', this.config.transformers.length, 'transformers');
               const hasTableTransformer = this.config.transformers.some(t =>
                 t.type === 'element' && t.dependencies?.some?.(d =>
                   typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
                 )
               );
-              console.log('  Has TABLE_TRANSFORMER?', hasTableTransformer);
+              // console.log('  Has TABLE_TRANSFORMER?', hasTableTransformer);
             }
             markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, child);
             // try {
@@ -452,10 +452,10 @@ export class WindowedTreeMatcher {
             //   console.error('  Error converting node to markdown:', error);
             //   markdown = child.getTextContent();
             // }
-            if (child.getType() === 'table') {
-              console.log('  Result markdown before trim:', markdown);
-              console.log('  Result markdown after trim:', markdown.trim());
-            }
+            // if (child.getType() === 'table') {
+            //   console.log('  Result markdown before trim:', markdown);
+            //   console.log('  Result markdown after trim:', markdown.trim());
+            // }
           } else if ($isDecoratorNode(child)) {
             // For decorator nodes, try each transformer to see if it can export this node
             let exported = false;

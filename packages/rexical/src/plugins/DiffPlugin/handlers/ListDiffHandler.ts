@@ -154,29 +154,29 @@ export class ListDiffHandler implements DiffNodeHandler {
       const targetListType = (targetNode as any).listType;
 
       if (sourceListType !== targetListType) {
-        console.log(`List type change detected: ${sourceListType} -> ${targetListType}`);
-        
+        // console.log(`List type change detected: ${sourceListType} -> ${targetListType}`);
+
         // Instead of modifying the existing list, we need to:
         // 1. Mark the old list as removed
         // 2. Create a new list with the new type and mark it as added
-        
+
         // Mark the existing list (with old type) as removed
         $setDiffState(liveNode, 'removed');
-        
+
         // Create a new list with the target type
         const newList = createNodeFromSerialized(targetNode);
         if ($isElementNode(newList)) {
           // Mark the new list as added
           $setDiffState(newList, 'added');
-          
+
           // Insert the new list after the old one
           liveNode.insertAfter(newList);
-          
+
           // The new list now has all the content from targetNode
           // Both lists will be visible in the diff view:
           // - Old list (removed) with strike-through
           // - New list (added) in green
-          
+
           return {handled: true, skipChildren: true};
         }
       }
@@ -203,9 +203,9 @@ export class ListDiffHandler implements DiffNodeHandler {
         context.targetEditor &&
         context.transformers
       ) {
-        console.log(
-          '\n🔄 Applying recursive sub-tree diff to list for better insertion positioning...',
-        );
+        // console.log(
+        //   '\n🔄 Applying recursive sub-tree diff to list for better insertion positioning...',
+        // );
 
         try {
           // Apply recursive sub-tree diffing to the list children
@@ -218,7 +218,7 @@ export class ListDiffHandler implements DiffNodeHandler {
             context.transformers,
           );
 
-          console.log('✅ Recursive sub-tree diff completed successfully');
+          // console.log('✅ Recursive sub-tree diff completed successfully');
           return {handled: true, skipChildren: true};
         } catch (error) {
           console.warn(
@@ -307,9 +307,9 @@ export class ListDiffHandler implements DiffNodeHandler {
       // For list items with nested lists, don't use inline text diff
       // as it would destroy the nested list structure with clear()
       // Instead, just mark as modified and let the recursive system handle the rest
-      console.log(
-        '🏗️ List item contains nested list - preserving structure, letting recursive system handle nested content',
-      );
+      // console.log(
+      //   '🏗️ List item contains nested list - preserving structure, letting recursive system handle nested content',
+      // );
       $setDiffState(liveNode, 'modified');
       return {handled: true, skipChildren: false}; // Let the system recurse into children
     } else {
