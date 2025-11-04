@@ -52,7 +52,11 @@ export function updateWindowTitleBars() {
 
         // Update title bar overlay on Windows/Linux
         if (process.platform !== 'darwin' && window.setTitleBarOverlay) {
+          try {
             window.setTitleBarOverlay(titleBarColor);
+          } catch (error) {
+            console.error('Error setting title bar overlay:', error);
+          }
         }
 
         // Send theme-change event to all windows
