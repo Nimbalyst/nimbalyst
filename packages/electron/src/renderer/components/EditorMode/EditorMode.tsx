@@ -105,11 +105,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
         if (onCurrentFileChange) {
           onCurrentFileChange(tab.filePath, tab.fileName, tab.isDirty || false);
         }
-
-        // Update main process
-        if (window.electronAPI) {
-          window.electronAPI.setCurrentFile(tab.filePath);
-        }
       }
     },
     onTabClose: (tab) => {
@@ -122,10 +117,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
 
         if (onCurrentFileChange) {
           onCurrentFileChange(null, null, false);
-        }
-
-        if (window.electronAPI) {
-          window.electronAPI.setCurrentFile(null);
         }
       }
     }

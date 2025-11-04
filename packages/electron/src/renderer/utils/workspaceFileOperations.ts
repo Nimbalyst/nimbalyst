@@ -80,8 +80,8 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
         window.electronAPI.addToWorkspaceRecentFiles(filePath);
       }
 
-      // Explicitly update the current file in main process (redundant but safe)
-      if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Ensuring backend has correct file path');
+      // Update current file in main process for window title and session restore
+      if (LOG_CONFIG.WORKSPACE_FILE_SELECT) console.log('[WORKSPACE_FILE_SELECT] Updating active file in backend');
       const syncResult = window.electronAPI.setCurrentFile(filePath);
       if (syncResult && typeof syncResult.then === 'function') {
         await syncResult;

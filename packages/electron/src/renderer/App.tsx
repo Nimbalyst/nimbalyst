@@ -773,7 +773,7 @@ export default function App() {
 
   // NOTE: handleCreateNewFile and handleRestoreFromHistory moved to EditorMode
 
-  // Sync current file path with backend whenever it changes
+  // Sync current file path with backend for window title and session restore
   useEffect(() => {
     if (window.electronAPI && currentFilePath !== null) {
       if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] Syncing current file path to backend:', currentFilePath);
@@ -785,8 +785,6 @@ export default function App() {
         }).catch((error) => {
           if (LOG_CONFIG.FILE_SYNC) console.error('[FILE_SYNC] ✗ Failed to sync file path:', error);
         });
-      } else {
-        if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] File path sync called (no promise returned)');
       }
     } else if (window.electronAPI && currentFilePath === null) {
       if (LOG_CONFIG.FILE_SYNC) console.log('[FILE_SYNC] Clearing file path in backend');

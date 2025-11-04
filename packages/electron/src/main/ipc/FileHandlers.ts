@@ -330,37 +330,17 @@ export function registerFileHandlers() {
         // console.log('[SET_FILE] New file path:', filePath);
         // console.log('[SET_FILE] State exists:', !!state);
 
-        const oldFilePath = state.filePath;
-        // console.log('[SET_FILE] Previous file path:', oldFilePath);
-
-        // Stop watching the old file
-        if (oldFilePath && oldFilePath !== filePath) {
-            console.log('[SET_FILE] Stopping watcher for old file:', oldFilePath);
-            stopFileWatcher(windowId);
-        }
-
-        // Update the file path
+        // Update the file path (for window title, session restore, etc.)
         state.filePath = filePath;
-        console.log('[SET_FILE] Updated state with new file path');
 
-        // Start watching the new file
-        if (filePath) {
-             // console.log('[SET_FILE] Starting watcher for new file:', filePath);
-            startFileWatcher(window, filePath);
+        // NOTE: We DO NOT start/stop file watchers here anymore!
+        // In workspace mode with tabs, each TabEditor manages its own watcher lifecycle.
+        // Stopping watchers here was breaking inactive tab file watching.
 
-            // Update represented filename for macOS
-            if (process.platform === 'darwin') {
-                window.setRepresentedFilename(filePath);
-                console.log('[SET_FILE] Updated macOS represented filename');
-            }
+        // Update represented filename for macOS
+        if (filePath && process.platform === 'darwin') {
+            window.setRepresentedFilename(filePath);
         }
-
-        console.log('[SET_FILE] ✓ File path update complete');
-        console.log('[SET_FILE] Final state:', {
-            filePath: state.filePath,
-            workspacePath: state.workspacePath,
-            documentEdited: state.documentEdited
-        });
 
         return { success: true };
     });
