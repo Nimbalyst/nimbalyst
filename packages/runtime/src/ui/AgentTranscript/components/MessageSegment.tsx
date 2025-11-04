@@ -81,19 +81,31 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     );
   };
 
+  // Helper function to check if content indicates login is required
+  const isLoginRequiredError = (text: string): boolean => {
+    const lowerText = text.toLowerCase();
+    return (
+      lowerText.includes('invalid api key') ||
+      lowerText.includes('/login') ||
+      lowerText.includes('please run /login') ||
+      lowerText.includes('unauthorized') ||
+      lowerText.includes('authentication required') ||
+      lowerText.includes('oauth token has expired') ||
+      lowerText.includes('token has expired') ||
+      lowerText.includes('expired token') ||
+      lowerText.includes('please obtain a new token') ||
+      lowerText.includes('refresh your existing token') ||
+      lowerText.includes('authentication_error')
+    );
+  };
+
   // Render text content
   const renderTextContent = () => {
     if (message.isThinking) return renderThinking();
     if (!message.content.trim()) return null;
 
     // Check if this is a login-required error in the message content
-    const content = message.content;
-    const isLoginRequired =
-      content.toLowerCase().includes('invalid api key') ||
-      content.includes('/login') ||
-      content.toLowerCase().includes('please run /login') ||
-      content.toLowerCase().includes('unauthorized') ||
-      content.toLowerCase().includes('authentication required');
+    const isLoginRequired = isLoginRequiredError(message.content);
 
     // If it's a login-required message, render the special widget (only if allowed)
     if (isLoginRequired && !isUser && shouldShowLoginWidget) {
@@ -282,12 +294,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     const errorMessage = message.errorMessage || message.content || 'Error';
 
     // Check if this is a login-required error for Claude Code
-    const isLoginRequired =
-      errorMessage.toLowerCase().includes('invalid api key') ||
-      errorMessage.includes('/login') ||
-      errorMessage.toLowerCase().includes('please run /login') ||
-      errorMessage.toLowerCase().includes('unauthorized') ||
-      errorMessage.toLowerCase().includes('authentication required');
+    const isLoginRequired = isLoginRequiredError(errorMessage);
 
     // If it's a login-required error, render the special widget (only if allowed)
     if (isLoginRequired && shouldShowLoginWidget) {

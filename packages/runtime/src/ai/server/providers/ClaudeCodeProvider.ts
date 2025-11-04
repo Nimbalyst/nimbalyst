@@ -771,17 +771,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               // Log error to database (as 'output' since errors are provider responses)
               this.logError(sessionId, 'claude-code', new Error(errorMessage), 'result_chunk', 'api_error');
 
-              // Yield error to UI
+              // Yield error to UI - MessageSegment will handle displaying it (possibly as LoginRequiredWidget)
               yield {
                 type: 'error',
                 error: errorMessage
-              };
-
-              // Also yield as text to ensure visibility with better formatting
-              yield {
-                type: 'text',
-                content: `❌ ${errorMessage}`,
-                isSystem: true
               };
             }
             // Don't yield result content as text - it's already been sent in the assistant message
@@ -984,40 +977,30 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             const summary = chunk.summary || '';
 
             // Check if this is an error summary
-            if (summary.toLowerCase().includes('invalid api key') ||
-                summary.toLowerCase().includes('error') ||
-                summary.toLowerCase().includes('failed') ||
-                summary.includes('/login') ||
-                summary.toLowerCase().includes('unauthorized')) {
+            const lowerSummary = summary.toLowerCase();
+            if (lowerSummary.includes('invalid api key') ||
+                lowerSummary.includes('error') ||
+                lowerSummary.includes('failed') ||
+                lowerSummary.includes('/login') ||
+                lowerSummary.includes('unauthorized') ||
+                lowerSummary.includes('oauth token has expired') ||
+                lowerSummary.includes('token has expired') ||
+                lowerSummary.includes('expired token') ||
+                lowerSummary.includes('authentication_error')) {
               console.error('[CLAUDE-CODE] ERROR: Summary contains error message:', summary);
               console.error('[CLAUDE-CODE] Full summary chunk:', JSON.stringify(chunk, null, 2));
 
-              // Format a user-friendly error message
-              let userMessage = summary;
-
-              // Make API key errors more actionable
-              if (summary.toLowerCase().includes('invalid api key')) {
-                userMessage = `❌ Claude Code Error: ${summary}\n\n` +
-                            `Please check your API key in Settings → AI Models → Claude.\n` +
-                            `Make sure you're using a valid Anthropic API key that starts with "sk-ant-"`;
-              } else if (summary.includes('/login')) {
-                userMessage = `❌ Claude Code Authentication Error\n\n` +
-                            `${summary}\n\n` +
-                            `Please ensure your Anthropic API key is correctly configured in Settings.`;
-              }
+              // Pass through the error message directly
+              // The LoginRequiredWidget in MessageSegment will handle displaying a proper UI
+              const errorMessage = summary;
 
               // Log error to database (as 'output' since errors are provider responses)
-              this.logError(sessionId, 'claude-code', new Error(userMessage), 'summary_chunk', 'authentication_error');
+              this.logError(sessionId, 'claude-code', new Error(errorMessage), 'summary_chunk', 'authentication_error');
 
-              // Yield both as error and as text to ensure visibility
+              // Yield error to UI - MessageSegment will handle displaying it (possibly as LoginRequiredWidget)
               yield {
                 type: 'error',
-                error: userMessage
-              };
-
-              yield {
-                type: 'text',
-                content: userMessage
+                error: errorMessage
               };
 
               // Send completion event before breaking
