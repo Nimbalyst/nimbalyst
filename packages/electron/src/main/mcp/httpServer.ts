@@ -41,15 +41,15 @@ export function updateDocumentState(state: any, sessionId?: string) {
   }
 
   // DEFENSIVE LOGGING: Log exactly what we received
-  console.log(`[MCP Server] Received document state update:`, {
-    sessionId,
-    filePath: state.filePath,
-    workspacePath: state.workspacePath,
-    stateKeys: Object.keys(state || {})
-  });
+  // console.log(`[MCP Server] Received document state update:`, {
+  //   sessionId,
+  //   filePath: state.filePath,
+  //   workspacePath: state.workspacePath,
+  //   stateKeys: Object.keys(state || {})
+  // });
 
   documentStateBySession.set(sessionId, state);
-  console.log(`[MCP Server] Session ${sessionId} associated with workspace: ${state.workspacePath}`);
+  // console.log(`[MCP Server] Session ${sessionId} associated with workspace: ${state.workspacePath}`);
 }
 
 /**
@@ -58,7 +58,7 @@ export function updateDocumentState(state: any, sessionId?: string) {
  */
 export function registerWorkspaceWindow(workspacePath: string, windowId: number) {
   workspaceToWindowMap.set(workspacePath, windowId);
-  console.log(`[MCP Server] Registered workspace ${workspacePath} -> window ${windowId}`);
+  // console.log(`[MCP Server] Registered workspace ${workspacePath} -> window ${windowId}`);
 }
 
 // Store the HTTP server instance
@@ -76,29 +76,29 @@ function findWindowForFilePath(filePath: string | undefined): BrowserWindow | nu
     throw new Error('[MCP Server] CRITICAL: No file path provided to findWindowForFilePath, cannot determine target window');
   }
 
-  console.log(`[MCP Server] Looking for window with file: ${filePath}`);
+  // console.log(`[MCP Server] Looking for window with file: ${filePath}`);
 
   // DEFENSIVE: Log ALL document states in detail
-  const stateDetails = Array.from(documentStateBySession.entries()).map(([id, state]) => ({
-    sessionId: id,
-    filePath: state?.filePath,
-    workspacePath: state?.workspacePath,
-    hasFilePath: !!state?.filePath,
-    hasWorkspacePath: !!state?.workspacePath,
-    filePathMatches: state?.filePath === filePath
-  }));
-  console.log(`[MCP Server] Document states (${stateDetails.length}):`, JSON.stringify(stateDetails, null, 2));
+  // const stateDetails = Array.from(documentStateBySession.entries()).map(([id, state]) => ({
+  //   sessionId: id,
+  //   filePath: state?.filePath,
+  //   workspacePath: state?.workspacePath,
+  //   hasFilePath: !!state?.filePath,
+  //   hasWorkspacePath: !!state?.workspacePath,
+  //   filePathMatches: state?.filePath === filePath
+  // }));
+  // console.log(`[MCP Server] Document states (${stateDetails.length}):`, JSON.stringify(stateDetails, null, 2));
 
   // First, find which workspace this file belongs to
   let targetWorkspacePath: string | undefined;
   for (const [sessionId, state] of documentStateBySession.entries()) {
-    console.log(`[MCP Server] Checking session ${sessionId}:`, {
-      stateFilePath: state?.filePath,
-      targetFilePath: filePath,
-      matches: state?.filePath === filePath,
-      hasWorkspacePath: !!state?.workspacePath,
-      workspacePath: state?.workspacePath
-    });
+    // console.log(`[MCP Server] Checking session ${sessionId}:`, {
+    //   stateFilePath: state?.filePath,
+    //   targetFilePath: filePath,
+    //   matches: state?.filePath === filePath,
+    //   hasWorkspacePath: !!state?.workspacePath,
+    //   workspacePath: state?.workspacePath
+    // });
 
     if (state?.filePath === filePath) {
       if (!state?.workspacePath) {
@@ -107,7 +107,7 @@ function findWindowForFilePath(filePath: string | undefined): BrowserWindow | nu
       }
 
       targetWorkspacePath = state.workspacePath;
-      console.log(`[MCP Server] File belongs to workspace: ${targetWorkspacePath}`);
+      // console.log(`[MCP Server] File belongs to workspace: ${targetWorkspacePath}`);
       break;
     }
   }
@@ -136,7 +136,7 @@ function findWindowForFilePath(filePath: string | undefined): BrowserWindow | nu
     throw new Error(`[MCP Server] CRITICAL: Window ${windowId} for workspace ${targetWorkspacePath} no longer exists (window was closed)`);
   }
 
-  console.log(`[MCP Server] Found window ${windowId} for workspace: ${targetWorkspacePath}`);
+  // console.log(`[MCP Server] Found window ${windowId} for workspace: ${targetWorkspacePath}`);
   return window;
 }
 
@@ -148,7 +148,7 @@ export function unregisterWindow(windowId: number) {
   for (const [workspacePath, mappedWindowId] of workspaceToWindowMap.entries()) {
     if (mappedWindowId === windowId) {
       workspaceToWindowMap.delete(workspacePath);
-      console.log(`[MCP Server] Unregistered workspace ${workspacePath} from window ${windowId}`);
+      // console.log(`[MCP Server] Unregistered workspace ${workspacePath} from window ${windowId}`);
     }
   }
 }
@@ -156,7 +156,7 @@ export function unregisterWindow(windowId: number) {
 export function cleanupMcpServer() {
   // Close all active SSE transports
   for (const [sessionId, transport] of activeTransports.entries()) {
-    console.log(`[MCP Server] Closing transport for session ${sessionId}`);
+    // console.log(`[MCP Server] Closing transport for session ${sessionId}`);
     try {
       // Close the transport
       if (transport.onclose) {
@@ -186,7 +186,7 @@ export function shutdownHttpServer(): Promise<void> {
       return;
     }
 
-    console.log('[MCP Server] Shutting down HTTP server');
+    // console.log('[MCP Server] Shutting down HTTP server');
 
     // Track if we've resolved
     let hasResolved = false;
@@ -257,11 +257,11 @@ export async function startMcpHttpServer(startPort: number = 3456): Promise<{ ht
   while (maxAttempts > 0) {
     try {
       httpServer = await tryCreateServer(port);
-      console.log(`[MCP Server] Successfully started on port ${port}`);
+      // console.log(`[MCP Server] Successfully started on port ${port}`);
       break;
     } catch (error: any) {
       if (error.code === 'EADDRINUSE') {
-        console.log(`[MCP Server] Port ${port} is in use, trying ${port + 1}...`);
+        // console.log(`[MCP Server] Port ${port} is in use, trying ${port + 1}...`);
         port++;
         maxAttempts--;
       } else {
@@ -300,7 +300,7 @@ async function tryCreateServer(port: number): Promise<any> {
 
     // Handle SSE GET request to establish connection
     if (pathname === '/mcp' && req.method === 'GET') {
-      console.log('[MCP Server] SSE connection request');
+      // console.log('[MCP Server] SSE connection request');
 
       // Create a new MCP server instance for this connection
       const server = new Server(
@@ -317,7 +317,7 @@ async function tryCreateServer(port: number): Promise<any> {
 
       // Register tool handlers
       server.setRequestHandler(ListToolsRequestSchema, async () => {
-        console.log('[MCP Server] Listing tools');
+        // console.log('[MCP Server] Listing tools');
         return {
           tools: [
             {
@@ -379,11 +379,11 @@ async function tryCreateServer(port: number): Promise<any> {
       // Tool execution handler
       server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { name, arguments: args } = request.params;
-        console.log(`[MCP Server] Tool called: ${name}`, args);
+        // console.log(`[MCP Server] Tool called: ${name}`, args);
 
         // Strip MCP server prefix if present (Claude Code sends tools as mcp__nimbalyst__toolName)
         const toolName = name.replace(/^mcp__nimbalyst__/, '');
-        console.log(`[MCP Server] Resolved tool name: ${toolName} (original: ${name})`);
+        // console.log(`[MCP Server] Resolved tool name: ${toolName} (original: ${name})`);
 
         switch (toolName) {
           case 'applyDiff': {
@@ -456,7 +456,7 @@ async function tryCreateServer(port: number): Promise<any> {
                 });
 
                 // Send the request with the result channel and target file path
-                console.log('[MCP Server] Sending applyDiff to window', targetWindow.id);
+                // console.log('[MCP Server] Sending applyDiff to window', targetWindow.id);
                 targetWindow.webContents.send('mcp:applyDiff', {
                   replacements: args?.replacements,
                   resultChannel,
@@ -535,15 +535,15 @@ async function tryCreateServer(port: number): Promise<any> {
                 });
 
                 // Send IPC message to renderer with result channel
-                console.log('[MCP Server] ==========================================');
-                console.log('[MCP Server] Sending mcp:streamContent IPC to renderer');
-                console.log('[MCP Server] Target window ID:', targetWindow.id);
-                console.log('[MCP Server] streamId:', streamId);
-                console.log('[MCP Server] targetFilePath:', targetFilePath);
-                console.log('[MCP Server] position:', args?.position || 'end');
-                console.log('[MCP Server] content length:', args?.content?.length);
-                console.log('[MCP Server] content preview:', args?.content?.substring(0, 100));
-                console.log('[MCP Server] ==========================================');
+                // console.log('[MCP Server] ==========================================');
+                // console.log('[MCP Server] Sending mcp:streamContent IPC to renderer');
+                // console.log('[MCP Server] Target window ID:', targetWindow.id);
+                // console.log('[MCP Server] streamId:', streamId);
+                // console.log('[MCP Server] targetFilePath:', targetFilePath);
+                // console.log('[MCP Server] position:', args?.position || 'end');
+                // console.log('[MCP Server] content length:', args?.content?.length);
+                // console.log('[MCP Server] content preview:', args?.content?.substring(0, 100));
+                // console.log('[MCP Server] ==========================================');
 
                 targetWindow.webContents.send('mcp:streamContent', {
                   streamId,
@@ -554,7 +554,7 @@ async function tryCreateServer(port: number): Promise<any> {
                   resultChannel
                 });
 
-                console.log('[MCP Server] IPC message sent to window', targetWindow.id);
+                // console.log('[MCP Server] IPC message sent to window', targetWindow.id);
               });
             }
             return {
@@ -578,15 +578,15 @@ async function tryCreateServer(port: number): Promise<any> {
 
       // Store the transport by session ID
       activeTransports.set(transport.sessionId, transport);
-      console.log('[MCP Server] Created transport with session ID:', transport.sessionId);
+      // console.log('[MCP Server] Created transport with session ID:', transport.sessionId);
 
       // Connect server to transport
       server.connect(transport).then(() => {
-        console.log('[MCP Server] Client connected successfully');
+        // console.log('[MCP Server] Client connected successfully');
 
         // Clean up on disconnect
         transport.onclose = () => {
-          console.log('[MCP Server] Client disconnected, session:', transport.sessionId);
+          // console.log('[MCP Server] Client disconnected, session:', transport.sessionId);
           activeTransports.delete(transport.sessionId);
         };
       }).catch(error => {
@@ -601,7 +601,7 @@ async function tryCreateServer(port: number): Promise<any> {
     // Handle POST requests for sending messages
     } else if (pathname === '/mcp' && req.method === 'POST') {
       const sessionId = parsedUrl.query.sessionId as string;
-      console.log('[MCP Server] POST message for session:', sessionId);
+      // console.log('[MCP Server] POST message for session:', sessionId);
 
       if (!sessionId) {
         res.writeHead(400);
@@ -641,8 +641,8 @@ async function tryCreateServer(port: number): Promise<any> {
     });
 
     httpServer.on('listening', () => {
-      console.log(`[MCP Server] Running on http://127.0.0.1:${port}/mcp`);
-      console.log('[MCP Server] Ready to accept SSE connections and POST messages');
+      // console.log(`[MCP Server] Running on http://127.0.0.1:${port}/mcp`);
+      // console.log('[MCP Server] Ready to accept SSE connections and POST messages');
 
       // Unref the server so it doesn't keep the process alive
       httpServer.unref();

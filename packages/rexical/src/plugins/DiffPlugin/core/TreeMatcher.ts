@@ -508,13 +508,13 @@ export class WindowedTreeMatcher {
       targetNodesWithMarkdown,
     );
 
-    console.log('TreeMatcher results:');
-    console.log('  Source nodes:', sourceNodesWithMarkdown.map(n => `${n.node.type}: ${n.markdown.substring(0, 50)}`));
-    console.log('  Target nodes:', targetNodesWithMarkdown.map(n => `${n.node.type}: ${n.markdown.substring(0, 50)}`));
-    console.log('  Diffs found:', result.diffs.length);
-    result.diffs.forEach(diff => {
-      console.log(`    ${diff.changeType} ${diff.nodeType}: "${diff.sourceMarkdown?.substring(0, 30)}" -> "${diff.targetMarkdown?.substring(0, 30)}"`);
-    });
+    // console.log('TreeMatcher results:');
+    // console.log('  Source nodes:', sourceNodesWithMarkdown.map(n => `${n.node.type}: ${n.markdown.substring(0, 50)}`));
+    // console.log('  Target nodes:', targetNodesWithMarkdown.map(n => `${n.node.type}: ${n.markdown.substring(0, 50)}`));
+    // console.log('  Diffs found:', result.diffs.length);
+    // result.diffs.forEach(diff => {
+    //   console.log(`    ${diff.changeType} ${diff.nodeType}: "${diff.sourceMarkdown?.substring(0, 30)}" -> "${diff.targetMarkdown?.substring(0, 30)}"`);
+    // });
 
     return result;
   }

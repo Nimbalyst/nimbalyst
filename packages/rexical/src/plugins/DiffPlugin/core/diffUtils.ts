@@ -327,9 +327,9 @@ function _applyMarkdownEdits(
         });
       }
     } else {
-      console.log('  ❌ Text not found in document');
-      console.log('  Document preview (first 500 chars):', originalMarkdown.substring(0, 500));
-      console.log('  Document preview (last 500 chars):', originalMarkdown.substring(Math.max(0, originalMarkdown.length - 500)));
+      // console.log('  ❌ Text not found in document');
+      // console.log('  Document preview (first 500 chars):', originalMarkdown.substring(0, 500));
+      // console.log('  Document preview (last 500 chars):', originalMarkdown.substring(Math.max(0, originalMarkdown.length - 500)));
 
       // Try to find similar text for debugging
       const searchText = oldText.substring(0, 50);
@@ -337,8 +337,8 @@ function _applyMarkdownEdits(
       if (similarIndex >= 0) {
         const contextStart = Math.max(0, similarIndex - 20);
         const contextEnd = Math.min(originalMarkdown.length, similarIndex + replacement.oldText.length + 20);
-        console.log('  🔍 Found similar text at position', similarIndex);
-        console.log('  Context:', JSON.stringify(originalMarkdown.substring(contextStart, contextEnd)));
+        // console.log('  🔍 Found similar text at position', similarIndex);
+        // console.log('  Context:', JSON.stringify(originalMarkdown.substring(contextStart, contextEnd)));
       }
 
       throw createTextReplacementError(originalMarkdown, {
@@ -671,9 +671,9 @@ export function applyMarkdownDiffToDocument(
   transformers: Array<Transformer>,
 ): void {
   // Debug: Starting diff application
-  console.log('\n🔍 STARTING DIFF APPLICATION...');
-  console.log('Original markdown:', originalMarkdown.substring(0, 200));
-  console.log('New markdown:', newMarkdown.substring(0, 200));
+  // console.log('\n🔍 STARTING DIFF APPLICATION...');
+  // console.log('Original markdown:', originalMarkdown.substring(0, 200));
+  // console.log('New markdown:', newMarkdown.substring(0, 200));
 
   if (originalMarkdown === newMarkdown) {
     return;

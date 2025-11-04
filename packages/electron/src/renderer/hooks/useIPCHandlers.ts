@@ -724,7 +724,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }
 
     if (window.electronAPI.onMcpStreamContent) {
-      console.log('[MCP] Registering onMcpStreamContent handler');
+      // console.log('[MCP] Registering onMcpStreamContent handler');
       cleanupFns.push(window.electronAPI.onMcpStreamContent(async ({ streamId, content, position, insertAfter, mode, targetFilePath, resultChannel }) => {
         console.log('[MCP] ==========================================');
         console.log('[MCP] streamContent IPC RECEIVED');

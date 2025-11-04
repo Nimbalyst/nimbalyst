@@ -23,7 +23,7 @@ export class ProviderFactory {
   ): AIProvider | null {
     const key = `${type}-${sessionId}`;
     const provider = this.providers.get(key) || null;
-    console.log(`[ProviderFactory] Getting provider ${key}: ${provider ? 'found' : 'not found'}`);
+    // console.log(`[ProviderFactory] Getting provider ${key}: ${provider ? 'found' : 'not found'}`);
     return provider;
   }
   
@@ -37,8 +37,8 @@ export class ProviderFactory {
   ): AIProvider {
     const startTime = Date.now();
     const key = `${type}-${sessionId}`;
-    console.log(`[ProviderFactory] Creating new ${type} provider for session ${sessionId}`);
-    
+    // console.log(`[ProviderFactory] Creating new ${type} provider for session ${sessionId}`);
+
     // Create new provider based on type
     let provider: AIProvider;
     switch (type) {
@@ -64,8 +64,8 @@ export class ProviderFactory {
     
     // Cache the provider
     this.providers.set(key, provider);
-    console.log(`[ProviderFactory] Created ${type} provider in ${Date.now() - startTime}ms`);
-    
+    // console.log(`[ProviderFactory] Created ${type} provider in ${Date.now() - startTime}ms`);
+
     return provider;
   }
 
@@ -95,12 +95,12 @@ export class ProviderFactory {
    * Clean up all provider instances
    */
   static destroyAll(): void {
-    console.log(`[ProviderFactory] Destroying ${this.providers.size} providers`);
-    
+    // console.log(`[ProviderFactory] Destroying ${this.providers.size} providers`);
+
     // Try to destroy each provider individually with error handling
     for (const [key, provider] of this.providers.entries()) {
       try {
-        console.log(`[ProviderFactory] Destroying provider: ${key}`);
+        // console.log(`[ProviderFactory] Destroying provider: ${key}`);
         provider.destroy();
       } catch (error) {
         console.error(`[ProviderFactory] Error destroying provider ${key}:`, error);

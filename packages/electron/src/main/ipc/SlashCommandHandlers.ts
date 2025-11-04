@@ -37,7 +37,7 @@ export function registerSlashCommandHandlers() {
       const service = getService(workspacePath);
       const commands = await service.listCommands(sdkCommands);
 
-      console.log(`[SlashCommandHandlers] Returning ${commands.length} slash commands for workspace: ${workspacePath}`);
+      // console.log(`[SlashCommandHandlers] Returning ${commands.length} slash commands for workspace: ${workspacePath}`);
       return commands;
     } catch (error) {
       console.error('[SlashCommandHandlers] Error listing slash commands:', error);
@@ -76,7 +76,7 @@ export function registerSlashCommandHandlers() {
       const service = servicesByWorkspace.get(workspacePath);
       if (service) {
         service.clearCache();
-        console.log(`[SlashCommandHandlers] Cleared cache for workspace: ${workspacePath}`);
+        // console.log(`[SlashCommandHandlers] Cleared cache for workspace: ${workspacePath}`);
       }
 
       return { success: true };
@@ -86,5 +86,5 @@ export function registerSlashCommandHandlers() {
     }
   });
 
-  console.log('[SlashCommandHandlers] Registered slash command IPC handlers');
+  // console.log('[SlashCommandHandlers] Registered slash command IPC handlers');
 }
