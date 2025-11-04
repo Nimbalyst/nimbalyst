@@ -2,8 +2,8 @@
 
 # Kill any existing Preditor processes
 echo "Killing any existing Preditor processes..."
-pkill -f "Preditor" || true
-pkill -f "preditor" || true
+pkill -f "Nimbalyst" || true
+pkill -f "nimbalyst" || true
 pkill -f "electron.*packages/electron" || true
 
 # Wait a moment for processes to fully terminate

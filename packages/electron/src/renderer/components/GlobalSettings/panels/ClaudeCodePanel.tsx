@@ -87,6 +87,17 @@ export function ClaudeCodePanel({
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      const result = await window.electronAPI.invoke('claude-code:logout');
+      if (result.success) {
+        alert(result.message || 'Logout initiated! Please wait for the Terminal window to complete, then click "Refresh Status" to verify.');
+      }
+    } catch (error: any) {
+      alert(`Logout failed: ${error.message || 'Unknown error'}`);
+    }
+  };
+
   // Commented out - no longer checking local installation
   // const [isChecking, setIsChecking] = useState(false);
   // const [npmAvailable, setNpmAvailable] = useState<{
@@ -220,165 +231,274 @@ export function ClaudeCodePanel({
               <div className="provider-panel-section">
                 <h4 className="provider-panel-section-title">Authentication</h4>
                 <div className="api-key-section">
-                  <div style={{
-                    fontSize: '13px',
-                    color: 'var(--text-secondary)',
-                    marginBottom: '12px',
-                    padding: '10px',
-                    backgroundColor: 'var(--surface-secondary)',
-                    borderRadius: '4px',
-                    lineHeight: '1.5'
-                  }}>
-                    <strong>Choose authentication method:</strong>
-                    <br /><br />
-                    <strong>1. Claude Pro/Max subscription:</strong> Use your existing subscription (no extra charges)
-                    <br />
-                    <strong>2. Anthropic API key:</strong> Pay per use with API credits (enter key below)
-                  </div>
-
-                  {/* Login Status */}
-                  {loginStatus && (
-                    <div style={{
-                      marginBottom: '12px',
-                      padding: '10px',
-                      backgroundColor: loginStatus.isLoggedIn ? 'var(--surface-secondary)' : 'transparent',
-                      borderRadius: '4px',
-                      fontSize: '13px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '8px'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                        {loginStatus.isLoggedIn ? (
-                          <>
-                            <span style={{ color: '#10b981', fontSize: '16px' }}>✓</span>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              <span style={{ color: 'var(--text-primary)', fontWeight: '600' }}>
-                                Logged in with Claude subscription
-                              </span>
-                              {loginStatus.email && (
-                                <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
-                                  Account: {loginStatus.email}
-                                </span>
-                              )}
-                              {loginStatus.organization && (
-                                <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
-                                  Organization: {loginStatus.organization}
-                                </span>
-                              )}
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '16px' }}>ℹ️</span>
-                            <span style={{ color: 'var(--text-secondary)' }}>
-                              Not logged in with subscription
-                            </span>
-                          </>
-                        )}
-                      </div>
-                      <button
-                        style={{
-                          padding: '6px 12px',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          fontWeight: '500',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          border: '1px solid var(--border-primary)',
-                          background: 'var(--surface-secondary)',
-                          color: 'var(--text-primary)'
-                        }}
-                        onClick={checkLoginStatus}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'var(--surface-hover)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'var(--surface-secondary)';
-                        }}
-                      >
-                        Refresh Status
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Login Button */}
-                  {loginStatus && !loginStatus.isLoggedIn && (
-                    <div style={{ marginBottom: '12px' }}>
-                      <button
-                        style={{
-                          width: '100%',
-                          padding: '10px 16px',
-                          borderRadius: '6px',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          cursor: isLoggingIn ? 'not-allowed' : 'pointer',
-                          transition: 'all 0.15s ease',
-                          border: 'none',
-                          background: isLoggingIn ? 'var(--text-tertiary)' : 'var(--primary-color, #2563eb)',
-                          color: 'white',
-                          opacity: isLoggingIn ? '0.6' : '1'
-                        }}
-                        onClick={handleLogin}
-                        disabled={isLoggingIn}
-                        onMouseEnter={(e) => {
-                          if (!isLoggingIn) {
-                            e.currentTarget.style.opacity = '0.9';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isLoggingIn) {
-                            e.currentTarget.style.opacity = '1';
-                          }
-                        }}
-                      >
-                        {isLoggingIn ? 'Opening Login...' : 'Login with Claude Subscription'}
-                      </button>
-                      <p style={{
-                        fontSize: '11px',
-                        color: 'var(--text-secondary)',
-                        marginTop: '6px',
-                        lineHeight: '1.4'
-                      }}>
-                        This will open a Terminal window where you can complete OAuth authentication with your Claude Pro or Max subscription.
-                      </p>
-                    </div>
-                  )}
-                  <div className="api-key-row">
-                    <input
-                      type="password"
-                      value={apiKeys['claude-code'] || ''}
-                      onChange={(e) => onApiKeyChange('claude-code', e.target.value)}
-                      onFocus={(e) => e.target.select()}
-                      placeholder="sk-ant-... (optional if using subscription)"
-                      className="api-key-input"
-                    />
-                    {apiKeys['claude-code'] ? (
-                      <button
-                        className={`test-button ${config.testStatus}`}
-                        onClick={onTestConnection}
-                        disabled={config.testStatus === 'testing'}
-                      >
-                        {config.testStatus === 'testing' ? 'Testing...' :
-                         config.testStatus === 'success' ? '✓ Connected' :
-                         config.testStatus === 'error' ? '✗ Failed' : 'Test'}
-                      </button>
-                    ) : (
+                  {/* Logged In State - Show success banner */}
+                  {loginStatus?.isLoggedIn && (
+                    <>
                       <div style={{
-                        padding: '8px 16px',
+                        marginBottom: '16px',
+                        padding: '14px 16px',
+                        backgroundColor: '#10b98114',
+                        border: '1px solid #10b98130',
+                        borderRadius: '6px',
                         fontSize: '13px',
-                        color: 'var(--text-secondary)',
-                        backgroundColor: 'var(--surface-secondary)',
-                        borderRadius: '4px',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '6px'
+                        justifyContent: 'space-between',
+                        gap: '12px'
                       }}>
-                        ℹ️ Using subscription auth
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                          <span style={{ color: '#10b981', fontSize: '20px', lineHeight: 1 }}>✓</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span style={{ color: 'var(--text-primary)', fontWeight: '600', fontSize: '14px' }}>
+                              Authenticated with Claude Plan
+                            </span>
+                            {loginStatus.email && (
+                              <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+                                {loginStatus.email}
+                                {loginStatus.organization && ` • ${loginStatus.organization}`}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              fontWeight: '500',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              border: '1px solid var(--border-primary)',
+                              background: 'var(--surface-secondary)',
+                              color: 'var(--text-primary)'
+                            }}
+                            onClick={checkLoginStatus}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'var(--surface-hover)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'var(--surface-secondary)';
+                            }}
+                          >
+                            Refresh
+                          </button>
+                          <button
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              fontWeight: '500',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              border: '1px solid var(--border-primary)',
+                              background: 'var(--surface-secondary)',
+                              color: 'var(--text-primary)'
+                            }}
+                            onClick={handleLogout}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'var(--surface-hover)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'var(--surface-secondary)';
+                            }}
+                          >
+                            Logout
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </div>
+
+                      {/* Switch Account Option */}
+                      <div style={{ marginBottom: '16px' }}>
+                        <div style={{
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          color: 'var(--text-primary)',
+                          marginBottom: '8px'
+                        }}>
+                          Switch Account
+                        </div>
+                        <p style={{
+                          fontSize: '12px',
+                          color: 'var(--text-secondary)',
+                          marginBottom: '10px',
+                          lineHeight: '1.5'
+                        }}>
+                          Need to use a different Claude account? Logout above and login again.
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Not Logged In State - Promote login as primary option */}
+                  {loginStatus && !loginStatus.isLoggedIn && (
+                    <>
+                      {/* Primary Login Card */}
+                      <div style={{
+                        marginBottom: '16px',
+                        padding: '16px',
+                        backgroundColor: 'var(--surface-secondary)',
+                        border: '1px solid var(--border-primary)',
+                        borderRadius: '8px'
+                      }}>
+                        <div style={{
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          color: 'var(--text-primary)',
+                          marginBottom: '8px'
+                        }}>
+                          Recommended: Use Your Claude Plan
+                        </div>
+                        <p style={{
+                          fontSize: '13px',
+                          color: 'var(--text-secondary)',
+                          marginBottom: '12px',
+                          lineHeight: '1.5'
+                        }}>
+                          Authenticate with your Claude Pro or Team subscription.
+                        </p>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            style={{
+                              flex: 1,
+                              padding: '12px 16px',
+                              borderRadius: '6px',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              cursor: isLoggingIn ? 'not-allowed' : 'pointer',
+                              transition: 'all 0.15s ease',
+                              border: 'none',
+                              background: isLoggingIn ? 'var(--text-tertiary)' : 'var(--primary-color, #2563eb)',
+                              color: 'white',
+                              opacity: isLoggingIn ? '0.6' : '1'
+                            }}
+                            onClick={handleLogin}
+                            disabled={isLoggingIn}
+                            onMouseEnter={(e) => {
+                              if (!isLoggingIn) {
+                                e.currentTarget.style.opacity = '0.9';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isLoggingIn) {
+                                e.currentTarget.style.opacity = '1';
+                              }
+                            }}
+                          >
+                            {isLoggingIn ? 'Opening Login...' : 'Login with Claude Plan'}
+                          </button>
+                          <button
+                            style={{
+                              padding: '12px 16px',
+                              borderRadius: '6px',
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              border: '1px solid var(--border-primary)',
+                              background: 'var(--surface-secondary)',
+                              color: 'var(--text-primary)'
+                            }}
+                            onClick={checkLoginStatus}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'var(--surface-hover)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'var(--surface-secondary)';
+                            }}
+                          >
+                            Refresh
+                          </button>
+                        </div>
+                        <p style={{
+                          fontSize: '11px',
+                          color: 'var(--text-secondary)',
+                          marginTop: '8px',
+                          lineHeight: '1.4'
+                        }}>
+                          Opens Terminal for OAuth authentication
+                        </p>
+                      </div>
+
+                      {/* Divider */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        marginBottom: '16px'
+                      }}>
+                        <div style={{ flex: 1, height: '1px', background: 'var(--border-primary)' }} />
+                        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: '500' }}>
+                          OR
+                        </span>
+                        <div style={{ flex: 1, height: '1px', background: 'var(--border-primary)' }} />
+                      </div>
+
+                      {/* Alternative API Key Option */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <div style={{
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          color: 'var(--text-primary)',
+                          marginBottom: '8px'
+                        }}>
+                          Alternative: Use API Key
+                        </div>
+                        <p style={{
+                          fontSize: '12px',
+                          color: 'var(--text-secondary)',
+                          marginBottom: '10px',
+                          lineHeight: '1.5'
+                        }}>
+                          Use an Anthropic API key if you don't have a Claude plan. Pay-per-use with API credits.
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  {/* API Key Input - Hidden when logged in, visible when not */}
+                  {loginStatus?.isLoggedIn ? (
+                    <div style={{
+                      padding: '12px 16px',
+                      backgroundColor: 'var(--surface-secondary)',
+                      borderRadius: '6px',
+                      opacity: 0.6
+                    }}>
+                      <div style={{
+                        fontSize: '13px',
+                        color: 'var(--text-secondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <span>ℹ️</span>
+                        <span>API key not needed - authenticated with Claude Plan</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="api-key-row">
+                      <input
+                        type="password"
+                        value={apiKeys['claude-code'] || ''}
+                        onChange={(e) => onApiKeyChange('claude-code', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        placeholder="sk-ant-..."
+                        className="api-key-input"
+                      />
+                      {apiKeys['claude-code'] ? (
+                        <button
+                          className={`test-button ${config.testStatus}`}
+                          onClick={onTestConnection}
+                          disabled={config.testStatus === 'testing'}
+                        >
+                          {config.testStatus === 'testing' ? 'Testing...' :
+                           config.testStatus === 'success' ? '✓ Connected' :
+                           config.testStatus === 'error' ? '✗ Failed' : 'Test'}
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
+
                   {config.testMessage && config.testStatus === 'error' && (
                     <div className="test-error">{config.testMessage}</div>
                   )}

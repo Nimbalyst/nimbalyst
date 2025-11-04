@@ -48,7 +48,6 @@ export function registerClaudeCodeHandlers() {
 
       // Get account info
       const accountInfo = await session.accountInfo();
-
       console.log('[ClaudeCodeHandlers] Account info:', accountInfo);
 
       // If we got account info, user is logged in
@@ -72,26 +71,11 @@ export function registerClaudeCodeHandlers() {
         isExpired: true
       };
     } catch (error: any) {
-      console.error('[ClaudeCodeHandlers] Error checking login status:', error);
-
-      // If error mentions authentication, user is definitely not logged in
-      if (error.message?.toLowerCase().includes('auth') ||
-          error.message?.toLowerCase().includes('login') ||
-          error.message?.toLowerCase().includes('token')) {
-        return {
-          isLoggedIn: false,
-          hasOAuthToken: false,
-          isExpired: true,
-          error: error.message
-        };
-      }
-
-      // For other errors, return not logged in
+      console.log('[ClaudeCodeHandlers] Failed to get account info:', error.message);
       return {
         isLoggedIn: false,
         hasOAuthToken: false,
-        isExpired: true,
-        error: error.message
+        isExpired: true
       };
     }
   });
@@ -179,6 +163,92 @@ end tell`;
       }
     } catch (error) {
       console.error('[ClaudeCodeHandlers] Login error:', error);
+      throw error;
+    }
+  });
+
+  // Handle claude logout command
+  ipcMain.handle('claude-code:logout', async () => {
+    console.log('[ClaudeCodeHandlers] Starting claude logout...');
+
+    try {
+      // Use the bundled CLI - same as login
+      const cliPath = findBundledCli();
+      if (!cliPath) {
+        throw new Error('Claude Agent SDK CLI not found in bundled installation. This is a build configuration issue.');
+      }
+
+      console.log('[ClaudeCodeHandlers] Found bundled CLI at:', cliPath);
+
+      // Open a Terminal window with the /logout command
+      // This provides a proper environment for the CLI to clean up properly
+      const platform = process.platform;
+
+      if (platform === 'darwin') {
+        // macOS: Use AppleScript to open Terminal with the command
+        console.log('[ClaudeCodeHandlers] Opening Terminal window for logout...');
+
+        const script = `
+tell application "Terminal"
+  activate
+  do script "clear && echo 'Claude Code Logout' && echo '' && node '${cliPath}' /logout && echo '' && echo 'Logout complete. You can close this window.' && exit"
+end tell`;
+
+        spawn('osascript', ['-e', script], {
+          detached: true,
+          stdio: 'ignore'
+        }).unref();
+
+        // Return immediately - the CLI will handle cleanup in the terminal
+        return {
+          success: true,
+          message: 'Terminal window opened. Logout will complete shortly.'
+        };
+      } else if (platform === 'win32') {
+        // Windows: Use start command to open a new cmd window
+        console.log('[ClaudeCodeHandlers] Opening command prompt for logout...');
+
+        spawn('cmd', ['/c', 'start', 'cmd', '/k', `node "${cliPath}" /logout && exit`], {
+          detached: true,
+          stdio: 'ignore'
+        }).unref();
+
+        return {
+          success: true,
+          message: 'Command prompt opened. Logout will complete shortly.'
+        };
+      } else {
+        // Linux: Try to open a terminal emulator
+        console.log('[ClaudeCodeHandlers] Opening terminal for logout...');
+
+        // Try common terminal emulators
+        const terminals = ['gnome-terminal', 'konsole', 'xterm', 'x-terminal-emulator'];
+        let terminalOpened = false;
+
+        for (const terminal of terminals) {
+          try {
+            spawn(terminal, ['-e', `bash -c "node '${cliPath}' /logout; echo ''; echo 'Logout complete. Press Enter to close...'; read"`], {
+              detached: true,
+              stdio: 'ignore'
+            }).unref();
+            terminalOpened = true;
+            break;
+          } catch (error) {
+            console.log(`[ClaudeCodeHandlers] ${terminal} not available`);
+          }
+        }
+
+        if (terminalOpened) {
+          return {
+            success: true,
+            message: 'Terminal opened. Logout will complete shortly.'
+          };
+        } else {
+          throw new Error('No terminal emulator found. Please run "node ' + cliPath + ' /logout" manually in your terminal.');
+        }
+      }
+    } catch (error) {
+      console.error('[ClaudeCodeHandlers] Logout error:', error);
       throw error;
     }
   });
