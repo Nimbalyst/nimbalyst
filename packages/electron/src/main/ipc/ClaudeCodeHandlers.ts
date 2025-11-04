@@ -39,14 +39,14 @@ export function registerClaudeCodeHandlers() {
     console.log('[ClaudeCodeHandlers] Checking login status...');
 
     try {
-      // Create a query instance to access accountInfo
-      // We need to start a minimal query to get access to the SDK's methods
-      const session = query('', {
-        userInput: true,
-        streamingOutput: true,
+      // Call query with proper signature: { prompt, options }
+      // Use empty string prompt - SDK will write it directly without async iteration
+      const session = query({
+        prompt: '',
+        options: {}
       });
 
-      // Get account info using the SDK's method
+      // Get account info
       const accountInfo = await session.accountInfo();
 
       console.log('[ClaudeCodeHandlers] Account info:', accountInfo);
