@@ -998,18 +998,19 @@ export class AIService {
                       totalTokens: 0
                     };
 
-                // Calculate input tokens including cache tokens
-                const inputTokens = (tokenUsage.input_tokens || 0) +
-                                   (tokenUsage.cache_read_input_tokens || 0) +
-                                   (tokenUsage.cache_creation_input_tokens || 0);
-
-                const outputTokens = tokenUsage.output_tokens || 0;
-                const totalTokens = inputTokens + outputTokens;
+                // Calculate new tokens for this message
+                // Note: cache_read_input_tokens represent reused context from previous messages,
+                // so we don't add them to the cumulative total (they were already counted).
+                // We only count: new input tokens + cache creation tokens + output tokens
+                const newInputTokens = (tokenUsage.input_tokens || 0) +
+                                      (tokenUsage.cache_creation_input_tokens || 0);
+                const newOutputTokens = tokenUsage.output_tokens || 0;
+                const newTotalTokens = newInputTokens + newOutputTokens;
 
                 const updatedUsage = {
-                  inputTokens: currentUsage.inputTokens + inputTokens,
-                  outputTokens: currentUsage.outputTokens + outputTokens,
-                  totalTokens: currentUsage.totalTokens + totalTokens,
+                  inputTokens: currentUsage.inputTokens + newInputTokens,
+                  outputTokens: currentUsage.outputTokens + newOutputTokens,
+                  totalTokens: currentUsage.totalTokens + newTotalTokens,
                   contextWindow: 200000 // Claude Code default context window
                 };
 
