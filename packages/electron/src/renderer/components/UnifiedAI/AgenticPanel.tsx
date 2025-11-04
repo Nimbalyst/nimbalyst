@@ -1519,6 +1519,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                 No session selected
               </div>
               <button
+                data-testid="new-session-button"
                 onClick={() => createNewSession()}
                 style={{
                   padding: '0.5rem 1rem',

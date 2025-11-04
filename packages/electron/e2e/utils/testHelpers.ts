@@ -42,7 +42,7 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   // AI Chat
   aiChatPanel: '[data-testid="ai-chat-panel"]',
   chatInput: 'textarea.ai-chat-input-field',
-  newSessionButton: '.session-history-new-button',
+  newSessionButton: '[data-testid="new-session-button"]',
   noSessionSelected: 'text="No session selected"',
 
   // Active session (more specific to avoid matching editor tabs)
