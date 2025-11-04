@@ -38,36 +38,47 @@ export function registerClaudeCodeHandlers() {
     console.log('[ClaudeCodeHandlers] Checking login status...');
 
     try {
-      // Check for stored credentials in the config directory
-      // Claude SDK stores credentials in ~/.config/claude-code/credentials.json
-      const configDir = path.join(os.homedir(), '.config', 'claude-code');
-      const credentialsPath = path.join(configDir, 'credentials.json');
+      // Check for stored credentials - Claude CLI stores OAuth credentials in ~/.claude/.credentials.json
+      const credentialsPath = path.join(os.homedir(), '.claude', '.credentials.json');
+      console.log('[ClaudeCodeHandlers] Checking credentials path:', credentialsPath);
 
       if (fs.existsSync(credentialsPath)) {
         try {
           const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
           console.log('[ClaudeCodeHandlers] Found credentials file');
 
-          // Check if credentials are valid (has session token or API key)
-          const isLoggedIn = !!(credentials.sessionToken || credentials.apiKey);
+          // Check if credentials are valid
+          // OAuth credentials have: access_token, refresh_token, expires_at
+          const hasOAuthToken = !!(credentials.access_token && credentials.refresh_token);
+
+          // Check if token is expired
+          let isExpired = false;
+          if (credentials.expires_at) {
+            const expiresAt = new Date(credentials.expires_at);
+            isExpired = expiresAt < new Date();
+            console.log('[ClaudeCodeHandlers] Token expires at:', expiresAt, 'Is expired:', isExpired);
+          }
+
+          const isLoggedIn = hasOAuthToken && !isExpired;
 
           return {
             isLoggedIn,
-            // Don't send sensitive data to renderer
-            hasSession: !!credentials.sessionToken,
-            hasApiKey: !!credentials.apiKey
+            hasOAuthToken,
+            isExpired,
+            expiresAt: credentials.expires_at,
+            scopes: credentials.scopes || []
           };
         } catch (error) {
           console.error('[ClaudeCodeHandlers] Error reading credentials:', error);
-          return { isLoggedIn: false };
+          return { isLoggedIn: false, hasOAuthToken: false, isExpired: true };
         }
       }
 
-      console.log('[ClaudeCodeHandlers] No credentials file found');
-      return { isLoggedIn: false };
+      console.log('[ClaudeCodeHandlers] No credentials file found at:', credentialsPath);
+      return { isLoggedIn: false, hasOAuthToken: false, isExpired: true };
     } catch (error) {
       console.error('[ClaudeCodeHandlers] Error checking login status:', error);
-      return { isLoggedIn: false };
+      return { isLoggedIn: false, hasOAuthToken: false, isExpired: true };
     }
   });
 
@@ -76,101 +87,82 @@ export function registerClaudeCodeHandlers() {
     console.log('[ClaudeCodeHandlers] Starting claude login...');
 
     try {
-      // Find the bundled Claude Agent SDK CLI
+      // Use the bundled CLI - no need for global installation
       const cliPath = findBundledCli();
-
       if (!cliPath) {
-        throw new Error('Claude Agent SDK CLI not found');
+        throw new Error('Claude Agent SDK CLI not found in bundled installation. This is a build configuration issue.');
       }
 
-      console.log('[ClaudeCodeHandlers] Found CLI at:', cliPath);
+      console.log('[ClaudeCodeHandlers] Found bundled CLI at:', cliPath);
 
-      // Spawn the login command with piped stdio to handle interactive prompts
-      return new Promise((resolve, reject) => {
-        console.log('[ClaudeCodeHandlers] Spawning login process...');
-        console.log('[ClaudeCodeHandlers] Command: node', [cliPath, 'login']);
+      // Open a Terminal window with the claude setup-token command
+      // This provides a proper TTY environment for the interactive OAuth flow
+      const platform = process.platform;
 
-        const loginProcess = spawn('node', [cliPath, 'login'], {
-          stdio: ['pipe', 'pipe', 'pipe'], // Pipe stdin/stdout/stderr so we can handle prompts
-          detached: false, // Don't detach - we need to handle prompts
-          shell: true,
-          env: {
-            ...process.env,
-            // Try to skip interactive prompts if possible
-            CI: 'true',
-            FORCE_COLOR: '0'
+      if (platform === 'darwin') {
+        // macOS: Use AppleScript to open Terminal with the command
+        console.log('[ClaudeCodeHandlers] Opening Terminal window for OAuth setup...');
+
+        // Use node to run the bundled CLI
+        const script = `
+tell application "Terminal"
+  activate
+  do script "clear && echo 'Claude Code Authentication' && echo '' && echo 'Please complete the OAuth flow in your browser.' && echo 'When finished, you can close this window.' && echo '' && node '${cliPath}' setup-token"
+end tell`;
+
+        spawn('osascript', ['-e', script], {
+          detached: true,
+          stdio: 'ignore'
+        }).unref();
+
+        // Return immediately - user will complete the flow in the terminal
+        return {
+          success: true,
+          message: 'Terminal window opened. Please complete the authentication in your browser, then click "Refresh Status" to verify.'
+        };
+      } else if (platform === 'win32') {
+        // Windows: Use start command to open a new cmd window
+        console.log('[ClaudeCodeHandlers] Opening command prompt for OAuth setup...');
+
+        spawn('cmd', ['/c', 'start', 'cmd', '/k', `node "${cliPath}" setup-token`], {
+          detached: true,
+          stdio: 'ignore'
+        }).unref();
+
+        return {
+          success: true,
+          message: 'Command prompt opened. Please complete the authentication in your browser, then click "Refresh Status" to verify.'
+        };
+      } else {
+        // Linux: Try to open a terminal emulator
+        console.log('[ClaudeCodeHandlers] Opening terminal for OAuth setup...');
+
+        // Try common terminal emulators
+        const terminals = ['gnome-terminal', 'konsole', 'xterm', 'x-terminal-emulator'];
+        let terminalOpened = false;
+
+        for (const terminal of terminals) {
+          try {
+            spawn(terminal, ['-e', `bash -c "node '${cliPath}' setup-token; read -p 'Press Enter to close...'"`], {
+              detached: true,
+              stdio: 'ignore'
+            }).unref();
+            terminalOpened = true;
+            break;
+          } catch (error) {
+            console.log(`[ClaudeCodeHandlers] ${terminal} not available`);
           }
-        });
+        }
 
-        console.log('[ClaudeCodeHandlers] Process spawned, PID:', loginProcess.pid);
-
-        let output = '';
-        let errorOutput = '';
-        let hasOutput = false;
-
-        // Set a timeout in case process hangs
-        const timeout = setTimeout(() => {
-          console.error('[ClaudeCodeHandlers] Login process timeout after 30 seconds');
-          loginProcess.kill();
-          reject(new Error('Login process timed out. The CLI may not be compatible with automated login.'));
-        }, 30000);
-
-        // Handle stdout
-        loginProcess.stdout?.on('data', (data) => {
-          hasOutput = true;
-          const text = data.toString();
-          output += text;
-          console.log('[ClaudeCodeHandlers] Login stdout:', text);
-
-          // Auto-respond to CLAUDE.md import prompt
-          // Answer "1" (Yes, allow external imports) to the prompt
-          if (text.includes('Allow external CLAUDE.md file imports')) {
-            console.log('[ClaudeCodeHandlers] Auto-responding to CLAUDE.md prompt with "1" (allow)');
-            loginProcess.stdin?.write('1\n');
-          }
-        });
-
-        // Handle stderr
-        loginProcess.stderr?.on('data', (data) => {
-          hasOutput = true;
-          const text = data.toString();
-          errorOutput += text;
-          console.error('[ClaudeCodeHandlers] Login stderr:', text);
-        });
-
-        loginProcess.on('error', (error) => {
-          clearTimeout(timeout);
-          console.error('[ClaudeCodeHandlers] Login process error:', error);
-          reject(error);
-        });
-
-        loginProcess.on('exit', (code) => {
-          clearTimeout(timeout);
-          console.log('[ClaudeCodeHandlers] Login process exited with code:', code);
-          console.log('[ClaudeCodeHandlers] Had output:', hasOutput);
-          console.log('[ClaudeCodeHandlers] Total output:', output);
-          console.log('[ClaudeCodeHandlers] Total error output:', errorOutput);
-
-          if (code === 0) {
-            console.log('[ClaudeCodeHandlers] Login successful');
-            resolve({ success: true });
-          } else {
-            console.error('[ClaudeCodeHandlers] Login failed with code:', code);
-            reject(new Error(`Login failed with exit code ${code}. Output: ${output}\nError: ${errorOutput}`));
-          }
-        });
-
-        // Check if process started
-        setTimeout(() => {
-          if (!hasOutput && loginProcess.killed) {
-            console.error('[ClaudeCodeHandlers] Process died immediately without output');
-            clearTimeout(timeout);
-            reject(new Error('Login process failed to start'));
-          } else {
-            console.log('[ClaudeCodeHandlers] Process appears to be running...');
-          }
-        }, 2000);
-      });
+        if (terminalOpened) {
+          return {
+            success: true,
+            message: 'Terminal opened. Please complete the authentication in your browser, then click "Refresh Status" to verify.'
+          };
+        } else {
+          throw new Error('No terminal emulator found. Please run "node ' + cliPath + ' setup-token" manually in your terminal.');
+        }
+      }
     } catch (error) {
       console.error('[ClaudeCodeHandlers] Login error:', error);
       throw error;

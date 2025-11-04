@@ -47,9 +47,12 @@ export function ClaudeCodePanel({
 }: ClaudeCodePanelProps) {
   const [loginStatus, setLoginStatus] = useState<{
     isLoggedIn: boolean;
-    hasSession: boolean;
-    hasApiKey: boolean;
+    hasOAuthToken: boolean;
+    isExpired: boolean;
+    expiresAt?: string;
+    scopes?: string[];
   } | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
     checkLoginStatus();
@@ -61,7 +64,21 @@ export function ClaudeCodePanel({
       setLoginStatus(status);
     } catch (error) {
       console.error('Failed to check login status:', error);
-      setLoginStatus({ isLoggedIn: false, hasSession: false, hasApiKey: false });
+      setLoginStatus({ isLoggedIn: false, hasOAuthToken: false, isExpired: true });
+    }
+  };
+
+  const handleLogin = async () => {
+    setIsLoggingIn(true);
+    try {
+      const result = await window.electronAPI.invoke('claude-code:login');
+      if (result.success) {
+        alert(result.message || 'Login initiated! Please complete authentication in the Terminal window, then click "Refresh Status" to verify.');
+      }
+    } catch (error: any) {
+      alert(`Login failed: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -224,27 +241,59 @@ export function ClaudeCodePanel({
                       fontSize: '13px',
                       display: 'flex',
                       alignItems: 'center',
+                      justifyContent: 'space-between',
                       gap: '8px'
                     }}>
-                      {loginStatus.isLoggedIn ? (
-                        <>
-                          <span style={{ color: '#10b981', fontSize: '16px' }}>✓</span>
-                          <span style={{ color: 'var(--text-primary)' }}>
-                            <strong>Logged in with Claude subscription</strong>
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span style={{ color: 'var(--text-secondary)', fontSize: '16px' }}>ℹ️</span>
-                          <span style={{ color: 'var(--text-secondary)' }}>
-                            Not logged in with subscription
-                          </span>
-                        </>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                        {loginStatus.isLoggedIn ? (
+                          <>
+                            <span style={{ color: '#10b981', fontSize: '16px' }}>✓</span>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ color: 'var(--text-primary)', fontWeight: '600' }}>
+                                Logged in with Claude subscription
+                              </span>
+                              {loginStatus.expiresAt && (
+                                <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
+                                  Expires: {new Date(loginStatus.expiresAt).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '16px' }}>ℹ️</span>
+                            <span style={{ color: 'var(--text-secondary)' }}>
+                              Not logged in with subscription
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <button
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          fontWeight: '500',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          border: '1px solid var(--border-primary)',
+                          background: 'var(--surface-secondary)',
+                          color: 'var(--text-primary)'
+                        }}
+                        onClick={checkLoginStatus}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'var(--surface-hover)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'var(--surface-secondary)';
+                        }}
+                      >
+                        Refresh Status
+                      </button>
                     </div>
                   )}
 
-                  {/* COMMENTED OUT - Login button disabled until login system is working
+                  {/* Login Button */}
                   {loginStatus && !loginStatus.isLoggedIn && (
                     <div style={{ marginBottom: '12px' }}>
                       <button
@@ -254,34 +303,38 @@ export function ClaudeCodePanel({
                           borderRadius: '6px',
                           fontSize: '14px',
                           fontWeight: '600',
-                          cursor: 'pointer',
+                          cursor: isLoggingIn ? 'not-allowed' : 'pointer',
                           transition: 'all 0.15s ease',
                           border: 'none',
-                          background: 'var(--primary-color, #2563eb)',
-                          color: 'white'
+                          background: isLoggingIn ? 'var(--text-tertiary)' : 'var(--primary-color, #2563eb)',
+                          color: 'white',
+                          opacity: isLoggingIn ? '0.6' : '1'
                         }}
-                        onClick={async () => {
-                          try {
-                            const result = await window.electronAPI.invoke('claude-code:login');
-                            alert('Login initiated! Please complete authentication in your browser, then click OK to refresh status.');
-                            // Refresh login status after user confirms
-                            await checkLoginStatus();
-                          } catch (error: any) {
-                            alert(`Login failed: ${error.message}`);
+                        onClick={handleLogin}
+                        disabled={isLoggingIn}
+                        onMouseEnter={(e) => {
+                          if (!isLoggingIn) {
+                            e.currentTarget.style.opacity = '0.9';
                           }
                         }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.opacity = '0.9';
-                        }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.opacity = '1';
+                          if (!isLoggingIn) {
+                            e.currentTarget.style.opacity = '1';
+                          }
                         }}
                       >
-                        Login with Claude Subscription
+                        {isLoggingIn ? 'Opening Login...' : 'Login with Claude Subscription'}
                       </button>
+                      <p style={{
+                        fontSize: '11px',
+                        color: 'var(--text-secondary)',
+                        marginTop: '6px',
+                        lineHeight: '1.4'
+                      }}>
+                        This will open a Terminal window where you can complete OAuth authentication with your Claude Pro or Max subscription.
+                      </p>
                     </div>
                   )}
-                  */}
                   <div className="api-key-row">
                     <input
                       type="password"
