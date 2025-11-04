@@ -797,13 +797,9 @@ app.on('before-quit', async (event) => {
 // Window all closed handler
 app.on('window-all-closed', () => {
   logger.main.info('All windows closed');
-  // On macOS, keep app running when all windows are closed
-  // and show the Workspace Manager, but NOT when we are quitting.
-  if (process.platform === 'darwin') {
-    if (!isAppQuitting) {
-      // Only show the Workspace Manager when not quitting the app
-      createWorkspaceManagerWindow();
-    }
+  if (!isAppQuitting) {
+    // Only show the Workspace Manager when not quitting the app
+    createWorkspaceManagerWindow();
     // If we are quitting, do nothing here and allow normal quit to proceed
   } else {
     // On other platforms, quit when all windows are closed
