@@ -19,6 +19,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.3] - 2025-11-04
+
+
+### Added
+- Unified diff navigation for document history dialog
+- Token usage display for Claude Code AI sessions
+- Sound and OS notifications enabled by default for new users
+- Login required widget for Claude Code authentication
+- E2E tests for AI multi-round editing
+
+### Changed
+- Improved Claude Code login widget appearance
+- Claude Code now uses SDK-only authentication
+
+### Fixed
+- File watchers now stay active for all open tabs (no longer stop when switching tabs)
+- Cmd+N new file dialog now opens correctly in files mode
+- Unhandled promise rejection in Claude Code login check
+- AI diff approval system for consecutive edits
+- Adjacent diff changes now group correctly
+- Cache read tokens excluded from cumulative usage display
+- Session history no longer refreshes on input, improved status indicators
+- Title bar overlay error handling
+- Multiple debug console log noise issues
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.2] - 2025-11-03
 
 
