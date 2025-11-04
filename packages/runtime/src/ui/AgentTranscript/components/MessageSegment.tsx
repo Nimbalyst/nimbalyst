@@ -3,6 +3,7 @@ import type { Message } from '../../../ai/server/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { JSONViewer } from './JSONViewer';
 import { DiffViewer } from './DiffViewer';
+import { LoginRequiredWidget } from './LoginRequiredWidget';
 
 interface MessageSegmentProps {
   message: Message;
@@ -13,6 +14,7 @@ interface MessageSegmentProps {
   expandedTools: Set<string>;
   onToggleToolExpand: (toolId: string) => void;
   documentContext?: { filePath?: string }; // For passing file path to edits
+  shouldShowLoginWidget?: boolean; // Control whether to show login widget
 }
 
 export const MessageSegment: React.FC<MessageSegmentProps> = ({
@@ -22,7 +24,8 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
   showToolCalls,
   expandedTools,
   onToggleToolExpand,
-  documentContext
+  documentContext,
+  shouldShowLoginWidget = true
 }) => {
   const [isDiffExpanded, setDiffExpanded] = useState(false);
 
@@ -82,6 +85,25 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
   const renderTextContent = () => {
     if (message.isThinking) return renderThinking();
     if (!message.content.trim()) return null;
+
+    // Check if this is a login-required error in the message content
+    const content = message.content;
+    const isLoginRequired =
+      content.toLowerCase().includes('invalid api key') ||
+      content.includes('/login') ||
+      content.toLowerCase().includes('please run /login') ||
+      content.toLowerCase().includes('unauthorized') ||
+      content.toLowerCase().includes('authentication required');
+
+    // If it's a login-required message, render the special widget (only if allowed)
+    if (isLoginRequired && !isUser && shouldShowLoginWidget) {
+      return <LoginRequiredWidget />;
+    }
+
+    // If it's a login-required message but we shouldn't show the widget, render nothing
+    if (isLoginRequired && !isUser && !shouldShowLoginWidget) {
+      return null;
+    }
 
     // Slight visual variation for system messages
     const isSystemMessage = message.isSystem || message.role === 'system';
@@ -257,6 +279,27 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
   const renderError = () => {
     if (!message.isError || message.role === 'tool') return null;
 
+    const errorMessage = message.errorMessage || message.content || 'Error';
+
+    // Check if this is a login-required error for Claude Code
+    const isLoginRequired =
+      errorMessage.toLowerCase().includes('invalid api key') ||
+      errorMessage.includes('/login') ||
+      errorMessage.toLowerCase().includes('please run /login') ||
+      errorMessage.toLowerCase().includes('unauthorized') ||
+      errorMessage.toLowerCase().includes('authentication required');
+
+    // If it's a login-required error, render the special widget (only if allowed)
+    if (isLoginRequired && shouldShowLoginWidget) {
+      return <LoginRequiredWidget />;
+    }
+
+    // If it's a login-required error but we shouldn't show widget, render nothing
+    if (isLoginRequired && !shouldShowLoginWidget) {
+      return null;
+    }
+
+    // Otherwise, render the generic error UI
     return (
       <div style={{
         margin: '0.5rem 0',
@@ -271,7 +314,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
           fontSize: '0.875rem',
           marginBottom: '0.5rem'
         }}>
-          {message.errorMessage || 'Error'}
+          {errorMessage}
         </div>
       </div>
     );

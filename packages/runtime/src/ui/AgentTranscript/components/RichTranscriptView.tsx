@@ -132,6 +132,23 @@ export const RichTranscriptView = React.forwardRef<
     return false;
   }, [messages, sessionStatus]);
 
+  // Helper to check if message is a login-required error
+  const isLoginRequiredError = (message: Message) => {
+    const content = message.content || message.errorMessage || '';
+    return (
+      content.toLowerCase().includes('invalid api key') ||
+      content.includes('/login') ||
+      content.toLowerCase().includes('please run /login') ||
+      content.toLowerCase().includes('unauthorized') ||
+      content.toLowerCase().includes('authentication required')
+    );
+  };
+
+  // Find if any message is a login-required error
+  const loginErrorIndex = useMemo(() => {
+    return messages.findIndex(msg => !msg.role || msg.role === 'user' ? false : isLoginRequiredError(msg));
+  }, [messages]);
+
   return (
     <div className="rich-transcript-view">
       {/* Settings Panel */}
@@ -450,6 +467,7 @@ export const RichTranscriptView = React.forwardRef<
                         expandedTools={expandedTools}
                         onToggleToolExpand={toggleToolExpand}
                         documentContext={documentContext}
+                        shouldShowLoginWidget={loginErrorIndex === -1 || loginErrorIndex === index}
                       />
                     </div>
                   </div>

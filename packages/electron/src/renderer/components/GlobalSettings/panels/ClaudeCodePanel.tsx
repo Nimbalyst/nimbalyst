@@ -51,6 +51,11 @@ export function ClaudeCodePanel({
     isExpired: boolean;
     expiresAt?: string;
     scopes?: string[];
+    email?: string;
+    organization?: string;
+    subscriptionType?: string;
+    tokenSource?: string;
+    apiKeySource?: string;
   } | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
@@ -248,13 +253,18 @@ export function ClaudeCodePanel({
                         {loginStatus.isLoggedIn ? (
                           <>
                             <span style={{ color: '#10b981', fontSize: '16px' }}>✓</span>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                               <span style={{ color: 'var(--text-primary)', fontWeight: '600' }}>
                                 Logged in with Claude subscription
                               </span>
-                              {loginStatus.expiresAt && (
+                              {loginStatus.email && (
                                 <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
-                                  Expires: {new Date(loginStatus.expiresAt).toLocaleDateString()}
+                                  Account: {loginStatus.email}
+                                </span>
+                              )}
+                              {loginStatus.organization && (
+                                <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
+                                  Organization: {loginStatus.organization}
                                 </span>
                               )}
                             </div>

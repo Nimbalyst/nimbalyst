@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { claudeCodeDetector } from '../services/ClaudeCodeDetector';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 
 /**
  * Register Claude Code related IPC handlers
@@ -38,47 +39,60 @@ export function registerClaudeCodeHandlers() {
     console.log('[ClaudeCodeHandlers] Checking login status...');
 
     try {
-      // Check for stored credentials - Claude CLI stores OAuth credentials in ~/.claude/.credentials.json
-      const credentialsPath = path.join(os.homedir(), '.claude', '.credentials.json');
-      console.log('[ClaudeCodeHandlers] Checking credentials path:', credentialsPath);
+      // Create a query instance to access accountInfo
+      // We need to start a minimal query to get access to the SDK's methods
+      const session = query('', {
+        userInput: true,
+        streamingOutput: true,
+      });
 
-      if (fs.existsSync(credentialsPath)) {
-        try {
-          const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
-          console.log('[ClaudeCodeHandlers] Found credentials file');
+      // Get account info using the SDK's method
+      const accountInfo = await session.accountInfo();
 
-          // Check if credentials are valid
-          // OAuth credentials have: access_token, refresh_token, expires_at
-          const hasOAuthToken = !!(credentials.access_token && credentials.refresh_token);
+      console.log('[ClaudeCodeHandlers] Account info:', accountInfo);
 
-          // Check if token is expired
-          let isExpired = false;
-          if (credentials.expires_at) {
-            const expiresAt = new Date(credentials.expires_at);
-            isExpired = expiresAt < new Date();
-            console.log('[ClaudeCodeHandlers] Token expires at:', expiresAt, 'Is expired:', isExpired);
-          }
-
-          const isLoggedIn = hasOAuthToken && !isExpired;
-
-          return {
-            isLoggedIn,
-            hasOAuthToken,
-            isExpired,
-            expiresAt: credentials.expires_at,
-            scopes: credentials.scopes || []
-          };
-        } catch (error) {
-          console.error('[ClaudeCodeHandlers] Error reading credentials:', error);
-          return { isLoggedIn: false, hasOAuthToken: false, isExpired: true };
-        }
+      // If we got account info, user is logged in
+      if (accountInfo && accountInfo.email) {
+        return {
+          isLoggedIn: true,
+          hasOAuthToken: true,
+          isExpired: false,
+          email: accountInfo.email,
+          organization: accountInfo.organization,
+          subscriptionType: accountInfo.subscriptionType,
+          tokenSource: accountInfo.tokenSource,
+          apiKeySource: accountInfo.apiKeySource
+        };
       }
 
-      console.log('[ClaudeCodeHandlers] No credentials file found at:', credentialsPath);
-      return { isLoggedIn: false, hasOAuthToken: false, isExpired: true };
-    } catch (error) {
+      // No account info means not logged in
+      return {
+        isLoggedIn: false,
+        hasOAuthToken: false,
+        isExpired: true
+      };
+    } catch (error: any) {
       console.error('[ClaudeCodeHandlers] Error checking login status:', error);
-      return { isLoggedIn: false, hasOAuthToken: false, isExpired: true };
+
+      // If error mentions authentication, user is definitely not logged in
+      if (error.message?.toLowerCase().includes('auth') ||
+          error.message?.toLowerCase().includes('login') ||
+          error.message?.toLowerCase().includes('token')) {
+        return {
+          isLoggedIn: false,
+          hasOAuthToken: false,
+          isExpired: true,
+          error: error.message
+        };
+      }
+
+      // For other errors, return not logged in
+      return {
+        isLoggedIn: false,
+        hasOAuthToken: false,
+        isExpired: true,
+        error: error.message
+      };
     }
   });
 
