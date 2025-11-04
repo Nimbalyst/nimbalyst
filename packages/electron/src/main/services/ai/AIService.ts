@@ -101,7 +101,7 @@ export class AIService {
     this.sessionManager = new SessionManager(sessionStore);
 
     // Register built-in tools (which now includes file tools)
-    console.log('[AIService] Registering built-in tools...');
+    // console.log('[AIService] Registering built-in tools...');
     for (const tool of BUILT_IN_TOOLS) {
       toolRegistry.register(tool);
       // console.log(`[AIService] Registered tool: ${tool.name}`);
@@ -388,7 +388,7 @@ export class AIService {
       if (!workspacePath) {
         const windowState = windowStates.get(event.sender.id);
         workspacePath = windowState?.workspacePath || undefined;
-        console.log(`[AIService] Got workspace path from window ${event.sender.id}:`, workspacePath);
+        // console.log(`[AIService] Got workspace path from window ${event.sender.id}:`, workspacePath);
       }
 
       // Require workspace path for AI operations
@@ -404,7 +404,7 @@ export class AIService {
         throw new Error(`Session ${sessionId} not found`);
       }
 
-      console.log(`[AIService] Loaded session ${sessionId} with provider: ${session.provider}, model: ${session.model} (took ${perfLog.sessionLoadTime}ms)`);
+      // console.log(`[AIService] Loaded session ${sessionId} with provider: ${session.provider}, model: ${session.model} (took ${perfLog.sessionLoadTime}ms)`);
 
       // Verify we got the right session
       if (session.id !== sessionId) {
@@ -413,16 +413,16 @@ export class AIService {
       }
 
       // Comprehensive logging of what we're sending to Claude
-      console.group('🤖 [AIService] Sending message to AI provider');
-      console.log('📝 User Message:', message);
-      console.log('🏢 Provider:', session.provider);
-      console.log('🤖 Model:', session.model || 'default');
-      console.log('📄 Document Context:', {
-        hasDocument: !!documentContext,
-        filePath: documentContext?.filePath || 'none',
-        fileType: documentContext?.fileType || 'none',
-        contentLength: documentContext?.content?.length || 0,
-      });
+      // console.group('🤖 [AIService] Sending message to AI provider');
+      // console.log('📝 User Message:', message);
+      // console.log('🏢 Provider:', session.provider);
+      // console.log('🤖 Model:', session.model || 'default');
+      // console.log('📄 Document Context:', {
+      //   hasDocument: !!documentContext,
+      //   filePath: documentContext?.filePath || 'none',
+      //   fileType: documentContext?.fileType || 'none',
+      //   contentLength: documentContext?.content?.length || 0,
+      // });
 
       if (documentContext?.content) {
         console.log('📋 Document Content Preview (first 500 chars):',
@@ -469,7 +469,7 @@ export class AIService {
         console.log('[CLAUDE-CODE-SERVICE] Getting provider for claude-code, session:', session.id);
       }
 
-      console.log(`[AIService] Getting provider for: ${session.provider}, sessionId: ${session.id}`);
+      // console.log(`[AIService] Getting provider for: ${session.provider}, sessionId: ${session.id}`);
       let provider = ProviderFactory.getProvider(session.provider as AIProviderType, session.id);
       perfLog.getProviderTime = Date.now() - providerStartTime;
 
@@ -478,7 +478,7 @@ export class AIService {
         if (isProviderClaudeCode) {
           console.log('[CLAUDE-CODE-SERVICE] Provider not found, creating new claude-code provider');
         }
-        console.log(`[AIService] Provider not found, creating new ${session.provider} provider`);
+        // console.log(`[AIService] Provider not found, creating new ${session.provider} provider`);
         const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
 
         // Get the correct API key based on provider
@@ -536,20 +536,20 @@ export class AIService {
         // Only add model if it exists and provider isn't claude-code
         if ((session.model || session.providerConfig?.model) && session.provider !== 'claude-code') {
           const fullModel = session.model || session.providerConfig?.model;
-          console.log('[AIService] Reinitializing provider with model:', {
-            sessionModel: session.model,
-            providerConfigModel: session.providerConfig?.model,
-            fullModel,
-            provider: session.provider
-          });
+          // console.log('[AIService] Reinitializing provider with model:', {
+          //   sessionModel: session.model,
+          //   providerConfigModel: session.providerConfig?.model,
+          //   fullModel,
+          //   provider: session.provider
+          // });
 
           // Strip provider prefix if present (e.g., "claude:claude-sonnet-4" -> "claude-sonnet-4")
           if (fullModel && fullModel.includes(':')) {
             reinitConfig.model = fullModel.split(':').slice(1).join(':');
-            console.log('[AIService] Stripped model prefix:', {
-              original: fullModel,
-              stripped: reinitConfig.model
-            });
+            // console.log('[AIService] Stripped model prefix:', {
+            //   original: fullModel,
+            //   stripped: reinitConfig.model
+            // });
           } else {
             reinitConfig.model = fullModel;
           }
@@ -560,7 +560,7 @@ export class AIService {
           console.log('[CLAUDE-CODE-SERVICE] About to initialize claude-code provider with config:', JSON.stringify(safeConfig, null, 2));
         }
         const safeConfig = { ...reinitConfig, apiKey: reinitConfig.apiKey ? '***' : undefined };
-        console.log('[AIService] About to initialize provider with config:', JSON.stringify(safeConfig, null, 2));
+        // console.log('[AIService] About to initialize provider with config:', JSON.stringify(safeConfig, null, 2));
         const initStartTime = Date.now();
 
         try {
@@ -570,7 +570,7 @@ export class AIService {
           if (isProviderClaudeCode) {
             console.log(`[CLAUDE-CODE-SERVICE] Provider initialization completed in ${perfLog.providerInitTime}ms`);
           }
-          console.log(`[AIService] Provider initialization took ${perfLog.providerInitTime}ms`);
+          // console.log(`[AIService] Provider initialization took ${perfLog.providerInitTime}ms`);
         } catch (initError) {
           if (isProviderClaudeCode) {
             console.error('[CLAUDE-CODE-SERVICE] Failed to initialize provider:', initError);
@@ -582,7 +582,7 @@ export class AIService {
         // CRITICAL: Restore provider session data from database
         // This is essential for session resumption (e.g., Claude Code sessions)
         if (session.providerSessionId && provider.setProviderSessionData) {
-          console.log(`[AIService] Restoring provider session data for ${session.provider}`);
+          // console.log(`[AIService] Restoring provider session data for ${session.provider}`);
           provider.setProviderSessionData(session.id, { claudeSessionId: session.providerSessionId });
         }
 
@@ -592,14 +592,14 @@ export class AIService {
       }
 
       // NOTE: No longer tracking provider per-window - each session has its own provider instance
-      console.log(`[AIService] Using provider for session ${session.id}: ${session.provider}`);
+      // console.log(`[AIService] Using provider for session ${session.id}: ${session.provider}`);
 
       // Re-register tool handler with the CURRENT document context from this message
       // This ensures applyDiff targets the correct file even when switching tabs
-      console.log(`[AIService] Re-registering tool handler with document context:`, {
-        filePath: documentContext?.filePath,
-        hasContext: !!documentContext
-      });
+      // console.log(`[AIService] Re-registering tool handler with document context:`, {
+      //   filePath: documentContext?.filePath,
+      //   hasContext: !!documentContext
+      // });
       const toolHandler = this.createToolHandler(event.sender, documentContext, session.id, workspacePath);
       provider.registerToolHandler(toolHandler);
 
@@ -1521,39 +1521,39 @@ export class AIService {
     // Get slash commands from active claude-code provider
     ipcMain.handle('ai:getSlashCommands', async (event, sessionId?: string) => {
       try {
-        console.log('[AIService] ai:getSlashCommands called with sessionId:', sessionId);
+        // console.log('[AIService] ai:getSlashCommands called with sessionId:', sessionId);
 
         // Get provider from session
         let provider: AIProvider | undefined;
         if (sessionId) {
-          console.log('[AIService] Getting provider from ProviderFactory with sessionId:', sessionId);
+          // console.log('[AIService] Getting provider from ProviderFactory with sessionId:', sessionId);
           provider = ProviderFactory.getProvider('claude-code', sessionId) ?? undefined;
-          console.log('[AIService] Provider from ProviderFactory:', provider ? 'found' : 'not found');
+          // console.log('[AIService] Provider from ProviderFactory:', provider ? 'found' : 'not found');
         }
 
         // Check if provider has getSlashCommands method
         if (provider) {
-          console.log('[AIService] Provider found, checking for getSlashCommands method');
-          console.log('[AIService] Has getSlashCommands:', 'getSlashCommands' in provider);
+          // console.log('[AIService] Provider found, checking for getSlashCommands method');
+          // console.log('[AIService] Has getSlashCommands:', 'getSlashCommands' in provider);
 
           if ('getSlashCommands' in provider && typeof (provider as any).getSlashCommands === 'function') {
             const commands = (provider as any).getSlashCommands();
-            console.log('[AIService] Retrieved slash commands from provider:', commands);
+            // console.log('[AIService] Retrieved slash commands from provider:', commands);
 
             // If commands array is empty, return empty array
             if (commands.length === 0) {
-              console.log('[AIService] Provider returned empty commands');
+              // console.log('[AIService] Provider returned empty commands');
               return { success: true, commands: [] };
             }
 
             return { success: true, commands };
           } else {
-            console.log('[AIService] Provider does not have getSlashCommands method');
+            // console.log('[AIService] Provider does not have getSlashCommands method');
           }
         }
 
         // No provider found - return empty commands
-        console.log('[AIService] No provider found');
+        // console.log('[AIService] No provider found');
         return { success: true, commands: [] };
       } catch (error) {
         console.error('[AIService] Error getting slash commands:', error);

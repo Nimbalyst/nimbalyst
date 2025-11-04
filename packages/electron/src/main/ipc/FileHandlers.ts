@@ -345,7 +345,7 @@ export function registerFileHandlers() {
 
         // Start watching the new file
         if (filePath) {
-            console.log('[SET_FILE] Starting watcher for new file:', filePath);
+             // console.log('[SET_FILE] Starting watcher for new file:', filePath);
             startFileWatcher(window, filePath);
 
             // Update represented filename for macOS
