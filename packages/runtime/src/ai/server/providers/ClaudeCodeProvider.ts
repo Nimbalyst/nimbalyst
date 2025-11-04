@@ -24,6 +24,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   private claudeSessionIds: Map<string, string> = new Map(); // Our session ID -> Claude session ID
   private currentSessionType?: string; // Track session type for prompt customization
   private slashCommands: string[] = []; // Available slash commands from SDK
+  private editedFilesThisTurn: Set<string> = new Set(); // Track files edited in current turn
 
   static readonly DEFAULT_MODEL = 'claude-code';
 
@@ -107,6 +108,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     // Create abort controller for this request
     this.abortController = new AbortController();
 
+    // Clear edited files tracker for this turn
+    this.editedFilesThisTurn.clear();
+
     try {
       // Build system prompt with document context
       const promptBuildStart = Date.now();
@@ -140,7 +144,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         model: 'sonnet',
         permissionMode: 'bypassPermissions',
         // PHASE 3: PreToolUse hook for tagging "before" state
-        // PostToolUse hook for saving "after" state
+        // PostToolUse hook for triggering file watcher (no snapshot creation)
         hooks: {
           'PreToolUse': [
             {
@@ -1110,6 +1114,20 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       console.log(`[CLAUDE-CODE] Stats - Chunks: ${chunkCount}, Tool calls: ${toolCallCount}, Content length: ${fullContent.length}`);
       console.log(`[CLAUDE-CODE] First 500 chars of response:`, fullContent.substring(0, 500));
 
+      // Create snapshots for all files edited during this turn
+      console.log(`[CLAUDE-CODE] ========== TURN ENDING ==========`);
+      console.log(`[CLAUDE-CODE] editedFilesThisTurn size:`, this.editedFilesThisTurn.size);
+      console.log(`[CLAUDE-CODE] editedFilesThisTurn contents:`, Array.from(this.editedFilesThisTurn));
+
+      if (this.editedFilesThisTurn.size > 0) {
+        console.log(`[CLAUDE-CODE] Creating ai-edit snapshots for ${this.editedFilesThisTurn.size} files edited this turn`);
+        await this.createTurnEndSnapshots(workspacePath!, sessionId);
+        console.log(`[CLAUDE-CODE] Turn-end snapshots complete`);
+      } else {
+        console.log(`[CLAUDE-CODE] WARNING: No files in editedFilesThisTurn set - no snapshots will be created`);
+      }
+      console.log(`[CLAUDE-CODE] ========== TURN END COMPLETE ==========`);
+
       yield {
         type: 'complete',
         // Don't send content here - it's already been sent in chunks
@@ -1207,7 +1225,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   /**
    * PHASE 3: Create PreToolUse hook for tagging file state before edits
    * This hook intercepts Edit/Write/MultiEdit tools, tags the current file state,
-   * and returns 'allow' to let the edit proceed immediately.
+   * and tracks files for end-of-turn snapshot creation.
    */
   private createPreToolUseHook(workspacePath: string, sessionId?: string) {
     const fs = require('fs');
@@ -1231,60 +1249,47 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       }
 
       try {
-        // Extract file path from tool arguments
-        let filePath: string | undefined;
+        // Extract file paths from tool arguments
+        const filePaths: string[] = [];
         if (toolName === 'Edit' || toolName === 'Write') {
-          filePath = toolInput.file_path || toolInput.filePath;
+          const filePath = toolInput.file_path || toolInput.filePath;
+          if (filePath) {
+            filePaths.push(filePath);
+          }
         } else if (toolName === 'MultiEdit') {
           // MultiEdit might have multiple files - tag each one
           const edits = toolInput.edits || [];
           for (const edit of edits) {
             const editFilePath = edit.file_path || edit.filePath;
             if (editFilePath) {
-              await this.tagFileBeforeEdit(editFilePath, workspacePath, sessionId, toolUseID || `${toolName}-${Date.now()}`);
+              filePaths.push(editFilePath);
             }
           }
-          return {
-            hookSpecificOutput: {
-              hookEventName: 'PreToolUse' as const,
-              permissionDecision: 'allow' as const
-            }
-          };
         }
 
-        if (!filePath) {
-          console.warn('[CLAUDE-CODE] PreToolUse: No file path found in tool arguments');
-          return {
-            hookSpecificOutput: {
-              hookEventName: 'PreToolUse' as const,
-              permissionDecision: 'allow' as const
-            }
-          };
-        }
+        // Tag each file and track for end-of-turn snapshot
+        for (let filePath of filePaths) {
+          if (!filePath) continue;
 
-        // Make file path absolute if relative
-        if (!path.isAbsolute(filePath)) {
-          filePath = path.join(workspacePath, filePath);
-        }
+          // Make file path absolute if relative
+          if (!path.isAbsolute(filePath)) {
+            filePath = path.join(workspacePath, filePath);
+          }
 
-        // Read current file content (if file exists)
-        let content = '';
-        try {
-          content = fs.readFileSync(filePath, 'utf-8');
-        } catch (error) {
-          // File might not exist yet (Write tool creating new file)
-          console.log(`[CLAUDE-CODE] PreToolUse: File doesn't exist yet, no tag needed:`, filePath);
-          return {
-            hookSpecificOutput: {
-              hookEventName: 'PreToolUse' as const,
-              permissionDecision: 'allow' as const
-            }
-          };
-        }
+          // Track this file as edited during this turn
+          this.editedFilesThisTurn.add(filePath);
 
-        // Create unique tag ID for this edit
-        const actualToolUseId = toolUseID || `tool-${Date.now()}`;
-        await this.tagFileBeforeEdit(filePath, workspacePath!, sessionId, actualToolUseId);
+          // Read current file content (if file exists)
+          try {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            // Create unique tag ID for this edit
+            const actualToolUseId = toolUseID || `tool-${Date.now()}`;
+            await this.tagFileBeforeEdit(filePath, workspacePath!, sessionId, actualToolUseId);
+          } catch (error) {
+            // File might not exist yet (Write tool creating new file)
+            console.log(`[CLAUDE-CODE] PreToolUse: File doesn't exist yet, will track for snapshot:`, filePath);
+          }
+        }
 
       } catch (error) {
         console.error('[CLAUDE-CODE] PreToolUse hook error:', error);
@@ -1321,7 +1326,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // If yes, skip creating a new tag - we want to show ALL edits together as one diff
         console.log(`[CLAUDE-CODE] PreToolUse: Checking for existing pending tags for:`, filePath);
         const pendingTags = await historyManager.getPendingTags(filePath);
-        console.log(`[CLAUDE-CODE] PreToolUse: Found ${pendingTags?.length || 0} pending tags`);
+        console.log(`[CLAUDE-CODE] PreToolUse: Found ${pendingTags?.length || 0} pending tags for ${filePath}`);
+        if (pendingTags && pendingTags.length > 0) {
+          console.log(`[CLAUDE-CODE] PreToolUse: Existing tag details:`, JSON.stringify(pendingTags[0], null, 2));
+        }
 
         if (pendingTags && pendingTags.length > 0) {
           console.log(`[CLAUDE-CODE] PreToolUse: File already has pending tag, skipping new tag:`, {
@@ -1357,6 +1365,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           toolUseId
         );
         console.log(`[CLAUDE-CODE] PreToolUse: Tag created successfully`);
+
+        // Small delay to ensure tag is committed to database before next edit check
+        await new Promise(resolve => setTimeout(resolve, 10));
       } catch (importError) {
         console.warn('[CLAUDE-CODE] PreToolUse: Could not import historyManager (might be in renderer process):',  importError);
         // If we're not in the main process, we'll need to use IPC
@@ -1364,87 +1375,82 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       }
 
     } catch (error) {
+      // Check if this is a unique constraint violation (expected if tag already exists)
+      const errorStr = String(error);
+      if (errorStr.includes('unique') || errorStr.includes('UNIQUE') || errorStr.includes('duplicate')) {
+        console.log(`[CLAUDE-CODE] PreToolUse: Tag already exists (unique constraint), skipping:`, filePath);
+        // This is fine - means another rapid edit already created the tag
+        return;
+      }
       console.error('[CLAUDE-CODE] PreToolUse: Failed to tag file:', error);
-      throw error;
+      // Don't throw - allow the edit to proceed even if tagging fails
     }
   }
 
   /**
-   * PostToolUse hook to save AI edit as a snapshot
-   * This creates the "after" version and coalesces with any previous edits
+   * PostToolUse hook to ensure file watcher detects changes
+   * This doesn't create snapshots - those are created at turn end
+   * It just ensures the file system has flushed the write
    */
   private createPostToolUseHook(workspacePath: string, sessionId?: string) {
-    const fs = require('fs');
-    const path = require('path');
-
     return async (input: any, toolUseID: string | undefined, options: { signal: AbortSignal }) => {
       const toolName = input.tool_name;
-      const toolInput = input.tool_input;
-      const toolResponse = input.tool_response;
 
-      console.log(`[CLAUDE-CODE] PostToolUse hook: ${toolName}`, { toolUseID });
-
-      // Only intercept file editing tools
+      // Only care about file editing tools
       if (toolName !== 'Edit' && toolName !== 'Write' && toolName !== 'MultiEdit') {
-        console.log(`[CLAUDE-CODE] PostToolUse: Not a file editing tool, skipping`);
         return {};
       }
 
-      try {
-        // Extract file paths that were edited
-        const filePaths: string[] = [];
-        if (toolName === 'Edit' || toolName === 'Write') {
-          const filePath = toolInput.file_path || toolInput.filePath;
-          if (filePath) {
-            filePaths.push(filePath);
-          }
-        } else if (toolName === 'MultiEdit') {
-          const edits = toolInput.edits || [];
-          for (const edit of edits) {
-            const editFilePath = edit.file_path || edit.filePath;
-            if (editFilePath) {
-              filePaths.push(editFilePath);
-            }
-          }
-        }
+      console.log(`[CLAUDE-CODE] PostToolUse hook: ${toolName} completed`, { toolUseID });
 
-        // Save snapshot for each edited file
-        for (let filePath of filePaths) {
-          // Make file path absolute if relative
-          if (!path.isAbsolute(filePath)) {
-            filePath = path.join(workspacePath, filePath);
-          }
+      // Small delay to ensure file system has flushed the write
+      // This gives chokidar time to detect the change and trigger diff update
+      // Increased from 50ms to 200ms to ensure file watcher can process each edit
+      await new Promise(resolve => setTimeout(resolve, 200));
 
-          // Read the new content that was just written
-          let newContent = '';
-          try {
-            newContent = fs.readFileSync(filePath, 'utf-8');
-          } catch (error) {
-            console.warn(`[CLAUDE-CODE] PostToolUse: Could not read file after edit:`, filePath);
-            continue;
-          }
-
-          // Save as 'ai-edit' snapshot in history
-          try {
-            const { historyManager } = await import('../../../../../electron/src/main/HistoryManager');
-            await historyManager.createSnapshot(
-              filePath,
-              newContent,
-              'ai-edit',
-              `AI edit via ${toolName} (session: ${sessionId || 'unknown'})`
-            );
-            console.log(`[CLAUDE-CODE] PostToolUse: Saved ai-edit snapshot for ${filePath}`);
-          } catch (importError) {
-            console.warn('[CLAUDE-CODE] PostToolUse: Could not import historyManager:', importError);
-          }
-        }
-
-      } catch (error) {
-        console.error('[CLAUDE-CODE] PostToolUse hook error:', error);
-      }
-
+      console.log(`[CLAUDE-CODE] PostToolUse hook: Delay complete, file watcher should have detected change`);
       return {};
     };
+  }
+
+  /**
+   * Create 'ai-edit' snapshots for all files edited during this turn
+   * Called at the end of the agent's turn, before yielding completion
+   */
+  private async createTurnEndSnapshots(workspacePath: string, sessionId?: string): Promise<void> {
+    const fs = require('fs');
+    const path = require('path');
+
+    console.log(`[CLAUDE-CODE] Creating turn-end snapshots for ${this.editedFilesThisTurn.size} files`);
+
+    for (const filePath of this.editedFilesThisTurn) {
+      try {
+        // Read the final content after all edits this turn
+        let finalContent = '';
+        try {
+          finalContent = fs.readFileSync(filePath, 'utf-8');
+        } catch (error) {
+          console.warn(`[CLAUDE-CODE] Turn-end snapshot: Could not read file:`, filePath);
+          continue;
+        }
+
+        // Save as 'ai-edit' snapshot in history
+        try {
+          const { historyManager } = await import('../../../../../electron/src/main/HistoryManager');
+          await historyManager.createSnapshot(
+            filePath,
+            finalContent,
+            'ai-edit',
+            `AI edit turn complete (session: ${sessionId || 'unknown'})`
+          );
+          console.log(`[CLAUDE-CODE] Turn-end snapshot created for ${filePath}`);
+        } catch (importError) {
+          console.warn('[CLAUDE-CODE] Could not import historyManager:', importError);
+        }
+      } catch (error) {
+        console.error(`[CLAUDE-CODE] Failed to create turn-end snapshot for ${filePath}:`, error);
+      }
+    }
   }
 
   private async findCliPath(): Promise<string> {

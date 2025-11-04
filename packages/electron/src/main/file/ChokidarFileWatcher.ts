@@ -81,8 +81,10 @@ export class ChokidarFileWatcher {
                     atomic: true,          // Handle atomic writes (vim-style saves)
                     usePolling: false,     // Use native fs.watch
                     awaitWriteFinish: {
-                        stabilityThreshold: 100,
-                        pollInterval: 50
+                        // Reduced from 100ms to 10ms to detect AI edits faster
+                        // AI edits are sequential, not atomic, so we want immediate detection
+                        stabilityThreshold: 10,
+                        pollInterval: 10
                     }
                 });
 

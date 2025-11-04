@@ -94,6 +94,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const instanceIdRef = useRef<number>(Math.floor(Math.random() * 10000));
   const hasInitialContentSyncRef = useRef<boolean>(false);
   const pendingAIEditTagRef = useRef<{tagId: string, filePath: string} | null>(null);
+  const isApplyingDiffRef = useRef<boolean>(false); // Track programmatic diff application
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -142,6 +143,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
           // If there are unsaved changes, show dialog
           if (isDirtyRef.current) {
+            console.log(`[TabEditor] TAB ACTIVATION: Showing background change dialog`);
             setBackgroundChangeContent(diskContent);
             setShowBackgroundChangeDialog(true);
           } else {
@@ -333,10 +335,32 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     setIsDirty(isContentDirty);
     lastChangeTimeRef.current = Date.now();
 
+    // CRITICAL: If user manually edits during diff mode, clear the pending tag
+    // This means they've modified the AI's changes, so it's no longer a "pure" AI diff
+    // and we should allow autosave to prevent data loss
+    // Only do this for ACTUAL user edits, not:
+    // - Programmatic diff application (isApplyingDiffRef)
+    // - Content changes from file watcher reloads
+    // The safest check: Only clear if user is actively typing (currentContent != lastChangeTimeRef content)
+    // For now, DISABLE this clearing entirely - let user approve/reject handle it
+    if (false && pendingAIEditTagRef.current && !isApplyingDiffRef.current) {
+      logger.ui.info(`[TabEditor] User edited during diff mode - clearing pending tag for ${fileName}`);
+      const tagInfo = pendingAIEditTagRef.current;
+      pendingAIEditTagRef.current = null;
+
+      // Mark the tag as reviewed since user has manually intervened
+      if (window.electronAPI?.history) {
+        window.electronAPI.history.updateTagStatus(tagInfo.filePath, tagInfo.tagId, 'reviewed')
+          .catch(error => {
+            logger.ui.error(`[TabEditor] Failed to mark tag as reviewed after user edit:`, error);
+          });
+      }
+    }
+
     // Notify parent
     onDirtyChange?.(isContentDirty);
     onContentChange?.();
-  }, [onDirtyChange, onContentChange]);
+  }, [fileName, onDirtyChange, onContentChange]);
 
 
   // Autosave timer
@@ -346,6 +370,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     const timer = setInterval(async () => {
       // Skip if not dirty
       if (!isDirtyRef.current) return;
+
+      // CRITICAL: Skip autosave if we're in diff mode showing AI edits
+      // The content is already on disk - autosaving the diff view would cause mismatches
+      if (pendingAIEditTagRef.current) {
+        logger.ui.info(`[TabEditor] Skipping autosave - diff mode active for ${fileName}`);
+        return;
+      }
 
       // Skip if not enough time has passed since last change (debounce)
       if (Date.now() - lastChangeTimeRef.current < autosaveDebounce) {
@@ -375,6 +406,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
     const timer = setInterval(async () => {
       if (!getContentFnRef.current) return;
+
+      // Skip periodic snapshots if we're in diff mode
+      if (pendingAIEditTagRef.current) {
+        logger.ui.info(`[TabEditor] Skipping periodic snapshot - diff mode active for ${fileName}`);
+        return;
+      }
 
       try {
         const currentContent = getContentFnRef.current();
@@ -442,8 +479,17 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
           await new Promise(resolve => setTimeout(resolve, 100));
 
-          const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
-          editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+          // Mark that we're applying a diff programmatically (not a user edit)
+          isApplyingDiffRef.current = true;
+          try {
+            const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
+            editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+          } finally {
+            // Reset flag after a small delay to ensure content change handler has run
+            setTimeout(() => {
+              isApplyingDiffRef.current = false;
+            }, 100);
+          }
 
           // Store tag info for approval
           pendingAIEditTagRef.current = {
@@ -574,9 +620,18 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   // Wait a tick for the editor to update
                   await new Promise(resolve => setTimeout(resolve, 100));
 
-                  const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
-                  editorToUpdate.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
-                  console.log(`[TabEditor] Updated diff with new edits`);
+                  // Mark that we're applying a diff programmatically (not a user edit)
+                  isApplyingDiffRef.current = true;
+                  try {
+                    const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
+                    editorToUpdate.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+                    console.log(`[TabEditor] Updated diff with new edits`);
+                  } finally {
+                    // Reset flag after a small delay to ensure content change handler has run
+                    setTimeout(() => {
+                      isApplyingDiffRef.current = false;
+                    }, 100);
+                  }
                 } catch (error) {
                   logger.ui.error(`[TabEditor] Failed to update diff:`, error);
                 }
@@ -612,9 +667,18 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 // Wait a tick for the editor to update
                 await new Promise(resolve => setTimeout(resolve, 100));
 
-                const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
-                editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
-                console.log(`[TabEditor] Dispatched APPLY_MARKDOWN_REPLACE_COMMAND`);
+                // Mark that we're applying a diff programmatically (not a user edit)
+                isApplyingDiffRef.current = true;
+                try {
+                  const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
+                  editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+                  console.log(`[TabEditor] Dispatched APPLY_MARKDOWN_REPLACE_COMMAND`);
+                } finally {
+                  // Reset flag after a small delay to ensure content change handler has run
+                  setTimeout(() => {
+                    isApplyingDiffRef.current = false;
+                  }, 100);
+                }
 
                 // Store tag info so we can mark it as reviewed when user approves
                 pendingAIEditTagRef.current = {
@@ -642,52 +706,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         const applyReload = async () => {
           // No pending tags - handle as normal file change
           if (false) {  // This block is now dead code - will be cleaned up
-            // AI edit detected - apply diff mode in the editor
-            logger.ui.info(`[TabEditor] AI edit pending for ${fileName}, applying diff mode`);
-            console.log(`[TabEditor] AI edit pending - tagged content length: ${pendingTags[0].content.length}, new content length: ${newContent.length}`);
-
-            // FIRST: Load the tagged (old) content into the editor
-            const oldContent = pendingTags[0].content;
-            setContent(oldContent);
-            contentRef.current = oldContent;
-
-            // Update editor with old content
-            if (editorRef.current) {
-              try {
-                const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-                const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
-                const transformers = getEditorTransformers();
-
-                editorRef.current.update(() => {
-                  const root = $getRoot();
-                  root.clear();
-                  $convertFromEnhancedMarkdownString(oldContent, transformers);
-                }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
-
-                // THEN: Apply the diff replacement
-                const replacements: TextReplacement[] = [{
-                  oldText: oldContent,
-                  newText: newContent
-                }];
-
-                // Wait a tick for the editor to update
-                await new Promise(resolve => setTimeout(resolve, 100));
-
-                const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
-                editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
-                console.log(`[TabEditor] Dispatched APPLY_MARKDOWN_REPLACE_COMMAND`);
-
-                // Store tag info so we can mark it as reviewed when user approves
-                pendingAIEditTagRef.current = {
-                  tagId: pendingTags[0].id,
-                  filePath: data.path
-                };
-              } catch (error) {
-                logger.ui.error(`[TabEditor] Failed to apply AI diff:`, error);
-              }
-            }
-
-            // Don't reset the flag here - it will be reset in the finally block
+            // Dead code placeholder - can be removed in cleanup
             return;
           }
 
@@ -736,8 +755,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         };
 
         // Protect dirty files from being overwritten
-        if (isDirtyRef.current) {
+        // BUT: Skip this check if there's a pending AI edit tag - the diff mode handles it
+        if (isDirtyRef.current && (!pendingTags || pendingTags.length === 0)) {
           // Store the new content and show dialog
+          console.log(`[TabEditor] FILE WATCHER: Showing conflict dialog (isDirty=${isDirtyRef.current}, pendingTags=${pendingTags.length})`);
           setConflictDialogContent(newContent);
           setShowConflictDialog(true);
           // Don't reset flag yet - let finally block handle it

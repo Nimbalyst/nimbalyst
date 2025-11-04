@@ -7,12 +7,22 @@ export function buildSystemPrompt(documentContext?: DocumentContext): string {
   });
   const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
+  // Check if this is an agentic coding session (no specific document context)
+  const sessionType = (documentContext as any)?.sessionType;
   const hasDocument = !!(documentContext && (documentContext.filePath || documentContext.content));
 
   let base = `Current date and time: ${dateStr} at ${timeStr}
 
 You are an AI assistant integrated into the Nimbalyst editor, a markdown-focused text editor.
 When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
+
+  // In agentic coding mode, there's no specific document - agent works across codebase
+  if (sessionType === 'coding') {
+    return base + `
+
+You are working in agentic coding mode with access to the entire workspace.
+You can read, edit, and create files as needed to complete tasks.`;
+  }
 
   if (!hasDocument) {
     return base + `
@@ -35,12 +45,20 @@ You can still answer questions, provide information, and have general conversati
 
   return base + `
 
-Current document context:
-- File: ${documentContext?.filePath || 'untitled'}
-- Type: ${documentContext?.fileType || 'markdown'}
-${(documentContext as any)?.cursorPosition ? `- Cursor position: Line ${(documentContext as any).cursorPosition.line}, Column ${(documentContext as any).cursorPosition.column}` : ''}
-${selectionPreview ? `- Selected text: "${selectionPreview}"` : ''}
-${documentContext?.content ? `- Full document content:\n${documentContext.content}` : ''}
+═══════════════════════════════════════════════════════════
+🎯 ACTIVE DOCUMENT (the file the user is asking you to edit):
+═══════════════════════════════════════════════════════════
+File path: ${documentContext?.filePath || 'untitled'}
+File type: ${documentContext?.fileType || 'markdown'}
+${(documentContext as any)?.cursorPosition ? `Cursor position: Line ${(documentContext as any).cursorPosition.line}, Column ${(documentContext as any).cursorPosition.column}` : ''}
+${selectionPreview ? `Selected text: "${selectionPreview}"` : ''}
+
+**IMPORTANT**: When the user says "this file", "this document", "here", or "clean up",
+they are referring to THIS file above (${documentContext?.filePath || 'untitled'}),
+NOT any other files mentioned in project instructions or context.
+
+${documentContext?.content ? `Full content of the active document:\n\`\`\`\n${documentContext.content}\n\`\`\`\n` : ''}
+═══════════════════════════════════════════════════════════
 
 You can edit this markdown file using your native Edit and Write tools.
 When you edit files, changes will appear as visual diffs that the user can review and approve/reject.
@@ -179,7 +197,17 @@ You can still answer questions, provide information, and have general conversati
 
   return base + `
 
-Current document: ${documentContext?.filePath || 'untitled'}
+═══════════════════════════════════════════════════════════
+🎯 ACTIVE DOCUMENT (the file the user is asking you to edit):
+═══════════════════════════════════════════════════════════
+File path: ${documentContext?.filePath || 'untitled'}
+${(documentContext as any)?.cursorPosition ? `Cursor position: Line ${(documentContext as any).cursorPosition.line}, Column ${(documentContext as any).cursorPosition.column}` : ''}
+${selectionPreview ? `Selected text: "${selectionPreview}"` : ''}
+
+**IMPORTANT**: When the user says "this file", "this document", "here", or "clean up",
+they are referring to THIS file above (${documentContext?.filePath || 'untitled'}),
+NOT any other files mentioned in project instructions (like CLAUDE.md) or context.
+═══════════════════════════════════════════════════════════
 
 You can edit this markdown file using your native Edit and Write tools.
 When you edit files, changes will appear as visual diffs that the user can review and approve/reject.
