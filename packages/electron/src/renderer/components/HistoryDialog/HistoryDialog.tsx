@@ -26,6 +26,8 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
   const [compactView, setCompactView] = useState(true);
   const [versionAContent, setVersionAContent] = useState<string>('');
   const [versionBContent, setVersionBContent] = useState<string>('');
+  const [versionAMeta, setVersionAMeta] = useState<{ type: string; timestamp: string } | null>(null);
+  const [versionBMeta, setVersionBMeta] = useState<{ type: string; timestamp: string } | null>(null);
   const [navigationState, setNavigationState] = useState<DiffNavigationState | TextDiffNavigationState | null>(null);
 
   const displayedSnapshots = useMemo(() => {
@@ -91,6 +93,8 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
       setDiffViewMode('rich');
       setVersionAContent('');
       setVersionBContent('');
+      setVersionAMeta(null);
+      setVersionBMeta(null);
     }
   }, [isOpen]);
 
@@ -121,19 +125,16 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
       setSelectedVersions(newSelections);
       setDiffMode(false);
 
-      // If we still have one selection, show its preview
+      // If we still have one selection, load diff with previous version
       if (newSelections.length === 1) {
-        setLoadingPreview(true);
-        try {
-          const content = await loadSnapshot(newSelections[0].timestamp);
-          if (content) {
-            setPreviewContent(content);
-          }
-        } catch (error) {
-          console.error('Failed to load snapshot:', error);
-          setPreviewContent('Failed to load snapshot');
-        } finally {
-          setLoadingPreview(false);
+        const clickedSnapshot = displayedSnapshots.find(s => s.timestamp === newSelections[0].timestamp);
+        const clickedIndex = displayedSnapshots.findIndex(s => s.timestamp === newSelections[0].timestamp);
+        const previousSnapshot = displayedSnapshots[clickedIndex + 1];
+
+        if (clickedSnapshot && previousSnapshot) {
+          await loadDiffMode(previousSnapshot.timestamp, clickedSnapshot.timestamp);
+        } else {
+          setPreviewContent('');
         }
       } else {
         setPreviewContent('');
@@ -141,12 +142,36 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
       return;
     }
 
-    // If not a command-click and we have selections, replace with this one
-    if (!isCommandClick && selectedVersions.length > 0) {
-      setSelectedVersions([{ timestamp, label: 'A' }]);
-      setDiffMode(false);
+    // Command-click: add to selection for manual diff
+    if (isCommandClick) {
+      if (selectedVersions.length < 2) {
+        const label: 'A' | 'B' = selectedVersions.length === 0 ? 'A' : 'B';
+        const newSelections = [...selectedVersions, { timestamp, label }];
+        setSelectedVersions(newSelections);
 
-      // Load preview for the new single selection
+        if (newSelections.length === 2) {
+          // Two selections - load both and enter diff mode
+          const [versionA, versionB] = newSelections;
+          await loadDiffMode(versionA.timestamp, versionB.timestamp);
+        }
+      }
+      return;
+    }
+
+    // Regular click: ALWAYS reset to single selection and show diff with previous version
+    // This ensures that even if you had command-clicked before, a regular click
+    // switches back to the default "diff with previous" behavior
+    const clickedSnapshot = displayedSnapshots.find(s => s.timestamp === timestamp);
+    const clickedIndex = displayedSnapshots.findIndex(s => s.timestamp === timestamp);
+    const previousSnapshot = displayedSnapshots[clickedIndex + 1];
+
+    setSelectedVersions([{ timestamp, label: 'A' }]);
+
+    if (clickedSnapshot && previousSnapshot) {
+      await loadDiffMode(previousSnapshot.timestamp, clickedSnapshot.timestamp);
+    } else {
+      // No previous version - just show the content
+      setDiffMode(false);
       setLoadingPreview(true);
       try {
         const content = await loadSnapshot(timestamp);
@@ -159,66 +184,45 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
       } finally {
         setLoadingPreview(false);
       }
-      return;
     }
+  };
 
-    // Add new selection (command-click or first selection)
-    if (selectedVersions.length < 2) {
-      const label: 'A' | 'B' = selectedVersions.length === 0 ? 'A' : 'B';
-      const newSelections = [...selectedVersions, { timestamp, label }];
-      setSelectedVersions(newSelections);
+  const loadDiffMode = async (olderTimestamp: string, newerTimestamp: string) => {
+    setLoadingPreview(true);
+    try {
+      // Determine which is older (A should be older)
+      const indexOlder = snapshots.findIndex(s => s.timestamp === olderTimestamp);
+      const indexNewer = snapshots.findIndex(s => s.timestamp === newerTimestamp);
 
-      if (newSelections.length === 1) {
-        // Single selection - show normal preview
-        setLoadingPreview(true);
-        try {
-          const content = await loadSnapshot(timestamp);
-          if (content) {
-            setPreviewContent(content);
-          }
-        } catch (error) {
-          console.error('Failed to load snapshot:', error);
-          setPreviewContent('Failed to load snapshot');
-        } finally {
-          setLoadingPreview(false);
-        }
-      } else if (newSelections.length === 2) {
-        // Two selections - load both and enter diff mode
-        setLoadingPreview(true);
-        try {
-          const [versionA, versionB] = newSelections;
+      let actualOlderTimestamp = olderTimestamp;
+      let actualNewerTimestamp = newerTimestamp;
 
-          // Determine which is older (A should be older)
-          const indexA = snapshots.findIndex(s => s.timestamp === versionA.timestamp);
-          const indexB = snapshots.findIndex(s => s.timestamp === versionB.timestamp);
-
-          let olderVersion = versionA;
-          let newerVersion = versionB;
-
-          // In the snapshots list, newer versions come first (index 0 is newest)
-          // So higher index means older
-          if (indexA < indexB) {
-            olderVersion = versionB;
-            newerVersion = versionA;
-          }
-
-          const [contentA, contentB] = await Promise.all([
-            loadSnapshot(olderVersion.timestamp),
-            loadSnapshot(newerVersion.timestamp),
-          ]);
-
-          if (contentA && contentB) {
-            setVersionAContent(contentA);
-            setVersionBContent(contentB);
-            setDiffMode(true);
-            // Keep loading overlay visible longer to allow DiffPreviewEditor to render
-            setTimeout(() => setLoadingPreview(false), 1200);
-          }
-        } catch (error) {
-          console.error('Failed to load snapshots for diff:', error);
-          setLoadingPreview(false);
-        }
+      // In the snapshots list, newer versions come first (index 0 is newest)
+      // So higher index means older
+      if (indexOlder < indexNewer) {
+        actualOlderTimestamp = newerTimestamp;
+        actualNewerTimestamp = olderTimestamp;
       }
+
+      const snapshotA = snapshots.find(s => s.timestamp === actualOlderTimestamp);
+      const snapshotB = snapshots.find(s => s.timestamp === actualNewerTimestamp);
+
+      const [contentA, contentB] = await Promise.all([
+        loadSnapshot(actualOlderTimestamp),
+        loadSnapshot(actualNewerTimestamp),
+      ]);
+
+      if (contentA && contentB && snapshotA && snapshotB) {
+        setVersionAContent(contentA);
+        setVersionBContent(contentB);
+        setVersionAMeta({ type: snapshotA.type, timestamp: snapshotA.timestamp });
+        setVersionBMeta({ type: snapshotB.type, timestamp: snapshotB.timestamp });
+        setDiffMode(true);
+        setLoadingPreview(false);
+      }
+    } catch (error) {
+      console.error('Failed to load snapshots for diff:', error);
+      setLoadingPreview(false);
     }
   };
 
@@ -256,27 +260,39 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
-    
+
     // Less than 1 hour
     if (diff < 3600000) {
       const minutes = Math.floor(diff / 60000);
       return `${minutes} minute${minutes !== 1 ? 's' : ''} ago`;
     }
-    
+
     // Less than 24 hours
     if (diff < 86400000) {
       const hours = Math.floor(diff / 3600000);
       return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
     }
-    
+
     // Less than 7 days
     if (diff < 604800000) {
       const days = Math.floor(diff / 86400000);
       return `${days} day${days !== 1 ? 's' : ''} ago`;
     }
-    
+
     // Show full date
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+  };
+
+  const formatVersionLabel = (type: string, timestamp: string) => {
+    const typeLabel = type === 'ai-diff' ? 'AI Edit'
+      : type === 'pre-apply' ? 'Pre-edit'
+      : type === 'manual' ? 'Manual Save'
+      : type === 'auto-save' ? 'Auto-save'
+      : type === 'external-change' ? 'External Change'
+      : type;
+
+    const timeLabel = formatTimestamp(timestamp);
+    return `${typeLabel} ${timeLabel}`;
   };
 
   const getSnapshotIcon = (type: string) => {
@@ -402,6 +418,17 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
             <div className="history-preview-header">
               <div className="history-preview-header-left">
                 <h3>{diffMode ? 'Diff Preview' : 'Preview'}</h3>
+                {diffMode && versionAMeta && versionBMeta && (
+                  <div className="diff-version-labels">
+                    <span className="diff-version-label diff-version-old">
+                      {formatVersionLabel(versionAMeta.type, versionAMeta.timestamp)}
+                    </span>
+                    <span className="diff-version-separator">vs</span>
+                    <span className="diff-version-label diff-version-new">
+                      {formatVersionLabel(versionBMeta.type, versionBMeta.timestamp)}
+                    </span>
+                  </div>
+                )}
                 {diffMode && (
                   <>
                     <div className="diff-mode-toggle">
@@ -469,6 +496,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
               <div className="history-preview-content">
                 {diffViewMode === 'rich' ? (
                   <DiffPreviewEditor
+                    key={`${versionAMeta?.timestamp}-${versionBMeta?.timestamp}`}
                     oldMarkdown={versionAContent}
                     newMarkdown={versionBContent}
                     onNavigationStateChange={handleNavigationStateChange}
@@ -477,6 +505,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
                   />
                 ) : (
                   <TextDiffViewer
+                    key={`${versionAMeta?.timestamp}-${versionBMeta?.timestamp}`}
                     oldText={versionAContent}
                     newText={versionBContent}
                     onNavigationStateChange={handleNavigationStateChange}
@@ -491,10 +520,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
               </div>
             ) : (
               <div className="history-preview-empty">
-                {selectedVersions.length === 0
-                  ? 'Select a snapshot to preview, or Cmd+Click a second snapshot to compare'
-                  : 'Cmd+Click another snapshot to see diff comparison'
-                }
+                Select a snapshot to see diff with previous version, or Cmd+Click two snapshots to compare any versions
               </div>
             )}
 

@@ -328,6 +328,7 @@
   min-width: 0;
   flex: 1;
   overflow: hidden;
+  flex-wrap: wrap;
 }
 
 .history-preview-header h3 {
@@ -337,6 +338,34 @@
   color: var(--text-secondary, #6b7280);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.diff-version-labels {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary, #6b7280);
+}
+
+.diff-version-label {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--surface-tertiary, #f3f4f6);
+  font-weight: 500;
+}
+
+.diff-version-old {
+  color: var(--text-error, #dc2626);
+}
+
+.diff-version-new {
+  color: var(--text-success, #059669);
+}
+
+.diff-version-separator {
+  font-weight: 600;
+  color: var(--text-tertiary, #9ca3af);
 }
 
 .diff-mode-toggle {
