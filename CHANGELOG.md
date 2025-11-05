@@ -19,6 +19,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.4] - 2025-11-05
+
+
+### Added
+- TreeViewPlugin now displays diff state information for debugging
+
+### Changed
+- Markdown import/export preserves newlines and spacing more consistently
+- LiveNodeKeyState setup is now automated in diff operations
+- Reduced debug logging noise in DiffPlugin, SlashCommandService, and markdown import
+
+### Fixed
+- History dialog diff preview now displays changes correctly
+- Multi-section diff operations no longer create extra blank lines
+- Claude Code login/logout workflow improved
+- Window close behavior on macOS (removed darwin-specific check)
+
 ## [0.45.3] - 2025-11-04
 
 
