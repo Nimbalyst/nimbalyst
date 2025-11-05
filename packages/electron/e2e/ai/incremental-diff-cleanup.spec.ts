@@ -272,3 +272,67 @@ test('should handle mixed accept/reject incrementally', async () => {
   expect(finalContent).toContain('This is the second section with different content.'); // Original (rejected)
   expect(finalContent).toContain('ACCEPT this too');
 });
+
+test('should save partial acceptances correctly with rejections', async () => {
+  // Apply a multi-section diff with distinct content
+  const result = await simulateApplyDiff(page, testFilePath, [
+    { oldText: 'This is the first section with some content.', newText: 'FIRST ACCEPTED.' },
+    { oldText: 'This is the second section with different content.', newText: 'SECOND REJECTED.' },
+    { oldText: 'This is the third section with more content.', newText: 'THIRD ACCEPTED.' }
+  ]);
+
+  expect(result.success).toBe(true);
+
+  // Wait for diff approval bar
+  await page.waitForSelector('.diff-approval-bar', { timeout: 2000 });
+
+  // Verify we have 3 change groups
+  let changeCounter = await page.locator('.diff-change-counter').textContent();
+  expect(changeCounter).toContain('3');
+
+  // Navigate to first group to select it
+  const nextButton = page.locator('.diff-nav-button').last();
+  await nextButton.click();
+  await page.waitForTimeout(200);
+
+  // Accept the first change
+  const acceptButton = page.locator('button:has-text("Accept")').first();
+  await acceptButton.click();
+  await page.waitForTimeout(200);
+
+  // Verify we still have 2 changes remaining (tag should NOT be cleared)
+  changeCounter = await page.locator('.diff-change-counter').textContent();
+  expect(changeCounter).toContain('2');
+  await expect(page.locator('.diff-approval-bar')).toBeVisible();
+
+  // Reject the second change
+  const rejectButton = page.locator('button:has-text("Reject")').first();
+  await rejectButton.click();
+  await page.waitForTimeout(200);
+
+  // Verify we still have 1 change remaining (tag should NOT be cleared)
+  changeCounter = await page.locator('.diff-change-counter').textContent();
+  expect(changeCounter).toContain('1');
+  await expect(page.locator('.diff-approval-bar')).toBeVisible();
+
+  // Accept the third and final change
+  await acceptButton.click();
+  await page.waitForTimeout(500);
+
+  // Verify diff mode exited (tag is NOW cleared)
+  await expect(page.locator('.diff-approval-bar')).toHaveCount(0);
+
+  // Save to ensure everything is flushed
+  await manualSaveDocument(page);
+  await waitForSave(page, 'test.md');
+
+  // Verify the final content on disk reflects our decisions:
+  // - First change: ACCEPTED
+  // - Second change: REJECTED (should have original text)
+  // - Third change: ACCEPTED
+  const finalContent = await fs.readFile(testFilePath, 'utf8');
+  expect(finalContent).toContain('FIRST ACCEPTED');
+  expect(finalContent).toContain('This is the second section with different content.'); // Original (rejected)
+  expect(finalContent).not.toContain('SECOND REJECTED');
+  expect(finalContent).toContain('THIRD ACCEPTED');
+});
