@@ -442,3 +442,4 @@ Defensive coding that masks failures is worse than crashing:
 - Better to throw "missing workspacePath" than to guess
 
 **Rule of thumb:** If you're adding code to "handle" missing required data, you're probably hiding a bug. Throw instead.
+- nimbalyst always preserves newlines and spacing in markdown
