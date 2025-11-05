@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { $getRoot, $setState } from 'lexical';
+import { $getRoot } from 'lexical';
 import {
   $convertFromEnhancedMarkdownString,
   $convertToEnhancedMarkdownString,
@@ -11,7 +11,6 @@ import {
 } from '../../../../markdown';
 import { applyMarkdownReplace } from '../../core/diffUtils';
 import { createTestHeadlessEditor } from '../utils/testConfig';
-import { LiveNodeKeyState } from "../../../DiffPlugin/core/DiffState.ts";
 
 describe('Mixed operations test', () => {
   it('should handle adds, removes, and edits in the same document', () => {
@@ -89,17 +88,8 @@ Thank you for reading this comprehensive guide. We hope it was helpful!
       { discrete: true }
     );
 
-    // Set LiveNodeKeyState
-    editor.update(() => {
-      const root = $getRoot();
-      const children = root.getChildren();
-      for (const child of children) {
-        const key = child.getKey();
-        $setState(child, LiveNodeKeyState, key);
-      }
-    }, { discrete: true });
-
     // Apply the diff (single replacement of entire document)
+    // LiveNodeKeyState is set automatically by applyMarkdownReplace via parallel traversal
     editor.update(
       () => {
         const original = $convertToEnhancedMarkdownString(transformers);

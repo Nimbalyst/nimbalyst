@@ -698,59 +698,62 @@ export function applyMarkdownDiffToDocument(
       throw new Error('Editor must have nodes configured');
     }
 
-    // CRITICAL: Verify LiveNodeKeyState is set - caller must do this BEFORE calling this function
-    let hasLiveNodeKeys = false;
-    let nodeCount = 0;
-    editor.getEditorState().read(() => {
-      const root = $getRoot();
-      const children = root.getChildren();
-      nodeCount = children.length;
-      if (children.length > 0) {
-        const firstChild = children[0];
-        const liveKey = $getState(firstChild, LiveNodeKeyState);
-        hasLiveNodeKeys = liveKey !== null && liveKey !== undefined;
-        console.log(`[applyMarkdownReplace] Checking LiveNodeKeyState: nodeCount=${nodeCount}, firstChild type=${firstChild.getType()}, liveKey=${liveKey}`);
-      }
-    });
-
-    if (!hasLiveNodeKeys) {
-      console.error(`[applyMarkdownReplace] LiveNodeKeyState validation FAILED! nodeCount=${nodeCount}`);
-      throw new Error(
-        'LiveNodeKeyState not set! Caller must set it in a SEPARATE discrete editor.update() BEFORE calling applyMarkdownReplace. ' +
-        `Checked ${nodeCount} nodes.`
-      );
-    }
-
-    // Get LIVE editor state as JSON (LiveNodeKeyState should already be set)
+    // Clone LIVE editor state to create SOURCE editor
     const liveState = editor.getEditorState().toJSON();
-    console.log(`[DEBUG] LIVE state has ${liveState.root.children.length} children`);
-    if (liveState.root.children[0]) {
-      console.log(`[DEBUG] First child has $ key: ${'$' in liveState.root.children[0]}`);
-      if ('$' in liveState.root.children[0]) {
-        console.log(`[DEBUG] $ value:`, (liveState.root.children[0] as any).$);
-      }
-    }
 
     const sourceEditor = createHeadlessEditor({
       nodes: editor._createEditorArgs.nodes,
       theme: editor._config.theme,
     });
 
-    // Load the state after creating the editor
+    // Load the cloned state into SOURCE editor
     sourceEditor.setEditorState(sourceEditor.parseEditorState(liveState));
 
-    // DEBUG: Check if NodeState survived the clone
-    console.log('[DEBUG] Checking if NodeState survived clone to SOURCE editor:');
-    sourceEditor.getEditorState().read(() => {
-      const root = $getRoot();
-      const children = root.getChildren();
-      console.log(`  SOURCE has ${children.length} children`);
-      const firstChild = children[0];
-      if (firstChild) {
-        const liveKey = $getState(firstChild, LiveNodeKeyState);
-        console.log(`  First child key=${firstChild.getKey()}, LiveNodeKeyState=${liveKey}`);
-      }
+    // AUTOMATIC: Set LiveNodeKeyState on SOURCE nodes via parallel traversal
+    // This walks both LIVE and SOURCE trees in parallel and sets each SOURCE node's
+    // LiveNodeKeyState to point back to its corresponding LIVE node key.
+
+    // First, collect all LIVE node keys in order
+    const liveNodeKeys: string[] = [];
+    editor.getEditorState().read(() => {
+      const liveRoot = $getRoot();
+
+      const collectKeys = (node: LexicalNode) => {
+        liveNodeKeys.push(node.getKey());
+        if ($isElementNode(node)) {
+          for (const child of node.getChildren()) {
+            collectKeys(child);
+          }
+        }
+      };
+
+      collectKeys(liveRoot);
     });
+
+    // Then, set those keys on the SOURCE nodes in parallel order
+    let keysSet = 0;
+    sourceEditor.update(() => {
+      const sourceRoot = $getRoot();
+      let keyIndex = 0;
+
+      const setKeys = (node: LexicalNode) => {
+        if (keyIndex < liveNodeKeys.length) {
+          $setState(node, LiveNodeKeyState, liveNodeKeys[keyIndex]);
+          keyIndex++;
+          keysSet++;
+        }
+
+        if ($isElementNode(node)) {
+          for (const child of node.getChildren()) {
+            setKeys(child);
+          }
+        }
+      };
+
+      setKeys(sourceRoot);
+    }, { discrete: true });
+
+    console.log(`[applyMarkdownReplace] Automatically set LiveNodeKeyState on ${keysSet} SOURCE nodes via parallel traversal`);
 
     const targetEditor = createHeadlessEditor({
       nodes: editor._createEditorArgs.nodes,

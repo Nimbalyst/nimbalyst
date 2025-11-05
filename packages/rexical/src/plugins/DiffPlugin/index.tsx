@@ -203,10 +203,8 @@ export function DiffPlugin(): JSX.Element | null {
           // Get transformers including both core and plugin transformers
           const transformers = getEditorTransformers();
 
-          // NOTE: LiveNodeKeyState should be set by CALLER before dispatching this command
-          // Command handlers run inside an update context, so we can't set it here
-
           // Get current markdown content
+          // NOTE: LiveNodeKeyState is set automatically by applyMarkdownReplace via parallel traversal
           const currentMarkdown = editor.getEditorState().read(() => {
             return $convertToEnhancedMarkdownString(transformers);
           });
