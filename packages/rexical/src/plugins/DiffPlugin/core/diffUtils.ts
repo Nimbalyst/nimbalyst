@@ -545,11 +545,11 @@ export function applyMarkdownDiff(
   markdownDiff: string,
   transformers: Array<Transformer>,
 ): void {
-  console.log('\n🔍 STARTING MARKDOWN DIFF APPLICATION...');
-  console.log('Diff to apply:', markdownDiff.substring(0, 200) + '...');
+  // console.log('\n🔍 STARTING MARKDOWN DIFF APPLICATION...');
+  // console.log('Diff to apply:', markdownDiff.substring(0, 200) + '...');
 
   if (!markdownDiff.trim()) {
-    console.log('Empty diff, nothing to apply');
+    // console.log('Empty diff, nothing to apply');
     return;
   }
 
@@ -753,7 +753,7 @@ export function applyMarkdownDiffToDocument(
       setKeys(sourceRoot);
     }, { discrete: true });
 
-    console.log(`[applyMarkdownReplace] Automatically set LiveNodeKeyState on ${keysSet} SOURCE nodes via parallel traversal`);
+    // console.log(`[applyMarkdownReplace] Automatically set LiveNodeKeyState on ${keysSet} SOURCE nodes via parallel traversal`);
 
     const targetEditor = createHeadlessEditor({
       nodes: editor._createEditorArgs.nodes,
@@ -778,16 +778,16 @@ export function applyMarkdownDiffToDocument(
       );
 
       // DEBUG: Show what target editor contains
-      targetEditor.getEditorState().read(() => {
-        const root = $getRoot();
-        const children = root.getChildren();
-        console.log(`[diffUtils] TARGET editor has ${children.length} children after parsing markdown:`);
-        children.forEach((child, idx) => {
-          if (idx >= 0 && idx <= 20) {
-            console.log(`  [${idx}] ${child.getType()} "${child.getTextContent().substring(0, 30)}"`);
-          }
-        });
-      });
+      // targetEditor.getEditorState().read(() => {
+      //   const root = $getRoot();
+      //   const children = root.getChildren();
+      //   console.log(`[diffUtils] TARGET editor has ${children.length} children after parsing markdown:`);
+      //   children.forEach((child, idx) => {
+      //     if (idx >= 0 && idx <= 20) {
+      //       console.log(`  [${idx}] ${child.getType()} "${child.getTextContent().substring(0, 30)}"`);
+      //     }
+      //   });
+      // });
 
       // Get serialized states for diffing (unused but kept for potential future use)
       // sourceEditor.getEditorState().toJSON();
@@ -822,10 +822,10 @@ export function applyMarkdownDiffToDocument(
       const root = $getRoot();
       const children = root.getChildren();
       children.forEach((child) => {
-        if (child.getType() === 'table') {
-          console.log('🔍 LIVE: Converting table node to markdown for lookup map');
-          console.log('  Table node key:', child.getKey());
-        }
+        // if (child.getType() === 'table') {
+        //   console.log('🔍 LIVE: Converting table node to markdown for lookup map');
+        //   console.log('  Table node key:', child.getKey());
+        // }
         let markdown = '';
         try {
           markdown = $convertNodeToEnhancedMarkdownString(
@@ -836,9 +836,9 @@ export function applyMarkdownDiffToDocument(
           console.error('  Error converting live node to markdown:', error);
           markdown = child.getTextContent().trim();
         }
-        if (child.getType() === 'table') {
-          console.log('  Live table markdown:', markdown);
-        }
+        // if (child.getType() === 'table') {
+        //   console.log('  Live table markdown:', markdown);
+        // }
         liveNodesByMarkdown.set(markdown, child.getKey());
       });
     });
@@ -848,35 +848,35 @@ export function applyMarkdownDiffToDocument(
       editor.update(
         () => {
           // DEBUG: Log initial live tree state
-          const initialChildren = $getRoot().getChildren();
-          console.log(`\n[DIFF APPLICATION] Starting with ${initialChildren.length} children in live tree:`);
-          initialChildren.forEach((child, i) => {
-            console.log(`  [${i}] ${child.getType().padEnd(12)} "${child.getTextContent().substring(0, 30)}"`);
-          });
-          console.log('');
+          // const initialChildren = $getRoot().getChildren();
+          // console.log(`\n[DIFF APPLICATION] Starting with ${initialChildren.length} children in live tree:`);
+          // initialChildren.forEach((child, i) => {
+          //   console.log(`  [${i}] ${child.getType().padEnd(12)} "${child.getTextContent().substring(0, 30)}"`);
+          // });
+          // console.log('');
 
           // Separate diffs by type for proper processing order
           const removes = rootMatchResult.sequence.filter(d => d.changeType === 'remove');
           const updates = rootMatchResult.sequence.filter(d => d.changeType === 'update');
           const adds = rootMatchResult.sequence.filter(d => d.changeType === 'add');
 
-          console.log(`[DIFF APPLICATION] Processing ${rootMatchResult.sequence.length} diffs:`);
-          console.log(`  ${removes.length} removes, ${updates.length} updates, ${adds.length} adds`);
+          // console.log(`[DIFF APPLICATION] Processing ${rootMatchResult.sequence.length} diffs:`);
+          // console.log(`  ${removes.length} removes, ${updates.length} updates, ${adds.length} adds`);
 
           // Process REMOVEs in reverse order to avoid index shifting
-          console.log('  Processing REMOVEs in reverse order...');
+          // console.log('  Processing REMOVEs in reverse order...');
           for (const diff of [...removes].reverse()) {
             $applyNodeDiff(editor, diff, transformers, liveNodesByMarkdown, sourceEditor, targetEditor, treeMatcher);
           }
 
           // Process UPDATEs (order doesn't matter, they use live keys)
-          console.log('  Processing UPDATEs...');
+          // console.log('  Processing UPDATEs...');
           for (const diff of updates) {
             $applyNodeDiff(editor, diff, transformers, liveNodesByMarkdown, sourceEditor, targetEditor, treeMatcher);
           }
 
           // Process ADDs - group by sourceIndex, sort each group by targetIndex ascending
-          console.log('  Processing ADDs in targetIndex order within each sourceIndex group...');
+          // console.log('  Processing ADDs in targetIndex order within each sourceIndex group...');
           const addsBySourceIndex = new Map<number, NodeDiff[]>();
           for (const add of adds) {
             if (!addsBySourceIndex.has(add.sourceIndex)) {
@@ -888,7 +888,7 @@ export function applyMarkdownDiffToDocument(
           // Sort each group by targetIndex and apply
           for (const [sourceIdx, group] of addsBySourceIndex.entries()) {
             const sorted = group.sort((a, b) => a.targetIndex - b.targetIndex);
-            console.log(`    sourceIndex=${sourceIdx}: processing ${sorted.length} adds in targetIndex order`);
+            // console.log(`    sourceIndex=${sourceIdx}: processing ${sorted.length} adds in targetIndex order`);
             for (const diff of sorted) {
               $applyNodeDiff(editor, diff, transformers, liveNodesByMarkdown, sourceEditor, targetEditor, treeMatcher);
             }
@@ -1085,9 +1085,9 @@ export function $applyNodeDiff(
         );
       }
 
-      const sourceText = diff.sourceMarkdown?.substring(0, 30);
-      const targetText = diff.targetMarkdown?.substring(0, 30);
-      console.log(`[UPDATE] liveKey=${liveNodeKey}, source="${sourceText}", target="${targetText}"`);
+      // const sourceText = diff.sourceMarkdown?.substring(0, 30);
+      // const targetText = diff.targetMarkdown?.substring(0, 30);
+      // console.log(`[UPDATE] liveKey=${liveNodeKey}, source="${sourceText}", target="${targetText}"`);
 
       const liveNode = $getNodeByKey(liveNodeKey);
       if (!liveNode || !$isElementNode(liveNode)) {
@@ -1096,14 +1096,14 @@ export function $applyNodeDiff(
       }
 
       // Debug: show what we found
-      const currentText = liveNode.getTextContent().substring(0, 30);
-      console.log(`  Found node: text="${currentText}", type=${liveNode.getType()}`);
+      // const currentText = liveNode.getTextContent().substring(0, 30);
+      // console.log(`  Found node: text="${currentText}", type=${liveNode.getType()}`);
 
       // Debug: show where it is in the tree
-      const liveRoot = $getRoot();
-      const allChildren = liveRoot.getChildren();
-      const currentIndex = allChildren.findIndex(n => n.getKey() === liveNodeKey);
-      console.log(`  Current position in tree: ${currentIndex}`);
+      // const liveRoot = $getRoot();
+      // const allChildren = liveRoot.getChildren();
+      // const currentIndex = allChildren.findIndex(n => n.getKey() === liveNodeKey);
+      // console.log(`  Current position in tree: ${currentIndex}`);
 
       // console.log('  Found live node:', liveNode.getType());
 
@@ -1175,10 +1175,10 @@ export function $applySubTreeDiff(
       ? targetParentNode.children
       : [];
 
-  if (sourceChildren.length === 0 && targetChildren.length === 0) {
-    console.log('No children to process in sub-tree diff');
-    return;
-  }
+  // if (sourceChildren.length === 0 && targetChildren.length === 0) {
+  //   console.log('No children to process in sub-tree diff');
+  //   return;
+  // }
 
   // console.log(
   //   `Source children: ${sourceChildren.length}, Target children: ${targetChildren.length}`,
@@ -1429,7 +1429,7 @@ export function $applyChildNodeDiff(
 
         // If the handler says not to skip children, we need to recurse
         if (result.handled && result.skipChildren === false && sourceEditor && targetEditor) {
-          console.log(`Handler for ${liveNode.getType()} requests recursion into children`);
+          // console.log(`Handler for ${liveNode.getType()} requests recursion into children`);
           // Recursively apply sub-tree diff to handle nested structures
           $applySubTreeDiff(
             liveNode,

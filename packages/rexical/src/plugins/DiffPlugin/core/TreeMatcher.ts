@@ -247,9 +247,9 @@ export class WindowedTreeMatcher {
     // Extract live node key from NodeState (if present)
     const liveNodeKey = $getState(node, LiveNodeKeyState) || undefined;
 
-    if (liveNodeKey) {
-      console.log(`[TreeMatcher] Cached node ${key} with liveNodeKey=${liveNodeKey}, type=${node.getType()}, text="${node.getTextContent().substring(0, 20)}"`);
-    }
+    // if (liveNodeKey) {
+    //   console.log(`[TreeMatcher] Cached node ${key} with liveNodeKey=${liveNodeKey}, type=${node.getType()}, text="${node.getTextContent().substring(0, 20)}"`);
+    // }
 
     // Cache this node
     cache.set(key, {
@@ -524,16 +524,16 @@ export class WindowedTreeMatcher {
     });
 
     // DEBUG: Log source nodes
-    console.log(`[TreeMatcher] SOURCE has ${sourceNodesWithMarkdown.length} nodes`);
-    sourceNodesWithMarkdown.forEach((node, idx) => {
-      console.log(`[TreeMatcher] source[${idx}] liveKey=${node.liveNodeKey} markdown="${node.markdown}"`);
-    });
+    // console.log(`[TreeMatcher] SOURCE has ${sourceNodesWithMarkdown.length} nodes`);
+    // sourceNodesWithMarkdown.forEach((node, idx) => {
+    //   console.log(`[TreeMatcher] source[${idx}] liveKey=${node.liveNodeKey} markdown="${node.markdown}"`);
+    // });
 
     // DEBUG: Log target nodes to see what we're matching against
-    console.log(`[TreeMatcher] TARGET has ${targetNodesWithMarkdown.length} nodes`);
-    targetNodesWithMarkdown.forEach((node, idx) => {
-      console.log(`[TreeMatcher] target[${idx}] markdown="${node.markdown}"`);
-    });
+    // console.log(`[TreeMatcher] TARGET has ${targetNodesWithMarkdown.length} nodes`);
+    // targetNodesWithMarkdown.forEach((node, idx) => {
+    //   console.log(`[TreeMatcher] target[${idx}] markdown="${node.markdown}"`);
+    // });
 
     const result = this.matchNodesWithMarkdown(
       sourceNodesWithMarkdown,
@@ -649,7 +649,7 @@ export class WindowedTreeMatcher {
           sourceContentMatched.add(sourceIdx);
           targetContentMatched.add(targetIdx);
 
-          console.log(`[TreeMatcher PHASE 1] MATCH: source[${sourceIdx}](liveKey=${sourceNode.liveNodeKey}) -> target[${targetIdx}], markdown="${sourceNode.markdown.substring(0, 20)}"`);
+          // console.log(`[TreeMatcher PHASE 1] MATCH: source[${sourceIdx}](liveKey=${sourceNode.liveNodeKey}) -> target[${targetIdx}], markdown="${sourceNode.markdown.substring(0, 20)}"`);
           const exactMatch: NodeDiff = {
             changeType: 'update',
             sourceIndex: sourceIdx,
@@ -672,9 +672,9 @@ export class WindowedTreeMatcher {
         }
       }
 
-      if (!foundMatch) {
-        console.log(`[TreeMatcher PHASE 1] NO MATCH for source node ${sourceIdx}: key=${sourceNode.key}, liveKey=${sourceNode.liveNodeKey}, markdown="${sourceNode.markdown.substring(0, 20)}"`);
-      }
+      // if (!foundMatch) {
+      //   console.log(`[TreeMatcher PHASE 1] NO MATCH for source node ${sourceIdx}: key=${sourceNode.key}, liveKey=${sourceNode.liveNodeKey}, markdown="${sourceNode.markdown.substring(0, 20)}"`);
+      // }
     }
 
     // PHASE 2: Similarity-based matching for remaining unmatched nodes
@@ -1070,7 +1070,7 @@ export class WindowedTreeMatcher {
 
       if (similarity === 1.0) {
         // Exact match at same position - prioritize this
-        console.log(`[TreeMatcher] Creating exact UPDATE diff: sourceKey=${sourceNodeWithMarkdown.key}, liveKey=${sourceNodeWithMarkdown.liveNodeKey}, markdown="${sourceNodeWithMarkdown.markdown.substring(0, 20)}"`);
+        // console.log(`[TreeMatcher] Creating exact UPDATE diff: sourceKey=${sourceNodeWithMarkdown.key}, liveKey=${sourceNodeWithMarkdown.liveNodeKey}, markdown="${sourceNodeWithMarkdown.markdown.substring(0, 20)}"`);
         return {
           changeType: 'update',
           sourceIndex,
@@ -1091,7 +1091,7 @@ export class WindowedTreeMatcher {
       }
 
       if (similarity > bestSimilarity) {
-        console.log(`[TreeMatcher] Creating similar UPDATE diff: sourceKey=${sourceNodeWithMarkdown.key}, liveKey=${sourceNodeWithMarkdown.liveNodeKey}, markdown="${sourceNodeWithMarkdown.markdown.substring(0, 20)}", similarity=${similarity}`);
+        // console.log(`[TreeMatcher] Creating similar UPDATE diff: sourceKey=${sourceNodeWithMarkdown.key}, liveKey=${sourceNodeWithMarkdown.liveNodeKey}, markdown="${sourceNodeWithMarkdown.markdown.substring(0, 20)}", similarity=${similarity}`);
         bestMatch = {
           changeType: 'update',
           sourceIndex,
