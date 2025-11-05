@@ -282,6 +282,9 @@ export function createMarkdownImport(
     const root = node || $getRoot();
     root.clear();
 
+    // console.log(`[MARKDOWN IMPORT] Input markdown: "${markdownString}"`);
+    // console.log(`[MARKDOWN IMPORT] Split into ${linesLength} lines:`, lines);
+
     for (let i = 0; i < linesLength; i++) {
       const lineText = lines[i];
       // console.log(`[MARKDOWN IMPORT] Line ${i}: "${lineText}" (length: ${lineText.length})`);
@@ -307,9 +310,13 @@ export function createMarkdownImport(
     const children = root.getChildren();
     // console.log('[MARKDOWN IMPORT] shouldPreserveNewLines:', shouldPreserveNewLines);
     // console.log('[MARKDOWN IMPORT] children count:', children.length);
-    for (const child of children) {
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
       const isEmpty = isEmptyParagraph(child);
+
+      // Standard removal: when not preserving newlines, remove all empty paragraphs except singleton
       const shouldRemove = !shouldPreserveNewLines && isEmpty && root.getChildrenSize() > 1;
+
       // console.log('[MARKDOWN IMPORT] child:', child.getType(), 'isEmpty:', isEmpty, 'shouldRemove:', shouldRemove);
       if (shouldRemove) {
         // console.log('[MARKDOWN IMPORT] REMOVING empty paragraph');

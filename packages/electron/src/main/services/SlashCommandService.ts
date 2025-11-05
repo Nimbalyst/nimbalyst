@@ -147,7 +147,7 @@ export class SlashCommandService {
     try {
       // Check if directory exists
       if (!fs.existsSync(dirPath)) {
-        console.log(`[SlashCommandService] Commands directory does not exist: ${dirPath}`);
+        // console.log(`[SlashCommandService] Commands directory does not exist: ${dirPath}`);
         return commands;
       }
 
