@@ -428,16 +428,22 @@ export function ClaudeCodePanel({
                         marginBottom: '16px'
                       }}>
                         <div style={{ flex: 1, height: '1px', background: 'var(--border-primary)' }} />
-                        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: '500' }}>
+                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           OR
                         </span>
                         <div style={{ flex: 1, height: '1px', background: 'var(--border-primary)' }} />
                       </div>
 
                       {/* Alternative API Key Option */}
-                      <div style={{ marginBottom: '12px' }}>
+                      <div style={{
+                        marginBottom: '16px',
+                        padding: '16px',
+                        backgroundColor: 'var(--surface-secondary)',
+                        border: '1px solid var(--border-primary)',
+                        borderRadius: '8px'
+                      }}>
                         <div style={{
-                          fontSize: '13px',
+                          fontSize: '14px',
                           fontWeight: '600',
                           color: 'var(--text-primary)',
                           marginBottom: '8px'
@@ -445,9 +451,9 @@ export function ClaudeCodePanel({
                           Alternative: Use API Key
                         </div>
                         <p style={{
-                          fontSize: '12px',
+                          fontSize: '13px',
                           color: 'var(--text-secondary)',
-                          marginBottom: '10px',
+                          marginBottom: '12px',
                           lineHeight: '1.5'
                         }}>
                           Use an Anthropic API key if you don't have a Claude plan. Pay-per-use with API credits.

@@ -101,11 +101,12 @@ export function registerClaudeCodeHandlers() {
         // macOS: Use AppleScript to open Terminal with the command
         console.log('[ClaudeCodeHandlers] Opening Terminal window for OAuth setup...');
 
-        // Use node to run the bundled CLI
+        // Use Electron's bundled Node.js to run the CLI
+        const nodePath = process.execPath;
         const script = `
 tell application "Terminal"
   activate
-  do script "clear && echo 'Claude Code Authentication' && echo '' && echo 'Please complete the OAuth flow in your browser.' && echo 'When finished, you can close this window.' && echo '' && node '${cliPath}' setup-token"
+  do script "clear && echo 'Claude Code Authentication' && echo '' && echo 'Please complete the OAuth flow in your browser.' && echo 'When finished, you can close this window.' && echo '' && '${nodePath}' '${cliPath}' setup-token"
 end tell`;
 
         spawn('osascript', ['-e', script], {
@@ -122,7 +123,8 @@ end tell`;
         // Windows: Use start command to open a new cmd window
         console.log('[ClaudeCodeHandlers] Opening command prompt for OAuth setup...');
 
-        spawn('cmd', ['/c', 'start', 'cmd', '/k', `node "${cliPath}" setup-token`], {
+        const nodePath = process.execPath;
+        spawn('cmd', ['/c', 'start', 'cmd', '/k', `"${nodePath}" "${cliPath}" setup-token`], {
           detached: true,
           stdio: 'ignore'
         }).unref();
@@ -135,13 +137,14 @@ end tell`;
         // Linux: Try to open a terminal emulator
         console.log('[ClaudeCodeHandlers] Opening terminal for OAuth setup...');
 
+        const nodePath = process.execPath;
         // Try common terminal emulators
         const terminals = ['gnome-terminal', 'konsole', 'xterm', 'x-terminal-emulator'];
         let terminalOpened = false;
 
         for (const terminal of terminals) {
           try {
-            spawn(terminal, ['-e', `bash -c "node '${cliPath}' setup-token; read -p 'Press Enter to close...'"`], {
+            spawn(terminal, ['-e', `bash -c "'${nodePath}' '${cliPath}' setup-token; read -p 'Press Enter to close...'"`], {
               detached: true,
               stdio: 'ignore'
             }).unref();
@@ -158,7 +161,7 @@ end tell`;
             message: 'Terminal opened. Please complete the authentication in your browser, then click "Refresh Status" to verify.'
           };
         } else {
-          throw new Error('No terminal emulator found. Please run "node ' + cliPath + ' setup-token" manually in your terminal.');
+          throw new Error('No terminal emulator found. Please run "' + nodePath + ' ' + cliPath + ' setup-token" manually in your terminal.');
         }
       }
     } catch (error) {
@@ -180,18 +183,19 @@ end tell`;
 
       console.log('[ClaudeCodeHandlers] Found bundled CLI at:', cliPath);
 
-      // Open a Terminal window with the /logout command
-      // This provides a proper environment for the CLI to clean up properly
+      // Open an interactive Terminal session where the user can type /logout
+      // This avoids the stdin raw mode issues when piping commands
       const platform = process.platform;
 
       if (platform === 'darwin') {
-        // macOS: Use AppleScript to open Terminal with the command
-        console.log('[ClaudeCodeHandlers] Opening Terminal window for logout...');
+        // macOS: Use AppleScript to open Terminal with an interactive session
+        console.log('[ClaudeCodeHandlers] Opening Terminal window for interactive logout...');
 
+        const nodePath = process.execPath;
         const script = `
 tell application "Terminal"
   activate
-  do script "clear && echo 'Claude Code Logout' && echo '' && node '${cliPath}' /logout && echo '' && echo 'Logout complete. You can close this window.' && exit"
+  do script "clear && echo 'Claude Code Logout' && echo '' && echo 'Type /logout and press Enter to logout:' && echo '' && '${nodePath}' '${cliPath}'"
 end tell`;
 
         spawn('osascript', ['-e', script], {
@@ -199,35 +203,37 @@ end tell`;
           stdio: 'ignore'
         }).unref();
 
-        // Return immediately - the CLI will handle cleanup in the terminal
+        // Return immediately - user will complete logout in the terminal
         return {
           success: true,
-          message: 'Terminal window opened. Logout will complete shortly.'
+          message: 'Terminal window opened. Type /logout and press Enter to complete logout.'
         };
       } else if (platform === 'win32') {
         // Windows: Use start command to open a new cmd window
-        console.log('[ClaudeCodeHandlers] Opening command prompt for logout...');
+        console.log('[ClaudeCodeHandlers] Opening command prompt for interactive logout...');
 
-        spawn('cmd', ['/c', 'start', 'cmd', '/k', `node "${cliPath}" /logout && exit`], {
+        const nodePath = process.execPath;
+        spawn('cmd', ['/c', 'start', 'cmd', '/k', `echo Claude Code Logout && echo. && echo Type /logout and press Enter to logout: && echo. && "${nodePath}" "${cliPath}"`], {
           detached: true,
           stdio: 'ignore'
         }).unref();
 
         return {
           success: true,
-          message: 'Command prompt opened. Logout will complete shortly.'
+          message: 'Command prompt opened. Type /logout and press Enter to complete logout.'
         };
       } else {
         // Linux: Try to open a terminal emulator
-        console.log('[ClaudeCodeHandlers] Opening terminal for logout...');
+        console.log('[ClaudeCodeHandlers] Opening terminal for interactive logout...');
 
+        const nodePath = process.execPath;
         // Try common terminal emulators
         const terminals = ['gnome-terminal', 'konsole', 'xterm', 'x-terminal-emulator'];
         let terminalOpened = false;
 
         for (const terminal of terminals) {
           try {
-            spawn(terminal, ['-e', `bash -c "node '${cliPath}' /logout; echo ''; echo 'Logout complete. Press Enter to close...'; read"`], {
+            spawn(terminal, ['-e', `bash -c "clear; echo 'Claude Code Logout'; echo ''; echo 'Type /logout and press Enter to logout:'; echo ''; '${nodePath}' '${cliPath}'"`], {
               detached: true,
               stdio: 'ignore'
             }).unref();
@@ -241,10 +247,10 @@ end tell`;
         if (terminalOpened) {
           return {
             success: true,
-            message: 'Terminal opened. Logout will complete shortly.'
+            message: 'Terminal opened. Type /logout and press Enter to complete logout.'
           };
         } else {
-          throw new Error('No terminal emulator found. Please run "node ' + cliPath + ' /logout" manually in your terminal.');
+          throw new Error('No terminal emulator found. Please run "' + nodePath + ' ' + cliPath + '" manually and type /logout in your terminal.');
         }
       }
     } catch (error) {
