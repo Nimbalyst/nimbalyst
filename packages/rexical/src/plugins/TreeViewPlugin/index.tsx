@@ -10,10 +10,17 @@ import type {JSX} from 'react';
 
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {TreeView} from '@lexical/react/LexicalTreeView';
+import { $getDiffState } from "../DiffPlugin/core";
 
 export default function TreeViewPlugin(): JSX.Element {
   const [editor] = useLexicalComposerContext();
   // console.log("Showing TreeViewPlugin");
+
+    function customPrintNode(node: any): string {
+      const diffState = $getDiffState(node);
+      return diffState? `[${diffState}] ` : '';
+    }
+
   return (
     <TreeView
       viewClassName="tree-view-output"
@@ -23,6 +30,7 @@ export default function TreeViewPlugin(): JSX.Element {
       timeTravelPanelSliderClassName="debug-timetravel-panel-slider"
       timeTravelPanelButtonClassName="debug-timetravel-panel-button"
       editor={editor}
+      customPrintNode={customPrintNode}
     />
   );
 }
