@@ -988,10 +988,79 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       }
     };
 
+    // Handle clearing diff tag without accept/reject (for incremental operations)
+    const handleClearDiffTag = async () => {
+      if (pendingAIEditTagRef.current) {
+        const { tagId, filePath } = pendingAIEditTagRef.current;
+        try {
+          // CRITICAL: Save current editor state to disk FIRST
+          // This preserves all the incremental accept/reject decisions the user made
+          if (editorRef.current) {
+            const { $convertToEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+            const transformers = getEditorTransformers();
+
+            const currentContent = editorRef.current.getEditorState().read(() => {
+              return $convertToEnhancedMarkdownString(transformers);
+            });
+
+            // Save to disk
+            await window.electronAPI.saveFile(currentContent, filePath);
+
+            // Create history snapshot for this incremental save
+            // This ensures history accurately reflects what's on disk after user's decisions
+            if (window.electronAPI.history) {
+              await window.electronAPI.history.addSnapshot(
+                filePath,
+                currentContent,
+                'manual',
+                'Incremental diff acceptance'
+              );
+            }
+
+            // Update our state
+            setContent(currentContent);
+            contentRef.current = currentContent;
+            initialContentRef.current = currentContent;
+            setLastSavedContent(currentContent);
+            lastSavedContentRef.current = currentContent;
+          }
+
+          // Mark tag as reviewed (all diffs processed incrementally)
+          await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed');
+          logger.ui.info(`[TabEditor] Marked AI edit tag as reviewed after incremental operations: ${tagId}`);
+
+          // Clear the pending tag reference
+          pendingAIEditTagRef.current = null;
+
+          // Reload editor to exit diff mode and show clean final state
+          const result = await window.electronAPI.readFileContent(filePath);
+          if (result && result.content) {
+            const finalContent = result.content;
+
+            // Update editor to show final content (no diff)
+            if (editorRef.current) {
+              const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+              const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+              const transformers = getEditorTransformers();
+
+              editorRef.current.update(() => {
+                const root = $getRoot();
+                root.clear();
+                $convertFromEnhancedMarkdownString(finalContent, transformers);
+              }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+            }
+          }
+        } catch (error) {
+          logger.ui.error(`[TabEditor] Failed to clear diff tag:`, error);
+        }
+      }
+    };
+
     // Register command listeners
     const importCommands = async () => {
       const { APPROVE_DIFF_COMMAND, REJECT_DIFF_COMMAND } = await import('rexical');
       const { COMMAND_PRIORITY_LOW } = await import('lexical');
+      const { CLEAR_DIFF_TAG_COMMAND } = await import('../../commands/diffCommands');
 
       const unregisterApprove = editor.registerCommand(
         APPROVE_DIFF_COMMAND,
@@ -1011,9 +1080,19 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         COMMAND_PRIORITY_LOW
       );
 
+      const unregisterClear = editor.registerCommand(
+        CLEAR_DIFF_TAG_COMMAND,
+        () => {
+          handleClearDiffTag();
+          return false; // Let other handlers run
+        },
+        COMMAND_PRIORITY_LOW
+      );
+
       return () => {
         unregisterApprove();
         unregisterReject();
+        unregisterClear();
       };
     };
 

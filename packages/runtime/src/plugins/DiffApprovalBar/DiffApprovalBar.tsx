@@ -9,7 +9,8 @@ import {
   groupDiffChanges,
   scrollToChangeGroup,
   type DiffChangeGroup,
-  $getDiffState
+  $getDiffState,
+  $hasDiffNodes
 } from 'rexical';
 import { usePostHog } from 'posthog-js/react';
 import './DiffApprovalBar.css';
@@ -313,32 +314,44 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
 
     $approveChangeGroup(editor, currentGroup.nodes);
 
-    // Wait for groups to update, then move Lexical selection to next group
+    // Wait for groups to update, then check if all diffs are cleared
     setTimeout(() => {
       const updatedGroups = groupDiffChanges(editor);
-      if (updatedGroups.length > 0) {
-        const newIndex = Math.min(indexBeforeApproval, updatedGroups.length - 1);
-        const nextGroup = updatedGroups[newIndex];
 
-        // Move the actual Lexical selection to the next group
-        // Try to select any node in the group that's selectable
-        editor.update(() => {
-          try {
-            // Try each node in the group until one succeeds
-            for (const node of nextGroup.nodes) {
-              try {
-                node.selectStart();
-                break; // Success, stop trying
-              } catch (e) {
-                // This node isn't selectable, try next one
-                continue;
-              }
-            }
-          } catch (e) {
-            console.warn('Failed to move selection to next group:', e);
-          }
+      // Check if this was the last diff - if so, trigger cleanup
+      if (updatedGroups.length === 0 || !$hasDiffNodes(editor)) {
+        // All diffs cleared - dispatch CLEAR_DIFF_TAG_COMMAND
+        // This is handled by TabEditor in Electron to mark tag as reviewed
+        import('../../../../electron/src/renderer/commands/diffCommands').then(({ CLEAR_DIFF_TAG_COMMAND }) => {
+          editor.dispatchCommand(CLEAR_DIFF_TAG_COMMAND, undefined);
+        }).catch(() => {
+          // Command not available (non-Electron environment), ignore
         });
+        return;
       }
+
+      // Still have diffs - move to next group
+      const newIndex = Math.min(indexBeforeApproval, updatedGroups.length - 1);
+      const nextGroup = updatedGroups[newIndex];
+
+      // Move the actual Lexical selection to the next group
+      // Try to select any node in the group that's selectable
+      editor.update(() => {
+        try {
+          // Try each node in the group until one succeeds
+          for (const node of nextGroup.nodes) {
+            try {
+              node.selectStart();
+              break; // Success, stop trying
+            } catch (e) {
+              // This node isn't selectable, try next one
+              continue;
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to move selection to next group:', e);
+        }
+      });
     }, 100);
   };
 
@@ -357,32 +370,44 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
 
     $rejectChangeGroup(editor, currentGroup.nodes);
 
-    // Wait for groups to update, then move Lexical selection to next group
+    // Wait for groups to update, then check if all diffs are cleared
     setTimeout(() => {
       const updatedGroups = groupDiffChanges(editor);
-      if (updatedGroups.length > 0) {
-        const newIndex = Math.min(indexBeforeRejection, updatedGroups.length - 1);
-        const nextGroup = updatedGroups[newIndex];
 
-        // Move the actual Lexical selection to the next group
-        // Try to select any node in the group that's selectable
-        editor.update(() => {
-          try {
-            // Try each node in the group until one succeeds
-            for (const node of nextGroup.nodes) {
-              try {
-                node.selectStart();
-                break; // Success, stop trying
-              } catch (e) {
-                // This node isn't selectable, try next one
-                continue;
-              }
-            }
-          } catch (e) {
-            console.warn('Failed to move selection to next group:', e);
-          }
+      // Check if this was the last diff - if so, trigger cleanup
+      if (updatedGroups.length === 0 || !$hasDiffNodes(editor)) {
+        // All diffs cleared - dispatch CLEAR_DIFF_TAG_COMMAND
+        // This is handled by TabEditor in Electron to mark tag as reviewed
+        import('../../../../electron/src/renderer/commands/diffCommands').then(({ CLEAR_DIFF_TAG_COMMAND }) => {
+          editor.dispatchCommand(CLEAR_DIFF_TAG_COMMAND, undefined);
+        }).catch(() => {
+          // Command not available (non-Electron environment), ignore
         });
+        return;
       }
+
+      // Still have diffs - move to next group
+      const newIndex = Math.min(indexBeforeRejection, updatedGroups.length - 1);
+      const nextGroup = updatedGroups[newIndex];
+
+      // Move the actual Lexical selection to the next group
+      // Try to select any node in the group that's selectable
+      editor.update(() => {
+        try {
+          // Try each node in the group until one succeeds
+          for (const node of nextGroup.nodes) {
+            try {
+              node.selectStart();
+              break; // Success, stop trying
+            } catch (e) {
+              // This node isn't selectable, try next one
+              continue;
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to move selection to next group:', e);
+        }
+      });
     }, 100);
   };
 
