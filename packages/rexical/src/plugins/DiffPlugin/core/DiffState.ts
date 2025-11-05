@@ -38,6 +38,16 @@ export const OriginalMarkdownState = createState('originalMarkdown', {
 });
 
 /**
+ * Configuration for tracking live editor node keys during diff operations.
+ * This allows us to map SOURCE editor nodes back to their corresponding LIVE editor nodes.
+ */
+export const LiveNodeKeyState = createState('liveNodeKey', {
+  parse: (value): string | null => {
+    return typeof value === 'string' ? value : null;
+  },
+});
+
+/**
  * Helper functions for working with DiffState
  */
 

@@ -129,11 +129,14 @@ import {
   $getRoot,
   $isDecoratorNode,
   $isElementNode,
+  createState,
+  $getState,
+  $setState,
 } from 'lexical';
 
 import {createHeadlessEditor} from '@lexical/headless';
 import {createNodeFromSerialized} from './createNodeFromSerialized';
-import {$setDiffState, $getDiffState} from './DiffState';
+import {$setDiffState, $getDiffState, LiveNodeKeyState} from './DiffState';
 import {DiffHandlerContext, diffHandlerRegistry} from '../handlers';
 import {DefaultDiffHandler} from '../handlers/DefaultDiffHandler';
 import {ListDiffHandler} from '../handlers/ListDiffHandler';
@@ -695,10 +698,58 @@ export function applyMarkdownDiffToDocument(
       throw new Error('Editor must have nodes configured');
     }
 
-    // Create temporary editors for source and target states
+    // CRITICAL: Verify LiveNodeKeyState is set - caller must do this BEFORE calling this function
+    let hasLiveNodeKeys = false;
+    let nodeCount = 0;
+    editor.getEditorState().read(() => {
+      const root = $getRoot();
+      const children = root.getChildren();
+      nodeCount = children.length;
+      if (children.length > 0) {
+        const firstChild = children[0];
+        const liveKey = $getState(firstChild, LiveNodeKeyState);
+        hasLiveNodeKeys = liveKey !== null && liveKey !== undefined;
+        console.log(`[applyMarkdownReplace] Checking LiveNodeKeyState: nodeCount=${nodeCount}, firstChild type=${firstChild.getType()}, liveKey=${liveKey}`);
+      }
+    });
+
+    if (!hasLiveNodeKeys) {
+      console.error(`[applyMarkdownReplace] LiveNodeKeyState validation FAILED! nodeCount=${nodeCount}`);
+      throw new Error(
+        'LiveNodeKeyState not set! Caller must set it in a SEPARATE discrete editor.update() BEFORE calling applyMarkdownReplace. ' +
+        `Checked ${nodeCount} nodes.`
+      );
+    }
+
+    // Get LIVE editor state as JSON (LiveNodeKeyState should already be set)
+    const liveState = editor.getEditorState().toJSON();
+    console.log(`[DEBUG] LIVE state has ${liveState.root.children.length} children`);
+    if (liveState.root.children[0]) {
+      console.log(`[DEBUG] First child has $ key: ${'$' in liveState.root.children[0]}`);
+      if ('$' in liveState.root.children[0]) {
+        console.log(`[DEBUG] $ value:`, (liveState.root.children[0] as any).$);
+      }
+    }
+
     const sourceEditor = createHeadlessEditor({
       nodes: editor._createEditorArgs.nodes,
       theme: editor._config.theme,
+    });
+
+    // Load the state after creating the editor
+    sourceEditor.setEditorState(sourceEditor.parseEditorState(liveState));
+
+    // DEBUG: Check if NodeState survived the clone
+    console.log('[DEBUG] Checking if NodeState survived clone to SOURCE editor:');
+    sourceEditor.getEditorState().read(() => {
+      const root = $getRoot();
+      const children = root.getChildren();
+      console.log(`  SOURCE has ${children.length} children`);
+      const firstChild = children[0];
+      if (firstChild) {
+        const liveKey = $getState(firstChild, LiveNodeKeyState);
+        console.log(`  First child key=${firstChild.getKey()}, LiveNodeKeyState=${liveKey}`);
+      }
     });
 
     const targetEditor = createHeadlessEditor({
@@ -707,22 +758,7 @@ export function applyMarkdownDiffToDocument(
     });
 
     try {
-      // Load editors with their content
-      sourceEditor.update(
-        () => {
-          const root = $getRoot();
-          root.clear();
-          $convertFromEnhancedMarkdownString(
-            originalMarkdown,
-            transformers,
-            undefined,
-            true,
-            true
-          );
-        },
-        {discrete: true},
-      );
-
+      // Load TARGET editor with new markdown
       targetEditor.update(
         () => {
           const root = $getRoot();
@@ -737,6 +773,18 @@ export function applyMarkdownDiffToDocument(
         },
         {discrete: true},
       );
+
+      // DEBUG: Show what target editor contains
+      targetEditor.getEditorState().read(() => {
+        const root = $getRoot();
+        const children = root.getChildren();
+        console.log(`[diffUtils] TARGET editor has ${children.length} children after parsing markdown:`);
+        children.forEach((child, idx) => {
+          if (idx >= 0 && idx <= 20) {
+            console.log(`  [${idx}] ${child.getType()} "${child.getTextContent().substring(0, 30)}"`);
+          }
+        });
+      });
 
       // Get serialized states for diffing (unused but kept for potential future use)
       // sourceEditor.getEditorState().toJSON();
@@ -770,7 +818,7 @@ export function applyMarkdownDiffToDocument(
     editor.getEditorState().read(() => {
       const root = $getRoot();
       const children = root.getChildren();
-      for (const child of children) {
+      children.forEach((child) => {
         if (child.getType() === 'table') {
           console.log('🔍 LIVE: Converting table node to markdown for lookup map');
           console.log('  Table node key:', child.getKey());
@@ -789,24 +837,58 @@ export function applyMarkdownDiffToDocument(
           console.log('  Live table markdown:', markdown);
         }
         liveNodesByMarkdown.set(markdown, child.getKey());
-      }
+      });
     });
 
     // Phase 2: Apply changes correctly respecting exact match positions
     try {
       editor.update(
         () => {
-          // Process the sequence in reverse order to prevent position shift issues
-          for (const diff of [...rootMatchResult.sequence].reverse()) {
-            $applyNodeDiff(
-              editor,
-              diff,
-              transformers,
-              liveNodesByMarkdown,
-              sourceEditor,
-              targetEditor,
-              treeMatcher,
-            );
+          // DEBUG: Log initial live tree state
+          const initialChildren = $getRoot().getChildren();
+          console.log(`\n[DIFF APPLICATION] Starting with ${initialChildren.length} children in live tree:`);
+          initialChildren.forEach((child, i) => {
+            console.log(`  [${i}] ${child.getType().padEnd(12)} "${child.getTextContent().substring(0, 30)}"`);
+          });
+          console.log('');
+
+          // Separate diffs by type for proper processing order
+          const removes = rootMatchResult.sequence.filter(d => d.changeType === 'remove');
+          const updates = rootMatchResult.sequence.filter(d => d.changeType === 'update');
+          const adds = rootMatchResult.sequence.filter(d => d.changeType === 'add');
+
+          console.log(`[DIFF APPLICATION] Processing ${rootMatchResult.sequence.length} diffs:`);
+          console.log(`  ${removes.length} removes, ${updates.length} updates, ${adds.length} adds`);
+
+          // Process REMOVEs in reverse order to avoid index shifting
+          console.log('  Processing REMOVEs in reverse order...');
+          for (const diff of [...removes].reverse()) {
+            $applyNodeDiff(editor, diff, transformers, liveNodesByMarkdown, sourceEditor, targetEditor, treeMatcher);
+          }
+
+          // Process UPDATEs (order doesn't matter, they use live keys)
+          console.log('  Processing UPDATEs...');
+          for (const diff of updates) {
+            $applyNodeDiff(editor, diff, transformers, liveNodesByMarkdown, sourceEditor, targetEditor, treeMatcher);
+          }
+
+          // Process ADDs - group by sourceIndex, sort each group by targetIndex ascending
+          console.log('  Processing ADDs in targetIndex order within each sourceIndex group...');
+          const addsBySourceIndex = new Map<number, NodeDiff[]>();
+          for (const add of adds) {
+            if (!addsBySourceIndex.has(add.sourceIndex)) {
+              addsBySourceIndex.set(add.sourceIndex, []);
+            }
+            addsBySourceIndex.get(add.sourceIndex)!.push(add);
+          }
+
+          // Sort each group by targetIndex and apply
+          for (const [sourceIdx, group] of addsBySourceIndex.entries()) {
+            const sorted = group.sort((a, b) => a.targetIndex - b.targetIndex);
+            console.log(`    sourceIndex=${sourceIdx}: processing ${sorted.length} adds in targetIndex order`);
+            for (const diff of sorted) {
+              $applyNodeDiff(editor, diff, transformers, liveNodesByMarkdown, sourceEditor, targetEditor, treeMatcher);
+            }
           }
         },
         {discrete: true},
@@ -921,15 +1003,68 @@ export function $applyNodeDiff(
       // Mark the node as added using DiffState
       $setDiffState(newNode, 'added');
 
-      // Use sourceIndex which TreeMatcher calculated based on where this should go
-      // in the source/live structure. Multiple additions to the same location will
-      // have the same sourceIndex, and reverse order insertion will keep them together.
-      const insertPosition = diff.sourceIndex;
+      // sourceIndex tells us which SOURCE node this should be inserted before
+      // We need to find that SOURCE node's liveNodeKey, then find it in LIVE editor
+      const insertBeforeSourceIndex = diff.sourceIndex;
 
-      const children = liveRoot.getChildren();
-      if (insertPosition < children.length) {
-        children[insertPosition].insertBefore(newNode);
+      if (!sourceEditor) {
+        console.warn('ADD diff requires sourceEditor to determine insertion position');
+        liveRoot.append(newNode); // Fallback to append
+        break;
+      }
+
+      // Get the SOURCE node at sourceIndex and extract its live key
+      let liveKeyToInsertBefore: string | null = null;
+      sourceEditor.getEditorState().read(() => {
+        const sourceRoot = $getRoot();
+        const sourceChildren = sourceRoot.getChildren();
+        if (insertBeforeSourceIndex < sourceChildren.length) {
+          const sourceNode = sourceChildren[insertBeforeSourceIndex];
+          liveKeyToInsertBefore = $getState(sourceNode, LiveNodeKeyState);
+        }
+      });
+
+      // Find the LIVE node with that key and insert before it
+      if (liveKeyToInsertBefore) {
+        let liveNodeToInsertBefore = $getNodeByKey(liveKeyToInsertBefore);
+        if (liveNodeToInsertBefore) {
+          // OPTIMIZATION: If we're about to insert before an empty paragraph,
+          // look backwards to find any preceding empties and insert before ALL of them.
+          // This keeps related content grouped together.
+          while (liveNodeToInsertBefore) {
+            // Check if this node is an empty paragraph
+            const isEmptyParagraph = liveNodeToInsertBefore.getType() === 'paragraph' &&
+              liveNodeToInsertBefore.getTextContent().trim() === '';
+
+            if (!isEmptyParagraph) {
+              break; // Not empty, stop here
+            }
+
+            // Check if there's a previous sibling that's also empty
+            const prevSibling = liveNodeToInsertBefore.getPreviousSibling();
+            if (!prevSibling) {
+              break; // No previous sibling, stop here
+            }
+
+            const isPrevEmpty = prevSibling.getType() === 'paragraph' &&
+              prevSibling.getTextContent().trim() === '';
+
+            if (isPrevEmpty) {
+              // Move back to insert before the previous empty too
+              liveNodeToInsertBefore = prevSibling;
+            } else {
+              // Previous is not empty, stop here
+              break;
+            }
+          }
+
+          liveNodeToInsertBefore.insertBefore(newNode);
+        } else {
+          console.warn(`Could not find LIVE node with key: ${liveKeyToInsertBefore}`);
+          liveRoot.append(newNode); // Fallback
+        }
       } else {
+        // No live key found (sourceIndex >= source children length), append to end
         liveRoot.append(newNode);
       }
 
@@ -937,24 +1072,35 @@ export function $applyNodeDiff(
     }
 
     case 'update': {
-      // Find the live node by its markdown content
-      const liveNodeKey = liveNodesByMarkdown.get(diff.sourceMarkdown);
-      // console.log('  Looking for node with markdown:', diff.sourceMarkdown?.substring(0, 50));
-      // console.log('  Found key:', liveNodeKey);
+      // Use sourceLiveKey which was preserved from the LIVE editor via NodeState
+      const liveNodeKey = diff.sourceLiveKey;
 
       if (!liveNodeKey) {
-        console.warn(
-          `Could not find live node with markdown: ${diff.sourceMarkdown}`,
+        throw new Error(
+          `UPDATE diff missing sourceLiveKey! This means LiveNodeKeyState was not set on LIVE nodes before diff application. ` +
+          `sourceIndex=${diff.sourceIndex}, sourceMarkdown="${diff.sourceMarkdown?.substring(0, 30)}"`
         );
-        // console.log('  Available keys in liveNodesByMarkdown:', Array.from(liveNodesByMarkdown.keys()).map(k => k.substring(0, 50)));
-        return;
       }
+
+      const sourceText = diff.sourceMarkdown?.substring(0, 30);
+      const targetText = diff.targetMarkdown?.substring(0, 30);
+      console.log(`[UPDATE] liveKey=${liveNodeKey}, source="${sourceText}", target="${targetText}"`);
 
       const liveNode = $getNodeByKey(liveNodeKey);
       if (!liveNode || !$isElementNode(liveNode)) {
         console.warn(`Could not find element node with key: ${liveNodeKey}`);
         return;
       }
+
+      // Debug: show what we found
+      const currentText = liveNode.getTextContent().substring(0, 30);
+      console.log(`  Found node: text="${currentText}", type=${liveNode.getType()}`);
+
+      // Debug: show where it is in the tree
+      const liveRoot = $getRoot();
+      const allChildren = liveRoot.getChildren();
+      const currentIndex = allChildren.findIndex(n => n.getKey() === liveNodeKey);
+      console.log(`  Current position in tree: ${currentIndex}`);
 
       // console.log('  Found live node:', liveNode.getType());
 

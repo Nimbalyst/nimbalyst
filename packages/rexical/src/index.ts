@@ -114,7 +114,7 @@ export { $convertFromMarkdownStringRexical } from './markdown/LexicalMarkdownImp
 export { default as MarkdownCopyPlugin, COPY_AS_MARKDOWN_COMMAND } from './plugins/MarkdownCopyPlugin';
 
 // Diff plugin and hook
-export { DiffPlugin, useDiffCommands, APPLY_MARKDOWN_REPLACE_COMMAND } from './plugins/DiffPlugin';
+export { DiffPlugin, useDiffCommands, APPLY_MARKDOWN_REPLACE_COMMAND, LiveNodeKeyState } from './plugins/DiffPlugin';
 
 // Diff utilities (now from local plugin)
 export {

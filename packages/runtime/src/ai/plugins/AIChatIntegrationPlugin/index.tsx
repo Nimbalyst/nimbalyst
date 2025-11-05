@@ -8,8 +8,8 @@
 
 import { useEffect, useRef } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $setDiffState, APPLY_MARKDOWN_REPLACE_COMMAND, type TextReplacement, $hasDiffNodes } from 'rexical';
-import { $getSelection, $isRangeSelection, $getRoot, $isElementNode, LexicalNode } from 'lexical';
+import { $setDiffState, APPLY_MARKDOWN_REPLACE_COMMAND, LiveNodeKeyState, type TextReplacement, $hasDiffNodes } from 'rexical';
+import { $getSelection, $isRangeSelection, $getRoot, $isElementNode, $setState, LexicalNode } from 'lexical';
 import { MarkdownStreamProcessor, getEditorTransformers } from 'rexical';
 import { $isHeadingNode } from '@lexical/rich-text';
 import { $convertToEnhancedMarkdownString, $convertNodeToEnhancedMarkdownString } from 'rexical';
@@ -139,7 +139,8 @@ export function AIChatIntegrationPlugin(): null {
     const filePath = editorContainer?.getAttribute('data-file-path');
 
     if (!filePath) {
-      console.error('[AIChatIntegrationPlugin] Cannot register editor - no file path found');
+      // editor may be the diff preview
+      // console.error('[AIChatIntegrationPlugin] Cannot register editor - no file path found');
       return;
     }
 
@@ -194,6 +195,17 @@ export function AIChatIntegrationPlugin(): null {
             };
 
             window.addEventListener('diffApplyComplete', handleComplete as EventListener);
+
+            // CRITICAL: Set LiveNodeKeyState BEFORE dispatching command
+            // Command handlers run inside update context, so can't set it there
+            editor.update(() => {
+              const root = $getRoot();
+              const children = root.getChildren();
+              for (const child of children) {
+                const key = child.getKey();
+                $setState(child, LiveNodeKeyState, key);
+              }
+            }, { discrete: true });
 
             // Dispatch the command with requestId attached to the replacements
             const commandPayload = { replacements, requestId };

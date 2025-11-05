@@ -23,6 +23,7 @@ export {
   $setDiffState,
   $clearDiffState,
   $hasDiffState,
+  LiveNodeKeyState,
 } from './DiffState';
 export type { DiffStateType } from './DiffState';
 

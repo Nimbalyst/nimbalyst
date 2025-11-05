@@ -14,9 +14,12 @@ import {
   LexicalNode,
   NodeKey,
   SerializedLexicalNode,
+  createState,
+  $getState,
 } from 'lexical';
 import {$getRoot, $isElementNode, $isDecoratorNode} from 'lexical';
 import {$getSerializedNode} from '../utils/getSerializedNode';
+import {LiveNodeKeyState} from './DiffState';
 
 // Types for windowed matching
 export type NodeDiff = {
@@ -26,6 +29,7 @@ export type NodeDiff = {
   sourceNode: SerializedLexicalNode;
   sourceKey: string;
   sourceMarkdown: string;
+  sourceLiveKey?: string; // Original key from LIVE editor (for UPDATE operations)
 
   targetIndex: number;
   targetNode: SerializedLexicalNode;
@@ -70,6 +74,7 @@ type NodeWithMarkdown = {
   node: SerializedLexicalNode;
   markdown: string;
   key: string;
+  liveNodeKey?: string; // Original key from LIVE editor (if captured)
 };
 
 /**
@@ -236,11 +241,22 @@ export class WindowedTreeMatcher {
       markdown = node.getTextContent();
     }
 
+    // Get serialized node
+    const serializedNode = $getSerializedNode(node);
+
+    // Extract live node key from NodeState (if present)
+    const liveNodeKey = $getState(node, LiveNodeKeyState) || undefined;
+
+    if (liveNodeKey) {
+      console.log(`[TreeMatcher] Cached node ${key} with liveNodeKey=${liveNodeKey}, type=${node.getType()}, text="${node.getTextContent().substring(0, 20)}"`);
+    }
+
     // Cache this node
     cache.set(key, {
-      node: $getSerializedNode(node),
+      node: serializedNode,
       markdown: markdown.trim(),
       key: key,
+      liveNodeKey: liveNodeKey,
     });
 
     // Cache children structure
@@ -395,10 +411,14 @@ export class WindowedTreeMatcher {
             }
           }
 
+          // Extract liveNodeKey from NodeState if present
+          const liveNodeKey = $getState(child, LiveNodeKeyState) || undefined;
+
           results.push({
             node: serialized,
             markdown: markdown.trim(),
             key: child.getKey(),
+            liveNodeKey: liveNodeKey,
           });
         } catch (error) {
           // console.warn('Failed to process source node:', error);
@@ -503,6 +523,18 @@ export class WindowedTreeMatcher {
       return results;
     });
 
+    // DEBUG: Log source nodes
+    console.log(`[TreeMatcher] SOURCE has ${sourceNodesWithMarkdown.length} nodes`);
+    sourceNodesWithMarkdown.forEach((node, idx) => {
+      console.log(`[TreeMatcher] source[${idx}] liveKey=${node.liveNodeKey} markdown="${node.markdown}"`);
+    });
+
+    // DEBUG: Log target nodes to see what we're matching against
+    console.log(`[TreeMatcher] TARGET has ${targetNodesWithMarkdown.length} nodes`);
+    targetNodesWithMarkdown.forEach((node, idx) => {
+      console.log(`[TreeMatcher] target[${idx}] markdown="${node.markdown}"`);
+    });
+
     const result = this.matchNodesWithMarkdown(
       sourceNodesWithMarkdown,
       targetNodesWithMarkdown,
@@ -527,33 +559,9 @@ export class WindowedTreeMatcher {
     sourceNodesWithMarkdown: NodeWithMarkdown[],
     targetNodesWithMarkdown: NodeWithMarkdown[],
   ): WindowedMatchResult {
-    // FILTER OUT EMPTY PARAGRAPHS FOR MATCHING - they're just spacing artifacts, not real content
-    // We'll handle spacing automatically based on where real content gets placed
-    const sourceContentNodes = sourceNodesWithMarkdown.filter(
-      (node) => !this.isEmptySpacingNode(node),
-    );
-    const targetContentNodes = targetNodesWithMarkdown.filter(
-      (node) => !this.isEmptySpacingNode(node),
-    );
-
-    // Create index mappings between content-only and full arrays (including blank lines)
-    const sourceContentToFull = new Map<number, number>();
-    const targetContentToFull = new Map<number, number>();
-
-    let sourceContentIdx = 0;
-    let targetContentIdx = 0;
-
-    for (let i = 0; i < sourceNodesWithMarkdown.length; i++) {
-      if (!this.isEmptySpacingNode(sourceNodesWithMarkdown[i])) {
-        sourceContentToFull.set(sourceContentIdx++, i);
-      }
-    }
-
-    for (let i = 0; i < targetNodesWithMarkdown.length; i++) {
-      if (!this.isEmptySpacingNode(targetNodesWithMarkdown[i])) {
-        targetContentToFull.set(targetContentIdx++, i);
-      }
-    }
+    // All nodes including empties - no filtering, no pre-matching
+    const sourceContentNodes = sourceNodesWithMarkdown;
+    const targetContentNodes = targetNodesWithMarkdown;
 
     // Special case: single content node pairs
     if (
@@ -564,18 +572,14 @@ export class WindowedTreeMatcher {
     ) {
       // If they're identical, no diff needed (exact match = no change)
       if (sourceContentNodes[0].markdown === targetContentNodes[0].markdown) {
-        const fullSourceIdx = sourceContentToFull.get(0)!;
-        const fullTargetIdx = targetContentToFull.get(0)!;
-
-        // Exact matches are NOT changes - but include them in sequence for positioning
-        // Mark them so diff application knows to skip them while using them for anchoring
         const exactMatch: NodeDiff = {
           changeType: 'update',
-          sourceIndex: fullSourceIdx,
+          sourceIndex: 0,
           sourceNode: sourceContentNodes[0].node,
           sourceKey: sourceContentNodes[0].key,
           sourceMarkdown: sourceContentNodes[0].markdown,
-          targetIndex: fullTargetIdx,
+          sourceLiveKey: sourceContentNodes[0].liveNodeKey,
+          targetIndex: 0,
           targetNode: sourceContentNodes[0].node,
           targetKey: sourceContentNodes[0].key,
           targetMarkdown: sourceContentNodes[0].markdown,
@@ -588,8 +592,6 @@ export class WindowedTreeMatcher {
       }
 
       // If they're different, it's an actual update
-      const fullSourceIdx = sourceContentToFull.get(0)!;
-      const fullTargetIdx = targetContentToFull.get(0)!;
 
       const similarity = this.calculateMarkdownSimilarity(
         sourceContentNodes[0].markdown,
@@ -598,9 +600,9 @@ export class WindowedTreeMatcher {
 
       const match = this.createNodeMatch(
         sourceContentNodes[0],
-        fullSourceIdx,
+        0,
         targetContentNodes[0],
-        fullTargetIdx,
+        0,
         similarity,
         similarity >= this.config.similarityThreshold ? 'similar' : 'none',
       );
@@ -616,8 +618,8 @@ export class WindowedTreeMatcher {
     let sourceContentMatched = new Set<number>();
     let targetContentMatched = new Set<number>();
 
-    // PHASE 1: Exact content matching - CONTENT NODES ONLY
-    // This should be much simpler now - no empty paragraphs to confuse us!
+    // PHASE 1: Exact content matching to establish "guide posts"
+    // Skip empty paragraphs - they can't be guide posts since they're all identical
     for (
       let sourceIdx = 0;
       sourceIdx < sourceContentNodes.length;
@@ -625,38 +627,37 @@ export class WindowedTreeMatcher {
     ) {
       const sourceNode = sourceContentNodes[sourceIdx];
 
-      // Skip nodes that should never match
+      // Skip already matched, empties, and never-match nodes
+      if (sourceContentMatched.has(sourceIdx)) continue;
+      if (this.isEmptySpacingNode(sourceNode)) continue; // Skip empties - can't be guide posts
       if (this.neverMatchNodes.has(sourceNode.node.type)) continue;
 
       // Find exact content match
+      let foundMatch = false;
       for (
         let targetIdx = 0;
         targetIdx < targetContentNodes.length;
         targetIdx++
       ) {
         if (targetContentMatched.has(targetIdx)) continue;
+        if (this.isEmptySpacingNode(targetContentNodes[targetIdx])) continue; // Don't match to empties
 
         const targetNode = targetContentNodes[targetIdx];
 
         if (sourceNode.markdown === targetNode.markdown) {
-          // console.log(`  EXACT MATCH [${sourceIdx}]->[${targetIdx}]:`);
-          // console.log(`    Type: ${sourceNode.node.type}`);
-          // console.log(`    Markdown: "${sourceNode.markdown.substring(0, 80)}..."`);
-          // Exact match found!
-          // Include exact matches in sequence as position anchors, but not as changes
+          foundMatch = true;
           sourceContentMatched.add(sourceIdx);
           targetContentMatched.add(targetIdx);
 
-          const fullSourceIdx = sourceContentToFull.get(sourceIdx)!;
-          const fullTargetIdx = targetContentToFull.get(targetIdx)!;
-
+          console.log(`[TreeMatcher PHASE 1] MATCH: source[${sourceIdx}](liveKey=${sourceNode.liveNodeKey}) -> target[${targetIdx}], markdown="${sourceNode.markdown.substring(0, 20)}"`);
           const exactMatch: NodeDiff = {
             changeType: 'update',
-            sourceIndex: fullSourceIdx,
+            sourceIndex: sourceIdx,
             sourceNode: sourceNode.node,
             sourceKey: sourceNode.key,
             sourceMarkdown: sourceNode.markdown,
-            targetIndex: fullTargetIdx,
+            sourceLiveKey: sourceNode.liveNodeKey,
+            targetIndex: targetIdx,
             targetNode: targetNode.node,
             targetKey: targetNode.key,
             targetMarkdown: targetNode.markdown,
@@ -665,10 +666,14 @@ export class WindowedTreeMatcher {
             matchType: 'exact',
           };
 
+          diffs.push(exactMatch); // Add to diffs array
           sequence.push(exactMatch); // Include as position anchor
-          // Don't add to diffs - exact matches aren't changes
           break;
         }
+      }
+
+      if (!foundMatch) {
+        console.log(`[TreeMatcher PHASE 1] NO MATCH for source node ${sourceIdx}: key=${sourceNode.key}, liveKey=${sourceNode.liveNodeKey}, markdown="${sourceNode.markdown.substring(0, 20)}"`);
       }
     }
 
@@ -682,18 +687,9 @@ export class WindowedTreeMatcher {
 
     // Add similarity matches to our results
     for (const match of similarityMatches.selectedMatches) {
-      const fullSourceIdx = sourceContentToFull.get(match.sourceIndex)!;
-      const fullTargetIdx = targetContentToFull.get(match.targetIndex)!;
-
-      // Update the match with full indices
-      const updatedMatch: NodeDiff = {
-        ...match,
-        sourceIndex: fullSourceIdx,
-        targetIndex: fullTargetIdx,
-      };
-
-      diffs.push(updatedMatch);
-      sequence.push(updatedMatch);
+      // Similarity matches already have correct indices (no filtering)
+      diffs.push(match);
+      sequence.push(match);
     }
 
     // Update matched sets with similarity matches
@@ -708,6 +704,7 @@ export class WindowedTreeMatcher {
 
     // PHASE 3: Handle remaining unmatched content nodes as pure adds/removes
     // Any remaining unmatched source content nodes are removes
+    // Skip empties - they just stay as blank lines
     for (
       let sourceIdx = 0;
       sourceIdx < sourceContentNodes.length;
@@ -715,14 +712,17 @@ export class WindowedTreeMatcher {
     ) {
       if (!sourceContentMatched.has(sourceIdx)) {
         const sourceNode = sourceContentNodes[sourceIdx];
-        const fullSourceIdx = sourceContentToFull.get(sourceIdx)!;
+
+        // Skip empties - they're preserved as blank lines
+        if (this.isEmptySpacingNode(sourceNode)) continue;
 
         const removeMatch: NodeDiff = {
           changeType: 'remove',
-          sourceIndex: fullSourceIdx,
+          sourceIndex: sourceIdx,
           sourceNode: sourceNode.node,
           sourceKey: sourceNode.key,
           sourceMarkdown: sourceNode.markdown,
+          sourceLiveKey: sourceNode.liveNodeKey,
           targetIndex: -1,
           targetNode: null as any,
           targetKey: null as any,
@@ -732,14 +732,13 @@ export class WindowedTreeMatcher {
           matchType: 'none',
         };
 
-        // Show in diffs
         diffs.push(removeMatch);
-        // Include in sequence
         sequence.push(removeMatch);
       }
     }
 
     // Any remaining unmatched target content nodes are adds
+    // Skip empties for now - Phase 3 optimization can use them to minimize operations
     for (
       let targetIdx = 0;
       targetIdx < targetContentNodes.length;
@@ -747,10 +746,11 @@ export class WindowedTreeMatcher {
     ) {
       if (!targetContentMatched.has(targetIdx)) {
         const targetNode = targetContentNodes[targetIdx];
-        const fullTargetIdx = targetContentToFull.get(targetIdx)!;
 
-        // NEW: Calculate the insertion position in the SOURCE/LIVE structure
-        // Find the first matched node AFTER this position in target
+        // Skip empties - they're preserved as blank lines
+        if (this.isEmptySpacingNode(targetNode)) continue;
+
+        // Calculate insertion position by finding the next matched node
         let insertPositionInSource = sourceNodesWithMarkdown.length; // Default to end
 
         for (
@@ -760,10 +760,9 @@ export class WindowedTreeMatcher {
         ) {
           if (targetContentMatched.has(searchIdx)) {
             // Found a matched node after our insertion point
-            // Find where this matched node is in the source
             const matchedTargetNode = targetContentNodes[searchIdx];
 
-            // Find this node's source position by looking through our matches (exact or similar)
+            // Find this node's source position by looking through our matches
             for (const seqItem of sequence) {
               if (
                 (seqItem.matchType === 'exact' ||
@@ -771,6 +770,22 @@ export class WindowedTreeMatcher {
                 seqItem.targetMarkdown === matchedTargetNode.markdown
               ) {
                 insertPositionInSource = seqItem.sourceIndex;
+
+                // OPTIMIZATION: If there are unmatched empty paragraphs immediately before
+                // this matched node in SOURCE, insert before them instead.
+                // This keeps related content grouped together.
+                while (insertPositionInSource > 0) {
+                  const prevSourceIdx = insertPositionInSource - 1;
+                  if (!sourceContentMatched.has(prevSourceIdx)) {
+                    const prevSourceNode = sourceContentNodes[prevSourceIdx];
+                    if (this.isEmptySpacingNode(prevSourceNode)) {
+                      insertPositionInSource = prevSourceIdx;
+                      continue; // Keep looking backwards
+                    }
+                  }
+                  break; // Stop if not an unmatched empty
+                }
+
                 break;
               }
             }
@@ -778,13 +793,29 @@ export class WindowedTreeMatcher {
           }
         }
 
+        // OPTIMIZATION: If insertion position is at end of document,
+        // check if there are trailing unmatched empties and insert before them
+        if (insertPositionInSource === sourceNodesWithMarkdown.length) {
+          while (insertPositionInSource > 0) {
+            const prevSourceIdx = insertPositionInSource - 1;
+            if (!sourceContentMatched.has(prevSourceIdx)) {
+              const prevSourceNode = sourceContentNodes[prevSourceIdx];
+              if (this.isEmptySpacingNode(prevSourceNode)) {
+                insertPositionInSource = prevSourceIdx;
+                continue; // Keep looking backwards
+              }
+            }
+            break; // Stop if not an unmatched empty
+          }
+        }
+
         const addMatch: NodeDiff = {
           changeType: 'add',
-          sourceIndex: insertPositionInSource, // Use calculated position
+          sourceIndex: insertPositionInSource,
           sourceNode: null as any,
           sourceKey: null as any,
           sourceMarkdown: '',
-          targetIndex: fullTargetIdx,
+          targetIndex: targetIdx,
           targetNode: targetNode.node,
           targetKey: targetNode.key,
           targetMarkdown: targetNode.markdown,
@@ -793,115 +824,15 @@ export class WindowedTreeMatcher {
           matchType: 'none',
         };
 
-        // Show in diffs
         diffs.push(addMatch);
-        // Include in sequence
         sequence.push(addMatch);
       }
     }
 
-    // ALSO ADD: Handle empty paragraphs that are part of insertions
-    // Look for empty paragraphs that are between or adjacent to added content
-    for (let i = 0; i < targetNodesWithMarkdown.length; i++) {
-      if (this.isEmptySpacingNode(targetNodesWithMarkdown[i])) {
-        // Check if this empty paragraph is part of an insertion block
-        // It's part of an insertion if it's between added content nodes
-        let isPartOfInsertion = false;
-
-        // Check if there's added content before this empty paragraph
-        let hasAddedBefore = false;
-        for (let j = i - 1; j >= 0; j--) {
-          const contentIdx = Array.from(targetContentToFull.entries()).find(
-            ([_contentIdx, fullIdx]) => fullIdx === j,
-          )?.[0];
-          if (
-            contentIdx !== undefined &&
-            !targetContentMatched.has(contentIdx)
-          ) {
-            hasAddedBefore = true;
-            break;
-          }
-          // Stop if we hit matched content
-          if (
-            contentIdx !== undefined &&
-            targetContentMatched.has(contentIdx)
-          ) {
-            break;
-          }
-        }
-
-        // Check if there's added content after this empty paragraph
-        let hasAddedAfter = false;
-        for (let j = i + 1; j < targetNodesWithMarkdown.length; j++) {
-          const contentIdx = Array.from(targetContentToFull.entries()).find(
-            ([_contentIdx, fullIdx]) => fullIdx === j,
-          )?.[0];
-          if (
-            contentIdx !== undefined &&
-            !targetContentMatched.has(contentIdx)
-          ) {
-            hasAddedAfter = true;
-            break;
-          }
-          // Stop if we hit matched content
-          if (
-            contentIdx !== undefined &&
-            targetContentMatched.has(contentIdx)
-          ) {
-            break;
-          }
-        }
-
-        // Include this empty paragraph if it's adjacent to added content
-        if (hasAddedBefore || hasAddedAfter) {
-          // Find insertion position similar to content nodes
-          let insertPositionInSource = sourceNodesWithMarkdown.length;
-
-          // Look for the next matched content node to determine position
-          for (let j = i + 1; j < targetNodesWithMarkdown.length; j++) {
-            const contentIdx = Array.from(targetContentToFull.entries()).find(
-              ([_contentIdx, fullIdx]) => fullIdx === j,
-            )?.[0];
-            if (
-              contentIdx !== undefined &&
-              targetContentMatched.has(contentIdx)
-            ) {
-              // Found matched content after this empty paragraph
-              const matchedNode = targetContentNodes[contentIdx];
-              for (const seqItem of sequence) {
-                if (
-                  (seqItem.matchType === 'exact' ||
-                    seqItem.matchType === 'similar') &&
-                  seqItem.targetMarkdown === matchedNode.markdown
-                ) {
-                  insertPositionInSource = seqItem.sourceIndex;
-                  break;
-                }
-              }
-              break;
-            }
-          }
-
-          const emptyParaMatch: NodeDiff = {
-            changeType: 'add',
-            sourceIndex: insertPositionInSource,
-            sourceNode: null as any,
-            sourceKey: null as any,
-            sourceMarkdown: '',
-            targetIndex: i,
-            targetNode: targetNodesWithMarkdown[i].node,
-            targetKey: targetNodesWithMarkdown[i].key,
-            targetMarkdown: '',
-            nodeType: 'paragraph',
-            similarity: 0,
-            matchType: 'none',
-          };
-
-          diffs.push(emptyParaMatch);
-          sequence.push(emptyParaMatch);
-        }
-      }
-    }
+    // TODO PHASE 3 OPTIMIZATION: Use empty paragraphs intelligently to minimize operations
+    // For example: If adding content between two guide posts, could we UPDATE an empty
+    // paragraph instead of doing REMOVE empty + ADD content?
+    // This optimization should happen here, after guide posts are established.
 
     // Sort sequence by target index to maintain proper ordering
     sequence.sort((a, b) => a.targetIndex - b.targetIndex);
@@ -926,6 +857,7 @@ export class WindowedTreeMatcher {
       sourceNode: sourceNode.node,
       sourceMarkdown: sourceNode.markdown,
       sourceKey: sourceNode.key,
+      sourceLiveKey: sourceNode.liveNodeKey,
       targetIndex,
       targetNode: targetNode.node,
       targetMarkdown: targetNode.markdown,
@@ -1004,6 +936,8 @@ export class WindowedTreeMatcher {
 
       const sourceNode = sourceNodesWithMarkdown[sourceIdx];
       if (this.neverMatchNodes.has(sourceNode.node.type)) continue;
+      if (this.isEmptySpacingNode(sourceNode)) continue; // Skip empties - can't be guide posts
+
       for (
         let targetIdx = 0;
         targetIdx < targetNodesWithMarkdown.length;
@@ -1012,6 +946,7 @@ export class WindowedTreeMatcher {
         if (targetMatched.has(targetIdx)) continue;
 
         const targetNode = targetNodesWithMarkdown[targetIdx];
+        if (this.isEmptySpacingNode(targetNode)) continue; // Don't match to empties
 
         // Skip if types don't match and we require same type
         if (
@@ -1135,12 +1070,14 @@ export class WindowedTreeMatcher {
 
       if (similarity === 1.0) {
         // Exact match at same position - prioritize this
+        console.log(`[TreeMatcher] Creating exact UPDATE diff: sourceKey=${sourceNodeWithMarkdown.key}, liveKey=${sourceNodeWithMarkdown.liveNodeKey}, markdown="${sourceNodeWithMarkdown.markdown.substring(0, 20)}"`);
         return {
           changeType: 'update',
           sourceIndex,
           sourceNode: sourceNodeWithMarkdown.node,
           sourceMarkdown: sourceNodeWithMarkdown.markdown,
           sourceKey: sourceNodeWithMarkdown.key,
+          sourceLiveKey: sourceNodeWithMarkdown.liveNodeKey,
 
           targetIndex: sourceIndex,
           targetNode: targetNodeWithMarkdown.node,
@@ -1154,12 +1091,14 @@ export class WindowedTreeMatcher {
       }
 
       if (similarity > bestSimilarity) {
+        console.log(`[TreeMatcher] Creating similar UPDATE diff: sourceKey=${sourceNodeWithMarkdown.key}, liveKey=${sourceNodeWithMarkdown.liveNodeKey}, markdown="${sourceNodeWithMarkdown.markdown.substring(0, 20)}", similarity=${similarity}`);
         bestMatch = {
           changeType: 'update',
           sourceIndex,
           sourceNode: sourceNodeWithMarkdown.node,
           sourceMarkdown: sourceNodeWithMarkdown.markdown,
           sourceKey: sourceNodeWithMarkdown.key,
+          sourceLiveKey: sourceNodeWithMarkdown.liveNodeKey,
 
           targetIndex: sourceIndex,
           targetNode: targetNodeWithMarkdown.node,
@@ -1207,6 +1146,7 @@ export class WindowedTreeMatcher {
               sourceNode: sourceNodeWithMarkdown.node,
               sourceMarkdown: sourceNodeWithMarkdown.markdown,
               sourceKey: sourceNodeWithMarkdown.key,
+              sourceLiveKey: sourceNodeWithMarkdown.liveNodeKey,
 
               targetIndex: targetIdx,
               targetNode: targetNodeWithMarkdown.node,

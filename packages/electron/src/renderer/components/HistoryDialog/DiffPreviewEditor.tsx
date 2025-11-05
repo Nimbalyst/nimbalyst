@@ -6,9 +6,11 @@ import {
   scrollToChangeGroup,
   $getDiffState,
   $hasDiffNodes,
+  LiveNodeKeyState,
   type DiffChangeGroup
 } from 'rexical';
 import type { LexicalEditor } from 'lexical';
+import { $getRoot, $setState } from 'lexical';
 import './DiffPreviewEditor.css';
 
 const HIGHLIGHT_CLASS_REMOVED = 'diff-group-highlight-removed';
@@ -204,6 +206,17 @@ export function DiffPreviewEditor({
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+          // CRITICAL: Set LiveNodeKeyState BEFORE dispatching command
+          // Command handlers run inside an update context, so we can't set it there
+          editor.update(() => {
+            const root = $getRoot();
+            const children = root.getChildren();
+            for (const child of children) {
+              const key = child.getKey();
+              $setState(child, LiveNodeKeyState, key);
+            }
+          }, { discrete: true });
+
           const replacements = [{ oldText: oldMarkdown, newText: newMarkdown }];
 
           try {

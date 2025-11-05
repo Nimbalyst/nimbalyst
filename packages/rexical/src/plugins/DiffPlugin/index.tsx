@@ -21,8 +21,10 @@ import {
   APPROVE_DIFF_COMMAND,
   REJECT_DIFF_COMMAND,
   applyMarkdownReplace,
+  LiveNodeKeyState,
   type TextReplacement,
 } from './core/exports';
+import { $getState, $setState } from 'lexical';
 
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { $convertToEnhancedMarkdownString, getEditorTransformers } from '../../markdown';
@@ -56,6 +58,11 @@ type ApplyMarkdownReplacePayload =
  * Custom command for applying markdown replacements
  */
 export const APPLY_MARKDOWN_REPLACE_COMMAND = createCommand<ApplyMarkdownReplacePayload>('APPLY_MARKDOWN_REPLACE_COMMAND');
+
+/**
+ * Export LiveNodeKeyState for use in setting node state before diffs
+ */
+export { LiveNodeKeyState } from './core/exports';
 
 /**
  * React plugin component that sets up commands for diff functionality.
@@ -196,63 +203,60 @@ export function DiffPlugin(): JSX.Element | null {
           // Get transformers including both core and plugin transformers
           const transformers = getEditorTransformers();
 
+          // NOTE: LiveNodeKeyState should be set by CALLER before dispatching this command
+          // Command handlers run inside an update context, so we can't set it here
+
           // Get current markdown content
           const currentMarkdown = editor.getEditorState().read(() => {
             return $convertToEnhancedMarkdownString(transformers);
           });
 
-          // Apply the replacements inside editor.update and handle errors there
-          // IMPORTANT: We must dispatch events INSIDE the editor.update callback
-          // because when an error occurs, editor.update() may not return normally
-          editor.update(() => {
-            try {
-              applyMarkdownReplace(
-                editor,
-                currentMarkdown,
-                replacements,
-                transformers
-              );
+          // Apply the replacements - applyMarkdownReplace does its own editor.update() internally
+          try {
+            applyMarkdownReplace(
+              editor,
+              currentMarkdown,
+              replacements,
+              transformers
+            );
 
-              // Success - dispatch completion event from INSIDE the update callback
-              // Use setTimeout to defer event dispatch to next tick to avoid race condition
-              if (typeof window !== 'undefined') {
-                setTimeout(() => {
-                  window.dispatchEvent(new CustomEvent('diffApplyComplete', {
-                    detail: { success: true, requestId }
-                  }));
-                }, 0);
-              }
-            } catch (error: any) {
-              // Handle error from INSIDE the editor.update callback
-              // Extract meaningful error message
-              let errorMessage = 'Failed to apply changes';
-
-              if (error?.context?.errorType === 'TEXT_REPLACEMENT_ERROR') {
-                const replacement = error.context?.additionalInfo?.replacement;
-                if (replacement) {
-                  errorMessage = `Could not find matching text in the document. The text may have been modified or contains different whitespace/formatting.`;
-                }
-              } else if (error?.message) {
-                errorMessage = error.message;
-              }
-
-              // Dispatch error event from INSIDE the catch block
-              // Use setTimeout to defer event dispatch to next tick to avoid race condition
-              if (typeof window !== 'undefined') {
-                setTimeout(() => {
-                  window.dispatchEvent(new CustomEvent('diffApplyComplete', {
-                    detail: { success: false, error: errorMessage, requestId }
-                  }));
-                }, 0);
-              }
+            // Success - dispatch completion event
+            if (typeof window !== 'undefined') {
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('diffApplyComplete', {
+                  detail: { success: true, requestId }
+                }));
+              }, 0);
             }
-          }, { discrete: true });
+          } catch (error: any) {
+            // Handle error from applyMarkdownReplace
+            // Extract meaningful error message
+            let errorMessage = 'Failed to apply changes';
+
+            if (error?.context?.errorType === 'TEXT_REPLACEMENT_ERROR') {
+              const replacement = error.context?.additionalInfo?.replacement;
+              if (replacement) {
+                errorMessage = `Could not find matching text in the document. The text may have been modified or contains different whitespace/formatting.`;
+              }
+            } else if (error?.message) {
+              errorMessage = error.message;
+            }
+
+            // Dispatch error event
+            if (typeof window !== 'undefined') {
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('diffApplyComplete', {
+                  detail: { success: false, error: errorMessage, requestId }
+                }));
+              }, 0);
+            }
+          }
 
           return true;
         } catch (error: any) {
-          // This catches errors from getting markdown or other setup BEFORE editor.update
-          // Errors from applyMarkdownReplace are caught inside the editor.update callback above
-          console.error('[DiffPlugin] Setup error before editor.update:', error);
+          // This catches errors from setup (getting transformers, setting NodeState, reading markdown)
+          // Errors from applyMarkdownReplace itself are caught in the inner try/catch above
+          console.error('[DiffPlugin] Setup error before applyMarkdownReplace:', error);
 
           // Dispatch error event for setup errors
           // Use setTimeout to defer event dispatch to next tick to avoid race condition
