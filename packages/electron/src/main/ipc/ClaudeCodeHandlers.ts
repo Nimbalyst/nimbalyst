@@ -106,7 +106,7 @@ export function registerClaudeCodeHandlers() {
         const script = `
 tell application "Terminal"
   activate
-  do script "clear && echo 'Claude Code Authentication' && echo '' && echo 'Please complete the OAuth flow in your browser.' && echo 'When finished, you can close this window.' && echo '' && '${nodePath}' '${cliPath}' setup-token"
+  do script "clear && echo 'Claude Code Authentication' && echo '' && echo 'Please complete the OAuth flow in your browser.' && echo 'When finished, you can close this window.' && echo '' && ELECTRON_RUN_AS_NODE=1 '${nodePath}' '${cliPath}' setup-token"
 end tell`;
 
         spawn('osascript', ['-e', script], {
@@ -124,7 +124,7 @@ end tell`;
         console.log('[ClaudeCodeHandlers] Opening command prompt for OAuth setup...');
 
         const nodePath = process.execPath;
-        spawn('cmd', ['/c', 'start', 'cmd', '/k', `"${nodePath}" "${cliPath}" setup-token`], {
+        spawn('cmd', ['/c', 'start', 'cmd', '/k', `set ELECTRON_RUN_AS_NODE=1 && "${nodePath}" "${cliPath}" setup-token`], {
           detached: true,
           stdio: 'ignore'
         }).unref();
@@ -144,7 +144,7 @@ end tell`;
 
         for (const terminal of terminals) {
           try {
-            spawn(terminal, ['-e', `bash -c "'${nodePath}' '${cliPath}' setup-token; read -p 'Press Enter to close...'"`], {
+            spawn(terminal, ['-e', `bash -c "ELECTRON_RUN_AS_NODE=1 '${nodePath}' '${cliPath}' setup-token; read -p 'Press Enter to close...'"`], {
               detached: true,
               stdio: 'ignore'
             }).unref();
@@ -195,7 +195,7 @@ end tell`;
         const script = `
 tell application "Terminal"
   activate
-  do script "clear && echo 'Claude Code Logout' && echo '' && echo 'Type /logout and press Enter to logout:' && echo '' && '${nodePath}' '${cliPath}'"
+  do script "clear && echo 'Claude Code Logout' && echo '' && echo 'Type /logout and press Enter to logout:' && echo '' && ELECTRON_RUN_AS_NODE=1 '${nodePath}' '${cliPath}'"
 end tell`;
 
         spawn('osascript', ['-e', script], {
@@ -213,7 +213,7 @@ end tell`;
         console.log('[ClaudeCodeHandlers] Opening command prompt for interactive logout...');
 
         const nodePath = process.execPath;
-        spawn('cmd', ['/c', 'start', 'cmd', '/k', `echo Claude Code Logout && echo. && echo Type /logout and press Enter to logout: && echo. && "${nodePath}" "${cliPath}"`], {
+        spawn('cmd', ['/c', 'start', 'cmd', '/k', `echo Claude Code Logout && echo. && echo Type /logout and press Enter to logout: && echo. && set ELECTRON_RUN_AS_NODE=1 && "${nodePath}" "${cliPath}"`], {
           detached: true,
           stdio: 'ignore'
         }).unref();
@@ -233,7 +233,7 @@ end tell`;
 
         for (const terminal of terminals) {
           try {
-            spawn(terminal, ['-e', `bash -c "clear; echo 'Claude Code Logout'; echo ''; echo 'Type /logout and press Enter to logout:'; echo ''; '${nodePath}' '${cliPath}'"`], {
+            spawn(terminal, ['-e', `bash -c "clear; echo 'Claude Code Logout'; echo ''; echo 'Type /logout and press Enter to logout:'; echo ''; ELECTRON_RUN_AS_NODE=1 '${nodePath}' '${cliPath}'"`], {
               detached: true,
               stdio: 'ignore'
             }).unref();
