@@ -166,8 +166,8 @@ export class DefaultDiffHandler implements DiffNodeHandler {
     const targetText = getNodeContent(targetNode);
 
     if (sourceText === targetText) {
-      // Content is the same, no change needed
-      return {handled: true, skipChildren: false};
+      // Content is the same, no change needed - don't process children
+      return {handled: true, skipChildren: true};
     }
 
     // Content has changed - mark as modified
