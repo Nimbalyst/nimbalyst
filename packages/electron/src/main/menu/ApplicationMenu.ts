@@ -485,6 +485,20 @@ export async function createApplicationMenu() {
                     label: 'Recent Files',
                     submenu: await createRecentSubmenu()
                 },
+                ...(process.platform !== 'darwin' ? [
+                  {
+                      label: 'Settings...',
+                      accelerator: KeyboardShortcuts.window.aiModels,
+                      click: async () => {
+                          // Track settings opened
+                          AnalyticsService.getInstance().sendEvent('global_settings_opened', {
+                              source: 'menu',
+                              section: 'general',
+                          });
+                          createAIModelsWindow();
+                      }
+                  },
+                ]: []),
                 { type: 'separator' },
                 {
                     label: 'Save',
