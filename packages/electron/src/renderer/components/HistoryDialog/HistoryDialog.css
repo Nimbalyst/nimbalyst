@@ -494,7 +494,6 @@
 .history-preview-content {
   flex: 1;
   overflow: auto;
-  padding: 20px;
 }
 
 .history-preview-content:has(.diff-preview-editor) {

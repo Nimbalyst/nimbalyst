@@ -204,6 +204,13 @@ export function DiffPreviewEditor({
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+          // console.log('[DiffPreviewEditor] Applying diff:', {
+          //   oldLength: oldMarkdown.length,
+          //   newLength: newMarkdown.length,
+          //   oldStart: oldMarkdown.substring(0, 100),
+          //   newStart: newMarkdown.substring(0, 100),
+          // });
+
           const replacements = [{ oldText: oldMarkdown, newText: newMarkdown }];
 
           try {

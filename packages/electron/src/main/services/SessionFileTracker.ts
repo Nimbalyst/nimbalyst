@@ -143,12 +143,12 @@ export class SessionFileTracker {
 
       if (!linkType) {
         // Tool doesn't interact with files
-        console.log('[SessionFileTracker] Tool does not interact with files');
+        // console.log('[SessionFileTracker] Tool does not interact with files');
         return;
       }
 
       const filePath = extractFilePathFromArgs(toolName, args);
-      console.log('[SessionFileTracker] Extracted file path:', { toolName, filePath, args });
+      // console.log('[SessionFileTracker] Extracted file path:', { toolName, filePath, args });
 
       if (!filePath) {
         logger.main.debug(`[SessionFileTracker] No file path found in ${toolName} args`);
@@ -164,13 +164,13 @@ export class SessionFileTracker {
         metadata = extractReadMetadata(toolName, args, result);
       }
 
-      console.log('[SessionFileTracker] About to add file link:', {
-        sessionId,
-        workspaceId,
-        filePath,
-        linkType,
-        metadata
-      });
+      // console.log('[SessionFileTracker] About to add file link:', {
+      //   sessionId,
+      //   workspaceId,
+      //   filePath,
+      //   linkType,
+      //   metadata
+      // });
 
       // Add file link to database
       const addedLink = await SessionFilesRepository.addFileLink({
@@ -182,7 +182,7 @@ export class SessionFileTracker {
         metadata
       });
 
-      console.log('[SessionFileTracker] File link added successfully:', addedLink);
+      // console.log('[SessionFileTracker] File link added successfully:', addedLink);
       logger.main.debug(`[SessionFileTracker] Tracked ${linkType} link: ${filePath}`);
     } catch (error) {
       logger.main.error('[SessionFileTracker] Failed to track tool execution:', error);

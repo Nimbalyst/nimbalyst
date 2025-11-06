@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MaterialSymbol } from '../MaterialSymbol';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
+import { $convertFromEnhancedMarkdownString, getEditorTransformers } from 'rexical';
+import { $getRoot } from 'lexical';
 import './DiffTestDropdown.css';
 
 interface DiffTestDropdownProps {
@@ -419,6 +421,53 @@ export function DiffTestDropdown({ documentContext }: DiffTestDropdownProps) {
               oldText: match[0],
               newText: `${match[1]} ${match[2]} (Updated)`
             }
+          ]);
+        }
+      }
+    },
+    {
+      id: 'multiple-section-headers',
+      name: 'Multiple Section Headers',
+      icon: 'view_headline',
+      description: 'Add paragraphs under multiple section headers',
+      run: async (filePath: string) => {
+        const editorInstance = editorRegistry.getEditor(filePath);
+        if (!editorInstance) {
+          throw new Error('No editor instance found');
+        }
+
+        // First, set content directly using markdown conversion (not using diff)
+        const headersOnly = '# Test Doc\n\n## Section One\n\n## Section Two\n';
+
+        await new Promise<void>(resolve => {
+          editorInstance.editor.update(() => {
+            const root = $getRoot();
+            root.clear();
+            // Import markdown using enhanced conversion
+            $convertFromEnhancedMarkdownString(headersOnly, getEditorTransformers(), undefined, true, true);
+          }, { discrete: true, onUpdate: () => resolve() });
+        });
+
+        // Wait for content to settle
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Now apply diff to add paragraph under Section One
+        await editorRegistry.applyReplacements(filePath, [
+          { oldText: '## Section One\n\n', newText: '## Section One\nFirst paragraph.\n' }
+        ]);
+
+        // Wait a bit
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Then apply diff to add paragraph under Section Two
+        const currentContent = editorRegistry.getContent(filePath);
+        if (currentContent.includes('## Section Two\n')) {
+          await editorRegistry.applyReplacements(filePath, [
+            { oldText: '## Section Two\n', newText: '## Section Two\nSecond paragraph.\n' }
+          ]);
+        } else if (currentContent.includes('## Section Two')) {
+          await editorRegistry.applyReplacements(filePath, [
+            { oldText: '## Section Two', newText: '## Section Two\nSecond paragraph.' }
           ]);
         }
       }

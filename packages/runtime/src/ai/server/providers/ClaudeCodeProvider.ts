@@ -1239,7 +1239,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // Only intercept file editing tools
       if (toolName !== 'Edit' && toolName !== 'Write' && toolName !== 'MultiEdit') {
-        console.log(`[CLAUDE-CODE] PreToolUse: Not a file editing tool, allowing`);
+        // console.log(`[CLAUDE-CODE] PreToolUse: Not a file editing tool, allowing`);
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse' as const,
