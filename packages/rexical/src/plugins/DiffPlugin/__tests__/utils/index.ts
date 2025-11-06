@@ -33,3 +33,9 @@ export type {
   ComprehensiveReplaceTestResult,
   ReplaceTestOptions
 } from './replaceTestUtils';
+
+// Re-export tree debug utilities
+export {
+  printEditorTree,
+  printDiffStateSummary
+} from './treeDebugUtils';
