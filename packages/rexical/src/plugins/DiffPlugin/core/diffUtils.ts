@@ -1271,80 +1271,117 @@ export function $applySubTreeDiff(
   let childMatchResult;
 
   if (isListItems) {
-    console.log('[SubTreeDiff] Using POSITION-FIRST matching for list items');
+    console.log('[SubTreeDiff] Using HYBRID matching for list items (position + content)');
+    console.log(`  Source children (${sourceCanonicalChildren.length}):`, sourceCanonicalChildren.map((n, i) => `[${i}] ${n.type}: "${n.text?.substring(0, 30)}"`));
+    console.log(`  Target children (${targetCanonicalChildren.length}):`, targetCanonicalChildren.map((n, i) => `[${i}] ${n.type}: "${n.text?.substring(0, 30)}"`));
 
-    // Create position-based diffs for list items
+    // HYBRID MATCHING: First match by content (exact matches), then by position
     const diffs: any[] = [];
     const sequence: any[] = [];
-    const maxLen = Math.max(sourceCanonicalChildren.length, targetCanonicalChildren.length);
+    const sourceMatched = new Set<number>();
+    const targetMatched = new Set<number>();
 
-    for (let i = 0; i < maxLen; i++) {
-      const sourceNode = sourceCanonicalChildren[i];
-      const targetNode = targetCanonicalChildren[i];
+    // Phase 1: Find exact content matches (regardless of position)
+    for (let si = 0; si < sourceCanonicalChildren.length; si++) {
+      if (sourceMatched.has(si)) continue;
 
-      if (sourceNode && targetNode) {
-        // Both exist at this position - UPDATE
-        const similarity = sourceNode.text === targetNode.text ? 1.0 : 0.0;
-        const matchType = sourceNode.text === targetNode.text ? 'exact' : 'similar';
+      const sourceNode = sourceCanonicalChildren[si];
+      for (let ti = 0; ti < targetCanonicalChildren.length; ti++) {
+        if (targetMatched.has(ti)) continue;
 
-        const diff = {
-          changeType: 'update',
-          sourceIndex: i,
-          sourceNode: sourceNode.serialized,
-          sourceKey: sourceNode.key,
-          sourceMarkdown: sourceNode.text || '',
-          sourceLiveKey: sourceNode.liveNodeKey,
-          targetIndex: i,
-          targetNode: targetNode.serialized,
-          targetKey: targetNode.key,
-          targetMarkdown: targetNode.text || '',
-          nodeType: sourceNode.type,
-          similarity,
-          matchType,
-        };
+        const targetNode = targetCanonicalChildren[ti];
+        const exactMatch = sourceNode.text === targetNode.text;
 
-        diffs.push(diff);
-        sequence.push(diff);
-      } else if (sourceNode && !targetNode) {
-        // Source exists but target doesn't - REMOVE
-        const diff = {
-          changeType: 'remove',
-          sourceIndex: i,
-          sourceNode: sourceNode.serialized,
-          sourceKey: sourceNode.key,
-          sourceMarkdown: sourceNode.text || '',
-          sourceLiveKey: sourceNode.liveNodeKey,
-          targetIndex: -1,
-          targetNode: null,
-          targetKey: null,
-          targetMarkdown: '',
-          nodeType: sourceNode.type,
-          similarity: 0,
-          matchType: 'none',
-        };
+        if (exactMatch) {
+          console.log(`  EXACT match: source[${si}] "${sourceNode.text?.substring(0, 20)}" → target[${ti}]`);
 
-        diffs.push(diff);
-        sequence.push(diff);
-      } else if (!sourceNode && targetNode) {
-        // Target exists but source doesn't - ADD
-        const diff = {
-          changeType: 'add',
-          sourceIndex: i - 1, // Insert after previous
-          sourceNode: null,
-          sourceKey: null,
-          sourceMarkdown: '',
-          targetIndex: i,
-          targetNode: targetNode.serialized,
-          targetKey: targetNode.key,
-          targetMarkdown: targetNode.text || '',
-          nodeType: targetNode.type,
-          similarity: 0,
-          matchType: 'none',
-        };
+          const diff = {
+            changeType: 'update',
+            sourceIndex: si,
+            sourceNode: sourceNode.serialized,
+            sourceKey: sourceNode.key,
+            sourceMarkdown: sourceNode.text || '',
+            sourceLiveKey: sourceNode.liveNodeKey,
+            targetIndex: ti,
+            targetNode: targetNode.serialized,
+            targetKey: targetNode.key,
+            targetMarkdown: targetNode.text || '',
+            nodeType: sourceNode.type,
+            similarity: 1.0,
+            matchType: 'exact',
+          };
 
-        diffs.push(diff);
-        sequence.push(diff);
+          diffs.push(diff);
+          sequence.push(diff);
+          sourceMatched.add(si);
+          targetMatched.add(ti);
+          break; // Found match for this source node
+        }
       }
+    }
+
+    // Phase 2: Handle unmatched nodes - these are ADD or REMOVE
+    for (let si = 0; si < sourceCanonicalChildren.length; si++) {
+      if (sourceMatched.has(si)) continue;
+
+      const sourceNode = sourceCanonicalChildren[si];
+      console.log(`  REMOVE: source[${si}] "${sourceNode.text?.substring(0, 20)}"`);
+
+      const diff = {
+        changeType: 'remove',
+        sourceIndex: si,
+        sourceNode: sourceNode.serialized,
+        sourceKey: sourceNode.key,
+        sourceMarkdown: sourceNode.text || '',
+        sourceLiveKey: sourceNode.liveNodeKey,
+        targetIndex: -1,
+        targetNode: null,
+        targetKey: null,
+        targetMarkdown: '',
+        nodeType: sourceNode.type,
+        similarity: 0,
+        matchType: 'none',
+      };
+
+      diffs.push(diff);
+      sequence.push(diff);
+    }
+
+    for (let ti = 0; ti < targetCanonicalChildren.length; ti++) {
+      if (targetMatched.has(ti)) continue;
+
+      const targetNode = targetCanonicalChildren[ti];
+      console.log(`  ADD: target[${ti}] "${targetNode.text?.substring(0, 20)}"`);
+
+      // Find the appropriate sourceIndex for insertion
+      // Insert after the last matched source node that appears before this target
+      let insertAfter = -1;
+      for (let checkTi = ti - 1; checkTi >= 0; checkTi--) {
+        // Find which source this target was matched with
+        const matchedDiff = diffs.find(d => d.targetIndex === checkTi && d.changeType === 'update');
+        if (matchedDiff) {
+          insertAfter = matchedDiff.sourceIndex;
+          break;
+        }
+      }
+
+      const diff = {
+        changeType: 'add',
+        sourceIndex: insertAfter,
+        sourceNode: null,
+        sourceKey: null,
+        sourceMarkdown: '',
+        targetIndex: ti,
+        targetNode: targetNode.serialized,
+        targetKey: targetNode.key,
+        targetMarkdown: targetNode.text || '',
+        nodeType: targetNode.type,
+        similarity: 0,
+        matchType: 'none',
+      };
+
+      diffs.push(diff);
+      sequence.push(diff);
     }
 
     childMatchResult = { diffs, sequence };
@@ -1428,14 +1465,25 @@ export function $applyChildNodeDiff(
       // Mark the node as added using DiffState
       $setDiffState(newNode, 'added');
 
-      // Use sourceIndex which TreeMatcher calculated based on where this should go
-      // in the source/live structure. Multiple additions to the same location will
-      // have the same sourceIndex, and reverse order insertion will keep them together.
-      const insertPosition = diff.sourceIndex;
+      // sourceIndex from hybrid matching means "insert after this index"
+      // For example, sourceIndex=1 means "insert after source[1]"
+      // In Lexical, insertAfter inserts AFTER the node, so we need to:
+      // 1. If sourceIndex is -1, insert at beginning (before index 0)
+      // 2. Otherwise, insert AFTER liveChildren[sourceIndex]
+      const insertAfterIndex = diff.sourceIndex;
 
-      if (insertPosition < liveChildren.length) {
-        liveChildren[insertPosition].insertBefore(newNode);
+      if (insertAfterIndex === -1) {
+        // Insert at the beginning
+        if (liveChildren.length > 0) {
+          liveChildren[0].insertBefore(newNode);
+        } else {
+          liveParentNode.append(newNode);
+        }
+      } else if (insertAfterIndex < liveChildren.length) {
+        // Insert after the specified index
+        liveChildren[insertAfterIndex].insertAfter(newNode);
       } else {
+        // Append to end
         liveParentNode.append(newNode);
       }
 
