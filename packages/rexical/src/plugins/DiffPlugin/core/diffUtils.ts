@@ -1262,136 +1262,15 @@ export function $applySubTreeDiff(
   //   targetCanonicalChildren.length,
   // );
 
-  // For list items, use position-first matching instead of similarity-based matching
-  // This fixes the bug where "two" → "deux" was incorrectly matched as "ten" → "deux"
-  // because TOPT's global optimization preferred wrong pairings when text similarity was low
-  const isListItems = sourceCanonicalChildren.length > 0 &&
-    sourceCanonicalChildren[0].type === 'listitem';
-
-  let childMatchResult;
-
-  if (isListItems) {
-    console.log('[SubTreeDiff] Using HYBRID matching for list items (position + content)');
-    console.log(`  Source children (${sourceCanonicalChildren.length}):`, sourceCanonicalChildren.map((n, i) => `[${i}] ${n.type}: "${n.text?.substring(0, 30)}"`));
-    console.log(`  Target children (${targetCanonicalChildren.length}):`, targetCanonicalChildren.map((n, i) => `[${i}] ${n.type}: "${n.text?.substring(0, 30)}"`));
-
-    // HYBRID MATCHING: First match by content (exact matches), then by position
-    const diffs: any[] = [];
-    const sequence: any[] = [];
-    const sourceMatched = new Set<number>();
-    const targetMatched = new Set<number>();
-
-    // Phase 1: Find exact content matches (regardless of position)
-    for (let si = 0; si < sourceCanonicalChildren.length; si++) {
-      if (sourceMatched.has(si)) continue;
-
-      const sourceNode = sourceCanonicalChildren[si];
-      for (let ti = 0; ti < targetCanonicalChildren.length; ti++) {
-        if (targetMatched.has(ti)) continue;
-
-        const targetNode = targetCanonicalChildren[ti];
-        const exactMatch = sourceNode.text === targetNode.text;
-
-        if (exactMatch) {
-          console.log(`  EXACT match: source[${si}] "${sourceNode.text?.substring(0, 20)}" → target[${ti}]`);
-
-          const diff = {
-            changeType: 'update',
-            sourceIndex: si,
-            sourceNode: sourceNode.serialized,
-            sourceKey: sourceNode.key,
-            sourceMarkdown: sourceNode.text || '',
-            sourceLiveKey: sourceNode.liveNodeKey,
-            targetIndex: ti,
-            targetNode: targetNode.serialized,
-            targetKey: targetNode.key,
-            targetMarkdown: targetNode.text || '',
-            nodeType: sourceNode.type,
-            similarity: 1.0,
-            matchType: 'exact',
-          };
-
-          diffs.push(diff);
-          sequence.push(diff);
-          sourceMatched.add(si);
-          targetMatched.add(ti);
-          break; // Found match for this source node
-        }
-      }
-    }
-
-    // Phase 2: Handle unmatched nodes - these are ADD or REMOVE
-    for (let si = 0; si < sourceCanonicalChildren.length; si++) {
-      if (sourceMatched.has(si)) continue;
-
-      const sourceNode = sourceCanonicalChildren[si];
-      console.log(`  REMOVE: source[${si}] "${sourceNode.text?.substring(0, 20)}"`);
-
-      const diff = {
-        changeType: 'remove',
-        sourceIndex: si,
-        sourceNode: sourceNode.serialized,
-        sourceKey: sourceNode.key,
-        sourceMarkdown: sourceNode.text || '',
-        sourceLiveKey: sourceNode.liveNodeKey,
-        targetIndex: -1,
-        targetNode: null,
-        targetKey: null,
-        targetMarkdown: '',
-        nodeType: sourceNode.type,
-        similarity: 0,
-        matchType: 'none',
-      };
-
-      diffs.push(diff);
-      sequence.push(diff);
-    }
-
-    for (let ti = 0; ti < targetCanonicalChildren.length; ti++) {
-      if (targetMatched.has(ti)) continue;
-
-      const targetNode = targetCanonicalChildren[ti];
-      console.log(`  ADD: target[${ti}] "${targetNode.text?.substring(0, 20)}"`);
-
-      // Find the appropriate sourceIndex for insertion
-      // Insert after the last matched source node that appears before this target
-      let insertAfter = -1;
-      for (let checkTi = ti - 1; checkTi >= 0; checkTi--) {
-        // Find which source this target was matched with
-        const matchedDiff = diffs.find(d => d.targetIndex === checkTi && d.changeType === 'update');
-        if (matchedDiff) {
-          insertAfter = matchedDiff.sourceIndex;
-          break;
-        }
-      }
-
-      const diff = {
-        changeType: 'add',
-        sourceIndex: insertAfter,
-        sourceNode: null,
-        sourceKey: null,
-        sourceMarkdown: '',
-        targetIndex: ti,
-        targetNode: targetNode.serialized,
-        targetKey: targetNode.key,
-        targetMarkdown: targetNode.text || '',
-        nodeType: targetNode.type,
-        similarity: 0,
-        matchType: 'none',
-      };
-
-      diffs.push(diff);
-      sequence.push(diff);
-    }
-
-    childMatchResult = { diffs, sequence };
-  } else {
-    // Use TreeMatcher for non-list-item children
-    childMatchResult = treeMatcher.matchCanonicalNodes(
-      sourceCanonicalChildren,
-      targetCanonicalChildren,
-    );
-  }
+  // Use TreeMatcher (TOPT) for all child matching
+  // With pairAlignThreshold: 0.2, TOPT will correctly:
+  // 1. Match exact content ("One"→"One", "Two"→"Two", "Three"→"Three")
+  // 2. Insert new items in the correct position (nested list between "Two" and "Three")
+  // 3. Handle text changes at same position ("two"→"deux")
+  const childMatchResult = treeMatcher.matchCanonicalNodes(
+    sourceCanonicalChildren,
+    targetCanonicalChildren,
+  );
 
   console.log(
     `[SubTreeDiff] Sub-tree matching found ${childMatchResult.diffs.length} diffs, ${childMatchResult.sequence.length} total operations`,
@@ -1465,26 +1344,23 @@ export function $applyChildNodeDiff(
       // Mark the node as added using DiffState
       $setDiffState(newNode, 'added');
 
-      // sourceIndex from hybrid matching means "insert after this index"
-      // For example, sourceIndex=1 means "insert after source[1]"
-      // In Lexical, insertAfter inserts AFTER the node, so we need to:
-      // 1. If sourceIndex is -1, insert at beginning (before index 0)
-      // 2. Otherwise, insert AFTER liveChildren[sourceIndex]
-      const insertAfterIndex = diff.sourceIndex;
+      // sourceIndex from TreeMatcher means "insert at this position" (insert before this index)
+      // For example, sourceIndex=2 means "insert before liveChildren[2]"
+      const insertBeforeIndex = diff.sourceIndex;
 
-      if (insertAfterIndex === -1) {
+      if (insertBeforeIndex >= liveChildren.length) {
+        // Append to end
+        liveParentNode.append(newNode);
+      } else if (insertBeforeIndex <= 0) {
         // Insert at the beginning
         if (liveChildren.length > 0) {
           liveChildren[0].insertBefore(newNode);
         } else {
           liveParentNode.append(newNode);
         }
-      } else if (insertAfterIndex < liveChildren.length) {
-        // Insert after the specified index
-        liveChildren[insertAfterIndex].insertAfter(newNode);
       } else {
-        // Append to end
-        liveParentNode.append(newNode);
+        // Insert before the specified index
+        liveChildren[insertBeforeIndex].insertBefore(newNode);
       }
 
       break;

@@ -215,12 +215,27 @@ export class WindowedTreeMatcher {
     };
 
     // Run order-preserving diff
-    // Use high pairAlignThreshold (2.0) to allow matching nodes at same position
-    // even if text content is completely different (e.g., "two" → "deux")
-    // This preserves document structure and minimizes false delete+add pairs
     const diffOps = diffTrees(sourceRoot, targetRoot, {
-      pairAlignThreshold: 2.0,  // Was 0.8 - raised to prioritize position over similarity
-      equalThreshold: 0.1,
+      pairAlignThreshold: 0.8,
+      equalThreshold: 0.2,
+      // Mark listitem as textual so text similarity is weighted heavily
+      // This makes TOPT prefer matching "Three"→"Three" over "Three"→"undefined"
+      isTextual: (n) => n.type === 'text' || n.type === 'paragraph' || n.type === 'listitem',
+    });
+
+    console.log(`\n[TreeMatcher] TOPT produced ${diffOps.length} operations for ${sourceNodes.length} source → ${targetNodes.length} target nodes:`);
+    diffOps.filter(op => op.aPath?.length === 1 || op.bPath?.length === 1).forEach((op, i) => {
+      if (op.op === 'equal' || op.op === 'replace') {
+        const aIdx = op.aPath?.[0];
+        const bIdx = op.bPath?.[0];
+        console.log(`  [${i}] ${op.op.toUpperCase()}: source[${aIdx}] "${op.a.text?.substring(0, 30)}" → target[${bIdx}] "${op.b.text?.substring(0, 30)}"`);
+      } else if (op.op === 'delete') {
+        const aIdx = op.aPath?.[0];
+        console.log(`  [${i}] DELETE: source[${aIdx}] "${op.a.text?.substring(0, 30)}"`);
+      } else if (op.op === 'insert') {
+        const bIdx = op.bPath?.[0];
+        console.log(`  [${i}] INSERT: target[${bIdx}] "${op.b.text?.substring(0, 30)}"`);
+      }
     });
 
     const diffs: NodeDiff[] = [];
@@ -471,70 +486,10 @@ export class WindowedTreeMatcher {
       sequence.push(diff);
     }
 
-    // Convert matching remove/add pairs with identical content into updates (handle moves)
-    const removeDiffs = diffs.filter((d) => d.changeType === 'remove');
-    const addDiffs = diffs.filter((d) => d.changeType === 'add');
-    const newUpdates: NodeDiff[] = [];
-
-    for (const removeDiff of removeDiffs) {
-      const sourceNode = sourceNodes[removeDiff.sourceIndex];
-
-      let matchedAdd: NodeDiff | null = null;
-      for (const addDiff of addDiffs) {
-        if (convertedAdds.has(addDiff)) continue;
-        const targetNode = targetNodes[addDiff.targetIndex];
-        if (!targetNode || targetNode.type !== sourceNode.type) continue;
-
-        const attrsEqual =
-          JSON.stringify(sourceNode.attrs) === JSON.stringify(targetNode.attrs);
-        const textEqual = (sourceNode.text || '') === (targetNode.text || '');
-
-        if (attrsEqual && textEqual) {
-          matchedAdd = addDiff;
-          break;
-        }
-      }
-
-      if (matchedAdd) {
-        convertedRemoves.add(removeDiff);
-        convertedAdds.add(matchedAdd);
-
-        const targetNode = targetNodes[matchedAdd.targetIndex];
-
-        const updateDiff: NodeDiff = {
-          changeType: 'update',
-          sourceIndex: removeDiff.sourceIndex,
-          sourceNode: removeDiff.sourceNode,
-          sourceKey: removeDiff.sourceKey,
-          sourceMarkdown: removeDiff.sourceMarkdown,
-          sourceLiveKey: removeDiff.sourceLiveKey,
-          targetIndex: matchedAdd.targetIndex,
-          targetNode: targetNode ? targetNode.serialized : matchedAdd.targetNode,
-          targetKey: targetNode ? targetNode.key : matchedAdd.targetKey,
-          targetMarkdown: matchedAdd.targetMarkdown,
-          nodeType: removeDiff.nodeType,
-          similarity: 1,
-          matchType: 'exact',
-        };
-
-        newUpdates.push(updateDiff);
-      }
-    }
-
-    if (convertedRemoves.size > 0 || convertedAdds.size > 0) {
-      const filteredSequence = sequence.filter(
-        (diff) => !convertedRemoves.has(diff) && !convertedAdds.has(diff),
-      );
-      const filteredDiffs = diffs.filter(
-        (diff) => !convertedRemoves.has(diff) && !convertedAdds.has(diff),
-      );
-
-      filteredDiffs.push(...newUpdates);
-      filteredSequence.push(...newUpdates);
-
-      diffs.splice(0, diffs.length, ...filteredDiffs);
-      sequence.splice(0, sequence.length, ...filteredSequence);
-    }
+    // DON'T convert DELETE+INSERT into UPDATE!
+    // If a node moves position (different source/target index), it should be DELETE+INSERT
+    // UPDATE is only for content changes at the same logical position
+    // Keeping DELETE+INSERT allows the node to be physically moved
 
     sequence.sort((a, b) => a.targetIndex - b.targetIndex);
 

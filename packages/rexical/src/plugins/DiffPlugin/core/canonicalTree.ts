@@ -9,7 +9,7 @@ import {
 } from 'lexical';
 import {TABLE_TRANSFORMER} from '../../TablePlugin/TableTransformer';
 import {LiveNodeKeyState} from './DiffState';
-import {getEditorTransformers} from '../../../markdown';
+import {getEditorTransformers, $convertToEnhancedMarkdownString} from '../../../markdown';
 
 // CanonicalTreeNode is compatible with ThresholdNode (N) from ThresholdedOrderPreservingTree
 // Core fields (id, type, text, attrs, children) match exactly
@@ -82,7 +82,11 @@ function normalizeTableSeparator(text: string): string {
     // Count the number of columns (number of | chars minus 1)
     const cols = (text.match(/\|/g) || []).length - 1;
     // Return normalized format: |---|---|...|
-    return '|' + Array(cols).fill('---').join('|') + '|';
+    const normalized = '|' + Array(cols).fill('---').join('|') + '|';
+    if (text !== normalized) {
+      console.log('[canonicalTree] Normalizing table separator:', text, '→', normalized);
+    }
+    return normalized;
   }
   return text;
 }
@@ -104,10 +108,29 @@ function extractText(
   }
 
   if ($isElementNode(node)) {
-    const text = node.getTextContent();
-    // Normalize table separators to prevent false diffs
-    const normalized = normalizeTableSeparator(text);
-    return normalized || undefined;
+    // For element nodes with direct text children, use that text
+    let directText = '';
+    const children = node.getChildren();
+    for (const child of children) {
+      if ($isTextNode(child)) {
+        directText += child.getTextContent();
+      }
+    }
+
+    if (directText) {
+      const normalized = normalizeTableSeparator(directText);
+      return normalized || undefined;
+    }
+
+    // For element nodes without direct text (e.g., list wrapper nodes),
+    // use the full text content to distinguish between different nested structures
+    // This allows TOPT to match based on what's actually inside the node
+    const fullText = node.getTextContent();
+    if (fullText) {
+      return fullText;
+    }
+
+    return undefined;
   }
 
   if ('text' in serialized && typeof (serialized as any).text === 'string') {

@@ -208,4 +208,110 @@ describe('Nested list addition bug', () => {
       }, 100);
     });
   });
+
+  it('should correctly handle moving nested list from Two to One', async () => {
+    const oldMarkdown = `# numbers
+
+- One
+- Two
+  - alpha
+  - bravo
+- Three
+`;
+
+    const newMarkdown = `# numbers
+
+- One
+  - alpha
+  - bravo
+- Two
+- Three
+`;
+
+    const editor = createTestHeadlessEditor();
+
+    // Register the command handler
+    editor.registerCommand(
+      APPLY_MARKDOWN_REPLACE_COMMAND,
+      (replacements) => {
+        applyMarkdownReplace(editor, oldMarkdown, replacements, MARKDOWN_TEST_TRANSFORMERS);
+        return true;
+      },
+      COMMAND_PRIORITY_EDITOR
+    );
+
+    // Load old markdown
+    editor.update(() => {
+      const root = $getRoot();
+      root.clear();
+      $convertFromEnhancedMarkdownString(oldMarkdown, MARKDOWN_TEST_TRANSFORMERS);
+    }, { discrete: true });
+
+    console.log('\n=== MOVE NESTED LIST FROM TWO TO ONE ===');
+
+    // First check what structure the NEW markdown creates
+    const tempEditor = createTestHeadlessEditor();
+    tempEditor.update(() => {
+      const root = $getRoot();
+      root.clear();
+      $convertFromEnhancedMarkdownString(newMarkdown, MARKDOWN_TEST_TRANSFORMERS);
+    }, { discrete: true });
+
+    console.log('\\n=== EXPECTED STRUCTURE (from direct markdown import) ===');
+    tempEditor.getEditorState().read(() => {
+      const root = $getRoot();
+      const children = root.getChildren();
+      const listNode = children.find((child: any) => child.getType() === 'list');
+      if (listNode) {
+        const items = listNode.getChildren();
+        items.forEach((item: any, i: number) => {
+          const directText = item.getChildren().filter((c: any) => c.getType() === 'text')
+            .map((c: any) => c.getTextContent()).join('');
+          const hasNestedList = item.getChildren().some((c: any) => c.getType() === 'list');
+          console.log(`  [${i}] listitem: directText="${directText}", hasNestedList=${hasNestedList}`);
+        });
+      }
+    });
+
+    // Apply diff
+    const replacements = [{ oldText: oldMarkdown, newText: newMarkdown }];
+    const result = editor.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+
+    if (!result) {
+      console.error('APPLY_MARKDOWN_REPLACE_COMMAND was not handled!');
+      throw new Error('Command not handled');
+    }
+
+    // Wait for async operations
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        let listItemTexts: string[] = [];
+
+        editor.getEditorState().read(() => {
+          const root = $getRoot();
+          const children = root.getChildren();
+
+          const listNode = children.find((child: any) => child.getType() === 'list');
+          if (listNode) {
+            const listItems = listNode.getChildren();
+            listItemTexts = listItems.map((item: any) => item.getTextContent().trim());
+          }
+        });
+
+        console.log('\n=== FINAL LIST ITEMS ===');
+        listItemTexts.forEach((text: string, i: number) => {
+          console.log(`[${i}] "${text}"`);
+        });
+
+        // Expected: [0] "One\n\nalpha\n\nbravo", [1] "Two", [2] "Three"
+        // Or: [0] "One", [1] wrapper for nested list, [2] "Two", [3] "Three"
+        expect(listItemTexts.length).toBeGreaterThanOrEqual(3);
+        expect(listItemTexts.some(t => t === 'Two')).toBe(true);
+        expect(listItemTexts.some(t => t === 'Three')).toBe(true);
+        expect(listItemTexts.some(t => t.includes('alpha'))).toBe(true);
+
+        resolve();
+      }, 100);
+    });
+  });
 });
