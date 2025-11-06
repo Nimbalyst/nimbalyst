@@ -1,40 +1,31 @@
-/**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- *
- */
-
 import type {Transformer} from '@lexical/markdown';
-import { $convertNodeToEnhancedMarkdownString } from "../../../markdown";
 import {
-  $getNodeByKey,
-  LexicalEditor,
-  LexicalNode,
-  NodeKey,
-  SerializedLexicalNode,
-  createState,
-  $getState,
+  $getRoot,
+  type LexicalEditor,
+  type SerializedLexicalNode,
 } from 'lexical';
-import {$getRoot, $isElementNode, $isDecoratorNode} from 'lexical';
-import {$getSerializedNode} from '../utils/getSerializedNode';
-import {LiveNodeKeyState} from './DiffState';
 
-// Types for windowed matching
+import {
+  canonicalizeForest,
+  getDiffTransformers,
+  levenshteinDistance,
+  type CanonicalTreeNode,
+} from './canonicalTree';
+import {diffTrees, type DiffOp} from './ThresholdedOrderPreservingTree';
+
 export type NodeDiff = {
   changeType: 'add' | 'remove' | 'update';
 
   sourceIndex: number;
-  sourceNode: SerializedLexicalNode;
-  sourceKey: string;
-  sourceMarkdown: string;
-  sourceLiveKey?: string; // Original key from LIVE editor (for UPDATE operations)
+  sourceNode: SerializedLexicalNode | null;
+  sourceKey: string | null;
+  sourceMarkdown: string; // legacy field - now contains payload
+  sourceLiveKey?: string;
 
   targetIndex: number;
-  targetNode: SerializedLexicalNode;
-  targetKey: string;
-  targetMarkdown: string;
+  targetNode: SerializedLexicalNode | null;
+  targetKey: string | null;
+  targetMarkdown: string; // payload
 
   nodeType: string;
   similarity: number;
@@ -42,1208 +33,578 @@ export type NodeDiff = {
 };
 
 export interface WindowedMatchResult {
-  // Only actual changes (adds, removes, similarity-based updates)
   diffs: NodeDiff[];
-  // Complete ordered list of ALL operations including exact matches
   sequence: NodeDiff[];
 }
 
-// Configuration for matching behavior
 export interface MatchingConfig {
-  // How far to look ahead/behind for matches (default: 2)
   windowSize: number;
-
-  // Minimum similarity for considering nodes "the same" (default: 0.7)
   similarityThreshold: number;
-
-  // Whether to match by type only first (default: true)
   requireSameType: boolean;
-
-  // Transformers for markdown conversion
   transformers: Transformer[];
 }
 
-const DEFAULT_CONFIG: Partial<MatchingConfig> = {
+const DEFAULT_CONFIG: MatchingConfig = {
   windowSize: 2,
-  similarityThreshold: 0.2, // Lowered from 0.3 to be more forgiving
+  similarityThreshold: 0.2,
   requireSameType: true,
+  transformers: [],
 };
 
-// Pre-calculated node with its markdown representation
-type NodeWithMarkdown = {
-  node: SerializedLexicalNode;
-  markdown: string;
-  key: string;
-  liveNodeKey?: string; // Original key from LIVE editor (if captured)
-};
+type CanonicalCache = Map<string, CanonicalTreeNode>;
+type ChildrenCache = Map<string, string[]>;
 
-/**
- * Performs content-first matching between source and target editor content for optimal visual diffs.
- *
- * PROBLEM: Traditional position-based diff algorithms suffer from the "middle insertion problem" -
- * when content is inserted in the middle of a document, everything after the insertion appears as
- * changed rather than correctly identified as a single insertion. This creates confusing visual
- * diffs for users.
- *
- * SOLUTION: This implementation uses a content-first, globally-optimized matching approach with
- * source-position-based insertion mapping. Key innovations:
- *
- * 1. **Content-First Matching**: Find exact content matches regardless of position
- * 2. **Similarity-Based Updates**: Compute similarity scores for remaining unmatched nodes
- * 3. **Source-Position Insertion Mapping**: Calculate where insertions should go in the SOURCE
- *    structure, not target. Multiple insertions that belong together get the same sourceIndex.
- * 4. **Reverse-Order Application**: Apply insertions in reverse order to prevent position drift
- * 5. **Dual-Match Position Anchoring**: Use both exact AND similar matches as position anchors
- *
- * MIDDLE INSERTION FIX:
- * The key insight is that when inserting content in the middle, we need to calculate insertion
- * positions based on where nodes should go in the LIVE/SOURCE editor, not the target. For example:
- * - Source: [one, two, three, five, six, seven]
- * - Target: [one, two, three, **four-header**, **four-list**, five, six, seven]
- *
- * Both "four" nodes should map to sourceIndex=3 (before "five" in the source). When applied in
- * reverse order, they stay together and don't affect each other's insertion positions.
- *
- * PHASES:
- * 1. **Exact Matching**: Global content-based matching (not positional)
- * 2. **Similarity Matching**: Global optimization for remaining nodes (threshold: 0.05)
- * 3. **Insertion Mapping**: Map additions to source positions using exact+similar anchors
- * 4. **Sequential Application**: Apply in reverse order to preserve groupings
- *
- * This produces semantically minimal diffs where:
- * - Identical content always matches (even when repositioned)
- * - Similar content shows as updates, not remove+add pairs
- * - Insertions are properly grouped and positioned
- * - Complex formatting changes are detected (very low similarity threshold)
- * - Visual diff display shows the minimum number of apparent changes
- */
+function calculateSimilarity(
+  source: CanonicalTreeNode,
+  target: CanonicalTreeNode,
+): number {
+  if (source.type !== target.type) {
+    return 0;
+  }
+
+  const textMatches = source.text === target.text;
+  const attrsMatch = JSON.stringify(source.attrs) === JSON.stringify(target.attrs);
+
+  if (textMatches && attrsMatch) {
+    return 1;
+  }
+
+  // Debug: log why similarity is not 1.0
+  if (process?.env?.DIFF_DEBUG === '1' && (!textMatches || !attrsMatch)) {
+    console.log(`[calculateSimilarity] NOT exact match for ${source.type}:`);
+    console.log(`  textMatches: ${textMatches} (source="${source.text?.substring(0, 30)}", target="${target.text?.substring(0, 30)}")`);
+    console.log(`  attrsMatch: ${attrsMatch}`);
+    if (!attrsMatch) {
+      console.log(`  source.attrs:`, JSON.stringify(source.attrs)?.substring(0, 100));
+      console.log(`  target.attrs:`, JSON.stringify(target.attrs)?.substring(0, 100));
+    }
+  }
+
+  const textDistance = levenshteinDistance(source.text || '', target.text || '');
+  const maxLength = Math.max((source.text || '').length, (target.text || '').length, 1);
+  const textSimilarity = 1 - textDistance / maxLength;
+
+  const attrsMismatch = attrsMatch ? 0 : 0.1;
+
+  return Math.max(0, Math.min(1, textSimilarity - attrsMismatch));
+}
+
+function registerCanonicalNode(
+  node: CanonicalTreeNode,
+  cache: CanonicalCache,
+  childrenCache: ChildrenCache,
+) {
+  cache.set(node.key, node);
+  const children = node.children || [];
+  childrenCache.set(
+    node.key,
+    children.map((child) => child.key),
+  );
+
+  for (const child of children) {
+    registerCanonicalNode(child, cache, childrenCache);
+  }
+}
+
 export class WindowedTreeMatcher {
   private config: MatchingConfig;
   private sourceEditor: LexicalEditor;
   private targetEditor: LexicalEditor;
 
-  private neverMatchNodes: Set<string> = new Set([
-    // 'code',
-    'formula',
-    'matrix',
-    'diagram',
-  ]);
-
-  // Pre-cached node data for the entire tree
-  private sourceNodeCache: Map<string, NodeWithMarkdown> = new Map();
-  private targetNodeCache: Map<string, NodeWithMarkdown> = new Map();
-  private sourceTreeStructure: Map<string, string[]> = new Map(); // nodeKey -> childKeys
-  private targetTreeStructure: Map<string, string[]> = new Map(); // nodeKey -> childKeys
+  private sourceNodeCache: CanonicalCache = new Map();
+  private targetNodeCache: CanonicalCache = new Map();
+  private sourceChildrenCache: ChildrenCache = new Map();
+  private targetChildrenCache: ChildrenCache = new Map();
+  private sourceRootChildren: CanonicalTreeNode[] = [];
+  private targetRootChildren: CanonicalTreeNode[] = [];
 
   constructor(
     sourceEditor: LexicalEditor,
     targetEditor: LexicalEditor,
     config: Partial<MatchingConfig>,
   ) {
-    if (!config.transformers) {
-      throw new Error('WindowedTreeMatcher requires transformers in config');
-    }
+    const transformers =
+      config.transformers && config.transformers.length > 0
+        ? config.transformers
+        : getDiffTransformers();
 
     this.sourceEditor = sourceEditor;
     this.targetEditor = targetEditor;
-    this.config = {...DEFAULT_CONFIG, ...config} as MatchingConfig;
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...config,
+      transformers,
+    };
 
-    // Pre-cache all node data for both editors
-    this.buildCompleteCache();
+    this.buildCaches();
   }
 
-  /**
-   * Build complete cache of all nodes in both editors with their markdown and serialized forms
-   */
-  private buildCompleteCache(): void {
+  private buildCaches(): void {
+    this.sourceNodeCache.clear();
+    this.targetNodeCache.clear();
+    this.sourceChildrenCache.clear();
+    this.targetChildrenCache.clear();
+    this.sourceRootChildren = [];
+    this.targetRootChildren = [];
+
     this.sourceEditor.getEditorState().read(() => {
       const root = $getRoot();
-      this.cacheNodeRecursively(
-        root,
-        this.sourceNodeCache,
-        this.sourceTreeStructure,
-      );
+      const children = root.getChildren();
+      this.sourceRootChildren = canonicalizeForest(children);
+      for (const child of this.sourceRootChildren) {
+        registerCanonicalNode(child, this.sourceNodeCache, this.sourceChildrenCache);
+      }
     });
 
     this.targetEditor.getEditorState().read(() => {
       const root = $getRoot();
-      this.cacheNodeRecursively(
-        root,
-        this.targetNodeCache,
-        this.targetTreeStructure,
-      );
+      const children = root.getChildren();
+      this.targetRootChildren = canonicalizeForest(children);
+      for (const child of this.targetRootChildren) {
+        registerCanonicalNode(child, this.targetNodeCache, this.targetChildrenCache);
+      }
     });
   }
 
-  /**
-   * Recursively cache a node and all its descendants
-   */
-  private cacheNodeRecursively(
-    node: LexicalNode,
-    cache: Map<string, NodeWithMarkdown>,
-    treeStructure: Map<string, string[]>,
-  ): void {
-    const key = node.getKey();
-
-    // Generate markdown for this node
-    let markdown: string = '';
-    try {
-      // TODO GH: Review if this can just directly use convertNode... for all circumstances here and below
-      if ($isElementNode(node)) {
-        // For element nodes, convert to markdown using our custom function
-        markdown = $convertNodeToEnhancedMarkdownString(
-          this.config.transformers,
-          node
-        );
-      } else if ($isDecoratorNode(node)) {
-        // For decorator nodes, we need to use transformers to export them properly
-        // Try each transformer to see if it can export this decorator node
-        let exported = false;
-        for (const transformer of this.config.transformers) {
-          if (transformer.type === 'element' && transformer.export) {
-            try {
-              const result = transformer.export(node, () => node.getTextContent());
-              if (result != null) {
-                markdown = result;
-                exported = true;
-                break;
-              }
-            } catch {
-              // This transformer doesn't handle this node, try next
-            }
-          }
-        }
-        if (!exported) {
-          // No transformer handled this decorator node, fall back to text content
-          markdown = node.getTextContent();
-        }
-      } else {
-        // For text nodes, we need to preserve markdown formatting
-        // Text nodes don't have markdown conversion, but their parent might contain links
-        const parent = node.getParent();
-        if (parent && $isElementNode(parent) && parent.getType() === 'paragraph') {
-          try {
-            // Convert parent to markdown to preserve link formatting
-            markdown = $convertNodeToEnhancedMarkdownString(
-              this.config.transformers,
-              parent
-            );
-          } catch {
-            markdown = node.getTextContent();
-          }
-        } else {
-          markdown = node.getTextContent();
-        }
-      }
-    } catch (error) {
-      // Fallback for error cases
-      console.warn('Error converting node to markdown:', error);
-      markdown = node.getTextContent();
-    }
-
-    // Get serialized node
-    const serializedNode = $getSerializedNode(node);
-
-    // Extract live node key from NodeState (if present)
-    const liveNodeKey = $getState(node, LiveNodeKeyState) || undefined;
-
-    // if (liveNodeKey) {
-    //   console.log(`[TreeMatcher] Cached node ${key} with liveNodeKey=${liveNodeKey}, type=${node.getType()}, text="${node.getTextContent().substring(0, 20)}"`);
-    // }
-
-    // Cache this node
-    cache.set(key, {
-      node: serializedNode,
-      markdown: markdown.trim(),
-      key: key,
-      liveNodeKey: liveNodeKey,
-    });
-
-    // Cache children structure
-    if ($isElementNode(node)) {
-      const children = node.getChildren();
-      const childKeys = children.map((child) => child.getKey());
-      treeStructure.set(key, childKeys);
-
-      // Recursively cache all children
-      for (const child of children) {
-        this.cacheNodeRecursively(child, cache, treeStructure);
-      }
-    } else {
-      treeStructure.set(key, []);
-    }
-  }
-
-  /**
-   * Get cached data for a source node by key
-   */
-  getSourceNodeData(key: string): NodeWithMarkdown | undefined {
+  getSourceNodeData(key: string): CanonicalTreeNode | undefined {
     return this.sourceNodeCache.get(key);
   }
 
-  /**
-   * Get cached data for a target node by key
-   */
-  getTargetNodeData(key: string): NodeWithMarkdown | undefined {
+  getTargetNodeData(key: string): CanonicalTreeNode | undefined {
     return this.targetNodeCache.get(key);
   }
 
-  /**
-   * Get cached children keys for a source node
-   */
   getSourceChildren(parentKey: string): string[] {
-    return this.sourceTreeStructure.get(parentKey) || [];
+    return this.sourceChildrenCache.get(parentKey) || [];
   }
 
-  /**
-   * Get cached children keys for a target node
-   */
   getTargetChildren(parentKey: string): string[] {
-    return this.targetTreeStructure.get(parentKey) || [];
+    return this.targetChildrenCache.get(parentKey) || [];
   }
 
-  /**
-   * Get cached children data for a source node
-   */
-  getSourceChildrenData(parentKey: string): NodeWithMarkdown[] {
-    const childKeys = this.getSourceChildren(parentKey);
-    return childKeys
-      .map((key) => this.sourceNodeCache.get(key)!)
-      .filter(Boolean);
-  }
-
-  /**
-   * Get cached children data for a target node
-   */
-  getTargetChildrenData(parentKey: string): NodeWithMarkdown[] {
-    const childKeys = this.getTargetChildren(parentKey);
-    return childKeys
-      .map((key) => this.targetNodeCache.get(key)!)
-      .filter(Boolean);
-  }
-
-  /**
-   * Match the children of root nodes between source and target editors
-   */
   matchRootChildren(): WindowedMatchResult {
-    // Pre-calculate all markdown and serialized nodes WITHIN their own editor contexts
-    const sourceNodesWithMarkdown = this.sourceEditor.getEditorState().read(() => {
-      const root = $getRoot();
-      const children = root.getChildren();
-      // console.log('🔍 SOURCE EDITOR: Processing', children.length, 'root children');
-      // children.forEach((child, idx) => {
-      //   console.log(`  [${idx}] ${child.getType()} (key: ${child.getKey()})`);
-      // });
-      const results: NodeWithMarkdown[] = [];
-
-      for (const child of children) {
-        try {
-          const serialized = $getSerializedNode(child);
-          let markdown = '';
-
-          if ($isElementNode(child)) {
-            if (child.getType() === 'table') {
-              // console.log('🔍 SOURCE: Converting table node to markdown');
-              // console.log('  Number of transformers:', this.config.transformers.length);
-              const tableTransformer = this.config.transformers.find(t =>
-                t.type === 'element' && t.dependencies?.some?.(d =>
-                  typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
-                )
-              );
-              // console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
-              // if (tableTransformer) {
-              //   console.log('  Transformer export function exists:', !!('export' in tableTransformer && tableTransformer.export));
-              // }
-            }
-            // Debug: check if transformers include TABLE_TRANSFORMER
-            if (child.getType() === 'table') {
-              // console.log('  Calling $convertNodeToMarkdownString with', this.config.transformers.length, 'transformers');
-              const hasTableTransformer = this.config.transformers.some(t =>
-                t.type === 'element' && t.dependencies?.some?.(d =>
-                  typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
-                )
-              );
-              // console.log('  Has TABLE_TRANSFORMER?', hasTableTransformer);
-            }
-            markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, child);
-            // try {
-            //   markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, child);
-            // } catch (error) {
-            //   console.error('  Error converting node to markdown:', error);
-            //   markdown = child.getTextContent();
-            // }
-            // if (child.getType() === 'table') {
-            //   console.log('  Result markdown before trim:', markdown);
-            //   console.log('  Result markdown after trim:', markdown.trim());
-            // }
-          } else if ($isDecoratorNode(child)) {
-            // For decorator nodes, try each transformer to see if it can export this node
-            let exported = false;
-            for (const transformer of this.config.transformers) {
-              if (transformer.type === 'element' && transformer.export) {
-                try {
-                  const result = transformer.export(child, () => child.getTextContent());
-                  if (result != null) {
-                    markdown = result;
-                    exported = true;
-                    break;
-                  }
-                } catch {
-                  // This transformer doesn't handle this node, try next
-                }
-              }
-            }
-            if (!exported) {
-              markdown = child.getTextContent();
-            }
-          } else {
-            // For text nodes within paragraphs, we need the parent's markdown
-            // to preserve link formatting
-            const parent = child.getParent();
-            if (parent && $isElementNode(parent) && parent.getType() === 'paragraph') {
-              try {
-                markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, parent);
-              } catch {
-                markdown = child.getTextContent();
-              }
-            } else {
-              markdown = child.getTextContent();
-            }
-          }
-
-          // Extract liveNodeKey from NodeState if present
-          const liveNodeKey = $getState(child, LiveNodeKeyState) || undefined;
-
-          results.push({
-            node: serialized,
-            markdown: markdown.trim(),
-            key: child.getKey(),
-            liveNodeKey: liveNodeKey,
-          });
-        } catch (error) {
-          // console.warn('Failed to process source node:', error);
-        }
-      }
-      return results;
-    });
-
-    const targetNodesWithMarkdown = this.targetEditor.getEditorState().read(() => {
-      const root = $getRoot();
-      const children = root.getChildren();
-      // console.log('🔍 TARGET EDITOR: Processing', children.length, 'root children');
-      // children.forEach((child, idx) => {
-      //   console.log(`  [${idx}] ${child.getType()} (key: ${child.getKey()})`);
-      // });
-      const results: NodeWithMarkdown[] = [];
-
-      for (const child of children) {
-        try {
-          const serialized = $getSerializedNode(child);
-          let markdown = '';
-
-          if ($isElementNode(child)) {
-            if (child.getType() === 'table') {
-              // console.log('🔍 TARGET: Converting table node to markdown');
-              // console.log('  Number of transformers:', this.config.transformers.length);
-              const tableTransformer = this.config.transformers.find(t =>
-                t.type === 'element' && t.dependencies?.some?.(d =>
-                  typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
-                )
-              );
-              // console.log('  Found TABLE_TRANSFORMER:', !!tableTransformer);
-              // if (tableTransformer) {
-              //   console.log('  Transformer export function exists:', !!('export' in tableTransformer && tableTransformer.export));
-              // }
-            }
-            // Debug: check if transformers include TABLE_TRANSFORMER
-            if (child.getType() === 'table') {
-              // console.log('  Calling $convertNodeToMarkdownString with', this.config.transformers.length, 'transformers');
-              const hasTableTransformer = this.config.transformers.some(t =>
-                t.type === 'element' && t.dependencies?.some?.(d =>
-                  typeof d === 'function' ? d.name === 'TableNode' : d === 'TableNode'
-                )
-              );
-              // console.log('  Has TABLE_TRANSFORMER?', hasTableTransformer);
-            }
-            markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, child);
-            // try {
-            //   markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, child);
-            // } catch (error) {
-            //   console.error('  Error converting node to markdown:', error);
-            //   markdown = child.getTextContent();
-            // }
-            // if (child.getType() === 'table') {
-            //   console.log('  Result markdown before trim:', markdown);
-            //   console.log('  Result markdown after trim:', markdown.trim());
-            // }
-          } else if ($isDecoratorNode(child)) {
-            // For decorator nodes, try each transformer to see if it can export this node
-            let exported = false;
-            for (const transformer of this.config.transformers) {
-              if (transformer.type === 'element' && transformer.export) {
-                try {
-                  const result = transformer.export(child, () => child.getTextContent());
-                  if (result != null) {
-                    markdown = result;
-                    exported = true;
-                    break;
-                  }
-                } catch {
-                  // This transformer doesn't handle this node, try next
-                }
-              }
-            }
-            if (!exported) {
-              markdown = child.getTextContent();
-            }
-          } else {
-            // For text nodes within paragraphs, we need the parent's markdown
-            // to preserve link formatting
-            const parent = child.getParent();
-            if (parent && $isElementNode(parent)) {
-              try {
-                markdown = $convertNodeToEnhancedMarkdownString(this.config.transformers, parent);
-              } catch {
-                markdown = child.getTextContent();
-              }
-            } else {
-              markdown = child.getTextContent();
-            }
-          }
-
-          results.push({
-            node: serialized,
-            markdown: markdown.trim(),
-            key: child.getKey(),
-          });
-        } catch (error) {
-          // console.warn('Failed to process target node:', error);
-        }
-      }
-      return results;
-    });
-
-    // DEBUG: Log source nodes
-    // console.log(`[TreeMatcher] SOURCE has ${sourceNodesWithMarkdown.length} nodes`);
-    // sourceNodesWithMarkdown.forEach((node, idx) => {
-    //   console.log(`[TreeMatcher] source[${idx}] liveKey=${node.liveNodeKey} markdown="${node.markdown}"`);
-    // });
-
-    // DEBUG: Log target nodes to see what we're matching against
-    // console.log(`[TreeMatcher] TARGET has ${targetNodesWithMarkdown.length} nodes`);
-    // targetNodesWithMarkdown.forEach((node, idx) => {
-    //   console.log(`[TreeMatcher] target[${idx}] markdown="${node.markdown}"`);
-    // });
-
-    const result = this.matchNodesWithMarkdown(
-      sourceNodesWithMarkdown,
-      targetNodesWithMarkdown,
+    return this.matchCanonicalNodes(
+      this.sourceRootChildren,
+      this.targetRootChildren,
     );
-
-    // console.log('TreeMatcher results:');
-    // console.log('  Source nodes:', sourceNodesWithMarkdown.map(n => `${n.node.type}: ${n.markdown.substring(0, 50)}`));
-    // console.log('  Target nodes:', targetNodesWithMarkdown.map(n => `${n.node.type}: ${n.markdown.substring(0, 50)}`));
-    // console.log('  Diffs found:', result.diffs.length);
-    // result.diffs.forEach(diff => {
-    //   console.log(`    ${diff.changeType} ${diff.nodeType}: "${diff.sourceMarkdown?.substring(0, 30)}" -> "${diff.targetMarkdown?.substring(0, 30)}"`);
-    // });
-
-    return result;
   }
 
-
-  /**
-   * Match nodes using pre-calculated NodeWithMarkdown data (used for cached sub-tree diffing)
-   */
-  matchNodesWithMarkdown(
-    sourceNodesWithMarkdown: NodeWithMarkdown[],
-    targetNodesWithMarkdown: NodeWithMarkdown[],
+  matchCanonicalNodes(
+    sourceNodes: CanonicalTreeNode[],
+    targetNodes: CanonicalTreeNode[],
   ): WindowedMatchResult {
-    // All nodes including empties - no filtering, no pre-matching
-    const sourceContentNodes = sourceNodesWithMarkdown;
-    const targetContentNodes = targetNodesWithMarkdown;
+    // Create root nodes for diffTrees
+    const sourceRoot: CanonicalTreeNode = {
+      id: -1,
+      key: 'source-root',
+      type: 'root',
+      text: undefined,
+      attrs: undefined,
+      children: sourceNodes,
+      serialized: { type: 'root', version: 1 } as SerializedLexicalNode,
+    };
 
-    // Special case: single content node pairs
-    if (
-      sourceContentNodes.length === 1 &&
-      targetContentNodes.length === 1 &&
-      sourceContentNodes[0].node.type === targetContentNodes[0].node.type &&
-      !this.neverMatchNodes.has(sourceContentNodes[0].node.type)
-    ) {
-      // If they're identical, no diff needed (exact match = no change)
-      if (sourceContentNodes[0].markdown === targetContentNodes[0].markdown) {
-        const exactMatch: NodeDiff = {
-          changeType: 'update',
-          sourceIndex: 0,
-          sourceNode: sourceContentNodes[0].node,
-          sourceKey: sourceContentNodes[0].key,
-          sourceMarkdown: sourceContentNodes[0].markdown,
-          sourceLiveKey: sourceContentNodes[0].liveNodeKey,
-          targetIndex: 0,
-          targetNode: sourceContentNodes[0].node,
-          targetKey: sourceContentNodes[0].key,
-          targetMarkdown: sourceContentNodes[0].markdown,
-          nodeType: sourceContentNodes[0].node.type,
-          similarity: 1.0,
-          matchType: 'exact',
-        };
+    const targetRoot: CanonicalTreeNode = {
+      id: -2,
+      key: 'target-root',
+      type: 'root',
+      text: undefined,
+      attrs: undefined,
+      children: targetNodes,
+      serialized: { type: 'root', version: 1 } as SerializedLexicalNode,
+    };
 
-        return {diffs: [], sequence: [exactMatch]};
-      }
-
-      // If they're different, it's an actual update
-
-      const similarity = this.calculateMarkdownSimilarity(
-        sourceContentNodes[0].markdown,
-        targetContentNodes[0].markdown,
-      );
-
-      const match = this.createNodeMatch(
-        sourceContentNodes[0],
-        0,
-        targetContentNodes[0],
-        0,
-        similarity,
-        similarity >= this.config.similarityThreshold ? 'similar' : 'none',
-      );
-
-      return {
-        diffs: [match], // Show change in diffs
-        sequence: [match], // Single change
-      };
-    }
+    // Run order-preserving diff
+    const diffOps = diffTrees(sourceRoot, targetRoot, {
+      pairAlignThreshold: 0.8,
+      equalThreshold: 0.1,
+    });
 
     const diffs: NodeDiff[] = [];
     const sequence: NodeDiff[] = [];
-    let sourceContentMatched = new Set<number>();
-    let targetContentMatched = new Set<number>();
 
-    // PHASE 1: Exact content matching to establish "guide posts"
-    // Skip empty paragraphs - they can't be guide posts since they're all identical
-    for (
-      let sourceIdx = 0;
-      sourceIdx < sourceContentNodes.length;
-      sourceIdx++
-    ) {
-      const sourceNode = sourceContentNodes[sourceIdx];
+    const sourceMatched = new Set<number>();
+    const targetMatched = new Set<number>();
+    const targetToSource = new Map<number, number>();
 
-      // Skip already matched, empties, and never-match nodes
-      if (sourceContentMatched.has(sourceIdx)) continue;
-      if (this.isEmptySpacingNode(sourceNode)) continue; // Skip empties - can't be guide posts
-      if (this.neverMatchNodes.has(sourceNode.node.type)) continue;
+    // Convert DiffOp to NodeDiff
+    // Process root children only (skip root itself)
+    for (const op of diffOps) {
+      // Skip the root node operation
+      if (op.op === 'equal' && op.a.type === 'root') continue;
+      if (op.op === 'replace' && op.a.type === 'root') continue;
 
-      // Find exact content match
-      let foundMatch = false;
-      for (
-        let targetIdx = 0;
-        targetIdx < targetContentNodes.length;
-        targetIdx++
-      ) {
-        if (targetContentMatched.has(targetIdx)) continue;
-        if (this.isEmptySpacingNode(targetContentNodes[targetIdx])) continue; // Don't match to empties
+      // Only process direct children of root (depth 1)
+      const depth = op.op === 'delete' ? op.aPath.length :
+                   op.op === 'insert' ? op.bPath.length :
+                   op.aPath.length;
+      if (depth !== 1) continue; // Only process top-level nodes
 
-        const targetNode = targetContentNodes[targetIdx];
+      if (op.op === 'equal' || op.op === 'replace') {
+        const sourceIdx = op.aPath[0];
+        const targetIdx = op.bPath[0];
 
-        if (sourceNode.markdown === targetNode.markdown) {
-          foundMatch = true;
-          sourceContentMatched.add(sourceIdx);
-          targetContentMatched.add(targetIdx);
+        if (sourceIdx >= sourceNodes.length || targetIdx >= targetNodes.length) continue;
 
-          // console.log(`[TreeMatcher PHASE 1] MATCH: source[${sourceIdx}](liveKey=${sourceNode.liveNodeKey}) -> target[${targetIdx}], markdown="${sourceNode.markdown.substring(0, 20)}"`);
-          const exactMatch: NodeDiff = {
-            changeType: 'update',
-            sourceIndex: sourceIdx,
-            sourceNode: sourceNode.node,
-            sourceKey: sourceNode.key,
-            sourceMarkdown: sourceNode.markdown,
-            sourceLiveKey: sourceNode.liveNodeKey,
-            targetIndex: targetIdx,
-            targetNode: targetNode.node,
-            targetKey: targetNode.key,
-            targetMarkdown: targetNode.markdown,
-            nodeType: sourceNode.node.type,
-            similarity: 1.0,
-            matchType: 'exact',
-          };
+        const similarity = calculateSimilarity(sourceNodes[sourceIdx], targetNodes[targetIdx]);
 
-          diffs.push(exactMatch); // Add to diffs array
-          sequence.push(exactMatch); // Include as position anchor
+        if (similarity < this.config.similarityThreshold) continue;
+
+        sourceMatched.add(sourceIdx);
+        targetMatched.add(targetIdx);
+        targetToSource.set(targetIdx, sourceIdx);
+
+        const isExact = op.op === 'equal';
+
+        // CRITICAL: Skip exact matches - they require no diff operations
+        // When ThresholdedOrderPreservingTree marks as EQUAL (isExact=true), trust it
+        // even if calculateSimilarity returns something < 1.0 due to different algorithms
+        if (isExact) {
+          // Debug: log skipped exact matches
+          if (process?.env?.DIFF_DEBUG === '1') {
+            console.log(`[TreeMatcher] Skipping exact match at source[${sourceIdx}] -> target[${targetIdx}]: ${sourceNodes[sourceIdx].type} "${(sourceNodes[sourceIdx].text || '').substring(0, 30)}" (similarity=${similarity.toFixed(4)})`);
+          }
+          // Still mark as matched to prevent false delete/add pairs,
+          // but don't create a diff operation
+          continue;
+        }
+
+        // Debug: log non-exact matches
+        if (process?.env?.DIFF_DEBUG === '1') {
+          console.log(`[TreeMatcher] Creating UPDATE for source[${sourceIdx}] -> target[${targetIdx}]: ${sourceNodes[sourceIdx].type} "${(sourceNodes[sourceIdx].text || '').substring(0, 30)}" (similarity=${similarity.toFixed(4)}, isExact=${isExact})`);
+        }
+
+        const diff: NodeDiff = {
+          changeType: 'update',
+          sourceIndex: sourceIdx,
+          sourceNode: sourceNodes[sourceIdx].serialized,
+          sourceKey: sourceNodes[sourceIdx].key,
+          sourceMarkdown: sourceNodes[sourceIdx].text || '',
+          sourceLiveKey: sourceNodes[sourceIdx].liveNodeKey,
+          targetIndex: targetIdx,
+          targetNode: targetNodes[targetIdx].serialized,
+          targetKey: targetNodes[targetIdx].key,
+          targetMarkdown: targetNodes[targetIdx].text || '',
+          nodeType: sourceNodes[sourceIdx].type,
+          similarity,
+          matchType: isExact ? 'exact' : 'similar',
+        };
+
+        diffs.push(diff);
+        sequence.push(diff);
+      } else if (op.op === 'delete') {
+        const sourceIdx = op.aPath[0];
+        if (sourceIdx >= sourceNodes.length) continue;
+
+        sourceMatched.add(sourceIdx);
+
+        // Create NodeDiff for delete
+        const diff: NodeDiff = {
+          changeType: 'remove',
+          sourceIndex: sourceIdx,
+          sourceNode: sourceNodes[sourceIdx].serialized,
+          sourceKey: sourceNodes[sourceIdx].key,
+          sourceMarkdown: sourceNodes[sourceIdx].text || '',
+          sourceLiveKey: sourceNodes[sourceIdx].liveNodeKey,
+          targetIndex: -1,
+          targetNode: null,
+          targetKey: null,
+          targetMarkdown: '',
+          nodeType: sourceNodes[sourceIdx].type,
+          similarity: 0,
+          matchType: 'none',
+        };
+
+        diffs.push(diff);
+        sequence.push(diff);
+      } else if (op.op === 'insert') {
+        const targetIdx = op.bPath[0];
+        if (targetIdx >= targetNodes.length) continue;
+
+        targetMatched.add(targetIdx);
+
+        // Determine insertion index
+        const insertionIndex = this.determineInsertionIndex(
+          targetIdx,
+          sourceNodes.length,
+          targetNodes.length,
+          targetToSource,
+        );
+
+        // Create NodeDiff for insert
+        const diff: NodeDiff = {
+          changeType: 'add',
+          sourceIndex: insertionIndex,
+          sourceNode: null,
+          sourceKey: null,
+          sourceMarkdown: '',
+          sourceLiveKey: undefined,
+          targetIndex: targetIdx,
+          targetNode: targetNodes[targetIdx].serialized,
+          targetKey: targetNodes[targetIdx].key,
+          targetMarkdown: targetNodes[targetIdx].text || '',
+          nodeType: targetNodes[targetIdx].type,
+          similarity: 0,
+          matchType: 'none',
+        };
+
+        diffs.push(diff);
+        sequence.push(diff);
+      }
+    }
+
+    const candidateMatches: Array<{
+      sourceIdx: number;
+      targetIdx: number;
+      similarity: number;
+    }> = [];
+
+    for (let i = 0; i < sourceNodes.length; i++) {
+      if (sourceMatched.has(i)) continue;
+      const sourceNode = sourceNodes[i];
+      for (let j = 0; j < targetNodes.length; j++) {
+        if (targetMatched.has(j)) continue;
+        const targetNode = targetNodes[j];
+        if (sourceNode.type !== targetNode.type) continue;
+
+        const similarity = calculateSimilarity(sourceNode, targetNode);
+        if (similarity >= this.config.similarityThreshold) {
+          candidateMatches.push({sourceIdx: i, targetIdx: j, similarity});
+        }
+      }
+    }
+
+    candidateMatches.sort((a, b) => b.similarity - a.similarity);
+
+    for (const candidate of candidateMatches) {
+      if (sourceMatched.has(candidate.sourceIdx)) continue;
+      if (targetMatched.has(candidate.targetIdx)) continue;
+
+      const sourceNode = sourceNodes[candidate.sourceIdx];
+      const targetNode = targetNodes[candidate.targetIdx];
+      const isExact =
+        candidate.similarity === 1 &&
+        JSON.stringify(sourceNode.attrs) === JSON.stringify(targetNode.attrs);
+
+      sourceMatched.add(candidate.sourceIdx);
+      targetMatched.add(candidate.targetIdx);
+      targetToSource.set(candidate.targetIdx, candidate.sourceIdx);
+
+      const diff: NodeDiff = {
+        changeType: 'update',
+        sourceIndex: candidate.sourceIdx,
+        sourceNode: sourceNode.serialized,
+        sourceKey: sourceNode.key,
+        sourceMarkdown: sourceNode.text || '',
+        sourceLiveKey: sourceNode.liveNodeKey,
+        targetIndex: candidate.targetIdx,
+        targetNode: targetNode.serialized,
+        targetKey: targetNode.key,
+        targetMarkdown: targetNode.text || '',
+        nodeType: sourceNode.type,
+        similarity: candidate.similarity,
+        matchType: isExact ? 'exact' : 'similar',
+      };
+
+      diffs.push(diff);
+      sequence.push(diff);
+    }
+
+    const convertedRemoves = new Set<NodeDiff>();
+    const convertedAdds = new Set<NodeDiff>();
+
+    for (let i = 0; i < sourceNodes.length; i++) {
+      if (sourceMatched.has(i)) continue;
+
+      const sourceNode = sourceNodes[i];
+      const diff: NodeDiff = {
+        changeType: 'remove',
+        sourceIndex: i,
+        sourceNode: sourceNode.serialized,
+        sourceKey: sourceNode.key,
+        sourceMarkdown: sourceNode.text || '',
+        sourceLiveKey: sourceNode.liveNodeKey,
+        targetIndex: -1,
+        targetNode: null,
+        targetKey: null,
+        targetMarkdown: '',
+        nodeType: sourceNode.type,
+        similarity: 0,
+        matchType: 'none',
+      };
+
+      diffs.push(diff);
+      sequence.push(diff);
+    }
+
+    for (let j = 0; j < targetNodes.length; j++) {
+      if (targetMatched.has(j)) continue;
+
+      const targetNode = targetNodes[j];
+      const insertionIndex = this.determineInsertionIndex(
+        j,
+        sourceNodes.length,
+        targetNodes.length,
+        targetToSource,
+      );
+
+      const diff: NodeDiff = {
+        changeType: 'add',
+        sourceIndex: insertionIndex,
+        sourceNode: null,
+        sourceKey: null,
+        sourceMarkdown: '',
+        sourceLiveKey: undefined,
+        targetIndex: j,
+        targetNode: targetNode.serialized,
+        targetKey: targetNode.key,
+        targetMarkdown: targetNode.text || '',
+        nodeType: targetNode.type,
+        similarity: 0,
+        matchType: 'none',
+      };
+
+      diffs.push(diff);
+      sequence.push(diff);
+    }
+
+    // Convert matching remove/add pairs with identical content into updates (handle moves)
+    const removeDiffs = diffs.filter((d) => d.changeType === 'remove');
+    const addDiffs = diffs.filter((d) => d.changeType === 'add');
+    const newUpdates: NodeDiff[] = [];
+
+    for (const removeDiff of removeDiffs) {
+      const sourceNode = sourceNodes[removeDiff.sourceIndex];
+
+      let matchedAdd: NodeDiff | null = null;
+      for (const addDiff of addDiffs) {
+        if (convertedAdds.has(addDiff)) continue;
+        const targetNode = targetNodes[addDiff.targetIndex];
+        if (!targetNode || targetNode.type !== sourceNode.type) continue;
+
+        const attrsEqual =
+          JSON.stringify(sourceNode.attrs) === JSON.stringify(targetNode.attrs);
+        const textEqual = (sourceNode.text || '') === (targetNode.text || '');
+
+        if (attrsEqual && textEqual) {
+          matchedAdd = addDiff;
           break;
         }
       }
 
-      // if (!foundMatch) {
-      //   console.log(`[TreeMatcher PHASE 1] NO MATCH for source node ${sourceIdx}: key=${sourceNode.key}, liveKey=${sourceNode.liveNodeKey}, markdown="${sourceNode.markdown.substring(0, 20)}"`);
-      // }
-    }
+      if (matchedAdd) {
+        convertedRemoves.add(removeDiff);
+        convertedAdds.add(matchedAdd);
 
-    // PHASE 2: Similarity-based matching for remaining unmatched nodes
-    const similarityMatches = this.findOptimalSimilarityMatches(
-      sourceContentNodes,
-      targetContentNodes,
-      sourceContentMatched,
-      targetContentMatched,
-    );
+        const targetNode = targetNodes[matchedAdd.targetIndex];
 
-    // Add similarity matches to our results
-    for (const match of similarityMatches.selectedMatches) {
-      // Similarity matches already have correct indices (no filtering)
-      diffs.push(match);
-      sequence.push(match);
-    }
-
-    // Update matched sets with similarity matches
-    sourceContentMatched = new Set([
-      ...sourceContentMatched,
-      ...similarityMatches.sourceMatched,
-    ]);
-    targetContentMatched = new Set([
-      ...targetContentMatched,
-      ...similarityMatches.targetMatched,
-    ]);
-
-    // PHASE 3: Handle remaining unmatched content nodes as pure adds/removes
-    // Any remaining unmatched source content nodes are removes
-    // Skip empties - they just stay as blank lines
-    for (
-      let sourceIdx = 0;
-      sourceIdx < sourceContentNodes.length;
-      sourceIdx++
-    ) {
-      if (!sourceContentMatched.has(sourceIdx)) {
-        const sourceNode = sourceContentNodes[sourceIdx];
-
-        // Skip empties - they're preserved as blank lines
-        if (this.isEmptySpacingNode(sourceNode)) continue;
-
-        const removeMatch: NodeDiff = {
-          changeType: 'remove',
-          sourceIndex: sourceIdx,
-          sourceNode: sourceNode.node,
-          sourceKey: sourceNode.key,
-          sourceMarkdown: sourceNode.markdown,
-          sourceLiveKey: sourceNode.liveNodeKey,
-          targetIndex: -1,
-          targetNode: null as any,
-          targetKey: null as any,
-          targetMarkdown: '',
-          nodeType: sourceNode.node.type,
-          similarity: 0,
-          matchType: 'none',
+        const updateDiff: NodeDiff = {
+          changeType: 'update',
+          sourceIndex: removeDiff.sourceIndex,
+          sourceNode: removeDiff.sourceNode,
+          sourceKey: removeDiff.sourceKey,
+          sourceMarkdown: removeDiff.sourceMarkdown,
+          sourceLiveKey: removeDiff.sourceLiveKey,
+          targetIndex: matchedAdd.targetIndex,
+          targetNode: targetNode ? targetNode.serialized : matchedAdd.targetNode,
+          targetKey: targetNode ? targetNode.key : matchedAdd.targetKey,
+          targetMarkdown: matchedAdd.targetMarkdown,
+          nodeType: removeDiff.nodeType,
+          similarity: 1,
+          matchType: 'exact',
         };
 
-        diffs.push(removeMatch);
-        sequence.push(removeMatch);
+        newUpdates.push(updateDiff);
       }
     }
 
-    // Any remaining unmatched target content nodes are adds
-    // Skip empties for now - Phase 3 optimization can use them to minimize operations
-    for (
-      let targetIdx = 0;
-      targetIdx < targetContentNodes.length;
-      targetIdx++
-    ) {
-      if (!targetContentMatched.has(targetIdx)) {
-        const targetNode = targetContentNodes[targetIdx];
+    if (convertedRemoves.size > 0 || convertedAdds.size > 0) {
+      const filteredSequence = sequence.filter(
+        (diff) => !convertedRemoves.has(diff) && !convertedAdds.has(diff),
+      );
+      const filteredDiffs = diffs.filter(
+        (diff) => !convertedRemoves.has(diff) && !convertedAdds.has(diff),
+      );
 
-        // Skip empties - they're preserved as blank lines
-        if (this.isEmptySpacingNode(targetNode)) continue;
+      filteredDiffs.push(...newUpdates);
+      filteredSequence.push(...newUpdates);
 
-        // Calculate insertion position by finding the next matched node
-        let insertPositionInSource = sourceNodesWithMarkdown.length; // Default to end
-
-        for (
-          let searchIdx = targetIdx + 1;
-          searchIdx < targetContentNodes.length;
-          searchIdx++
-        ) {
-          if (targetContentMatched.has(searchIdx)) {
-            // Found a matched node after our insertion point
-            const matchedTargetNode = targetContentNodes[searchIdx];
-
-            // Find this node's source position by looking through our matches
-            for (const seqItem of sequence) {
-              if (
-                (seqItem.matchType === 'exact' ||
-                  seqItem.matchType === 'similar') &&
-                seqItem.targetMarkdown === matchedTargetNode.markdown
-              ) {
-                insertPositionInSource = seqItem.sourceIndex;
-
-                // OPTIMIZATION: If there are unmatched empty paragraphs immediately before
-                // this matched node in SOURCE, insert before them instead.
-                // This keeps related content grouped together.
-                while (insertPositionInSource > 0) {
-                  const prevSourceIdx = insertPositionInSource - 1;
-                  if (!sourceContentMatched.has(prevSourceIdx)) {
-                    const prevSourceNode = sourceContentNodes[prevSourceIdx];
-                    if (this.isEmptySpacingNode(prevSourceNode)) {
-                      insertPositionInSource = prevSourceIdx;
-                      continue; // Keep looking backwards
-                    }
-                  }
-                  break; // Stop if not an unmatched empty
-                }
-
-                break;
-              }
-            }
-            break;
-          }
-        }
-
-        // OPTIMIZATION: If insertion position is at end of document,
-        // check if there are trailing unmatched empties and insert before them
-        if (insertPositionInSource === sourceNodesWithMarkdown.length) {
-          while (insertPositionInSource > 0) {
-            const prevSourceIdx = insertPositionInSource - 1;
-            if (!sourceContentMatched.has(prevSourceIdx)) {
-              const prevSourceNode = sourceContentNodes[prevSourceIdx];
-              if (this.isEmptySpacingNode(prevSourceNode)) {
-                insertPositionInSource = prevSourceIdx;
-                continue; // Keep looking backwards
-              }
-            }
-            break; // Stop if not an unmatched empty
-          }
-        }
-
-        const addMatch: NodeDiff = {
-          changeType: 'add',
-          sourceIndex: insertPositionInSource,
-          sourceNode: null as any,
-          sourceKey: null as any,
-          sourceMarkdown: '',
-          targetIndex: targetIdx,
-          targetNode: targetNode.node,
-          targetKey: targetNode.key,
-          targetMarkdown: targetNode.markdown,
-          nodeType: targetNode.node.type,
-          similarity: 0,
-          matchType: 'none',
-        };
-
-        diffs.push(addMatch);
-        sequence.push(addMatch);
-      }
+      diffs.splice(0, diffs.length, ...filteredDiffs);
+      sequence.splice(0, sequence.length, ...filteredSequence);
     }
 
-    // TODO PHASE 3 OPTIMIZATION: Use empty paragraphs intelligently to minimize operations
-    // For example: If adding content between two guide posts, could we UPDATE an empty
-    // paragraph instead of doing REMOVE empty + ADD content?
-    // This optimization should happen here, after guide posts are established.
-
-    // Sort sequence by target index to maintain proper ordering
     sequence.sort((a, b) => a.targetIndex - b.targetIndex);
+
+    if (process?.env?.DIFF_DEBUG === '1') {
+      console.log(
+        '[TreeMatcher] diff summary',
+        diffs.map((d) => ({
+          type: d.changeType,
+          nodeType: d.nodeType,
+          sourceIdx: d.sourceIndex,
+          targetIdx: d.targetIndex,
+          matchType: d.matchType,
+          similarity: Number(d.similarity.toFixed(2)),
+          sourceText: d.sourceMarkdown,
+          targetText: d.targetMarkdown,
+        })),
+      );
+
+      // Print a readable summary
+      console.log('\n=== DIFF SUMMARY ===');
+      console.log(`Total operations: ${diffs.length}`);
+      const byType = {
+        add: diffs.filter(d => d.changeType === 'add').length,
+        remove: diffs.filter(d => d.changeType === 'remove').length,
+        update: diffs.filter(d => d.changeType === 'update').length,
+      };
+      console.log(`  Adds: ${byType.add}`);
+      console.log(`  Removes: ${byType.remove}`);
+      console.log(`  Updates: ${byType.update}`);
+
+      const updates = diffs.filter(d => d.changeType === 'update');
+      if (updates.length > 0) {
+        console.log('\n=== UPDATE OPERATIONS ===');
+        updates.forEach((u, i) => {
+          const preview = (u.sourceMarkdown || '').substring(0, 60);
+          console.log(`[${i}] ${u.nodeType} [${u.sourceIndex}->${u.targetIndex}] sim=${u.similarity.toFixed(3)} match=${u.matchType}`);
+          console.log(`    "${preview}${preview.length >= 60 ? '...' : ''}"`);
+        });
+      }
+
+      console.log(`\nSkipped exact matches: ${sourceNodes.length + targetNodes.length - diffs.length - sourceNodes.length - targetNodes.length + diffs.filter(d => d.changeType === 'update').length}`);
+    }
 
     return {diffs, sequence};
   }
 
-  /**
-   * Create a NodeDiff match object
-   */
-  private createNodeMatch(
-    sourceNode: NodeWithMarkdown,
-    sourceIndex: number,
-    targetNode: NodeWithMarkdown,
-    targetIndex: number,
-    similarity: number,
-    matchType: 'exact' | 'similar' | 'none',
-  ): NodeDiff {
-    return {
-      changeType: 'update',
-      sourceIndex,
-      sourceNode: sourceNode.node,
-      sourceMarkdown: sourceNode.markdown,
-      sourceKey: sourceNode.key,
-      sourceLiveKey: sourceNode.liveNodeKey,
-      targetIndex,
-      targetNode: targetNode.node,
-      targetMarkdown: targetNode.markdown,
-      targetKey: targetNode.key,
-      similarity,
-      matchType,
-      nodeType: sourceNode.node.type,
-    };
-  }
-
-  /**
-   * Check if a node is just empty spacing (empty paragraph) that shouldn't be matched
-   */
-  private isEmptySpacingNode(node: NodeWithMarkdown): boolean {
-    // Yes, matching arbitrary numbers of spaces is on purpose
-    // indents of spaces between list items is common and should not be matched
-    return node.node.type === 'paragraph' && node.markdown.trim() === '';
-  }
-
-  /**
-   * Find optimal similarity-based matches using global optimization
-   */
-  private findOptimalSimilarityMatches(
-    sourceNodesWithMarkdown: NodeWithMarkdown[],
-    targetNodesWithMarkdown: NodeWithMarkdown[],
-    sourceMatched: Set<number>,
-    targetMatched: Set<number>,
-  ): {
-    selectedMatches: NodeDiff[];
-    sourceMatched: Set<number>;
-    targetMatched: Set<number>;
-  } {
-    // Collect all possible matches above threshold
-    const possibleMatches: Array<{
-      sourceIdx: number;
-      targetIdx: number;
-      similarity: number;
-      match: NodeDiff;
-    }> = [];
-
-    // console.log('\n=== SIMILARITY MATCHING DEBUG ===');
-    // console.log(
-    //   `Checking ${sourceNodesWithMarkdown.length} source nodes against ${targetNodesWithMarkdown.length} target nodes`,
-    // );
-
-    // Debug: Show what nodes we're comparing
-          // console.log('Source nodes (unmatched):');
-    sourceNodesWithMarkdown.forEach((node, idx) => {
-      if (!sourceMatched.has(idx)) {
-          // console.log(`  [${idx}] ${node.node.type}: "${node.markdown}"`);
-      }
-    });
-          // console.log('Target nodes (unmatched):');
-    targetNodesWithMarkdown.forEach((node, idx) => {
-      if (!targetMatched.has(idx)) {
-          // console.log(`  [${idx}] ${node.node.type}: "${node.markdown}"`);
-      }
-    });
-
-    // Also show ALL nodes for debugging
-          // console.log('\nALL Source nodes:');
-    sourceNodesWithMarkdown.forEach((node, idx) => {
-          // console.log(`  [${idx}] ${node.node.type}: "${node.markdown}"`);
-    });
-          // console.log('ALL Target nodes:');
-    targetNodesWithMarkdown.forEach((node, idx) => {
-          // console.log(`  [${idx}] ${node.node.type}: "${node.markdown}"`);
-    });
-
-    for (
-      let sourceIdx = 0;
-      sourceIdx < sourceNodesWithMarkdown.length;
-      sourceIdx++
-    ) {
-      if (sourceMatched.has(sourceIdx)) continue;
-
-      const sourceNode = sourceNodesWithMarkdown[sourceIdx];
-      if (this.neverMatchNodes.has(sourceNode.node.type)) continue;
-      if (this.isEmptySpacingNode(sourceNode)) continue; // Skip empties - can't be guide posts
-
-      for (
-        let targetIdx = 0;
-        targetIdx < targetNodesWithMarkdown.length;
-        targetIdx++
-      ) {
-        if (targetMatched.has(targetIdx)) continue;
-
-        const targetNode = targetNodesWithMarkdown[targetIdx];
-        if (this.isEmptySpacingNode(targetNode)) continue; // Don't match to empties
-
-        // Skip if types don't match and we require same type
-        if (
-          this.config.requireSameType &&
-          sourceNode.node.type !== targetNode.node.type
-        ) {
-          continue;
-        }
-
-        const similarity = this.calculateMarkdownSimilarity(
-          sourceNode.markdown,
-          targetNode.markdown,
-        );
-
-        // Apply position penalty to favor closer positions
-        const positionDistance = Math.abs(sourceIdx - targetIdx);
-        const maxDistance = Math.max(
-          sourceNodesWithMarkdown.length,
-          targetNodesWithMarkdown.length,
-        );
-        const positionPenalty = (positionDistance / maxDistance) * 0.2; // 20% penalty for distance
-        const adjustedSimilarity = similarity - positionPenalty;
-
-        // DEBUG: Log similarity calculations for paragraph nodes
-        if (
-          sourceNode.node.type === 'paragraph' &&
-          targetNode.node.type === 'paragraph'
-        ) {
-          // console.log(`\nParagraph similarity [${sourceIdx}->${targetIdx}]:`);
-          // console.log(`  Source: "${sourceNode.markdown.substring(0, 50)}..."`);
-          // console.log(`  Target: "${targetNode.markdown.substring(0, 50)}..."`);
-          // console.log(`  Source normalized: "${sourceNode.markdown.replace(/\s+/g, ' ').trim().substring(0, 50)}..."`);
-          // console.log(`  Target normalized: "${targetNode.markdown.replace(/\s+/g, ' ').trim().substring(0, 50)}..."`);
-          // console.log(`  Raw similarity: ${similarity.toFixed(3)}`);
-          // console.log(`  Position penalty: ${positionPenalty.toFixed(3)}`);
-          // console.log(
-          //   `  Adjusted similarity: ${adjustedSimilarity.toFixed(3)}`,
-          // );
-          // console.log(`  Threshold: ${this.config.similarityThreshold}`);
-          // console.log(
-          //   `  Above threshold: ${
-          //     adjustedSimilarity >= this.config.similarityThreshold
-          //   }`,
-          // );
-        }
-
-        if (adjustedSimilarity >= this.config.similarityThreshold) {
-          const match = this.createNodeMatch(
-            sourceNode,
-            sourceIdx,
-            targetNode,
-            targetIdx,
-            similarity, // Use original similarity for display, not adjusted
-            'similar',
-          );
-
-          possibleMatches.push({
-            sourceIdx,
-            targetIdx,
-            similarity: adjustedSimilarity, // Use adjusted for selection
-            match,
-          });
-        }
-      }
-    }
-
-    // console.log(
-    //   `Found ${possibleMatches.length} possible matches above threshold`,
-    // );
-    // console.log('=====================================\n');
-
-    // Greedy selection with position penalties - pick highest scoring non-conflicting matches
-    // NOTE: Hungarian algorithm would provide theoretical global optimization, but current
-    // approach works well for typical document sizes and is much simpler to maintain
-    possibleMatches.sort((a, b) => b.similarity - a.similarity);
-
-    const selectedMatches: NodeDiff[] = [];
-    const newSourceMatched = new Set<number>();
-    const newTargetMatched = new Set<number>();
-
-    for (const possibleMatch of possibleMatches) {
-      if (
-        !newSourceMatched.has(possibleMatch.sourceIdx) &&
-        !newTargetMatched.has(possibleMatch.targetIdx)
-      ) {
-        selectedMatches.push(possibleMatch.match);
-        newSourceMatched.add(possibleMatch.sourceIdx);
-        newTargetMatched.add(possibleMatch.targetIdx);
-      }
-    }
-
-    return {
-      selectedMatches: selectedMatches,
-      sourceMatched: newSourceMatched,
-      targetMatched: newTargetMatched,
-    };
-  }
-
-  /**
-   * Find the best match for a source node within a position window
-   */
-  private findBestMatchInWindow(
-    sourceNodeWithMarkdown: NodeWithMarkdown,
-    sourceIndex: number,
-    targetNodesWithMarkdown: NodeWithMarkdown[],
-    targetMatched: Set<number>,
-  ): NodeDiff | null {
-    let bestMatch: NodeDiff | null = null;
-    let bestSimilarity = 0;
-
-    // First check exact position
-    if (
-      sourceIndex < targetNodesWithMarkdown.length &&
-      !targetMatched.has(sourceIndex)
-    ) {
-      const targetNodeWithMarkdown = targetNodesWithMarkdown[sourceIndex];
-      const similarity = this.calculateMarkdownSimilarity(
-        sourceNodeWithMarkdown.markdown,
-        targetNodeWithMarkdown.markdown,
-      );
-
-      if (similarity === 1.0) {
-        // Exact match at same position - prioritize this
-        // console.log(`[TreeMatcher] Creating exact UPDATE diff: sourceKey=${sourceNodeWithMarkdown.key}, liveKey=${sourceNodeWithMarkdown.liveNodeKey}, markdown="${sourceNodeWithMarkdown.markdown.substring(0, 20)}"`);
-        return {
-          changeType: 'update',
-          sourceIndex,
-          sourceNode: sourceNodeWithMarkdown.node,
-          sourceMarkdown: sourceNodeWithMarkdown.markdown,
-          sourceKey: sourceNodeWithMarkdown.key,
-          sourceLiveKey: sourceNodeWithMarkdown.liveNodeKey,
-
-          targetIndex: sourceIndex,
-          targetNode: targetNodeWithMarkdown.node,
-          targetMarkdown: targetNodeWithMarkdown.markdown,
-          targetKey: targetNodeWithMarkdown.key,
-
-          similarity: 1.0,
-          matchType: 'exact',
-          nodeType: sourceNodeWithMarkdown.node.type,
-        };
-      }
-
-      if (similarity > bestSimilarity) {
-        // console.log(`[TreeMatcher] Creating similar UPDATE diff: sourceKey=${sourceNodeWithMarkdown.key}, liveKey=${sourceNodeWithMarkdown.liveNodeKey}, markdown="${sourceNodeWithMarkdown.markdown.substring(0, 20)}", similarity=${similarity}`);
-        bestMatch = {
-          changeType: 'update',
-          sourceIndex,
-          sourceNode: sourceNodeWithMarkdown.node,
-          sourceMarkdown: sourceNodeWithMarkdown.markdown,
-          sourceKey: sourceNodeWithMarkdown.key,
-          sourceLiveKey: sourceNodeWithMarkdown.liveNodeKey,
-
-          targetIndex: sourceIndex,
-          targetNode: targetNodeWithMarkdown.node,
-          targetMarkdown: targetNodeWithMarkdown.markdown,
-          targetKey: targetNodeWithMarkdown.key,
-
-          similarity,
-          matchType:
-            similarity >= this.config.similarityThreshold ? 'similar' : 'none',
-          nodeType: sourceNodeWithMarkdown.node.type,
-        };
-        bestSimilarity = similarity;
-      }
-    }
-
-    // Check within window
-    for (let offset = 1; offset <= this.config.windowSize; offset++) {
-      // Check positions before and after
-      for (const targetIdx of [sourceIndex + offset, sourceIndex - offset]) {
-        if (
-          targetIdx >= 0 &&
-          targetIdx < targetNodesWithMarkdown.length &&
-          !targetMatched.has(targetIdx)
-        ) {
-          const targetNodeWithMarkdown = targetNodesWithMarkdown[targetIdx];
-
-          // Skip if types don't match and we require same type
-          if (
-            this.config.requireSameType &&
-            sourceNodeWithMarkdown.node.type !==
-              targetNodeWithMarkdown.node.type
-          ) {
-            continue;
-          }
-
-          const similarity = this.calculateMarkdownSimilarity(
-            sourceNodeWithMarkdown.markdown,
-            targetNodeWithMarkdown.markdown,
-          );
-
-          if (similarity > bestSimilarity) {
-            bestMatch = {
-              changeType: 'update',
-              sourceIndex,
-              sourceNode: sourceNodeWithMarkdown.node,
-              sourceMarkdown: sourceNodeWithMarkdown.markdown,
-              sourceKey: sourceNodeWithMarkdown.key,
-              sourceLiveKey: sourceNodeWithMarkdown.liveNodeKey,
-
-              targetIndex: targetIdx,
-              targetNode: targetNodeWithMarkdown.node,
-              targetMarkdown: targetNodeWithMarkdown.markdown,
-              targetKey: targetNodeWithMarkdown.key,
-
-              similarity,
-              matchType:
-                similarity >= this.config.similarityThreshold
-                  ? 'similar'
-                  : 'none',
-              nodeType: sourceNodeWithMarkdown.node.type,
-            };
-            bestSimilarity = similarity;
-          }
-        }
-      }
-    }
-
-    // Only return matches above threshold
-    return bestMatch && bestMatch.matchType !== 'none' ? bestMatch : null;
-  }
-
-  /**
-   * Calculate similarity between two markdown strings
-   */
-  private calculateMarkdownSimilarity(
-    sourceMarkdown: string,
-    targetMarkdown: string,
+  private determineInsertionIndex(
+    targetIdx: number,
+    sourceLength: number,
+    targetLength: number,
+    targetToSource: Map<number, number>,
   ): number {
-    // Exact markdown match = perfect similarity
-    if (sourceMarkdown === targetMarkdown) {
-      return 1.0;
+    for (let prev = targetIdx - 1; prev >= 0; prev--) {
+      const sourceIdx = targetToSource.get(prev);
+      if (sourceIdx != null) {
+        return Math.min(sourceIdx + 1, sourceLength);
+      }
     }
 
-    // Use content similarity on the markdown strings
-    return this.calculateContentSimilarity(sourceMarkdown, targetMarkdown);
-  }
-
-  /**
-   * Calculate content similarity between two strings using word-based comparison
-   */
-  private calculateContentSimilarity(source: string, target: string): number {
-    if (source === target) return 1.0;
-    if (!source || !target) return 0.0;
-
-    // Normalize whitespace for comparison
-    const sourceNormalized = source.replace(/\s+/g, ' ').trim();
-    const targetNormalized = target.replace(/\s+/g, ' ').trim();
-
-    // If normalized versions match, consider it a very high match
-    if (sourceNormalized === targetNormalized) return 0.95;
-
-    // Check if one is a prefix of the other (common case for additions)
-    // Remove trailing punctuation for comparison
-    const sourceTrimmed = sourceNormalized.replace(/[.,!?;:\s]+$/, '');
-    const targetTrimmed = targetNormalized.replace(/[.,!?;:\s]+$/, '');
-
-    if (target.startsWith(sourceTrimmed) || source.startsWith(targetTrimmed)) {
-      const shorter = source.length < target.length ? source : target;
-      const longer = source.length < target.length ? target : source;
-      // High similarity if one is a prefix of the other
-      return shorter.length / longer.length;
+    for (let next = targetIdx + 1; next < targetLength; next++) {
+      const sourceIdx = targetToSource.get(next);
+      if (sourceIdx != null) {
+        return sourceIdx;
+      }
     }
 
-    // Simple word-based similarity - use normalized versions
-    const sourceWords = sourceNormalized.toLowerCase().split(/\s+/);
-    const targetWords = targetNormalized.toLowerCase().split(/\s+/);
-
-    if (sourceWords.length === 0 && targetWords.length === 0) return 1.0;
-    if (sourceWords.length === 0 || targetWords.length === 0) return 0.0;
-
-    const sourceSet = new Set(sourceWords);
-    const targetSet = new Set(targetWords);
-
-    const intersection = new Set(
-      [...sourceSet].filter((word) => targetSet.has(word)),
-    );
-    const union = new Set([...sourceSet, ...targetSet]);
-
-    const similarity = intersection.size / union.size;
-
-    return similarity;
+    return sourceLength;
   }
 
-  /**
-   * Check if two nodes should be considered for recursive diffing
-   * This is used after matching to determine if we should dive into the children
-   */
   shouldRecursivelyDiff(match: NodeDiff): boolean {
-    // Always recursively diff exact matches
     if (match.matchType === 'exact') {
       return true;
     }
-
-    // For similar matches, only recurse if similarity is high enough
-    // This prevents us from trying to diff completely different content
     return (
       match.matchType === 'similar' &&
       match.similarity >= this.config.similarityThreshold
@@ -1251,7 +612,6 @@ export class WindowedTreeMatcher {
   }
 }
 
-// Export a function to create a matcher with proper configuration
 export function createWindowedTreeMatcher(
   sourceEditor: LexicalEditor,
   targetEditor: LexicalEditor,

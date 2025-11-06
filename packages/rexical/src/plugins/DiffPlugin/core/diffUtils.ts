@@ -120,9 +120,8 @@
 import type {Transformer} from '@lexical/markdown';
 import {
   $convertFromEnhancedMarkdownString,
-  $convertNodeToEnhancedMarkdownString,
-  $convertToEnhancedMarkdownString
-} from "../../../markdown";
+  $convertToEnhancedMarkdownString,
+} from '../../../markdown';
 import type {ElementNode, LexicalEditor, SerializedLexicalNode} from 'lexical';
 import {
   $getNodeByKey,
@@ -136,7 +135,7 @@ import {
 
 import {createHeadlessEditor} from '@lexical/headless';
 import {createNodeFromSerialized} from './createNodeFromSerialized';
-import {$setDiffState, $getDiffState, LiveNodeKeyState} from './DiffState';
+import {DiffState, $setDiffState, $getDiffState, LiveNodeKeyState} from './DiffState';
 import {DiffHandlerContext, diffHandlerRegistry} from '../handlers';
 import {DefaultDiffHandler} from '../handlers/DefaultDiffHandler';
 import {ListDiffHandler} from '../handlers/ListDiffHandler';
@@ -815,34 +814,6 @@ export function applyMarkdownDiffToDocument(
     // Phase 1: Match root-level nodes
     const rootMatchResult = treeMatcher.matchRootChildren();
 
-    // Create position tracking for robust diff application
-    const liveNodesByMarkdown = new Map<string, string>();
-
-    editor.getEditorState().read(() => {
-      const root = $getRoot();
-      const children = root.getChildren();
-      children.forEach((child) => {
-        // if (child.getType() === 'table') {
-        //   console.log('🔍 LIVE: Converting table node to markdown for lookup map');
-        //   console.log('  Table node key:', child.getKey());
-        // }
-        let markdown = '';
-        try {
-          markdown = $convertNodeToEnhancedMarkdownString(
-            transformers,
-            child as ElementNode
-          ).trim();
-        } catch (error) {
-          console.error('  Error converting live node to markdown:', error);
-          markdown = child.getTextContent().trim();
-        }
-        // if (child.getType() === 'table') {
-        //   console.log('  Live table markdown:', markdown);
-        // }
-        liveNodesByMarkdown.set(markdown, child.getKey());
-      });
-    });
-
     // Phase 2: Apply changes correctly respecting exact match positions
     try {
       editor.update(
@@ -866,13 +837,13 @@ export function applyMarkdownDiffToDocument(
           // Process REMOVEs in reverse order to avoid index shifting
           // console.log('  Processing REMOVEs in reverse order...');
           for (const diff of [...removes].reverse()) {
-            $applyNodeDiff(editor, diff, transformers, liveNodesByMarkdown, sourceEditor, targetEditor, treeMatcher);
+            $applyNodeDiff(editor, diff, transformers, sourceEditor, targetEditor, treeMatcher);
           }
 
           // Process UPDATEs (order doesn't matter, they use live keys)
           // console.log('  Processing UPDATEs...');
           for (const diff of updates) {
-            $applyNodeDiff(editor, diff, transformers, liveNodesByMarkdown, sourceEditor, targetEditor, treeMatcher);
+            $applyNodeDiff(editor, diff, transformers, sourceEditor, targetEditor, treeMatcher);
           }
 
           // Process ADDs - group by sourceIndex, sort each group by targetIndex ascending
@@ -890,12 +861,25 @@ export function applyMarkdownDiffToDocument(
             const sorted = group.sort((a, b) => a.targetIndex - b.targetIndex);
             // console.log(`    sourceIndex=${sourceIdx}: processing ${sorted.length} adds in targetIndex order`);
             for (const diff of sorted) {
-              $applyNodeDiff(editor, diff, transformers, liveNodesByMarkdown, sourceEditor, targetEditor, treeMatcher);
+              $applyNodeDiff(editor, diff, transformers, sourceEditor, targetEditor, treeMatcher);
             }
           }
         },
         {discrete: true},
       );
+
+      if (process?.env?.DIFF_DEBUG === '1') {
+        editor.getEditorState().read(() => {
+          const root = $getRoot();
+          const snapshot = root.getChildren().map((child, idx) => ({
+            index: idx,
+            type: child.getType(),
+            text: child.getTextContent(),
+            diffState: $getDiffState(child),
+          }));
+          console.log('[applyMarkdownReplace] post-apply snapshot', snapshot);
+        });
+      }
     } catch (error) {
       const applyError = createMappingError(
         `Failed to apply node mappings to live editor: ${
@@ -939,23 +923,18 @@ export function $applyNodeDiff(
   editor: LexicalEditor,
   diff: NodeDiff,
   transformers: Array<Transformer>,
-  liveNodesByMarkdown: Map<string, string>,
   sourceEditor?: LexicalEditor,
   targetEditor?: LexicalEditor,
   treeMatcher?: any,
 ): void {
-  // console.log(`Applying diff: ${diff.changeType} ${diff.nodeType}`);
   const liveRoot = $getRoot();
 
   switch (diff.changeType) {
     case 'remove': {
-      // Find the live node by its markdown content
-      // console.log('  Looking for live node with markdown:', diff.sourceMarkdown?.substring(0, 100));
-      // console.log('  Available live nodes:', Array.from(liveNodesByMarkdown.keys()).map(k => k.substring(0, 50)));
-      const liveNodeKey = liveNodesByMarkdown.get(diff.sourceMarkdown);
+      const liveNodeKey = diff.sourceLiveKey;
       if (!liveNodeKey) {
         console.warn(
-          `Could not find live node with markdown: ${diff.sourceMarkdown}`,
+          `Could not find live node key for removal. sourceIndex=${diff.sourceIndex}`,
         );
         return;
       }
@@ -968,23 +947,15 @@ export function $applyNodeDiff(
       }
 
       // Mark the entire node as removed using NodeState
-      if ($isElementNode(liveNode)) {
-        // Set diff state to 'removed' - preserve original content for reject functionality
-        $setDiffState(liveNode, 'removed');
-        // console.log('  ✅ Set diff state to REMOVED on node:', liveNode.getKey(), liveNode.getType());
-        // Verify it was set
-        const verifyState = $getDiffState(liveNode);
-        // console.log('  🔍 Verified diff state immediately:', verifyState);
-        // NOTE: We don't call $markNodeAsRemoved here because we want to preserve
-        // the original content for proper reject functionality. The NodeState is
-        // sufficient for tracking that this node should be removed on approve.
-      } else {
-        // For non-element nodes, we need to handle differently
-        // This shouldn't happen at root level, but let's be safe
-        console.warn(
-          `Cannot mark non-element node as removed: ${liveNode.getType()}`,
-        );
-      }
+      // Set diff state to 'removed' - preserve original content for reject functionality
+      $setDiffState(liveNode, 'removed');
+      // console.log('  ✅ Set diff state to REMOVED on node:', liveNode.getKey(), liveNode.getType());
+      // Verify it was set
+      const verifyState = $getDiffState(liveNode);
+      // console.log('  🔍 Verified diff state immediately:', verifyState);
+      // NOTE: We don't call $markNodeAsRemoved here because we want to preserve
+      // the original content for proper reject functionality. The NodeState is
+      // sufficient for tracking that this node should be removed on approve.
       break;
     }
 
@@ -1075,7 +1046,6 @@ export function $applyNodeDiff(
     }
 
     case 'update': {
-      // Use sourceLiveKey which was preserved from the LIVE editor via NodeState
       const liveNodeKey = diff.sourceLiveKey;
 
       if (!liveNodeKey) {
@@ -1090,8 +1060,8 @@ export function $applyNodeDiff(
       // console.log(`[UPDATE] liveKey=${liveNodeKey}, source="${sourceText}", target="${targetText}"`);
 
       const liveNode = $getNodeByKey(liveNodeKey);
-      if (!liveNode || !$isElementNode(liveNode)) {
-        console.warn(`Could not find element node with key: ${liveNodeKey}`);
+      if (!liveNode) {
+        console.warn(`Could not find node with key: ${liveNodeKey}`);
         return;
       }
 
@@ -1109,42 +1079,40 @@ export function $applyNodeDiff(
 
       // Only mark as modified if it's not an exact match
       // Exact matches from TreeMatcher should remain unchanged for clean visual diffs
-      if (diff.matchType === 'exact' && diff.similarity === 1.0) {
-        // This is an exact match - don't mark as modified
-        // The node content is identical, it just may have shifted position
-        // No diff state needed - this preserves the original clean content
-        break;
+      const isExactMatch = diff.matchType === 'exact' && diff.similarity === 1.0;
+
+      if (!isExactMatch) {
+        // Mark the node as modified using NodeState for actual content changes
+        $setDiffState(liveNode, 'modified');
+
+        // Initialize handlers if not already done
+        initializeHandlers();
+
+        // Create handler context
+        const context: DiffHandlerContext = {
+          liveNode: liveNode,
+          sourceNode: diff.sourceNode,
+          targetNode: diff.targetNode,
+          changeType: 'update',
+          validator: new NodeStructureValidator(), // Keep for compatibility but handlers won't use it
+          sourceEditor,
+          targetEditor,
+          transformers,
+          treeMatcher,
+        };
+
+        // Find and apply the appropriate handler for non-exact matches
+        const handler = diffHandlerRegistry.findHandler(context);
+
+        if (handler) {
+          handler.handleUpdate(context);
+        } else {
+          // For non-exact matches without a handler, warn
+          console.warn(`No handler found for node type: ${liveNode.getType()}`);
+          // The DiffState 'modified' marking above is sufficient for tracking changes
+        }
       }
-
-      // Mark the node as modified using NodeState for actual content changes
-      $setDiffState(liveNode, 'modified');
-
-      // Initialize handlers if not already done
-      initializeHandlers();
-
-      // Create handler context
-      const context: DiffHandlerContext = {
-        liveNode: liveNode,
-        sourceNode: diff.sourceNode,
-        targetNode: diff.targetNode,
-        changeType: 'update',
-        validator: new NodeStructureValidator(), // Keep for compatibility but handlers won't use it
-        sourceEditor,
-        targetEditor,
-        transformers,
-        treeMatcher,
-      };
-
-      // Find and apply the appropriate handler
-      const handler = diffHandlerRegistry.findHandler(context);
-
-      if (handler) {
-        handler.handleUpdate(context);
-      } else {
-        // Fallback: log warning but don't do anything since we rely on handlers
-        console.warn(`No handler found for node type: ${liveNode.getType()}`);
-        // The DiffState 'modified' marking above is sufficient for tracking changes
-      }
+      // Exact matches: do nothing - children are already identical since markdown is identical
       break;
     }
   }
@@ -1197,61 +1165,38 @@ export function $applySubTreeDiff(
   });
 
   // Create NodeWithMarkdown objects from the cached data by matching serialized structures
-  const sourceChildrenWithMarkdown: Array<{
-    node: SerializedLexicalNode;
-    markdown: string;
-    key: string;
-  }> = [];
-  const targetChildrenWithMarkdown: Array<{
-    node: SerializedLexicalNode;
-    markdown: string;
-    key: string;
-  }> = [];
+  const sourceCanonicalChildren = sourceChildren
+    .map((child: any) => {
+      const key = child?.__key ?? child?.key;
+      if (!key) return null;
+      return treeMatcher.getSourceNodeData(key);
+    })
+    .filter(Boolean);
+  const targetCanonicalChildren = targetChildren
+    .map((child: any) => {
+      const key = child?.__key ?? child?.key;
+      if (!key) return null;
+      return treeMatcher.getTargetNodeData(key);
+    })
+    .filter(Boolean);
 
-  // Map serialized children to cached data
-  for (const child of sourceChildren) {
-    // Find matching cached data by comparing serialized structures
-    let found = false;
-    for (const [key, cached] of treeMatcher['sourceNodeCache']) {
-      if (JSON.stringify(cached.node) === JSON.stringify(child)) {
-        sourceChildrenWithMarkdown.push({
-          node: child,
-          markdown: cached.markdown,
-          key: cached.key,
-        });
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
-      console.warn('Could not find cached data for source child, skipping');
-    }
-  }
+  console.log(
+    '[SubTreeDiff] source child keys',
+    sourceChildren.map((child: any) => child?.__key ?? child?.key),
+  );
+  console.log(
+    '[SubTreeDiff] target child keys',
+    targetChildren.map((child: any) => child?.__key ?? child?.key),
+  );
+  console.log(
+    '[SubTreeDiff] canonical children counts',
+    sourceCanonicalChildren.length,
+    targetCanonicalChildren.length,
+  );
 
-  for (const child of targetChildren) {
-    // Find matching cached data by comparing serialized structures
-    let found = false;
-    for (const [key, cached] of treeMatcher['targetNodeCache']) {
-      if (JSON.stringify(cached.node) === JSON.stringify(child)) {
-        targetChildrenWithMarkdown.push({
-          node: child,
-          markdown: cached.markdown,
-          key: cached.key,
-        });
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
-      console.warn('Could not find cached data for target child, skipping');
-    }
-  }
-
-  // Use the internal matchNodes logic but with our pre-built data
-  // We need to create a custom matching since matchNodes expects actual LexicalNode objects
-  const childMatchResult = (treeMatcher as any).matchNodesWithMarkdown(
-    sourceChildrenWithMarkdown,
-    targetChildrenWithMarkdown,
+  const childMatchResult = treeMatcher.matchCanonicalNodes(
+    sourceCanonicalChildren,
+    targetCanonicalChildren,
   );
 
   // console.log(
@@ -1259,34 +1204,6 @@ export function $applySubTreeDiff(
   // );
 
   // Create position tracking for child nodes by their markdown content
-  const liveChildNodesByMarkdown = new Map<string, string>();
-  const liveChildren = liveParentNode.getChildren();
-
-  for (const child of liveChildren) {
-    if ($isElementNode(child)) {
-      // Always use proper markdown conversion to preserve formatting and structure
-      let markdown: string;
-      try {
-        markdown = $convertNodeToEnhancedMarkdownString(
-          transformers,
-          child
-        ).trim();
-      } catch (error) {
-        // This should rarely happen, but if it does, log it
-        console.warn('Failed to convert child to markdown:', error);
-        // Last resort fallback - this will lose formatting
-        markdown = child.getTextContent().trim();
-      }
-
-      liveChildNodesByMarkdown.set(markdown, child.getKey());
-      // console.log(`  Mapped child node: "${markdown}" -> ${child.getKey()}`);
-    }
-  }
-
-  // console.log(
-  //   `Mapped ${liveChildNodesByMarkdown.size} live child nodes by markdown`,
-  // );
-
   // Apply the child node diffs in reverse order to prevent position shift issues
   for (const diff of [...childMatchResult.sequence].reverse()) {
     // console.log(
@@ -1296,7 +1213,6 @@ export function $applySubTreeDiff(
       liveParentNode,
       diff,
       transformers,
-      liveChildNodesByMarkdown,
       sourceEditor,
       targetEditor,
       treeMatcher,
@@ -1314,7 +1230,6 @@ export function $applyChildNodeDiff(
   liveParentNode: ElementNode,
   diff: NodeDiff,
   transformers: Array<Transformer>,
-  liveChildNodesByMarkdown: Map<string, string>,
   sourceEditor?: LexicalEditor,
   targetEditor?: LexicalEditor,
   treeMatcher?: any,
@@ -1323,11 +1238,10 @@ export function $applyChildNodeDiff(
 
   switch (diff.changeType) {
     case 'remove': {
-      // Find the live child node by its markdown content
-      const liveNodeKey = liveChildNodesByMarkdown.get(diff.sourceMarkdown);
+      const liveNodeKey = diff.sourceLiveKey;
       if (!liveNodeKey) {
         console.warn(
-          `Could not find live child node with markdown: ${diff.sourceMarkdown}`,
+          `Could not find live child node for removal; missing live key. sourceIndex=${diff.sourceIndex}`,
         );
         return;
       }
@@ -1339,24 +1253,13 @@ export function $applyChildNodeDiff(
       }
 
       // Mark the child node as removed using DiffState
-      if ($isElementNode(liveNode)) {
-        $setDiffState(liveNode, 'removed');
-      } else {
-        console.warn(
-          `Cannot mark non-element child node as removed: ${liveNode.getType()}`,
-        );
-      }
+      $setDiffState(liveNode, 'removed');
       break;
     }
 
     case 'add': {
       // Create a new child node from the target serialized node
       const newNode = createNodeFromSerialized(diff.targetNode);
-
-      if (!$isElementNode(newNode)) {
-        console.warn(`Cannot add non-element child node: ${newNode.getType()}`);
-        return;
-      }
 
       // Mark the node as added using DiffState
       $setDiffState(newNode, 'added');
@@ -1376,20 +1279,17 @@ export function $applyChildNodeDiff(
     }
 
     case 'update': {
-      // Find the live child node by its markdown content
-      const liveNodeKey = liveChildNodesByMarkdown.get(diff.sourceMarkdown);
+      const liveNodeKey = diff.sourceLiveKey;
       if (!liveNodeKey) {
         console.warn(
-          `Could not find live child node with markdown: ${diff.sourceMarkdown}`,
+          'Could not find live child node for update; missing live key.',
         );
         return;
       }
 
       const liveNode = $getNodeByKey(liveNodeKey);
-      if (!liveNode || !$isElementNode(liveNode)) {
-        console.warn(
-          `Could not find element child node with key: ${liveNodeKey}`,
-        );
+      if (!liveNode) {
+        console.warn(`Could not find child node with key: ${liveNodeKey}`);
         return;
       }
 
