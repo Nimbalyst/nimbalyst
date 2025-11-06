@@ -72,13 +72,30 @@ function extractAttrs(serialized: SerializedLexicalNode): Record<string, any> | 
   return canonicalized as Record<string, any>;
 }
 
+// Normalize table separator rows to a canonical format
+// This prevents false diffs from whitespace variations in table separators
+// Examples: "|---|---|---|" and "| --- | --- | --- |" both normalize to "|---|---|---|"
+function normalizeTableSeparator(text: string): string {
+  // Match table separator pattern: |, optional spaces, dashes/colons, optional spaces, |
+  const tableSepRegex = /^(\|\s*:?-+:?\s*)+\|$/;
+  if (tableSepRegex.test(text)) {
+    // Count the number of columns (number of | chars minus 1)
+    const cols = (text.match(/\|/g) || []).length - 1;
+    // Return normalized format: |---|---|...|
+    return '|' + Array(cols).fill('---').join('|') + '|';
+  }
+  return text;
+}
+
 function extractText(
   node: LexicalNode,
   serialized: SerializedLexicalNode,
 ): string | undefined {
   if ($isTextNode(node)) {
     const text = (serialized as any).text ?? '';
-    return text || undefined; // Return undefined if empty string
+    // Normalize table separators in text nodes too
+    const normalized = normalizeTableSeparator(text);
+    return normalized || undefined;
   }
 
   if ($isDecoratorNode(node)) {
@@ -88,16 +105,20 @@ function extractText(
 
   if ($isElementNode(node)) {
     const text = node.getTextContent();
-    return text || undefined;
+    // Normalize table separators to prevent false diffs
+    const normalized = normalizeTableSeparator(text);
+    return normalized || undefined;
   }
 
   if ('text' in serialized && typeof (serialized as any).text === 'string') {
     const text = (serialized as any).text;
-    return text || undefined;
+    const normalized = normalizeTableSeparator(text);
+    return normalized || undefined;
   }
 
   const text = node.getTextContent();
-  return text || undefined;
+  const normalized = normalizeTableSeparator(text);
+  return normalized || undefined;
 }
 
 export function buildCanonicalTree(

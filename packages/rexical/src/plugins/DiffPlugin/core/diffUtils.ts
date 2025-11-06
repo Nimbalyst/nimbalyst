@@ -367,11 +367,22 @@ export function applyMarkdownReplace(
   // console.log('[applyMarkdownReplace] CALLED with', replacements.length, 'replacements');
   const normalizedReplacements = replacements.map((replacement) => {
     const {oldText, newText} = resolveReplacementTexts(replacement);
+    console.log('[applyMarkdownReplace] Replacement:', {
+      oldTextLength: oldText.length,
+      newTextLength: newText.length,
+      oldTextStart: oldText.substring(0, 100),
+      newTextStart: newText.substring(0, 100),
+    });
     return {
       ...(replacement as any),
       oldText,
       newText,
     } as TextReplacement;
+  });
+
+  console.log('[applyMarkdownReplace] originalMarkdown:', {
+    length: originalMarkdown.length,
+    start: originalMarkdown.substring(0, 100),
   });
 
   // Debug: Starting markdown replace
@@ -384,10 +395,12 @@ export function applyMarkdownReplace(
   try {
     // Try to apply text replacements to get the target markdown
     newMarkdown = _applyMarkdownEdits(originalMarkdown, normalizedReplacements);
+    console.log('[applyMarkdownReplace] Text replacement succeeded, newMarkdown length:', newMarkdown.length);
   } catch (error) {
     // Text replacement failed - construct the new markdown from the replacements
     // This allows TreeMatcher to still work even if exact text matching fails
     // This is normal for structural changes like tables and lists
+    console.log('[applyMarkdownReplace] Text replacement FAILED:', error);
     textReplacementError = error as Error;
 
     // Build the new markdown by applying replacements in a best-effort manner
@@ -805,14 +818,54 @@ export function applyMarkdownDiffToDocument(
     }
 
     // NEW: Use TreeMatcher for root-level matching
+    // Use a large window size to handle documents with many nodes
+    // Window size determines how far apart nodes can be and still be considered for matching
+    const sourceNodeCount = sourceEditor.getEditorState().read(() => $getRoot().getChildren().length);
+    const targetNodeCount = targetEditor.getEditorState().read(() => $getRoot().getChildren().length);
+    const maxNodeCount = Math.max(sourceNodeCount, targetNodeCount);
+    // Use 50% of document size as window, with minimum of 10 and maximum of 100
+    const windowSize = Math.min(100, Math.max(10, Math.floor(maxNodeCount * 0.5)));
+
+    console.log('[diffUtils] Document sizes:', {
+      sourceNodeCount,
+      targetNodeCount,
+      windowSize,
+      originalMarkdownLength: originalMarkdown.length,
+      newMarkdownLength: newMarkdown.length,
+    });
+
+    // Debug: show first few nodes of each
+    sourceEditor.getEditorState().read(() => {
+      const children = $getRoot().getChildren().slice(0, 5);
+      console.log('[diffUtils] Source first 5 nodes:', children.map(c => ({
+        type: c.getType(),
+        text: c.getTextContent().substring(0, 40)
+      })));
+    });
+
+    targetEditor.getEditorState().read(() => {
+      const children = $getRoot().getChildren().slice(0, 5);
+      console.log('[diffUtils] Target first 5 nodes:', children.map(c => ({
+        type: c.getType(),
+        text: c.getTextContent().substring(0, 40)
+      })));
+    });
+
     const treeMatcher = createWindowedTreeMatcher(sourceEditor, targetEditor, {
       transformers,
-      windowSize: 2,
+      windowSize,
       similarityThreshold: 0.05, // Very low threshold to catch dramatic changes
     });
 
+    console.log('[diffUtils] Created TreeMatcher for applyMarkdownDiffToDocument');
+
     // Phase 1: Match root-level nodes
     const rootMatchResult = treeMatcher.matchRootChildren();
+
+    console.log('[diffUtils] TreeMatcher results:', {
+      diffs: rootMatchResult.diffs.length,
+      sequence: rootMatchResult.sequence.length,
+    });
 
     // Phase 2: Apply changes correctly respecting exact match positions
     try {
@@ -1079,7 +1132,20 @@ export function $applyNodeDiff(
 
       // Only mark as modified if it's not an exact match
       // Exact matches from TreeMatcher should remain unchanged for clean visual diffs
-      const isExactMatch = diff.matchType === 'exact' && diff.similarity === 1.0;
+      // Trust matchType === 'exact' from TreeMatcher (which uses ThresholdedOrderPreservingTree's EQUAL operations)
+      // Don't require similarity === 1.0 because normalized content (like table separators) may have different text
+      const isExactMatch = diff.matchType === 'exact';
+
+      if (diff.sourceMarkdown?.includes('|---') || diff.targetMarkdown?.includes('|---')) {
+        console.log('[diffUtils] Table separator diff:', {
+          matchType: diff.matchType,
+          similarity: diff.similarity,
+          isExactMatch,
+          willMark: !isExactMatch,
+          source: diff.sourceMarkdown?.substring(0, 50),
+          target: diff.targetMarkdown?.substring(0, 50),
+        });
+      }
 
       if (!isExactMatch) {
         // Mark the node as modified using NodeState for actual content changes
@@ -1158,9 +1224,11 @@ export function $applySubTreeDiff(
   }
 
   // Create a TreeMatcher with pre-cached data for both editors
+  // Use adaptive window size based on child count
+  const childWindowSize = Math.min(50, Math.max(5, Math.floor(sourceChildren.length * 0.5)));
   const treeMatcher = createWindowedTreeMatcher(sourceEditor, targetEditor, {
     transformers,
-    windowSize: 2,
+    windowSize: childWindowSize,
     similarityThreshold: 0.05,
   });
 
@@ -1180,35 +1248,131 @@ export function $applySubTreeDiff(
     })
     .filter(Boolean);
 
-  console.log(
-    '[SubTreeDiff] source child keys',
-    sourceChildren.map((child: any) => child?.__key ?? child?.key),
-  );
-  console.log(
-    '[SubTreeDiff] target child keys',
-    targetChildren.map((child: any) => child?.__key ?? child?.key),
-  );
-  console.log(
-    '[SubTreeDiff] canonical children counts',
-    sourceCanonicalChildren.length,
-    targetCanonicalChildren.length,
-  );
-
-  const childMatchResult = treeMatcher.matchCanonicalNodes(
-    sourceCanonicalChildren,
-    targetCanonicalChildren,
-  );
-
   // console.log(
-  //   `Sub-tree matching found ${childMatchResult.diffs.length} diffs, ${childMatchResult.sequence.length} total operations`,
+  //   '[SubTreeDiff] source child keys',
+  //   sourceChildren.map((child: any) => child?.__key ?? child?.key),
   // );
+  // console.log(
+  //   '[SubTreeDiff] target child keys',
+  //   targetChildren.map((child: any) => child?.__key ?? child?.key),
+  // );
+  // console.log(
+  //   '[SubTreeDiff] canonical children counts',
+  //   sourceCanonicalChildren.length,
+  //   targetCanonicalChildren.length,
+  // );
+
+  // For list items, use position-first matching instead of similarity-based matching
+  // This fixes the bug where "two" → "deux" was incorrectly matched as "ten" → "deux"
+  // because TOPT's global optimization preferred wrong pairings when text similarity was low
+  const isListItems = sourceCanonicalChildren.length > 0 &&
+    sourceCanonicalChildren[0].type === 'listitem';
+
+  let childMatchResult;
+
+  if (isListItems) {
+    console.log('[SubTreeDiff] Using POSITION-FIRST matching for list items');
+
+    // Create position-based diffs for list items
+    const diffs: any[] = [];
+    const sequence: any[] = [];
+    const maxLen = Math.max(sourceCanonicalChildren.length, targetCanonicalChildren.length);
+
+    for (let i = 0; i < maxLen; i++) {
+      const sourceNode = sourceCanonicalChildren[i];
+      const targetNode = targetCanonicalChildren[i];
+
+      if (sourceNode && targetNode) {
+        // Both exist at this position - UPDATE
+        const similarity = sourceNode.text === targetNode.text ? 1.0 : 0.0;
+        const matchType = sourceNode.text === targetNode.text ? 'exact' : 'similar';
+
+        const diff = {
+          changeType: 'update',
+          sourceIndex: i,
+          sourceNode: sourceNode.serialized,
+          sourceKey: sourceNode.key,
+          sourceMarkdown: sourceNode.text || '',
+          sourceLiveKey: sourceNode.liveNodeKey,
+          targetIndex: i,
+          targetNode: targetNode.serialized,
+          targetKey: targetNode.key,
+          targetMarkdown: targetNode.text || '',
+          nodeType: sourceNode.type,
+          similarity,
+          matchType,
+        };
+
+        diffs.push(diff);
+        sequence.push(diff);
+      } else if (sourceNode && !targetNode) {
+        // Source exists but target doesn't - REMOVE
+        const diff = {
+          changeType: 'remove',
+          sourceIndex: i,
+          sourceNode: sourceNode.serialized,
+          sourceKey: sourceNode.key,
+          sourceMarkdown: sourceNode.text || '',
+          sourceLiveKey: sourceNode.liveNodeKey,
+          targetIndex: -1,
+          targetNode: null,
+          targetKey: null,
+          targetMarkdown: '',
+          nodeType: sourceNode.type,
+          similarity: 0,
+          matchType: 'none',
+        };
+
+        diffs.push(diff);
+        sequence.push(diff);
+      } else if (!sourceNode && targetNode) {
+        // Target exists but source doesn't - ADD
+        const diff = {
+          changeType: 'add',
+          sourceIndex: i - 1, // Insert after previous
+          sourceNode: null,
+          sourceKey: null,
+          sourceMarkdown: '',
+          targetIndex: i,
+          targetNode: targetNode.serialized,
+          targetKey: targetNode.key,
+          targetMarkdown: targetNode.text || '',
+          nodeType: targetNode.type,
+          similarity: 0,
+          matchType: 'none',
+        };
+
+        diffs.push(diff);
+        sequence.push(diff);
+      }
+    }
+
+    childMatchResult = { diffs, sequence };
+  } else {
+    // Use TreeMatcher for non-list-item children
+    childMatchResult = treeMatcher.matchCanonicalNodes(
+      sourceCanonicalChildren,
+      targetCanonicalChildren,
+    );
+  }
+
+  console.log(
+    `[SubTreeDiff] Sub-tree matching found ${childMatchResult.diffs.length} diffs, ${childMatchResult.sequence.length} total operations`,
+  );
+
+  // Log each diff for debugging
+  childMatchResult.sequence.forEach((diff, i) => {
+    console.log(`  [${i}] ${diff.changeType.toUpperCase()} sourceIdx=${diff.sourceIndex} targetIdx=${diff.targetIndex} type=${diff.nodeType} similarity=${diff.similarity.toFixed(2)} matchType=${diff.matchType}`);
+    console.log(`       source: "${(diff.sourceMarkdown || '').substring(0, 40)}"`);
+    console.log(`       target: "${(diff.targetMarkdown || '').substring(0, 40)}"`);
+  });
 
   // Create position tracking for child nodes by their markdown content
   // Apply the child node diffs in reverse order to prevent position shift issues
   for (const diff of [...childMatchResult.sequence].reverse()) {
-    // console.log(
-    //   `Applying child diff: ${diff.changeType} at sourceIndex ${diff.sourceIndex}, targetIndex ${diff.targetIndex}`,
-    // );
+    console.log(
+      `[SubTreeDiff] Applying child diff: ${diff.changeType} at sourceIndex ${diff.sourceIndex}, targetIndex ${diff.targetIndex}`,
+    );
     $applyChildNodeDiff(
       liveParentNode,
       diff,
@@ -1219,7 +1383,7 @@ export function $applySubTreeDiff(
     );
   }
 
-  // console.log('✅ Sub-tree diff application completed');
+  console.log('[SubTreeDiff] ✅ Sub-tree diff application completed');
 }
 
 /**
@@ -1295,9 +1459,10 @@ export function $applyChildNodeDiff(
 
       // Only mark as modified if it's not an exact match
       // Exact matches from TreeMatcher should remain unchanged for clean visual diffs
-      if (diff.matchType === 'exact' && diff.similarity === 1.0) {
+      // Trust matchType === 'exact' from TreeMatcher (which uses ThresholdedOrderPreservingTree's EQUAL operations)
+      if (diff.matchType === 'exact') {
         // This is an exact match - don't mark as modified
-        // The node content is identical, it just may have shifted position
+        // The node content is identical (or normalized to identical), it just may have shifted position
         // No diff state needed - this preserves the original clean content
         break;
       }

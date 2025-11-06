@@ -194,8 +194,9 @@ export class ListDiffHandler implements DiffNodeHandler {
 
     // Check if we need to apply recursive sub-tree diffing
     if (sourceChildren.length > 0 || targetChildren.length > 0) {
-      // Mark the list as modified since we're updating its contents
-      $setDiffState(liveNode, 'modified');
+      // DON'T mark the list itself as modified - only the children that changed will be marked
+      // This prevents the entire list from being highlighted when only individual items changed
+      // $setDiffState(liveNode, 'modified');
 
       // Use recursive sub-tree diffing for better insertion positioning and index alignment
       if (
@@ -203,9 +204,9 @@ export class ListDiffHandler implements DiffNodeHandler {
         context.targetEditor &&
         context.transformers
       ) {
-        // console.log(
-        //   '\n🔄 Applying recursive sub-tree diff to list for better insertion positioning...',
-        // );
+        console.log(
+          '\n🔄 [ListDiffHandler] Applying recursive sub-tree diff to list for better insertion positioning...',
+        );
 
         try {
           // Apply recursive sub-tree diffing to the list children
@@ -218,7 +219,7 @@ export class ListDiffHandler implements DiffNodeHandler {
             context.transformers,
           );
 
-          // console.log('✅ Recursive sub-tree diff completed successfully');
+          console.log('✅ [ListDiffHandler] Recursive sub-tree diff completed successfully');
           return {handled: true, skipChildren: true};
         } catch (error) {
           console.warn(

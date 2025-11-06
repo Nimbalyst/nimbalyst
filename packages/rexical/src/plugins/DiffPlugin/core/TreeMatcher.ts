@@ -215,8 +215,11 @@ export class WindowedTreeMatcher {
     };
 
     // Run order-preserving diff
+    // Use high pairAlignThreshold (2.0) to allow matching nodes at same position
+    // even if text content is completely different (e.g., "two" → "deux")
+    // This preserves document structure and minimizes false delete+add pairs
     const diffOps = diffTrees(sourceRoot, targetRoot, {
-      pairAlignThreshold: 0.8,
+      pairAlignThreshold: 2.0,  // Was 0.8 - raised to prioritize position over similarity
       equalThreshold: 0.1,
     });
 

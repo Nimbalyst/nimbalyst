@@ -203,9 +203,10 @@ export function DiffPlugin(): JSX.Element | null {
           // Get transformers including both core and plugin transformers
           const transformers = getEditorTransformers();
 
-          // Get current markdown content
-          // NOTE: LiveNodeKeyState is set automatically by applyMarkdownReplace via parallel traversal
-          const currentMarkdown = editor.getEditorState().read(() => {
+          // Use the oldText from the first replacement as originalMarkdown
+          // This avoids round-trip conversion issues where markdown changes slightly
+          // when imported into Lexical and exported back (whitespace, line endings, etc.)
+          const originalMarkdown = replacements[0].oldText || editor.getEditorState().read(() => {
             return $convertToEnhancedMarkdownString(transformers);
           });
 
@@ -213,7 +214,7 @@ export function DiffPlugin(): JSX.Element | null {
           try {
             applyMarkdownReplace(
               editor,
-              currentMarkdown,
+              originalMarkdown,
               replacements,
               transformers
             );
