@@ -17,6 +17,7 @@ import path from 'path';
 import fs from 'fs';
 import { app } from 'electron';
 import { buildClaudeCodeSystemPromptAddendum } from '../../prompt';
+import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions } from '../../../electron/claudeCodeEnvironment';
 
 export class ClaudeCodeProvider extends BaseAIProvider {
   // Single abort controller - each provider instance is per-session via ProviderFactory
@@ -221,85 +222,22 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // In production, we need to spawn claude-code differently
       // The SDK expects to spawn with 'node', but we need to use Electron in node mode
       if (app.isPackaged) {
-        const os = require('os');
-        const homedir = os.homedir();
-        const username = os.userInfo().username;
-        const platform = process.platform;
+        // Use shared environment setup utility
+        const packagedEnv = setupClaudeCodeEnvironment();
+        Object.assign(env, packagedEnv);
 
-        // Enhanced environment variables (cross-platform)
-        if (platform === 'win32') {
-          // Windows environment setup
-          env.USERPROFILE = homedir;
-          env.USERNAME = username;
-          env.TEMP = env.TEMP || path.join(homedir, 'AppData', 'Local', 'Temp');
-          env.TMP = env.TMP || env.TEMP;
-
-          // Windows PATH - preserve existing and add common locations
-          const pathSeparator = ';';
-          const commonPaths = [
-            env.PATH || '',
-            path.join(homedir, 'AppData', 'Local', 'Programs'),
-            'C:\\Program Files\\nodejs',
-            'C:\\Program Files (x86)\\nodejs',
-          ].filter(Boolean);
-          env.PATH = commonPaths.join(pathSeparator);
-        } else {
-          // Unix-like (macOS/Linux) environment setup
-          env.HOME = homedir;
-          env.USER = username;
-          env.LOGNAME = username;
-          env.SHELL = env.SHELL || process.env.SHELL || '/bin/bash';
-          env.TMPDIR = env.TMPDIR || os.tmpdir() || '/tmp';
-
-          // Unix PATH - preserve existing and add common locations
-          const pathSeparator = ':';
-          const commonPaths = [
-            env.PATH || '',
-            '/usr/local/bin',
-            '/usr/bin',
-            '/bin',
-            '/usr/sbin',
-            '/sbin',
-            path.join(homedir, '.local', 'bin'),
-            path.join(homedir, 'bin'),
-            '/opt/homebrew/bin',
-            '/opt/local/bin',
-          ].filter(Boolean);
-          env.PATH = commonPaths.join(pathSeparator);
-        }
-
-        // CRITICAL FIX: Set NODE_PATH to unpacked modules
-        const appPath = app.getAppPath();
-        const unpackedPath = appPath.includes('app.asar')
-          ? appPath.replace(/app\.asar(?=[\/\\]|$)/, 'app.asar.unpacked')
-          : appPath;
-
-        env.NODE_PATH = path.join(unpackedPath, 'node_modules');
-        console.log(`[CLAUDE-CODE] Platform: ${platform}`);
-        console.log(`[CLAUDE-CODE] Set NODE_PATH for module resolution: ${env.NODE_PATH}`);
-
-        // Verify the unpacked node_modules directory exists
-        if (!fs.existsSync(env.NODE_PATH)) {
-          const error = `Unpacked node_modules directory not found at: ${env.NODE_PATH}. ` +
-                       `This indicates a build configuration issue. The Claude Agent SDK must be unpacked during the build process.`;
-          console.error(`[CLAUDE-CODE] ✗ CRITICAL ERROR: ${error}`);
-          throw new Error(error);
-        }
-        console.log(`[CLAUDE-CODE] ✓ Verified unpacked node_modules exists`);
-
-        // Use Electron as Node
-        env.ELECTRON_RUN_AS_NODE = '1';
-        options.executable = process.execPath;
-        options.executableArgs = [];
-        console.log(`[CLAUDE-CODE] Using Electron as Node: ${process.execPath}`);
+        // Set executable options
+        const executableOptions = getClaudeCodeExecutableOptions();
+        Object.assign(options, executableOptions);
 
         console.log('[CLAUDE-CODE] Enhanced environment for packaged build:', {
-          platform,
+          platform: process.platform,
           HOME: env.HOME || env.USERPROFILE,
           USER: env.USER || env.USERNAME,
           SHELL: env.SHELL,
-          PATH: env.PATH.substring(0, 100) + '...',
+          PATH: env.PATH?.substring(0, 100) + '...',
           NODE_PATH: env.NODE_PATH,
+          ELECTRON_RUN_AS_NODE: env.ELECTRON_RUN_AS_NODE,
           executable: options.executable,
           cwd: workspacePath
         });

@@ -1,10 +1,14 @@
-import { ipcMain } from 'electron';
+import { ipcMain, app } from 'electron';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import os from 'os';
 import { claudeCodeDetector } from '../services/ClaudeCodeDetector';
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { logger } from '../utils/logger';
+import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions } from '@nimbalyst/runtime/electron/claudeCodeEnvironment';
+
+// Use IPC component logger for this file
+const log = logger.ipc;
 
 /**
  * Register Claude Code related IPC handlers
@@ -12,7 +16,6 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 export function registerClaudeCodeHandlers() {
   // Check if Claude Code is installed
   ipcMain.handle('claude-code:check-installation', async () => {
-    console.log('[ClaudeCodeHandlers] Checking installation...');
     const status = await claudeCodeDetector.getStatus();
     return {
       installed: status.installed,
@@ -22,33 +25,40 @@ export function registerClaudeCodeHandlers() {
 
   // Get full Claude Code status
   ipcMain.handle('claude-code:get-status', async () => {
-    console.log('[ClaudeCodeHandlers] Getting full status...');
     const status = await claudeCodeDetector.getStatus();
     return status;
   });
 
   // Refresh Claude Code detection (clears cache)
   ipcMain.handle('claude-code:refresh-status', async () => {
-    console.log('[ClaudeCodeHandlers] Refreshing status...');
     claudeCodeDetector.clearCache();
     const status = await claudeCodeDetector.getStatus();
     return status;
   });
   // Check login status
   ipcMain.handle('claude-code:check-login', async () => {
-    console.log('[ClaudeCodeHandlers] Checking login status...');
+    // Save original environment to restore later
+    const originalEnv = { ...process.env };
 
     try {
+      // Setup environment for packaged builds
+      const env = setupClaudeCodeEnvironment();
+
+      // Apply environment to current process temporarily
+      Object.assign(process.env, env);
+
+      // Build options for query
+      const options: any = getClaudeCodeExecutableOptions();
+
       // Call query with proper signature: { prompt, options }
       // Use empty string prompt - SDK will write it directly without async iteration
       const session = query({
         prompt: '',
-        options: {}
+        options
       });
 
       // Get account info
       const accountInfo = await session.accountInfo();
-      console.log('[ClaudeCodeHandlers] Account info:', accountInfo);
 
       // If we got account info, user is logged in
       if (accountInfo && accountInfo.email) {
@@ -71,19 +81,23 @@ export function registerClaudeCodeHandlers() {
         isExpired: true
       };
     } catch (error: any) {
-      console.log('[ClaudeCodeHandlers] Failed to get account info:', error.message);
+      log.error('[ClaudeCodeHandlers] Login check failed:', error.message);
+
       return {
         isLoggedIn: false,
         hasOAuthToken: false,
-        isExpired: true
+        isExpired: true,
+        error: error.message
       };
+    } finally {
+      // Always restore original environment
+      Object.keys(process.env).forEach(key => delete process.env[key]);
+      Object.assign(process.env, originalEnv);
     }
   });
 
   // Handle claude login command
   ipcMain.handle('claude-code:login', async () => {
-    console.log('[ClaudeCodeHandlers] Starting claude login...');
-
     try {
       // Use the bundled CLI - no need for global installation
       const cliPath = findBundledCli();
@@ -91,15 +105,12 @@ export function registerClaudeCodeHandlers() {
         throw new Error('Claude Agent SDK CLI not found in bundled installation. This is a build configuration issue.');
       }
 
-      console.log('[ClaudeCodeHandlers] Found bundled CLI at:', cliPath);
-
       // Open a Terminal window with the claude setup-token command
       // This provides a proper TTY environment for the interactive OAuth flow
       const platform = process.platform;
 
       if (platform === 'darwin') {
         // macOS: Use AppleScript to open Terminal with the command
-        console.log('[ClaudeCodeHandlers] Opening Terminal window for OAuth setup...');
 
         // Use Electron's bundled Node.js to run the CLI
         const nodePath = process.execPath;
@@ -121,8 +132,6 @@ end tell`;
         };
       } else if (platform === 'win32') {
         // Windows: Use start command to open a new cmd window
-        console.log('[ClaudeCodeHandlers] Opening command prompt for OAuth setup...');
-
         const nodePath = process.execPath;
         // TODO: On windows only, assume we have access to a working claude installation because I could not figure out
         //  how to use the weird Windows shell to run the command with ELECTRON_RUN_AS_NODE=1 properly.
@@ -137,8 +146,6 @@ end tell`;
         };
       } else {
         // Linux: Try to open a terminal emulator
-        console.log('[ClaudeCodeHandlers] Opening terminal for OAuth setup...');
-
         const nodePath = process.execPath;
         // Try common terminal emulators
         const terminals = ['gnome-terminal', 'konsole', 'xterm', 'x-terminal-emulator'];
@@ -153,7 +160,7 @@ end tell`;
             terminalOpened = true;
             break;
           } catch (error) {
-            console.log(`[ClaudeCodeHandlers] ${terminal} not available`);
+            // Terminal not available, try next one
           }
         }
 
@@ -167,15 +174,13 @@ end tell`;
         }
       }
     } catch (error) {
-      console.error('[ClaudeCodeHandlers] Login error:', error);
+      log.error('[ClaudeCodeHandlers] Login error:', error);
       throw error;
     }
   });
 
   // Handle claude logout command
   ipcMain.handle('claude-code:logout', async () => {
-    console.log('[ClaudeCodeHandlers] Starting claude logout...');
-
     try {
       // Use the bundled CLI - same as login
       const cliPath = findBundledCli();
@@ -183,15 +188,12 @@ end tell`;
         throw new Error('Claude Agent SDK CLI not found in bundled installation. This is a build configuration issue.');
       }
 
-      console.log('[ClaudeCodeHandlers] Found bundled CLI at:', cliPath);
-
       // Open an interactive Terminal session where the user can type /logout
       // This avoids the stdin raw mode issues when piping commands
       const platform = process.platform;
 
       if (platform === 'darwin') {
         // macOS: Use AppleScript to open Terminal with an interactive session
-        console.log('[ClaudeCodeHandlers] Opening Terminal window for interactive logout...');
 
         const nodePath = process.execPath;
         const script = `
@@ -212,8 +214,6 @@ end tell`;
         };
       } else if (platform === 'win32') {
         // Windows: Use start command to open a new cmd window
-        console.log('[ClaudeCodeHandlers] Opening command prompt for interactive logout...');
-
         const nodePath = process.execPath;
         spawn('cmd', ['/c', 'start', 'cmd', '/k', `echo Claude Code Logout && echo. && echo Type /logout and press Enter to logout: && echo. && set ELECTRON_RUN_AS_NODE=1 && "${nodePath}" "${cliPath}"`], {
           detached: true,
@@ -226,8 +226,6 @@ end tell`;
         };
       } else {
         // Linux: Try to open a terminal emulator
-        console.log('[ClaudeCodeHandlers] Opening terminal for interactive logout...');
-
         const nodePath = process.execPath;
         // Try common terminal emulators
         const terminals = ['gnome-terminal', 'konsole', 'xterm', 'x-terminal-emulator'];
@@ -242,7 +240,7 @@ end tell`;
             terminalOpened = true;
             break;
           } catch (error) {
-            console.log(`[ClaudeCodeHandlers] ${terminal} not available`);
+            // Terminal not available, try next one
           }
         }
 
@@ -256,12 +254,10 @@ end tell`;
         }
       }
     } catch (error) {
-      console.error('[ClaudeCodeHandlers] Logout error:', error);
+      log.error('[ClaudeCodeHandlers] Logout error:', error);
       throw error;
     }
   });
-
-  console.log('[ClaudeCodeHandlers] Registered IPC handlers');
 }
 
 /**
@@ -278,10 +274,10 @@ function findBundledCli(): string | null {
       return cliPath;
     }
 
-    console.error('[ClaudeCodeHandlers] CLI not found at expected path:', cliPath);
+    log.error('[ClaudeCodeHandlers] CLI not found at expected path:', cliPath);
     return null;
   } catch (error) {
-    console.error('[ClaudeCodeHandlers] Error finding bundled CLI:', error);
+    log.error('[ClaudeCodeHandlers] Error finding bundled CLI:', error);
     return null;
   }
 }
