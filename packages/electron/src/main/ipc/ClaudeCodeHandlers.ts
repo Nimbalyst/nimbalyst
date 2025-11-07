@@ -124,7 +124,9 @@ end tell`;
         console.log('[ClaudeCodeHandlers] Opening command prompt for OAuth setup...');
 
         const nodePath = process.execPath;
-        spawn('cmd', ['/c', 'start', 'cmd', '/k', `set ELECTRON_RUN_AS_NODE=1 && "${nodePath}" "${cliPath}" setup-token`], {
+        // TODO: On windows only, assume we have access to a working claude installation because I could not figure out
+        //  how to use the weird Windows shell to run the command with ELECTRON_RUN_AS_NODE=1 properly.
+        spawn('cmd', ['/c', 'start', 'cmd', '/k', `claude setup-token`], {
           detached: true,
           stdio: 'ignore'
         }).unref();
