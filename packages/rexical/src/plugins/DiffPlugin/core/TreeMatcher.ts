@@ -216,8 +216,8 @@ export class WindowedTreeMatcher {
 
     // Run order-preserving diff
     const diffOps = diffTrees(sourceRoot, targetRoot, {
-      pairAlignThreshold: 0.8,
-      equalThreshold: 0.2,
+      pairAlignThreshold: 2.0,
+      equalThreshold: 0.1,
       // Weight text similarity very heavily to prefer identity matches
       // For "MD Editor" vs "Feature Requests": cost = 3.0 * 1.0 = 3.0 (text mismatch)
       // For "MD Editor" vs "MD Editor": cost = 3.0 * 0 = 0 (text match)
