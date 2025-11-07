@@ -36,15 +36,3 @@ This table shows the data layout.
 ## Summary
 
 In conclusion, this document contains multiple content types to test the diff algorithm's accuracy when new content is appended.
-
-## Additional Section
-
-This is new content appended to the end of the document.
-
-### New Subsection
-
-- New item 1
-- New item 2
-- New item 3
-
-The diff algorithm should mark only this section as added, without modifying any of the existing content above.

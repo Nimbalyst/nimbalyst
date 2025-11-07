@@ -198,6 +198,16 @@ export class ListDiffHandler implements DiffNodeHandler {
       // This prevents the entire list from being highlighted when only individual items changed
       // $setDiffState(liveNode, 'modified');
 
+      // Skip sub-tree diff if source and target are exact matches
+      // This prevents false matches in nested content when parent is unchanged
+      const isExactMatch = this.areNodesExactMatch(sourceNode, targetNode);
+
+      if (isExactMatch) {
+        // console.log('[ListDiffHandler] Skipping sub-tree diff - nodes are exact match');
+        // No diff state needed - node is unchanged
+        return {handled: true, skipChildren: true};
+      }
+
       // Use recursive sub-tree diffing for better insertion positioning and index alignment
       if (
         context.sourceEditor &&
@@ -441,5 +451,40 @@ export class ListDiffHandler implements DiffNodeHandler {
         this.rejectTextDiffMarkers(child);
       }
     }
+  }
+
+  /**
+   * Check if two serialized nodes are exact matches
+   * Compares the JSON representation recursively
+   */
+  private areNodesExactMatch(
+    node1: SerializedLexicalNode,
+    node2: SerializedLexicalNode,
+  ): boolean {
+    // Compare JSON strings for deep equality
+    // This includes type, text, children, and all other properties
+    try {
+      const json1 = JSON.stringify(node1, this.sortKeys);
+      const json2 = JSON.stringify(node2, this.sortKeys);
+      return json1 === json2;
+    } catch (error) {
+      // If serialization fails, assume not equal
+      return false;
+    }
+  }
+
+  /**
+   * Helper to sort object keys for stable JSON comparison
+   */
+  private sortKeys(key: string, value: any): any {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return Object.keys(value)
+        .sort()
+        .reduce((sorted: any, k: string) => {
+          sorted[k] = value[k];
+          return sorted;
+        }, {});
+    }
+    return value;
   }
 }
