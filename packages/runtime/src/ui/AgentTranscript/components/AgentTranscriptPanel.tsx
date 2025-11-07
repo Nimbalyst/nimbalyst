@@ -8,9 +8,16 @@ import { formatISO } from '../../../utils/dateUtils';
 
 type SidebarTab = 'prompts' | 'files';
 
+interface Todo {
+  status: 'pending' | 'in_progress' | 'completed';
+  content: string;
+  activeForm: string;
+}
+
 interface AgentTranscriptPanelProps {
   sessionId: string;
   sessionData: SessionData;
+  todos?: Todo[];
   onSettingsChange?: (settings: TranscriptSettings) => void;
   showSettings?: boolean;
   initialSettings?: TranscriptSettings;
@@ -21,6 +28,7 @@ interface AgentTranscriptPanelProps {
 export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   sessionId,
   sessionData,
+  todos = [],
   onSettingsChange,
   showSettings,
   initialSettings,
@@ -345,22 +353,67 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
             </div>
 
             {/* Tab Content */}
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              {activeTab === 'prompts' && (
-                <TranscriptSidebar
-                  sessionId={sessionId}
-                  prompts={prompts}
-                  onNavigateToPrompt={handleNavigateToPrompt}
-                  isCollapsed={false}
-                  onToggleCollapse={() => setIsSidebarCollapsed(true)}
-                />
-              )}
-              {activeTab === 'files' && (
-                <FileEditsSidebar
-                  fileEdits={fileEdits}
-                  onFileClick={onFileClick}
-                  workspacePath={sessionData.workspacePath}
-                />
+            <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                {activeTab === 'prompts' && (
+                  <TranscriptSidebar
+                    sessionId={sessionId}
+                    prompts={prompts}
+                    onNavigateToPrompt={handleNavigateToPrompt}
+                    isCollapsed={false}
+                    onToggleCollapse={() => setIsSidebarCollapsed(true)}
+                  />
+                )}
+                {activeTab === 'files' && (
+                  <FileEditsSidebar
+                    fileEdits={fileEdits}
+                    onFileClick={onFileClick}
+                    workspacePath={sessionData.workspacePath}
+                  />
+                )}
+              </div>
+
+              {/* TodoList below tab content */}
+              {todos && todos.length > 0 && (
+                <div style={{
+                  borderTop: '1px solid var(--border-primary)',
+                  backgroundColor: 'var(--surface-secondary)',
+                  padding: '0.75rem',
+                  maxHeight: '150px',
+                  overflow: 'auto'
+                }}>
+                  <div style={{ marginBottom: '0.5rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                    Tasks ({todos.filter(t => t.status === 'completed').length}/{todos.length})
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    {todos.map((todo, index) => {
+                      const displayText = todo.status === 'in_progress' ? todo.activeForm : todo.content;
+                      return (
+                        <div key={index} style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '0.5rem',
+                          fontSize: '0.75rem',
+                          color: 'var(--text-primary)',
+                          opacity: todo.status === 'completed' ? 0.6 : 1
+                        }}>
+                          <div style={{ marginTop: '2px', flexShrink: 0 }}>
+                            {todo.status === 'pending' && <span style={{ fontSize: '0.625rem' }}>○</span>}
+                            {todo.status === 'in_progress' && <span style={{ fontSize: '0.625rem', animation: 'spin 1s linear infinite' }}>◐</span>}
+                            {todo.status === 'completed' && <span style={{ fontSize: '0.625rem', color: 'var(--primary-color)' }}>●</span>}
+                          </div>
+                          <div style={{
+                            flex: 1,
+                            textDecoration: todo.status === 'completed' ? 'line-through' : 'none',
+                            wordBreak: 'break-word'
+                          }}>
+                            {displayText}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
             </div>
           </>

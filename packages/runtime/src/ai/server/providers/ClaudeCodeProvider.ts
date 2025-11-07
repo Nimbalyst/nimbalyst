@@ -393,6 +393,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   const toolArgs = block.input;
                   const isMcpTool = toolName?.startsWith('mcp__');
 
+                  // Detect TodoWrite tool invocations and extract todos
+                  if (toolName === 'TodoWrite' && toolArgs && toolArgs.todos) {
+                    console.log(`[CLAUDE-CODE] TodoWrite detected with ${toolArgs.todos.length} todos`);
+                    // Emit todo update event to renderer via IPC (don't await - let it happen async)
+                    this.emitTodoUpdate(sessionId, toolArgs.todos).catch(err => {
+                      console.error('[CLAUDE-CODE] Failed to emit todo update:', err);
+                    });
+                  }
+
                   // SDK-native tools that are executed by the Claude Code SDK itself
                   const sdkNativeTools = ['Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS', 'Bash',
                                           'WebFetch', 'WebSearch', 'Task', 'ExitPlanMode',
@@ -1123,6 +1132,60 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       this.abortController = null;
     } else {
       console.log('[CLAUDE-CODE] No active request to abort');
+    }
+  }
+
+  /**
+   * Update session metadata with current todos
+   * Uses the existing metadata update mechanism instead of custom IPC events
+   */
+  private async emitTodoUpdate(sessionId: string | undefined, todos: any[]): Promise<void> {
+    console.log(`[CLAUDE-CODE] emitTodoUpdate called with sessionId: ${sessionId}, todos count: ${todos?.length}`);
+
+    if (!sessionId) {
+      console.warn('[CLAUDE-CODE] Cannot update todos: no session ID');
+      return;
+    }
+
+    try {
+      // Update session metadata with the current todos
+      // This will trigger session reloads which will update the UI
+      console.log(`[CLAUDE-CODE] Updating session metadata with ${todos.length} todos for session ${sessionId}`);
+
+      // Import AISessionsRepository dynamically
+      console.log('[CLAUDE-CODE] Importing AISessionsRepository...');
+      const { AISessionsRepository } = await import('../../../storage/repositories/AISessionsRepository');
+      console.log('[CLAUDE-CODE] AISessionsRepository imported successfully');
+
+      // Get current session to merge metadata
+      console.log(`[CLAUDE-CODE] Getting current session ${sessionId}...`);
+      const currentSession = await AISessionsRepository.get(sessionId);
+      console.log(`[CLAUDE-CODE] Current session retrieved:`, currentSession ? 'found' : 'not found');
+
+      const currentMetadata = currentSession?.metadata || {};
+      console.log(`[CLAUDE-CODE] Current metadata:`, JSON.stringify(currentMetadata, null, 2));
+
+      console.log(`[CLAUDE-CODE] Updating metadata with merged todos...`);
+      await AISessionsRepository.updateMetadata(sessionId, {
+        metadata: {
+          ...currentMetadata,
+          currentTodos: todos
+        }
+      });
+
+      console.log(`[CLAUDE-CODE] Session metadata updated successfully with todos:`, JSON.stringify(todos, null, 2));
+
+      // Emit message:logged event to trigger UI reload
+      // This will cause the AgenticPanel to reload the session and pick up the new todos
+      console.log(`[CLAUDE-CODE] Emitting message:logged event...`);
+      this.emit('message:logged', {
+        sessionId,
+        direction: 'output'
+      });
+      console.log(`[CLAUDE-CODE] Emitted message:logged event to trigger UI reload`);
+    } catch (error) {
+      console.error('[CLAUDE-CODE] Failed to update session metadata with todos:', error);
+      console.error('[CLAUDE-CODE] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     }
   }
 

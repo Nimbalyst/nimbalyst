@@ -54,6 +54,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
 
   return (
     <div
+        id={"session-list-item-" + id}
       className={`session-list-item ${isActive ? 'active' : ''} ${isLoaded ? 'loaded' : ''}`}
       onClick={onClick}
       onMouseEnter={() => setIsHovering(true)}

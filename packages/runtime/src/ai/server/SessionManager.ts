@@ -56,6 +56,7 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     providerSessionId,
     lastReadMessageTimestamp: session.lastReadMessageTimestamp ?? undefined,
     tokenUsage,
+    metadata: session.metadata ?? {},
   } satisfies SessionData;
 }
 

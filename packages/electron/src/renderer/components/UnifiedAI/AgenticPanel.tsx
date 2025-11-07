@@ -732,7 +732,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             const lastMessage = messages[messages.length - 1];
             const lastMessageTimestamp = lastMessage?.timestamp ?? null;
 
-            console.log(`[AgenticPanel] Auto-marking active session ${data.sessionId} as read after message completion (timestamp: ${lastMessageTimestamp})`);
+            // console.log(`[AgenticPanel] Auto-marking active session ${data.sessionId} as read after message completion (timestamp: ${lastMessageTimestamp})`);
 
             // Update ref immediately
             readStateRef.current.set(data.sessionId, {

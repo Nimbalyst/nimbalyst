@@ -1,10 +1,16 @@
-import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect } from 'react';
+import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect, useState } from 'react';
 import { AgentTranscriptPanel, TodoItem, FileEditSummary } from '@nimbalyst/runtime';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AIInput, AIInputRef } from './AIInput';
 import { FileGutter } from '../AIChat/FileGutter';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
+
+interface Todo {
+  status: 'pending' | 'in_progress' | 'completed';
+  content: string;
+  activeForm: string;
+}
 
 export interface AISessionViewRef {
   focusInput: () => void;
@@ -96,6 +102,18 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   onModelChange
 }, ref) => {
   const inputRef = useRef<AIInputRef>(null);
+  const [todos, setTodos] = useState<Todo[]>([]);
+
+  // Extract todos from session metadata when sessionData changes
+  useEffect(() => {
+    if (sessionData.metadata?.currentTodos) {
+      console.log(`[AISessionView] Extracting todos for session ${sessionId}:`, sessionData.metadata.currentTodos);
+      setTodos(sessionData.metadata.currentTodos);
+    } else {
+      console.log(`[AISessionView] No todos found in session metadata for ${sessionId}`);
+      setTodos([]);
+    }
+  }, [sessionId, sessionData.metadata?.currentTodos]);
 
   // Expose focusInput method through ref
   useImperativeHandle(ref, () => ({
@@ -200,6 +218,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         <AgentTranscriptPanel
           sessionId={sessionId}
           sessionData={sessionData}
+          todos={todos}
           onFileClick={handleFileClick}
           onTodoClick={handleTodoClick}
           hideSidebar={mode === 'chat'} // Hide sidebar in chat mode
