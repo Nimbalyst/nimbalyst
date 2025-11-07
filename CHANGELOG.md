@@ -19,6 +19,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.5] - 2025-11-07
+
+
+### Added
+- Settings menu item for non-darwin platforms (File > Settings...)
+- E2E test for partial diff acceptance with rejections
+
+### Changed
+- Integrated ThresholdedOrderPreservingTree (TOPT) algorithm for order-preserving diffs
+- Improved TOPT matching for nested list structures
+- Use hybrid content-first matching for list item diffs
+- Reorganized and cleaned up DiffPlugin tests
+- Use electron-node for Claude Code login/logout operations
+
+### Fixed
+- External links now open in default browser instead of in-app
+- Reverted bad optimization for local changes that caused full document diff regressions
+- History dialog diff navigation now syncs with clicked diff groups
+- TOPT now forces exact text matches to prevent false alignments
+- Prevent unnecessary processing of children when content is unchanged
+- AI edit tag now clears properly after incremental diff operations
+- Console.log statements removed from diff utilities and various components
+- Electron-node authentication for Claude Code login/logout
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.4] - 2025-11-05
 
 
