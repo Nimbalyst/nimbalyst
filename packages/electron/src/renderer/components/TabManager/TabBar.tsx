@@ -418,6 +418,7 @@ export const TabBar: React.FC<TabBarProps> = ({
               className={`tab ${tab.id === activeTabId ? 'active' : ''} ${tab.isDirty ? 'dirty' : ''} ${tab.isPinned ? 'pinned' : ''} ${draggedIndex === index ? 'dragging' : ''} ${dragOverIndex === index ? 'drag-over' : ''}`}
               data-tab-type={tab.isVirtual ? 'session' : 'document'}
               data-tab-id={tab.id}
+              data-filename={tab.fileName}
               draggable={true}
               onDragStart={(e) => handleDragStart(e, index)}
               onDragOver={(e) => handleDragOver(e, index)}
@@ -489,6 +490,8 @@ export const TabBar: React.FC<TabBarProps> = ({
               {!tab.isPinned && (
                 <button
                   className="tab-close-button"
+                  data-testid={`tab-close-button-${tab.id}`}
+                  data-filename={tab.fileName}
                   onClick={(e) => handleCloseClick(e, tab.id)}
                   title="Close tab"
                 >

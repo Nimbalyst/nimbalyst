@@ -34,6 +34,7 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   tabProcessingIndicator: '.tab-processing-indicator',
   tabUnreadIndicator: '.tab-unread-indicator',
   fileTabsContainer: '.file-tabs-container',
+  tabCloseButton: '.tab-close-button',
 
   // API key dialog
   apiKeyDialogOverlay: '.api-key-dialog-overlay',
@@ -553,4 +554,40 @@ export async function openAIChatWithSession(page: Page): Promise<void> {
   // Wait for chat input to be visible (use .first() to avoid strict mode violations)
   const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
   await chatInput.waitFor({ state: 'visible', timeout: 3000 });
+}
+
+/**
+ * Close a tab by filename
+ * Uses data-filename attribute for reliable identification
+ */
+export async function closeTabByFileName(page: Page, fileName: string): Promise<void> {
+  // Find the tab with the matching filename
+  const tab = page.locator(PLAYWRIGHT_TEST_SELECTORS.tab, { has: page.locator(`[data-filename="${fileName}"]`) });
+
+  // Make sure tab exists
+  await expect(tab).toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+
+  // Click the close button for this tab
+  const closeButton = tab.locator(PLAYWRIGHT_TEST_SELECTORS.tabCloseButton);
+  await closeButton.click();
+
+  // Wait for tab to disappear
+  await expect(tab).not.toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
+  await page.waitForTimeout(300);
+}
+
+/**
+ * Get a tab locator by filename
+ * Uses data-filename attribute for reliable identification
+ */
+export function getTabByFileName(page: Page, fileName: string) {
+  return page.locator(PLAYWRIGHT_TEST_SELECTORS.tab, { has: page.locator(`[data-filename="${fileName}"]`) });
+}
+
+/**
+ * Check if a tab with the given filename is visible
+ */
+export async function isTabVisible(page: Page, fileName: string): Promise<boolean> {
+  const tab = getTabByFileName(page, fileName);
+  return await tab.isVisible().catch(() => false);
 }
