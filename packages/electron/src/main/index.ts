@@ -5,6 +5,16 @@ import * as path from 'path';
 import { existsSync, writeFileSync, appendFileSync, readFileSync } from 'fs';
 import * as fs from 'fs';
 
+// CRITICAL: Hide dock icon when running as background Node process
+// This prevents Terminal icon from appearing when Claude Code spawns child processes
+if (process.env.ELECTRON_RUN_AS_NODE === '1' && process.platform === 'darwin') {
+  // When Electron runs as Node (ELECTRON_RUN_AS_NODE=1), hide from dock
+  // This must happen before app.whenReady()
+  if (app.dock) {
+    app.dock.hide();
+  }
+}
+
 import { createWindow, windows, windowStates, findWindowByFilePath } from './window/WindowManager';
 import { loadFileIntoWindow } from './file/FileOperations';
 import { createApplicationMenu, updateApplicationMenu } from './menu/ApplicationMenu';

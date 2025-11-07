@@ -85,12 +85,17 @@ export function setupClaudeCodeEnvironment(): NodeJS.ProcessEnv {
   // Use Electron as Node
   env.ELECTRON_RUN_AS_NODE = '1';
 
+  // Prevent dock icon from appearing on macOS when running as background process
+  if (platform === 'darwin') {
+    env.ELECTRON_NO_ATTACH_CONSOLE = '1';
+  }
+
   return env;
 }
 
 /**
  * Get SDK options for packaged builds
- * Sets the executable to use Electron as Node
+ * Sets the executable to use Electron as Node with background processing flags
  */
 export function getClaudeCodeExecutableOptions(): { executable: string; executableArgs: string[] } | {} {
   if (!app.isPackaged) {
