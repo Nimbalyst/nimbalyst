@@ -125,6 +125,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Require notarization for release builds
           REQUIRE_NOTARIZE: ${{ github.event_name == 'push' || github.event.inputs.release == 'true' }}
+          # Mark as official build for analytics tracking
+          # This ensures PostHog only sends data from official GitHub release builds
+          OFFICIAL_BUILD: 'true'
         working-directory: packages/electron
         run: |
           if [ "${{ matrix.os }}" == "macos-latest" ]; then

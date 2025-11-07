@@ -37,11 +37,12 @@ export class AnalyticsService {
   private distinctId?: string;
   private sessionId?: string;
   private isDevInstallation: boolean = process.env.NODE_ENV?.toLowerCase() === 'development';
+  private isOfficialBuild: boolean = process.env.OFFICIAL_BUILD === 'true';
 
   public init(): void {
     this.postHogClient ??= this.initPostHogClient();
     this.sessionTracker ??= this.initPostHogClient();
-    this.log.info(`Analytics service initialized (analytics ID: ${this.getDistinctId()})`);
+    this.log.info(`Analytics service initialized (analytics ID: ${this.getDistinctId()}, official build: ${this.isOfficialBuild})`);
   }
 
   public sendEvent(eventName: string, properties?: Record<string | number, any>): void {
@@ -87,8 +88,14 @@ export class AnalyticsService {
    * the same session ID in its events too. You probably never need to call this yourself.
    */
   public setSessionId(sessionId: string): void {
-    this.log.info(`Setting analytics session ID: ${sessionId}, previous session ID: ${this.sessionId}, anonymous tracking consent: ${this.allowedToSendAnalytics()}`);
+    this.log.info(`Setting analytics session ID: ${sessionId}, previous session ID: ${this.sessionId}, official build: ${this.isOfficialBuild}`);
     this.sessionId = sessionId;
+
+    // Only send session start event from official builds
+    if (!this.allowedToSendAnalytics()) {
+      this.log.info('Skipping session start event (not an official build)');
+      return;
+    }
 
     const eventProperties: Record<string | number, any> = {
       '$session_id': this.sessionId,
@@ -120,7 +127,12 @@ export class AnalyticsService {
   }
 
   public allowedToSendAnalytics(): boolean {
-    return true;
+    // Only send analytics from official GitHub release builds
+    // This prevents analytics from:
+    // - Development builds (npm run dev)
+    // - Local builds (npm run build:mac:local)
+    // - Any build not created by the GitHub "Build and Release Electron App" workflow
+    return this.isOfficialBuild;
   }
 
   public getDistinctId(): string {

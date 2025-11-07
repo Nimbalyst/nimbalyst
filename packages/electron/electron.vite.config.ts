@@ -83,6 +83,7 @@ const optimizeExcalidrawPlugin = () => {
 };
 
 const isDev = process.env.NODE_ENV !== 'production';
+const isOfficialBuild = process.env.OFFICIAL_BUILD === 'true';
 const runtimeSrcDir = resolve(__dirname, '../runtime/src');
 const runtimeDistDir = resolve(__dirname, '../runtime/dist');
 const rexicalDistDir = resolve(__dirname, '../rexical/dist');
@@ -108,6 +109,9 @@ const resolveWorkspaceSubpaths = () => {
 
 export default defineConfig({
   main: {
+    define: {
+      'process.env.OFFICIAL_BUILD': JSON.stringify(isOfficialBuild ? 'true' : 'false')
+    },
     plugins: [resolveWorkspaceSubpaths()],
     resolve: {
       alias: {
@@ -168,6 +172,7 @@ export default defineConfig({
     root: 'src/renderer',
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+      'process.env.OFFICIAL_BUILD': JSON.stringify(isOfficialBuild ? 'true' : 'false'),
       'process.env': '{}'
     },
     plugins: [
