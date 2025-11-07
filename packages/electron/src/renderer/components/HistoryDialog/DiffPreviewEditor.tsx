@@ -43,7 +43,68 @@ export function DiffPreviewEditor({
   const [changeGroups, setChangeGroups] = useState<DiffChangeGroup[]>([]);
   const [currentGroupIndex, setCurrentGroupIndex] = useState(0);
   const isNavigatingRef = useRef(false);
+  const currentGroupIndexRef = useRef(0);
+  const changeGroupsRef = useRef<DiffChangeGroup[]>([]);
 
+  // Keep refs in sync with state
+  useEffect(() => {
+    currentGroupIndexRef.current = currentGroupIndex;
+  }, [currentGroupIndex]);
+
+  useEffect(() => {
+    changeGroupsRef.current = changeGroups;
+  }, [changeGroups]);
+
+  // Handle clicks on diff nodes to update navigation index
+  const handleEditorClick = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    editor.getEditorState().read(() => {
+      const selection = editor._editorState._selection;
+      if (!selection) return;
+
+      const anchor = selection.anchor;
+      const node = anchor.getNode();
+      if (!node) return;
+
+      // Find which change group contains this node
+      const groups = changeGroupsRef.current;
+      for (let i = 0; i < groups.length; i++) {
+        const group = groups[i];
+        // Check if any node in this group matches or is an ancestor
+        for (const groupNode of group.nodes) {
+          try {
+            let currentNode = node;
+            // Walk up the tree to see if we're inside this group node
+            while (currentNode) {
+              if (currentNode.getKey() === groupNode.getKey()) {
+                // Found the group!
+                if (i !== currentGroupIndexRef.current) {
+                  setCurrentGroupIndex(i);
+                  scrollToChangeGroup(editor, i, groups);
+
+                  // Update parent state immediately
+                  if (onNavigationStateChange) {
+                    onNavigationStateChange({
+                      currentIndex: i,
+                      totalGroups: groups.length,
+                      canGoPrevious: i > 0,
+                      canGoNext: i < groups.length - 1
+                    });
+                  }
+                }
+                return;
+              }
+              currentNode = currentNode.getParent();
+            }
+          } catch (e) {
+            // Node might not be attached
+          }
+        }
+      }
+    });
+  }, [onNavigationStateChange]);
 
   // Update groups whenever editor changes
   const updateGroups = useCallback(() => {
@@ -146,7 +207,7 @@ export function DiffPreviewEditor({
     };
   }, [changeGroups, currentGroupIndex]);
 
-  // Listen for editor updates
+  // Listen for editor updates and clicks
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
@@ -155,10 +216,19 @@ export function DiffPreviewEditor({
       updateGroups();
     });
 
+    // Add click listener to detect when user selects a diff node
+    const rootElement = editor.getRootElement();
+    if (rootElement) {
+      rootElement.addEventListener('click', handleEditorClick);
+    }
+
     return () => {
       removeUpdateListener();
+      if (rootElement) {
+        rootElement.removeEventListener('click', handleEditorClick);
+      }
     };
-  }, [updateGroups]);
+  }, [updateGroups, handleEditorClick]);
 
   // Handle navigation callbacks from parent
   useEffect(() => {
@@ -166,25 +236,53 @@ export function DiffPreviewEditor({
 
     // Store navigation handlers on window so parent can call them
     (window as any).__richDiffNavigatePrevious = () => {
-      if (currentGroupIndex > 0) {
-        const newIndex = currentGroupIndex - 1;
+      const currentIndex = currentGroupIndexRef.current;
+      const groups = changeGroupsRef.current;
+
+      if (currentIndex > 0) {
+        const newIndex = currentIndex - 1;
         setCurrentGroupIndex(newIndex);
-        if (editorRef.current && changeGroups.length > 0) {
-          scrollToChangeGroup(editorRef.current, newIndex, changeGroups);
+
+        if (editorRef.current && groups.length > 0) {
+          scrollToChangeGroup(editorRef.current, newIndex, groups);
+        }
+
+        // Update parent state immediately
+        if (onNavigationStateChange) {
+          onNavigationStateChange({
+            currentIndex: newIndex,
+            totalGroups: groups.length,
+            canGoPrevious: newIndex > 0,
+            canGoNext: newIndex < groups.length - 1
+          });
         }
       }
     };
 
     (window as any).__richDiffNavigateNext = () => {
-      if (currentGroupIndex < changeGroups.length - 1) {
-        const newIndex = currentGroupIndex + 1;
+      const currentIndex = currentGroupIndexRef.current;
+      const groups = changeGroupsRef.current;
+
+      if (currentIndex < groups.length - 1) {
+        const newIndex = currentIndex + 1;
         setCurrentGroupIndex(newIndex);
-        if (editorRef.current && changeGroups.length > 0) {
-          scrollToChangeGroup(editorRef.current, newIndex, changeGroups);
+
+        if (editorRef.current && groups.length > 0) {
+          scrollToChangeGroup(editorRef.current, newIndex, groups);
+        }
+
+        // Update parent state immediately
+        if (onNavigationStateChange) {
+          onNavigationStateChange({
+            currentIndex: newIndex,
+            totalGroups: groups.length,
+            canGoPrevious: newIndex > 0,
+            canGoNext: newIndex < groups.length - 1
+          });
         }
       }
     };
-  }, [currentGroupIndex, changeGroups, onNavigatePrevious, onNavigateNext]);
+  }, [onNavigatePrevious, onNavigateNext, onNavigationStateChange]);
 
   const handleEditorReady = (editor: LexicalEditor) => {
     editorRef.current = editor;

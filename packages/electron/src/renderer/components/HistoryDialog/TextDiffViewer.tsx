@@ -43,6 +43,8 @@ export function TextDiffViewer({
   const newContentRef = useRef<HTMLDivElement>(null);
   const syncingRef = useRef(false);
   const [currentChangeIndex, setCurrentChangeIndex] = React.useState(0);
+  const currentChangeIndexRef = useRef(0);
+  const changeGroupsRef = useRef<ChangeGroup[]>([]);
 
   const { oldLines, newLines, stats, changeGroups } = useMemo(() => {
     const changes = diffLines(oldText, newText);
@@ -99,6 +101,15 @@ export function TextDiffViewer({
     };
   }, [oldText, newText]);
 
+  // Keep refs in sync with state
+  useEffect(() => {
+    currentChangeIndexRef.current = currentChangeIndex;
+  }, [currentChangeIndex]);
+
+  useEffect(() => {
+    changeGroupsRef.current = changeGroups;
+  }, [changeGroups]);
+
   const handleScroll = useCallback((source: 'old' | 'new') => {
     if (syncingRef.current) return;
 
@@ -135,9 +146,10 @@ export function TextDiffViewer({
   }, [oldText, newText]);
 
   const scrollToChange = useCallback((index: number) => {
-    if (index < 0 || index >= changeGroups.length) return;
+    const groups = changeGroupsRef.current;
+    if (index < 0 || index >= groups.length) return;
 
-    const group = changeGroups[index];
+    const group = groups[index];
     const targetRef = group.type === 'addition' ? newContentRef : oldContentRef;
 
     if (targetRef.current) {
@@ -150,7 +162,45 @@ export function TextDiffViewer({
     }
 
     setCurrentChangeIndex(index);
-  }, [changeGroups]);
+
+    // Update parent state immediately
+    if (onNavigationStateChange) {
+      onNavigationStateChange({
+        currentIndex: index,
+        totalGroups: groups.length,
+        canGoPrevious: index > 0,
+        canGoNext: index < groups.length - 1,
+        addedLines: stats.addedLines,
+        removedLines: stats.removedLines
+      });
+    }
+  }, [onNavigationStateChange, stats]);
+
+  // Handle clicks on diff lines to update navigation index
+  const handleLineClick = useCallback((lineIndex: number, isNewVersion: boolean) => {
+    const groups = changeGroupsRef.current;
+
+    // Find which change group contains this line
+    for (let i = 0; i < groups.length; i++) {
+      const group = groups[i];
+
+      // Check if this line is in the current group
+      const isInGroup = lineIndex >= group.startIndex && lineIndex <= group.endIndex;
+
+      // For additions, check in new version; for deletions/modifications, check in old version
+      const isCorrectVersion =
+        (group.type === 'addition' && isNewVersion) ||
+        (group.type === 'deletion' && !isNewVersion) ||
+        (group.type === 'modification' && (isNewVersion || !isNewVersion));
+
+      if (isInGroup && isCorrectVersion) {
+        if (i !== currentChangeIndexRef.current) {
+          scrollToChange(i);
+        }
+        return;
+      }
+    }
+  }, [scrollToChange]);
 
   // Notify parent of navigation state changes
   useEffect(() => {
@@ -171,19 +221,25 @@ export function TextDiffViewer({
     if (onNavigatePrevious) {
       // Store handler so parent can trigger it
       (window as any).__textDiffNavigatePrevious = () => {
-        if (currentChangeIndex > 0) {
-          scrollToChange(currentChangeIndex - 1);
+        const currentIndex = currentChangeIndexRef.current;
+        const groups = changeGroupsRef.current;
+
+        if (currentIndex > 0) {
+          scrollToChange(currentIndex - 1);
         }
       };
     }
     if (onNavigateNext) {
       (window as any).__textDiffNavigateNext = () => {
-        if (currentChangeIndex < changeGroups.length - 1) {
-          scrollToChange(currentChangeIndex + 1);
+        const currentIndex = currentChangeIndexRef.current;
+        const groups = changeGroupsRef.current;
+
+        if (currentIndex < groups.length - 1) {
+          scrollToChange(currentIndex + 1);
         }
       };
     }
-  }, [currentChangeIndex, changeGroups.length, scrollToChange, onNavigatePrevious, onNavigateNext]);
+  }, [scrollToChange, onNavigatePrevious, onNavigateNext]);
 
   const handlePreviousChange = useCallback(() => {
     if (currentChangeIndex > 0) {
@@ -209,7 +265,16 @@ export function TextDiffViewer({
           >
             <div className="text-diff-lines">
               {oldLines.map((line, index) => (
-                <div key={index} className={`text-diff-line text-diff-line-${line.type}`}>
+                <div
+                  key={index}
+                  className={`text-diff-line text-diff-line-${line.type}`}
+                  onClick={() => {
+                    if (line.type !== 'unchanged') {
+                      handleLineClick(index, false);
+                    }
+                  }}
+                  style={{ cursor: line.type !== 'unchanged' ? 'pointer' : 'default' }}
+                >
                   <span className="text-diff-line-number">{line.lineNumber}</span>
                   <span className="text-diff-line-content">{line.content || ' '}</span>
                 </div>
@@ -226,7 +291,16 @@ export function TextDiffViewer({
           >
             <div className="text-diff-lines">
               {newLines.map((line, index) => (
-                <div key={index} className={`text-diff-line text-diff-line-${line.type}`}>
+                <div
+                  key={index}
+                  className={`text-diff-line text-diff-line-${line.type}`}
+                  onClick={() => {
+                    if (line.type !== 'unchanged') {
+                      handleLineClick(index, true);
+                    }
+                  }}
+                  style={{ cursor: line.type !== 'unchanged' ? 'pointer' : 'default' }}
+                >
                   <span className="text-diff-line-number">{line.lineNumber}</span>
                   <span className="text-diff-line-content">{line.content || ' '}</span>
                 </div>
