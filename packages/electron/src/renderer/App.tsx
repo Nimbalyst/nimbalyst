@@ -1040,6 +1040,40 @@ export default function App() {
     };
   }, []); // Empty deps - listener registered once, uses refs for current values
 
+  // Intercept external link clicks and open in default browser
+  useEffect(() => {
+    const handleClick = (event: MouseEvent) => {
+      // Find if we clicked on a link or inside a link
+      let target = event.target as HTMLElement | null;
+      while (target && target !== document.body) {
+        if (target.tagName === 'A') {
+          const anchor = target as HTMLAnchorElement;
+          const href = anchor.getAttribute('href');
+
+          // Check if it's an external link (http:// or https://)
+          if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            // Open in default browser
+            window.electronAPI.openExternal(href).catch((error) => {
+              logger.ui.error('Failed to open external link:', error);
+            });
+            return;
+          }
+          break;
+        }
+        target = target.parentElement;
+      }
+    };
+
+    document.addEventListener('click', handleClick, true);
+
+    return () => {
+      document.removeEventListener('click', handleClick, true);
+    };
+  }, []);
+
   // Show nothing while initializing - let HTML/CSS background show through
   if (isInitializing) {
     return <div style={{ height: '100vh' }} />;
