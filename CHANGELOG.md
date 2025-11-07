@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.6] - 2025-11-07
+
+
+### Added
+- /implement command for plan execution and progress tracking
+
+### Changed
+- Upgraded Claude Agent SDK to latest version
+
+### Fixed
+- Terminal icon no longer shows for every Claude Code interaction
+- Analytics now only recorded on official release builds (not development builds)
+- Check login status now works correctly in packaged DMG
+- History dialog restore button now properly enables when showing diffs
+- Claude installation assumed available on Win32 platform
+
 ## [0.45.5] - 2025-11-07
 
 
