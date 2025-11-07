@@ -218,25 +218,35 @@ export class WindowedTreeMatcher {
     const diffOps = diffTrees(sourceRoot, targetRoot, {
       pairAlignThreshold: 0.8,
       equalThreshold: 0.2,
-      // Mark listitem as textual so text similarity is weighted heavily
-      // This makes TOPT prefer matching "Three"→"Three" over "Three"→"undefined"
-      isTextual: (n) => n.type === 'text' || n.type === 'paragraph' || n.type === 'listitem',
+      // Weight text similarity very heavily to prefer identity matches
+      // For "MD Editor" vs "Feature Requests": cost = 3.0 * 1.0 = 3.0 (text mismatch)
+      // For "MD Editor" vs "MD Editor": cost = 3.0 * 0 = 0 (text match)
+      // This makes identity matches much cheaper than similar-but-different matches
+      // With wText=3.0, mismatched headings get normalized cost > 0.8, preventing bad pairings
+      wText: 3.0,  // Much higher than default 0.5
+      wAttr: 0.15,
+      wStruct: 0.35,
+      // Mark nodes as textual so text similarity is weighted heavily
+      // This makes TOPT prefer exact text matches over position-based matches
+      // heading: "MD Editor" won't match "Feature Requests" (0% text similarity)
+      // listitem: "Three" won't match "undefined" (for nested list cases)
+      isTextual: (n) => n.type === 'text' || n.type === 'paragraph' || n.type === 'heading' || n.type === 'list' || n.type === 'listitem',
     });
 
-    console.log(`\n[TreeMatcher] TOPT produced ${diffOps.length} operations for ${sourceNodes.length} source → ${targetNodes.length} target nodes:`);
-    diffOps.filter(op => op.aPath?.length === 1 || op.bPath?.length === 1).forEach((op, i) => {
-      if (op.op === 'equal' || op.op === 'replace') {
-        const aIdx = op.aPath?.[0];
-        const bIdx = op.bPath?.[0];
-        console.log(`  [${i}] ${op.op.toUpperCase()}: source[${aIdx}] "${op.a.text?.substring(0, 30)}" → target[${bIdx}] "${op.b.text?.substring(0, 30)}"`);
-      } else if (op.op === 'delete') {
-        const aIdx = op.aPath?.[0];
-        console.log(`  [${i}] DELETE: source[${aIdx}] "${op.a.text?.substring(0, 30)}"`);
-      } else if (op.op === 'insert') {
-        const bIdx = op.bPath?.[0];
-        console.log(`  [${i}] INSERT: target[${bIdx}] "${op.b.text?.substring(0, 30)}"`);
-      }
-    });
+    // console.log(`\n[TreeMatcher] TOPT produced ${diffOps.length} operations for ${sourceNodes.length} source → ${targetNodes.length} target nodes:`);
+    // diffOps.filter(op => op.aPath?.length === 1 || op.bPath?.length === 1).forEach((op, i) => {
+    //   if (op.op === 'equal' || op.op === 'replace') {
+    //     const aIdx = op.aPath?.[0];
+    //     const bIdx = op.bPath?.[0];
+    //     console.log(`  [${i}] ${op.op.toUpperCase()}: source[${aIdx}] "${op.a.text?.substring(0, 30)}" → target[${bIdx}] "${op.b.text?.substring(0, 30)}"`);
+    //   } else if (op.op === 'delete') {
+    //     const aIdx = op.aPath?.[0];
+    //     console.log(`  [${i}] DELETE: source[${aIdx}] "${op.a.text?.substring(0, 30)}"`);
+    //   } else if (op.op === 'insert') {
+    //     const bIdx = op.bPath?.[0];
+    //     console.log(`  [${i}] INSERT: target[${bIdx}] "${op.b.text?.substring(0, 30)}"`);
+    //   }
+    // });
 
     const diffs: NodeDiff[] = [];
     const sequence: NodeDiff[] = [];

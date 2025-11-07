@@ -88,7 +88,8 @@ function pairCost(a: CanonicalTreeNode, b: CanonicalTreeNode, opts: DiffOpts, pa
         pairMemo.set(k, cost); return cost;
     }
 
-    const txt = (opts.isTextual!(a) && opts.isTextual!(b)) ? (1 - textSim(a.text, b.text)) : 0;
+    const textSimValue = textSim(a.text, b.text);
+    const txt = (opts.isTextual!(a) && opts.isTextual!(b)) ? (1 - textSimValue) : 0;
     const attr = attrDist(a.attrs, b.attrs);
     const typePen = a.type === b.type ? 0 : opts.typePenalty;
 
@@ -119,6 +120,7 @@ function pairCost(a: CanonicalTreeNode, b: CanonicalTreeNode, opts: DiffOpts, pa
     }
     const struct = dp[m][n];
     const total = typePen + opts.wText * txt + opts.wAttr * attr + opts.wStruct * struct;
+
     pairMemo.set(k, total);
     return total;
 }
@@ -134,18 +136,34 @@ function alignChildren(a: CanonicalTreeNode, b: CanonicalTreeNode, opts: DiffOpt
     for (let j = 1; j <= n; j++) dp[0][j] = dp[0][j - 1] + delCost(B[j - 1], opts);
 
     const PC: number[][] = Array.from({ length: m }, () => new Array<number>(n).fill(Infinity));
+    const isExactMatch: boolean[][] = Array.from({ length: m }, () => new Array<boolean>(n).fill(false));
     for (let i = 0; i < m; i++) for (let j = 0; j < n; j++) {
         const c = pairCost(A[i], B[j], opts, pairMemo);
         const base = delCost(A[i], opts) + delCost(B[j], opts) || 1;
         const norm = c / base;
-        if (norm <= opts.pairAlignThreshold) PC[i][j] = c; // only allow “match” when similar enough
+        if (norm <= opts.pairAlignThreshold) PC[i][j] = c; // only allow "match" when similar enough
+
+        // Track exact text matches - these should always be chosen
+        // For textual nodes with identical text, force cost to 0 to ensure they match
+        if (opts.isTextual!(A[i]) && opts.isTextual!(B[j]) && A[i].text === B[j].text) {
+            isExactMatch[i][j] = true;
+            PC[i][j] = 0;  // Zero cost ensures exact matches are always chosen
+        }
     }
 
     for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) {
         const del = dp[i - 1][j] + delCost(A[i - 1], opts);
         const ins = dp[i][j - 1] + delCost(B[j - 1], opts);
         const match = PC[i - 1][j - 1] < Infinity ? dp[i - 1][j - 1] + PC[i - 1][j - 1] : Infinity;
-        dp[i][j] = Math.min(del, ins, match);
+
+        // CRITICAL: Force exact text matches to always be chosen
+        // When we have an exact text match, use it regardless of other costs
+        // This prevents position-based alignments from winning over identity matches
+        if (i > 0 && j > 0 && isExactMatch[i - 1][j - 1] && match < Infinity) {
+            dp[i][j] = dp[i - 1][j - 1];  // Match is free (cost already set to 0 in PC)
+        } else {
+            dp[i][j] = Math.min(del, ins, match);
+        }
     }
 
     const steps: Step[] = [];
@@ -172,7 +190,7 @@ export function diffTrees(a: CanonicalTreeNode, b: CanonicalTreeNode, optsPartia
         const aN = aNode!, bN = bNode!;
         const cost = pairCost(aN, bN, opts, memo);
 
-        // Decide “equal” vs “replace” for this node pair
+        // Decide "equal" vs "replace" for this node pair
         if (cost <= opts.equalThreshold) {
             ops.push({ op: 'equal', aPath, bPath, a: aN, b: bN });
         } else if (!opts.allowTypePair!(aN.type, bN.type)) {
