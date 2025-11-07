@@ -217,6 +217,8 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
         setVersionBContent(contentB);
         setVersionAMeta({ type: snapshotA.type, timestamp: snapshotA.timestamp });
         setVersionBMeta({ type: snapshotB.type, timestamp: snapshotB.timestamp });
+        // Set preview content to the newer version for restore functionality
+        setPreviewContent(contentB);
         setDiffMode(true);
         setLoadingPreview(false);
       }
