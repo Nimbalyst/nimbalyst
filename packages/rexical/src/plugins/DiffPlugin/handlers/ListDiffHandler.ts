@@ -204,9 +204,9 @@ export class ListDiffHandler implements DiffNodeHandler {
         context.targetEditor &&
         context.transformers
       ) {
-        console.log(
-          '\n🔄 [ListDiffHandler] Applying recursive sub-tree diff to list for better insertion positioning...',
-        );
+        // console.log(
+        //   '\n🔄 [ListDiffHandler] Applying recursive sub-tree diff to list for better insertion positioning...',
+        // );
 
         try {
           // Apply recursive sub-tree diffing to the list children
@@ -219,7 +219,7 @@ export class ListDiffHandler implements DiffNodeHandler {
             context.transformers,
           );
 
-          console.log('✅ [ListDiffHandler] Recursive sub-tree diff completed successfully');
+          // console.log('✅ [ListDiffHandler] Recursive sub-tree diff completed successfully');
           return {handled: true, skipChildren: true};
         } catch (error) {
           console.warn(

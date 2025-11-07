@@ -367,12 +367,12 @@ export function applyMarkdownReplace(
   // console.log('[applyMarkdownReplace] CALLED with', replacements.length, 'replacements');
   const normalizedReplacements = replacements.map((replacement) => {
     const {oldText, newText} = resolveReplacementTexts(replacement);
-    console.log('[applyMarkdownReplace] Replacement:', {
-      oldTextLength: oldText.length,
-      newTextLength: newText.length,
-      oldTextStart: oldText.substring(0, 100),
-      newTextStart: newText.substring(0, 100),
-    });
+    // console.log('[applyMarkdownReplace] Replacement:', {
+    //   oldTextLength: oldText.length,
+    //   newTextLength: newText.length,
+    //   oldTextStart: oldText.substring(0, 100),
+    //   newTextStart: newText.substring(0, 100),
+    // });
     return {
       ...(replacement as any),
       oldText,
@@ -380,10 +380,10 @@ export function applyMarkdownReplace(
     } as TextReplacement;
   });
 
-  console.log('[applyMarkdownReplace] originalMarkdown:', {
-    length: originalMarkdown.length,
-    start: originalMarkdown.substring(0, 100),
-  });
+  // console.log('[applyMarkdownReplace] originalMarkdown:', {
+  //   length: originalMarkdown.length,
+  //   start: originalMarkdown.substring(0, 100),
+  // });
 
   // Debug: Starting markdown replace
   // console.log('\n🔧 STARTING MARKDOWN REPLACE...');
@@ -395,7 +395,7 @@ export function applyMarkdownReplace(
   try {
     // Try to apply text replacements to get the target markdown
     newMarkdown = _applyMarkdownEdits(originalMarkdown, normalizedReplacements);
-    console.log('[applyMarkdownReplace] Text replacement succeeded, newMarkdown length:', newMarkdown.length);
+    // console.log('[applyMarkdownReplace] Text replacement succeeded, newMarkdown length:', newMarkdown.length);
   } catch (error) {
     // Text replacement failed - construct the new markdown from the replacements
     // This allows TreeMatcher to still work even if exact text matching fails
@@ -826,30 +826,30 @@ export function applyMarkdownDiffToDocument(
     // Use 50% of document size as window, with minimum of 10 and maximum of 100
     const windowSize = Math.min(100, Math.max(10, Math.floor(maxNodeCount * 0.5)));
 
-    console.log('[diffUtils] Document sizes:', {
-      sourceNodeCount,
-      targetNodeCount,
-      windowSize,
-      originalMarkdownLength: originalMarkdown.length,
-      newMarkdownLength: newMarkdown.length,
-    });
-
-    // Debug: show first few nodes of each
-    sourceEditor.getEditorState().read(() => {
-      const children = $getRoot().getChildren().slice(0, 5);
-      console.log('[diffUtils] Source first 5 nodes:', children.map(c => ({
-        type: c.getType(),
-        text: c.getTextContent().substring(0, 40)
-      })));
-    });
-
-    targetEditor.getEditorState().read(() => {
-      const children = $getRoot().getChildren().slice(0, 5);
-      console.log('[diffUtils] Target first 5 nodes:', children.map(c => ({
-        type: c.getType(),
-        text: c.getTextContent().substring(0, 40)
-      })));
-    });
+    // console.log('[diffUtils] Document sizes:', {
+    //   sourceNodeCount,
+    //   targetNodeCount,
+    //   windowSize,
+    //   originalMarkdownLength: originalMarkdown.length,
+    //   newMarkdownLength: newMarkdown.length,
+    // });
+    //
+    // // Debug: show first few nodes of each
+    // sourceEditor.getEditorState().read(() => {
+    //   const children = $getRoot().getChildren().slice(0, 5);
+    //   console.log('[diffUtils] Source first 5 nodes:', children.map(c => ({
+    //     type: c.getType(),
+    //     text: c.getTextContent().substring(0, 40)
+    //   })));
+    // });
+    //
+    // targetEditor.getEditorState().read(() => {
+    //   const children = $getRoot().getChildren().slice(0, 5);
+    //   console.log('[diffUtils] Target first 5 nodes:', children.map(c => ({
+    //     type: c.getType(),
+    //     text: c.getTextContent().substring(0, 40)
+    //   })));
+    // });
 
     const treeMatcher = createWindowedTreeMatcher(sourceEditor, targetEditor, {
       transformers,
@@ -857,7 +857,7 @@ export function applyMarkdownDiffToDocument(
       similarityThreshold: 0.05, // Very low threshold to catch dramatic changes
     });
 
-    console.log('[diffUtils] Created TreeMatcher for applyMarkdownDiffToDocument');
+    // console.log('[diffUtils] Created TreeMatcher for applyMarkdownDiffToDocument');
 
     // Phase 1: Match root-level nodes
     const rootMatchResult = treeMatcher.matchRootChildren();
@@ -1272,23 +1272,23 @@ export function $applySubTreeDiff(
     targetCanonicalChildren,
   );
 
-  console.log(
-    `[SubTreeDiff] Sub-tree matching found ${childMatchResult.diffs.length} diffs, ${childMatchResult.sequence.length} total operations`,
-  );
+  // console.log(
+  //   `[SubTreeDiff] Sub-tree matching found ${childMatchResult.diffs.length} diffs, ${childMatchResult.sequence.length} total operations`,
+  // );
 
   // Log each diff for debugging
-  childMatchResult.sequence.forEach((diff, i) => {
-    console.log(`  [${i}] ${diff.changeType.toUpperCase()} sourceIdx=${diff.sourceIndex} targetIdx=${diff.targetIndex} type=${diff.nodeType} similarity=${diff.similarity.toFixed(2)} matchType=${diff.matchType}`);
-    console.log(`       source: "${(diff.sourceMarkdown || '').substring(0, 40)}"`);
-    console.log(`       target: "${(diff.targetMarkdown || '').substring(0, 40)}"`);
-  });
+  // childMatchResult.sequence.forEach((diff, i) => {
+  //   console.log(`  [${i}] ${diff.changeType.toUpperCase()} sourceIdx=${diff.sourceIndex} targetIdx=${diff.targetIndex} type=${diff.nodeType} similarity=${diff.similarity.toFixed(2)} matchType=${diff.matchType}`);
+  //   console.log(`       source: "${(diff.sourceMarkdown || '').substring(0, 40)}"`);
+  //   console.log(`       target: "${(diff.targetMarkdown || '').substring(0, 40)}"`);
+  // });
 
   // Create position tracking for child nodes by their markdown content
   // Apply the child node diffs in reverse order to prevent position shift issues
   for (const diff of [...childMatchResult.sequence].reverse()) {
-    console.log(
-      `[SubTreeDiff] Applying child diff: ${diff.changeType} at sourceIndex ${diff.sourceIndex}, targetIndex ${diff.targetIndex}`,
-    );
+    // console.log(
+    //   `[SubTreeDiff] Applying child diff: ${diff.changeType} at sourceIndex ${diff.sourceIndex}, targetIndex ${diff.targetIndex}`,
+    // );
     $applyChildNodeDiff(
       liveParentNode,
       diff,
@@ -1299,7 +1299,7 @@ export function $applySubTreeDiff(
     );
   }
 
-  console.log('[SubTreeDiff] ✅ Sub-tree diff application completed');
+  // console.log('[SubTreeDiff] ✅ Sub-tree diff application completed');
 }
 
 /**
