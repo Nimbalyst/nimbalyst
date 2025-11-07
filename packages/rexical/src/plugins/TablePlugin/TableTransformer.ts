@@ -194,5 +194,8 @@ const mapToTableCells = (textContent: string): Array<TableCellNode> | null => {
   if (!match || !match[1]) {
     return null;
   }
-  return match[1].split('|').map((text) => $createTableCell(text));
+  return match[1].split('|').map((text) => {
+    // Remove exactly one space from start and end if present
+    return $createTableCell(text.replace(/^ | $/g, ''));
+  });
 };
