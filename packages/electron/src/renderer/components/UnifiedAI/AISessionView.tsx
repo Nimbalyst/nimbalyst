@@ -110,7 +110,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       console.log(`[AISessionView] Extracting todos for session ${sessionId}:`, sessionData.metadata.currentTodos);
       setTodos(sessionData.metadata.currentTodos);
     } else {
-      console.log(`[AISessionView] No todos found in session metadata for ${sessionId}`);
+      // console.log(`[AISessionView] No todos found in session metadata for ${sessionId}`);
       setTodos([]);
     }
   }, [sessionId, sessionData.metadata?.currentTodos]);

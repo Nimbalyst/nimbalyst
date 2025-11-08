@@ -155,6 +155,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             if (editorRef.current) {
               const editorToUpdate = editorRef.current;
               (async () => {
+                // Skip if already applying a diff (prevents infinite recursion from editor updates)
+                if (isApplyingDiffRef.current) return;
+                isApplyingDiffRef.current = true;
                 try {
                   const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
                   const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
@@ -182,8 +185,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     editorToUpdate.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
                     console.log(`[TabEditor] Applied pending AI edit diff on tab activation, waiting for DOM update`);
                   } finally {
-                    // Wait longer for DOM to update
-                    await new Promise(resolve => setTimeout(resolve, 200));
+                    // Wait significantly longer for DOM to fully render with CSS classes
+                    // Lexical's async updates can take time, and we need the final render to include our CSS
+                    await new Promise(resolve => setTimeout(resolve, 500));
                     isApplyingDiffRef.current = false;
                   }
 
@@ -196,6 +200,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   }
                 } catch (error) {
                   logger.ui.error(`[TabEditor] Failed to apply pending AI diff on tab activation:`, error);
+                } finally {
+                  isApplyingDiffRef.current = false;
                 }
               })();
             }
@@ -626,10 +632,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         return;
       }
 
-      // Skip if already processing a change
-      // This prevents duplicate processing when chokidar fires multiple events
-      if (processingFileChangeRef.current) {
-        console.log('[TabEditor] Skipping duplicate file-changed event - another change is already processing');
+      // Skip if already processing a change or applying a diff
+      if (processingFileChangeRef.current || isApplyingDiffRef.current) {
+        console.log('[TabEditor] Skipping file-changed event - processing or applying diff');
         return;
       }
       processingFileChangeRef.current = true;
@@ -697,6 +702,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             diffUpdatePromise = (async () => {
               try {
                 // FIRST: Reset editor to old (tagged) content to clear existing diff nodes
+                // This is NECESSARY - editor must have oldContent before applyMarkdownReplace can find it
                 const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
                 const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
                 const transformers = getEditorTransformers();
@@ -727,8 +733,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     console.log(`[TabEditor] Updated diff with new edits`);
                   }
                 } finally {
-                  // Reset flag after a small delay to ensure content change handler has run
-                  await new Promise(resolve => setTimeout(resolve, 100));
+                  // Wait for DOM to fully render with CSS classes
+                  await new Promise(resolve => setTimeout(resolve, 500));
                   isApplyingDiffRef.current = false;
                 }
               } catch (error) {
@@ -744,6 +750,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             contentRef.current = oldContent;
 
             // CRITICAL FIX RC6/RC7: Create a promise for the diff application and ensure proper state sync
+            // Load the old content first, then apply diff
             diffUpdatePromise = (async () => {
               try {
                 if (editorRef.current) {
@@ -751,20 +758,24 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
                   const transformers = getEditorTransformers();
 
+                  console.log(`[TabEditor] Loading old content for first-time diff (length: ${oldContent.length})`);
+
+                  // Load the old (tagged) content - this will be the baseline for diff
                   editorRef.current.update(() => {
                     const root = $getRoot();
                     root.clear();
                     $convertFromEnhancedMarkdownString(oldContent, transformers);
                   }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
 
-                  // THEN: Apply the diff replacement
+                  // THEN: Apply the diff replacement to show changes from old to new
                   const replacements: TextReplacement[] = [{
                     oldText: oldContent,
                     newText: newContent
                   }];
 
-                  // Wait a tick for the editor to update
-                  await new Promise(resolve => setTimeout(resolve, 100));
+                  // Wait longer for the editor to fully process the content load
+                  console.log(`[TabEditor] Waiting for content load to complete...`);
+                  await new Promise(resolve => setTimeout(resolve, 250));
 
                   // Mark that we're applying a diff programmatically (not a user edit)
                   isApplyingDiffRef.current = true;
