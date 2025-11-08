@@ -71,7 +71,8 @@
     "sharp": "^0.34.4",
     "ulid": "^3.0.1",
     "uuid": "^11.1.0",
-    "web-streams-polyfill": "^4.2.0"
+    "web-streams-polyfill": "^4.2.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@electric-sql/pglite-socket": "^0.0.13",
