@@ -38,8 +38,10 @@
     "@electric-sql/pglite-tools": "^0.2.16",
     "@playwright/test": "^1.55.0",
     "@types/node": "^20.0.0",
+    "ajv": "^8.17.1",
     "concurrently": "^9.2.0",
     "electron-builder": "^26.0.12",
+    "terser": "^5.31.0",
     "typescript": "^5.0.0"
   },
   "workspaces": [
