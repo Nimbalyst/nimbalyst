@@ -19,6 +19,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.7] - 2025-11-08
+
+
+### Added
+- Working simple todo display
+
+### Changed
+- Upgraded vite-plugin-static-copy to 3.1.4 to fix chokidar dependencies
+- Upgraded npm to 11.x in CI to fix optional dependencies bug
+
+### Fixed
+- Prevent infinite loop in tab activation during diff application
+- Add zod dependency and externalize MCP SDK to fix dev mode build
+- Improved test reliability and fixed race conditions
+
+### Removed
+
 ## [0.45.6] - 2025-11-07
 
 
