@@ -128,17 +128,14 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
   }, []);
 
   const handleFolderClick = useCallback((e: React.MouseEvent, path: string) => {
-    // Check if click was on chevron - let it handle toggle
-    const target = e.target as HTMLElement;
-    if (target.closest('.file-tree-chevron')) {
-      return;
-    }
+    // Toggle the folder when clicking anywhere on the row
+    toggleDirectory(path);
 
-    // Otherwise select the folder
+    // Also select the folder
     if (onFolderSelect) {
       onFolderSelect(path);
     }
-  }, [onFolderSelect]);
+  }, [onFolderSelect, toggleDirectory]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, item: FileTreeItem) => {
     e.preventDefault();
@@ -351,13 +348,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
                     opacity: draggedItem?.path === item.path ? 0.5 : 1
                   }}
                 >
-                  <span
-                    className="file-tree-chevron"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleDirectory(item.path);
-                    }}
-                  >
+                  <span className="file-tree-chevron">
                     <MaterialSymbol
                       icon={isExpanded ? "keyboard_arrow_down" : "keyboard_arrow_right"}
                       size={16}
