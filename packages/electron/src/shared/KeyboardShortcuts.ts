@@ -47,9 +47,9 @@ export const KeyboardShortcuts = {
     navigateBack: 'Cmd+[',
     navigateForward: 'Cmd+]',
 
-    // Tab navigation - keep existing shortcuts
-    nextTab: 'Cmd+Alt+Right',
-    prevTab: 'Cmd+Alt+Left',
+    // Tab navigation - use Option instead of Alt for macOS compatibility
+    nextTab: 'Cmd+Option+Right',
+    prevTab: 'Cmd+Option+Left',
 
     // Zoom
     actualSize: 'Cmd+0',
@@ -88,6 +88,7 @@ export function getShortcutDisplay(shortcut: string): string {
   return shortcut
     .replace('Cmd', '⌘')
     .replace('Ctrl', '⌃')
+    .replace('Option', '⌥')
     .replace('Alt', '⌥')
     .replace('Shift', '⇧');
 }

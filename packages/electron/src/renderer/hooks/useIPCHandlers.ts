@@ -70,6 +70,8 @@ interface UseIPCHandlersProps {
   handleSaveAs: () => Promise<void>;
   handleWorkspaceFileSelect: (filePath: string) => Promise<void>;
   openWelcomeTab: () => Promise<void>;
+  handleNextTab?: () => void;
+  handlePreviousTab?: () => void;
 
   // State setters
   setIsApiKeyDialogOpen: (open: boolean) => void;
@@ -107,6 +109,7 @@ interface UseIPCHandlersProps {
   workspacePath: string | null;
   sessionToLoad: { sessionId: string; workspacePath?: string } | null;
   isDirty: boolean;
+  activeMode: 'files' | 'agent' | 'plan';
 
   // Logging configuration
   LOG_CONFIG: {
@@ -132,6 +135,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
+    handleNextTab,
+    handlePreviousTab,
 
     // State setters
     setIsApiKeyDialogOpen,
@@ -165,6 +170,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     workspacePath,
     sessionToLoad,
     isDirty,
+    activeMode,
 
     // Config
     LOG_CONFIG
@@ -178,6 +184,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
+    handleNextTab,
+    handlePreviousTab,
     setIsApiKeyDialogOpen,
     setWorkspaceMode,
     setWorkspacePath,
@@ -199,6 +207,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     workspacePath,
     sessionToLoad,
     isDirty,
+    activeMode,
   });
 
   // Update refs whenever values change
@@ -209,6 +218,8 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
+    handleNextTab,
+    handlePreviousTab,
     setIsApiKeyDialogOpen,
     setWorkspaceMode,
     setWorkspacePath,
@@ -235,12 +246,9 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
   };
 
   useEffect(() => {
-    console.log('[IPC] useIPCHandlers effect running');
     if (!window.electronAPI) {
-      console.log('[IPC] No electronAPI available!');
       return;
     }
-    console.log('[IPC] electronAPI available, setting up handlers');
 
     // COMMENTED OUT - API key dialog no longer needed, using claude-code login
     // Check for first launch (no API key configured)
@@ -573,20 +581,16 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       }));
     }
 
-    // Tab navigation handlers
-    if (window.electronAPI.onNextTab) {
+    // Tab navigation handlers - delegate to App.tsx for mode-aware routing
+    if (window.electronAPI.onNextTab && handlersRef.current.handleNextTab) {
       cleanupFns.push(window.electronAPI.onNextTab(() => {
-        if (editorModeRef.current?.tabs) {
-          editorModeRef.current.tabs.nextTab();
-        }
+        handlersRef.current.handleNextTab?.();
       }));
     }
 
-    if (window.electronAPI.onPreviousTab) {
+    if (window.electronAPI.onPreviousTab && handlersRef.current.handlePreviousTab) {
       cleanupFns.push(window.electronAPI.onPreviousTab(() => {
-        if (editorModeRef.current?.tabs) {
-          editorModeRef.current.tabs.previousTab();
-        }
+        handlersRef.current.handlePreviousTab?.();
       }));
     }
 

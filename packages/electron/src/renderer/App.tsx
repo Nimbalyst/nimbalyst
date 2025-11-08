@@ -859,6 +859,23 @@ export default function App() {
     setIsFirstTimeSetup(false);
   }, [workspacePath]);
 
+  // Mode-aware tab navigation handlers
+  const handleNextTab = () => {
+    if (activeMode === 'agent') {
+      agenticPanelRef.current?.nextTab?.();
+    } else {
+      editorModeRef.current?.tabs?.nextTab?.();
+    }
+  };
+
+  const handlePreviousTab = () => {
+    if (activeMode === 'agent') {
+      agenticPanelRef.current?.previousTab?.();
+    } else {
+      editorModeRef.current?.tabs?.previousTab?.();
+    }
+  };
+
   // Set up IPC listeners
   // IPC handlers hook - sets up all IPC communication with main process
   useIPCHandlers({
@@ -874,6 +891,8 @@ export default function App() {
     handleSaveAs,
     handleWorkspaceFileSelect,
     openWelcomeTab,
+    handleNextTab,
+    handlePreviousTab,
 
     // State setters
     setIsApiKeyDialogOpen,
@@ -906,6 +925,7 @@ export default function App() {
     workspacePath,
     sessionToLoad,
     isDirty,
+    activeMode,
 
     // Config
     LOG_CONFIG,

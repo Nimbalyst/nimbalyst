@@ -14,6 +14,8 @@ import { DiffTestDropdown } from "../AIChat/DiffTestDropdown.tsx";
 export interface AgenticPanelRef {
   createNewSession: (planPath?: string) => Promise<void>;
   closeActiveTab: () => void;
+  nextTab: () => void;
+  previousTab: () => void;
 }
 
 export interface AgenticPanelProps {
@@ -1276,8 +1278,20 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       if (activeTabId) {
         handleTabClose(activeTabId);
       }
+    },
+    nextTab: () => {
+      if (sessionTabs.length === 0 || !activeTabId) return;
+      const currentIndex = sessionTabs.findIndex(t => t.id === activeTabId);
+      const nextIndex = (currentIndex + 1) % sessionTabs.length;
+      handleTabSelect(sessionTabs[nextIndex].id);
+    },
+    previousTab: () => {
+      if (sessionTabs.length === 0 || !activeTabId) return;
+      const currentIndex = sessionTabs.findIndex(t => t.id === activeTabId);
+      const prevIndex = currentIndex <= 0 ? sessionTabs.length - 1 : currentIndex - 1;
+      handleTabSelect(sessionTabs[prevIndex].id);
     }
-  }), [createNewSession, activeTabId, handleTabClose]);
+  }), [createNewSession, activeTabId, handleTabClose, sessionTabs, handleTabSelect]);
 
   const handleTogglePin = useCallback((tabId: string) => {
     setSessionTabs(prev => {

@@ -116,35 +116,10 @@ export function useTabNavigation(options: UseTabNavigationOptions) {
     };
   }, [enabled, goBack, goForward]);
 
-  // Listen for keyboard shortcuts
-  useEffect(() => {
-    if (!enabled) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Check for navigation shortcuts
-      const isMac = navigator.platform.toLowerCase().includes('mac');
-      const isBack = isMac
-        ? e.metaKey && e.altKey && e.key === 'ArrowLeft'
-        : e.ctrlKey && e.altKey && e.key === 'ArrowLeft';
-      const isForward = isMac
-        ? e.metaKey && e.altKey && e.key === 'ArrowRight'
-        : e.ctrlKey && e.altKey && e.key === 'ArrowRight';
-
-      if (isBack) {
-        e.preventDefault();
-        goBack();
-      } else if (isForward) {
-        e.preventDefault();
-        goForward();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [enabled, goBack, goForward]);
+  // NOTE: Keyboard shortcuts are NOT handled here anymore. They're handled via:
+  // 1. Electron menu accelerators (Meta+Alt+Left/Right) -> sends 'next-tab'/'prev-tab' IPC events
+  // 2. App.tsx receives these IPC events and routes them with mode awareness
+  // This hook is only used for browser-based navigation history (back/forward menu items)
 
   // Export current navigation state for external saving
   const getNavigationState = useCallback(() => {

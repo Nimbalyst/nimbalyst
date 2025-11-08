@@ -771,7 +771,7 @@ export async function createApplicationMenu() {
                     click: async () => {
                         const focused = BrowserWindow.getFocusedWindow();
                         if (focused) {
-                            focused.webContents.send('previous-tab');
+                            focused.webContents.send('prev-tab');
                         }
                     }
                 },

@@ -258,20 +258,26 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       nextTab: () => {
         if (tabs.tabs.length > 1) {
           const currentIndex = tabs.tabs.findIndex(tab => tab.id === tabs.activeTabId);
-          const nextIndex = (currentIndex + 1) % tabs.tabs.length;
-          const nextTab = tabs.tabs[nextIndex];
-          if (nextTab) {
-            tabs.switchTab(nextTab.id);
+          // Don't wrap - if we're at the end, stay there
+          if (currentIndex < tabs.tabs.length - 1) {
+            const nextIndex = currentIndex + 1;
+            const nextTab = tabs.tabs[nextIndex];
+            if (nextTab) {
+              tabs.switchTab(nextTab.id);
+            }
           }
         }
       },
       previousTab: () => {
         if (tabs.tabs.length > 1) {
           const currentIndex = tabs.tabs.findIndex(tab => tab.id === tabs.activeTabId);
-          const prevIndex = currentIndex <= 0 ? tabs.tabs.length - 1 : currentIndex - 1;
-          const prevTab = tabs.tabs[prevIndex];
-          if (prevTab) {
-            tabs.switchTab(prevTab.id);
+          // Don't wrap - if we're at the beginning, stay there
+          if (currentIndex > 0) {
+            const prevIndex = currentIndex - 1;
+            const prevTab = tabs.tabs[prevIndex];
+            if (prevTab) {
+              tabs.switchTab(prevTab.id);
+            }
           }
         }
       },
