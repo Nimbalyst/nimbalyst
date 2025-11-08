@@ -139,10 +139,23 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         // If there are unreviewed pending AI edits, apply diff mode
         if (pendingTags && pendingTags.length > 0) {
+          // CRITICAL: Skip if the mount effect already handled pending diffs for this file
+          // The mount effect runs synchronously first, so if it found diffs, it's already applying them
+          if (mountEffectHandledPendingDiffRef.current) {
+            console.log(`[TabEditor] Mount effect already handled pending diff on tab activation, skipping`);
+            return;
+          }
+
           const oldContent = pendingTags[0].content;
 
           // Check if this tag is already being shown
           const isAlreadyShowingThisTag = pendingAIEditTagRef.current?.tagId === pendingTags[0].id;
+
+          // Skip if we're already showing this exact diff - the mount effect handled it
+          if (isAlreadyShowingThisTag && diskContent === oldContent) {
+            console.log(`[TabEditor] Diff already applied on tab activation, skipping`);
+            return;
+          }
 
           // If disk content differs from old content, we need to update the diff
           if (diskContent !== oldContent) {
@@ -250,7 +263,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     // Small delay to let the tab switch animation complete
     const timer = setTimeout(checkDiskContent, 300);
     return () => clearTimeout(timer);
-  }, [isActive, filePath, fileName, onDirtyChange, showConflictDialog, showBackgroundChangeDialog]);
+  }, [isActive, filePath, fileName, showConflictDialog, showBackgroundChangeDialog]);
+  // NOTE: Removed onDirtyChange from dependencies - it's not used in the effect and was causing
+  // unnecessary re-runs when parent passed new callback, which would clear and reschedule the setTimeout
 
   useEffect(() => {
     lastSaveTimeRef.current = lastSaveTime;
@@ -263,33 +278,94 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   // CRITICAL FIX RC7: On component mount or file path change, check if there are pending AI edits
   // that should show diffs. This handles the case where a tab is closed and reopened.
   // Only restore diffs for tags that haven't been reviewed/approved yet.
+  // MERGED WITH MOUNT DIFF APPLICATION: Consolidated into a single effect that both
+  // restores the tag ref AND applies the diff in one operation to prevent flashing.
+  const hasCheckedForPendingTagsRef = useRef(false);
+  const mountEffectHandledPendingDiffRef = useRef(false); // Track if mount effect found pending diffs
+
   useEffect(() => {
-    const checkForPendingDiffs = async () => {
+    // Guard against re-running this effect - only run once per filePath change
+    if (hasCheckedForPendingTagsRef.current) return;
+    if (!window.electronAPI?.history) return;
+    if (!editorRef.current) return;
+
+    hasCheckedForPendingTagsRef.current = true;
+    // Reset the flag for this file
+    mountEffectHandledPendingDiffRef.current = false;
+
+    const checkAndApplyPendingDiffs = async () => {
       try {
-        if (!window.electronAPI?.history) return;
-
         const pendingTags = await window.electronAPI.history.getPendingTags(filePath);
-        if (pendingTags && pendingTags.length > 0) {
-          // Filter out tags that have been reviewed - only show diffs for pending/unreviewed tags
-          const unreviewedTags = pendingTags.filter((tag: any) => tag.status !== 'reviewed' && tag.status !== 'rejected');
+        if (!pendingTags || pendingTags.length === 0) {
+          return;
+        }
 
-          if (unreviewedTags.length > 0) {
-            // There are pending AI edits that haven't been reviewed - restore the pending tag ref
-            // This ensures the diff will be shown even if component remounted
-            console.log(`[TabEditor] Restoring pending AI edit on mount: tagId=${unreviewedTags[0].id}, status=${unreviewedTags[0].status}`);
-            pendingAIEditTagRef.current = {
-              tagId: unreviewedTags[0].id,
-              filePath: filePath
-            };
+        // Filter out tags that have been reviewed - only show diffs for pending/unreviewed tags
+        const unreviewedTags = pendingTags.filter((tag: any) => tag.status !== 'reviewed' && tag.status !== 'rejected');
+
+        if (unreviewedTags.length === 0) {
+          return;
+        }
+
+        // CRITICAL: Mark that mount effect found pending diffs IMMEDIATELY after we know they exist
+        // This flag prevents the tab activation effect (300ms delay) from also applying the same diff
+        // Must be set before any await statements that could delay it
+        mountEffectHandledPendingDiffRef.current = true;
+
+        const pendingTag = unreviewedTags[0];
+        const oldContent = pendingTag.content;
+        const newContent = contentRef.current; // Use current content ref to get actual disk content
+
+        console.log(`[TabEditor] Restoring pending AI edit on mount: tagId=${pendingTag.id}, status=${pendingTag.status}`);
+
+        // Set the ref so other parts of the component know we're in diff mode
+        pendingAIEditTagRef.current = {
+          tagId: pendingTag.id,
+          filePath: filePath
+        };
+
+        // If content differs, apply the diff
+        if (oldContent !== newContent) {
+          // Reset editor to old (tagged) content first
+          const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+          const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+          const transformers = getEditorTransformers();
+
+          editorRef.current.update(() => {
+            const root = $getRoot();
+            root.clear();
+            $convertFromEnhancedMarkdownString(oldContent, transformers);
+          }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+
+          setContent(oldContent);
+          contentRef.current = oldContent;
+
+          // Wait a tick before applying diff
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          // Apply the diff
+          isApplyingDiffRef.current = true;
+          try {
+            const replacements: TextReplacement[] = [{
+              oldText: oldContent,
+              newText: newContent
+            }];
+            const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
+            editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+            console.log(`[TabEditor] Applied pending AI edit diff on mount`);
+          } finally {
+            setTimeout(() => {
+              isApplyingDiffRef.current = false;
+            }, 100);
           }
         }
       } catch (error) {
-        logger.ui.error(`[TabEditor] Failed to check for pending diffs on mount:`, error);
+        logger.ui.error(`[TabEditor] Failed to check and apply pending diffs on mount:`, error);
       }
     };
 
-    checkForPendingDiffs();
-  }, [filePath]);
+    checkAndApplyPendingDiffs();
+  }, [filePath]); // Only depend on filePath, NOT initialContent
 
 
   // Helper: Save file with history snapshot
@@ -537,76 +613,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     return () => clearInterval(timer);
   }, [periodicSnapshotInterval, filePath, fileName]);
 
-  // Check for pending AI edit tags on mount
-  const hasCheckedForPendingTagsRef = useRef(false);
-
-  useEffect(() => {
-    if (hasCheckedForPendingTagsRef.current) return;
-    if (!window.electronAPI?.history) return;
-    if (!editorRef.current) return;
-
-    hasCheckedForPendingTagsRef.current = true;
-
-    const checkForPendingTags = async () => {
-      try {
-        const pendingTags = await window.electronAPI.history.getPendingTags(filePath);
-
-        if (pendingTags && pendingTags.length > 0) {
-          console.log(`[TabEditor] Found pending AI edit tag on mount - restoring diff mode`);
-
-          // Load the tagged (old) content first
-          const oldContent = pendingTags[0].content;
-          const newContent = initialContent; // Current disk content
-
-          setContent(oldContent);
-          contentRef.current = oldContent;
-
-          // Update editor with old content
-          const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-          const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
-          const transformers = getEditorTransformers();
-
-          editorRef.current.update(() => {
-            const root = $getRoot();
-            root.clear();
-            $convertFromEnhancedMarkdownString(oldContent, transformers);
-          }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
-
-          // Apply the diff
-          const replacements: TextReplacement[] = [{
-            oldText: oldContent,
-            newText: newContent
-          }];
-
-          await new Promise(resolve => setTimeout(resolve, 100));
-
-          // Mark that we're applying a diff programmatically (not a user edit)
-          isApplyingDiffRef.current = true;
-          try {
-            const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
-            editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
-          } finally {
-            // Reset flag after a small delay to ensure content change handler has run
-            setTimeout(() => {
-              isApplyingDiffRef.current = false;
-            }, 100);
-          }
-
-          // Store tag info for approval
-          pendingAIEditTagRef.current = {
-            tagId: pendingTags[0].id,
-            filePath: filePath
-          };
-
-          console.log(`[TabEditor] Restored diff mode on mount`);
-        }
-      } catch (error) {
-        logger.ui.error(`[TabEditor] Failed to check for pending tags on mount:`, error);
-      }
-    };
-
-    checkForPendingTags();
-  }, [filePath, initialContent]);
 
   // File watching - use ref to ensure we only register once
   const fileWatcherRegisteredRef = useRef(false);
