@@ -19,6 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.8] - 2025-11-08
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Resolve peer dependency conflicts by hoisting ajv and terser
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.7] - 2025-11-08
 
 
