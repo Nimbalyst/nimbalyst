@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const electronE2EDir = path.join(__dirname, 'packages/electron/tests/e2e');
+const electronE2EDir = path.join(__dirname, 'packages/electron/e2e');
 
 if (!process.env.TS_NODE_PROJECT) {
   process.env.TS_NODE_PROJECT = path.join(__dirname, 'tsconfig.playwright.json');
