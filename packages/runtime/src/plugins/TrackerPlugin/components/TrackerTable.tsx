@@ -165,8 +165,12 @@ export function TrackerTable({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<TrackerItemType | 'all'>(filterType || 'all');
+  // Only use internal type filter state when tabs are shown (not hidden by parent)
+  const [internalTypeFilter, setInternalTypeFilter] = useState<TrackerItemType | 'all'>('all');
   const posthog = usePostHog();
+
+  // Use prop filterType when hideTypeTabs is true, otherwise use internal state
+  const activeTypeFilter = hideTypeTabs ? filterType : internalTypeFilter;
 
   useEffect(() => {
     let unsubscribeTracker: (() => void) | null = null;
@@ -194,8 +198,8 @@ export function TrackerTable({
 
         // Load tracker items
         // console.log('[TrackerTable] Loading tracker items...');
-        const trackerItems = typeFilter !== 'all' && documentService.getTrackerItemsByType
-          ? await documentService.getTrackerItemsByType(typeFilter)
+        const trackerItems = activeTypeFilter !== 'all' && documentService.getTrackerItemsByType
+          ? await documentService.getTrackerItemsByType(activeTypeFilter)
           : await documentService.listTrackerItems();
 
         // console.log('[TrackerTable] Loaded tracker items:', trackerItems?.length || 0);
@@ -239,7 +243,7 @@ export function TrackerTable({
           // Load items for each full-document tracker type
           for (const tracker of fullDocumentTrackers) {
             // Only load if we're showing all types or this specific type
-            if (typeFilter === 'all' || typeFilter === tracker.type) {
+            if (activeTypeFilter === 'all' || activeTypeFilter === tracker.type) {
               const items = convertFullDocumentToTrackerItems(metadata || [], tracker.type as TrackerItemType);
               // console.log(`[TrackerTable] Loaded ${items.length} ${tracker.type} items from frontmatter`);
               allItems = [...allItems, ...items];
@@ -287,7 +291,7 @@ export function TrackerTable({
       // Need to watch metadata if we're showing all types or any type that supports fullDocument mode
       const trackerTypes = globalRegistry.getAll();
       const fullDocumentTrackers = trackerTypes.filter(t => t.modes.fullDocument);
-      const needsMetadataWatcher = typeFilter === 'all' || fullDocumentTrackers.some(t => t.type === typeFilter);
+      const needsMetadataWatcher = activeTypeFilter === 'all' || fullDocumentTrackers.some(t => t.type === activeTypeFilter);
 
       if (documentService.watchDocumentMetadata && needsMetadataWatcher) {
         // console.log('[TrackerTable] Setting up metadata watcher');
@@ -313,7 +317,7 @@ export function TrackerTable({
         unsubscribeMetadata();
       }
     };
-  }, [typeFilter]);
+  }, [activeTypeFilter]);
 
   const sortItems = useCallback((itemsToSort: TrackerItem[], sortColumn: SortColumn, sortDir: SortDirection) => {
     const sorted = [...itemsToSort].sort((a, b) => {
@@ -371,7 +375,7 @@ export function TrackerTable({
       }
 
       // Apply type filter
-      if (typeFilter !== 'all' && item.type !== typeFilter) {
+      if (activeTypeFilter !== 'all' && item.type !== activeTypeFilter) {
         return false;
       }
 
@@ -500,8 +504,8 @@ export function TrackerTable({
           {typeOptions.map(option => (
             <button
               key={option.value}
-              className={`tracker-type-tab ${typeFilter === option.value ? 'active' : ''}`}
-              onClick={() => setTypeFilter(option.value as TrackerItemType | 'all')}
+              className={`tracker-type-tab ${internalTypeFilter === option.value ? 'active' : ''}`}
+              onClick={() => setInternalTypeFilter(option.value as TrackerItemType | 'all')}
             >
               <span className="material-symbols-outlined">{option.icon}</span>
               <span>{option.label}</span>
