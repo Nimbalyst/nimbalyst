@@ -722,6 +722,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       const isRelevantSession = sessionTabsRef.current.some(tab => tab.id === data.sessionId) || data.sessionId === activeTabId;
       if (!isRelevantSession) return;
 
+      // Only reload when assistant messages are saved to the database.
+      // User messages are already added to local state before being sent,
+      // so reloading on 'input' direction causes race conditions with streaming responses.
+      if (data.direction !== 'output') return;
+
       scheduleSessionReload(data.sessionId, { reason: 'message-logged', minInterval: 120 });
 
       // If this is the active tab, auto-mark as read after message completion
@@ -761,8 +766,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         }, 300); // Delay to allow reload to complete
       }
 
-      // Also reload the session list to update message counts and titles
-      loadSessions();
+      // Note: We don't need to reload the entire session list here.
+      // The session list will update its visual indicators (processing state, unread badges)
+      // via the processingSessions and unreadSessions props, which update based on
+      // sendingSessions state and message counts. No database query needed.
     };
 
     const cleanup = window.electronAPI.on('ai:message-logged', handleMessageLogged);
@@ -770,7 +777,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     return () => {
       cleanup?.();
     };
-  }, [activeTabId, scheduleSessionReload, loadSessions]);
+  }, [activeTabId, scheduleSessionReload]);
 
   // Listen for notification clicks to switch to session
   useEffect(() => {

@@ -77,7 +77,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       const result = await window.electronAPI.invoke('sessions:list', workspacePath);
 
       if (result.success && Array.isArray(result.sessions)) {
-        // Map all sessions with full data including processing and unread states
+        // Map sessions with base data only. Visual indicators (isProcessing, hasUnread)
+        // are applied separately by the useEffect below to avoid stale closure issues.
         const allSessions = result.sessions.map((s: any) => ({
           id: s.id,
           title: s.title || s.name || 'Untitled Session',
@@ -86,8 +87,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           model: s.model,
           sessionType: s.sessionType || 'chat',
           messageCount: s.messageCount || 0,
-          isProcessing: processingSessions.has(s.id),
-          hasUnread: unreadSessions.has(s.id)
+          isProcessing: false,  // Will be updated by visual indicator effect
+          hasUnread: false      // Will be updated by visual indicator effect
         }));
         setSessions(allSessions);
       }
@@ -97,11 +98,20 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [workspacePath, processingSessions, unreadSessions]);
+  }, [workspacePath]);
 
   useEffect(() => {
     loadSessions();
-  }, [loadSessions, refreshTrigger, processingSessions, unreadSessions]);
+  }, [loadSessions, refreshTrigger]);
+
+  // Update visual indicators (processing state, unread badges) without reloading from database
+  useEffect(() => {
+    setSessions(prevSessions => prevSessions.map(session => ({
+      ...session,
+      isProcessing: processingSessions.has(session.id),
+      hasUnread: unreadSessions.has(session.id)
+    })));
+  }, [processingSessions, unreadSessions]);
 
   const handleToggleGroup = (groupName: string) => {
     if (collapsedGroups.includes(groupName)) {
