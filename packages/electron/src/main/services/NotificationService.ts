@@ -6,8 +6,12 @@
  */
 
 import { Notification, BrowserWindow, app, systemPreferences } from 'electron';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { logger } from '../utils/logger';
 import { isOSNotificationsEnabled } from '../utils/store';
+
+const execAsync = promisify(exec);
 
 export interface NotificationOptions {
   title: string;
@@ -24,6 +28,33 @@ class NotificationService {
   constructor() {
     logger.main.info('[NotificationService] Service initialized');
     this.requestPermissions();
+  }
+
+  /**
+   * Check if running in development mode
+   */
+  private isDevelopmentMode(): boolean {
+    return !app.isPackaged;
+  }
+
+  /**
+   * Show notification using AppleScript (fallback for development mode)
+   */
+  private async showAppleScriptNotification(title: string, body: string): Promise<void> {
+    if (process.platform !== 'darwin') {
+      return;
+    }
+
+    try {
+      const escapedTitle = title.replace(/"/g, '\\"');
+      const escapedBody = body.replace(/"/g, '\\"');
+      const script = `display notification "${escapedBody}" with title "${escapedTitle}"`;
+
+      await execAsync(`osascript -e '${script}'`);
+      logger.main.info('[NotificationService] AppleScript notification shown (dev mode)');
+    } catch (error) {
+      logger.main.error('[NotificationService] AppleScript notification failed:', error);
+    }
   }
 
   /**
@@ -82,13 +113,26 @@ class NotificationService {
       return;
     }
 
+    // In development mode, use AppleScript for more reliable notifications on macOS
+    if (this.isDevelopmentMode() && process.platform === 'darwin') {
+      logger.main.info('[NotificationService] Using AppleScript notification (development mode)');
+      try {
+        await this.showAppleScriptNotification(options.title, options.body);
+      } catch (error) {
+        logger.main.error('[NotificationService] AppleScript notification failed:', error);
+      }
+      return;
+    }
+
     try {
-      // Create and show the notification
+      // Create and show the notification using Electron API (production mode)
       const notification = new Notification({
         title: options.title,
         body: options.body,
         icon: options.icon || this.getAppIcon(),
         silent: false, // Use system notification sound
+        urgency: 'normal', // macOS notification urgency
+        timeoutType: 'default', // Use system default timeout
       });
 
       // Handle notification click - focus window and switch to session
