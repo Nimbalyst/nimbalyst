@@ -9,10 +9,23 @@
   gap: 1rem;
 }
 
+.login-required-widget.logged-in {
+  background-color: color-mix(in srgb, var(--success-color) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success-color) 40%, transparent);
+}
+
 .login-required-message {
   color: var(--text-primary);
   font-size: 0.9rem;
   line-height: 1.5;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.login-required-widget.logged-in .login-required-message {
+  color: var(--success-color);
+  font-weight: 500;
 }
 
 .login-status-message {
@@ -47,6 +60,11 @@
   font-size: 1rem;
 }
 
+.login-status-icon.success {
+  font-size: 1.2rem;
+  font-weight: bold;
+}
+
 .login-account-info {
   font-size: 0.8rem;
   padding-left: 1.5rem;
@@ -54,6 +72,11 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+
+.login-required-widget.logged-in .login-account-info {
+  padding-left: 0;
+  color: color-mix(in srgb, var(--success-color) 80%, var(--text-secondary));
 }
 
 .login-actions {

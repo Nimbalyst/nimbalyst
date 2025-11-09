@@ -99,50 +99,60 @@ export const LoginRequiredWidget: React.FC = () => {
     }
   };
 
+  const isLoggedIn = loginStatus?.success && loginStatus?.accountInfo;
+
   return (
-    <div className="login-required-widget">
+    <div className={`login-required-widget ${isLoggedIn ? 'logged-in' : ''}`}>
       <div className="login-required-message">
-        An Anthropic account is required to use Claude Code. Please login or create an account.
+        {isLoggedIn ? (
+          <>
+            <span className="login-status-icon success">✓</span>
+            You are logged in and can continue your conversation
+          </>
+        ) : (
+          'An Anthropic account is required to use Claude Code. Please login or create an account.'
+        )}
       </div>
 
-      {loginStatus && (
-        <div className={`login-status-message ${loginStatus.success ? 'success' : 'error'}`}>
-          <div className="login-status-header">
-            <span className="login-status-icon">
-              {loginStatus.success ? '✓' : '⚠'}
-            </span>
-            <span>{loginStatus.message}</span>
-          </div>
-          {loginStatus.success && loginStatus.accountInfo && (
-            <div className="login-account-info">
-              {loginStatus.accountInfo.email && (
-                <div>Account: {loginStatus.accountInfo.email}</div>
-              )}
-              {loginStatus.accountInfo.organization && (
-                <div>Organization: {loginStatus.accountInfo.organization}</div>
-              )}
-            </div>
+      {loginStatus && loginStatus.accountInfo && (
+        <div className="login-account-info">
+          {loginStatus.accountInfo.email && (
+            <div>Account: {loginStatus.accountInfo.email}</div>
+          )}
+          {loginStatus.accountInfo.organization && (
+            <div>Organization: {loginStatus.accountInfo.organization}</div>
           )}
         </div>
       )}
 
-      <div className="login-actions">
-        <button
-          onClick={handleLogin}
-          disabled={isLoggingIn}
-          className="login-button"
-        >
-          {isLoggingIn ? 'Opening Login...' : 'Login'}
-        </button>
+      {loginStatus && !loginStatus.success && (
+        <div className="login-status-message error">
+          <div className="login-status-header">
+            <span className="login-status-icon">⚠</span>
+            <span>{loginStatus.message}</span>
+          </div>
+        </div>
+      )}
 
-        <button
-          onClick={handleRefreshStatus}
-          disabled={isChecking}
-          className="status-button"
-        >
-          {isChecking ? 'Checking...' : 'Check Status'}
-        </button>
-      </div>
+      {!isLoggedIn && (
+        <div className="login-actions">
+          <button
+            onClick={handleLogin}
+            disabled={isLoggingIn}
+            className="login-button"
+          >
+            {isLoggingIn ? 'Opening Login...' : 'Login'}
+          </button>
+
+          <button
+            onClick={handleRefreshStatus}
+            disabled={isChecking}
+            className="status-button"
+          >
+            {isChecking ? 'Checking...' : 'Check Status'}
+          </button>
+        </div>
+      )}
     </div>
   );
 };
