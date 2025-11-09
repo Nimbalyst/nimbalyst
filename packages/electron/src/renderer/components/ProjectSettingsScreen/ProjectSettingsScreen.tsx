@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { usePostHog } from 'posthog-js/react';
 import './ProjectSettingsScreen.css';
-import OnboardingService from '../../services/OnboardingService';
+import PackageService from '../../services/PackageService';
+import { ToolPackage } from '../../../shared/toolPackages';
 
 export interface SettingsScreenProps {
   workspacePath: string;
@@ -10,12 +11,16 @@ export interface SettingsScreenProps {
   isFirstTime?: boolean;
 }
 
-interface SetupAction {
-  id: string;
-  title: string;
-  description: string;
-  completed: boolean;
-  action: () => Promise<void>;
+interface VersionStatus {
+  isInstalled: boolean;
+  installedVersion?: string;
+  latestVersion: string;
+  needsUpdate: boolean;
+}
+
+interface PackageWithStatus {
+  package: ToolPackage;
+  versionStatus: VersionStatus;
 }
 
 const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
@@ -25,245 +30,66 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
   isFirstTime = false,
 }) => {
   const posthog = usePostHog();
-  const [actions, setActions] = useState<SetupAction[]>([]);
-  const [commandsLocation, setCommandsLocation] = useState<'project' | 'global'>('project');
+  const [packages, setPackages] = useState<PackageWithStatus[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [hoveredActionId, setHoveredActionId] = useState<string | null>(null);
+  const [expandedPackageId, setExpandedPackageId] = useState<string | null>(null);
 
-  // Helper functions
-  const checkFileExists = async (relativePath: string): Promise<boolean> => {
-    try {
-      const fullPath = `${workspacePath}/${relativePath}`;
-      const result = await window.electronAPI.readFileContent(fullPath);
-      const exists = !!(result && result.content);
-      console.log(`[SettingsScreen] File check for ${relativePath}:`, exists);
-      return exists;
-    } catch (err) {
-      console.log(`[SettingsScreen] File check for ${relativePath}: false (error:`, err, ')');
-      return false;
-    }
-  };
-
-  const checkCLAUDEmdConfigured = async (): Promise<boolean> => {
-    try {
-      const claudeMdPath = `${workspacePath}/CLAUDE.md`;
-      const result = await window.electronAPI.readFileContent(claudeMdPath);
-      if (result && result.content) {
-        return result.content.includes('## Nimbalyst Planning System');
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  };
-
-  // Check which actions are already completed
-  const checkActionStatus = async () => {
-    try {
-      const planCommandExists = await checkFileExists('.claude/commands/plan.md');
-      const trackCommandExists = await checkFileExists('.claude/commands/track.md');
-      const claudeMdConfigured = await checkCLAUDEmdConfigured();
-      const bugsTrackerExists = await checkFileExists('nimbalyst-local/tracker/bugs.md');
-      const tasksTrackerExists = await checkFileExists('nimbalyst-local/tracker/tasks.md');
-      const ideasTrackerExists = await checkFileExists('nimbalyst-local/tracker/ideas.md');
-      const decisionsTrackerExists = await checkFileExists('nimbalyst-local/tracker/decisions.md');
-
-      setActions([
-        {
-          id: 'plan-command',
-          title: '/plan command',
-          description: 'Create and track plans across your project',
-          completed: planCommandExists,
-          action: async () => {
-            await OnboardingService.installPlanCommand(workspacePath, 'nimbalyst-local/plans');
-          },
-        },
-        {
-          id: 'track-command',
-          title: '/track command',
-          description: 'Create tracking items for bugs, tasks, and ideas',
-          completed: trackCommandExists,
-          action: async () => {
-            await OnboardingService.installTrackCommand(workspacePath);
-          },
-        },
-        {
-          id: 'claude-md',
-          title: 'Configure CLAUDE.md',
-          description: 'Add Nimbalyst-specific instructions for Claude Code',
-          completed: claudeMdConfigured,
-          action: async () => {
-            await OnboardingService.configureCLAUDEmd(workspacePath);
-          },
-        },
-        {
-          id: 'bugs-tracker',
-          title: 'Bugs',
-          description: 'Track bugs and issues',
-          completed: bugsTrackerExists,
-          action: async () => {
-            await OnboardingService.createTrackerDocument(workspacePath, 'bugs');
-          },
-        },
-        {
-          id: 'tasks-tracker',
-          title: 'Tasks',
-          description: 'Track tasks and todos',
-          completed: tasksTrackerExists,
-          action: async () => {
-            await OnboardingService.createTrackerDocument(workspacePath, 'tasks');
-          },
-        },
-        {
-          id: 'ideas-tracker',
-          title: 'Ideas',
-          description: 'Track feature ideas',
-          completed: ideasTrackerExists,
-          action: async () => {
-            await OnboardingService.createTrackerDocument(workspacePath, 'ideas');
-          },
-        },
-        {
-          id: 'decisions-tracker',
-          title: 'Decisions',
-          description: 'Track architecture decisions',
-          completed: decisionsTrackerExists,
-          action: async () => {
-            await OnboardingService.createTrackerDocument(workspacePath, 'decisions');
-          },
-        },
-      ]);
-    } catch (err) {
-      console.error('Failed to check action status:', err);
-    }
-  };
-
-  // Load action status and commands location on mount
+  // Load packages on mount
   useEffect(() => {
-    const loadSettings = async () => {
-      await checkActionStatus();
-
-      // Load commands location from config
-      try {
-        const config = await OnboardingService.loadConfig(workspacePath);
-        setCommandsLocation(config.commandsLocation || 'project');
-      } catch (err) {
-        console.error('Failed to load commands location:', err);
-      }
+    const loadPackages = async () => {
+      PackageService.setWorkspacePath(workspacePath);
+      const packagesWithStatus = await PackageService.getAllPackagesWithVersionStatus();
+      setPackages(packagesWithStatus);
     };
 
-    loadSettings();
+    loadPackages();
   }, [workspacePath]);
 
-  // Track screen open event with status of all items
+  // Track screen open event
   useEffect(() => {
-    if (actions.length > 0) {
-      const statusProperties: Record<string, boolean> = {};
-      actions.forEach(action => {
-        statusProperties[action.id] = action.completed;
-      });
+    if (packages.length > 0) {
+      const installedCount = packages.filter(p => p.versionStatus.isInstalled).length;
 
-      posthog?.capture('claude_code_setup_screen_opened', {
-        ...statusProperties,
-        commandsLocation,
+      posthog?.capture('project_settings_opened', {
         isFirstTime,
-        completedCount: actions.filter(a => a.completed).length,
-        totalCount: actions.length,
+        totalPackages: packages.length,
+        installedPackages: installedCount,
       });
     }
-  }, [actions, commandsLocation, isFirstTime, posthog]);
+  }, [packages, isFirstTime, posthog]);
 
-  const handleChangeCommandsLocation = async (newLocation: 'project' | 'global') => {
+  const handleInstallPackage = async (packageId: string) => {
     setError(null);
     setSuccess(null);
     setIsProcessing(true);
 
     try {
-      const config = await OnboardingService.loadConfig(workspacePath);
-      config.commandsLocation = newLocation;
-      await OnboardingService.saveConfig(workspacePath, config);
-      setCommandsLocation(newLocation);
-      setSuccess(`Commands location changed to ${newLocation === 'project' ? 'project (.claude/)' : 'global (~/.claude/)'}`);
+      await PackageService.installPackage(packageId);
 
-      // Refresh action status
-      await checkActionStatus();
+      // Refresh packages list with version info
+      const updatedPackages = await PackageService.getAllPackagesWithVersionStatus();
+      setPackages(updatedPackages);
 
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err) {
-      console.error('Failed to change commands location:', err);
-      setError(err instanceof Error ? err.message : 'Failed to change commands location');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+      const pkg = packages.find(p => p.package.id === packageId);
+      setSuccess(`${pkg?.package.name} package installed successfully!`);
 
-  const handleRunAction = async (actionId: string) => {
-    const action = actions.find(a => a.id === actionId);
-    if (!action) return;
-
-    setError(null);
-    setSuccess(null);
-    setIsProcessing(true);
-
-    const wasCompleted = action.completed;
-
-    try {
-      await action.action();
-      const verb = wasCompleted ? 'reinstalled' : 'completed';
-      setSuccess(`${action.title} ${verb}!`);
-
-      // Longer delay to ensure file system has synced and IPC has completed
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Check if status was correctly detected by re-checking the file directly
-      let statusDetected = false;
-      try {
-        if (actionId === 'plan-command') {
-          statusDetected = await checkFileExists('.claude/commands/plan.md');
-        } else if (actionId === 'track-command') {
-          statusDetected = await checkFileExists('.claude/commands/track.md');
-        } else if (actionId === 'claude-md') {
-          statusDetected = await checkCLAUDEmdConfigured();
-        } else if (actionId === 'bugs-tracker') {
-          statusDetected = await checkFileExists('nimbalyst-local/tracker/bugs.md');
-        } else if (actionId === 'tasks-tracker') {
-          statusDetected = await checkFileExists('nimbalyst-local/tracker/tasks.md');
-        } else if (actionId === 'ideas-tracker') {
-          statusDetected = await checkFileExists('nimbalyst-local/tracker/ideas.md');
-        } else if (actionId === 'decisions-tracker') {
-          statusDetected = await checkFileExists('nimbalyst-local/tracker/decisions.md');
-        }
-      } catch (err) {
-        console.error('Failed to check status after action:', err);
-      }
-
-      // Refresh action status for UI update
-      await checkActionStatus();
-
-      // Track the action
-      posthog?.capture('claude_code_setup_action_executed', {
-        actionId,
-        actionType: actionId.includes('command') ? 'command' : 'tracker',
-        wasReinstall: wasCompleted,
-        success: true,
-        statusDetectedCorrectly: statusDetected,
+      // Track installation
+      posthog?.capture('package_installed', {
+        packageId,
+        packageName: pkg?.package.name,
       });
 
-      // Clear success message after 3 seconds (longer so user can see it)
+      // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      console.error(`Failed to execute action ${action.id}:`, err);
-      setError(err instanceof Error ? err.message : `Failed to ${action.title}`);
+      console.error(`Failed to install package ${packageId}:`, err);
+      setError(err instanceof Error ? err.message : `Failed to install package`);
 
       // Track failure
-      posthog?.capture('claude_code_setup_action_executed', {
-        actionId,
-        actionType: actionId.includes('command') ? 'command' : 'tracker',
-        wasReinstall: wasCompleted,
-        success: false,
-        statusDetectedCorrectly: false,
+      posthog?.capture('package_install_failed', {
+        packageId,
         error: err instanceof Error ? err.message : 'Unknown error',
       });
     } finally {
@@ -271,98 +97,36 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
     }
   };
 
-  const handleInstallAll = async () => {
+  const handleUninstallPackage = async (packageId: string) => {
     setError(null);
     setSuccess(null);
     setIsProcessing(true);
 
-    const incompleteActionsBefore = actions.filter(a => !a.completed);
-    const incompleteActionIds = incompleteActionsBefore.map(a => a.id);
-    let installSuccess = true;
-    const failedActions: string[] = [];
-
     try {
-      // Ensure base directories exist
-      await OnboardingService.ensurePlansDirectory(workspacePath, 'nimbalyst-local/plans');
-      await OnboardingService.configureGitignore(workspacePath, 'nimbalyst-local');
+      await PackageService.uninstallPackage(packageId);
 
-      // Run all incomplete actions
-      for (const action of incompleteActionsBefore) {
-        try {
-          await action.action();
-        } catch (err) {
-          console.error(`Failed to ${action.title}:`, err);
-          installSuccess = false;
-          failedActions.push(action.id);
-          // Continue with other actions even if one fails
-        }
-      }
+      // Refresh packages list with version info
+      const updatedPackages = await PackageService.getAllPackagesWithVersionStatus();
+      setPackages(updatedPackages);
 
-      setSuccess('All setup actions completed!');
+      const pkg = packages.find(p => p.package.id === packageId);
+      setSuccess(`${pkg?.package.name} package uninstalled successfully!`);
 
-      // Wait for file system to sync
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Re-check all action statuses directly to verify detection
-      const statusChecks = await Promise.all([
-        checkFileExists('.claude/commands/plan.md'),
-        checkFileExists('.claude/commands/track.md'),
-        checkCLAUDEmdConfigured(),
-        checkFileExists('nimbalyst-local/tracker/bugs.md'),
-        checkFileExists('nimbalyst-local/tracker/tasks.md'),
-        checkFileExists('nimbalyst-local/tracker/ideas.md'),
-        checkFileExists('nimbalyst-local/tracker/decisions.md'),
-      ]);
-
-      const actionIdsInOrder = [
-        'plan-command',
-        'track-command',
-        'claude-md',
-        'bugs-tracker',
-        'tasks-tracker',
-        'ideas-tracker',
-        'decisions-tracker',
-      ];
-
-      // Check which incomplete actions are now detected as complete
-      let detectedCount = 0;
-      incompleteActionIds.forEach(actionId => {
-        const index = actionIdsInOrder.indexOf(actionId);
-        if (index !== -1 && statusChecks[index]) {
-          detectedCount++;
-        }
+      // Track uninstallation
+      posthog?.capture('package_uninstalled', {
+        packageId,
+        packageName: pkg?.package.name,
       });
 
-      const expectedDetected = incompleteActionIds.length - failedActions.length;
-      const statusDetectedCorrectly = detectedCount === expectedDetected;
-
-      // Refresh action status for UI update
-      await checkActionStatus();
-
-      // Track the install all action
-      posthog?.capture('claude_code_setup_install_all', {
-        totalActions: incompleteActionIds.length,
-        succeededActions: incompleteActionIds.length - failedActions.length,
-        failedActions: failedActions.length,
-        detectedActions: detectedCount,
-        success: installSuccess,
-        statusDetectedCorrectly,
-        failedActionIds: failedActions,
-      });
-
-      // Clear success message after 2 seconds
-      setTimeout(() => setSuccess(null), 2000);
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to install all');
+      console.error(`Failed to uninstall package ${packageId}:`, err);
+      setError(err instanceof Error ? err.message : `Failed to uninstall package`);
 
       // Track failure
-      posthog?.capture('claude_code_setup_install_all', {
-        totalActions: incompleteActionIds.length,
-        succeededActions: 0,
-        failedActions: incompleteActionIds.length,
-        detectedActions: 0,
-        success: false,
-        statusDetectedCorrectly: false,
+      posthog?.capture('package_uninstall_failed', {
+        packageId,
         error: err instanceof Error ? err.message : 'Unknown error',
       });
     } finally {
@@ -370,15 +134,20 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
     }
   };
 
-  const completedCount = actions.filter(a => a.completed).length;
-  const totalCount = actions.length;
+  const togglePackageDetails = (packageId: string) => {
+    setExpandedPackageId(expandedPackageId === packageId ? null : packageId);
+  };
+
+  const installedCount = packages.filter(p => p.versionStatus.isInstalled).length;
+  const needsUpdateCount = packages.filter(p => p.versionStatus.needsUpdate).length;
+  const totalCount = packages.length;
 
   return (
     <div className="settings-screen">
       <div className="settings-header">
         <h2>
-          <span className="material-symbols-outlined">settings</span>
-          Claude Code Setup for {workspaceName}
+          <span className="material-symbols-outlined">extension</span>
+          Tool Packages for {workspaceName}
         </h2>
         <div className="settings-header-actions">
           <button className="button-get-started" onClick={onClose}>
@@ -405,115 +174,145 @@ const ProjectSettingsScreen: React.FC<SettingsScreenProps> = ({
           </div>
         )}
 
-        <div className="settings-section">
-          <div className="section-header-row">
-            <div>
-              <h3>Commands Location</h3>
-              <p className="settings-help">Install for this project or your user directory</p>
-            </div>
-            <div className="header-actions">
-              <div className="location-tabs">
-                <button
-                  className={`location-tab ${commandsLocation === 'project' ? 'active' : ''}`}
-                  onClick={() => handleChangeCommandsLocation('project')}
-                  disabled={isProcessing}
-                >
-                  Project
-                </button>
-                <button
-                  className={`location-tab ${commandsLocation === 'global' ? 'active' : ''}`}
-                  onClick={() => handleChangeCommandsLocation('global')}
-                  disabled={isProcessing}
-                >
-                  Global
-                </button>
-              </div>
-              {completedCount < totalCount && (
-                <button
-                  className="install-all-button"
-                  onClick={handleInstallAll}
-                  disabled={isProcessing}
-                >
-                  Install All
-                </button>
-              )}
-            </div>
-          </div>
+        <div className="settings-intro">
+          <p>
+            Tool packages bundle custom commands and tracker schemas into curated sets for different
+            workflows. Each package includes everything you need to get started quickly.
+          </p>
         </div>
 
+        {totalCount > 0 && (
+          <div className="settings-progress">
+            <span className="progress-text">
+              {installedCount} of {totalCount} packages installed
+              {needsUpdateCount > 0 && ` • ${needsUpdateCount} update${needsUpdateCount > 1 ? 's' : ''} available`}
+            </span>
+          </div>
+        )}
+
         <div className="settings-section">
-          <h3>Claude Code Commands</h3>
+          <h3>Available Packages</h3>
 
           <div className="action-cards">
-            {actions.slice(0, 3).map(action => (
+            {packages.map(({ package: pkg, versionStatus }) => (
               <div
-                key={action.id}
-                className={`action-card ${action.completed ? 'completed' : ''}`}
-                onMouseEnter={() => setHoveredActionId(action.id)}
-                onMouseLeave={() => setHoveredActionId(null)}
+                key={pkg.id}
+                className={`action-card ${versionStatus.isInstalled ? 'completed' : ''}`}
               >
                 <div className="action-info">
-                  <h4>{action.title}</h4>
-                  <p>{action.description}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+                    <span className="material-symbols-outlined" style={{ color: 'var(--primary-color)', fontSize: '24px' }}>
+                      {pkg.icon}
+                    </span>
+                    <h4>{pkg.name}</h4>
+                    {versionStatus.isInstalled && versionStatus.installedVersion && (
+                      <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginLeft: 'auto' }}>
+                        v{versionStatus.installedVersion}
+                      </span>
+                    )}
+                  </div>
+                  <p>{pkg.description}</p>
+
+                  {expandedPackageId === pkg.id && (
+                    <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-primary)' }}>
+                      <div style={{ marginBottom: '12px' }}>
+                        <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                          Custom Commands ({pkg.customCommands.length})
+                        </strong>
+                        <ul style={{ margin: '8px 0 0', paddingLeft: '20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                          {pkg.customCommands.map(cmd => (
+                            <li key={cmd.name} style={{ marginBottom: '4px' }}>
+                              <code style={{ background: 'var(--surface-tertiary)', padding: '2px 6px', borderRadius: '4px' }}>
+                                /{cmd.name}
+                              </code>
+                              {' - '}
+                              {cmd.description}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div>
+                        <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                          Tracker Schemas ({pkg.trackerSchemas.length})
+                        </strong>
+                        <ul style={{ margin: '8px 0 0', paddingLeft: '20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                          {pkg.trackerSchemas.map(schema => (
+                            <li key={schema.type} style={{ marginBottom: '4px' }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: '14px', verticalAlign: 'middle', marginRight: '4px' }}>
+                                {schema.icon}
+                              </span>
+                              {schema.displayName}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => togglePackageDetails(pkg.id)}
+                    style={{
+                      marginTop: '12px',
+                      padding: '4px 8px',
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--primary-color)',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    {expandedPackageId === pkg.id ? 'Hide' : 'Show'} details
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                      {expandedPackageId === pkg.id ? 'expand_less' : 'expand_more'}
+                    </span>
+                  </button>
                 </div>
-                {!action.completed ? (
+
+                {!versionStatus.isInstalled ? (
                   <button
                     className="action-install-button"
-                    onClick={() => handleRunAction(action.id)}
+                    onClick={() => handleInstallPackage(pkg.id)}
                     disabled={isProcessing}
                   >
                     Install
                   </button>
-                ) : hoveredActionId === action.id ? (
-                  <button
-                    className="action-reinstall-button"
-                    onClick={() => handleRunAction(action.id)}
-                    disabled={isProcessing}
-                  >
-                    Reinstall
-                  </button>
                 ) : (
-                  <span className="action-status">Installed</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="settings-section">
-          <h3>Tracker Documents</h3>
-          <p className="settings-help">Select which types of items you want to track</p>
-
-          <div className="action-cards">
-            {actions.slice(3).map(action => (
-              <div
-                key={action.id}
-                className={`action-card ${action.completed ? 'completed' : ''}`}
-                onMouseEnter={() => setHoveredActionId(action.id)}
-                onMouseLeave={() => setHoveredActionId(null)}
-              >
-                <div className="action-info">
-                  <h4>{action.title}</h4>
-                  <p>{action.description}</p>
-                </div>
-                {!action.completed ? (
-                  <button
-                    className="action-install-button"
-                    onClick={() => handleRunAction(action.id)}
-                    disabled={isProcessing}
-                  >
-                    Create
-                  </button>
-                ) : hoveredActionId === action.id ? (
-                  <button
-                    className="action-reinstall-button"
-                    onClick={() => handleRunAction(action.id)}
-                    disabled={isProcessing}
-                  >
-                    Recreate
-                  </button>
-                ) : (
-                  <span className="action-status">Created</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+                    {versionStatus.needsUpdate ? (
+                      <>
+                        <button
+                          className="action-install-button"
+                          onClick={() => handleInstallPackage(pkg.id)}
+                          disabled={isProcessing}
+                          style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                            upgrade
+                          </span>
+                          Update to v{versionStatus.latestVersion}
+                        </button>
+                        <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                          Update available
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="action-status">Installed</span>
+                        <button
+                          className="action-reinstall-button"
+                          onClick={() => handleUninstallPackage(pkg.id)}
+                          disabled={isProcessing}
+                          style={{ fontSize: '12px', padding: '4px 12px' }}
+                        >
+                          Uninstall
+                        </button>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
             ))}

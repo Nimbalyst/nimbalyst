@@ -4,6 +4,7 @@ import { RecentItem, SessionState, SessionWindow } from '../types';
 import { logger } from './logger';
 import type { OnboardingConfig } from '../../shared/types/workspace';
 import { DEFAULT_ONBOARDING_CONFIG } from '../../shared/types/workspace';
+import type { InstalledPackage } from '../../shared/toolPackages';
 
 export type AppTheme = 'dark' | 'light' | 'system' | 'crystal-dark';
 export type { SessionState, SessionWindow } from '../types';
@@ -107,6 +108,8 @@ export interface WorkspaceState {
   trackerBottomPanelHeight?: number;
   // Onboarding configuration
   onboarding?: OnboardingConfig;
+  // Installed tool packages
+  installedPackages?: InstalledPackage[];
   lastUpdated: number;
 }
 
