@@ -887,9 +887,39 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const cleanupStreamResponse = window.electronAPI.onAIStreamResponse(handleStreamResponse);
     const cleanupError = window.electronAPI.onAIError(handleStreamError);
 
+    // Handle queued prompt starting
+    const handleQueuePromptStarting = (_event: any, data: { sessionId: string; message: string }) => {
+      console.log('[AgenticPanel] Queue prompt starting for session:', data.sessionId);
+      // Mark session as sending/loading
+      sendingSessionsRef.current.add(data.sessionId);
+      setSendingSessions(prev => new Set(prev).add(data.sessionId));
+
+      // Add user message to UI immediately
+      setSessionTabs(prev => prev.map(tab => {
+        if (tab.id === data.sessionId) {
+          const userMessage = {
+            role: 'user' as const,
+            content: data.message,
+            timestamp: Date.now()
+          };
+          return {
+            ...tab,
+            sessionData: {
+              ...tab.sessionData,
+              messages: [...(tab.sessionData.messages || []), userMessage]
+            }
+          };
+        }
+        return tab;
+      }));
+    };
+
+    const cleanupQueuePromptStarting = window.electronAPI.on('ai:queue-prompt-starting', handleQueuePromptStarting);
+
     return () => {
       cleanupStreamResponse();
       cleanupError();
+      cleanupQueuePromptStarting();
     };
   }, [activeTabId, workspacePath, scheduleSessionReload]);
 

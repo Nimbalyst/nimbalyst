@@ -362,7 +362,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
             if (chunk.session_id && sessionId) {
               // Store the claude session ID
-              console.log(`[CLAUDE-CODE] Storing session ID mapping: ${sessionId} -> ${chunk.session_id}`);
+              // console.log(`[CLAUDE-CODE] Storing session ID mapping: ${sessionId} -> ${chunk.session_id}`);
               this.claudeSessionIds.set(sessionId, chunk.session_id);
             }
 
@@ -736,7 +736,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
             // Store session_id if present
             if (chunk.session_id && sessionId) {
-              console.log(`[CLAUDE-CODE] Storing session ID from system message: ${sessionId} -> ${chunk.session_id}`);
+              // console.log(`[CLAUDE-CODE] Storing session ID from system message: ${sessionId} -> ${chunk.session_id}`);
               this.claudeSessionIds.set(sessionId, chunk.session_id);
             }
 

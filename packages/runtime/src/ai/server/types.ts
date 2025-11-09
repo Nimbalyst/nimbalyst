@@ -73,6 +73,14 @@ export interface AIModel {
 
 export type SessionType = 'chat' | 'planning' | 'coding';
 
+export interface QueuedPrompt {
+  id: string;           // Unique ID for this queued item
+  prompt: string;       // The user's message
+  timestamp: number;    // When queued
+  documentContext?: DocumentContext; // Optional document context at queue time
+  attachments?: ChatAttachment[]; // Optional attachments
+}
+
 export interface SessionData {
   id: string;  // Our session ID
   provider: AIProviderType | string;  // Provider type

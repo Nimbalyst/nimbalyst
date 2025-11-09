@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useImperativeHandle, forwardRef, useEffect,
 import { AgentTranscriptPanel, TodoItem, FileEditSummary } from '@nimbalyst/runtime';
 import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
 import { AIInput, AIInputRef } from './AIInput';
+import { PromptQueueList } from './PromptQueueList';
 import { FileGutter } from '../AIChat/FileGutter';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
@@ -103,11 +104,36 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
 }, ref) => {
   const inputRef = useRef<AIInputRef>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
+
+  // Extract queue from session metadata when sessionData changes
+  useEffect(() => {
+    if (sessionData.metadata?.queuedPrompts) {
+      setQueuedPrompts(sessionData.metadata.queuedPrompts as any[]);
+    } else {
+      setQueuedPrompts([]);
+    }
+  }, [sessionData.metadata?.queuedPrompts]);
+
+  // Listen for queue updates from backend
+  useEffect(() => {
+    const handleQueueUpdate = (_event: any, data: { sessionId: string; queueLength: number }) => {
+      if (data.sessionId === sessionId) {
+        // Queue was updated by backend, reload session data will happen automatically
+        // This just ensures UI is responsive
+      }
+    };
+
+    window.electronAPI.on('ai:queue-updated', handleQueueUpdate);
+    return () => {
+      window.electronAPI.off('ai:queue-updated', handleQueueUpdate);
+    };
+  }, [sessionId]);
 
   // Extract todos from session metadata when sessionData changes
   useEffect(() => {
     if (sessionData.metadata?.currentTodos) {
-      console.log(`[AISessionView] Extracting todos for session ${sessionId}:`, sessionData.metadata.currentTodos);
+      // console.log(`[AISessionView] Extracting todos for session ${sessionId}:`, sessionData.metadata.currentTodos);
       setTodos(sessionData.metadata.currentTodos);
     } else {
       // console.log(`[AISessionView] No todos found in session metadata for ${sessionId}`);
@@ -144,9 +170,70 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     }
   }, [sessionId, draftAttachments, onDraftAttachmentsChange]);
 
+  // Handle queue message (must be before handleSend which uses it)
+  const handleQueue = useCallback(async (message: string) => {
+    console.log('[AISessionView] handleQueue called with message:', message.substring(0, 50));
+    if (!message.trim()) {
+      console.log('[AISessionView] Message was empty, returning');
+      return;
+    }
+
+    try {
+      // Generate unique ID for queued prompt
+      // Only store serializable parts of documentContext
+      const serializableContext = documentContext ? {
+        filePath: documentContext.filePath,
+        content: documentContext.content,
+        fileType: documentContext.fileType
+      } : undefined;
+
+      const queuedPrompt = {
+        id: `queued-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        prompt: message.trim(),
+        timestamp: Date.now(),
+        documentContext: serializableContext,
+        attachments: draftAttachments
+      };
+
+      // Add to queue array
+      const updatedQueue = [...queuedPrompts, queuedPrompt];
+
+      console.log('[AISessionView] About to update metadata. Current queue:', queuedPrompts.length, 'New queue:', updatedQueue.length);
+
+      // Update session metadata via IPC
+      const result = await window.electronAPI.invoke('ai:updateSessionMetadata', sessionId, {
+        ...sessionData.metadata,
+        queuedPrompts: updatedQueue
+      }, workspacePath);
+
+      console.log('[AISessionView] Metadata update result:', result);
+
+      // Update local state immediately
+      setQueuedPrompts(updatedQueue);
+
+      // Clear draft
+      if (onDraftInputChange) {
+        onDraftInputChange(sessionId, '');
+      }
+      if (onDraftAttachmentsChange) {
+        onDraftAttachmentsChange(sessionId, []);
+      }
+
+      console.log(`[AISessionView] Queued prompt for session ${sessionId}. Queue length: ${updatedQueue.length}`);
+    } catch (error) {
+      console.error('[AISessionView] Failed to queue prompt:', error);
+    }
+  }, [sessionId, documentContext, draftAttachments, queuedPrompts, sessionData.metadata, workspacePath, onDraftInputChange, onDraftAttachmentsChange]);
+
   // Handle send message
   const handleSend = useCallback(() => {
-    if (!draftInput.trim() || isLoading) return;
+    if (!draftInput.trim()) return;
+
+    // If already loading, queue the prompt instead
+    if (isLoading) {
+      handleQueue(draftInput.trim());
+      return;
+    }
 
     if (onSendMessage) {
       onSendMessage(sessionId, draftInput.trim(), draftAttachments);
@@ -159,7 +246,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     if (onDraftAttachmentsChange) {
       onDraftAttachmentsChange(sessionId, []);
     }
-  }, [sessionId, draftInput, draftAttachments, isLoading, onSendMessage, onDraftInputChange, onDraftAttachmentsChange]);
+  }, [sessionId, draftInput, draftAttachments, isLoading, onSendMessage, onDraftInputChange, onDraftAttachmentsChange, handleQueue]);
 
   // Handle cancel
   const handleCancel = useCallback(() => {
@@ -188,6 +275,23 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       onNavigateHistory(sessionId, direction);
     }
   }, [sessionId, onNavigateHistory]);
+
+  // Handle cancel queued prompt
+  const handleCancelQueuedPrompt = useCallback(async (id: string) => {
+    try {
+      const updatedQueue = queuedPrompts.filter(p => p.id !== id);
+
+      await window.electronAPI.invoke('ai:updateSessionMetadata', sessionId, {
+        ...sessionData.metadata,
+        queuedPrompts: updatedQueue
+      }, workspacePath);
+
+      setQueuedPrompts(updatedQueue);
+      console.log(`[AISessionView] Cancelled queued prompt ${id}`);
+    } catch (error) {
+      console.error('[AISessionView] Failed to cancel queued prompt:', error);
+    }
+  }, [sessionId, queuedPrompts, sessionData.metadata, workspacePath]);
 
   // Feature flags based on mode and provider
   const enableSlashCommands = sessionData.provider === 'claude-code'; // Only for Claude Code
@@ -240,6 +344,12 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         onFileClick={handleFileClick}
       />
 
+      {/* Queue display */}
+      <PromptQueueList
+        queue={queuedPrompts}
+        onCancel={handleCancelQueuedPrompt}
+      />
+
       {/* Input area */}
       <AIInput
         ref={inputRef}
@@ -271,6 +381,8 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         onModelChange={onModelChange}
         tokenUsage={sessionData.tokenUsage}
         provider={sessionData.provider}
+        onQueue={handleQueue}
+        queueCount={queuedPrompts.length}
       />
     </div>
   );

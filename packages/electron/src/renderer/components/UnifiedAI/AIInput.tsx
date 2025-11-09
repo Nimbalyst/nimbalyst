@@ -56,6 +56,10 @@ interface AIInputProps {
     contextWindow?: number;
   };
   provider?: string; // Provider ID to determine if we should show token usage
+
+  // Queue support
+  onQueue?: (message: string) => void;
+  queueCount?: number;
 }
 
 /**
@@ -92,7 +96,9 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     currentModel,
     onModelChange,
     tokenUsage,
-    provider
+    provider,
+    onQueue,
+    queueCount = 0
   }, ref) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [typeaheadMatch, setTypeaheadMatch] = useState<TriggerMatch | null>(null);
@@ -380,7 +386,16 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
         }
       }
 
-      // Handle Enter to send (Shift+Enter for new line, but not when typeahead is open)
+      // Queue on Cmd+Shift+Enter (if loading and queue handler exists)
+      if (e.key === 'Enter' && e.shiftKey && (e.metaKey || e.ctrlKey) && !typeaheadMatch) {
+        e.preventDefault();
+        if (value.trim() && !disabled && isLoading && onQueue) {
+          handleQueue();
+        }
+        return;
+      }
+
+      // Handle Enter to send (Shift+Enter for new line, but not when typeaheadis open)
       if (e.key === 'Enter' && !e.shiftKey && !typeaheadMatch) {
         e.preventDefault();
         if (value.trim() && !disabled) {
@@ -484,6 +499,12 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       }
     };
 
+    const handleQueue = () => {
+      if (value.trim() && !disabled && onQueue) {
+        onQueue(value);
+      }
+    };
+
     return (
       <div className="ai-chat-input" style={{ position: 'relative' }}>
         {/* Attachment preview list */}
@@ -552,17 +573,38 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
               resize: 'none'
             }}
           />
-          {isLoading && onCancel ? (
-            <button
-              className="ai-chat-cancel-button"
-              onClick={onCancel}
-              title="Cancel request (Esc)"
-              aria-label="Cancel request"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
+          {isLoading ? (
+            <>
+              {onQueue && (
+                <button
+                  className="ai-chat-queue-button"
+                  onClick={handleQueue}
+                  disabled={disabled || !value.trim()}
+                  title="Queue this prompt (Cmd+Shift+Enter)"
+                  aria-label="Queue prompt"
+                  style={{
+                    marginRight: '4px'
+                  }}
+                >
+                  {queueCount > 0 && <span className="queue-badge">{queueCount}</span>}
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              )}
+              {onCancel && (
+                <button
+                  className="ai-chat-cancel-button"
+                  onClick={onCancel}
+                  title="Cancel request (Esc)"
+                  aria-label="Cancel request"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              )}
+            </>
           ) : (
             <button
               className="ai-chat-send-button"

@@ -94,6 +94,8 @@ export class AIService {
   private sessionManager: SessionManager;
   private settingsStore: Store<Record<string, unknown>> | null = null;
   private readonly analytics = AnalyticsService.getInstance();
+  // Store reference to sendMessage handler for queue processing
+  private sendMessageHandler: ((event: Electron.IpcMainInvokeEvent, message: string, documentContext?: DocumentContext, sessionId?: string, workspacePath?: string) => Promise<{ content: string }>) | null = null;
   // NOTE: Providers are now tracked per-session in ProviderFactory, not per-window
   // This allows multiple concurrent sessions in the same window (e.g., agent mode tabs)
 
@@ -360,8 +362,8 @@ export class AIService {
       return session;
     });
 
-    // Send message to AI
-    ipcMain.handle('ai:sendMessage', async (
+    // Send message to AI - store handler for queue processing
+    this.sendMessageHandler = async (
       event,
       message: string,
       documentContext?: DocumentContext,
@@ -1120,6 +1122,65 @@ export class AIService {
           }
         }
 
+        // QUEUE PROCESSING: Check if there are queued prompts and process the next one
+        console.log(`[AIService] Message stream completed, checking for queued prompts...`);
+
+        const reloadedSession = await this.sessionManager.loadSession(session.id, workspacePath);
+        const queuedPrompts = (reloadedSession?.metadata?.queuedPrompts as any[]) || [];
+
+        console.log(`[AIService] Queue check: found ${queuedPrompts.length} queued prompts`);
+
+        if (queuedPrompts.length > 0) {
+          console.log(`[AIService] Processing next queued prompt...`);
+
+          // Get the first queued prompt
+          const nextPrompt = queuedPrompts[0];
+          const remainingQueue = queuedPrompts.slice(1);
+
+          // Update session metadata to remove the processed prompt from queue
+          const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+          await AISessionsRepository.updateMetadata(session.id, {
+            metadata: {
+              ...reloadedSession.metadata,
+              queuedPrompts: remainingQueue
+            }
+          });
+
+          // Notify renderer that queue was updated
+          event.sender.send('ai:queue-updated', {
+            sessionId: session.id,
+            queueLength: remainingQueue.length
+          });
+
+          console.log(`[AIService] Auto-processing queued prompt: ${nextPrompt.prompt.substring(0, 100)}...`);
+
+          // Notify renderer that a queued prompt is starting
+          event.sender.send('ai:queue-prompt-starting', {
+            sessionId: session.id,
+            message: nextPrompt.prompt
+          });
+
+          // Process the queued prompt using the stored handler
+          setImmediate(() => {
+            if (this.sendMessageHandler) {
+              console.log('[AIService] Invoking sendMessageHandler for queued prompt');
+              this.sendMessageHandler(event, nextPrompt.prompt, nextPrompt.documentContext, session.id, workspacePath)
+                .then(() => {
+                  console.log('[AIService] Queued prompt completed successfully');
+                })
+                .catch((queueError: Error) => {
+                  console.error('[AIService] Error processing queued prompt:', queueError);
+                  event.sender.send('ai:error', {
+                    sessionId: session.id,
+                    message: `Failed to process queued prompt: ${queueError.message || 'Unknown error'}`
+                  });
+                });
+            } else {
+              console.error('[AIService] sendMessageHandler not available!');
+            }
+          });
+        }
+
         return { content: fullResponse };
       } catch (error) {
         const errorTime = Date.now() - startTime;
@@ -1171,7 +1232,10 @@ export class AIService {
 
         throw error;
       }
-    });
+    };
+
+    // Register the handler with IPC
+    ipcMain.handle('ai:sendMessage', this.sendMessageHandler);
 
     // Get session history
     ipcMain.handle('ai:getSessions', async (event, workspacePath?: string) => {
@@ -1230,6 +1294,18 @@ export class AIService {
     ) => {
       const success = await this.sessionManager.updateSessionMessages(sessionId, messages, workspacePath);
       return { success };
+    });
+
+    // Update session metadata (for queue, etc.)
+    ipcMain.handle('ai:updateSessionMetadata', async (
+      event,
+      sessionId: string,
+      metadata: Record<string, any>,
+      workspacePath?: string
+    ) => {
+      const { AISessionsRepository } = await import('@nimbalyst/runtime/storage/repositories/AISessionsRepository');
+      await AISessionsRepository.updateMetadata(sessionId, { metadata });
+      return { success: true };
     });
 
     // Save draft input

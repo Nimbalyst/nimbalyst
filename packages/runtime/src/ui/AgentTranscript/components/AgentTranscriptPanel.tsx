@@ -302,7 +302,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
                 style={{
                   flex: 1,
                   padding: '0.375rem 0.5rem',
-                  fontSize: '0.6875rem',
+                  fontSize: '1rem',
                   fontWeight: 500,
                   transition: 'colors 0.2s',
                   color: activeTab === 'prompts' ? 'var(--text-primary)' : 'var(--text-tertiary)',
@@ -329,7 +329,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
                 style={{
                   flex: 1,
                   padding: '0.375rem 0.5rem',
-                  fontSize: '0.6875rem',
+                  fontSize: '1rem',
                   fontWeight: 500,
                   transition: 'colors 0.2s',
                   color: activeTab === 'files' ? 'var(--text-primary)' : 'var(--text-tertiary)',
