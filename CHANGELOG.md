@@ -19,6 +19,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.9] - 2025-11-09
+
+
+### Added
+- AI prompt queueing system for managing multiple AI requests
+- Tool packages system with version tracking for Claude Code
+- Typeahead search with keyboard navigation to workspace manager
+- Display project-relative paths in agent transcript
+
+### Changed
+- Tightened agentic panel UI spacing and improved CSS variable usage
+- Made entire folder row clickable to expand/collapse in file tree
+
+### Fixed
+- Cmd+Alt+Left tab navigation event name mismatch
+- TrackerTable now responds to filterType prop changes
+- Pass attachments to AI provider and prevent typeahead conflicts
+- Eliminated unnecessary session list reloads and race conditions
+- Fixed tab keyboard arrow navigation
+- Prevented double-loading of diff editor on file open
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.8] - 2025-11-08
 
 
