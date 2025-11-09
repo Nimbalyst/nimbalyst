@@ -14,19 +14,19 @@ export const TodosSidebar: React.FC<TodosSidebarProps> = ({
     switch (status) {
       case 'completed':
         return (
-          <svg className="w-4 h-4 text-status-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg style={{ width: '1rem', height: '1rem', color: 'var(--success-color)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         );
       case 'in_progress':
         return (
-          <svg className="w-4 h-4 text-interactive animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg style={{ width: '1rem', height: '1rem', color: 'var(--accent-primary)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         );
       case 'pending':
         return (
-          <svg className="w-4 h-4 text-text-tertiary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg style={{ width: '1rem', height: '1rem', color: 'var(--text-tertiary)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         );
@@ -36,11 +36,11 @@ export const TodosSidebar: React.FC<TodosSidebarProps> = ({
   const getStatusColor = (status: TodoItem['status']) => {
     switch (status) {
       case 'completed':
-        return 'bg-status-success/10 border-status-success/30';
+        return { backgroundColor: 'color-mix(in srgb, var(--success-color) 10%, transparent)', borderColor: 'color-mix(in srgb, var(--success-color) 30%, transparent)' };
       case 'in_progress':
-        return 'bg-interactive/10 border-interactive/30';
+        return { backgroundColor: 'color-mix(in srgb, var(--accent-primary) 10%, transparent)', borderColor: 'color-mix(in srgb, var(--accent-primary) 30%, transparent)' };
       case 'pending':
-        return 'bg-surface-tertiary/50 border-border-primary';
+        return { backgroundColor: 'color-mix(in srgb, var(--surface-tertiary) 50%, transparent)', borderColor: 'var(--border-primary)' };
     }
   };
 
@@ -99,10 +99,15 @@ export const TodosSidebar: React.FC<TodosSidebarProps> = ({
             <span>{completedCount} of {totalCount} completed</span>
             <span>{progressPercent}%</span>
           </div>
-          <div className="w-full bg-surface-tertiary rounded-full h-1.5">
+          <div style={{ width: '100%', backgroundColor: 'var(--surface-tertiary)', borderRadius: '9999px', height: '0.375rem' }}>
             <div
-              className="bg-status-success rounded-full h-1.5 transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
+              style={{
+                width: `${progressPercent}%`,
+                backgroundColor: 'var(--success-color)',
+                borderRadius: '9999px',
+                height: '0.375rem',
+                transition: 'all 0.3s'
+              }}
             />
           </div>
         </div>
@@ -126,7 +131,8 @@ export const TodosSidebar: React.FC<TodosSidebarProps> = ({
                     <button
                       key={todo.id}
                       onClick={() => onTodoClick?.(todo)}
-                      className={`w-full text-left p-3 rounded-lg border transition-colors hover:bg-bg-hover ${getStatusColor(todo.status)}`}
+                      className="w-full text-left p-3 rounded-lg border transition-colors hover:bg-bg-hover"
+                      style={getStatusColor(todo.status)}
                     >
                       <div className="flex items-start gap-2">
                         <div className="flex-shrink-0 mt-0.5">
@@ -160,7 +166,8 @@ export const TodosSidebar: React.FC<TodosSidebarProps> = ({
                     <button
                       key={todo.id}
                       onClick={() => onTodoClick?.(todo)}
-                      className={`w-full text-left p-3 rounded-lg border transition-colors hover:bg-bg-hover ${getStatusColor(todo.status)}`}
+                      className="w-full text-left p-3 rounded-lg border transition-colors hover:bg-bg-hover"
+                      style={getStatusColor(todo.status)}
                     >
                       <div className="flex items-start gap-2">
                         <div className="flex-shrink-0 mt-0.5">
@@ -194,7 +201,8 @@ export const TodosSidebar: React.FC<TodosSidebarProps> = ({
                     <button
                       key={todo.id}
                       onClick={() => onTodoClick?.(todo)}
-                      className={`w-full text-left p-3 rounded-lg border transition-colors hover:bg-bg-hover ${getStatusColor(todo.status)}`}
+                      className="w-full text-left p-3 rounded-lg border transition-colors hover:bg-bg-hover"
+                      style={getStatusColor(todo.status)}
                     >
                       <div className="flex items-start gap-2">
                         <div className="flex-shrink-0 mt-0.5">

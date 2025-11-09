@@ -84,25 +84,25 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     switch (operation) {
       case 'create':
         return (
-          <svg className="w-3.5 h-3.5 text-status-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg style={{ width: '0.875rem', height: '0.875rem', color: 'var(--success-color)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
         );
       case 'edit':
         return (
-          <svg className="w-3.5 h-3.5 text-interactive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg style={{ width: '0.875rem', height: '0.875rem', color: 'var(--accent-primary)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
           </svg>
         );
       case 'delete':
         return (
-          <svg className="w-3.5 h-3.5 text-status-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg style={{ width: '0.875rem', height: '0.875rem', color: 'var(--error-color)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
         );
       case 'rename':
         return (
-          <svg className="w-3.5 h-3.5 text-status-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg style={{ width: '0.875rem', height: '0.875rem', color: 'var(--warning-color)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
           </svg>
         );
@@ -150,7 +150,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     const isCollapsed = collapsedSections[linkType];
 
     return (
-      <div key={linkType} style={{ marginBottom: '0.5rem' }}>
+      <div key={linkType} style={{ marginBottom: '0.375rem' }}>
         <button
           onClick={() => toggleSection(linkType)}
           style={{
@@ -158,33 +158,41 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '0.5rem 0.75rem',
-            fontSize: '0.75rem',
+            padding: '0.25rem 0.5rem',
+            fontSize: '1rem',
             fontWeight: 600,
-            color: 'var(--text-primary)',
-            backgroundColor: 'var(--surface-tertiary)',
-            borderRadius: '0.375rem',
-            transition: 'all 0.2s'
+            color: 'var(--text-secondary)',
+            backgroundColor: 'transparent',
+            border: 'none',
+            borderRadius: '0.25rem',
+            transition: 'all 0.2s',
+            cursor: 'pointer'
           }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-hover)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-tertiary)'}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
+            e.currentTarget.style.color = 'var(--text-primary)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+            e.currentTarget.style.color = 'var(--text-secondary)';
+          }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
             {getLinkTypeIcon(linkType)}
             <span>{title}</span>
             <span style={{
-              padding: '0.125rem 0.375rem',
+              padding: '0.125rem 0.25rem',
               backgroundColor: 'var(--surface-secondary)',
               borderRadius: '0.25rem',
-              fontSize: '10px'
+              fontSize: '9px'
             }}>
               {files.length}
             </span>
           </div>
           <svg
             style={{
-              width: '1rem',
-              height: '1rem',
+              width: '0.75rem',
+              height: '0.75rem',
               transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
               transition: 'transform 0.2s'
             }}
@@ -205,11 +213,11 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
                 style={{
                   width: '100%',
                   textAlign: 'left',
-                  padding: '0.75rem',
-                  borderRadius: '0.5rem',
+                  padding: '0.375rem 0.5rem',
+                  borderRadius: '0.375rem',
                   border: '1px solid transparent',
                   transition: 'all 0.2s',
-                  marginBottom: '0.25rem'
+                  marginBottom: '0.125rem'
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
@@ -220,60 +228,40 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
                   e.currentTarget.style.borderColor = 'transparent';
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'start', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                   {operation && (
-                    <div style={{ flexShrink: 0, marginTop: '0.125rem' }}>
+                    <div style={{ flexShrink: 0 }}>
                       {getOperationIcon(operation)}
                     </div>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
-                      fontSize: '0.875rem',
+                      fontSize: '0.8125rem',
                       color: 'var(--text-primary)',
                       fontWeight: 500,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap'
-                    }} title={filePath}>
+                    }} title={getRelativePath(filePath)}>
                       {formatFileName(filePath)}
                     </div>
-                    <div style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--text-tertiary)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      marginTop: '0.125rem'
-                    }} title={getRelativePath(filePath)}>
-                      {getRelativePath(filePath)}
-                    </div>
+                  </div>
+                  {linkType === 'edited' && (totalAdded > 0 || totalRemoved > 0) && (
                     <div style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '0.5rem',
-                      marginTop: '0.25rem',
-                      fontSize: '0.75rem'
+                      gap: '0.25rem',
+                      fontSize: '0.6875rem',
+                      flexShrink: 0
                     }}>
-                      {linkType === 'edited' && totalAdded > 0 && (
-                        <span style={{ color: 'var(--status-success)' }}>+{totalAdded}</span>
+                      {totalAdded > 0 && (
+                        <span style={{ color: 'var(--success-color)' }}>+{totalAdded}</span>
                       )}
-                      {linkType === 'edited' && totalRemoved > 0 && (
-                        <span style={{ color: 'var(--status-error)' }}>-{totalRemoved}</span>
-                      )}
-                      {edits.length > 1 && (
-                        <>
-                          <span style={{ color: 'var(--text-tertiary)' }}>•</span>
-                          <span style={{ color: 'var(--text-tertiary)' }}>{edits.length} times</span>
-                        </>
-                      )}
-                      {timestamp && (
-                        <>
-                          <span style={{ color: 'var(--text-tertiary)' }}>•</span>
-                          <span style={{ color: 'var(--text-tertiary)' }}>{formatTimeAgo(timestamp)}</span>
-                        </>
+                      {totalRemoved > 0 && (
+                        <span style={{ color: 'var(--error-color)' }}>-{totalRemoved}</span>
                       )}
                     </div>
-                  </div>
+                  )}
                 </div>
               </button>
             ))}
@@ -286,20 +274,20 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   const totalFiles = groupedByType.edited.length + groupedByType.referenced.length + groupedByType.read.length;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: 'var(--surface-secondary)', borderRight: '1px solid var(--border-primary)' }}>
-      <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-primary)' }}>
-        <h3 style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+    <div className={"file-edits-sidebar"} style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: 'var(--surface-secondary)', borderRight: '1px solid var(--border-primary)' }}>
+      <div style={{ padding: '0.25rem 0.75rem', borderBottom: '1px solid var(--border-primary)' }}>
+        <h3 style={{ fontSize: '0.875rem', margin: '10px', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
           <svg style={{ width: '1rem', height: '1rem' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           Files
+          <span style={{ marginLeft: 'auto', fontSize: '9px', padding: '0.125rem 0.25rem', backgroundColor: 'var(--surface-tertiary)', borderRadius: '0.25rem' }}>
+            {totalFiles}
+          </span>
         </h3>
-        <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '0.25rem' }}>
-          {totalFiles} file{totalFiles !== 1 ? 's' : ''}
-        </p>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0.25rem' }}>
         {totalFiles === 0 ? (
           <div style={{ padding: '1rem', color: 'var(--text-tertiary)', fontSize: '0.875rem', textAlign: 'center' }}>
             No file interactions yet

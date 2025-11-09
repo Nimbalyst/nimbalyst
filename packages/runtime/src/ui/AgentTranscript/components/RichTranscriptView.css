@@ -104,8 +104,8 @@
 }
 
 .rich-transcript-message-avatar.user {
-  background-color: color-mix(in srgb, var(--status-success) 20%, transparent);
-  color: var(--status-success);
+  background-color: color-mix(in srgb, var(--success-color) 20%, transparent);
+  color: var(--success-color);
 }
 
 .rich-transcript-message-avatar.assistant {
@@ -158,7 +158,7 @@
 }
 
 .rich-transcript-action-button.copied svg {
-  color: var(--status-success);
+  color: var(--success-color);
 }
 
 .rich-transcript-collapse-button {
