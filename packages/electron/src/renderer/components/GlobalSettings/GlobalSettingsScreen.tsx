@@ -175,7 +175,7 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
   );
   const [providers, setProviders] = useState<Record<string, ProviderConfig>>({
     claude: { enabled: false, testStatus: 'idle' },
-    'claude-code': { enabled: false, testStatus: 'idle', installStatus: 'not-installed' },
+    'claude-code': { enabled: true, testStatus: 'idle', installStatus: 'not-installed' },
     openai: { enabled: false, testStatus: 'idle' },
     'openai-codex': { enabled: false, testStatus: 'idle', installStatus: 'not-installed' },
     lmstudio: { enabled: false, baseUrl: 'http://127.0.0.1:8234', testStatus: 'idle' }
