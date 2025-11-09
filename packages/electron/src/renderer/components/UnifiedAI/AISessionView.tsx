@@ -65,6 +65,92 @@ export interface AISessionViewProps {
 }
 
 /**
+ * TranscriptSection - Memoized component that renders the transcript and file gutters.
+ * This is separated from the input area to prevent re-renders when typing.
+ */
+interface TranscriptSectionProps {
+  sessionId: string;
+  sessionData: SessionData;
+  workspacePath: string;
+  mode: 'chat' | 'agent';
+  todos: Todo[];
+  queuedPrompts: any[];
+  onFileClick?: (filePath: string) => void;
+  onTodoClick?: (todo: TodoItem) => void;
+  onCancelQueuedPrompt: (id: string) => void;
+}
+
+const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
+  sessionId,
+  sessionData,
+  workspacePath,
+  mode,
+  todos,
+  queuedPrompts,
+  onFileClick,
+  onTodoClick,
+  onCancelQueuedPrompt
+}) => {
+  return (
+    <>
+      {/* Referenced files gutter at top */}
+      <FileGutter
+        sessionId={sessionId}
+        workspacePath={workspacePath}
+        type="referenced"
+        onFileClick={onFileClick}
+      />
+
+      {/* Main transcript area */}
+      <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+        <AgentTranscriptPanel
+          sessionId={sessionId}
+          sessionData={sessionData}
+          todos={todos}
+          onFileClick={onFileClick}
+          onTodoClick={onTodoClick}
+          hideSidebar={mode === 'chat'} // Hide sidebar in chat mode
+          initialSettings={{
+            showToolCalls: true,
+            compactMode: false,
+            collapseTools: false,
+            showThinking: true,
+            showSessionInit: false
+          }}
+        />
+      </div>
+
+      {/* Edited files gutter at bottom */}
+      <FileGutter
+        sessionId={sessionId}
+        workspacePath={workspacePath}
+        type="edited"
+        onFileClick={onFileClick}
+      />
+
+      {/* Queue display */}
+      <PromptQueueList
+        queue={queuedPrompts}
+        onCancel={onCancelQueuedPrompt}
+      />
+    </>
+  );
+};
+
+// Memoize TranscriptSection to prevent re-renders when input changes
+const TranscriptSection = React.memo(TranscriptSectionComponent, (prevProps, nextProps) => {
+  // Only re-render if session data, todos, or queue actually changed
+  return (
+    prevProps.sessionId === nextProps.sessionId &&
+    prevProps.sessionData === nextProps.sessionData &&
+    prevProps.workspacePath === nextProps.workspacePath &&
+    prevProps.mode === nextProps.mode &&
+    prevProps.todos === nextProps.todos &&
+    prevProps.queuedPrompts === nextProps.queuedPrompts
+  );
+});
+
+/**
  * AISessionView component encapsulates all UI for a single AI session.
  *
  * Key features:
@@ -172,9 +258,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
 
   // Handle queue message (must be before handleSend which uses it)
   const handleQueue = useCallback(async (message: string) => {
-    console.log('[AISessionView] handleQueue called with message:', message.substring(0, 50));
     if (!message.trim()) {
-      console.log('[AISessionView] Message was empty, returning');
       return;
     }
 
@@ -198,15 +282,11 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       // Add to queue array
       const updatedQueue = [...queuedPrompts, queuedPrompt];
 
-      console.log('[AISessionView] About to update metadata. Current queue:', queuedPrompts.length, 'New queue:', updatedQueue.length);
-
       // Update session metadata via IPC
-      const result = await window.electronAPI.invoke('ai:updateSessionMetadata', sessionId, {
+      await window.electronAPI.invoke('ai:updateSessionMetadata', sessionId, {
         ...sessionData.metadata,
         queuedPrompts: updatedQueue
       }, workspacePath);
-
-      console.log('[AISessionView] Metadata update result:', result);
 
       // Update local state immediately
       setQueuedPrompts(updatedQueue);
@@ -218,8 +298,6 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       if (onDraftAttachmentsChange) {
         onDraftAttachmentsChange(sessionId, []);
       }
-
-      console.log(`[AISessionView] Queued prompt for session ${sessionId}. Queue length: ${updatedQueue.length}`);
     } catch (error) {
       console.error('[AISessionView] Failed to queue prompt:', error);
     }
@@ -287,7 +365,6 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       }, workspacePath);
 
       setQueuedPrompts(updatedQueue);
-      console.log(`[AISessionView] Cancelled queued prompt ${id}`);
     } catch (error) {
       console.error('[AISessionView] Failed to cancel queued prompt:', error);
     }
@@ -309,48 +386,20 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
       data-session-id={sessionId}
       data-active={isActive}
     >
-      {/* Referenced files gutter at top */}
-      <FileGutter
+      {/* Transcript and gutters - memoized to prevent re-render on input changes */}
+      <TranscriptSection
         sessionId={sessionId}
+        sessionData={sessionData}
         workspacePath={workspacePath}
-        type="referenced"
+        mode={mode}
+        todos={todos}
+        queuedPrompts={queuedPrompts}
         onFileClick={handleFileClick}
+        onTodoClick={handleTodoClick}
+        onCancelQueuedPrompt={handleCancelQueuedPrompt}
       />
 
-      {/* Main transcript area */}
-      <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
-        <AgentTranscriptPanel
-          sessionId={sessionId}
-          sessionData={sessionData}
-          todos={todos}
-          onFileClick={handleFileClick}
-          onTodoClick={handleTodoClick}
-          hideSidebar={mode === 'chat'} // Hide sidebar in chat mode
-          initialSettings={{
-            showToolCalls: true,
-            compactMode: false,
-            collapseTools: false,
-            showThinking: true,
-            showSessionInit: false
-          }}
-        />
-      </div>
-
-      {/* Edited files gutter at bottom */}
-      <FileGutter
-        sessionId={sessionId}
-        workspacePath={workspacePath}
-        type="edited"
-        onFileClick={handleFileClick}
-      />
-
-      {/* Queue display */}
-      <PromptQueueList
-        queue={queuedPrompts}
-        onCancel={handleCancelQueuedPrompt}
-      />
-
-      {/* Input area */}
+      {/* Input area - separate so typing doesn't re-render transcript */}
       <AIInput
         ref={inputRef}
         value={draftInput}
@@ -393,14 +442,69 @@ AISessionViewComponent.displayName = 'AISessionView';
 // Memoize to prevent re-renders when props haven't changed
 // This is critical for performance when multiple session tabs are open
 export const AISessionView = React.memo(AISessionViewComponent, (prevProps, nextProps) => {
-  // Re-render if any of these props change
-  return (
-    prevProps.sessionId === nextProps.sessionId &&
-    prevProps.isActive === nextProps.isActive &&
-    prevProps.draftInput === nextProps.draftInput &&
-    prevProps.isLoading === nextProps.isLoading &&
-    prevProps.sessionData === nextProps.sessionData &&
-    prevProps.aiMode === nextProps.aiMode &&
-    prevProps.currentModel === nextProps.currentModel
-  );
+  // Only compare data props, not callback props
+  // Callback props (onDraftInputChange, onSendMessage, etc.) may have new references
+  // but don't affect what's displayed, so we ignore them for performance
+
+  // Basic props comparison
+  if (
+    prevProps.sessionId !== nextProps.sessionId ||
+    prevProps.isActive !== nextProps.isActive ||
+    prevProps.draftInput !== nextProps.draftInput ||
+    prevProps.isLoading !== nextProps.isLoading ||
+    prevProps.aiMode !== nextProps.aiMode ||
+    prevProps.currentModel !== nextProps.currentModel ||
+    prevProps.workspacePath !== nextProps.workspacePath ||
+    prevProps.mode !== nextProps.mode ||
+    prevProps.draftAttachments?.length !== nextProps.draftAttachments?.length ||
+    prevProps.fileMentionOptions?.length !== nextProps.fileMentionOptions?.length
+  ) {
+    return false; // Props changed, should re-render
+  }
+
+  // Deep comparison of sessionData - only re-render if actual content changed
+  const prevData = prevProps.sessionData;
+  const nextData = nextProps.sessionData;
+
+  if (prevData === nextData) {
+    return true; // Same reference, no re-render needed
+  }
+
+  // Compare key properties of sessionData
+  if (
+    prevData.id !== nextData.id ||
+    prevData.provider !== nextData.provider ||
+    prevData.model !== nextData.model ||
+    prevData.messages.length !== nextData.messages.length ||
+    prevData.metadata?.currentTodos !== nextData.metadata?.currentTodos ||
+    prevData.metadata?.queuedPrompts !== nextData.metadata?.queuedPrompts
+  ) {
+    return false; // Content changed, should re-render
+  }
+
+  // Check if messages content actually changed (compare last message)
+  if (prevData.messages.length > 0) {
+    const prevLastMsg = prevData.messages[prevData.messages.length - 1];
+    const nextLastMsg = nextData.messages[nextData.messages.length - 1];
+
+    if (
+      prevLastMsg.content !== nextLastMsg.content ||
+      prevLastMsg.role !== nextLastMsg.role ||
+      prevLastMsg.timestamp !== nextLastMsg.timestamp
+    ) {
+      return false; // Last message changed, should re-render
+    }
+  }
+
+  // Compare documentContext if present
+  if (prevProps.documentContext !== nextProps.documentContext) {
+    if (!prevProps.documentContext || !nextProps.documentContext) {
+      return false; // One is null/undefined, the other isn't
+    }
+    if (prevProps.documentContext.filePath !== nextProps.documentContext.filePath) {
+      return false; // Different file
+    }
+  }
+
+  return true; // No meaningful changes, skip re-render
 });
