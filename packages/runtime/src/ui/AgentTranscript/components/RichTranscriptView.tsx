@@ -146,10 +146,28 @@ export const RichTranscriptView = React.forwardRef<
     );
   };
 
-  // Find if any message is a login-required error
-  const loginErrorIndex = useMemo(() => {
-    return messages.findIndex(msg => !msg.role || msg.role === 'user' ? false : isLoginRequiredError(msg));
-  }, [messages]);
+  // Helper to check if we should show the login widget for a given message index
+  // Show the widget if this is a login error AND the previous non-tool message wasn't also a login error
+  const shouldShowLoginWidgetForIndex = (index: number): boolean => {
+    const message = messages[index];
+    if (!isLoginRequiredError(message) || message.role === 'user') {
+      return false;
+    }
+
+    // Find the previous non-tool message
+    let prevIndex = index - 1;
+    while (prevIndex >= 0 && messages[prevIndex].role === 'tool') {
+      prevIndex--;
+    }
+
+    // If no previous message, show the widget
+    if (prevIndex < 0) {
+      return true;
+    }
+
+    // Show the widget only if the previous message wasn't also a login error
+    return !isLoginRequiredError(messages[prevIndex]);
+  };
 
   return (
     <div className="rich-transcript-view">
@@ -459,7 +477,7 @@ export const RichTranscriptView = React.forwardRef<
                         expandedTools={expandedTools}
                         onToggleToolExpand={toggleToolExpand}
                         documentContext={documentContext}
-                        shouldShowLoginWidget={loginErrorIndex === -1 || loginErrorIndex === index}
+                        shouldShowLoginWidget={shouldShowLoginWidgetForIndex(index)}
                       />
                     </div>
                   </div>
