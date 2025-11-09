@@ -203,10 +203,9 @@ export function DiffPlugin(): JSX.Element | null {
           // Get transformers including both core and plugin transformers
           const transformers = getEditorTransformers();
 
-          // Use the oldText from the first replacement as originalMarkdown
-          // This avoids round-trip conversion issues where markdown changes slightly
-          // when imported into Lexical and exported back (whitespace, line endings, etc.)
-          const originalMarkdown = replacements[0].oldText || editor.getEditorState().read(() => {
+          // Get the current full document markdown
+          // We need the full document to correctly apply multiple replacements
+          const originalMarkdown = editor.getEditorState().read(() => {
             return $convertToEnhancedMarkdownString(transformers);
           });
 

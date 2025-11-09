@@ -145,11 +145,14 @@ export function groupDiffChanges(editor: LexicalEditor): DiffChangeGroup[] {
       const types: Set<'added' | 'removed' | 'modified'> = new Set([current.state]);
 
       // Check if this is part of a remove+add pair (replacement)
+      // The order in the tree is removed-first then added-second
       if (current.state === 'removed' && i + 1 < allDiffNodes.length) {
         const next = allDiffNodes[i + 1];
 
-        // If next is 'added' and adjacent, group them together as a replacement
-        if (next.state === 'added' && areNodesAdjacent(current.node, next.node)) {
+        // If next is 'added', group them together as a replacement
+        // We don't check adjacency here because consecutive removed+added pairs
+        // are always meant to be replacements, even if they're in different paragraphs
+        if (next.state === 'added') {
           nodes.push(next.node);
           types.add(next.state);
           i += 2; // Skip both nodes

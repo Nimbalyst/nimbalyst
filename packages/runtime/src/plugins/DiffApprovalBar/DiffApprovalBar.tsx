@@ -154,7 +154,8 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
       editor.getEditorState().read(() => {
         const selection = $getSelection();
         if (!$isRangeSelection(selection)) {
-          setCurrentGroupIndex(-1);
+          // Don't clear the selection when there's no range selection
+          // This preserves auto-selection behavior
           return;
         }
 
@@ -192,7 +193,10 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
           if (foundGroupIndex !== -1) break;
         }
 
-        setCurrentGroupIndex(foundGroupIndex);
+        // Only update if we found a group or if the user selected outside diffs
+        if (foundGroupIndex !== -1) {
+          setCurrentGroupIndex(foundGroupIndex);
+        }
       });
     };
 
@@ -317,9 +321,10 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
     // Wait for groups to update, then check if all diffs are cleared
     setTimeout(() => {
       const updatedGroups = groupDiffChanges(editor);
+      const hasDiff = $hasDiffNodes(editor);
 
       // Check if this was the last diff - if so, trigger cleanup
-      if (updatedGroups.length === 0 || !$hasDiffNodes(editor)) {
+      if (updatedGroups.length === 0 || !hasDiff) {
         // All diffs cleared - dispatch CLEAR_DIFF_TAG_COMMAND
         // This is handled by TabEditor in Electron to mark tag as reviewed
         import('../../../../electron/src/renderer/commands/diffCommands').then(({ CLEAR_DIFF_TAG_COMMAND }) => {
@@ -373,9 +378,10 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
     // Wait for groups to update, then check if all diffs are cleared
     setTimeout(() => {
       const updatedGroups = groupDiffChanges(editor);
+      const hasDiff = $hasDiffNodes(editor);
 
       // Check if this was the last diff - if so, trigger cleanup
-      if (updatedGroups.length === 0 || !$hasDiffNodes(editor)) {
+      if (updatedGroups.length === 0 || !hasDiff) {
         // All diffs cleared - dispatch CLEAR_DIFF_TAG_COMMAND
         // This is handled by TabEditor in Electron to mark tag as reviewed
         import('../../../../electron/src/renderer/commands/diffCommands').then(({ CLEAR_DIFF_TAG_COMMAND }) => {
