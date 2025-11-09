@@ -683,7 +683,7 @@ export class AIService {
           attachments
         } as any : { sessionType: session.sessionType, attachments } as any;
 
-        for await (const chunk of provider.sendMessage(message, contextWithSession, session.id, sessionMessages, workspacePath)) {
+        for await (const chunk of provider.sendMessage(message, contextWithSession, session.id, sessionMessages, workspacePath, attachments)) {
           chunkCount++;
 
           if (!firstChunkTime) {

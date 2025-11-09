@@ -417,7 +417,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
 
         if (result.success && result.attachment) {
           onAttachmentAdd(result.attachment);
-          const reference = `@${file.name}`;
+          const reference = `@${file.name} `;
           onChange(value + (value ? ' ' : '') + reference);
         } else {
           console.error('[AIInput] Failed to save attachment:', result.error);
