@@ -78,6 +78,35 @@
   overflow-x: hidden;
   padding: 8px;
   -webkit-app-region: no-drag;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Search container */
+.search-container {
+  padding: 0 0 8px 0;
+  flex-shrink: 0;
+}
+
+.workspace-search {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: #1f2937;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.workspace-search:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.workspace-search::placeholder {
+  color: #9ca3af;
 }
 
 /* Project items - matching file tree items */
@@ -99,6 +128,14 @@
 
 .workspace-item.selected {
   background-color: #dbeafe;
+}
+
+.workspace-item.highlighted {
+  background-color: #e5e7eb;
+}
+
+.workspace-item.highlighted.selected {
+  background-color: #bfdbfe;
 }
 
 .workspace-icon {
@@ -659,6 +696,21 @@
 }
 
 /* Dark theme support */
+.dark-theme .workspace-search {
+  background-color: #2d2d2d;
+  border-color: #4a4a4a;
+  color: #ffffff;
+}
+
+.dark-theme .workspace-search:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.dark-theme .workspace-search::placeholder {
+  color: #6b7280;
+}
+
 .dark-theme .workspace-manager {
   background-color: #1a1a1a;
 }
@@ -683,6 +735,14 @@
 
 .dark-theme .workspace-item.selected {
   background-color: #4a5568;
+}
+
+.dark-theme .workspace-item.highlighted {
+  background-color: #3a3a3a;
+}
+
+.dark-theme .workspace-item.highlighted.selected {
+  background-color: #5a6574;
 }
 
 .dark-theme .workspace-icon {

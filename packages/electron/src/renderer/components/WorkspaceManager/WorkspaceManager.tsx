@@ -79,6 +79,8 @@ export const WorkspaceManager: React.FC = () => {
   const [selectedWorkspace, setSelectedWorkspace] = useState<WorkspaceInfo | null>(null);
   const [workspaceStats, setWorkspaceStats] = useState<WorkspaceStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   useEffect(() => {
     loadWorkspaces();
@@ -89,6 +91,27 @@ export const WorkspaceManager: React.FC = () => {
       loadWorkspaceStats(selectedWorkspace.path);
     }
   }, [selectedWorkspace]);
+
+  // Auto-select first item when search query changes or results update
+  useEffect(() => {
+    if (filteredWorkspaces.length > 0) {
+      setHighlightedIndex(0);
+      setSelectedWorkspace(filteredWorkspaces[0]);
+    } else {
+      setHighlightedIndex(-1);
+      setSelectedWorkspace(null);
+    }
+  }, [searchQuery]);
+
+  // Filter workspaces based on search query
+  const filteredWorkspaces = workspaces.filter(workspace => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      workspace.name.toLowerCase().includes(query) ||
+      workspace.path.toLowerCase().includes(query)
+    );
+  });
 
   const loadWorkspaces = async () => {
     try {
@@ -211,6 +234,48 @@ export const WorkspaceManager: React.FC = () => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (filteredWorkspaces.length === 0) return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightedIndex(prev => {
+          const next = prev < filteredWorkspaces.length - 1 ? prev + 1 : prev;
+          if (next !== -1) {
+            setSelectedWorkspace(filteredWorkspaces[next]);
+          }
+          return next;
+        });
+        break;
+
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightedIndex(prev => {
+          const next = prev > 0 ? prev - 1 : 0;
+          setSelectedWorkspace(filteredWorkspaces[next]);
+          return next;
+        });
+        break;
+
+      case 'Enter':
+        e.preventDefault();
+        if (highlightedIndex >= 0 && highlightedIndex < filteredWorkspaces.length) {
+          const workspace = filteredWorkspaces[highlightedIndex];
+          window.electronAPI.workspaceManager.openWorkspace(workspace.path);
+        } else if (selectedWorkspace) {
+          handleOpenWorkspace();
+        }
+        break;
+
+      case 'Escape':
+        e.preventDefault();
+        setSearchQuery('');
+        setHighlightedIndex(-1);
+        break;
+    }
+  };
+
   return (
     <div className="workspace-manager">
       <div className="sidebar">
@@ -230,6 +295,20 @@ export const WorkspaceManager: React.FC = () => {
         </div>
 
         <div className="workspaces-list">
+          {!loading && workspaces.length > 0 && (
+            <div className="search-container">
+              <input
+                type="text"
+                className="workspace-search"
+                placeholder="Search projects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                autoFocus
+              />
+            </div>
+          )}
+
           {loading ? (
             <div className="loading">
               <div className="spinner"></div>
@@ -238,11 +317,15 @@ export const WorkspaceManager: React.FC = () => {
             <div className="sidebar-empty">
               <p>No recent projects</p>
             </div>
+          ) : filteredWorkspaces.length === 0 ? (
+            <div className="sidebar-empty">
+              <p>No matching projects</p>
+            </div>
           ) : (
-            workspaces.map(workspace => (
+            filteredWorkspaces.map((workspace, index) => (
               <div
                 key={workspace.path}
-                className={`workspace-item ${selectedWorkspace?.path === workspace.path ? 'selected' : ''}`}
+                className={`workspace-item ${selectedWorkspace?.path === workspace.path ? 'selected' : ''} ${highlightedIndex === index ? 'highlighted' : ''}`}
                 onClick={(e) => {
                   // Command/Ctrl + click to deselect
                   if (e.metaKey || e.ctrlKey) {
@@ -252,6 +335,7 @@ export const WorkspaceManager: React.FC = () => {
                   } else {
                     setSelectedWorkspace(workspace);
                   }
+                  setHighlightedIndex(index);
                 }}
                 onDoubleClick={handleOpenWorkspace}
               >
