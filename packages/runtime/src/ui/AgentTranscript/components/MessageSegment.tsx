@@ -95,7 +95,8 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
       lowerText.includes('expired token') ||
       lowerText.includes('please obtain a new token') ||
       lowerText.includes('refresh your existing token') ||
-      lowerText.includes('authentication_error')
+      lowerText.includes('authentication_error') ||
+      lowerText.includes('process exited with code')
     );
   };
 

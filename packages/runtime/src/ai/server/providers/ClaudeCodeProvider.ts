@@ -937,7 +937,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 lowerSummary.includes('oauth token has expired') ||
                 lowerSummary.includes('token has expired') ||
                 lowerSummary.includes('expired token') ||
-                lowerSummary.includes('authentication_error')) {
+                lowerSummary.includes('authentication_error') ||
+                lowerSummary.includes('process exited with code')) {
               console.error('[CLAUDE-CODE] ERROR: Summary contains error message:', summary);
               console.error('[CLAUDE-CODE] Full summary chunk:', JSON.stringify(chunk, null, 2));
 
