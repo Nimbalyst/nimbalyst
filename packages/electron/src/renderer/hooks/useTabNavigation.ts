@@ -117,7 +117,7 @@ export function useTabNavigation(options: UseTabNavigationOptions) {
   }, [enabled, goBack, goForward]);
 
   // NOTE: Keyboard shortcuts are NOT handled here anymore. They're handled via:
-  // 1. Electron menu accelerators (Meta+Alt+Left/Right) -> sends 'next-tab'/'prev-tab' IPC events
+  // 1. Electron menu accelerators (Meta+Alt+Left/Right) -> sends 'next-tab'/'previous-tab' IPC events
   // 2. App.tsx receives these IPC events and routes them with mode awareness
   // This hook is only used for browser-based navigation history (back/forward menu items)
 
