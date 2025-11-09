@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.11] - 2025-11-09
+
+
+### Changed
+- Claude Code enabled by default for new installations
+- Improved login widget UX with better post-login experience
+- Enhanced error handling to avoid showing duplicate login messages
+
+### Fixed
+- Don't show model config screen on fresh install
+- Better logic around showing duplicate login messages
+- Don't show error in addition to login widget
+
 ## [0.45.9] - 2025-11-09
 
 
