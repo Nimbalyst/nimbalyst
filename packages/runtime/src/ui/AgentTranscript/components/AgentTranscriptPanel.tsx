@@ -215,6 +215,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
           onSettingsChange={onSettingsChange}
           showSettings={showSettings}
           documentContext={sessionData.documentContext}
+          workspacePath={sessionData.workspacePath}
         />
       </div>
 

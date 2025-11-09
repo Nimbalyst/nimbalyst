@@ -236,8 +236,8 @@
 }
 
 .rich-transcript-tool-args {
-  font-size: 0.8rem;
-  color: var(--text-tertiary);
+  /*font-size: 0.8rem;*/
+  color: var(--text-secondary);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;

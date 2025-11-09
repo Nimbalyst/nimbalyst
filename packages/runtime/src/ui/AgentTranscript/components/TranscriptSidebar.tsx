@@ -43,7 +43,6 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
         }}>
           <div style={{
             padding: '0.75rem 1rem',
-            borderBottom: '1px solid var(--border-primary)'
           }}>
             <h3 style={{
               fontWeight: 600,
@@ -53,13 +52,6 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
             }}>
               Prompt History
             </h3>
-            <p style={{
-              fontSize: '0.75rem',
-              color: 'var(--text-tertiary)',
-              margin: '0.25rem 0 0 0'
-            }}>
-              Click to navigate
-            </p>
           </div>
 
           <div style={{

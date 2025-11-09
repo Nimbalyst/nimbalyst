@@ -5,6 +5,7 @@ import { MessageSegment } from './MessageSegment';
 import { ProviderIcon } from '../../icons/ProviderIcons';
 import { parseTimestamp } from '../../../utils/dateUtils';
 import { JSONViewer } from './JSONViewer';
+import { formatToolArguments } from '../utils/pathResolver';
 import './RichTranscriptView.css';
 
 interface RichTranscriptViewProps {
@@ -16,6 +17,7 @@ interface RichTranscriptViewProps {
   onSettingsChange?: (settings: TranscriptSettings) => void;
   showSettings?: boolean;
   documentContext?: { filePath?: string };
+  workspacePath?: string;
 }
 
 const defaultSettings: TranscriptSettings = {
@@ -29,7 +31,7 @@ const defaultSettings: TranscriptSettings = {
 export const RichTranscriptView = React.forwardRef<
   { scrollToMessage: (index: number) => void },
   RichTranscriptViewProps
->(({ sessionId, sessionStatus, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext }, ref) => {
+>(({ sessionId, sessionStatus, messages, provider, settings: propsSettings, onSettingsChange, showSettings, documentContext, workspacePath }, ref) => {
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -268,13 +270,8 @@ export const RichTranscriptView = React.forwardRef<
                             {tool.name}
                           </span>
                           {tool.arguments && (() => {
-                            const args = tool.arguments;
-                            const argStr = Object.keys(args).map(k => {
-                              const val = args[k];
-                              if (typeof val === 'string') return val.length > 30 ? val.substring(0, 30) + '...' : val;
-                              return JSON.stringify(val);
-                            }).join(', ');
-                            return <span className="rich-transcript-tool-args">{argStr}</span>;
+                            const argStr = formatToolArguments(tool.name, tool.arguments, workspacePath);
+                            return argStr ? <span className="rich-transcript-tool-args">{argStr}</span> : null;
                           })()}
                           {tool.result && !(tool as any).isError && (
                             <svg className="rich-transcript-tool-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -405,13 +402,8 @@ export const RichTranscriptView = React.forwardRef<
                                     {tool.name}
                                   </span>
                                   {tool.arguments && (() => {
-                                    const args = tool.arguments;
-                                    const argStr = Object.keys(args).map(k => {
-                                      const val = args[k];
-                                      if (typeof val === 'string') return val.length > 30 ? val.substring(0, 30) + '...' : val;
-                                      return JSON.stringify(val);
-                                    }).join(', ');
-                                    return <span className="rich-transcript-tool-args">{argStr}</span>;
+                                    const argStr = formatToolArguments(tool.name, tool.arguments, workspacePath);
+                                    return argStr ? <span className="rich-transcript-tool-args">{argStr}</span> : null;
                                   })()}
                                   {tool.result && !(tool as any).isError && (
                                     <svg className="rich-transcript-tool-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
