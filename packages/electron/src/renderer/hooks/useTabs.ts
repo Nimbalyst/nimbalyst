@@ -169,8 +169,13 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
 
   // Remove a tab
   const removeTab = useCallback((tabId: string): void => {
+    console.log('[useTabs] removeTab called with tabId:', tabId);
     const tab = tabs.get(tabId);
-    if (!tab) return;
+    if (!tab) {
+      console.log('[useTabs] No tab found with id:', tabId);
+      return;
+    }
+    console.log('[useTabs] Found tab to remove:', tab.fileName);
 
     // Add to closed tabs history (before removing)
     setClosedTabs(prev => {

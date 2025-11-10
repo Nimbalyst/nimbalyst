@@ -242,8 +242,12 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     closeActiveTab: () => {
+      console.log('[EditorMode] closeActiveTab called, activeTabId:', tabs.activeTabId);
       if (tabs.activeTabId) {
+        console.log('[EditorMode] Calling tabs.removeTab with id:', tabs.activeTabId);
         tabs.removeTab(tabs.activeTabId);
+      } else {
+        console.log('[EditorMode] No active tab to close');
       }
     },
     handleOpen,

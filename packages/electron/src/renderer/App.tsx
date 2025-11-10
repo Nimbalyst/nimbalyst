@@ -1046,9 +1046,12 @@ export default function App() {
 
   useEffect(() => {
     const handleCloseActiveTab = () => {
+      console.log('[App] handleCloseActiveTab called, activeMode:', activeModeRef.current);
       if (activeModeRef.current === 'agent') {
+        console.log('[App] Calling agenticPanelRef.current?.closeActiveTab()');
         agenticPanelRef.current?.closeActiveTab();
       } else if (activeModeRef.current === 'files' || activeModeRef.current === 'plan') {
+        console.log('[App] Calling editorModeRef.current?.closeActiveTab(), ref exists:', !!editorModeRef.current);
         editorModeRef.current?.closeActiveTab();
       }
     };

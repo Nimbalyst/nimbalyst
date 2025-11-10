@@ -14,6 +14,7 @@ import { updateWindowTitleBars, updateNativeTheme } from '../theme/ThemeManager'
 import { getFileWatcherStatus, refreshWorkspaceFileTree, getGlobalFileWatcherStats } from '../file/FileWatcherDebug';
 import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
+import { getFocusedWindow } from '../utils/windowFocus';
 import { autoUpdaterService } from '../services/autoUpdater';
 import { KeyboardShortcuts } from './KeyboardShortcuts';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
@@ -368,7 +369,7 @@ export async function createApplicationMenu() {
                     label: 'New',
                     accelerator: KeyboardShortcuts.file.new,
                     click: async () => {
-                        const focusedWindow = BrowserWindow.getFocusedWindow();
+                        const focusedWindow = getFocusedWindow();
 
                         if (focusedWindow) {
                             const windowId = getWindowId(focusedWindow);
@@ -504,7 +505,7 @@ export async function createApplicationMenu() {
                     label: 'Save',
                     accelerator: KeyboardShortcuts.file.save,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused && !isAboutWindow(focused)) {
                             focused.webContents.send('file-save');
                         }
@@ -515,7 +516,7 @@ export async function createApplicationMenu() {
                     label: 'Close Tab',
                     accelerator: KeyboardShortcuts.file.closeTab,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             const windowId = getWindowId(focused);
                             if (windowId !== null) {
@@ -523,6 +524,7 @@ export async function createApplicationMenu() {
 
                                 // If in workspace or agentic coding mode, close the active tab
                                 if (state?.mode === 'workspace' || state?.mode === 'agentic-coding') {
+                                    logger.menu.info(`[Close Tab] Sending close-active-tab to window ${windowId}`);
                                     focused.webContents.send('close-active-tab');
                                     return;
                                 }
@@ -530,6 +532,8 @@ export async function createApplicationMenu() {
 
                             // Default behavior: close the window
                             focused.close();
+                        } else {
+                            logger.menu.warn('[Close Tab] No focused window found');
                         }
                     }
                 },
@@ -537,42 +541,7 @@ export async function createApplicationMenu() {
                     label: 'Close Project',
                     accelerator: KeyboardShortcuts.file.closeProject,
                     click: async () => {
-                        const allWindows = BrowserWindow.getAllWindows();
-
-                        // Try multiple methods to find the truly focused window
-                        const getFocusedResult = BrowserWindow.getFocusedWindow();
-                        const isFocusedResults = allWindows.filter(w => !w.isDestroyed() && w.isFocused());
-
-                        console.log('[Close Project] Menu triggered');
-                        console.log('[Close Project] All windows:', allWindows.map(w => ({
-                            id: w.id,
-                            title: w.getTitle(),
-                            isFocused: !w.isDestroyed() && w.isFocused(),
-                            isVisible: !w.isDestroyed() && w.isVisible(),
-                            isMinimized: !w.isDestroyed() && w.isMinimized(),
-                            isFocusable: !w.isDestroyed() && w.isFocusable()
-                        })));
-                        console.log('[Close Project] getFocusedWindow() returned:', getFocusedResult ? {
-                            id: getFocusedResult.id,
-                            title: getFocusedResult.getTitle()
-                        } : 'null');
-                        console.log('[Close Project] windows with isFocused()=true:', isFocusedResults.map(w => ({
-                            id: w.id,
-                            title: w.getTitle()
-                        })));
-
-                        // Prefer window that reports isFocused()=true, fall back to getFocusedWindow()
-                        let focused: BrowserWindow | null = null;
-                        if (isFocusedResults.length === 1) {
-                            focused = isFocusedResults[0];
-                            console.log('[Close Project] Using window with isFocused()=true');
-                        } else if (isFocusedResults.length > 1) {
-                            console.warn('[Close Project] Multiple windows report isFocused()=true, using first one');
-                            focused = isFocusedResults[0];
-                        } else {
-                            focused = getFocusedResult;
-                            console.log('[Close Project] Using getFocusedWindow() result');
-                        }
+                        const focused = getFocusedWindow();
 
                         if (focused && !focused.isDestroyed()) {
                             // Get window info for logging
@@ -629,7 +598,7 @@ export async function createApplicationMenu() {
                     label: 'Copy as Markdown',
                     accelerator: KeyboardShortcuts.edit.copyMarkdown,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('copy-as-markdown');
                         }
@@ -642,7 +611,7 @@ export async function createApplicationMenu() {
                     label: 'Find...',
                     accelerator: KeyboardShortcuts.edit.find,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('toggle-search-replace');
                         }
@@ -653,7 +622,7 @@ export async function createApplicationMenu() {
                     label: 'View Local History...',
                     accelerator: KeyboardShortcuts.edit.viewHistory,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('view-history');
                         }
@@ -664,7 +633,7 @@ export async function createApplicationMenu() {
                     label: 'Approve Current Action',
                     accelerator: KeyboardShortcuts.edit.approve,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('approve-action');
                         }
@@ -674,7 +643,7 @@ export async function createApplicationMenu() {
                     label: 'Reject Current Action',
                     accelerator: KeyboardShortcuts.edit.reject,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('reject-action');
                         }
@@ -690,7 +659,7 @@ export async function createApplicationMenu() {
                     label: 'Files Mode',
                     accelerator: KeyboardShortcuts.view.filesMode,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('set-content-mode', 'files');
                         }
@@ -701,7 +670,7 @@ export async function createApplicationMenu() {
                     accelerator: KeyboardShortcuts.view.agentMode,
                     click: async () => {
                         console.log('[Menu] Agent Mode clicked');
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         console.log('[Menu] Focused window:', focused ? 'exists' : 'null');
                         if (focused) {
                             console.log('[Menu] Sending set-content-mode event with agent');
@@ -715,7 +684,7 @@ export async function createApplicationMenu() {
                     label: 'Toggle AI Chat Panel',
                     accelerator: KeyboardShortcuts.view.toggleAIChat,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('toggle-ai-chat-panel');
                         }
@@ -725,7 +694,7 @@ export async function createApplicationMenu() {
                     label: 'Toggle Bottom Panel',
                     accelerator: KeyboardShortcuts.view.toggleBottomPanel,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('toggle-bottom-panel');
                         }
@@ -737,7 +706,7 @@ export async function createApplicationMenu() {
                     label: 'Navigate Back',
                     accelerator: KeyboardShortcuts.view.navigateBack,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('navigation:go-back');
                         }
@@ -747,7 +716,7 @@ export async function createApplicationMenu() {
                     label: 'Navigate Forward',
                     accelerator: KeyboardShortcuts.view.navigateForward,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('navigation:go-forward');
                         }
@@ -759,7 +728,7 @@ export async function createApplicationMenu() {
                     label: 'Next Tab',
                     accelerator: KeyboardShortcuts.view.nextTab,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('next-tab');
                         }
@@ -769,7 +738,7 @@ export async function createApplicationMenu() {
                     label: 'Previous Tab',
                     accelerator: KeyboardShortcuts.view.prevTab,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('previous-tab');
                         }
@@ -781,7 +750,7 @@ export async function createApplicationMenu() {
                     label: 'Actual Size',
                     accelerator: KeyboardShortcuts.view.actualSize,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) focused.webContents.setZoomFactor(1);
                     }
                 },
@@ -789,7 +758,7 @@ export async function createApplicationMenu() {
                     label: 'Zoom In',
                     accelerator: KeyboardShortcuts.view.zoomIn,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             const currentZoom = focused.webContents.getZoomFactor();
                             focused.webContents.setZoomFactor(currentZoom + 0.1);
@@ -800,7 +769,7 @@ export async function createApplicationMenu() {
                     label: 'Zoom Out',
                     accelerator: KeyboardShortcuts.view.zoomOut,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             const currentZoom = focused.webContents.getZoomFactor();
                             focused.webContents.setZoomFactor(Math.max(0.5, currentZoom - 0.1));
@@ -938,7 +907,7 @@ export async function createApplicationMenu() {
                     label: 'Toggle Full Screen',
                     accelerator: KeyboardShortcuts.view.toggleFullScreen,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.setFullScreen(!focused.isFullScreen());
                         }
@@ -973,7 +942,7 @@ export async function createApplicationMenu() {
                 //     label: 'Agentic Coding...',
                 //     accelerator: KeyboardShortcuts.window.agenticCoding,
                 //     click: async () => {
-                //         const focused = BrowserWindow.getFocusedWindow();
+                //         const focused = getFocusedWindow();
                 //         if (!focused) return;
                 //
                 //         const windowId = getWindowId(focused);
@@ -1010,7 +979,7 @@ export async function createApplicationMenu() {
                     label: 'Toggle Developer Tools',
                     accelerator: KeyboardShortcuts.view.toggleDevTools,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) focused.webContents.toggleDevTools();
                     }
                 },
@@ -1019,7 +988,7 @@ export async function createApplicationMenu() {
                     label: 'Reload',
                     accelerator: KeyboardShortcuts.view.reload,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) focused.webContents.reload();
                     }
                 },
@@ -1027,7 +996,7 @@ export async function createApplicationMenu() {
                     label: 'Force Reload',
                     accelerator: KeyboardShortcuts.view.forceReload,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) focused.webContents.reloadIgnoringCache();
                     }
                 },
@@ -1036,7 +1005,7 @@ export async function createApplicationMenu() {
                     label: 'Toggle Debug Console',
                     accelerator: KeyboardShortcuts.developer.toggleDebugConsole,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             focused.webContents.send('toggle-debug-console');
                         }
@@ -1046,7 +1015,7 @@ export async function createApplicationMenu() {
                 {
                     label: 'File Watcher Status',
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             const status = getFileWatcherStatus(focused.id);
                             dialog.showMessageBox(focused, {
@@ -1062,7 +1031,7 @@ export async function createApplicationMenu() {
                 {
                     label: 'Global Watcher Stats',
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             const stats = getGlobalFileWatcherStats();
                             dialog.showMessageBox(focused, {
@@ -1079,7 +1048,7 @@ export async function createApplicationMenu() {
                     label: 'Refresh File Tree',
                     accelerator: KeyboardShortcuts.developer.refreshFileTree,
                     click: async () => {
-                        const focused = BrowserWindow.getFocusedWindow();
+                        const focused = getFocusedWindow();
                         if (focused) {
                             refreshWorkspaceFileTree(focused);
                         }
@@ -1133,7 +1102,7 @@ export async function createApplicationMenu() {
                                 const { database } = await import('../database/initialize');
                                 const result = await database.startProtocolServer();
 
-                            const focused = BrowserWindow.getFocusedWindow();
+                            const focused = getFocusedWindow();
                             if (focused) {
                                 dialog.showMessageBox(focused, {
                                     type: 'info',
@@ -1144,7 +1113,7 @@ export async function createApplicationMenu() {
                                 });
                             }
                         } catch (error) {
-                            const focused = BrowserWindow.getFocusedWindow();
+                            const focused = getFocusedWindow();
                             if (focused) {
                                 dialog.showMessageBox(focused, {
                                     type: 'error',
@@ -1163,7 +1132,7 @@ export async function createApplicationMenu() {
                             const { database } = await import('../database/initialize');
                             const result = await database.stopProtocolServer();
 
-                            const focused = BrowserWindow.getFocusedWindow();
+                            const focused = getFocusedWindow();
                             if (focused) {
                                 dialog.showMessageBox(focused, {
                                     type: 'info',
@@ -1173,7 +1142,7 @@ export async function createApplicationMenu() {
                                 });
                             }
                         } catch (error) {
-                            const focused = BrowserWindow.getFocusedWindow();
+                            const focused = getFocusedWindow();
                             if (focused) {
                                 dialog.showMessageBox(focused, {
                                     type: 'error',
@@ -1192,7 +1161,7 @@ export async function createApplicationMenu() {
                             const { database } = await import('../database/initialize');
                             const status = await database.getProtocolServerStatus();
 
-                            const focused = BrowserWindow.getFocusedWindow();
+                            const focused = getFocusedWindow();
                             if (focused) {
                                 if (status.running) {
                                     const connectionString = `postgresql://${status.host}:${status.port}/pglite`;
@@ -1228,7 +1197,7 @@ Note: Only one connection at a time is supported.`,
                                 }
                             }
                         } catch (error) {
-                            const focused = BrowserWindow.getFocusedWindow();
+                            const focused = getFocusedWindow();
                             if (focused) {
                                 dialog.showMessageBox(focused, {
                                     type: 'error',
@@ -1312,7 +1281,7 @@ Note: Only one connection at a time is supported.`,
                 //             context: 'menu',
                 //         });
                 //         // Send message to renderer to open welcome tab
-                //         const focusedWindow = BrowserWindow.getFocusedWindow();
+                //         const focusedWindow = getFocusedWindow();
                 //         if (focusedWindow) {
                 //             focusedWindow.webContents.send('open-welcome-tab');
                 //         }
@@ -1338,7 +1307,7 @@ Note: Only one connection at a time is supported.`,
                             helpType: 'keyboard_shortcuts',
                             context: 'menu',
                         });
-                        const focusedWindow = BrowserWindow.getFocusedWindow();
+                        const focusedWindow = getFocusedWindow();
                         if (focusedWindow) {
                             focusedWindow.webContents.send('open-keyboard-shortcuts');
                         }
@@ -1360,7 +1329,7 @@ Note: Only one connection at a time is supported.`,
                             context: 'menu',
                         });
                         // Send message to renderer to open welcome tab
-                        const focusedWindow = BrowserWindow.getFocusedWindow();
+                        const focusedWindow = getFocusedWindow();
                         if (focusedWindow) {
                             focusedWindow.webContents.send('open-welcome-tab');
                         }
@@ -1386,7 +1355,7 @@ Note: Only one connection at a time is supported.`,
                             helpType: 'keyboard_shortcuts',
                             context: 'menu',
                         });
-                        const focusedWindow = BrowserWindow.getFocusedWindow();
+                        const focusedWindow = getFocusedWindow();
                         if (focusedWindow) {
                             focusedWindow.webContents.send('open-keyboard-shortcuts');
                         }
