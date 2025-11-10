@@ -114,15 +114,15 @@ class NotificationService {
     }
 
     // In development mode, use AppleScript for more reliable notifications on macOS
-    if (this.isDevelopmentMode() && process.platform === 'darwin') {
-      logger.main.info('[NotificationService] Using AppleScript notification (development mode)');
-      try {
-        await this.showAppleScriptNotification(options.title, options.body);
-      } catch (error) {
-        logger.main.error('[NotificationService] AppleScript notification failed:', error);
-      }
-      return;
-    }
+    // if (this.isDevelopmentMode() && process.platform === 'darwin') {
+    //   logger.main.info('[NotificationService] Using AppleScript notification (development mode)');
+    //   try {
+    //     await this.showAppleScriptNotification(options.title, options.body);
+    //   } catch (error) {
+    //     logger.main.error('[NotificationService] AppleScript notification failed:', error);
+    //   }
+    //   return;
+    // }
 
     try {
       // Create and show the notification using Electron API (production mode)
