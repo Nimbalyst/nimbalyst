@@ -92,6 +92,7 @@ export interface ProviderConfig {
   allowedTools?: string[];  // List of allowed tool names, ['*'] for all tools
   mcpEnabled?: boolean;
   permissionMode?: string;
+  authMethod?: string; // Authentication method: 'login' or 'api-key'
 }
 
 export interface Model {
