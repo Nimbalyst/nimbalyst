@@ -1,0 +1,217 @@
+.file-edits-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--surface-secondary);
+  border-right: 1px solid var(--border-primary);
+}
+
+.file-edits-sidebar__header {
+  padding: 0.25rem 0.75rem;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.file-edits-sidebar__title {
+  font-size: 0.875rem;
+  margin: 10px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.file-edits-sidebar__title-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.file-edits-sidebar__title-count {
+  margin-left: auto;
+  font-size: 9px;
+  padding: 0.125rem 0.25rem;
+  background-color: var(--surface-tertiary);
+  border-radius: 0.25rem;
+}
+
+.file-edits-sidebar__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.25rem;
+}
+
+.file-edits-sidebar__empty {
+  padding: 1rem;
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* Section */
+.file-edits-sidebar__section {
+  margin-bottom: 0.375rem;
+}
+
+.file-edits-sidebar__section-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background-color: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.file-edits-sidebar__section-header:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.file-edits-sidebar__section-header-content {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.file-edits-sidebar__section-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.file-edits-sidebar__section-count {
+  padding: 0.125rem 0.25rem;
+  background-color: var(--surface-secondary);
+  border-radius: 0.25rem;
+  font-size: 9px;
+}
+
+.file-edits-sidebar__section-chevron {
+  width: 0.75rem;
+  height: 0.75rem;
+  transition: transform 0.2s;
+}
+
+.file-edits-sidebar__section-chevron--collapsed {
+  transform: rotate(-90deg);
+}
+
+.file-edits-sidebar__section-files {
+  margin-top: 0.25rem;
+  padding-left: 0.5rem;
+}
+
+/* File Item */
+.file-edits-sidebar__file {
+  width: 100%;
+  text-align: left;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+  margin-bottom: 0.125rem;
+  background: transparent;
+}
+
+.file-edits-sidebar__file:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--border-primary);
+}
+
+.file-edits-sidebar__file-content {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.file-edits-sidebar__file-operation-icon {
+  flex-shrink: 0;
+}
+
+.file-edits-sidebar__file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-edits-sidebar__file-name {
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-edits-sidebar__file-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.6875rem;
+  flex-shrink: 0;
+}
+
+.file-edits-sidebar__file-stats-added {
+  color: var(--success-color);
+}
+
+.file-edits-sidebar__file-stats-removed {
+  color: var(--error-color);
+}
+
+/* Git Status Badge */
+.file-edits-sidebar__git-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: 2px;
+  flex-shrink: 0;
+  color: white;
+}
+
+.file-edits-sidebar__git-status--modified {
+  background-color: var(--warning-color);
+}
+
+.file-edits-sidebar__git-status--staged {
+  background-color: var(--success-color);
+}
+
+.file-edits-sidebar__git-status--untracked {
+  background-color: var(--text-tertiary);
+  color: var(--surface-primary);
+}
+
+.file-edits-sidebar__git-status--deleted {
+  background-color: var(--error-color);
+}
+
+/* Operation Icons */
+.file-edits-sidebar__icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.file-edits-sidebar__icon--create {
+  color: var(--success-color);
+}
+
+.file-edits-sidebar__icon--edit {
+  color: var(--primary-color);
+}
+
+.file-edits-sidebar__icon--delete {
+  color: var(--error-color);
+}
+
+.file-edits-sidebar__icon--rename {
+  color: var(--warning-color);
+}
