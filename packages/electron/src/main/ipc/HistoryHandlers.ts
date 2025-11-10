@@ -84,10 +84,14 @@ export async function registerHistoryHandlers() {
             ORDER BY timestamp DESC
         `, [filePath]);
 
-        return result.rows.map((row: any) => ({
-            ...row.metadata,
-            timestamp: row.timestamp
-        }));
+        return result.rows.map((row: any) => {
+            // Parse metadata if it's a string (PGLite returns JSONB as strings)
+            const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata;
+            return {
+                metadata,
+                timestamp: row.timestamp
+            };
+        });
     });
 
     // Mark all incremental-approval tags for a session as reviewed

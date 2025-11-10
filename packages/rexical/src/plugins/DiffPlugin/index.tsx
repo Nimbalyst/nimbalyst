@@ -74,14 +74,11 @@ export function DiffPlugin(): JSX.Element | null {
   const isEditable = useLexicalEditable();
 
   useEffect(() => {
-    // Track if we previously had diff nodes and if we're in an active command
-    let hadDiffNodesRef = false;
+    // Track if we're in an active command
     let commandInProgressRef = false;
 
     // Apply diff styling based on node state
     const updateDiffStyling = () => {
-      let diffNodesFound = 0;
-
       editor.getEditorState().read(() => {
         const root = $getRoot();
         const theme = editor._config.theme;
@@ -121,15 +118,12 @@ export function DiffPlugin(): JSX.Element | null {
               // Apply appropriate diff class based on state
               if (diffState === 'added' && diffAddClass) {
                 element.classList.add(diffAddClass);
-                diffNodesFound++;
                 // console.log('[DiffPlugin] Applied ADDED class to node:', node.getKey(), node.getType());
               } else if (diffState === 'removed' && diffRemoveClass) {
                 element.classList.add(diffRemoveClass);
-                diffNodesFound++;
                 // console.log('[DiffPlugin] Applied REMOVED class to node:', node.getKey(), node.getType());
               } else if (diffState === 'modified' && diffModifyClass) {
                 element.classList.add(diffModifyClass);
-                diffNodesFound++;
                 // console.log('[DiffPlugin] Applied MODIFIED class to node:', node.getKey(), node.getType());
               }
             }
@@ -147,22 +141,7 @@ export function DiffPlugin(): JSX.Element | null {
         for (const child of root.getChildren()) {
           traverseNodes(child);
         }
-        // console.log('[DiffPlugin updateDiffStyling] Total diff nodes found:', diffNodesFound);
       });
-
-      // Check if diff nodes were manually cleared (not via a command)
-      // Only trigger if:
-      // 1. We had diffs before
-      // 2. We have zero diffs now
-      // 3. We're not in the middle of executing a command
-      if (hadDiffNodesRef && diffNodesFound === 0 && !commandInProgressRef) {
-        // All diff nodes were removed manually - dispatch CLEAR_DIFF_TAG_COMMAND
-        setTimeout(() => {
-          editor.dispatchCommand(CLEAR_DIFF_TAG_COMMAND, undefined);
-        }, 100);
-      }
-
-      hadDiffNodesRef = diffNodesFound > 0;
     };
 
     // Update styling on editor state changes
