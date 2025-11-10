@@ -20,6 +20,7 @@ import {
   APPLY_DIFF_COMMAND,
   APPROVE_DIFF_COMMAND,
   REJECT_DIFF_COMMAND,
+  CLEAR_DIFF_TAG_COMMAND,
   applyMarkdownReplace,
   LiveNodeKeyState,
   type TextReplacement,
@@ -73,8 +74,14 @@ export function DiffPlugin(): JSX.Element | null {
   const isEditable = useLexicalEditable();
 
   useEffect(() => {
+    // Track if we previously had diff nodes and if we're in an active command
+    let hadDiffNodesRef = false;
+    let commandInProgressRef = false;
+
     // Apply diff styling based on node state
     const updateDiffStyling = () => {
+      let diffNodesFound = 0;
+
       editor.getEditorState().read(() => {
         const root = $getRoot();
         const theme = editor._config.theme;
@@ -90,7 +97,6 @@ export function DiffPlugin(): JSX.Element | null {
           return; // No theme classes defined
         }
 
-        let diffNodesFound = 0;
         const traverseNodes = (node: LexicalNode) => {
           // Skip table row nodes as they don't have direct DOM elements in some implementations
           // But DO process table nodes and table cell nodes which have DOM elements
@@ -143,6 +149,20 @@ export function DiffPlugin(): JSX.Element | null {
         }
         // console.log('[DiffPlugin updateDiffStyling] Total diff nodes found:', diffNodesFound);
       });
+
+      // Check if diff nodes were manually cleared (not via a command)
+      // Only trigger if:
+      // 1. We had diffs before
+      // 2. We have zero diffs now
+      // 3. We're not in the middle of executing a command
+      if (hadDiffNodesRef && diffNodesFound === 0 && !commandInProgressRef) {
+        // All diff nodes were removed manually - dispatch CLEAR_DIFF_TAG_COMMAND
+        setTimeout(() => {
+          editor.dispatchCommand(CLEAR_DIFF_TAG_COMMAND, undefined);
+        }, 100);
+      }
+
+      hadDiffNodesRef = diffNodesFound > 0;
     };
 
     // Update styling on editor state changes
@@ -276,12 +296,23 @@ export function DiffPlugin(): JSX.Element | null {
     const approveDiffUnregister = editor.registerCommand(
       APPROVE_DIFF_COMMAND,
       () => {
+        commandInProgressRef = true;
+
         editor.update(() => {
           $approveDiffs(editor);
         });
 
         // Clear diff styling after approval
         setTimeout(() => updateDiffStyling(), 0);
+
+        // Check if any diffs remain after approval
+        setTimeout(() => {
+          const hasDiff = $hasDiffNodes(editor);
+          if (!hasDiff) {
+            editor.dispatchCommand(CLEAR_DIFF_TAG_COMMAND, undefined);
+          }
+          commandInProgressRef = false;
+        }, 100);
 
         return true;
       },
@@ -292,12 +323,23 @@ export function DiffPlugin(): JSX.Element | null {
     const rejectDiffUnregister = editor.registerCommand(
       REJECT_DIFF_COMMAND,
       () => {
+        commandInProgressRef = true;
+
         editor.update(() => {
           $rejectDiffs(editor);
         });
 
         // Clear diff styling after rejection
         setTimeout(() => updateDiffStyling(), 0);
+
+        // Check if any diffs remain after rejection
+        setTimeout(() => {
+          const hasDiff = $hasDiffNodes(editor);
+          if (!hasDiff) {
+            editor.dispatchCommand(CLEAR_DIFF_TAG_COMMAND, undefined);
+          }
+          commandInProgressRef = false;
+        }, 100);
 
         return true;
       },
