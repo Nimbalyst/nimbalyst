@@ -509,7 +509,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Check if we should clear the pending-review tag after save
         // ONLY check for user-initiated saves (manual/autosave), NOT AI operations
         // During AI operations (apply/accept/reject), skipDiffCheck will be true
-        if (!skipDiffCheck && editorRef.current && pendingAIEditTagRef.current.tagId) {
+        if (!skipDiffCheck && editorRef.current && pendingAIEditTagRef.current?.tagId) {
           const { $hasDiffNodes } = await import('rexical');
           const hasDiffs = editorRef.current.getEditorState().read(() => {
             return $hasDiffNodes(editorRef.current!);
@@ -517,9 +517,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
           if (!hasDiffs) {
             logger.ui.info('[TabEditor] No diffs remaining after user save, clearing pending tag');
-            const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
+            const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current!;
             await window.electronAPI.invoke('history:update-tag-status', tagFilePath, tagId, 'reviewed');
-            pendingAIEditTagRef.current = { tagId: '', sessionId: '', filePath: '' };
+            pendingAIEditTagRef.current = null;
           } else {
             logger.ui.info('[TabEditor] Diffs still present after save, keeping pending tag');
           }
@@ -1320,17 +1320,32 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             lastSavedContentRef.current = currentContent;
           }
 
-          // Mark tag as reviewed (all diffs processed incrementally)
+          // CRITICAL: Mark the old pre-edit tag as reviewed FIRST
+          // This must happen before creating the new incremental-approval tag
+          // because the DB constraint allows only ONE tag with status='pending-review' per file
           logger.ui.info('[TabEditor] About to call updateTagStatus:', { filePath, tagId, status: 'reviewed' });
           await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed');
           logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed: ${tagId}`);
 
-          // Also mark any pending incremental-approval tags as reviewed
-          // This cleans up the baseline so a new AI session starts fresh
-          if (pendingAIEditTagRef.current?.sessionId) {
-            await window.electronAPI.invoke('history:mark-incremental-tags-reviewed', filePath, pendingAIEditTagRef.current.sessionId);
-            logger.ui.info(`[TabEditor] Marked incremental-approval tags as reviewed for session: ${pendingAIEditTagRef.current.sessionId}`);
+          // NOW create incremental-approval tag with the accepted state
+          // This becomes the baseline for any future AI edits in this session
+          // Without this, future AI edits will diff against the original pre-edit tag
+          const { sessionId } = pendingAIEditTagRef.current;
+          if (sessionId) {
+            await window.electronAPI.invoke('history:create-incremental-approval-tag',
+              filePath,
+              currentContent,  // The accepted state becomes the new baseline
+              sessionId,
+              {}  // Can optionally track which groups were accepted/rejected
+            );
+            logger.ui.info(`[TabEditor] Created incremental-approval tag for accepted state in session: ${sessionId}`);
           }
+
+          // NOTE: We do NOT mark incremental-approval tags as reviewed here
+          // The most recent incremental-approval tag (which we just created) serves as
+          // the baseline for any future AI edits in this session
+          // Incremental tags will be marked as reviewed when the entire session ends
+          // or when the user explicitly starts a new AI session
 
           // Clear the pending tag reference
           pendingAIEditTagRef.current = null;

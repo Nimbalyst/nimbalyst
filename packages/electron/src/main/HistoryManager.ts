@@ -279,6 +279,18 @@ export class HistoryManager {
         workspaceId = dirPath;
       }
 
+      // CRITICAL: Mark any existing pending tags as reviewed
+      // The unique index ensures only ONE can be pending-review at a time
+      // When starting a new AI edit (creating pre-edit tag), any previous pending
+      // incremental-approval tag should be marked as reviewed since the user is
+      // moving forward with new edits
+      await database.query(`
+        UPDATE document_history
+        SET metadata = jsonb_set(metadata, '{status}', to_jsonb('reviewed'::text))
+        WHERE file_path = $1
+          AND metadata->>'status' = 'pending-review'
+      `, [filePath]);
+
       // Store tag as a special history entry with tag metadata
       await database.query(`
         INSERT INTO document_history (
@@ -554,13 +566,14 @@ export class HistoryManager {
         workspaceId = dirPath;
       }
 
-      // CRITICAL: Mark any existing pending incremental-approval tag as superseded
+      // CRITICAL: Mark any existing pending tag as reviewed
       // The unique index ensures only ONE can be pending-review at a time
+      // When creating a new incremental-approval, the previous state (whether pre-edit or
+      // previous incremental-approval) has been reviewed and accepted by the user
       await database.query(`
         UPDATE document_history
-        SET metadata = jsonb_set(metadata, '{status}', to_jsonb('superseded'::text))
+        SET metadata = jsonb_set(metadata, '{status}', to_jsonb('reviewed'::text))
         WHERE file_path = $1
-          AND metadata->>'type' = 'incremental-approval'
           AND metadata->>'status' = 'pending-review'
       `, [filePath]);
 
@@ -599,77 +612,26 @@ export class HistoryManager {
   }
 
   /**
-   * Get the latest incremental-approval tag for a session
-   * Used to find the correct baseline when comparing diffs after partial accept/reject
-   */
-  async getLatestIncrementalApprovalTag(filePath: string, sessionId: string): Promise<{ content: string; timestamp: number } | null> {
-    try {
-      // Ensure database is initialized
-      if (!database.isInitialized()) {
-        await database.initialize();
-      }
-
-      const result = await database.query<{
-        content: Buffer;
-        timestamp: number;
-      }>(`
-        SELECT content, timestamp
-        FROM document_history
-        WHERE file_path = $1
-          AND metadata->>'type' = 'incremental-approval'
-          AND metadata->>'sessionId' = $2
-          AND metadata->>'status' = 'pending-review'
-        ORDER BY timestamp DESC
-        LIMIT 1
-      `, [filePath, sessionId]);
-
-      if (result.rows.length === 0) {
-        return null;
-      }
-
-      const row = result.rows[0];
-      const compressed = row.content;
-      const decompressed = await gunzip(compressed);
-      const content = decompressed.toString('utf-8');
-
-      return {
-        content,
-        timestamp: row.timestamp
-      };
-    } catch (error) {
-      logger.main.error('[HistoryManager] Failed to get latest incremental-approval tag:', error);
-      return null;
-    }
-  }
-
-  /**
    * Get the baseline content for diff comparison
-   * Returns the latest incremental-approval tag if it exists, otherwise the pre-edit tag
+   * With the unique constraint, there's only ONE pending tag per file.
+   * It will be either a pre-edit tag or an incremental-approval tag.
    */
   async getDiffBaseline(filePath: string): Promise<{ content: string; tagType: 'pre-edit' | 'incremental-approval' } | null> {
     try {
-      // First, find the pending pre-edit tag to get the session ID
+      // SIMPLIFIED: With the unique constraint, there's only ONE pending tag per file
+      // It will be either:
+      // - A pre-edit tag (if no acceptances have happened yet)
+      // - An incremental-approval tag (if user has accepted some changes)
+      // Just return whichever one is pending
       const pendingTags = await this.getPendingTags(filePath);
       if (pendingTags.length === 0) {
         return null; // No AI session in progress
       }
 
-      const preEditTag = pendingTags[0];
-      const sessionId = preEditTag.sessionId;
-
-      // Check for latest incremental-approval tag for this session
-      const incrementalTag = await this.getLatestIncrementalApprovalTag(filePath, sessionId);
-      if (incrementalTag) {
-        return {
-          content: incrementalTag.content,
-          tagType: 'incremental-approval'
-        };
-      }
-
-      // No incremental approvals yet - return pre-edit tag content
+      const pendingTag = pendingTags[0];
       return {
-        content: preEditTag.content,
-        tagType: 'pre-edit'
+        content: pendingTag.content,
+        tagType: pendingTag.type as 'pre-edit' | 'incremental-approval'
       };
     } catch (error) {
       logger.main.error('[HistoryManager] Failed to get diff baseline:', error);
