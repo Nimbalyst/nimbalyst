@@ -100,10 +100,115 @@ export class PackageService {
 
   /**
    * Check if a package is installed
+   *
+   * Checks both workspace state AND actual file existence on disk.
+   * A package is considered installed if:
+   * 1. It's marked as installed in workspace state, OR
+   * 2. ALL of its command files AND tracker schemas exist on disk
+   *
+   * If all files exist but state is not updated, the state will be synchronized.
    */
   async isPackageInstalled(packageId: string): Promise<boolean> {
+    // First check workspace state (fast path)
     const installed = await this.getInstalledPackages();
-    return installed.some(pkg => pkg.packageId === packageId && pkg.enabled);
+    const stateInstalled = installed.some(pkg => pkg.packageId === packageId && pkg.enabled);
+
+    if (stateInstalled) {
+      return true;
+    }
+
+    // If not in state, check if ALL files exist on disk
+    const pkg = getPackageById(packageId);
+    if (!pkg) {
+      return false;
+    }
+
+    // Check that ALL custom commands exist
+    for (const command of pkg.customCommands) {
+      const exists = await this.checkCommandExists(command.name, pkg.settings?.commandsLocation || 'project');
+      if (!exists) {
+        return false; // Missing at least one command file
+      }
+    }
+
+    // Check that ALL tracker schemas exist
+    for (const schema of pkg.trackerSchemas) {
+      const exists = await this.checkTrackerSchemaExists(schema.type);
+      if (!exists) {
+        return false; // Missing at least one tracker schema
+      }
+    }
+
+    // All files exist - synchronize the state
+    const hasAnyFiles = pkg.customCommands.length > 0 || pkg.trackerSchemas.length > 0;
+    if (hasAnyFiles) {
+      console.log(`[PackageService] Found all installed files for ${packageId}, synchronizing state`);
+      await this.synchronizePackageState(packageId);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Synchronize workspace state for a package that has files on disk
+   */
+  private async synchronizePackageState(packageId: string): Promise<void> {
+    try {
+      const installed = await this.getInstalledPackages();
+      const existingIndex = installed.findIndex(p => p.packageId === packageId);
+
+      const packageEntry: InstalledPackage = {
+        packageId,
+        installedAt: new Date().toISOString(),
+        enabled: true,
+      };
+
+      if (existingIndex >= 0) {
+        installed[existingIndex] = packageEntry;
+      } else {
+        installed.push(packageEntry);
+      }
+
+      await window.electronAPI.invoke('workspace:update-state', this.workspacePath, {
+        installedPackages: installed,
+      });
+
+      console.log(`[PackageService] Synchronized state for ${packageId}`);
+    } catch (error) {
+      console.error(`[PackageService] Failed to synchronize state for ${packageId}:`, error);
+    }
+  }
+
+  /**
+   * Check if a command file exists on disk
+   */
+  private async checkCommandExists(commandName: string, location: 'project' | 'global'): Promise<boolean> {
+    try {
+      if (location === 'global') {
+        const result = await window.electronAPI.invoke('read-global-claude-file', `commands/${commandName}.md`);
+        return !!result?.content;
+      } else {
+        const fullPath = `${this.workspacePath}/.claude/commands/${commandName}.md`;
+        const result = await window.electronAPI.readFileContent(fullPath);
+        return !!result?.content;
+      }
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Check if a tracker schema file exists on disk
+   */
+  private async checkTrackerSchemaExists(type: string): Promise<boolean> {
+    try {
+      const fullPath = `${this.workspacePath}/.nimbalyst/trackers/${type}.yaml`;
+      const result = await window.electronAPI.readFileContent(fullPath);
+      return !!result?.content;
+    } catch (error) {
+      return false;
+    }
   }
 
   /**
