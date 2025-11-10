@@ -169,6 +169,23 @@ export const RichTranscriptView = React.forwardRef<
     return !isLoginRequiredError(messages[prevIndex]);
   };
 
+  // Helper to get provider display name
+  const getProviderDisplayName = (provider?: string): string => {
+    switch (provider) {
+      case 'claude':
+        return 'Claude';
+      case 'claude-code':
+        return 'Claude Code';
+      case 'openai':
+      case 'openai-codex':
+        return 'OpenAI';
+      case 'lmstudio':
+        return 'LM Studio';
+      default:
+        return 'Agent';
+    }
+  };
+
   return (
     <div className="rich-transcript-view">
       {/* Settings Panel */}
@@ -211,7 +228,19 @@ export const RichTranscriptView = React.forwardRef<
         <div className={`rich-transcript-content ${settings.compactMode ? 'compact' : 'normal'}`}>
           {messages.length === 0 && !isWaitingForResponse ? (
             <div className="rich-transcript-empty">
-              No messages to display
+              <div className="rich-transcript-empty-content">
+                <div className="rich-transcript-empty-title">
+                  {getProviderDisplayName(provider)} is ready to assist with:
+                </div>
+                <ul className="rich-transcript-empty-capabilities">
+                  <li>Web research</li>
+                  <li>Code analysis</li>
+                  <li>File editing</li>
+                </ul>
+                <div className="rich-transcript-empty-footer">
+                  Enter a task below to get started
+                </div>
+              </div>
             </div>
           ) : (
             <div className="rich-transcript-messages">
