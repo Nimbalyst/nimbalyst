@@ -30,15 +30,12 @@ export function WorkspaceWelcome({ workspaceName }: WorkspaceWelcomeProps) {
           )}
         </div>
         <h1 className="workspace-welcome-title">{workspaceName}</h1>
-        <p className="workspace-welcome-text">
-          Select a file from the sidebar to start editing
-        </p>
         <div className="workspace-welcome-tips">
           <h3>Quick tips:</h3>
           <ul>
-            <li>Click on any markdown file in the sidebar to open it</li>
-            <li>Use <kbd>Cmd/Ctrl + S</kbd> to save your changes</li>
-            <li>Files are automatically saved every 2 seconds when modified</li>
+            <li>Open Markdown files from the sidebar</li>
+            <li>Edit files directly or use the agent on the right side</li>
+            <li>Files are automatically saved as you work</li>
           </ul>
         </div>
       </div>
