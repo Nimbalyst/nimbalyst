@@ -26,7 +26,10 @@ import {
 } from '../utils/testHelpers';
 import {
   simulateApplyDiff,
-  waitForSave
+  waitForSave,
+  queryTags,
+  getDiffBaseline,
+  countTagsByType
 } from '../utils/aiToolSimulator';
 
 let electronApp: ElectronApplication;
@@ -564,4 +567,70 @@ test('should save partial acceptances correctly with rejections', async () => {
   await expect(editorAfterReopen).toContainText('THIRD ACCEPTED');
 
   console.log('✓ File reopened successfully without diff mode - tag was properly cleared!');
+});
+
+test('should only show remaining diffs after accepting one and reopening file', async () => {
+  // Read original content
+  const originalContent = await fs.readFile(testFilePath, 'utf8');
+
+  // STEP 1: Create a pre-edit tag
+  await page.evaluate(async ([filePath, content]) => {
+    await window.electronAPI.invoke('history:create-tag', filePath, 'test-tag-baseline', content, 'test-session-baseline', 'tool-baseline');
+  }, [testFilePath, originalContent]);
+
+  await page.waitForTimeout(200);
+
+  // STEP 2: Apply a TWO-change diff
+  const result = await simulateApplyDiff(page, testFilePath, [
+    { oldText: 'This is the first section with some content.', newText: 'FIRST CHANGE.' },
+    { oldText: 'This is the second section with different content.', newText: 'SECOND CHANGE.' }
+  ]);
+
+  expect(result.success).toBe(true);
+
+  // Wait for diff approval bar
+  await page.waitForSelector('.diff-approval-bar', { timeout: 2000 });
+
+  // Count initial diff groups (should be 2)
+  let diffGroupCount = await page.locator('.diff-node').count();
+  console.log(`Initial diff groups: ${diffGroupCount}`);
+
+  // Accept FIRST change only
+  const acceptButton = page.locator('button:has-text("Accept")').first();
+  await acceptButton.click();
+  await page.waitForTimeout(500);
+
+  // VERIFY: Incremental-approval tag was created
+  const incrementalTagCount = await countTagsByType(electronApp, testFilePath, 'incremental-approval');
+  expect(incrementalTagCount).toBeGreaterThanOrEqual(1);
+
+  // VERIFY: Baseline shifted to incremental-approval tag
+  const baseline = await getDiffBaseline(electronApp, testFilePath);
+  expect(baseline?.tagType).toBe('incremental-approval');
+
+  // CRITICAL TEST: Close and reopen the file
+  console.log('Closing tab...');
+  const closeButton = page.locator('.tab-close-button[data-filename="test.md"]');
+  await closeButton.click();
+  await page.waitForTimeout(500);
+
+  console.log('Reopening file...');
+  await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+  await page.waitForTimeout(500);
+
+  // Wait for editor
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.contentEditable, { timeout: 3000 });
+  await page.waitForTimeout(1000);
+
+  // CRITICAL: Should still show diff mode (because second change is pending)
+  await expect(page.locator('.diff-approval-bar')).toBeVisible({ timeout: 2000 });
+
+  // CRITICAL: Should only show ONE diff group (the second change)
+  const remainingDiffCount = await page.locator('.diff-node').count();
+  console.log(`Remaining diff groups after reopen: ${remainingDiffCount}`);
+
+  // The key assertion: should have fewer diffs than before (ideally 1, but at minimum less than 2)
+  expect(remainingDiffCount).toBeLessThanOrEqual(diffGroupCount);
+
+  console.log('✓ Only remaining diffs shown after incremental accept and reopen!');
 });

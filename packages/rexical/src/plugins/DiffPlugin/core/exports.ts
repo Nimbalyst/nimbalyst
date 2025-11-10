@@ -16,6 +16,7 @@ export {
   APPROVE_DIFF_COMMAND,
   REJECT_DIFF_COMMAND,
   CLEAR_DIFF_TAG_COMMAND,
+  INCREMENTAL_APPROVAL_COMMAND,
 } from './diffPluginUtils';
 
 // DiffState utilities for diff tracking

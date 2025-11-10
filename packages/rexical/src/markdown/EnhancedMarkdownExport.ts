@@ -35,7 +35,8 @@ import {
   type FrontmatterData
 } from './FrontmatterUtils';
 
-import { $getDiffState } from '../plugins/DiffPlugin/core/DiffState';
+import { $getDiffState, OriginalMarkdownState } from '../plugins/DiffPlugin/core/DiffState';
+import { $getState } from 'lexical';
 
 /**
  * Options for enhanced markdown export.
@@ -43,6 +44,14 @@ import { $getDiffState } from '../plugins/DiffPlugin/core/DiffState';
 export interface EnhancedExportOptions {
   shouldPreserveNewLines?: boolean;
   includeFrontmatter?: boolean;
+  /**
+   * When true, exports as if all diffs were rejected:
+   * - Skips 'added' nodes
+   * - Includes 'removed' nodes
+   * - Uses original markdown for 'modified' nodes
+   * Used for creating incremental-approval baseline tags
+   */
+  rejectMode?: boolean;
 }
 
 /**
@@ -55,14 +64,16 @@ export function $convertToEnhancedMarkdownString(
 ): string {
   const {
     shouldPreserveNewLines = true,
-    includeFrontmatter = true
+    includeFrontmatter = true,
+    rejectMode = false
   } = options;
 
   // Get the markdown content
   const markdownContent = $convertNodeToEnhancedMarkdownString(
     transformers,
     null,
-    shouldPreserveNewLines
+    shouldPreserveNewLines,
+    rejectMode
   );
 
   // Add frontmatter if requested and available
@@ -113,10 +124,13 @@ export function $convertNodeToEnhancedMarkdownString(
   transformers: Array<Transformer>,
   node?: ElementNode | null,
   shouldPreserveNewLines: boolean = true,
+  rejectMode: boolean = false,
 ): string {
   const exportMarkdown = createEnhancedMarkdownExport(
     transformers,
     shouldPreserveNewLines,
+    null,
+    rejectMode
   );
   return exportMarkdown(node);
 }
@@ -180,6 +194,7 @@ function createEnhancedMarkdownExport(
   transformers: Array<Transformer>,
   shouldPreserveNewLines: boolean = true,
   selection: any = null,
+  rejectMode: boolean = false,
 ): (node?: ElementNode | null) => string {
   const byType = transformersByType(transformers);
   const isNewlineDelimited = !byType.multilineElement.length;
@@ -210,6 +225,7 @@ function createEnhancedMarkdownExport(
         textMatchTransformers,
         shouldPreserveNewLines,
         selection,
+        rejectMode,
       );
 
       if (result !== null) {
@@ -228,6 +244,7 @@ function createEnhancedMarkdownExport(
           textMatchTransformers,
           shouldPreserveNewLines,
           selection,
+          rejectMode,
         );
 
         if (result !== null) {
@@ -257,11 +274,23 @@ function exportTopLevelElements(
   textMatchTransformers: Array<TextMatchTransformer>,
   shouldPreserveNewLines: boolean = false,
   selection: any = null,
+  rejectMode: boolean = false,
 ): string | null {
-  // Skip nodes marked as removed in diff state
   const diffState = $getDiffState(node);
-  if (diffState === 'removed') {
-    return null;
+
+  if (rejectMode) {
+    // In reject mode: export as if all diffs were rejected
+    if (diffState === 'added') {
+      // Skip added nodes - user doesn't want them
+      return null;
+    }
+
+    // For 'removed' nodes and unmodified nodes, continue with normal export
+  } else {
+    // Normal mode: skip removed nodes (keep added/modified)
+    if (diffState === 'removed') {
+      return null;
+    }
   }
 
   for (const transformer of elementTransformers) {
@@ -279,6 +308,7 @@ function exportTopLevelElements(
         shouldPreserveNewLines,
         elementTransformers,
         selection,
+        rejectMode,
       ),
     );
 
@@ -297,6 +327,7 @@ function exportTopLevelElements(
       shouldPreserveNewLines,
       elementTransformers,
       selection,
+      rejectMode,
     );
   } else if ($isDecoratorNode(node)) {
     // Decorator nodes at top level: just return text content as fallback
@@ -317,15 +348,26 @@ function exportChildren(
   shouldPreserveNewLines: boolean = false,
   elementTransformers?: Array<ElementTransformer | MultilineElementTransformer>,
   selection: any = null,
+  rejectMode: boolean = false,
 ): string {
   const output = [];
   const children = node.getChildren();
 
   mainLoop: for (const child of children) {
-    // Skip nodes marked as removed in diff state
     const diffState = $getDiffState(child);
-    if (diffState === 'removed') {
-      continue;
+
+    if (rejectMode) {
+      // In reject mode: skip added nodes, include removed nodes
+      if (diffState === 'added') {
+        continue;
+      }
+      // For modified nodes, the original markdown is handled at the node level
+      // For removed nodes, continue with normal export
+    } else {
+      // Normal mode: skip removed nodes
+      if (diffState === 'removed') {
+        continue;
+      }
     }
     if ($isLineBreakNode(child)) {
       if (shouldPreserveNewLines) {
@@ -407,6 +449,7 @@ function exportChildren(
               shouldPreserveNewLines,
               elementTransformers,
               selection,
+              rejectMode,
             ),
           (node: TextNode, textContent: string) => textContent,
         );
@@ -426,6 +469,7 @@ function exportChildren(
           textMatchTransformers,
           shouldPreserveNewLines,
           selection,
+          rejectMode,
         );
 
         if (result != null) {

@@ -12,3 +12,11 @@ import { createCommand, LexicalCommand } from 'lexical';
 export const CLEAR_DIFF_TAG_COMMAND: LexicalCommand<void> = createCommand(
   'CLEAR_DIFF_TAG_COMMAND'
 );
+
+/**
+ * Command to create an incremental approval tag after partial accept/reject
+ * This updates the baseline for remaining diffs while keeping the session active
+ */
+export const INCREMENTAL_APPROVAL_COMMAND: LexicalCommand<void> = createCommand(
+  'INCREMENTAL_APPROVAL_COMMAND'
+);

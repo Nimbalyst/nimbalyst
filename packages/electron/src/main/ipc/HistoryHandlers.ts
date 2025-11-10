@@ -57,6 +57,55 @@ export async function registerHistoryHandlers() {
     ipcMain.handle('history:update-tag-content', async (event, filePath: string, tagId: string, content: string) => {
         await historyManager.updateTagContent(filePath, tagId, content);
     });
+
+    // Incremental approval tags
+    ipcMain.handle('history:create-incremental-approval-tag', async (
+        event,
+        filePath: string,
+        content: string,
+        sessionId: string,
+        metadata?: { acceptedGroups?: string[], rejectedGroups?: string[], remainingGroups?: string[] }
+    ) => {
+        await historyManager.createIncrementalApprovalTag(filePath, content, sessionId, metadata);
+    });
+
+    ipcMain.handle('history:get-diff-baseline', async (event, filePath: string) => {
+        return await historyManager.getDiffBaseline(filePath);
+    });
+
+    // Debug helper: get all tags with full metadata
+    ipcMain.handle('history:get-all-tags', async (event, filePath: string) => {
+        const { database } = await import('../database/PGLiteDatabaseWorker');
+
+        const result = await database.query(`
+            SELECT metadata, timestamp
+            FROM document_history
+            WHERE file_path = $1
+            ORDER BY timestamp DESC
+        `, [filePath]);
+
+        return result.rows.map((row: any) => ({
+            ...row.metadata,
+            timestamp: row.timestamp
+        }));
+    });
+
+    // Mark all incremental-approval tags for a session as reviewed
+    ipcMain.handle('history:mark-incremental-tags-reviewed', async (event, filePath: string, sessionId: string) => {
+        const { database } = await import('../database/PGLiteDatabaseWorker');
+        const now = Date.now();
+
+        await database.query(`
+            UPDATE document_history
+            SET metadata = jsonb_set(
+                  jsonb_set(metadata, '{status}', to_jsonb('reviewed'::text)),
+                  '{updatedAt}', to_jsonb($1::bigint)
+                )
+            WHERE file_path = $2
+              AND metadata->>'type' = 'incremental-approval'
+              AND metadata->>'sessionId' = $3
+        `, [now, filePath, sessionId]);
+    });
 }
 
 export { historyManager };

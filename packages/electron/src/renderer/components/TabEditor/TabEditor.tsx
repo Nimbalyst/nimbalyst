@@ -93,7 +93,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const pendingSaveIdsRef = useRef<Set<number>>(new Set());
   const instanceIdRef = useRef<number>(Math.floor(Math.random() * 10000));
   const hasInitialContentSyncRef = useRef<boolean>(false);
-  const pendingAIEditTagRef = useRef<{tagId: string, filePath: string} | null>(null);
+  const pendingAIEditTagRef = useRef<{tagId: string, sessionId: string, filePath: string} | null>(null);
   const isApplyingDiffRef = useRef<boolean>(false); // Track programmatic diff application
 
   // Keep refs in sync with state
@@ -146,7 +146,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             return;
           }
 
-          const oldContent = pendingTags[0].content;
+          // Get the baseline for diff comparison
+          // This will be the latest incremental-approval tag if it exists, otherwise the pre-edit tag
+          const baseline = await window.electronAPI.invoke('history:get-diff-baseline', filePath);
+          const oldContent = baseline ? baseline.content : pendingTags[0].content;
 
           // Check if this tag is already being shown
           const isAlreadyShowingThisTag = pendingAIEditTagRef.current?.tagId === pendingTags[0].id;
@@ -208,6 +211,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   if (!isAlreadyShowingThisTag) {
                     pendingAIEditTagRef.current = {
                       tagId: pendingTags[0].id,
+                      sessionId: pendingTags[0].sessionId,
                       filePath: filePath
                     };
                   }
@@ -313,14 +317,34 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         mountEffectHandledPendingDiffRef.current = true;
 
         const pendingTag = unreviewedTags[0];
-        const oldContent = pendingTag.content;
+
+        // Get the baseline for diff comparison
+        // This will be the latest incremental-approval tag if it exists, otherwise the pre-edit tag
+        const baseline = await window.electronAPI.invoke('history:get-diff-baseline', filePath);
+        const oldContent = baseline ? baseline.content : pendingTag.content;
         const newContent = contentRef.current; // Use current content ref to get actual disk content
 
         console.log(`[TabEditor] Restoring pending AI edit on mount: tagId=${pendingTag.id}, status=${pendingTag.status}`);
+        console.log('[TabEditor] MOUNT EFFECT - Restoring diff:', {
+          fileName: filePath,
+          baselineType: baseline?.tagType,
+          oldContentLength: oldContent.length,
+          newContentLength: newContent.length,
+          oldHasFirstAI: oldContent.includes('FIRST AI EDIT'),
+          oldHasSecondOriginal: oldContent.includes('Second paragraph'),
+          oldHasThirdOriginal: oldContent.includes('Third paragraph'),
+          oldHasThirdAI: oldContent.includes('THIRD AI EDIT'),
+          newHasFirstAI: newContent.includes('FIRST AI EDIT'),
+          newHasThirdAI: newContent.includes('THIRD AI EDIT'),
+          contentsEqual: oldContent === newContent
+        });
+        console.log('[TabEditor] OLD CONTENT:', JSON.stringify(oldContent));
+        console.log('[TabEditor] NEW CONTENT:', JSON.stringify(newContent));
 
         // Set the ref so other parts of the component know we're in diff mode
         pendingAIEditTagRef.current = {
           tagId: pendingTag.id,
+          sessionId: pendingTag.sessionId,
           filePath: filePath
         };
 
@@ -691,7 +715,23 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         // If there are unreviewed pending AI edit tags, apply diff mode (skip conflict dialog)
         if (pendingTags && pendingTags.length > 0) {
-          const oldContent = pendingTags[0].content;
+          // Get the baseline for diff comparison
+          // This will be the latest incremental-approval tag if it exists, otherwise the pre-edit tag
+          const baseline = await window.electronAPI.invoke('history:get-diff-baseline', data.path);
+          const oldContent = baseline ? baseline.content : pendingTags[0].content;
+
+          console.log('[TabEditor] FILE WATCHER - Applying diff mode:', {
+            fileName,
+            baselineType: baseline?.tagType,
+            oldContentLength: oldContent.length,
+            newContentLength: newContent.length,
+            oldHasFirstAI: oldContent.includes('FIRST AI EDIT'),
+            oldHasSecondOriginal: oldContent.includes('Second paragraph'),
+            oldHasThirdOriginal: oldContent.includes('Third paragraph'),
+            oldHasThirdAI: oldContent.includes('THIRD AI EDIT'),
+            newHasFirstAI: newContent.includes('FIRST AI EDIT'),
+            newHasThirdAI: newContent.includes('THIRD AI EDIT')
+          });
 
           // Check if we're ALREADY in diff mode for this tag
           const alreadyInDiffMode = pendingAIEditTagRef.current?.tagId === pendingTags[0].id;
@@ -799,6 +839,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   // This ensures pendingAIEditTagRef is synchronized with actual editor state
                   pendingAIEditTagRef.current = {
                     tagId: pendingTags[0].id,
+                    sessionId: pendingTags[0].sessionId,
                     filePath: data.path
                   };
                 }
@@ -1030,12 +1071,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     const editor = editorRef.current;
 
     const handleApprove = async () => {
+      logger.ui.info('[TabEditor] handleApprove called, pendingAIEditTagRef:', pendingAIEditTagRef.current);
       if (pendingAIEditTagRef.current) {
         const { tagId, filePath } = pendingAIEditTagRef.current;
         try {
           // Mark tag as reviewed
+          logger.ui.info('[TabEditor] About to call updateTagStatus from handleApprove:', { tagId, filePath });
           await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed');
-          logger.ui.info(`[TabEditor] Marked AI edit tag as reviewed: ${tagId}`);
+          logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed from handleApprove: ${tagId}`);
 
           // Clear the pending tag reference
           pendingAIEditTagRef.current = null;
@@ -1116,14 +1159,66 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       }
     };
 
-    // Handle clearing diff tag without accept/reject (for incremental operations)
-    const handleClearDiffTag = async () => {
+    // Handle incremental approval - create tag for partial accept/reject
+    const handleIncrementalApproval = async () => {
       try {
         if (!pendingAIEditTagRef.current) {
           return;
         }
 
+        const { tagId, sessionId, filePath } = pendingAIEditTagRef.current;
+
+        // Get current editor content (includes the accepted/rejected changes)
+        if (editorRef.current) {
+          const { $convertToEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+          const transformers = getEditorTransformers();
+
+          // Get the APPROVED content (normal export - what's actually in the editor)
+          const approvedContent = editorRef.current.getEditorState().read(() => {
+            return $convertToEnhancedMarkdownString(transformers);
+          });
+
+          // Get the REJECTED content (what-if we rejected all remaining diffs)
+          // This becomes the baseline for comparing remaining diffs
+          const rejectedContent = editorRef.current.getEditorState().read(() => {
+            return $convertToEnhancedMarkdownString(transformers, { rejectMode: true });
+          });
+
+          // Save the approved content to disk
+          await window.electronAPI.saveFile(approvedContent, filePath);
+
+          // Create incremental-approval tag with the REJECTED version
+          // This is the baseline: it shows what we've decided so far (approved + rejected)
+          await window.electronAPI.invoke('history:create-incremental-approval-tag',
+            filePath,
+            rejectedContent,
+            sessionId,
+            {}  // Can optionally track which groups were accepted/rejected
+          );
+
+          logger.ui.info(`[TabEditor] Created incremental-approval tag for session: ${sessionId}`);
+
+          // Update our state
+          setContent(approvedContent);
+          contentRef.current = approvedContent;
+          setLastSavedContent(approvedContent);
+          lastSavedContentRef.current = approvedContent;
+        }
+      } catch (error) {
+        logger.ui.error('[TabEditor] Failed to create incremental-approval tag:', error);
+      }
+    };
+
+    // Handle clearing diff tag without accept/reject (for incremental operations)
+    const handleClearDiffTag = async () => {
+      try {
+        if (!pendingAIEditTagRef.current) {
+          logger.ui.warn('[TabEditor] handleClearDiffTag called but no pendingAIEditTagRef');
+          return;
+        }
+
         const { tagId, filePath } = pendingAIEditTagRef.current;
+        logger.ui.info('[TabEditor] handleClearDiffTag START:', { tagId, filePath });
 
         // CRITICAL: Save current editor state to disk FIRST
         // This preserves all the incremental accept/reject decisions the user made
@@ -1151,8 +1246,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           }
 
           // Mark tag as reviewed (all diffs processed incrementally)
+          logger.ui.info('[TabEditor] About to call updateTagStatus:', { filePath, tagId, status: 'reviewed' });
           await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed');
-          logger.ui.info(`[TabEditor] Marked AI edit tag as reviewed after incremental operations: ${tagId}`);
+          logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed: ${tagId}`);
+
+          // Also mark any pending incremental-approval tags as reviewed
+          // This cleans up the baseline so a new AI session starts fresh
+          if (pendingAIEditTagRef.current?.sessionId) {
+            await window.electronAPI.invoke('history:mark-incremental-tags-reviewed', filePath, pendingAIEditTagRef.current.sessionId);
+            logger.ui.info(`[TabEditor] Marked incremental-approval tags as reviewed for session: ${pendingAIEditTagRef.current.sessionId}`);
+          }
 
           // Clear the pending tag reference
           pendingAIEditTagRef.current = null;
@@ -1182,7 +1285,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
     // Register command listeners
     const importCommands = async () => {
-      const { APPROVE_DIFF_COMMAND, REJECT_DIFF_COMMAND, CLEAR_DIFF_TAG_COMMAND } = await import('rexical');
+      const { APPROVE_DIFF_COMMAND, REJECT_DIFF_COMMAND, CLEAR_DIFF_TAG_COMMAND, INCREMENTAL_APPROVAL_COMMAND } = await import('rexical');
       const { COMMAND_PRIORITY_LOW } = await import('lexical');
 
       const unregisterApprove = editor.registerCommand(
@@ -1203,6 +1306,17 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         COMMAND_PRIORITY_LOW
       );
 
+      const unregisterIncremental = editor.registerCommand(
+        INCREMENTAL_APPROVAL_COMMAND,
+        () => {
+          handleIncrementalApproval().catch(err => {
+            logger.ui.error('[TabEditor] Error in handleIncrementalApproval:', err);
+          });
+          return false; // Let other handlers run
+        },
+        COMMAND_PRIORITY_LOW
+      );
+
       const unregisterClear = editor.registerCommand(
         CLEAR_DIFF_TAG_COMMAND,
         () => {
@@ -1217,6 +1331,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       return () => {
         unregisterApprove();
         unregisterReject();
+        unregisterIncremental();
         unregisterClear();
       };
     };

@@ -131,6 +131,7 @@ export {
   APPROVE_DIFF_COMMAND,
   REJECT_DIFF_COMMAND,
   CLEAR_DIFF_TAG_COMMAND,
+  INCREMENTAL_APPROVAL_COMMAND,
   generateUnifiedDiff,
   type TextReplacement
 } from './plugins/DiffPlugin/core/exports';

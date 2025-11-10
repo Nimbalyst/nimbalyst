@@ -253,3 +253,42 @@ export async function waitForSave(page: Page, fileName: string = 'test.md', time
   const tab = page.locator('.file-tabs-container .tab', { has: page.locator('.tab-title', { hasText: fileName }) });
   await tab.locator('.tab-dirty-indicator').waitFor({ state: 'hidden', timeout });
 }
+
+/**
+ * Query all tags for a file from the database (returns full metadata)
+ * This includes status, sessionId, tagId, etc.
+ */
+export async function queryTags(electronApp: any, filePath: string): Promise<any[]> {
+  const page = await electronApp.firstWindow();
+  return page.evaluate(async (filePath: string) => {
+    return await window.electronAPI.invoke('history:get-all-tags', filePath);
+  }, filePath);
+}
+
+/**
+ * Get pending tags for a file
+ */
+export async function getPendingTags(electronApp: any, filePath: string): Promise<any[]> {
+  const page = await electronApp.firstWindow();
+  return page.evaluate(async (filePath: string) => {
+    return await window.electronAPI.history.getPendingTags(filePath);
+  }, filePath);
+}
+
+/**
+ * Get the diff baseline for a file (latest incremental-approval or pre-edit tag)
+ */
+export async function getDiffBaseline(electronApp: any, filePath: string): Promise<{ content: string; tagType: string } | null> {
+  const page = await electronApp.firstWindow();
+  return page.evaluate(async (filePath: string) => {
+    return await window.electronAPI.invoke('history:get-diff-baseline', filePath);
+  }, filePath);
+}
+
+/**
+ * Count tags of a specific type for a file
+ */
+export async function countTagsByType(electronApp: any, filePath: string, tagType: string): Promise<number> {
+  const tags = await queryTags(electronApp, filePath);
+  return tags.filter((tag: any) => tag.type === tagType).length;
+}

@@ -278,6 +278,12 @@ class PGLiteWorker {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_history_pending_pre_edit_per_file
         ON document_history(file_path)
         WHERE metadata->>'type' = 'pre-edit' AND metadata->>'status' = 'pending-review';
+
+      -- Ensure only one incremental-approval tag can be pending per file
+      -- This prevents multiple baselines and ensures getDiffBaseline is unambiguous
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_history_pending_incremental_approval_per_file
+        ON document_history(file_path)
+        WHERE metadata->>'type' = 'incremental-approval' AND metadata->>'status' = 'pending-review';
     `);
 
     // Session Files table

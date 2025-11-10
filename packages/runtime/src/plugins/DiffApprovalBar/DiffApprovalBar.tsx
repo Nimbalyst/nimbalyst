@@ -5,6 +5,7 @@ import {
   APPROVE_DIFF_COMMAND,
   REJECT_DIFF_COMMAND,
   CLEAR_DIFF_TAG_COMMAND,
+  INCREMENTAL_APPROVAL_COMMAND,
   $approveChangeGroup,
   $rejectChangeGroup,
   groupDiffChanges,
@@ -332,7 +333,11 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
         return;
       }
 
-      // Still have diffs - move to next group
+      // Still have diffs - dispatch INCREMENTAL_APPROVAL_COMMAND
+      // This is handled by TabEditor in Electron to create incremental-approval tag
+      editor.dispatchCommand(INCREMENTAL_APPROVAL_COMMAND, undefined);
+
+      // Move to next group
       const newIndex = Math.min(indexBeforeApproval, updatedGroups.length - 1);
       const nextGroup = updatedGroups[newIndex];
 
@@ -385,7 +390,11 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
         return;
       }
 
-      // Still have diffs - move to next group
+      // Still have diffs - dispatch INCREMENTAL_APPROVAL_COMMAND
+      // This is handled by TabEditor in Electron to create incremental-approval tag
+      editor.dispatchCommand(INCREMENTAL_APPROVAL_COMMAND, undefined);
+
+      // Move to next group
       const newIndex = Math.min(indexBeforeRejection, updatedGroups.length - 1);
       const nextGroup = updatedGroups[newIndex];
 
@@ -481,7 +490,8 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
 
         <div className="diff-approval-bar-actions">
           <button
-            className="diff-reject-all-button"
+            className="diff-reject-button"
+            data-action="reject-single"
             onClick={handleRejectThis}
             title="Reject this change"
             disabled={!hasSelection}
@@ -492,7 +502,8 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
             Reject
           </button>
           <button
-            className="diff-accept-all-button"
+            className="diff-accept-button"
+            data-action="accept-single"
             onClick={handleAcceptThis}
             title="Accept this change"
             disabled={!hasSelection}
@@ -504,6 +515,7 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
           </button>
           <button
             className="diff-reject-all-button"
+            data-action="reject-all"
             onClick={handleRejectAll}
             title="Reject all changes"
           >
@@ -514,6 +526,7 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
           </button>
           <button
             className="diff-accept-all-button"
+            data-action="accept-all"
             onClick={handleAcceptAll}
             title="Accept all changes"
           >
