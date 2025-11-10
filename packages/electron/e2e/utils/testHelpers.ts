@@ -54,9 +54,13 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   attachmentFilename: '.attachment-filename',
   attachmentRemoveButton: '.attachment-remove',
 
-  // Diff approval
-  acceptAllButton: 'button:has-text("Accept All")',
-  rejectAllButton: 'button:has-text("Reject All")',
+  // Diff approval - use data-action attributes for reliable targeting
+  diffAcceptButton: 'button[data-action="accept-single"]',
+  diffRejectButton: 'button[data-action="reject-single"]',
+  diffAcceptAllButton: 'button[data-action="accept-all"]',
+  diffRejectAllButton: 'button[data-action="reject-all"]',
+  diffApprovalBar: '.diff-approval-bar',
+  diffChangeCounter: '.diff-change-counter',
 
   // Transcript elements
   richTranscriptMessage: '.rich-transcript-message',

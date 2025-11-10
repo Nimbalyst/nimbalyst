@@ -76,6 +76,8 @@
   white-space: nowrap;
 }
 
+.diff-reject-button,
+.diff-accept-button,
 .diff-reject-all-button,
 .diff-accept-all-button {
   padding: 6px 12px;
@@ -90,22 +92,26 @@
   white-space: nowrap;
 }
 
+.diff-reject-button,
 .diff-reject-all-button {
   background: transparent;
   border: 1px solid var(--border-primary);
   color: var(--text-primary);
 }
 
+.diff-reject-button:hover,
 .diff-reject-all-button:hover {
   background-color: var(--surface-hover);
 }
 
+.diff-accept-button,
 .diff-accept-all-button {
   background-color: var(--primary-color);
   border: none;
   color: white;
 }
 
+.diff-accept-button:hover,
 .diff-accept-all-button:hover {
   opacity: 0.9;
 }
@@ -124,6 +130,8 @@
 }
 
 /* Disabled button styling */
+.diff-reject-button:disabled,
+.diff-accept-button:disabled,
 .diff-reject-all-button:disabled,
 .diff-accept-all-button:disabled {
   opacity: 0.4;
