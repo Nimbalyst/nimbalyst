@@ -73,10 +73,10 @@ export function DiffPlugin(): JSX.Element | null {
   const [editor] = useLexicalComposerContext();
   const isEditable = useLexicalEditable();
 
-  useEffect(() => {
-    // Track if we're in an active command
-    let commandInProgressRef = false;
+  // Track if commands are in progress
+  const commandInProgressRef = React.useRef(false);
 
+  useEffect(() => {
     // Apply diff styling based on node state
     const updateDiffStyling = () => {
       editor.getEditorState().read(() => {
@@ -275,7 +275,7 @@ export function DiffPlugin(): JSX.Element | null {
     const approveDiffUnregister = editor.registerCommand(
       APPROVE_DIFF_COMMAND,
       () => {
-        commandInProgressRef = true;
+        commandInProgressRef.current = true;
 
         editor.update(() => {
           $approveDiffs(editor);
@@ -290,7 +290,7 @@ export function DiffPlugin(): JSX.Element | null {
           if (!hasDiff) {
             editor.dispatchCommand(CLEAR_DIFF_TAG_COMMAND, undefined);
           }
-          commandInProgressRef = false;
+          commandInProgressRef.current = false;
         }, 100);
 
         return true;
@@ -302,7 +302,7 @@ export function DiffPlugin(): JSX.Element | null {
     const rejectDiffUnregister = editor.registerCommand(
       REJECT_DIFF_COMMAND,
       () => {
-        commandInProgressRef = true;
+        commandInProgressRef.current = true;
 
         editor.update(() => {
           $rejectDiffs(editor);
@@ -317,7 +317,7 @@ export function DiffPlugin(): JSX.Element | null {
           if (!hasDiff) {
             editor.dispatchCommand(CLEAR_DIFF_TAG_COMMAND, undefined);
           }
-          commandInProgressRef = false;
+          commandInProgressRef.current = false;
         }, 100);
 
         return true;

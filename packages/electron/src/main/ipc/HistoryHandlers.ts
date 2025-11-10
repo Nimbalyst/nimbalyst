@@ -88,7 +88,7 @@ export async function registerHistoryHandlers() {
             // Parse metadata if it's a string (PGLite returns JSONB as strings)
             const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata;
             return {
-                metadata,
+                ...metadata,
                 timestamp: row.timestamp
             };
         });

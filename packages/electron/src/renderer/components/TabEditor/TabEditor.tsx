@@ -154,9 +154,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // Check if this tag is already being shown
           const isAlreadyShowingThisTag = pendingAIEditTagRef.current?.tagId === pendingTags[0].id;
 
-          // Skip if we're already showing this exact diff - the mount effect handled it
-          if (isAlreadyShowingThisTag && diskContent === oldContent) {
-            console.log(`[TabEditor] Diff already applied on tab activation, skipping`);
+          // CRITICAL FIX: Skip if we're already showing this diff
+          // The editor stays mounted during tab switches, so if we've already applied this diff,
+          // we don't need to reload it (which causes flashing)
+          if (isAlreadyShowingThisTag) {
+            console.log(`[TabEditor] Diff already shown for tag ${pendingTags[0].id}, skipping reload`);
             return;
           }
 
@@ -393,9 +395,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
 
   // Helper: Save file with history snapshot
+  // skipDiffCheck: Set to true when saving during AI operations (accept/reject/streaming)
   const saveWithHistory = useCallback(async (
       contentToSave: string,
-      snapshotType: 'auto' | 'manual' = 'auto'
+      snapshotType: 'auto' | 'manual' = 'auto',
+      skipDiffCheck: boolean = false
   ) => {
     if (!window.electronAPI) return;
 
@@ -415,7 +419,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       setLastSaveTime(saveTime);
       setLastSavedContent(contentToSave);
 
-      logger.ui.info(`[TabEditor] Saving ${fileName}, saveId=${thisSaveId}`);
+      logger.ui.info(`[TabEditor] Saving ${fileName}, saveId=${thisSaveId}, skipDiffCheck=${skipDiffCheck}`);
 
       // Save to disk with conflict detection
       const result = await window.electronAPI.saveFile(
@@ -483,6 +487,25 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             );
           } catch (error) {
             logger.ui.error(`[TabEditor] Failed to create history snapshot for ${filePath}:`, error);
+          }
+        }
+
+        // Check if we should clear the pending-review tag after save
+        // ONLY check for user-initiated saves (manual/autosave), NOT AI operations
+        // During AI operations (apply/accept/reject), skipDiffCheck will be true
+        if (!skipDiffCheck && editorRef.current && pendingAIEditTagRef.current.tagId) {
+          const { $hasDiffNodes } = await import('rexical');
+          const hasDiffs = editorRef.current.getEditorState().read(() => {
+            return $hasDiffNodes(editorRef.current!);
+          });
+
+          if (!hasDiffs) {
+            logger.ui.info('[TabEditor] No diffs remaining after user save, clearing pending tag');
+            const { tagId, filePath: tagFilePath } = pendingAIEditTagRef.current;
+            await window.electronAPI.invoke('history:update-tag-status', tagFilePath, tagId, 'reviewed');
+            pendingAIEditTagRef.current = { tagId: '', sessionId: '', filePath: '' };
+          } else {
+            logger.ui.info('[TabEditor] Diffs still present after save, keeping pending tag');
           }
         }
 
@@ -738,6 +761,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           console.log(`[TabEditor] Pending tag found. alreadyInDiffMode: ${alreadyInDiffMode}, current tagId: ${pendingAIEditTagRef.current?.tagId}, pending tagId: ${pendingTags[0].id}`);
 
           if (alreadyInDiffMode) {
+            // CRITICAL: Check if the disk content actually changed
+            // If the new content matches what we're already showing, skip the reload
+            // This prevents flashing when switching tabs or during saves
+            if (newContent === lastSavedContentRef.current) {
+              console.log('[TabEditor] Diff already showing correct content, skipping reload');
+              processingFileChangeRef.current = false;
+              return;
+            }
+
             // Already showing diff - reset editor and update with new content
             console.log(`[TabEditor] Updating existing diff with new content - tagged: ${oldContent.length}, new: ${newContent.length}`);
 
