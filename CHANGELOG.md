@@ -19,6 +19,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.12] - 2025-11-10
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- SQL parameter placeholder in mark session as read
+- Incremental diff accept/reject now clears pre-edit tag
+- OS notifications not appearing in development mode
+- Detection of tool packages installation
+
+### Performance
+- Optimized AI chat input rendering in long sessions by splitting transcript and input components
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.11] - 2025-11-09
 
 
