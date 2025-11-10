@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import type { FileEditSummary } from '../types';
 import { formatTimeAgo } from '../../../utils/dateUtils';
 
@@ -8,12 +8,18 @@ interface FileEditsSidebarProps {
   workspacePath?: string;
 }
 
+interface FileGitStatus {
+  status: 'modified' | 'staged' | 'untracked' | 'unchanged' | 'deleted';
+  gitStatusCode?: string;
+}
+
 export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   fileEdits,
   onFileClick,
   workspacePath
 }) => {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [gitStatus, setGitStatus] = useState<Record<string, FileGitStatus>>({});
 
   // Convert absolute path to relative path from workspace root
   const getRelativePath = (filePath: string): string => {
@@ -73,6 +79,46 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
     };
   }, [fileEdits]);
 
+  // Fetch git status for edited files
+  useEffect(() => {
+    if (!workspacePath || groupedByType.edited.length === 0) {
+      setGitStatus({});
+      return;
+    }
+
+    const fetchGitStatus = async () => {
+      try {
+        // Get list of edited file paths
+        const filePaths = groupedByType.edited.map(f => getRelativePath(f.filePath));
+
+        if (typeof window !== 'undefined' && (window as any).electronAPI) {
+          const result = await (window as any).electronAPI.invoke(
+            'git:get-file-status',
+            workspacePath,
+            filePaths
+          );
+          if (result.success && result.status) {
+            setGitStatus(result.status);
+          }
+        }
+      } catch (error) {
+        console.error('[FileEditsSidebar] Failed to fetch git status:', error);
+      }
+    };
+
+    fetchGitStatus();
+
+    // Refresh on window focus
+    const handleFocus = () => {
+      fetchGitStatus();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [groupedByType.edited, workspacePath]);
+
   const toggleSection = (sectionName: string) => {
     setCollapsedSections(prev => ({
       ...prev,
@@ -114,6 +160,52 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   const formatFileName = (filePath: string) => {
     const parts = filePath.split('/');
     return parts[parts.length - 1];
+  };
+
+  // Render git status indicator
+  const renderGitStatus = (filePath: string) => {
+    const relativePath = getRelativePath(filePath);
+    const status = gitStatus[relativePath];
+    if (!status || status.status === 'unchanged') {
+      return null;
+    }
+
+    const statusChar = {
+      modified: 'M',
+      staged: 'S',
+      untracked: '?',
+      deleted: 'D',
+      unchanged: ''
+    }[status.status];
+
+    const statusColor = {
+      modified: 'var(--warning-color)',
+      staged: 'var(--success-color)',
+      untracked: 'var(--text-tertiary)',
+      deleted: 'var(--error-color)',
+      unchanged: 'transparent'
+    }[status.status];
+
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '14px',
+          height: '14px',
+          fontSize: '0.65rem',
+          fontWeight: 600,
+          borderRadius: '2px',
+          backgroundColor: statusColor,
+          color: status.status === 'untracked' ? 'var(--surface-primary)' : 'white',
+          flexShrink: 0
+        }}
+        title={`Git status: ${status.status}`}
+      >
+        {statusChar}
+      </span>
+    );
   };
 
   const getLinkTypeIcon = (linkType: 'edited' | 'referenced' | 'read') => {
@@ -234,6 +326,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
                       {getOperationIcon(operation)}
                     </div>
                   )}
+                  {linkType === 'edited' && renderGitStatus(filePath)}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
                       fontSize: '0.8125rem',
