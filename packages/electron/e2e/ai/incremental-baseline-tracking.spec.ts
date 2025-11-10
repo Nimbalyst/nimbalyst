@@ -78,7 +78,7 @@ test('subsequent AI edits should use accepted state as baseline, not original', 
   const versionA = await fs.readFile(testFilePath, 'utf8');
   expect(versionA).toContain('First paragraph.');
 
-  // SIMULATE: User accepts first AI edit (Version A → Version B → Version C accepted)
+  // SIMULATE FIRST AI EDIT: Version A → Version B
   const versionC = versionA.replace('First paragraph.', 'FIRST AI EDIT');
 
   // Create pre-edit tag with Version A (what the AI started with)
@@ -94,32 +94,31 @@ test('subsequent AI edits should use accepted state as baseline, not original', 
   expect(preEditTag).toBeDefined();
   console.log('✓ Pre-edit tag created for first AI edit');
 
-  // User accepts changes - simulate by manually creating incremental-approval tag
-  // (In real app this happens in handleClearDiffTag after clicking Accept All)
-  await page.evaluate(async ([filePath, content, sessionId]) => {
-    await window.electronAPI.invoke('history:create-incremental-approval-tag',
-      filePath,
-      content,
-      sessionId,
-      {}
-    );
-  }, [testFilePath, versionC, 'test-session-1']);
+  // SIMULATE USER ACCEPTS ALL CHANGES
+  // In real flow: User clicks Accept All → handleClearDiffTag marks tag as reviewed
+  // NO incremental-approval tag is created when session is complete
+  await page.evaluate(async ([filePath, tagId]) => {
+    await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed');
+  }, [testFilePath, preEditTag.tagId]);
 
+  // Write accepted content to disk (simulates what handleClearDiffTag does)
+  await fs.writeFile(testFilePath, versionC, 'utf8');
   await page.waitForTimeout(100);
 
-  // Verify incremental-approval tag was created
-  tags = await queryTags(electronApp, testFilePath);
-  const incrementalTag = tags.find((t: any) => t.type === 'incremental-approval' && t.status === 'pending-review');
-  expect(incrementalTag).toBeDefined();
-  console.log('✓ Incremental-approval tag created with accepted state (Version C)');
-
   // Verify pre-edit tag was marked as reviewed
+  tags = await queryTags(electronApp, testFilePath);
   const reviewedPreEdit = tags.find((t: any) => t.type === 'pre-edit' && t.status === 'reviewed');
   expect(reviewedPreEdit).toBeDefined();
-  console.log('✓ Pre-edit tag marked as reviewed');
+  console.log('✓ Pre-edit tag marked as reviewed after accepting all changes');
 
-  // SECOND AI EDIT: Start a new AI edit with Version C as current state
-  // This simulates: AI makes more changes on top of the accepted state
+  // Verify NO pending tags remain (session complete)
+  const pendingTags = tags.filter((t: any) => t.status === 'pending-review');
+  expect(pendingTags.length).toBe(0);
+  console.log('✓ No pending tags after session complete');
+
+  // SIMULATE SECOND AI EDIT: AI makes new edit with Version C (accepted state) as baseline
+  // When AI creates a new pre-edit tag, it uses the CURRENT file content as the baseline
+  // Since we accepted changes, current content is Version C
   await page.evaluate(async ([filePath, content, sessionId]) => {
     await window.electronAPI.invoke('history:create-tag',
       filePath,
@@ -132,25 +131,20 @@ test('subsequent AI edits should use accepted state as baseline, not original', 
 
   await page.waitForTimeout(100);
 
-  // Verify new pre-edit tag was created
+  // Verify new pre-edit tag was created with Version C as baseline
   tags = await queryTags(electronApp, testFilePath);
-  const secondPreEditTag = tags.filter((t: any) => t.type === 'pre-edit' && t.status === 'pending-review');
-  expect(secondPreEditTag.length).toBeGreaterThan(0);
+  const secondPreEditTag = tags.find((t: any) => t.type === 'pre-edit' && t.status === 'pending-review');
+  expect(secondPreEditTag).toBeDefined();
   console.log('✓ Second pre-edit tag created');
 
-  // Verify old incremental-approval tag was marked as reviewed (by createTag)
-  const reviewedIncremental = tags.find((t: any) => t.type === 'incremental-approval' && t.status === 'reviewed');
-  expect(reviewedIncremental).toBeDefined();
-  console.log('✓ Previous incremental-approval tag marked as reviewed when creating new pre-edit tag');
-
-  // CRITICAL TEST: Verify getDiffBaseline returns content with the accepted changes (Version C)
-  // NOT the original content (Version A)
-  // The pending tag will be the new pre-edit tag, but it was created with Version C content
+  // CRITICAL TEST: Verify getDiffBaseline returns the new pre-edit tag with Version C content
+  // NOT the old pre-edit tag with Version A content
   const baseline = await getDiffBaseline(electronApp, testFilePath);
   expect(baseline).toBeDefined();
+  expect(baseline?.tagType).toBe('pre-edit'); // New pre-edit tag (not incremental-approval)
   expect(baseline?.content).toContain('FIRST AI EDIT'); // Should have Version C content (accepted state)
   expect(baseline?.content).not.toContain('First paragraph.'); // Should NOT have Version A content
 
-  console.log('✓ getDiffBaseline correctly returned accepted state (Version C)');
+  console.log('✓ getDiffBaseline correctly returned new pre-edit with accepted state (Version C)');
   console.log('✓ Second AI edit will diff against accepted state, not original');
 });

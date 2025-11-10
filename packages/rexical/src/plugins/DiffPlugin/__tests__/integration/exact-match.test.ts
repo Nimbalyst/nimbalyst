@@ -86,11 +86,11 @@ describe('Exact Match Detection', () => {
     const insertOps = rootOps.filter(op => op.op === 'insert');
     const deleteOps = rootOps.filter(op => op.op === 'delete');
 
-    console.log(`\nRoot-level operations:`);
-    console.log(`  EQUAL: ${equalOps.length}`);
-    console.log(`  REPLACE: ${replaceOps.length}`);
-    console.log(`  INSERT: ${insertOps.length}`);
-    console.log(`  DELETE: ${deleteOps.length}`);
+    // console.log(`\nRoot-level operations:`);
+    // console.log(`  EQUAL: ${equalOps.length}`);
+    // console.log(`  REPLACE: ${replaceOps.length}`);
+    // console.log(`  INSERT: ${insertOps.length}`);
+    // console.log(`  DELETE: ${deleteOps.length}`);
 
     // For identical trees, we expect all EQUAL operations
     expect(equalOps.length).toBe(tree1.length);
@@ -162,9 +162,9 @@ describe('Exact Match Detection', () => {
     const equalOps = rootOps.filter(op => op.op === 'equal');
     const replaceOps = rootOps.filter(op => op.op === 'replace');
 
-    console.log(`\n=== Change Detection ===`);
-    console.log(`  EQUAL: ${equalOps.length} (title should be here)`);
-    console.log(`  REPLACE: ${replaceOps.length} (changed paragraph should be here)`);
+    // console.log(`\n=== Change Detection ===`);
+    // console.log(`  EQUAL: ${equalOps.length} (title should be here)`);
+    // console.log(`  REPLACE: ${replaceOps.length} (changed paragraph should be here)`);
 
     // We expect: title as EQUAL, paragraph as REPLACE
     expect(equalOps.length).toBe(1); // Title

@@ -1320,34 +1320,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             lastSavedContentRef.current = currentContent;
           }
 
-          // CRITICAL: Mark the old pre-edit tag as reviewed FIRST
-          // This must happen before creating the new incremental-approval tag
-          // because the DB constraint allows only ONE tag with status='pending-review' per file
+          // Mark the pre-edit tag as reviewed (all diffs processed)
+          // When handleClearDiffTag is called, ALL diffs have been cleared (session complete)
+          // We do NOT create an incremental-approval tag here because there are no more diffs
+          // Incremental-approval tags are only created during partial acceptance (via INCREMENTAL_APPROVAL_COMMAND)
           logger.ui.info('[TabEditor] About to call updateTagStatus:', { filePath, tagId, status: 'reviewed' });
           await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed');
           logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed: ${tagId}`);
 
-          // NOW create incremental-approval tag with the accepted state
-          // This becomes the baseline for any future AI edits in this session
-          // Without this, future AI edits will diff against the original pre-edit tag
-          const { sessionId } = pendingAIEditTagRef.current;
-          if (sessionId) {
-            await window.electronAPI.invoke('history:create-incremental-approval-tag',
-              filePath,
-              currentContent,  // The accepted state becomes the new baseline
-              sessionId,
-              {}  // Can optionally track which groups were accepted/rejected
-            );
-            logger.ui.info(`[TabEditor] Created incremental-approval tag for accepted state in session: ${sessionId}`);
-          }
-
-          // NOTE: We do NOT mark incremental-approval tags as reviewed here
-          // The most recent incremental-approval tag (which we just created) serves as
-          // the baseline for any future AI edits in this session
-          // Incremental tags will be marked as reviewed when the entire session ends
-          // or when the user explicitly starts a new AI session
-
-          // Clear the pending tag reference
+          // Clear the pending tag reference (session is complete)
           pendingAIEditTagRef.current = null;
 
           // Reload editor to exit diff mode and show clean final state

@@ -26,6 +26,7 @@ export interface HistoryTag {
   id: string;                    // "pre-ai-edit-${sessionId}-${toolUseId}"
   filePath: string;
   content: string;               // The tagged content
+  type: 'pre-edit' | 'incremental-approval';  // Tag type
   status: TagStatus;
   sessionId: string;
   toolUseId: string;
@@ -471,15 +472,13 @@ export class HistoryManager {
           SELECT file_path, content, metadata
           FROM document_history
           WHERE file_path = $1
-            AND metadata->>'type' = 'pre-edit'
             AND metadata->>'status' = 'pending-review'
           ORDER BY timestamp DESC
         `
         : `
           SELECT file_path, content, metadata
           FROM document_history
-          WHERE metadata->>'type' = 'pre-edit'
-            AND metadata->>'status' = 'pending-review'
+          WHERE metadata->>'status' = 'pending-review'
           ORDER BY timestamp DESC
         `;
 
@@ -500,6 +499,7 @@ export class HistoryManager {
           id: row.metadata.tagId,
           filePath: row.file_path,
           content,
+          type: row.metadata.type,
           status: row.metadata.status,
           sessionId: row.metadata.sessionId,
           toolUseId: row.metadata.toolUseId,
