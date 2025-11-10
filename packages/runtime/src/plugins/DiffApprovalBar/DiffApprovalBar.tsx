@@ -4,6 +4,7 @@ import { $getSelection, $isRangeSelection } from 'lexical';
 import {
   APPROVE_DIFF_COMMAND,
   REJECT_DIFF_COMMAND,
+  CLEAR_DIFF_TAG_COMMAND,
   $approveChangeGroup,
   $rejectChangeGroup,
   groupDiffChanges,
@@ -327,11 +328,7 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
       if (updatedGroups.length === 0 || !hasDiff) {
         // All diffs cleared - dispatch CLEAR_DIFF_TAG_COMMAND
         // This is handled by TabEditor in Electron to mark tag as reviewed
-        import('../../../../electron/src/renderer/commands/diffCommands').then(({ CLEAR_DIFF_TAG_COMMAND }) => {
-          editor.dispatchCommand(CLEAR_DIFF_TAG_COMMAND, undefined);
-        }).catch(() => {
-          // Command not available (non-Electron environment), ignore
-        });
+        editor.dispatchCommand(CLEAR_DIFF_TAG_COMMAND, undefined);
         return;
       }
 
@@ -384,11 +381,7 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
       if (updatedGroups.length === 0 || !hasDiff) {
         // All diffs cleared - dispatch CLEAR_DIFF_TAG_COMMAND
         // This is handled by TabEditor in Electron to mark tag as reviewed
-        import('../../../../electron/src/renderer/commands/diffCommands').then(({ CLEAR_DIFF_TAG_COMMAND }) => {
-          editor.dispatchCommand(CLEAR_DIFF_TAG_COMMAND, undefined);
-        }).catch(() => {
-          // Command not available (non-Electron environment), ignore
-        });
+        editor.dispatchCommand(CLEAR_DIFF_TAG_COMMAND, undefined);
         return;
       }
 

@@ -84,7 +84,17 @@ test.afterEach(async () => {
 });
 
 test('should clear tag and exit diff mode after incrementally accepting all changes', async () => {
-  // Apply a multi-section diff that creates multiple change groups
+  // Read original content
+  const originalContent = await fs.readFile(testFilePath, 'utf8');
+
+  // STEP 1: Create a pre-edit tag (this is what the real AI flow does)
+  await page.evaluate(async ([filePath, content]) => {
+    await window.electronAPI.invoke('history:create-tag', filePath, 'test-tag-accept-all', content, 'test-session-accept', 'tool-accept-all');
+  }, [testFilePath, originalContent]);
+
+  await page.waitForTimeout(200);
+
+  // STEP 2: Apply diff (writes to disk, triggers file watcher)
   const result = await simulateApplyDiff(page, testFilePath, [
     { oldText: 'This is the first section with some content.', newText: 'This is the UPDATED first section with new content.' },
     { oldText: 'This is the second section with different content.', newText: 'This is the MODIFIED second section with changed content.' },
@@ -92,6 +102,9 @@ test('should clear tag and exit diff mode after incrementally accepting all chan
   ]);
 
   expect(result.success).toBe(true);
+
+  // Wait for file watcher to detect change and activate diff mode
+  await page.waitForTimeout(1000);
 
   // Wait for diff approval bar to appear
   await page.waitForSelector('.diff-approval-bar', { timeout: 2000 });
@@ -175,7 +188,17 @@ test('should clear tag and exit diff mode after incrementally accepting all chan
 });
 
 test('should clear tag and exit diff mode after incrementally rejecting all changes', async () => {
-  // Apply a multi-section diff that creates multiple change groups
+  // Read original content
+  const originalContent = await fs.readFile(testFilePath, 'utf8');
+
+  // STEP 1: Create a pre-edit tag
+  await page.evaluate(async ([filePath, content]) => {
+    await window.electronAPI.invoke('history:create-tag', filePath, 'test-tag-reject-all', content, 'test-session-reject', 'tool-reject-all');
+  }, [testFilePath, originalContent]);
+
+  await page.waitForTimeout(200);
+
+  // STEP 2: Apply a multi-section diff that creates multiple change groups
   const result = await simulateApplyDiff(page, testFilePath, [
     { oldText: 'This is the first section with some content.', newText: 'This is the UPDATED first section with new content.' },
     { oldText: 'This is the second section with different content.', newText: 'This is the MODIFIED second section with changed content.' },
@@ -224,10 +247,57 @@ test('should clear tag and exit diff mode after incrementally rejecting all chan
   expect(finalContent).toContain('This is the first section with some content.');
   expect(finalContent).toContain('This is the second section with different content.');
   expect(finalContent).toContain('This is the third section with more content.');
+
+  // CRITICAL TEST: Close and reopen the file to verify tag was cleared
+  console.log('Closing and reopening file to verify tag was cleared...');
+
+  // Close the tab
+  const closeButton = page.locator('.tab-close-button[data-filename="test.md"]');
+  await closeButton.click();
+  await page.waitForTimeout(500);
+
+  // Verify tab is closed
+  await expect(page.locator('.tab', { hasText: 'test.md' })).toHaveCount(0, { timeout: 2000 });
+
+  // Reopen the file from file tree
+  await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+  await page.waitForTimeout(500);
+
+  // Verify tab opened
+  await expect(page.locator('.tab', { hasText: 'test.md' })).toBeVisible({ timeout: 3000 });
+
+  // Wait for editor to load
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.contentEditable, { timeout: 3000 });
+  await page.waitForTimeout(1000);
+
+  // CRITICAL: Diff approval bar should NOT appear after reopening
+  const barCountAfterReopen = await page.locator('.diff-approval-bar').count();
+  if (barCountAfterReopen > 0) {
+    console.error('FAILURE: Diff bar reappeared after reopening! Tag was not cleared properly.');
+  }
+  expect(barCountAfterReopen).toBe(0);
+
+  // Verify content is still correct
+  const editorAfterReopen = page.locator(PLAYWRIGHT_TEST_SELECTORS.contentEditable);
+  await expect(editorAfterReopen).toContainText('This is the first section with some content.');
+  await expect(editorAfterReopen).toContainText('This is the second section with different content.');
+  await expect(editorAfterReopen).toContainText('This is the third section with more content.');
+
+  console.log('✓ File reopened successfully without diff mode - tag was properly cleared!');
 });
 
 test('should allow autosave after incremental accept cleanup', async () => {
-  // Apply diff
+  // Read original content
+  const originalContent = await fs.readFile(testFilePath, 'utf8');
+
+  // STEP 1: Create a pre-edit tag
+  await page.evaluate(async ([filePath, content]) => {
+    await window.electronAPI.invoke('history:create-tag', filePath, 'test-tag-autosave', content, 'test-session-autosave', 'tool-autosave');
+  }, [testFilePath, originalContent]);
+
+  await page.waitForTimeout(200);
+
+  // STEP 2: Apply diff
   const result = await simulateApplyDiff(page, testFilePath, [
     { oldText: 'This is the first section with some content.', newText: 'Updated content.' },
     { oldText: 'This is the second section with different content.', newText: 'Changed content.' }
@@ -270,10 +340,56 @@ test('should allow autosave after incremental accept cleanup', async () => {
   const savedContent = await fs.readFile(testFilePath, 'utf8');
   expect(savedContent).toContain('Modified Document');
   expect(savedContent).toContain('New content after diff');
+
+  // CRITICAL TEST: Close and reopen the file to verify tag was cleared
+  console.log('Closing and reopening file to verify tag was cleared...');
+
+  // Close the tab
+  const closeButton = page.locator('.tab-close-button[data-filename="test.md"]');
+  await closeButton.click();
+  await page.waitForTimeout(500);
+
+  // Verify tab is closed
+  await expect(page.locator('.tab', { hasText: 'test.md' })).toHaveCount(0, { timeout: 2000 });
+
+  // Reopen the file from file tree
+  await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+  await page.waitForTimeout(500);
+
+  // Verify tab opened
+  await expect(page.locator('.tab', { hasText: 'test.md' })).toBeVisible({ timeout: 3000 });
+
+  // Wait for editor to load
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.contentEditable, { timeout: 3000 });
+  await page.waitForTimeout(1000);
+
+  // CRITICAL: Diff approval bar should NOT appear after reopening
+  const barCountAfterReopen = await page.locator('.diff-approval-bar').count();
+  if (barCountAfterReopen > 0) {
+    console.error('FAILURE: Diff bar reappeared after reopening! Tag was not cleared properly.');
+  }
+  expect(barCountAfterReopen).toBe(0);
+
+  // Verify content is still correct
+  const editorAfterReopen = page.locator(PLAYWRIGHT_TEST_SELECTORS.contentEditable);
+  await expect(editorAfterReopen).toContainText('Modified Document');
+  await expect(editorAfterReopen).toContainText('New content after diff');
+
+  console.log('✓ File reopened successfully without diff mode - tag was properly cleared!');
 });
 
 test('should handle mixed accept/reject incrementally', async () => {
-  // Apply a multi-section diff
+  // Read original content
+  const originalContent = await fs.readFile(testFilePath, 'utf8');
+
+  // STEP 1: Create a pre-edit tag
+  await page.evaluate(async ([filePath, content]) => {
+    await window.electronAPI.invoke('history:create-tag', filePath, 'test-tag-mixed', content, 'test-session-mixed', 'tool-mixed');
+  }, [testFilePath, originalContent]);
+
+  await page.waitForTimeout(200);
+
+  // STEP 2: Apply a multi-section diff
   const result = await simulateApplyDiff(page, testFilePath, [
     { oldText: 'This is the first section with some content.', newText: 'ACCEPT this change.' },
     { oldText: 'This is the second section with different content.', newText: 'REJECT this change.' },
@@ -310,10 +426,58 @@ test('should handle mixed accept/reject incrementally', async () => {
   expect(finalContent).toContain('ACCEPT this change');
   expect(finalContent).toContain('This is the second section with different content.'); // Original (rejected)
   expect(finalContent).toContain('ACCEPT this too');
+
+  // CRITICAL TEST: Close and reopen the file to verify tag was cleared
+  console.log('Closing and reopening file to verify tag was cleared...');
+
+  // Close the tab
+  const closeButton = page.locator('.tab-close-button[data-filename="test.md"]');
+  await closeButton.click();
+  await page.waitForTimeout(500);
+
+  // Verify tab is closed
+  await expect(page.locator('.tab', { hasText: 'test.md' })).toHaveCount(0, { timeout: 2000 });
+
+  // Reopen the file from file tree
+  await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+  await page.waitForTimeout(500);
+
+  // Verify tab opened
+  await expect(page.locator('.tab', { hasText: 'test.md' })).toBeVisible({ timeout: 3000 });
+
+  // Wait for editor to load
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.contentEditable, { timeout: 3000 });
+  await page.waitForTimeout(1000);
+
+  // CRITICAL: Diff approval bar should NOT appear after reopening
+  // This is the key test for mixed accept/reject scenarios
+  const barCountAfterReopen = await page.locator('.diff-approval-bar').count();
+  if (barCountAfterReopen > 0) {
+    console.error('FAILURE: Diff bar reappeared after reopening! Tag was not cleared properly for mixed accept/reject.');
+  }
+  expect(barCountAfterReopen).toBe(0);
+
+  // Verify content is still correct
+  const editorAfterReopen = page.locator(PLAYWRIGHT_TEST_SELECTORS.contentEditable);
+  await expect(editorAfterReopen).toContainText('ACCEPT this change');
+  await expect(editorAfterReopen).toContainText('This is the second section with different content.');
+  await expect(editorAfterReopen).toContainText('ACCEPT this too');
+
+  console.log('✓ File reopened successfully without diff mode - tag was properly cleared for mixed accept/reject!');
 });
 
 test('should save partial acceptances correctly with rejections', async () => {
-  // Apply a multi-section diff with distinct content
+  // Read original content
+  const originalContent = await fs.readFile(testFilePath, 'utf8');
+
+  // STEP 1: Create a pre-edit tag
+  await page.evaluate(async ([filePath, content]) => {
+    await window.electronAPI.invoke('history:create-tag', filePath, 'test-tag-partial', content, 'test-session-partial', 'tool-partial');
+  }, [testFilePath, originalContent]);
+
+  await page.waitForTimeout(200);
+
+  // STEP 2: Apply a multi-section diff with distinct content
   const result = await simulateApplyDiff(page, testFilePath, [
     { oldText: 'This is the first section with some content.', newText: 'FIRST ACCEPTED.' },
     { oldText: 'This is the second section with different content.', newText: 'SECOND REJECTED.' },
@@ -363,4 +527,41 @@ test('should save partial acceptances correctly with rejections', async () => {
   expect(finalContent).toContain('FIRST ACCEPTED');
   expect(finalContent).toContain('SECOND REJECTED');
   expect(finalContent).toContain('THIRD ACCEPTED');
+
+  // CRITICAL TEST: Close and reopen the file to verify tag was cleared
+  console.log('Closing and reopening file to verify tag was cleared...');
+
+  // Close the tab
+  const closeButton = page.locator('.tab-close-button[data-filename="test.md"]');
+  await closeButton.click();
+  await page.waitForTimeout(500);
+
+  // Verify tab is closed
+  await expect(page.locator('.tab', { hasText: 'test.md' })).toHaveCount(0, { timeout: 2000 });
+
+  // Reopen the file from file tree
+  await page.locator('.file-tree-name', { hasText: 'test.md' }).click();
+  await page.waitForTimeout(500);
+
+  // Verify tab opened
+  await expect(page.locator('.tab', { hasText: 'test.md' })).toBeVisible({ timeout: 3000 });
+
+  // Wait for editor to load
+  await page.waitForSelector(PLAYWRIGHT_TEST_SELECTORS.contentEditable, { timeout: 3000 });
+  await page.waitForTimeout(1000);
+
+  // CRITICAL: Diff approval bar should NOT appear after reopening
+  const barCountAfterReopen = await page.locator('.diff-approval-bar').count();
+  if (barCountAfterReopen > 0) {
+    console.error('FAILURE: Diff bar reappeared after reopening! Tag was not cleared properly.');
+  }
+  expect(barCountAfterReopen).toBe(0);
+
+  // Verify content is still correct
+  const editorAfterReopen = page.locator(PLAYWRIGHT_TEST_SELECTORS.contentEditable);
+  await expect(editorAfterReopen).toContainText('FIRST ACCEPTED');
+  await expect(editorAfterReopen).toContainText('SECOND REJECTED');
+  await expect(editorAfterReopen).toContainText('THIRD ACCEPTED');
+
+  console.log('✓ File reopened successfully without diff mode - tag was properly cleared!');
 });

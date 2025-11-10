@@ -53,6 +53,69 @@ export function DiffTestDropdown({ documentContext }: DiffTestDropdownProps) {
 
   const testCases: TestCase[] = [
     {
+      id: 'four-headings-paragraph-diffs',
+      name: 'Four Headings with Paragraph Diffs',
+      icon: 'article',
+      description: 'Start with four headings and paragraphs, then modify each paragraph',
+      run: async (filePath: string) => {
+        const editorInstance = editorRegistry.getEditor(filePath);
+        if (!editorInstance) {
+          throw new Error('No editor instance found');
+        }
+
+        // Set up initial content with four headings and paragraphs
+        const initialContent = `# Test Document
+
+## First Heading
+
+This is the first paragraph with some sample text that we will modify later. It contains multiple sentences to make the changes more interesting.
+
+## Second Heading
+
+This is the second paragraph with different content. We will apply changes to this text as well to test the diff system.
+
+## Third Heading
+
+The third paragraph has its own unique text that will be modified. This helps us verify that changes work across different sections.
+
+## Fourth Heading
+
+Finally, the fourth paragraph completes our test structure. Each paragraph will receive targeted modifications to demonstrate the diff functionality.
+`;
+
+        await new Promise<void>(resolve => {
+          editorInstance.editor.update(() => {
+            const root = $getRoot();
+            root.clear();
+            $convertFromEnhancedMarkdownString(initialContent, getEditorTransformers(), undefined, true, true);
+          }, { discrete: true, onUpdate: () => resolve() });
+        });
+
+        // Wait for content to settle
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Apply diffs to modify bits of each paragraph
+        await editorRegistry.applyReplacements(filePath, [
+          {
+            oldText: 'This is the first paragraph with some sample text',
+            newText: 'This is the **first** paragraph with some **modified** sample text'
+          },
+          {
+            oldText: 'This is the second paragraph with different content',
+            newText: 'This is the _second_ paragraph with _updated_ different content'
+          },
+          {
+            oldText: 'The third paragraph has its own unique text',
+            newText: 'The third paragraph has its own [CHANGED] unique text'
+          },
+          {
+            oldText: 'Finally, the fourth paragraph completes our test structure',
+            newText: 'Finally, the fourth paragraph [MODIFIED] completes our test structure'
+          }
+        ]);
+      }
+    },
+    {
       id: 'stream-end',
       name: 'Stream at End',
       icon: 'stream',

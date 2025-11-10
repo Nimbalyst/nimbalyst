@@ -35,43 +35,36 @@ export interface StreamConfig {
 }
 
 /**
- * Simulate an applyDiff operation by directly calling editorRegistry
+ * Simulate an applyDiff operation by writing changes to disk (triggers file watcher)
+ * This properly simulates the AI edit flow with tags and file watching
  */
 export async function simulateApplyDiff(
   page: Page,
   targetFilePath: string,
   replacements: TextReplacement[]
 ): Promise<{ success: boolean; error?: string }> {
-  return await page.evaluate(
-    async ({ filePath, reps }) => {
-      // Access the already-loaded editorRegistry from window
-      const editorRegistry = (window as any).__editorRegistry;
+  const fs = await import('fs/promises');
 
-      console.log('[simulateApplyDiff] editorRegistry:', !!editorRegistry);
-      if (!editorRegistry) {
-        throw new Error('EditorRegistry not found on window');
-      }
+  try {
+    // Read current file content
+    const currentContent = await fs.readFile(targetFilePath, 'utf8');
 
-      // Get the active file path if not specified
-      const target = filePath || editorRegistry.getActiveFilePath();
-      console.log('[simulateApplyDiff] target:', target);
-      console.log('[simulateApplyDiff] replacements:', reps);
+    // Apply all replacements
+    let modifiedContent = currentContent;
+    for (const replacement of replacements) {
+      modifiedContent = modifiedContent.replace(replacement.oldText, replacement.newText);
+    }
 
-      if (!target) {
-        return {
-          success: false,
-          error: 'No target file path available and no active editor'
-        };
-      }
+    // Write modified content to disk - this triggers file watcher
+    await fs.writeFile(targetFilePath, modifiedContent, 'utf8');
 
-      // Apply replacements directly
-      console.log('[simulateApplyDiff] About to call applyReplacements');
-      const result = await editorRegistry.applyReplacements(target, reps);
-      console.log('[simulateApplyDiff] applyReplacements returned:', result);
-      return result;
-    },
-    { filePath: targetFilePath, reps: replacements }
-  );
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
 }
 
 /**

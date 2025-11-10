@@ -1118,12 +1118,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
     // Handle clearing diff tag without accept/reject (for incremental operations)
     const handleClearDiffTag = async () => {
-      if (pendingAIEditTagRef.current) {
+      try {
+        if (!pendingAIEditTagRef.current) {
+          return;
+        }
+
         const { tagId, filePath } = pendingAIEditTagRef.current;
-        try {
-          // CRITICAL: Save current editor state to disk FIRST
-          // This preserves all the incremental accept/reject decisions the user made
-          if (editorRef.current) {
+
+        // CRITICAL: Save current editor state to disk FIRST
+        // This preserves all the incremental accept/reject decisions the user made
+        if (editorRef.current) {
             const { $convertToEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
             const transformers = getEditorTransformers();
 
@@ -1136,14 +1140,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
             // Create history snapshot for this incremental save
             // This ensures history accurately reflects what's on disk after user's decisions
-            if (window.electronAPI.history) {
-              await window.electronAPI.history.addSnapshot(
-                filePath,
-                currentContent,
-                'manual',
-                'Incremental diff acceptance'
-              );
-            }
+            await window.electronAPI.invoke('history:create-snapshot', filePath, currentContent, 'manual', 'Incremental diff acceptance');
 
             // Update our state
             setContent(currentContent);
@@ -1178,17 +1175,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
             }
           }
-        } catch (error) {
-          logger.ui.error(`[TabEditor] Failed to clear diff tag:`, error);
-        }
+      } catch (error) {
+        logger.ui.error(`[TabEditor] Failed to clear diff tag:`, error);
       }
     };
 
     // Register command listeners
     const importCommands = async () => {
-      const { APPROVE_DIFF_COMMAND, REJECT_DIFF_COMMAND } = await import('rexical');
+      const { APPROVE_DIFF_COMMAND, REJECT_DIFF_COMMAND, CLEAR_DIFF_TAG_COMMAND } = await import('rexical');
       const { COMMAND_PRIORITY_LOW } = await import('lexical');
-      const { CLEAR_DIFF_TAG_COMMAND } = await import('../../commands/diffCommands');
 
       const unregisterApprove = editor.registerCommand(
         APPROVE_DIFF_COMMAND,
@@ -1211,7 +1206,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       const unregisterClear = editor.registerCommand(
         CLEAR_DIFF_TAG_COMMAND,
         () => {
-          handleClearDiffTag();
+          handleClearDiffTag().catch(err => {
+            logger.ui.error('[TabEditor] Error in handleClearDiffTag:', err);
+          });
           return false; // Let other handlers run
         },
         COMMAND_PRIORITY_LOW

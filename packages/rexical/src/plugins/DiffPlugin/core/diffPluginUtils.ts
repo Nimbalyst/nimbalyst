@@ -34,6 +34,9 @@ export const APPROVE_DIFF_COMMAND: LexicalCommand<void> = createCommand(
 export const REJECT_DIFF_COMMAND: LexicalCommand<void> = createCommand(
   'REJECT_DIFF_COMMAND',
 );
+export const CLEAR_DIFF_TAG_COMMAND: LexicalCommand<void> = createCommand(
+  'CLEAR_DIFF_TAG_COMMAND',
+);
 
 // Types
 export type Change = {
