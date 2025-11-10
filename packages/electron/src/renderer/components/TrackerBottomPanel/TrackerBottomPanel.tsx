@@ -3,6 +3,7 @@ import './TrackerBottomPanel.css';
 import { TrackerTable, SortColumn as TrackerSortColumn, SortDirection as TrackerSortDirection } from '@nimbalyst/runtime/plugins/TrackerPlugin';
 import { MaterialSymbol } from '../MaterialSymbol';
 import { globalRegistry, loadBuiltinTrackers } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
+import { usePostHog } from 'posthog-js/react';
 
 // Load built-in trackers immediately at module level
 loadBuiltinTrackers();
@@ -33,6 +34,7 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
   onSwitchToFilesMode,
 }) => {
   const [isResizing, setIsResizing] = useState(false);
+  const posthog = usePostHog();
 
   // Get available tracker types from registry
   const trackerTypes = useMemo(() => {
@@ -155,6 +157,16 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
       if (unsubscribeMetadata) unsubscribeMetadata();
     };
   }, [trackerTypes]);
+
+  // Track analytics when panel is opened or switched
+  useEffect(() => {
+    if (activePanel && posthog) {
+      posthog.capture('tracker_tab_opened', {
+        trackerType: activePanel,
+        itemCount: itemCounts[activePanel] || 0,
+      });
+    }
+  }, [activePanel, posthog, itemCounts]);
 
   const [trackerSortBy, setTrackerSortBy] = useState<TrackerSortColumn>('lastIndexed');
   const [trackerSortDirection, setTrackerSortDirection] = useState<TrackerSortDirection>('desc');

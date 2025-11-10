@@ -396,6 +396,15 @@ export function TrackerTable({
   const sortedItems = sortItems(filteredItems, currentSortBy, currentSortDirection);
 
   const handleRowClick = (item: TrackerItem) => {
+    // Track analytics
+    if (posthog) {
+      posthog.capture('tracker_item_clicked', {
+        trackerType: item.type,
+        itemStatus: item.status,
+        isInline: item.lineNumber !== undefined && item.lineNumber !== 0,
+      });
+    }
+
     // Switch to files mode first if we're in agent mode
     if (onSwitchToFilesMode) {
       onSwitchToFilesMode();
