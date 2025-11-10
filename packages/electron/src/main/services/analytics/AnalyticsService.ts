@@ -47,10 +47,20 @@ export class AnalyticsService {
 
   public sendEvent(eventName: string, properties?: Record<string | number, any>): void {
     if (this.allowedToSendAnalytics() && this.postHogClient && eventName) {
-      const eventProperties = {
+      const eventProperties: Record<string | number, any> = {
         '$session_id': this.sessionId,
         ...properties,
       }
+
+      // Mark users as dev users if they've ever used a non-official build
+      // This ensures the property is set even if they missed the session start event
+      if (!this.isOfficialBuild) {
+        eventProperties.$set_once = {
+          'is_dev_user': true,
+          ...eventProperties.$set_once
+        }
+      }
+
       this.log.info(`event: ${eventName}`, eventProperties);
       this.postHogClient.capture({
         distinctId: this.getDistinctId(),
@@ -91,9 +101,8 @@ export class AnalyticsService {
     this.log.info(`Setting analytics session ID: ${sessionId}, previous session ID: ${this.sessionId}, official build: ${this.isOfficialBuild}`);
     this.sessionId = sessionId;
 
-    // Only send session start event from official builds
     if (!this.allowedToSendAnalytics()) {
-      this.log.info('Skipping session start event (not an official build)');
+      this.log.info('Skipping session start event (analytics disabled)');
       return;
     }
 
@@ -104,8 +113,19 @@ export class AnalyticsService {
       }
     };
 
+    // Mark users as dev users if they've ever used a non-official build
+    // This uses $set_once which only sets the property if it doesn't already exist
+    // Once someone is marked as a dev user, they remain marked even on official builds
+    if (!this.isOfficialBuild) {
+      eventProperties.$set_once = {
+        'is_dev_user': true
+      }
+    }
+
+    // Also track whether this is a dev installation (NODE_ENV=development)
     if (this.isDevInstallation) {
       eventProperties.$set_once = {
+        ...eventProperties.$set_once,
         'is_dev_install': true
       }
     }
@@ -127,12 +147,10 @@ export class AnalyticsService {
   }
 
   public allowedToSendAnalytics(): boolean {
-    // Only send analytics from official GitHub release builds
-    // This prevents analytics from:
-    // - Development builds (npm run dev)
-    // - Local builds (npm run build:mac:local)
-    // - Any build not created by the GitHub "Build and Release Electron App" workflow
-    return this.isOfficialBuild;
+    // Send analytics from all builds (dev and official)
+    // Users are marked with 'is_dev_user' property if they've ever used a non-official build
+    // This allows filtering dev users in PostHog while still collecting their data
+    return true;
   }
 
   public getDistinctId(): string {

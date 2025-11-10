@@ -19,6 +19,8 @@ const root = ReactDOM.createRoot(rootElement);
 const analyticsId = await window.electronAPI.analytics?.getDistinctId() ?? '';
 const analyticsAllowed = await window.electronAPI.analytics?.allowedToSendAnalytics() ?? false;
 const isDevInstallation = process.env.NODE_ENV?.toLowerCase() === 'development';
+const isOfficialBuild = process.env.OFFICIAL_BUILD === 'true';
+
 const posthogClient = posthog.init(
   'phc_s3lQIILexwlGHvxrMBqti355xUgkRocjMXW4LjV0ATw',
   {
@@ -31,9 +33,12 @@ const posthogClient = posthog.init(
     capture_exceptions: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     loaded: (posthog) => {
-      console.log(`[RENDERER] PostHog loaded (analytics ID: ${posthog.get_distinct_id()}, session: ${posthog.get_session_id()})`);
-      if (!analyticsAllowed) {
-        console.log('[RENDERER] Opting out of granular analytics as the user has not consented');
+      console.log(`[RENDERER] PostHog loaded (analytics ID: ${posthog.get_distinct_id()}, session: ${posthog.get_session_id()}, official build: ${isOfficialBuild})`);
+
+      // Mark users as dev users if they've ever used a non-official build
+      // This property persists across all future events for this user
+      if (!isOfficialBuild) {
+        posthog.people.set_once({ is_dev_user: true });
       }
     },
     before_send: beforePostHogSendWeb,

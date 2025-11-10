@@ -28,6 +28,28 @@ This separation ensures that Electron-specific events (window management, file o
 
 3. **Opt-out retention ping**: Even when users opt out of analytics, the service sends a single `nimbalyst_session_start` event on application start. This allows us to track retention statistics (how many active unique installations exist) without tracking individual user behavior. This is the only event sent for opted-out users.
 
+### Dev User Tracking
+
+Users are automatically marked with the `is_dev_user` person property if they have ever used a non-official build. This includes:
+- Development builds (`npm run dev`)
+- Local builds (`npm run build:mac:local`)
+- Any build not created by the official GitHub release workflow
+
+**Key characteristics:**
+- The `is_dev_user` property is set using PostHog's `$set_once`, meaning once a user is marked as a dev user, they remain marked forever
+- This allows you to filter out dev users in PostHog queries while still collecting their analytics
+- Official GitHub release builds have `OFFICIAL_BUILD=true` environment variable set by the CI/CD workflow
+- Dev users are tracked in both the main process (via `AnalyticsService`) and renderer process (via PostHog React SDK)
+
+**Filtering dev users in PostHog:**
+```
+# Exclude dev users from your insights
+WHERE is_dev_user != true
+
+# Or only show dev users
+WHERE is_dev_user = true
+```
+
 ### Good vs Bad Event Properties
 
 **Good (anonymous):**
@@ -78,12 +100,11 @@ analyticsService.sendEvent('event_name', {
 });
 ```
 
-Events are only sent if:
-1. The user has opted in to analytics (`analyticsEnabled: true`)
-2. A valid analytics ID exists
-3. The PostHog client is initialized
+Events are sent from all builds (both dev and official) if:
+1. A valid analytics ID exists
+2. The PostHog client is initialized
 
-If these conditions aren't met, the event is logged but not sent.
+Dev users are automatically marked with the `is_dev_user` property, allowing you to filter them out in PostHog queries while still collecting their analytics data. If these conditions aren't met, the event is logged but not sent.
 
 ### In the Render process, use the React hook
 
