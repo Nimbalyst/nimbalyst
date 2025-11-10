@@ -35,8 +35,8 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
       return snapshots;
     }
 
-    const importantTypes = ['manual', 'external-change', 'ai-diff', 'pre-apply'];
-    const minorTypes = ['auto-save', 'auto'];
+    const importantTypes = ['manual', 'external-change', 'ai-diff', 'pre-apply', 'pre-edit'];
+    const minorTypes = ['auto-save', 'auto', 'incremental-approval'];
     const timeGroupInterval = 5 * 60 * 1000; // 5 minutes in milliseconds
 
     const result = [];
@@ -288,6 +288,8 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
   const formatVersionLabel = (type: string, timestamp: string) => {
     const typeLabel = type === 'ai-diff' ? 'AI Edit'
       : type === 'pre-apply' ? 'Pre-edit'
+      : type === 'pre-edit' ? 'AI Session Start'
+      : type === 'incremental-approval' ? 'Partial Review'
       : type === 'manual' ? 'Manual Save'
       : type === 'auto-save' ? 'Auto-save'
       : type === 'external-change' ? 'External Change'
@@ -307,6 +309,10 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
         return 'smart_toy';
       case 'pre-apply':
         return 'bolt';
+      case 'pre-edit':
+        return 'flag';
+      case 'incremental-approval':
+        return 'task_alt';
       case 'external-change':
         return 'sync_alt';
       case 'auto':
