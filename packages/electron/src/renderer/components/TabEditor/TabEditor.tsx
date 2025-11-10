@@ -420,6 +420,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       setLastSavedContent(contentToSave);
 
       logger.ui.info(`[TabEditor] Saving ${fileName}, saveId=${thisSaveId}, skipDiffCheck=${skipDiffCheck}`);
+      // console.trace('[TabEditor] saveWithHistory called, stack trace:');
 
       // Save to disk with conflict detection
       const result = await window.electronAPI.saveFile(
@@ -427,6 +428,21 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           filePath,
           initialContentRef.current
       );
+
+      // console.log(`[TabEditor] saveFile returned for ${fileName}, success=${result?.success}, conflict=${result?.conflict}`);
+
+      // IMMEDIATE: Clear dirty flag as soon as save succeeds
+      if (result && result.success) {
+        setIsDirty(false);
+        isDirtyRef.current = false;
+        // Update initialContentRef with current editor content to prevent false dirty flags
+        if (getContentFnRef.current) {
+          initialContentRef.current = getContentFnRef.current();
+        }
+        // Notify parent immediately
+        onDirtyChange?.(false);
+        // console.log(`[TabEditor] Cleared dirty flag immediately after successful save for ${fileName}`);
+      }
 
       if (result) {
         // Check for conflicts
@@ -509,13 +525,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           }
         }
 
-        // Update remaining state (refs were already updated before save)
-        initialContentRef.current = contentToSave;
-        setIsDirty(false);
-
         // Notify parent
         onSaveComplete?.(result.filePath);
-        onDirtyChange?.(false);
 
         // Clear this save ID after a delay to ensure file watcher events are processed
         // File watchers can be slow, especially on macOS, so use a generous timeout
@@ -544,16 +555,38 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       return;
     }
 
+    // Log stack trace to see what's calling this
+    // console.trace('[TabEditor] handleManualSave called for:', fileName);
+
     const currentContent = getContentFnRef.current();
     await saveWithHistory(currentContent, 'manual');
-  }, [saveWithHistory]);
+  }, [saveWithHistory, fileName]);
 
   // Content change handler from editor
   const handleContentChange = useCallback(() => {
     if (!getContentFnRef.current) return;
 
     const currentContent = getContentFnRef.current();
-    const isContentDirty = currentContent !== initialContentRef.current;
+
+    // CRITICAL: In diff mode, the editor content includes diff nodes which export
+    // to markdown differently than the baseline. This causes false dirty flags.
+    // Don't mark as dirty when in diff mode - user must explicitly approve/reject.
+    const isContentDirty = pendingAIEditTagRef.current
+      ? false
+      : currentContent !== initialContentRef.current;
+
+    // const timeNow = Date.now();
+    // const timeSinceLastSave = lastSaveTimeRef.current ? timeNow - lastSaveTimeRef.current : Infinity;
+    // console.log(`[TabEditor] handleContentChange for ${fileName}, dirty=${isContentDirty}, inDiffMode=${!!pendingAIEditTagRef.current}, currentLength=${currentContent.length}, initialLength=${initialContentRef.current.length}, timeSinceLastSave=${timeSinceLastSave}ms`);
+    // if (isContentDirty && currentContent !== initialContentRef.current) {
+    //   // Log the actual difference
+    //   const diffChars = Math.abs(currentContent.length - initialContentRef.current.length);
+    //   console.log(`[TabEditor] Content differs by ${diffChars} characters`);
+    //
+    //   // Log first 50 chars of each to see the difference
+    //   console.log(`[TabEditor] Current: "${currentContent.substring(0, 50)}..."`);
+    //   console.log(`[TabEditor] Initial: "${initialContentRef.current.substring(0, 50)}..."`);
+    // }
 
     setContent(currentContent);
     setIsDirty(isContentDirty);
@@ -592,8 +625,14 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     if (autosaveInterval <= 0) return;
 
     const timer = setInterval(async () => {
+      // Log autosave check
+      // console.log(`[TabEditor] Autosave timer fired for ${fileName}, isDirty=${isDirtyRef.current}, inDiffMode=${!!pendingAIEditTagRef.current}`);
+
       // Skip if not dirty
-      if (!isDirtyRef.current) return;
+      if (!isDirtyRef.current) {
+        // console.log(`[TabEditor] Skipping autosave - not dirty`);
+        return;
+      }
 
       // CRITICAL: Skip autosave if we're in diff mode showing AI edits
       // The content is already on disk - autosaving the diff view would cause mismatches
@@ -604,6 +643,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // Skip if not enough time has passed since last change (debounce)
       if (Date.now() - lastChangeTimeRef.current < autosaveDebounce) {
+        // console.log(`[TabEditor] Skipping autosave - debounce not elapsed`);
         return;
       }
 
@@ -1066,6 +1106,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
   // Handle content change from document header
   const handleDocumentHeaderContentChange = useCallback((newContent: string) => {
+    // console.log(`[TabEditor] handleDocumentHeaderContentChange called for ${fileName}, newContentLength=${newContent.length}`);
+    // console.trace('[TabEditor] DocumentHeader content change stack trace:');
+
     // Update editor content programmatically
     if (editorRef.current) {
       (async () => {
