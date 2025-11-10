@@ -19,6 +19,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.13] - 2025-11-10
+
+
+### Added
+- Git status indicators to FileEditsSidebar
+- PostHog events for tracking tab usage
+- is_dev_user property sent on all non-release builds with setOnce
+
+### Changed
+- Extract FileEditsSidebar inline styles to CSS
+
+### Fixed
+- Incremental diff accept/reject now properly clears pre-edit tag
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.12] - 2025-11-10
 
 
