@@ -19,6 +19,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.14] - 2025-11-10
+
+
+### Added
+- Dispatch CLEAR_DIFF_TAG_COMMAND in additional edge cases
+- incremental-approval support to history dialog
+- E2E test for Accept All edge case and metadata parsing
+- E2E test for reject-then-accept-all diff behavior
+
+### Changed
+- Updated AI input placeholder text to 'Ask a question. @ for files. / for commands'
+- Improved no file opened screen design
+- Updated empty AI sidebar text
+
+### Fixed
+- Infinite autosave loop after editing files
+- Dev mode location analytics now fire normally (better for testing)
+- Prevent flashing reloads during tab switches in diff mode
+- Keyboard shortcuts now reliably target focused window
+- Preserve incremental diff state across file close/reopen
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.13] - 2025-11-10
 
 
