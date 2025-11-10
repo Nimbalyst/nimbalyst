@@ -106,7 +106,7 @@ export async function registerSessionHandlers() {
                 await database.query(
                     `UPDATE ai_sessions
                      SET last_read_timestamp = NULL, last_read_message_id = NULL
-                     WHERE id = $2`,
+                     WHERE id = $1`,
                     [sessionId]
                 );
             }
