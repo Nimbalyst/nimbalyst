@@ -98,6 +98,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const [sessionHistoryCollapsed, setSessionHistoryCollapsed] = useState(mode === 'chat'); // Collapsed in chat mode
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
   const [sessionHistoryRefreshTrigger, setSessionHistoryRefreshTrigger] = useState(0);
+  const [renamedSession, setRenamedSession] = useState<{ id: string; title: string } | null>(null);
 
   // Reload coordination for database-backed session state
   const reloadTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -472,11 +473,26 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       throw new Error('Failed to load newly created session');
     }
 
+    // If planPath provided, create @ mention for draft input
+    let initialDraftInput = sessionData.draftInput;
+    if (planPath) {
+      // Convert absolute path to workspace-relative path
+      let relativePath = planPath;
+      if (planPath.startsWith(workspacePath)) {
+        relativePath = planPath.substring(workspacePath.length);
+        // Remove leading slash if present
+        if (relativePath.startsWith('/')) {
+          relativePath = relativePath.substring(1);
+        }
+      }
+      initialDraftInput = `@${relativePath} `;
+    }
+
     const newTab: SessionTab = {
       id: sessionData.id,
       name: tabName,
       sessionData,
-      draftInput: sessionData.draftInput,
+      draftInput: initialDraftInput,
       mode: 'plan',
       model: sessionData.model || sessionData.provider || 'claude-code'
     };
@@ -506,9 +522,23 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
 
     // Focus the input after a brief delay to ensure the component is rendered
+    // If we have planPath, position cursor at end of the @ mention
     setTimeout(() => {
       const ref = sessionViewRefsRef.current.get(sessionData.id);
-      ref?.current?.focusInput();
+      if (planPath) {
+        // Focus and move cursor to end
+        ref?.current?.focusInput();
+        // Additional timeout to ensure input is focused before setting cursor
+        setTimeout(() => {
+          const inputElement = ref?.current?.getInputElement?.();
+          if (inputElement && inputElement.selectionStart !== undefined) {
+            const length = inputElement.value.length;
+            inputElement.setSelectionRange(length, length);
+          }
+        }, 10);
+      } else {
+        ref?.current?.focusInput();
+      }
     }, 50);
 
     return sessionData;
@@ -1357,6 +1387,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }, []);
 
   const handleTabRename = useCallback(async (tabId: string, newName: string) => {
+    // Update the tab name in sessionTabs
     setSessionTabs(prev => prev.map(tab => {
       if (tab.id === tabId) {
         return { ...tab, name: newName };
@@ -1365,7 +1396,19 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }));
 
     try {
+      // Save to database
       await window.electronAPI.invoke('sessions:update-title', tabId, newName);
+
+      // Update availableSessions so SessionDropdown (chat mode) shows the new name
+      setAvailableSessions(prev => prev.map(session => {
+        if (session.id === tabId) {
+          return { ...session, title: newName, name: newName };
+        }
+        return session;
+      }));
+
+      // Update SessionHistory efficiently without database reload
+      setRenamedSession({ id: tabId, title: newName });
     } catch (err) {
       console.error('[AgenticPanel] Failed to update session title:', err);
     }
@@ -1608,6 +1651,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             loadedSessionIds={sessionTabs.map(tab => tab.id)}
             processingSessions={processingSessions}
             unreadSessions={unreadSessions}
+            renamedSession={renamedSession}
             onSessionSelect={openSessionInTab}
             onSessionDelete={deleteSession}
             onNewSession={() => createNewSession()}

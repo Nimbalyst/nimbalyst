@@ -23,6 +23,7 @@ interface SessionHistoryProps {
   loadedSessionIds?: string[]; // IDs of sessions loaded in tabs
   processingSessions?: Set<string>; // IDs of sessions currently processing
   unreadSessions?: Set<string>; // IDs of sessions with unread messages
+  renamedSession?: { id: string; title: string } | null; // Session that was just renamed
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete?: (sessionId: string) => void;
   onNewSession?: () => void;
@@ -51,6 +52,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   loadedSessionIds = [],
   processingSessions = new Set(),
   unreadSessions = new Set(),
+  renamedSession = null,
   onSessionSelect,
   onSessionDelete,
   onNewSession,
@@ -116,6 +118,18 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       hasUnread: unreadSessions.has(session.id)
     })));
   }, [processingSessions, unreadSessions]);
+
+  // Update session title when renamed (efficient update without database reload)
+  useEffect(() => {
+    if (renamedSession) {
+      setSessions(prevSessions => prevSessions.map(session => {
+        if (session.id === renamedSession.id) {
+          return { ...session, title: renamedSession.title };
+        }
+        return session;
+      }));
+    }
+  }, [renamedSession]);
 
   const handleToggleGroup = (groupName: string) => {
     if (collapsedGroups.includes(groupName)) {
