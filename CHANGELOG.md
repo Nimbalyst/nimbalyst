@@ -19,6 +19,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.15] - 2025-11-11
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Empty lines appearing at wrong positions in diff operations
+- Prevent duplicate snapshot creation and history dialog selection bugs
+- Remove debug logging that leaked document contents
+- Generate tagIds for incremental-approval tags and update pendingAIEditTagRef
+- Incremental diff baseline tracking for subsequent AI edits
+- Prevent accepted changes from reappearing in subsequent AI edits
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.14] - 2025-11-10
 
 
