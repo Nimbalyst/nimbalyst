@@ -63,11 +63,47 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
 /**
  * Transform raw agent messages from database into UI-friendly format
  * This processes the raw input/output logs and reconstructs the conversation
+ * Implements three-pass processing for sub-agent support:
+ * 1. Build parent-child map from parent_tool_use_id
+ * 2. Create all tool messages with sub-agent metadata
+ * 3. Build hierarchy and filter out child tools from top-level
  */
 function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
   const uiMessages: Message[] = [];
+  const allToolMessages = new Map<string, Message>(); // Map tool ID -> Message
+  const parentToolMap = new Map<string, string>(); // Map child tool ID -> parent tool ID
 
-  // Process messages in order
+  // PASS 1: Build parent-child relationship map
+  for (const agentMsg of agentMessages) {
+    try {
+      if (agentMsg.direction === 'output') {
+        try {
+          const parsed = JSON.parse(agentMsg.content);
+
+          // Check for parent_tool_use_id which indicates this message contains sub-agent tools
+          if (parsed.parent_tool_use_id && parsed.message?.content) {
+            const parentToolId = parsed.parent_tool_use_id;
+            const content = parsed.message.content;
+
+            // Map all tool_use blocks in this message to the parent
+            if (Array.isArray(content)) {
+              for (const block of content) {
+                if (block.type === 'tool_use' && block.id) {
+                  parentToolMap.set(block.id, parentToolId);
+                }
+              }
+            }
+          }
+        } catch (parseError) {
+          // Not JSON or doesn't have the structure we're looking for
+        }
+      }
+    } catch (error) {
+      // Continue processing other messages
+    }
+  }
+
+  // PASS 2: Process messages in order and create tool messages
   for (const agentMsg of agentMessages) {
     const timestamp = agentMsg.createdAt ? new Date(agentMsg.createdAt).getTime() : Date.now();
 
@@ -167,31 +203,62 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
                     });
                   }
                 } else if (block.type === 'tool_use') {
-                  // Tool call - add as a tool message
-                  uiMessages.push({
+                  // Tool call - create tool message with sub-agent metadata
+                  const isTaskAgent = block.name === 'Task';
+                  const parentToolId = parentToolMap.get(block.id);
+
+                  const toolMessage: Message = {
                     role: 'tool',
                     content: '',
                     timestamp,
                     toolCall: {
                       id: block.id,
                       name: block.name,
-                      arguments: block.input || block.arguments
+                      arguments: block.input || block.arguments,
+                      isSubAgent: isTaskAgent,
+                      subAgentType: isTaskAgent ? String(block.input?.subagent_type || block.arguments?.subagent_type || '') : undefined,
+                      parentToolId: parentToolId,
+                      childToolCalls: []
                     }
-                  });
+                  };
+
+                  // Store in allToolMessages map for hierarchy building
+                  if (block.id) {
+                    allToolMessages.set(block.id, toolMessage);
+                  }
+
+                  // Add child tools to their parent's childToolCalls array immediately (streaming)
+                  if (parentToolId) {
+                    const parentMessage = allToolMessages.get(parentToolId);
+                    if (parentMessage && parentMessage.toolCall?.childToolCalls) {
+                      parentMessage.toolCall.childToolCalls.push(toolMessage);
+                    }
+                  } else {
+                    // Only add to uiMessages if it's a top-level tool (no parent)
+                    uiMessages.push(toolMessage);
+                  }
                 } else if (block.type === 'tool_result') {
                   // Tool result - find the corresponding tool_use message and add result
                   const toolUseId = block.tool_use_id || block.id;
 
-                  // Search backwards for the tool message with this ID
-                  for (let i = uiMessages.length - 1; i >= 0; i--) {
-                    const msg = uiMessages[i];
-                    if (msg.role === 'tool' && msg.toolCall && msg.toolCall.id === toolUseId) {
-                      // Add the result to this tool call
-                      msg.toolCall.result = block.content;
-                      if (block.is_error) {
-                        msg.isError = true;
+                  // Look up the tool message in our map
+                  const toolMsg = allToolMessages.get(toolUseId);
+                  if (toolMsg && toolMsg.toolCall) {
+                    toolMsg.toolCall.result = block.content;
+                    if (block.is_error) {
+                      toolMsg.isError = true;
+                    }
+                  } else {
+                    // Fallback: search backwards in uiMessages (for backward compatibility)
+                    for (let i = uiMessages.length - 1; i >= 0; i--) {
+                      const msg = uiMessages[i];
+                      if (msg.role === 'tool' && msg.toolCall && msg.toolCall.id === toolUseId) {
+                        msg.toolCall.result = block.content;
+                        if (block.is_error) {
+                          msg.isError = true;
+                        }
+                        break;
                       }
-                      break;
                     }
                   }
                 }
@@ -207,6 +274,12 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
               errorMessage: typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error)
             });
           } else if (parsed.type === 'user' && parsed.message) {
+            // Skip messages that have parent_tool_use_id - these are sub-agent metadata, not conversation messages
+            if (parsed.parent_tool_use_id) {
+              // This message is metadata for organizing sub-agent tools, skip it
+              continue;
+            }
+
             // Slash command format (output): { type: "user", message: { role: "user", content: "..." } }
             // Note: Sometimes slash command outputs are marked as "user" messages (e.g., local command stdout)
             const msg = parsed.message;
@@ -292,6 +365,25 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
   // Mark the last message as complete if it's an assistant message and not already marked
   if (uiMessages.length > 0 && uiMessages[uiMessages.length - 1].role === 'assistant') {
     (uiMessages[uiMessages.length - 1] as any).isComplete = true;
+  }
+
+  // PASS 3: Build parent-child hierarchy (safety fallback)
+  // NOTE: Hierarchy is now built incrementally during streaming (PASS 2), so this
+  // should only catch edge cases where a child was created before its parent.
+  // We keep this for robustness.
+  for (const toolMessage of allToolMessages.values()) {
+    if (toolMessage.toolCall?.parentToolId) {
+      const parentMessage = allToolMessages.get(toolMessage.toolCall.parentToolId);
+      if (parentMessage && parentMessage.toolCall?.childToolCalls) {
+        // Check if not already added during streaming
+        const alreadyAdded = parentMessage.toolCall.childToolCalls.some(
+          child => child.toolCall?.id === toolMessage.toolCall?.id
+        );
+        if (!alreadyAdded) {
+          parentMessage.toolCall.childToolCalls.push(toolMessage);
+        }
+      }
+    }
   }
 
   return uiMessages;

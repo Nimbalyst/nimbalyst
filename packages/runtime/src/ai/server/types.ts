@@ -41,6 +41,11 @@ export interface Message {
     arguments?: any;
     result?: any;
     targetFilePath?: string;  // File path this tool call was executed against
+    // Sub-agent specific fields
+    isSubAgent?: boolean;           // true for Task tools
+    subAgentType?: string;          // e.g., "Explore", "bug-fixer", etc.
+    parentToolId?: string;          // ID of parent Task tool
+    childToolCalls?: Message[];     // Nested tools executed by sub-agent
   };
   isError?: boolean;
   errorMessage?: string;

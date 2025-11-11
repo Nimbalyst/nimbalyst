@@ -454,3 +454,63 @@
     background-color: var(--surface-hover);
   }
 }
+
+/* Sub-agent specific styling */
+.rich-transcript-tool-card.sub-agent {
+  background-color: color-mix(in srgb, var(--accent-primary) 5%, var(--surface-secondary));
+  border-color: color-mix(in srgb, var(--accent-primary) 20%, var(--border-primary));
+  border-width: 1px;
+}
+
+.rich-transcript-tool-icon.sub-agent-icon {
+  color: var(--accent-primary);
+}
+
+.rich-transcript-tool-subagent-type {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.rich-transcript-tool-description {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+.rich-transcript-tool-details {
+  margin: 0.5rem 0;
+}
+
+.rich-transcript-tool-details-summary {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0.25rem 0;
+  user-select: none;
+}
+
+.rich-transcript-tool-details-summary:hover {
+  color: var(--text-secondary);
+}
+
+.rich-transcript-tool-details-content {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.rich-transcript-subagent-children {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.rich-transcript-tool-container.nested {
+  margin-left: 0;
+}
+
+.rich-transcript-tool-card.child-tool {
+  background-color: var(--surface-tertiary);
+  border-color: var(--border-primary);
+}

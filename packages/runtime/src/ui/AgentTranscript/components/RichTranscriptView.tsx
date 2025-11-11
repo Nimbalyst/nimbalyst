@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import type { Message, SessionData } from '../../../ai/server/types';
 import type { TranscriptSettings } from '../types';
 import { MessageSegment } from './MessageSegment';
+import { MarkdownRenderer } from './MarkdownRenderer';
 import { ProviderIcon } from '../../icons/ProviderIcons';
 import { parseTimestamp } from '../../../utils/dateUtils';
 import { JSONViewer } from './JSONViewer';
@@ -134,6 +135,24 @@ export const RichTranscriptView = React.forwardRef<
     return false;
   }, [messages, sessionStatus]);
 
+  // Auto-expand sub-agent (Task) tools
+  useEffect(() => {
+    const subAgentIds = new Set<string>();
+    messages.forEach(msg => {
+      if (msg.role === 'tool' && msg.toolCall?.isSubAgent && msg.toolCall.id) {
+        subAgentIds.add(msg.toolCall.id);
+      }
+    });
+
+    if (subAgentIds.size > 0) {
+      setExpandedTools(prev => {
+        const next = new Set(prev);
+        subAgentIds.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  }, [messages]);
+
   // Helper to check if message is a login-required error
   const isLoginRequiredError = (message: Message) => {
     const content = message.content || message.errorMessage || '';
@@ -184,6 +203,156 @@ export const RichTranscriptView = React.forwardRef<
       default:
         return 'Agent';
     }
+  };
+
+  // Helper to extract text content from tool result
+  const extractResultText = (result: any): string | null => {
+    if (typeof result === 'string') {
+      return result;
+    }
+
+    // Handle array of content blocks (Anthropic format)
+    if (Array.isArray(result)) {
+      const textParts: string[] = [];
+      for (const block of result) {
+        if (block.type === 'text' && block.text) {
+          textParts.push(block.text);
+        }
+      }
+      return textParts.length > 0 ? textParts.join('\n') : null;
+    }
+
+    return null;
+  };
+
+  // Recursive tool rendering helper
+  const renderToolCard = (toolMsg: Message, toolIndex: number, depth: number = 0): JSX.Element | null => {
+    if (!toolMsg.toolCall) return null;
+
+    const tool = toolMsg.toolCall;
+    const toolId = tool.id || tool.name || `tool-${toolIndex}`;
+    const isExpanded = expandedTools.has(toolId);
+    const isSubAgent = tool.isSubAgent && tool.name === 'Task';
+    const hasChildren = tool.childToolCalls && tool.childToolCalls.length > 0;
+
+    // Extract description from arguments for sub-agents
+    const description = isSubAgent && tool.arguments?.description ? tool.arguments.description : null;
+    const prompt = isSubAgent && tool.arguments?.prompt ? tool.arguments.prompt : null;
+
+    // Extract result text
+    const resultText = tool.result ? extractResultText(tool.result) : null;
+
+    // Special styling for sub-agents
+    const cardClass = isSubAgent
+      ? 'rich-transcript-tool-card sub-agent'
+      : depth > 0
+        ? 'rich-transcript-tool-card child-tool'
+        : 'rich-transcript-tool-card';
+
+    return (
+      <div key={`tool-${toolIndex}-${depth}`} className={`rich-transcript-tool-container ${depth > 0 ? 'nested' : ''}`} style={{ marginLeft: depth > 0 ? '1rem' : '0' }}>
+        <div className={cardClass}>
+          <button onClick={() => toggleToolExpand(toolId)} className="rich-transcript-tool-button">
+            {isSubAgent ? (
+              // Document/clipboard icon for sub-agents
+              <svg className="rich-transcript-tool-icon sub-agent-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            ) : (
+              // Wrench icon for regular tools
+              <svg className="rich-transcript-tool-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            )}
+            <span className="rich-transcript-tool-name">
+              {isSubAgent ? 'Sub-Agent' : tool.name}
+              {isSubAgent && tool.subAgentType && (
+                <span className="rich-transcript-tool-subagent-type"> [{tool.subAgentType}]</span>
+              )}
+            </span>
+            {!isSubAgent && tool.arguments && (() => {
+              const argStr = formatToolArguments(tool.name, tool.arguments, workspacePath);
+              return argStr ? <span className="rich-transcript-tool-args">{argStr}</span> : null;
+            })()}
+            {tool.result && !(toolMsg as any).isError && (
+              <svg className="rich-transcript-tool-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+            {tool.result && (toolMsg as any).isError && (
+              <svg className="rich-transcript-tool-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+            <svg className="rich-transcript-tool-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isExpanded ? "M19 9l-7 7-7-7" : "M9 5l7 7-7 7"} />
+            </svg>
+          </button>
+
+          {isExpanded && (
+            <div className="rich-transcript-tool-expanded">
+              {/* Show description for sub-agents */}
+              {isSubAgent && description && (
+                <div className="rich-transcript-tool-section">
+                  <div className="rich-transcript-tool-description">{description}</div>
+                </div>
+              )}
+
+              {/* Show prompt for sub-agents (collapsable) */}
+              {isSubAgent && prompt && (
+                <details className="rich-transcript-tool-details">
+                  <summary className="rich-transcript-tool-details-summary">View full prompt</summary>
+                  <div className="rich-transcript-tool-details-content">
+                    <MarkdownRenderer content={prompt} isUser={false} />
+                  </div>
+                </details>
+              )}
+
+              {/* Show regular tool arguments (not for sub-agents) */}
+              {!isSubAgent && tool.arguments && Object.keys(tool.arguments).length > 0 && (
+                <div className="rich-transcript-tool-section">
+                  <div className="rich-transcript-tool-section-label">Arguments:</div>
+                  <JSONViewer data={tool.arguments} maxHeight="16rem" />
+                </div>
+              )}
+
+              {/* Recursively render child tools */}
+              {hasChildren && (
+                <div className="rich-transcript-tool-section">
+                  <div className="rich-transcript-tool-section-label">
+                    Sub-agent Actions ({tool.childToolCalls!.length}):
+                  </div>
+                  <div className="rich-transcript-subagent-children">
+                    {tool.childToolCalls!.map((childMsg, childIdx) =>
+                      renderToolCard(childMsg, childIdx, depth + 1)
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Show result - extract text from JSON if possible */}
+              {tool.result && (
+                <details className="rich-transcript-tool-details" open={!isSubAgent}>
+                  <summary className="rich-transcript-tool-details-summary">
+                    {isSubAgent ? 'View result' : 'Result'}
+                  </summary>
+                  <div className="rich-transcript-tool-details-content">
+                    {resultText ? (
+                      <MarkdownRenderer content={resultText} isUser={false} />
+                    ) : typeof tool.result === 'string' ? (
+                      <MarkdownRenderer content={tool.result} isUser={false} />
+                    ) : (
+                      <JSONViewer data={tool.result} maxHeight="16rem" />
+                    )}
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -299,64 +468,11 @@ export const RichTranscriptView = React.forwardRef<
                 }
                 const isNewGroup = !effectivePrevMessage || effectivePrevMessage.role !== message.role;
 
-                // Render tool calls in a compact format (only for orphaned tools now)
+                // Render tool calls (orphaned tools)
                 if (isTool && message.toolCall) {
-                  const tool = message.toolCall;
-                  const toolId = tool.id || tool.name || `tool-${index}`;
-                  const isExpanded = expandedTools.has(toolId);
-
                   return (
                     <div key={`${sessionId}-${index}`} className="rich-transcript-tool-container orphan">
-                      <div className="rich-transcript-tool-card">
-                        <button onClick={() => toggleToolExpand(toolId)} className="rich-transcript-tool-button">
-                          <svg className="rich-transcript-tool-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          <span className="rich-transcript-tool-name">
-                            {tool.name}
-                          </span>
-                          {tool.arguments && (() => {
-                            const argStr = formatToolArguments(tool.name, tool.arguments, workspacePath);
-                            return argStr ? <span className="rich-transcript-tool-args">{argStr}</span> : null;
-                          })()}
-                          {tool.result && !(tool as any).isError && (
-                            <svg className="rich-transcript-tool-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          )}
-                          {tool.result && (tool as any).isError && (
-                            <svg className="rich-transcript-tool-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          )}
-                          <svg className="rich-transcript-tool-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isExpanded ? "M19 9l-7 7-7-7" : "M9 5l7 7-7 7"} />
-                          </svg>
-                        </button>
-
-                        {isExpanded && (
-                          <div className="rich-transcript-tool-expanded">
-                            {tool.arguments && Object.keys(tool.arguments).length > 0 && (
-                              <div className="rich-transcript-tool-section">
-                                <div className="rich-transcript-tool-section-label">Arguments:</div>
-                                <JSONViewer data={tool.arguments} maxHeight="16rem" />
-                              </div>
-                            )}
-
-                            {tool.result && (
-                              <div className="rich-transcript-tool-section result">
-                                <div className="rich-transcript-tool-section-label">Result:</div>
-                                {typeof tool.result === 'string' ? (
-                                  <pre>{tool.result}</pre>
-                                ) : (
-                                  <JSONViewer data={tool.result} maxHeight="16rem" />
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                      {renderToolCard(message, index, 0)}
                     </div>
                   );
                 }
@@ -431,67 +547,9 @@ export const RichTranscriptView = React.forwardRef<
                     {/* Tool messages that came before this assistant message */}
                     {toolMessagesBefore.length > 0 && (
                       <div className={`rich-transcript-tool-messages ${isNewGroup ? 'indented' : ''}`}>
-                        {toolMessagesBefore.map(({ message: toolMsg, index: toolIndex }) => {
-                          if (!toolMsg.toolCall) return null;
-                          const tool = toolMsg.toolCall;
-                          const toolId = tool.id || tool.name || `tool-${toolIndex}`;
-                          const isExpanded = expandedTools.has(toolId);
-
-                          return (
-                            <div key={`tool-${toolIndex}`} className="rich-transcript-tool-container">
-                              <div className="rich-transcript-tool-card">
-                                <button onClick={() => toggleToolExpand(toolId)} className="rich-transcript-tool-button">
-                                  <svg className="rich-transcript-tool-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                  </svg>
-                                  <span className="rich-transcript-tool-name">
-                                    {tool.name}
-                                  </span>
-                                  {tool.arguments && (() => {
-                                    const argStr = formatToolArguments(tool.name, tool.arguments, workspacePath);
-                                    return argStr ? <span className="rich-transcript-tool-args">{argStr}</span> : null;
-                                  })()}
-                                  {tool.result && !(tool as any).isError && (
-                                    <svg className="rich-transcript-tool-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                  )}
-                                  {tool.result && (tool as any).isError && (
-                                    <svg className="rich-transcript-tool-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                  )}
-                                  <svg className="rich-transcript-tool-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isExpanded ? "M19 9l-7 7-7-7" : "M9 5l7 7-7 7"} />
-                                  </svg>
-                                </button>
-
-                                {isExpanded && (
-                                  <div className="rich-transcript-tool-expanded">
-                                    {tool.arguments && Object.keys(tool.arguments).length > 0 && (
-                                      <div className="rich-transcript-tool-section">
-                                        <div className="rich-transcript-tool-section-label">Arguments:</div>
-                                        <JSONViewer data={tool.arguments} maxHeight="16rem" />
-                                      </div>
-                                    )}
-
-                                    {tool.result && (
-                                      <div className="rich-transcript-tool-section result">
-                                        <div className="rich-transcript-tool-section-label">Result:</div>
-                                        {typeof tool.result === 'string' ? (
-                                          <pre>{tool.result}</pre>
-                                        ) : (
-                                          <JSONViewer data={tool.result} maxHeight="16rem" />
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {toolMessagesBefore.map(({ message: toolMsg, index: toolIndex }) =>
+                          renderToolCard(toolMsg, toolIndex, 0)
+                        )}
                       </div>
                     )}
 
