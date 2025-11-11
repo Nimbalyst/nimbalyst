@@ -415,6 +415,7 @@ export class HistoryManager {
 
   /**
    * Update tag status (pending-review -> reviewed -> archived)
+   * Works for both pre-edit and incremental-approval tags
    */
   async updateTagStatus(filePath: string, tagId: string, status: TagStatus): Promise<void> {
     try {
@@ -435,21 +436,20 @@ export class HistoryManager {
             )
         WHERE file_path = $3
           AND metadata->>'tagId' = $4
-          AND metadata->>'type' = 'pre-edit'
       `, [status, now, filePath, tagId]);
 
       logger.main.info('[HistoryManager] AFTER updateTagStatus - rows affected:', (result as any).rowCount || 0);
 
       // Verify the update worked
       const checkResult = await database.query(`
-        SELECT metadata->>'status' as status, metadata->>'tagId' as tag_id
+        SELECT metadata->>'status' as status, metadata->>'tagId' as tag_id, metadata->>'type' as type
         FROM document_history
         WHERE file_path = $1
-          AND metadata->>'type' = 'pre-edit'
+          AND (metadata->>'type' = 'pre-edit' OR metadata->>'type' = 'incremental-approval')
       `, [filePath]);
 
-      logger.main.info('[HistoryManager] All pre-edit tags for file after update:',
-        checkResult.rows.map((r: any) => ({ tagId: r.tag_id, status: r.status }))
+      logger.main.info('[HistoryManager] All tags for file after update:',
+        checkResult.rows.map((r: any) => ({ tagId: r.tag_id, type: r.type, status: r.status }))
       );
     } catch (error) {
       logger.main.error('[HistoryManager] Failed to update tag status:', error);
@@ -549,7 +549,7 @@ export class HistoryManager {
     content: string,
     sessionId: string,
     metadata?: { acceptedGroups?: string[], rejectedGroups?: string[], remainingGroups?: string[] }
-  ): Promise<void> {
+  ): Promise<string> {
     try {
       // Ensure database is initialized
       if (!database.isInitialized()) {
@@ -558,6 +558,9 @@ export class HistoryManager {
 
       const now = Date.now();
       const compressed = await gzip(Buffer.from(content, 'utf-8'));
+
+      // Generate unique tag ID
+      const tagId = `incremental-${sessionId}-${now}`;
 
       // Determine workspace ID
       let workspaceId: string | null = null;
@@ -597,14 +600,17 @@ export class HistoryManager {
         1,
         {
           type: 'incremental-approval',
+          tagId,
           status: 'pending-review',
           sessionId,
           createdAt: now,
+          updatedAt: now,
           ...metadata
         }
       ]);
 
-      logger.main.info('[HistoryManager] Created incremental-approval tag:', { filePath, sessionId });
+      logger.main.info('[HistoryManager] Created incremental-approval tag:', { filePath, sessionId, tagId });
+      return tagId;
     } catch (error) {
       logger.main.error('[HistoryManager] Failed to create incremental-approval tag:', error);
       throw error;

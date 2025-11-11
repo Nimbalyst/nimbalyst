@@ -1264,14 +1264,22 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
           // Create incremental-approval tag with the REJECTED version
           // This is the baseline: it shows what we've decided so far (approved + rejected)
-          await window.electronAPI.invoke('history:create-incremental-approval-tag',
+          const newTagId = await window.electronAPI.invoke('history:create-incremental-approval-tag',
             filePath,
             rejectedContent,
             sessionId,
             {}  // Can optionally track which groups were accepted/rejected
           );
 
-          logger.ui.info(`[TabEditor] Created incremental-approval tag for session: ${sessionId}`);
+          logger.ui.info(`[TabEditor] Created incremental-approval tag for session: ${sessionId}, tagId: ${newTagId}`);
+
+          // CRITICAL: Update pendingAIEditTagRef to point to the NEW incremental-approval tag
+          // This ensures that when CLEAR_DIFF_TAG_COMMAND is dispatched later, it marks the correct tag as reviewed
+          pendingAIEditTagRef.current = {
+            tagId: newTagId,
+            sessionId,
+            filePath
+          };
 
           // Update our state
           setContent(approvedContent);

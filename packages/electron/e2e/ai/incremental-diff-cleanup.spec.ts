@@ -297,12 +297,22 @@ test('should allow autosave after incremental accept cleanup', async () => {
   // Wait for diff approval bar
   await page.waitForSelector('.diff-approval-bar', { timeout: 2000 });
 
-  // Accept all changes incrementally
+  // Accept all changes incrementally by clicking Accept until diff bar disappears
+  // Get the total number of diff groups
+  const diffCountText = await page.locator('.diff-approval-bar').locator('text=/\\d+ of \\d+/').textContent();
+  const totalDiffs = parseInt(diffCountText?.match(/of (\d+)/)?.[1] || '0');
+  console.log(`Total diff groups: ${totalDiffs}`);
+
   const acceptButton = page.locator('button:has-text("Accept")').first();
-  await acceptButton.click();
-  await page.waitForTimeout(200);
-  await acceptButton.click();
-  await page.waitForTimeout(500);
+  for (let i = 0; i < totalDiffs; i++) {
+    console.log(`Accepting diff ${i + 1} of ${totalDiffs}`);
+    await acceptButton.click();
+    // Add longer delay to let handleIncrementalApproval complete
+    await page.waitForTimeout(2000);
+  }
+
+  // Wait for diff mode to exit
+  await page.waitForTimeout(1000);
 
   // Verify diff mode exited
   await expect(page.locator('.diff-approval-bar')).toHaveCount(0);
@@ -332,6 +342,19 @@ test('should allow autosave after incremental accept cleanup', async () => {
 
   // CRITICAL TEST: Close and reopen the file to verify tag was cleared
   console.log('Closing and reopening file to verify tag was cleared...');
+
+  // DEBUG: Check what tags exist before closing
+  const tagsBeforeClose = await page.evaluate(async ([filePath]) => {
+    return await window.electronAPI.history.getPendingTags(filePath);
+  }, [testFilePath]);
+  console.log('Tags before closing:', JSON.stringify(tagsBeforeClose, null, 2));
+
+  // DEBUG: Check pendingAIEditTagRef
+  const pendingTagRef = await page.evaluate(() => {
+    const tabEditor = (window as any).__tabEditorDebug;
+    return tabEditor?.pendingAIEditTagRef;
+  });
+  console.log('pendingAIEditTagRef:', JSON.stringify(pendingTagRef, null, 2));
 
   // Close the tab
   const closeButton = page.locator('.tab-close-button[data-filename="test.md"]');

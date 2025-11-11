@@ -66,7 +66,7 @@ export async function registerHistoryHandlers() {
         sessionId: string,
         metadata?: { acceptedGroups?: string[], rejectedGroups?: string[], remainingGroups?: string[] }
     ) => {
-        await historyManager.createIncrementalApprovalTag(filePath, content, sessionId, metadata);
+        return await historyManager.createIncrementalApprovalTag(filePath, content, sessionId, metadata);
     });
 
     ipcMain.handle('history:get-diff-baseline', async (event, filePath: string) => {

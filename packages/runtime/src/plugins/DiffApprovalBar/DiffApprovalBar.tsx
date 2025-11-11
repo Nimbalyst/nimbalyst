@@ -325,16 +325,24 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
       const updatedGroups = groupDiffChanges(editor);
       const hasDiff = $hasDiffNodes(editor);
 
+      console.log('[DiffApprovalBar handleAcceptThis] After accept:', {
+        groupCount: updatedGroups.length,
+        hasDiff,
+        willDispatchClear: updatedGroups.length === 0 || !hasDiff
+      });
+
       // Check if this was the last diff - if so, trigger cleanup
       if (updatedGroups.length === 0 || !hasDiff) {
         // All diffs cleared - dispatch CLEAR_DIFF_TAG_COMMAND
         // This is handled by TabEditor in Electron to mark tag as reviewed
+        console.log('[DiffApprovalBar] Dispatching CLEAR_DIFF_TAG_COMMAND');
         editor.dispatchCommand(CLEAR_DIFF_TAG_COMMAND, undefined);
         return;
       }
 
       // Still have diffs - dispatch INCREMENTAL_APPROVAL_COMMAND
       // This is handled by TabEditor in Electron to create incremental-approval tag
+      console.log('[DiffApprovalBar] Dispatching INCREMENTAL_APPROVAL_COMMAND');
       editor.dispatchCommand(INCREMENTAL_APPROVAL_COMMAND, undefined);
 
       // Move to next group
