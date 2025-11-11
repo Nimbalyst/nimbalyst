@@ -326,22 +326,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         const oldContent = baseline ? baseline.content : pendingTag.content;
         const newContent = contentRef.current; // Use current content ref to get actual disk content
 
-        console.log(`[TabEditor] Restoring pending AI edit on mount: tagId=${pendingTag.id}, status=${pendingTag.status}`);
-        console.log('[TabEditor] MOUNT EFFECT - Restoring diff:', {
-          fileName: filePath,
-          baselineType: baseline?.tagType,
-          oldContentLength: oldContent.length,
-          newContentLength: newContent.length,
-          oldHasFirstAI: oldContent.includes('FIRST AI EDIT'),
-          oldHasSecondOriginal: oldContent.includes('Second paragraph'),
-          oldHasThirdOriginal: oldContent.includes('Third paragraph'),
-          oldHasThirdAI: oldContent.includes('THIRD AI EDIT'),
-          newHasFirstAI: newContent.includes('FIRST AI EDIT'),
-          newHasThirdAI: newContent.includes('THIRD AI EDIT'),
-          contentsEqual: oldContent === newContent
-        });
-        console.log('[TabEditor] OLD CONTENT:', JSON.stringify(oldContent));
-        console.log('[TabEditor] NEW CONTENT:', JSON.stringify(newContent));
+        logger.ui.info(`[TabEditor] Restoring pending AI edit on mount: tagId=${pendingTag.id}, status=${pendingTag.status}`);
 
         // Set the ref so other parts of the component know we're in diff mode
         pendingAIEditTagRef.current = {
