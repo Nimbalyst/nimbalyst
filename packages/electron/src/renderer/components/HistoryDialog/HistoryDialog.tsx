@@ -12,8 +12,14 @@ interface HistoryDialogProps {
 }
 
 type VersionSelection = {
-  timestamp: string;
+  snapshotId: string; // Composite ID: timestamp-hash-index
+  timestamp: string; // Stored separately for loadSnapshot calls
   label: 'A' | 'B';
+};
+
+// Helper function to generate unique snapshot ID
+const getSnapshotId = (snapshot: { timestamp: string; baseMarkdownHash: string }, index: number) => {
+  return `${snapshot.timestamp}-${snapshot.baseMarkdownHash}-${index}`;
 };
 
 export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryDialogProps) {
@@ -115,24 +121,26 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
     };
   }, [isOpen, onClose]);
 
-  const handleSnapshotSelect = async (timestamp: string, isCommandClick: boolean) => {
+  const handleSnapshotSelect = async (snapshotId: string, timestamp: string, clickedIndex: number, isCommandClick: boolean) => {
     // Check if this version is already selected
-    const existingIndex = selectedVersions.findIndex(v => v.timestamp === timestamp);
+    const existingIndex = selectedVersions.findIndex(v => v.snapshotId === snapshotId);
 
     if (existingIndex >= 0) {
       // Deselect this version
-      const newSelections = selectedVersions.filter(v => v.timestamp !== timestamp);
+      const newSelections = selectedVersions.filter(v => v.snapshotId !== snapshotId);
       setSelectedVersions(newSelections);
       setDiffMode(false);
 
       // If we still have one selection, load diff with previous version
       if (newSelections.length === 1) {
-        const clickedSnapshot = displayedSnapshots.find(s => s.timestamp === newSelections[0].timestamp);
-        const clickedIndex = displayedSnapshots.findIndex(s => s.timestamp === newSelections[0].timestamp);
-        const previousSnapshot = displayedSnapshots[clickedIndex + 1];
+        const remainingSelection = newSelections[0];
+        // Parse the index from the snapshotId (last segment after final dash)
+        const idParts = remainingSelection.snapshotId.split('-');
+        const remainingIndex = parseInt(idParts[idParts.length - 1]);
+        const previousSnapshot = displayedSnapshots[remainingIndex + 1];
 
-        if (clickedSnapshot && previousSnapshot) {
-          await loadDiffMode(previousSnapshot.timestamp, clickedSnapshot.timestamp);
+        if (previousSnapshot) {
+          await loadDiffMode(previousSnapshot.timestamp, remainingSelection.timestamp);
         } else {
           setPreviewContent('');
         }
@@ -146,13 +154,12 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
     if (isCommandClick) {
       if (selectedVersions.length < 2) {
         const label: 'A' | 'B' = selectedVersions.length === 0 ? 'A' : 'B';
-        const newSelections = [...selectedVersions, { timestamp, label }];
+        const newSelections = [...selectedVersions, { snapshotId, timestamp, label }];
         setSelectedVersions(newSelections);
 
         if (newSelections.length === 2) {
           // Two selections - load both and enter diff mode
-          const [versionA, versionB] = newSelections;
-          await loadDiffMode(versionA.timestamp, versionB.timestamp);
+          await loadDiffMode(newSelections[0].timestamp, newSelections[1].timestamp);
         }
       }
       return;
@@ -161,14 +168,12 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
     // Regular click: ALWAYS reset to single selection and show diff with previous version
     // This ensures that even if you had command-clicked before, a regular click
     // switches back to the default "diff with previous" behavior
-    const clickedSnapshot = displayedSnapshots.find(s => s.timestamp === timestamp);
-    const clickedIndex = displayedSnapshots.findIndex(s => s.timestamp === timestamp);
     const previousSnapshot = displayedSnapshots[clickedIndex + 1];
 
-    setSelectedVersions([{ timestamp, label: 'A' }]);
+    setSelectedVersions([{ snapshotId, timestamp, label: 'A' }]);
 
-    if (clickedSnapshot && previousSnapshot) {
-      await loadDiffMode(previousSnapshot.timestamp, clickedSnapshot.timestamp);
+    if (previousSnapshot) {
+      await loadDiffMode(previousSnapshot.timestamp, timestamp);
     } else {
       // No previous version - just show the content
       setDiffMode(false);
@@ -245,11 +250,11 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
     }
   };
 
-  const handleDelete = async (timestamp: string) => {
+  const handleDelete = async (snapshotId: string, timestamp: string) => {
     if (window.confirm('Are you sure you want to delete this snapshot?')) {
       await deleteSnapshot(timestamp);
       // Remove from selections if selected
-      const newSelections = selectedVersions.filter(v => v.timestamp !== timestamp);
+      const newSelections = selectedVersions.filter(v => v.snapshotId !== snapshotId);
       if (newSelections.length !== selectedVersions.length) {
         setSelectedVersions(newSelections);
         setPreviewContent('');
@@ -385,13 +390,18 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
             ) : (
               <div className="history-items">
                 {displayedSnapshots.map((snapshot, index) => {
-                  const isSelected = selectedVersions.some(v => v.timestamp === snapshot.timestamp);
+                  const snapshotId = getSnapshotId(snapshot, index);
+                  const isSelected = selectedVersions.some(v => v.snapshotId === snapshotId);
 
                   return (
                   <div
-                    key={`${snapshot.timestamp}-${snapshot.type}-${index}`}
+                    key={snapshotId}
+                    data-testid={`history-item-${index}`}
+                    data-snapshot-id={snapshotId}
+                    data-snapshot-type={snapshot.type}
+                    data-selected={isSelected}
                     className={`history-item ${isSelected ? 'selected' : ''}`}
-                    onClick={(e) => handleSnapshotSelect(snapshot.timestamp, e.metaKey || e.ctrlKey)}
+                    onClick={(e) => handleSnapshotSelect(snapshotId, snapshot.timestamp, index, e.metaKey || e.ctrlKey)}
                   >
                     <div className="history-item-content">
                       <div className="history-item-main">
@@ -405,9 +415,10 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
                         <span className="history-item-size">{(snapshot.size / 1024).toFixed(1)} KB</span>
                         <button
                           className="history-item-delete"
+                          data-testid={`history-item-delete-${index}`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDelete(snapshot.timestamp);
+                            handleDelete(snapshotId, snapshot.timestamp);
                           }}
                           title="Delete snapshot"
                         >

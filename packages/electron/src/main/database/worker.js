@@ -256,6 +256,12 @@ class PGLiteWorker {
       CREATE INDEX IF NOT EXISTS idx_history_workspace_file ON document_history(workspace_id, file_path);
       CREATE INDEX IF NOT EXISTS idx_history_timestamp ON document_history(timestamp);
 
+      -- Create index to speed up duplicate detection (most recent snapshot check)
+      -- This is just for performance, not uniqueness
+      CREATE INDEX IF NOT EXISTS idx_history_file_content_hash
+        ON document_history(file_path, (metadata->>'baseMarkdownHash'))
+        WHERE metadata->>'baseMarkdownHash' IS NOT NULL;
+
       -- Migration: Clean up duplicate pending tags before creating unique index
       -- Keep only the most recent pending tag per file (any type)
       DELETE FROM document_history

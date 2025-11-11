@@ -37,6 +37,8 @@ export interface HistoryTag {
 export class HistoryManager {
   private maxSnapshots = 50;
   private maxAgeDays = 30;
+  private pendingSnapshots = new Map<string, { promise: Promise<void>; timestamp: number }>(); // Track in-flight snapshot creations
+  private readonly DEDUP_WINDOW_MS = 1500; // Only deduplicate within 1500ms window
 
   constructor() {}
 
@@ -56,14 +58,49 @@ export class HistoryManager {
     type: SnapshotType,
     description?: string
   ): Promise<void> {
-    const timestamp = new Date().toISOString();
-
-    // Calculate markdown hash
+    // Calculate markdown hash first
     const baseMarkdownHash = crypto
       .createHash('sha256')
       .update(state)
       .digest('hex');
 
+    // Create a unique key for this snapshot (file + hash)
+    const snapshotKey = `${filePath}:${baseMarkdownHash}`;
+    const now = Date.now();
+
+    // If there's already a pending snapshot with the same content within dedup window, wait for it and skip
+    const existing = this.pendingSnapshots.get(snapshotKey);
+    if (existing) {
+      const timeSinceStart = now - existing.timestamp;
+      if (timeSinceStart < this.DEDUP_WINDOW_MS) {
+        logger.main.debug('[HistoryManager] Skipping duplicate snapshot (already in progress, within dedup window):', snapshotKey);
+        await existing.promise; // Wait for the existing one to complete
+        return;
+      } else {
+        // Outside dedup window - this is a legitimate re-save of same content
+        logger.main.debug('[HistoryManager] Allowing snapshot (outside dedup window):', snapshotKey);
+      }
+    }
+
+    // Create a promise for this snapshot operation
+    const snapshotPromise = this._createSnapshotImpl(filePath, state, type, description, baseMarkdownHash);
+    this.pendingSnapshots.set(snapshotKey, { promise: snapshotPromise, timestamp: now });
+
+    try {
+      await snapshotPromise;
+    } finally {
+      // Clean up the pending snapshot entry
+      this.pendingSnapshots.delete(snapshotKey);
+    }
+  }
+
+  private async _createSnapshotImpl(
+    filePath: string,
+    state: string,
+    type: SnapshotType,
+    description: string | undefined,
+    baseMarkdownHash: string
+  ): Promise<void> {
     // Check for duplicate: if the most recent snapshot has the same content hash, skip
     try {
       // Ensure database is initialized
@@ -83,7 +120,7 @@ export class HistoryManager {
       if (recentResult.rows.length > 0) {
         const recentMetadata = recentResult.rows[0].metadata;
         if (recentMetadata?.baseMarkdownHash === baseMarkdownHash) {
-          logger.main.debug('[HistoryManager] Skipping duplicate snapshot (same content hash):', filePath);
+          logger.main.debug('[HistoryManager] Skipping duplicate snapshot (same content hash in DB):', filePath);
           return; // Skip creating duplicate
         }
       }
