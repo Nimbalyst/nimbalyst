@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.16] - 2025-11-11
+
+
+### Added
+- Floating button to show AI sessions for current document
+- Sort dropdown to session history panel
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Update session name in history list immediately after rename
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.15] - 2025-11-11
 
 
