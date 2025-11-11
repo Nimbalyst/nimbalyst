@@ -146,6 +146,61 @@ export async function registerSessionHandlers() {
         // Checkpoints aren't implemented in current system
     });
 
+    // Get sessions by file path
+    ipcMain.handle('sessions:get-by-file', async (event, workspaceId: string, filePath: string) => {
+        try {
+            const { database } = await import('../database/PGLiteDatabaseWorker');
+
+            // Query session_files table to get session IDs that have interacted with this file
+            const fileLinksResult = await database.query(
+                `SELECT DISTINCT session_id FROM session_files
+                 WHERE workspace_id = $1 AND file_path = $2`,
+                [workspaceId, filePath]
+            );
+
+            if (!fileLinksResult.rows || fileLinksResult.rows.length === 0) {
+                return [];
+            }
+
+            const sessionIds = fileLinksResult.rows.map((row: any) => row.session_id);
+
+            // Get list entries with messageCount
+            const listEntries = await AISessionsRepository.list(workspaceId);
+            const entriesMap = new Map(listEntries.map(entry => [entry.id, entry]));
+
+            // Load full session data for each session ID
+            const sessions = await Promise.all(
+                sessionIds.map(async (sessionId: string) => {
+                    try {
+                        const session = await AISessionsRepository.get(sessionId);
+                        const entry = entriesMap.get(sessionId);
+
+                        return session ? {
+                            id: session.id,
+                            title: session.title || 'Untitled Session',
+                            provider: session.provider,
+                            model: session.model,
+                            createdAt: session.createdAt,
+                            updatedAt: session.updatedAt,
+                            messageCount: entry?.messageCount || 0
+                        } : null;
+                    } catch (err) {
+                        console.error(`[SessionHandlers] Failed to load session ${sessionId}:`, err);
+                        return null;
+                    }
+                })
+            );
+
+            // Filter out nulls and sort by most recent first
+            return sessions
+                .filter(s => s !== null)
+                .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        } catch (error) {
+            console.error('[SessionHandlers] Error getting sessions by file:', error);
+            return [];
+        }
+    });
+
     // Test-only: Query database directly (for e2e tests and debugging)
     // This handler is safe to leave registered as it's read-only
     ipcMain.handle('test:query-db', async (event, sql: string, params?: any[]) => {

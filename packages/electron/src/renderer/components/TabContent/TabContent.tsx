@@ -31,6 +31,10 @@ interface TabContentProps {
   // Document action callbacks
   onViewHistory?: () => void;
   onRenameDocument?: () => void;
+  onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
+
+  // Document metadata
+  workspaceId?: string;
 }
 
 export const TabContent: React.FC<TabContentProps> = ({
@@ -44,6 +48,8 @@ export const TabContent: React.FC<TabContentProps> = ({
   onSaveComplete,
   onViewHistory,
   onRenameDocument,
+  onSwitchToAgentMode,
+  workspaceId,
 }) => {
   // Track manual save functions for each tab
   const saveFunctionsRef = useRef<Map<string, () => Promise<void>>>(new Map());
@@ -342,6 +348,8 @@ export const TabContent: React.FC<TabContentProps> = ({
             onGetContentReady={(getContentFn) => handleGetContentReady(tab.id, getContentFn)}
             onViewHistory={onViewHistory}
             onRenameDocument={onRenameDocument}
+            onSwitchToAgentMode={onSwitchToAgentMode}
+            workspaceId={workspaceId}
           />
         );
       })}

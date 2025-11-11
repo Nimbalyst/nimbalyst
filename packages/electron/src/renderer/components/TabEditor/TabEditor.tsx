@@ -48,6 +48,10 @@ interface TabEditorProps {
   // Document action callbacks
   onViewHistory?: () => void;
   onRenameDocument?: () => void;
+  onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
+
+  // Document metadata
+  workspaceId?: string;
 }
 
 export const TabEditor: React.FC<TabEditorProps> = ({
@@ -67,6 +71,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                                                       onGetContentReady,
                                                       onViewHistory,
                                                       onRenameDocument,
+                                                      onSwitchToAgentMode,
+                                                      workspaceId,
                                                     }) => {
   // Internal state - fully owned by this component
   const [content, setContent] = useState(initialContent);
@@ -1477,6 +1483,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               onSaveRequest: handleManualSave,
               onViewHistory,
               onRenameDocument,
+              onSwitchToAgentMode,
+              filePath,
+              workspaceId,
               onImageDoubleClick: handleImageDoubleClick,
               onImageDragStart: handleImageDragStart,
               textReplacements: isActive ? textReplacements : undefined,

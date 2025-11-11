@@ -98,6 +98,11 @@ export interface EditorConfig {
   // Document action callbacks
   onViewHistory?: () => void;
   onRenameDocument?: () => void;
+  onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
+
+  // Document metadata for AI sessions
+  filePath?: string;
+  workspaceId?: string;
 
   // Image interaction callbacks (platform-specific)
   onImageDoubleClick?: (src: string, nodeKey: NodeKey) => void;

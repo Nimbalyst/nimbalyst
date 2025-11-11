@@ -267,7 +267,14 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
             ) : ( */}
               <HistoryPlugin externalHistoryState={historyState} />
             {/* )} */}
-            {editable && <FloatingDocumentActionsPlugin config={config} />}
+            {editable && (
+              <FloatingDocumentActionsPlugin
+                config={config}
+                filePath={config.filePath}
+                workspaceId={config.workspaceId}
+                onSwitchToAgentMode={config.onSwitchToAgentMode}
+              />
+            )}
             <RichTextPlugin
               contentEditable={
                 <div className="editor-scroller" ref={onRef}>

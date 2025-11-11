@@ -160,3 +160,120 @@
 .action-menu-item:active {
   background: var(--surface-secondary);
 }
+
+/* AI Sessions Button */
+.floating-doc-ai-button {
+  position: relative;
+  color: var(--text-primary);
+}
+
+.ai-sessions-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--primary-color);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+  line-height: 1;
+}
+
+/* AI Sessions Dropdown */
+.floating-doc-ai-sessions-dropdown {
+  position: absolute;
+  top: 44px;
+  right: 88px;
+  min-width: 300px;
+  max-width: 400px;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 11;
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.ai-session-start-button {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: var(--primary-color);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-session-start-button:hover {
+  opacity: 0.9;
+}
+
+.ai-session-start-button:active {
+  opacity: 0.8;
+}
+
+.ai-sessions-divider {
+  height: 1px;
+  background: var(--border-primary);
+  margin: 0;
+}
+
+.ai-sessions-loading,
+.ai-sessions-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.ai-sessions-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.ai-session-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.ai-session-item:last-child {
+  border-bottom: none;
+}
+
+.ai-session-item:hover {
+  background: var(--surface-hover);
+}
+
+.ai-session-item:active {
+  background: var(--surface-secondary);
+}
+
+.ai-session-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-session-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

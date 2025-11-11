@@ -43,6 +43,7 @@ export interface EditorModeProps {
   onGetContentReady?: (getContentFn: (() => string) | null) => void;
   onCloseWorkspace?: () => void;
   onOpenQuickSearch?: () => void;
+  onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
 }
 
 const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMode({
@@ -54,7 +55,8 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   onCurrentFileChange,
   onGetContentReady,
   onCloseWorkspace,
-  onOpenQuickSearch
+  onOpenQuickSearch,
+  onSwitchToAgentMode
 }, ref) {
   // File tree state
   const [fileTree, setFileTree] = useState<FileTreeItem[]>([]);
@@ -558,6 +560,8 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
                       }
                     }
                   }}
+                  onSwitchToAgentMode={onSwitchToAgentMode}
+                  workspaceId={workspacePath}
                 />
               </TabManager>
             </div>

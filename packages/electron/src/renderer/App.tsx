@@ -1171,6 +1171,25 @@ export default function App() {
                   }}
                   onCloseWorkspace={handleCloseWorkspace}
                   onOpenQuickSearch={() => setIsQuickOpenVisible(true)}
+                  onSwitchToAgentMode={(planDocumentPath, sessionId) => {
+                    // Switch to agent mode first
+                    setActiveMode('agent');
+
+                    // Wait for next tick to ensure AgenticPanel is mounted/visible
+                    setTimeout(() => {
+                      if (planDocumentPath) {
+                        // Create new session with document reference
+                        if (agenticPanelRef.current?.createNewSession) {
+                          agenticPanelRef.current.createNewSession(planDocumentPath);
+                        }
+                      } else if (sessionId && agenticPanelRef.current) {
+                        // Load existing session
+                        // Note: AgenticPanel will need to handle loading the session by ID
+                        // For now, we just switch to agent mode and the user can select from history
+                        console.log('Load session:', sessionId);
+                      }
+                    }, 100);
+                  }}
                 />
               ) : (
                 <WorkspaceWelcome workspaceName="Open a workspace to get started" />
