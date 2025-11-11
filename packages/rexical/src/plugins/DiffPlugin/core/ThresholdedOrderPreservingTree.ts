@@ -74,6 +74,101 @@ function attrDist(a?: Record<string, any>, b?: Record<string, any>) {
     return keys.size ? d / keys.size : 0;
 }
 
+// Check if a node is empty (paragraph with no text content)
+function isEmptyNode(n: CanonicalTreeNode): boolean {
+    return n.type === 'paragraph' && (!n.text || n.text.trim() === '');
+}
+
+// Compute contextual similarity for empty nodes based on surrounding non-empty anchors
+// An empty paragraph should prefer matching another empty paragraph in similar context
+function contextualSimilarity(
+    aNode: CanonicalTreeNode,
+    bNode: CanonicalTreeNode,
+    aIndex: number,
+    bIndex: number,
+    aSiblings: CanonicalTreeNode[],
+    bSiblings: CanonicalTreeNode[]
+): number {
+    // Only applies to empty nodes
+    if (!isEmptyNode(aNode) || !isEmptyNode(bNode)) {
+        return 0; // No contextual bonus
+    }
+
+    let score = 0;
+    let contextCount = 0;
+
+    // Look at previous non-empty sibling
+    let aPrev: CanonicalTreeNode | null = null;
+    for (let i = aIndex - 1; i >= 0; i--) {
+        if (!isEmptyNode(aSiblings[i])) {
+            aPrev = aSiblings[i];
+            break;
+        }
+    }
+
+    let bPrev: CanonicalTreeNode | null = null;
+    for (let j = bIndex - 1; j >= 0; j--) {
+        if (!isEmptyNode(bSiblings[j])) {
+            bPrev = bSiblings[j];
+            break;
+        }
+    }
+
+    // Look at next non-empty sibling
+    let aNext: CanonicalTreeNode | null = null;
+    for (let i = aIndex + 1; i < aSiblings.length; i++) {
+        if (!isEmptyNode(aSiblings[i])) {
+            aNext = aSiblings[i];
+            break;
+        }
+    }
+
+    let bNext: CanonicalTreeNode | null = null;
+    for (let j = bIndex + 1; j < bSiblings.length; j++) {
+        if (!isEmptyNode(bSiblings[j])) {
+            bNext = bSiblings[j];
+            break;
+        }
+    }
+
+    // Compare previous context
+    if (aPrev && bPrev) {
+        contextCount++;
+        // Same type is the PRIMARY signal for structural matching
+        if (aPrev.type === bPrev.type) {
+            score += 1.0;  // Full point for type match (structure is preserved)
+            // Bonus if content also matches, but not required
+            // if (aPrev.text === bPrev.text) {
+            //     score += 0.0;  // No bonus - type match is sufficient
+            // }
+        }
+    } else if (!aPrev && !bPrev) {
+        // Both at start of section
+        contextCount++;
+        score += 1.0;
+    }
+
+    // Compare next context
+    if (aNext && bNext) {
+        contextCount++;
+        // Same type is the PRIMARY signal for structural matching
+        if (aNext.type === bNext.type) {
+            score += 1.0;  // Full point for type match (structure is preserved)
+            // Bonus if content also matches, but not required
+            // if (aNext.text === bNext.text) {
+            //     score += 0.0;  // No bonus - type match is sufficient
+            // }
+        }
+    } else if (!aNext && !bNext) {
+        // Both at end of section
+        contextCount++;
+        score += 1.0;
+    }
+
+    // Average the context matches
+    return contextCount > 0 ? score / contextCount : 0;
+}
+
 // --- Pair cost with memo (includes local + aligned-children structural cost)
 type PairKey = string;
 const keyFor = (a: CanonicalTreeNode, b: CanonicalTreeNode): PairKey => `${a.id}|${b.id}`;
@@ -103,7 +198,20 @@ function pairCost(a: CanonicalTreeNode, b: CanonicalTreeNode, opts: DiffOpts, pa
     // Precompute child pair costs (and refuse matches above threshold)
     const PC: number[][] = Array.from({ length: m }, () => new Array<number>(n).fill(Infinity));
     for (let i = 0; i < m; i++) for (let j = 0; j < n; j++) {
-        const c = pairCost(A[i], B[j], opts, pairMemo);
+        let c = pairCost(A[i], B[j], opts, pairMemo);
+
+        // EMPTY NODE CONTEXTUAL MATCHING (same as in alignChildren)
+        if (isEmptyNode(A[i]) && isEmptyNode(B[j])) {
+            const contextSim = contextualSimilarity(A[i], B[j], i, j, A, B);
+            // For strong context matches, treat as exact match
+            if (contextSim >= 0.8) {
+                c = 0;
+            } else {
+                const contextPenalty = (1 - contextSim) * 10.0;
+                c = c + contextPenalty;
+            }
+        }
+
         // normalize to [0,1]ish by dividing by (del+ins) so threshold is meaningful across sizes
         const base = delCost(A[i], opts) + delCost(B[j], opts) || 1;
         const norm = c / base; // ~0 == identical, ~1 == replace
@@ -138,16 +246,58 @@ function alignChildren(a: CanonicalTreeNode, b: CanonicalTreeNode, opts: DiffOpt
     const PC: number[][] = Array.from({ length: m }, () => new Array<number>(n).fill(Infinity));
     const isExactMatch: boolean[][] = Array.from({ length: m }, () => new Array<boolean>(n).fill(false));
     for (let i = 0; i < m; i++) for (let j = 0; j < n; j++) {
-        const c = pairCost(A[i], B[j], opts, pairMemo);
+        let c = pairCost(A[i], B[j], opts, pairMemo);
         const base = delCost(A[i], opts) + delCost(B[j], opts) || 1;
+
+        // EMPTY NODE CONTEXTUAL MATCHING
+        // For empty nodes (paragraphs with no text), they all have identical text (empty string)
+        // so textSim("", "") = 1, making cost = 0. This makes TOPT unable to distinguish between
+        // empty paragraphs in different contexts. We need to ADD COST based on context mismatch.
+        if (isEmptyNode(A[i]) && isEmptyNode(B[j])) {
+            const contextSim = contextualSimilarity(A[i], B[j], i, j, A, B);
+            // contextSim ranges from 0 (no context match) to 1 (perfect context match)
+
+            // For STRONG context matches (>= 0.8), treat as exact match with zero cost
+            // This allows empty paragraphs in the same structural position to match cleanly
+            if (contextSim >= 0.8) {
+                c = 0;  // Perfect match - no cost
+
+                if (process?.env?.DIFF_DEBUG === '1') {
+                    console.log(`[TOPT] Empty node EXACT match [${i}]->[${j}]: contextSim=${contextSim.toFixed(3)}, cost=0.000 (strong context)`);
+                }
+            } else {
+                // Add penalty for poor context: (1 - contextSim) * penalty
+                // This makes empty nodes prefer matching in similar contexts
+                // Make penalty VERY HIGH (higher than delete+insert cost) to force context-based matching
+                const contextPenalty = (1 - contextSim) * 10.0;  // Penalty up to 10.0 for no context match
+                c = c + contextPenalty;
+
+                // Debug logging for empty node matching
+                if (process?.env?.DIFF_DEBUG === '1') {
+                    console.log(`[TOPT] Empty node pairing [${i}]->[${j}]: contextSim=${contextSim.toFixed(3)}, baseCost=${(c - contextPenalty).toFixed(3)}, penalty=${contextPenalty.toFixed(3)}, finalCost=${c.toFixed(3)}`);
+                }
+            }
+        }
+
         const norm = c / base;
-        if (norm <= opts.pairAlignThreshold) PC[i][j] = c; // only allow "match" when similar enough
+        if (norm <= opts.pairAlignThreshold) {
+            PC[i][j] = c; // only allow "match" when similar enough
+        } else {
+            // Debug: log blocked matches for empty nodes
+            if (process?.env?.DIFF_DEBUG === '1' && isEmptyNode(A[i]) && isEmptyNode(B[j])) {
+                console.log(`[TOPT] BLOCKED empty node pairing [${i}]->[${j}]: norm=${norm.toFixed(3)} > threshold=${opts.pairAlignThreshold}, cost=${c.toFixed(3)}, base=${base.toFixed(3)}`);
+            }
+        }
 
         // Track exact text matches - these should always be chosen
         // For textual nodes with identical text, force cost to 0 to ensure they match
-        if (opts.isTextual!(A[i]) && opts.isTextual!(B[j]) && A[i].text === B[j].text) {
+        // EXCEPT for empty paragraphs which need context to disambiguate
+        const isEmpty = isEmptyNode(A[i]);
+        if (opts.isTextual!(A[i]) && opts.isTextual!(B[j]) && A[i].text === B[j].text && !isEmpty) {
             isExactMatch[i][j] = true;
             PC[i][j] = 0;  // Zero cost ensures exact matches are always chosen
+        } else if (process?.env?.DIFF_DEBUG === '1' && isEmpty && A[i].text === B[j].text) {
+            console.log(`[TOPT] NOT forcing exact match for empty node [${i}]->[${j}] (preserving contextual cost)`);
         }
     }
 

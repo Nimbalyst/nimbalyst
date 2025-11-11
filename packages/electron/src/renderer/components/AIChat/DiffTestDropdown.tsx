@@ -536,6 +536,57 @@ Finally, the fourth paragraph completes our test structure. Each paragraph will 
       }
     },
     {
+      id: 'empty-lines-positioning',
+      name: 'Empty Lines Positioning',
+      icon: 'format_line_spacing',
+      description: 'Test empty lines appearing in correct position (not at bottom)',
+      run: async (filePath: string) => {
+        const editorInstance = editorRegistry.getEditor(filePath);
+        if (!editorInstance) {
+          throw new Error('No editor instance found');
+        }
+
+        // Set up initial content: h1, h2, paragraph, and two empty lines
+        const initialContent = `# Main Title
+
+## First Section
+
+This is the initial paragraph.
+
+
+`;
+
+        await new Promise<void>(resolve => {
+          editorInstance.editor.update(() => {
+            const root = $getRoot();
+            root.clear();
+            $convertFromEnhancedMarkdownString(initialContent, getEditorTransformers(), undefined, true, true);
+          }, { discrete: true, onUpdate: () => resolve() });
+        });
+
+        // Wait for content to settle
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Apply diff that adds two new sections with headings and paragraphs
+        // The bug should cause empty lines to appear at the bottom instead of maintaining proper spacing
+        await editorRegistry.applyReplacements(filePath, [
+          {
+            oldText: 'This is the initial paragraph.\n\n\n',
+            newText: `This is the initial paragraph.
+
+## Second Section
+
+This is the second paragraph.
+
+## Third Section
+
+This is the third paragraph.
+`
+          }
+        ]);
+      }
+    },
+    {
       id: 'stress-test',
       name: 'Stress Test (10 Changes)',
       icon: 'warning',

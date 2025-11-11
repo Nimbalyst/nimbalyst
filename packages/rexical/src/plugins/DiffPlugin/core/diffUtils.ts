@@ -1053,38 +1053,11 @@ export function $applyNodeDiff(
 
       // Find the LIVE node with that key and insert before it
       if (liveKeyToInsertBefore) {
-        let liveNodeToInsertBefore = $getNodeByKey(liveKeyToInsertBefore);
+        const liveNodeToInsertBefore = $getNodeByKey(liveKeyToInsertBefore);
         if (liveNodeToInsertBefore) {
-          // OPTIMIZATION: If we're about to insert before an empty paragraph,
-          // look backwards to find any preceding empties and insert before ALL of them.
-          // This keeps related content grouped together.
-          while (liveNodeToInsertBefore) {
-            // Check if this node is an empty paragraph
-            const isEmptyParagraph = liveNodeToInsertBefore.getType() === 'paragraph' &&
-              liveNodeToInsertBefore.getTextContent().trim() === '';
-
-            if (!isEmptyParagraph) {
-              break; // Not empty, stop here
-            }
-
-            // Check if there's a previous sibling that's also empty
-            const prevSibling = liveNodeToInsertBefore.getPreviousSibling();
-            if (!prevSibling) {
-              break; // No previous sibling, stop here
-            }
-
-            const isPrevEmpty = prevSibling.getType() === 'paragraph' &&
-              prevSibling.getTextContent().trim() === '';
-
-            if (isPrevEmpty) {
-              // Move back to insert before the previous empty too
-              liveNodeToInsertBefore = prevSibling;
-            } else {
-              // Previous is not empty, stop here
-              break;
-            }
-          }
-
+          // Insert at the position determined by TreeMatcher
+          // DO NOT move the insertion point - TreeMatcher has already determined
+          // the correct position based on context and structural matching
           liveNodeToInsertBefore.insertBefore(newNode);
         } else {
           console.warn(`Could not find LIVE node with key: ${liveKeyToInsertBefore}`);

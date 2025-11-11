@@ -214,6 +214,19 @@ export class WindowedTreeMatcher {
       serialized: { type: 'root', version: 1 } as SerializedLexicalNode,
     };
 
+    // Debug: log source and target structures
+    if (process?.env?.DIFF_DEBUG === '1') {
+      console.log('\n[TreeMatcher] SOURCE STRUCTURE:');
+      sourceNodes.forEach((n, i) => {
+        console.log(`  [${i}] ${n.type}: "${(n.text || '').substring(0, 40)}"`);
+      });
+      console.log('\n[TreeMatcher] TARGET STRUCTURE:');
+      targetNodes.forEach((n, i) => {
+        console.log(`  [${i}] ${n.type}: "${(n.text || '').substring(0, 40)}"`);
+      });
+      console.log('');
+    }
+
     // Run order-preserving diff
     const diffOps = diffTrees(sourceRoot, targetRoot, {
       pairAlignThreshold: 2.0,
@@ -387,6 +400,11 @@ export class WindowedTreeMatcher {
       similarity: number;
     }> = [];
 
+    // Helper to check if a node is empty
+    const isEmptyParagraph = (n: CanonicalTreeNode) => {
+      return n.type === 'paragraph' && (!n.text || n.text.trim() === '');
+    };
+
     for (let i = 0; i < sourceNodes.length; i++) {
       if (sourceMatched.has(i)) continue;
       const sourceNode = sourceNodes[i];
@@ -395,7 +413,62 @@ export class WindowedTreeMatcher {
         const targetNode = targetNodes[j];
         if (sourceNode.type !== targetNode.type) continue;
 
-        const similarity = calculateSimilarity(sourceNode, targetNode);
+        let similarity = calculateSimilarity(sourceNode, targetNode);
+
+        // CRITICAL: For empty paragraphs, similarity alone isn't enough
+        // Empty paragraphs should only match if they appear in similar contexts
+        // Otherwise we get empty lines appearing at wrong positions
+        if (isEmptyParagraph(sourceNode) && isEmptyParagraph(targetNode)) {
+          // Check contextual similarity - do surrounding nodes match?
+          let contextScore = 0;
+          let contextChecks = 0;
+
+          // Check previous sibling
+          const prevSource = i > 0 ? sourceNodes[i - 1] : null;
+          const prevTarget = j > 0 ? targetNodes[j - 1] : null;
+          if (prevSource && prevTarget && prevSource.type === prevTarget.type && prevSource.text === prevTarget.text) {
+            contextScore += 1;
+            contextChecks += 1;
+          } else if (!prevSource && !prevTarget) {
+            contextScore += 1;
+            contextChecks += 1;
+          } else if (prevSource && prevTarget) {
+            contextChecks += 1; // Context exists but doesn't match
+          }
+
+          // Check next sibling
+          const nextSource = i < sourceNodes.length - 1 ? sourceNodes[i + 1] : null;
+          const nextTarget = j < targetNodes.length - 1 ? targetNodes[j + 1] : null;
+          if (nextSource && nextTarget && nextSource.type === nextTarget.type && nextSource.text === nextTarget.text) {
+            contextScore += 1;
+            contextChecks += 1;
+          } else if (!nextSource && !nextTarget) {
+            contextScore += 1;
+            contextChecks += 1;
+          } else if (nextSource && nextTarget) {
+            contextChecks += 1; // Context exists but doesn't match
+          }
+
+          // Require strong contextual match for empty paragraphs
+          // If context doesn't match well, reduce similarity drastically
+          const contextMatch = contextChecks > 0 ? contextScore / contextChecks : 0;
+
+          if (process?.env?.DIFF_DEBUG === '1') {
+            console.log(`[TreeMatcher] Fallback empty paragraph pairing [${i}]->[${j}]: contextScore=${contextScore}, contextChecks=${contextChecks}, contextMatch=${contextMatch.toFixed(3)}`);
+          }
+
+          if (contextMatch < 0.5) {
+            // Context doesn't match - don't pair these empty paragraphs
+            if (process?.env?.DIFF_DEBUG === '1') {
+              console.log(`[TreeMatcher] BLOCKED fallback pairing [${i}]->[${j}]: contextMatch=${contextMatch.toFixed(3)} < 0.5`);
+            }
+            continue;
+          }
+
+          // Adjust similarity based on context
+          similarity = similarity * contextMatch;
+        }
+
         if (similarity >= this.config.similarityThreshold) {
           candidateMatches.push({sourceIdx: i, targetIdx: j, similarity});
         }
