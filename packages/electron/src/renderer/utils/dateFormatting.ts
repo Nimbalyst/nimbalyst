@@ -106,8 +106,9 @@ export function getTimeGroupKey(timestamp: number): TimeGroupKey {
   return 'Older';
 }
 
-export function groupSessionsByTime<T extends { createdAt: number }>(
-  sessions: T[]
+export function groupSessionsByTime<T extends { createdAt: number; updatedAt?: number }>(
+  sessions: T[],
+  timestampField: 'createdAt' | 'updatedAt' = 'createdAt'
 ): GroupedSessions<T> {
   const groups: GroupedSessions<T> = {
     'Today': [],
@@ -119,12 +120,17 @@ export function groupSessionsByTime<T extends { createdAt: number }>(
     'Older': []
   };
 
-  // Sort sessions by creation date (newest first)
-  const sorted = [...sessions].sort((a, b) => b.createdAt - a.createdAt);
+  // Sort sessions by the specified timestamp field (newest first)
+  const sorted = [...sessions].sort((a, b) => {
+    const aTime = timestampField === 'updatedAt' && a.updatedAt ? a.updatedAt : a.createdAt;
+    const bTime = timestampField === 'updatedAt' && b.updatedAt ? b.updatedAt : b.createdAt;
+    return bTime - aTime;
+  });
 
   // Group sessions
   for (const session of sorted) {
-    const group = getTimeGroupKey(session.createdAt);
+    const timestamp = timestampField === 'updatedAt' && session.updatedAt ? session.updatedAt : session.createdAt;
+    const group = getTimeGroupKey(timestamp);
     groups[group].push(session);
   }
 

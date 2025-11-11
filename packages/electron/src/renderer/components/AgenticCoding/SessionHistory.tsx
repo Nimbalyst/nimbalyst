@@ -8,6 +8,7 @@ interface SessionItem {
   id: string;
   title?: string;
   createdAt: number;
+  updatedAt: number;
   provider: string;
   model?: string;
   sessionType?: 'chat' | 'planning' | 'coding';
@@ -64,6 +65,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   const [sessionTypeFilters, setSessionTypeFilters] = useState<Set<'chat' | 'planning' | 'coding'>>(
     new Set(['chat', 'planning', 'coding'])
   );
+  const [sortBy, setSortBy] = useState<'updated' | 'created'>('updated');
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
   // Extract workspace name from path
   const workspaceName = workspacePath.split('/').filter(Boolean).pop() || 'Workspace';
@@ -83,6 +86,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           id: s.id,
           title: s.title || s.name || 'Untitled Session',
           createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
           provider: s.provider || 'claude',
           model: s.model,
           sessionType: s.sessionType || 'chat',
@@ -142,6 +146,29 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     setSessionTypeFilters(newFilters);
   };
 
+  const toggleSortDropdown = () => {
+    setSortDropdownOpen(!sortDropdownOpen);
+  };
+
+  const selectSortOption = (option: 'updated' | 'created') => {
+    setSortBy(option);
+    setSortDropdownOpen(false);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sortDropdownOpen) {
+        const target = e.target as HTMLElement;
+        if (!target.closest('.session-history-sort-dropdown')) {
+          setSortDropdownOpen(false);
+        }
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [sortDropdownOpen]);
+
   // Filter sessions by session type and search query
   const filteredSessions = sessions.filter(session => {
     // Apply session type filter
@@ -158,8 +185,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     return true;
   });
 
-  // Group sessions by time
-  const groupedSessions = groupSessionsByTime(filteredSessions);
+  // Group sessions by time using the selected sort field
+  const groupedSessions = groupSessionsByTime(filteredSessions, sortBy === 'updated' ? 'updatedAt' : 'createdAt');
   const groupKeys = Object.keys(groupedSessions) as TimeGroupKey[];
 
   if (loading) {
@@ -321,6 +348,44 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
         >
           Coding
         </button>
+        <div className="session-history-sort-dropdown">
+          <button
+            className="session-history-sort-button"
+            onClick={toggleSortDropdown}
+            title={`Sorted by: ${sortBy === 'updated' ? 'Last Updated' : 'Created'}`}
+            aria-label="Sort sessions"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 2V14M8 14L4 10M8 14L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          {sortDropdownOpen && (
+            <div className="session-history-sort-menu">
+              <button
+                className={`session-history-sort-option ${sortBy === 'updated' ? 'active' : ''}`}
+                onClick={() => selectSortOption('updated')}
+              >
+                <span>Last Updated</span>
+                {sortBy === 'updated' && (
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M13 4L6 11L3 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </button>
+              <button
+                className={`session-history-sort-option ${sortBy === 'created' ? 'active' : ''}`}
+                onClick={() => selectSortOption('created')}
+              >
+                <span>Created</span>
+                {sortBy === 'created' && (
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M13 4L6 11L3 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       <div className="session-history-list">
         {groupKeys.map(groupKey => {
