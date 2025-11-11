@@ -251,6 +251,104 @@
   border: 1px solid var(--border-primary);
 }
 
+.rich-transcript-edit-card {
+  border-radius: 0.25rem;
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rich-transcript-edit-card__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.rich-transcript-edit-card__icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--accent-primary);
+  flex-shrink: 0;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  background-color: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+}
+
+.rich-transcript-edit-card__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.rich-transcript-edit-card__details {
+  flex: 1;
+  min-width: 0;
+}
+
+.rich-transcript-edit-card__title {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.rich-transcript-edit-card__file {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.rich-transcript-edit-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.rich-transcript-edit-card__meta-divider {
+  color: var(--text-quaternary, var(--text-tertiary));
+}
+
+.rich-transcript-edit-card__status {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.rich-transcript-edit-card__status--success {
+  color: var(--success-color);
+  background-color: color-mix(in srgb, var(--success-color) 15%, transparent);
+}
+
+.rich-transcript-edit-card__status--error {
+  color: var(--error-color);
+  background-color: color-mix(in srgb, var(--error-color) 15%, transparent);
+}
+
+.rich-transcript-edit-card__instruction {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  background-color: var(--surface-tertiary);
+  border-radius: 0.25rem;
+  padding: 0.5rem;
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.rich-transcript-edit-card__diffs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .rich-transcript-tool-button {
   width: 100%;
   padding: 0.25rem 0.5rem;

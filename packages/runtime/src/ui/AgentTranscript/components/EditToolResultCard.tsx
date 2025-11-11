@@ -1,0 +1,103 @@
+import React from 'react';
+import type { Message } from '../../../ai/server/types';
+import { DiffViewer } from './DiffViewer';
+import { toProjectRelative, shortenPath } from '../utils/pathResolver';
+
+interface EditToolResultCardProps {
+  toolMessage: Message;
+  edits: any[];
+  workspacePath?: string;
+}
+
+const resolveEditFilePath = (edit: any, toolMessage: Message): string | undefined => {
+  if (!edit) return undefined;
+  const tool = toolMessage.toolCall;
+  return (
+    edit.filePath ||
+    edit.file_path ||
+    edit.targetFilePath ||
+    tool?.targetFilePath ||
+    tool?.arguments?.file_path ||
+    tool?.arguments?.filePath ||
+    tool?.arguments?.path
+  );
+};
+
+const getInstructionText = (toolMessage: Message): string => {
+  const args = toolMessage.toolCall?.arguments;
+  if (!args) return '';
+  if (typeof args.instructions === 'string') return args.instructions;
+  if (typeof args.instruction === 'string') return args.instruction;
+  return '';
+};
+
+const truncateInstruction = (text: string, maxLength = 320) => {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1)}…`;
+};
+
+export const EditToolResultCard: React.FC<EditToolResultCardProps> = ({ toolMessage, edits, workspacePath }) => {
+  const tool = toolMessage.toolCall;
+  if (!tool || edits.length === 0) {
+    return null;
+  }
+
+  const firstEditPath = resolveEditFilePath(edits[0], toolMessage);
+  const displayPath = firstEditPath ? toProjectRelative(firstEditPath, workspacePath) : '';
+  const prettyPath = displayPath ? shortenPath(displayPath, 64) : '';
+
+  const instruction = truncateInstruction(getInstructionText(toolMessage));
+  const statusLabel = toolMessage.isError ? 'Failed' : 'Applied';
+  const statusClass = toolMessage.isError ? 'error' : 'success';
+  const editCountLabel = edits.length === 1 ? '1 edit' : `${edits.length} edits`;
+
+  return (
+    <div className="rich-transcript-edit-card">
+      <div className="rich-transcript-edit-card__header">
+        <div className="rich-transcript-edit-card__icon" aria-hidden="true">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+        </div>
+        <div className="rich-transcript-edit-card__details">
+          <div className="rich-transcript-edit-card__title">
+            {tool.name || 'Edit'}
+            {prettyPath && (
+              <span className="rich-transcript-edit-card__file">· {prettyPath}</span>
+            )}
+          </div>
+          <div className="rich-transcript-edit-card__meta">
+            <span>{editCountLabel}</span>
+            {instruction && <span className="rich-transcript-edit-card__meta-divider">•</span>}
+            {instruction && <span>Instruction</span>}
+          </div>
+        </div>
+        <span className={`rich-transcript-edit-card__status rich-transcript-edit-card__status--${statusClass}`}>
+          {statusLabel}
+        </span>
+      </div>
+
+      {instruction && (
+        <div className="rich-transcript-edit-card__instruction">
+          {instruction}
+        </div>
+      )}
+
+      <div className="rich-transcript-edit-card__diffs">
+        {edits.map((edit, idx) => {
+          const absolutePath = resolveEditFilePath(edit, toolMessage);
+          const relativePath = absolutePath ? toProjectRelative(absolutePath, workspacePath) : undefined;
+          return (
+            <DiffViewer
+              key={`edit-${idx}`}
+              edit={edit}
+              filePath={relativePath || absolutePath}
+              maxHeight="18rem"
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};

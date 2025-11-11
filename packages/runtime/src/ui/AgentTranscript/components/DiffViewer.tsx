@@ -13,6 +13,45 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
   // Use file path from props (session context) or fallback to edit fields
   const filePath = contextFilePath || edit.filePath || edit.file_path || edit.targetFilePath || 'Unknown file';
 
+  // Handle single edit with old_string/new_string (Claude Code Edit tool format)
+  if (!replacements.length && (edit.old_string || edit.new_string)) {
+    const oldText = edit.old_string || edit.oldText || '';
+    const newText = edit.new_string || edit.newText || '';
+    const oldLines = oldText.split('\n');
+    const newLines = newText.split('\n');
+
+    return (
+      <div className="diff-viewer" style={{ maxHeight }}>
+        <div className="diff-file-header">{filePath}</div>
+        <div className="diff-content">
+          {/* Show removed lines */}
+          {oldLines.length > 0 && oldLines.some((line: string) => line.trim()) && (
+            <>
+              {oldLines.map((line: string, i: number) => (
+                <div key={`old-${i}`} className="diff-line removed">
+                  <span className="diff-line-marker">-</span>
+                  <span className="diff-line-content">{line || ' '}</span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* Show added lines */}
+          {newLines.length > 0 && newLines.some((line: string) => line.trim()) && (
+            <>
+              {newLines.map((line: string, i: number) => (
+                <div key={`new-${i}`} className="diff-line added">
+                  <span className="diff-line-marker">+</span>
+                  <span className="diff-line-content">{line || ' '}</span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // If we have replacements array, show each replacement as a separate diff
   if (replacements.length > 0) {
     return (

@@ -7,6 +7,7 @@ import { ProviderIcon } from '../../icons/ProviderIcons';
 import { parseTimestamp } from '../../../utils/dateUtils';
 import { JSONViewer } from './JSONViewer';
 import { formatToolArguments } from '../utils/pathResolver';
+import { EditToolResultCard } from './EditToolResultCard';
 import './RichTranscriptView.css';
 
 interface RichTranscriptViewProps {
@@ -27,6 +28,190 @@ const defaultSettings: TranscriptSettings = {
   collapseTools: false,
   showThinking: true,
   showSessionInit: false,
+};
+
+const EDIT_TOOL_NAMES = new Set(['edit', 'write', 'multi-edit', 'multiedit', 'multi_edit']);
+
+const isEditToolName = (name?: string): boolean => {
+  if (!name) return false;
+  const normalized = name.toLowerCase();
+  if (EDIT_TOOL_NAMES.has(normalized)) return true;
+  if (normalized.endsWith('__edit')) return true;
+  if (normalized.endsWith(':edit')) return true;
+  return false;
+};
+
+const safeParseJson = (value: string): any | null => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const looksLikeJson = (value: string) => {
+  const trimmed = value.trim();
+  return (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
+};
+
+const extractEditsFromToolMessage = (message: Message): any[] => {
+  const tool = message.toolCall;
+  if (!tool) return [];
+
+  const fallbackPath =
+    tool.targetFilePath ||
+    tool.arguments?.file_path ||
+    tool.arguments?.filePath ||
+    tool.arguments?.path;
+
+  const edits: any[] = [];
+  const visited = new WeakSet<object>();
+
+  // DEBUG: Log the incoming tool message structure
+  if (tool.name && (tool.name.toLowerCase().includes('edit') || tool.name.toLowerCase().includes('write'))) {
+    console.log('[extractEditsFromToolMessage] Processing tool:', tool.name);
+    console.log('  fallbackPath:', fallbackPath);
+    console.log('  messageHasEdits:', !!message.edits);
+    console.log('  toolArguments:', JSON.stringify(tool.arguments, null, 2));
+    console.log('  toolResult:', JSON.stringify(tool.result, null, 2));
+  }
+
+  const pushEdit = (raw: any, fallback?: string) => {
+    if (!raw || typeof raw !== 'object') return;
+    const normalized: any = { ...raw };
+
+    if (Array.isArray(normalized.content)) {
+      const flattened = normalized.content
+        .map((block: any) => {
+          if (typeof block === 'string') return block;
+          if (block && typeof block.text === 'string') return block.text;
+          return '';
+        })
+        .filter(Boolean)
+        .join('\n')
+        .trim();
+      if (flattened) {
+        normalized.content = flattened;
+      }
+    }
+
+    if (
+      !normalized.filePath &&
+      !normalized.file_path &&
+      !normalized.targetFilePath &&
+      fallback
+    ) {
+      normalized.filePath = fallback;
+    }
+
+    edits.push(normalized);
+  };
+
+  const visit = (value: any, localFallback?: string) => {
+    if (value === null || value === undefined) return;
+    const fallback = localFallback || fallbackPath;
+
+    if (Array.isArray(value)) {
+      value.forEach(item => visit(item, fallback));
+      return;
+    }
+
+    if (typeof value === 'string') {
+      if (looksLikeJson(value)) {
+        const parsed = safeParseJson(value);
+        if (parsed) {
+          visit(parsed, fallback);
+        }
+      }
+      return;
+    }
+
+    if (typeof value !== 'object') {
+      return;
+    }
+
+    if (visited.has(value as object)) {
+      return;
+    }
+    visited.add(value as object);
+
+    const candidate = value as Record<string, any>;
+    const candidateFilePath =
+      candidate.file_path ||
+      candidate.filePath ||
+      candidate.targetFilePath ||
+      candidate.file ||
+      fallback;
+
+    const hasReplacementArray = Array.isArray(candidate.replacements) && candidate.replacements.length > 0;
+    const hasTextContent = typeof candidate.content === 'string' && candidate.content.trim().length > 0;
+    const hasContentBlocks =
+      Array.isArray(candidate.content) &&
+      candidate.content.some((block: any) => typeof block === 'string' || typeof block?.text === 'string');
+    const hasDiffLike =
+      typeof candidate.diff === 'string' ||
+      typeof candidate.newText === 'string' ||
+      typeof candidate.oldText === 'string' ||
+      typeof candidate.new_string === 'string' ||
+      typeof candidate.old_string === 'string';
+
+    if (hasReplacementArray || hasTextContent || hasContentBlocks || hasDiffLike) {
+      pushEdit(candidate, candidateFilePath);
+    }
+
+    if (candidate.edit) {
+      const editPath = candidate.edit?.file_path || candidate.edit?.filePath || candidateFilePath;
+      visit(candidate.edit, editPath);
+    }
+
+    if (Array.isArray(candidate.edits)) {
+      candidate.edits.forEach((entry: any) => {
+        const entryPath = entry?.file_path || entry?.filePath || candidateFilePath;
+        visit(entry, entryPath);
+      });
+    }
+
+    Object.entries(candidate).forEach(([key, child]) => {
+      if (key === 'edit' || key === 'edits') {
+        return;
+      }
+
+      if (typeof child === 'string' && looksLikeJson(child)) {
+        const parsed = safeParseJson(child);
+        if (parsed) {
+          visit(parsed, candidateFilePath);
+        }
+        return;
+      }
+
+      if (child && typeof child === 'object') {
+        visit(child, candidateFilePath);
+      }
+    });
+  };
+
+  if (Array.isArray(message.edits) && message.edits.length > 0) {
+    message.edits.forEach(edit => pushEdit(edit, fallbackPath));
+  }
+
+  if (tool.arguments) {
+    visit(tool.arguments);
+  }
+
+  if (tool.result) {
+    visit(tool.result);
+  }
+
+  // DEBUG: Log extraction results
+  if (tool.name && (tool.name.toLowerCase().includes('edit') || tool.name.toLowerCase().includes('write'))) {
+    console.log('[extractEditsFromToolMessage] Extraction complete:', {
+      toolName: tool.name,
+      editsFound: edits.length,
+      edits: edits.length > 0 ? edits : 'No edits found'
+    });
+  }
+
+  return edits;
 };
 
 export const RichTranscriptView = React.forwardRef<
@@ -234,6 +419,44 @@ export const RichTranscriptView = React.forwardRef<
     const isExpanded = expandedTools.has(toolId);
     const isSubAgent = tool.isSubAgent && tool.name === 'Task';
     const hasChildren = tool.childToolCalls && tool.childToolCalls.length > 0;
+
+    const editTool = isEditToolName(tool.name);
+    const editEntries = editTool ? extractEditsFromToolMessage(toolMsg) : [];
+
+    // DEBUG: Log tool detection results
+    if (tool.name && (tool.name.toLowerCase().includes('edit') || tool.name.toLowerCase().includes('write'))) {
+      console.log('[RichTranscriptView] Tool detection:', {
+        toolName: tool.name,
+        isEditTool: editTool,
+        editEntriesCount: editEntries.length,
+        toolStructure: {
+          hasArguments: !!tool.arguments,
+          hasResult: !!tool.result,
+          hasEdits: !!toolMsg.edits,
+          argumentsKeys: tool.arguments ? Object.keys(tool.arguments) : [],
+          resultKeys: tool.result ? Object.keys(tool.result) : []
+        }
+      });
+      if (editEntries.length > 0) {
+        console.log('[RichTranscriptView] Edit entries:', editEntries);
+      }
+    }
+
+    if (editTool && editEntries.length > 0) {
+      return (
+        <div
+          key={`tool-${toolIndex}-${depth}`}
+          className={`rich-transcript-tool-container ${depth > 0 ? 'nested' : ''}`}
+          style={{ marginLeft: depth > 0 ? '1rem' : '0' }}
+        >
+          <EditToolResultCard
+            toolMessage={toolMsg}
+            edits={editEntries}
+            workspacePath={workspacePath}
+          />
+        </div>
+      );
+    }
 
     // Extract description from arguments for sub-agents
     const description = isSubAgent && tool.arguments?.description ? tool.arguments.description : null;
