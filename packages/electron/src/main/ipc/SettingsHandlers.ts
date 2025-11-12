@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isFirstLaunch, markAppLaunched, isSettingsCompleted, markSettingsCompleted, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 
@@ -42,23 +42,6 @@ export function registerSettingsHandlers() {
 
     // AI Chat state has been moved to unified workspace state
     // Use workspace:get-state and workspace:update-state instead
-
-    // First launch detection
-    ipcMain.handle('first-launch:is-first-launch', () => {
-        return isFirstLaunch();
-    });
-
-    ipcMain.handle('first-launch:mark-launched', () => {
-        markAppLaunched();
-    });
-
-    ipcMain.handle('first-launch:is-settings-completed', () => {
-        return isSettingsCompleted();
-    });
-
-    ipcMain.handle('first-launch:mark-settings-completed', () => {
-        markSettingsCompleted();
-    });
 
     // Completion sound settings
     ipcMain.handle('completion-sound:is-enabled', () => {

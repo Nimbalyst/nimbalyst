@@ -23,9 +23,6 @@ interface AppStoreSchema {
   // Discord invitation tracking
   launchCount?: number;
   discordInvitationDismissed?: boolean;
-  // First launch tracking
-  hasLaunched?: boolean;
-  settingsCompleted?: boolean;
   // Sound notifications
   completionSoundEnabled?: boolean;
   completionSoundType?: CompletionSoundType;
@@ -580,23 +577,6 @@ export function shouldShowDiscordInvitation(): boolean {
   const launchCount = getLaunchCount();
   const dismissed = isDiscordInvitationDismissed();
   return launchCount >= 3 && !dismissed;
-}
-
-// First Launch Management
-export function isFirstLaunch(): boolean {
-  return !appStore.get('hasLaunched', false);
-}
-
-export function markAppLaunched(): void {
-  appStore.set('hasLaunched', true);
-}
-
-export function isSettingsCompleted(): boolean {
-  return appStore.get('settingsCompleted', false);
-}
-
-export function markSettingsCompleted(): void {
-  appStore.set('settingsCompleted', true);
 }
 
 // Completion Sound Settings

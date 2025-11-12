@@ -11,7 +11,6 @@ import { OpenAICodexPanel } from './panels/OpenAICodexPanel';
 import { LMStudioPanel } from './panels/LMStudioPanel';
 import { AdvancedPanel } from './panels/AdvancedPanel';
 import {AnalyticsSettingsPanel} from "./panels/AnalyticsPanel.tsx";
-import { GettingStartedPanel } from './GettingStartedPanel.tsx';
 import { NotificationsPanel } from './panels/NotificationsPanel';
 
 // Apply theme IMMEDIATELY when module loads - BEFORE React renders
@@ -106,7 +105,7 @@ interface AIModelsProps {
 }
 
 type ProviderId = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio' | 'advanced' | 'analytics' | 'notifications';
-type NavItemId = 'getting-started' | ProviderId;
+type NavItemId = ProviderId;
 
 interface Provider {
   id: ProviderId;
@@ -166,14 +165,9 @@ const PROVIDERS: Provider[] = ALL_PROVIDERS.filter(provider => {
 });
 
 export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
-  // Check if this is first time from URL params
-  const urlParams = new URLSearchParams(window.location.search);
-  const isFirstTime = urlParams.get('isFirstTime') === 'true';
   const posthog = usePostHog();
 
-  const [selectedNav, setSelectedNav] = useState<NavItemId>(
-    isFirstTime ? 'getting-started' : 'claude-code'
-  );
+  const [selectedNav, setSelectedNav] = useState<NavItemId>('claude-code');
   const [providers, setProviders] = useState<Record<string, ProviderConfig>>({
     claude: { enabled: false, testStatus: 'idle' },
     'claude-code': { enabled: true, testStatus: 'idle', installStatus: 'not-installed' },
@@ -445,10 +439,6 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
       }
     };
 
-    if (selectedNav === 'getting-started') {
-      return <GettingStartedPanel />;
-    }
-
     switch (selectedNav) {
       case 'claude':
         return <ClaudePanel {...commonProps} />;
@@ -540,19 +530,6 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
           <div className="global-settings-header">
             <h2>Global Settings</h2>
           </div>
-          {/* Getting Started nav item */}
-          <button
-            className={`nav-item ${selectedNav === 'getting-started' ? 'active' : ''}`}
-            onClick={() => setSelectedNav('getting-started')}
-          >
-            <span className="nav-item-icon">
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>rocket_launch</span>
-            </span>
-            <div className="nav-item-content">
-              <div className="nav-item-title">Getting Started</div>
-              <div className="nav-item-subtitle">Setup Guide</div>
-            </div>
-          </button>
 
           <div className="nav-section">
             <div className="nav-section-title">Agents</div>

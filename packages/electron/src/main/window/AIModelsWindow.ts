@@ -6,7 +6,7 @@ import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
 let aiModelsWindow: BrowserWindow | null = null;
 
-export function createAIModelsWindow(isFirstTime: boolean = false) {
+export function createAIModelsWindow() {
     // If window already exists, focus it
     if (aiModelsWindow) {
         aiModelsWindow.focus();
@@ -33,12 +33,12 @@ export function createAIModelsWindow(isFirstTime: boolean = false) {
 
     // Load the main app with a query parameter to indicate AI Models mode
     const currentTheme = getTheme();
-    const queryParams = `mode=ai-models&theme=${currentTheme}&isFirstTime=${isFirstTime}`;
+    const queryParams = `mode=ai-models&theme=${currentTheme}`;
     if (process.env.NODE_ENV === 'development') {
         aiModelsWindow.loadURL(`http://localhost:5273/?${queryParams}`);
     } else {
         aiModelsWindow.loadFile(join(__dirname, '../renderer/index.html'), {
-            query: { mode: 'ai-models', theme: currentTheme, isFirstTime: isFirstTime.toString() }
+            query: { mode: 'ai-models', theme: currentTheme }
         });
     }
 
@@ -46,12 +46,10 @@ export function createAIModelsWindow(isFirstTime: boolean = false) {
     aiModelsWindow.once('ready-to-show', () => {
         aiModelsWindow?.show();
 
-        // Track settings opened (if not already tracked from menu)
-        // We track section based on isFirstTime flag
-        const section = isFirstTime ? 'first_run' : 'general';
+        // Track settings opened
         AnalyticsService.getInstance().sendEvent('global_settings_opened', {
-            source: isFirstTime ? 'first_run' : 'direct',
-            section,
+            source: 'direct',
+            section: 'general',
         });
     });
 
