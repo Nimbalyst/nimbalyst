@@ -35,30 +35,32 @@ export interface StreamConfig {
 }
 
 /**
- * Simulate an applyDiff operation by writing changes to disk (triggers file watcher)
- * This properly simulates the AI edit flow with tags and file watching
+ * Simulate an applyDiff operation using editorRegistry.applyReplacements
+ * This properly simulates the AI edit flow with diff tags and visualization
  */
 export async function simulateApplyDiff(
   page: Page,
   targetFilePath: string,
   replacements: TextReplacement[]
 ): Promise<{ success: boolean; error?: string }> {
-  const fs = await import('fs/promises');
-
   try {
-    // Read current file content
-    const currentContent = await fs.readFile(targetFilePath, 'utf8');
+    // Use editorRegistry.applyReplacements to properly trigger diff mode
+    const result = await page.evaluate(
+      async ({ filePath, reps }) => {
+        const editorRegistry = (window as any).__editorRegistry;
 
-    // Apply all replacements
-    let modifiedContent = currentContent;
-    for (const replacement of replacements) {
-      modifiedContent = modifiedContent.replace(replacement.oldText, replacement.newText);
-    }
+        if (!editorRegistry) {
+          throw new Error('EditorRegistry not found on window');
+        }
 
-    // Write modified content to disk - this triggers file watcher
-    await fs.writeFile(targetFilePath, modifiedContent, 'utf8');
+        // Apply replacements using the proper method that triggers diff visualization
+        const result = await editorRegistry.applyReplacements(filePath, reps);
+        return result;
+      },
+      { filePath: targetFilePath, reps: replacements }
+    );
 
-    return { success: true };
+    return result || { success: true };
   } catch (error) {
     return {
       success: false,
