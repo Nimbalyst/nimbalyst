@@ -396,7 +396,6 @@ export default function App() {
       getLatestContent: getContentRef.current || undefined
     };
   }, [currentFilePath]);
-  const editorRef = useRef<any>(null);
   const searchCommandRef = useRef<LexicalCommand<undefined> | null>(null);
   const isInitializedRef = useRef<boolean>(false);
   const agenticPanelRef = useRef<AgenticPanelRef>(null);
@@ -915,7 +914,6 @@ export default function App() {
     isInitializedRef,
     isDirtyRef,
     getContentRef,
-    editorRef,
     searchCommandRef,
     editorModeRef,
 

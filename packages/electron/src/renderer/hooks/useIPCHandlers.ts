@@ -99,7 +99,6 @@ interface UseIPCHandlersProps {
   isDirtyRef: React.MutableRefObject<boolean>;
   // NOTE: contentVersionRef removed - EditorContainer doesn't need version bumping
   getContentRef: React.MutableRefObject<(() => string) | null>;
-  editorRef: React.MutableRefObject<any>;
   searchCommandRef: React.MutableRefObject<LexicalCommand<undefined> | null>;
   editorModeRef: React.RefObject<any>; // EditorModeRef from EditorMode component
 
@@ -160,7 +159,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     isDirtyRef,
     // NOTE: contentVersionRef removed - not needed for EditorContainer
     getContentRef,
-    editorRef,
     searchCommandRef,
     editorModeRef,
 
