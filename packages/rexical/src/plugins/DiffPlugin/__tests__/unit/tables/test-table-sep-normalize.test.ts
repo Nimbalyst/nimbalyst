@@ -6,7 +6,7 @@ import {describe, expect, it} from 'vitest';
 import {$getRoot} from 'lexical';
 import {
   $convertFromEnhancedMarkdownString,
-} from '../../../../markdown';
+} from '../../../../../markdown/index';
 import {createTestHeadlessEditor, MARKDOWN_TEST_TRANSFORMERS} from '../../utils/testConfig';
 import {canonicalizeForest} from '../../core/canonicalTree';
 

@@ -8,7 +8,7 @@
 
 import {setupMarkdownDiffTest} from '../../utils/diffTestUtils';
 import {$convertToMarkdownString} from '@lexical/markdown';
-import {MARKDOWN_TEST_TRANSFORMERS} from '../utils';
+import {MARKDOWN_TEST_TRANSFORMERS} from '../../utils/testConfig';
 
 /**
  * Helper function to extract markdown from editor and compare with expected

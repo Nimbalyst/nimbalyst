@@ -16,7 +16,7 @@ import {
   assertApproveProducesTarget as assertApproveProducesTargetReplace,
   assertRejectProducesOriginal as assertRejectProducesOriginalReplace,
 } from '../../utils/replaceTestUtils';
-import {MARKDOWN_TEST_TRANSFORMERS} from '../utils';
+import {MARKDOWN_TEST_TRANSFORMERS} from '../../utils/testConfig';
 
 // Direct import to test
 import {applyMarkdownReplace} from '../../core/diffUtils';

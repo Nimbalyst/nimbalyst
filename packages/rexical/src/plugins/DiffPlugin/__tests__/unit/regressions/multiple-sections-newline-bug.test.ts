@@ -11,8 +11,8 @@ import {
   $convertFromEnhancedMarkdownString,
   $convertToEnhancedMarkdownString,
   getEditorTransformers,
-} from '../../../../markdown';
-import { applyMarkdownReplace } from '../../core/diffUtils';
+} from '../../../../../markdown/index';
+import { applyMarkdownReplace } from '../../../core/diffUtils';
 import { createTestHeadlessEditor } from '../../utils/testConfig';
 
 describe('Multiple sections newline bug', () => {

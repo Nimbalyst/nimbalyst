@@ -8,7 +8,7 @@
 
 import {setupMarkdownDiffTest} from '../../utils/diffTestUtils';
 import {$convertToMarkdownString, TRANSFORMERS} from '@lexical/markdown';
-import {MARKDOWN_TEST_TRANSFORMERS} from '../utils';
+import {MARKDOWN_TEST_TRANSFORMERS} from '../../utils/testConfig';
 import {$getRoot} from 'lexical';
 import {$isListNode, $isListItemNode} from '@lexical/list';
 

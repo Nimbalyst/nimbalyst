@@ -8,21 +8,21 @@ import {$getRoot} from 'lexical';
 import {
   $convertFromEnhancedMarkdownString,
   $convertToEnhancedMarkdownString,
-} from '../../../../markdown';
+} from '../../../../../markdown/index';
 import {createTestHeadlessEditor, MARKDOWN_TEST_TRANSFORMERS} from '../../utils/testConfig';
-import {applyMarkdownDiffToDocument} from '../../core/diffUtils';
-import {$getDiffState} from '../../core/DiffState';
+import {applyMarkdownDiffToDocument} from '../../../core/diffUtils';
+import {$getDiffState} from '../../../core/DiffState';
 import * as fs from 'fs';
 import * as path from 'path';
 
 describe('Larger document test3 - plan with many changes', () => {
   it('should NOT mark identical Risk sections as modified', () => {
     const oldMarkdown = fs.readFileSync(
-      path.join(__dirname, 'larger/test3-old.md'),
+      path.join(__dirname, '../larger/test3-old.md'),
       'utf8'
     );
     const newMarkdown = fs.readFileSync(
-      path.join(__dirname, 'larger/test3-new.md'),
+      path.join(__dirname, '../larger/test3-new.md'),
       'utf8'
     );
 

@@ -12,6 +12,7 @@ import {
   type CanonicalTreeNode,
 } from './canonicalTree';
 import {diffTrees, type DiffOp} from './ThresholdedOrderPreservingTree';
+import {generateUnifiedDiff, parseUnifiedDiff} from './standardDiffFormat';
 
 export type NodeDiff = {
   changeType: 'add' | 'remove' | 'update';
@@ -182,6 +183,88 @@ export class WindowedTreeMatcher {
     return this.targetChildrenCache.get(parentKey) || [];
   }
 
+  /**
+   * Build text-based guide posts by using unified diff to find exact line matches.
+   * This provides reliable anchor points for tree matching, especially for content
+   * added at the beginning or when there are many similar empty paragraphs.
+   *
+   * Returns a Map<targetIdx, sourceIdx> of node pairs that match exactly at the text level.
+   */
+  private buildTextBasedGuidePosts(
+    sourceNodes: CanonicalTreeNode[],
+    targetNodes: CanonicalTreeNode[],
+  ): Map<number, number> {
+    const guidePosts = new Map<number, number>();
+
+    // Extract markdown text for each node
+    const sourceTexts = sourceNodes.map(n => (n.text || '').trim());
+    const targetTexts = targetNodes.map(n => (n.text || '').trim());
+
+    // Build full markdown strings with line markers
+    // Use node index as a marker to track which line belongs to which node
+    const sourceMarkdown = sourceTexts.map((text, i) => `${text}\n`).join('');
+    const targetMarkdown = targetTexts.map((text, i) => `${text}\n`).join('');
+
+    try {
+      // Generate unified diff
+      const unifiedDiff = generateUnifiedDiff(sourceMarkdown, targetMarkdown);
+      const parsed = parseUnifiedDiff(unifiedDiff);
+
+      // Track current line positions in source and target
+      let sourceLine = 1;
+      let targetLine = 1;
+
+      // Process each hunk to find equal lines
+      for (const hunk of parsed.hunks) {
+        // Skip to hunk start
+        sourceLine = hunk.oldStart;
+        targetLine = hunk.newStart;
+
+        for (const line of hunk.lines) {
+          if (line.startsWith(' ')) {
+            // Equal line - this is a guide post
+            // Map line numbers to node indices (0-based)
+            const sourceIdx = sourceLine - 1;
+            const targetIdx = targetLine - 1;
+
+            // Verify indices are valid and texts match
+            if (
+              sourceIdx >= 0 && sourceIdx < sourceNodes.length &&
+              targetIdx >= 0 && targetIdx < targetNodes.length &&
+              sourceTexts[sourceIdx] === targetTexts[targetIdx] &&
+              sourceTexts[sourceIdx].length > 0 // Skip empty lines
+            ) {
+              guidePosts.set(targetIdx, sourceIdx);
+            }
+
+            sourceLine++;
+            targetLine++;
+          } else if (line.startsWith('-')) {
+            // Deleted line
+            sourceLine++;
+          } else if (line.startsWith('+')) {
+            // Added line
+            targetLine++;
+          }
+        }
+      }
+
+      if (process?.env?.DIFF_DEBUG === '1') {
+        console.log(`\n[TreeMatcher] Built ${guidePosts.size} text-based guide posts:`);
+        guidePosts.forEach((sourceIdx, targetIdx) => {
+          console.log(`  target[${targetIdx}] "${targetTexts[targetIdx].substring(0, 40)}" ← source[${sourceIdx}] "${sourceTexts[sourceIdx].substring(0, 40)}"`);
+        });
+      }
+    } catch (error) {
+      // If unified diff fails, continue without guide posts
+      if (process?.env?.DIFF_DEBUG === '1') {
+        console.log('[TreeMatcher] Failed to build text-based guide posts:', error);
+      }
+    }
+
+    return guidePosts;
+  }
+
   matchRootChildren(): WindowedMatchResult {
     return this.matchCanonicalNodes(
       this.sourceRootChildren,
@@ -227,6 +310,10 @@ export class WindowedTreeMatcher {
       console.log('');
     }
 
+    // Build text-based guide posts before tree matching
+    // This provides reliable anchor points from exact text matches
+    const textGuidePosts = this.buildTextBasedGuidePosts(sourceNodes, targetNodes);
+
     // Run order-preserving diff
     const diffOps = diffTrees(sourceRoot, targetRoot, {
       pairAlignThreshold: 2.0,
@@ -268,9 +355,22 @@ export class WindowedTreeMatcher {
     const targetMatched = new Set<number>();
     const targetToSource = new Map<number, number>();
 
+    // Seed targetToSource with text-based guide posts
+    // These provide reliable anchor points for insertion index calculation
+    textGuidePosts.forEach((sourceIdx, targetIdx) => {
+      targetToSource.set(targetIdx, sourceIdx);
+    });
+
+    // Sort diffOps so that equal/replace operations come before insert/delete
+    // This ensures targetToSource map is populated before determineInsertionIndex needs it
+    const sortedDiffOps = diffOps.slice().sort((a, b) => {
+      const opOrder = { 'equal': 0, 'replace': 1, 'delete': 2, 'insert': 3 };
+      return opOrder[a.op] - opOrder[b.op];
+    });
+
     // Convert DiffOp to NodeDiff
     // Process root children only (skip root itself)
-    for (const op of diffOps) {
+    for (const op of sortedDiffOps) {
       // Skip the root node operation
       if (op.op === 'equal' && op.a.type === 'root') continue;
       if (op.op === 'replace' && op.a.type === 'root') continue;

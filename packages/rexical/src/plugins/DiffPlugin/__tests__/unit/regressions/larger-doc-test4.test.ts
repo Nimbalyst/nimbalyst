@@ -7,21 +7,21 @@ import {describe, expect, it} from 'vitest';
 import {$getRoot} from 'lexical';
 import {
   $convertFromEnhancedMarkdownString,
-} from '../../../../markdown';
+} from '../../../../../markdown/index';
 import {createTestHeadlessEditor, MARKDOWN_TEST_TRANSFORMERS} from '../../utils/testConfig';
-import {applyMarkdownDiffToDocument} from '../../core/diffUtils';
-import {$getDiffState} from '../../core/DiffState';
+import {applyMarkdownDiffToDocument} from '../../../core/diffUtils';
+import {$getDiffState} from '../../../core/DiffState';
 import * as fs from 'fs';
 import * as path from 'path';
 
 describe('Larger document test4 - minor changes causing diff explosion', () => {
   it('should show minimal diffs for minimal changes', () => {
     const oldMarkdown = fs.readFileSync(
-      path.join(__dirname, 'larger/test4-old.md'),
+      path.join(__dirname, '../larger/test4-old.md'),
       'utf8'
     );
     const newMarkdown = fs.readFileSync(
-      path.join(__dirname, 'larger/test4-new.md'),
+      path.join(__dirname, '../larger/test4-new.md'),
       'utf8'
     );
 

@@ -7,7 +7,7 @@ import {describe, expect, it} from 'vitest';
 import {$getRoot, COMMAND_PRIORITY_EDITOR} from 'lexical';
 import {
   $convertFromEnhancedMarkdownString,
-} from '../../../../markdown';
+} from '../../../../../markdown/index';
 import {createTestHeadlessEditor, MARKDOWN_TEST_TRANSFORMERS} from '../../utils/testConfig';
 import {$getDiffState} from '../../core/DiffState';
 import {APPLY_MARKDOWN_REPLACE_COMMAND, applyMarkdownReplace} from '../../core/exports';
