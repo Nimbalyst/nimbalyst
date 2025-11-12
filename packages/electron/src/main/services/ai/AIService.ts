@@ -478,7 +478,7 @@ export class AIService {
       // If provider doesn't exist, create and initialize it
       if (!provider) {
         if (isProviderClaudeCode) {
-          console.log('[CLAUDE-CODE-SERVICE] Provider not found, creating new claude-code provider');
+          // console.log('[CLAUDE-CODE-SERVICE] Provider not found, creating new claude-code provider');
         }
         // console.log(`[AIService] Provider not found, creating new ${session.provider} provider`);
         const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
@@ -516,12 +516,12 @@ export class AIService {
 
         // Create the provider
         if (isProviderClaudeCode) {
-          console.log('[CLAUDE-CODE-SERVICE] Creating claude-code provider instance');
+          // console.log('[CLAUDE-CODE-SERVICE] Creating claude-code provider instance');
         }
         provider = ProviderFactory.createProvider(session.provider, session.id);
 
         if (isProviderClaudeCode) {
-          console.log('[CLAUDE-CODE-SERVICE] Provider instance created, preparing config');
+          // console.log('[CLAUDE-CODE-SERVICE] Provider instance created, preparing config');
         }
 
         const reinitConfig: any = {
@@ -559,7 +559,7 @@ export class AIService {
 
         if (isProviderClaudeCode) {
           const safeConfig = { ...reinitConfig, apiKey: reinitConfig.apiKey ? '***' : undefined };
-          console.log('[CLAUDE-CODE-SERVICE] About to initialize claude-code provider with config:', JSON.stringify(safeConfig, null, 2));
+          // console.log('[CLAUDE-CODE-SERVICE] About to initialize claude-code provider with config:', JSON.stringify(safeConfig, null, 2));
         }
         const safeConfig = { ...reinitConfig, apiKey: reinitConfig.apiKey ? '***' : undefined };
         // console.log('[AIService] About to initialize provider with config:', JSON.stringify(safeConfig, null, 2));
@@ -570,7 +570,7 @@ export class AIService {
           perfLog.providerInitTime = Date.now() - initStartTime;
 
           if (isProviderClaudeCode) {
-            console.log(`[CLAUDE-CODE-SERVICE] Provider initialization completed in ${perfLog.providerInitTime}ms`);
+            // console.log(`[CLAUDE-CODE-SERVICE] Provider initialization completed in ${perfLog.providerInitTime}ms`);
           }
           // console.log(`[AIService] Provider initialization took ${perfLog.providerInitTime}ms`);
         } catch (initError) {
@@ -651,7 +651,7 @@ export class AIService {
         // Get existing messages from session for context
         const sessionMessages = session.messages || [];
 
-        console.log(`[AIService] Starting message stream (${sessionMessages.length} context messages)`);
+        // console.log(`[AIService] Starting message stream (${sessionMessages.length} context messages)`);
         const streamStartTime = Date.now();
 
         // Send performance metrics to renderer

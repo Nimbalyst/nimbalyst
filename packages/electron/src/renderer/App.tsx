@@ -568,14 +568,14 @@ export default function App() {
     const cleanup = window.electronAPI.onAgentNewSession(handleAgentNewSession);
 
     return () => {
-      console.log('[App] Cleaning up agent-new-session listener');
+      // console.log('[App] Cleaning up agent-new-session listener');
       cleanup();
     };
   }, []);
 
   // Listen for Discord invitation IPC event
   useEffect(() => {
-    console.log('[App] Setting up Discord invitation IPC listener');
+    // console.log('[App] Setting up Discord invitation IPC listener');
     if (!window.electronAPI?.on) {
       console.log('[App] electronAPI.on not available');
       return;
@@ -587,10 +587,10 @@ export default function App() {
     };
 
     window.electronAPI.on('show-discord-invitation', handleShowDiscordInvitation);
-    console.log('[App] Discord invitation listener registered');
+    // console.log('[App] Discord invitation listener registered');
 
     return () => {
-      console.log('[App] Removing Discord invitation listener');
+      // console.log('[App] Removing Discord invitation listener');
       window.electronAPI.off?.('show-discord-invitation', handleShowDiscordInvitation);
     };
   }, []);

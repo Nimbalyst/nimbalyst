@@ -119,7 +119,7 @@ export function registerWindowHandlers() {
         } else {
             console.log('[SET_FILE] WARNING: No window state found for window', windowId);
         }
-        console.log('[SET_FILE] Current file path updated from renderer:', filePath);
+        // console.log('[SET_FILE] Current file path updated from renderer:', filePath);
     });
 
     // Open image in default application

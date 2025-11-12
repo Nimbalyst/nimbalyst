@@ -12,7 +12,7 @@
             // Get theme SYNCHRONOUSLY from main process - already resolved!
             const theme = window.electronAPI?.getThemeSync?.() || 'light';
 
-            console.log('[THEME-INIT] Resolved theme from main process:', theme);
+            // console.log('[THEME-INIT] Resolved theme from main process:', theme);
 
             const root = document.documentElement;
 
@@ -34,7 +34,7 @@
                 root.setAttribute('data-theme', 'light');
             }
 
-            console.log('[THEME-INIT] Applied class:', theme + '-theme');
+            // console.log('[THEME-INIT] Applied class:', theme + '-theme');
         })();
     </script>
 </head>

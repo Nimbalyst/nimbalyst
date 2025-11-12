@@ -10,32 +10,32 @@ export class SoundPlayer {
   }
 
   public async playSound(soundType: CompletionSoundType): Promise<void> {
-    console.log('[SoundPlayer] playSound called with type:', soundType);
+    // console.log('[SoundPlayer] playSound called with type:', soundType);
 
     if (!this.audioContext) {
       console.warn('[SoundPlayer] AudioContext not available');
       return;
     }
 
-    console.log('[SoundPlayer] AudioContext state:', this.audioContext.state);
+    // console.log('[SoundPlayer] AudioContext state:', this.audioContext.state);
 
     // Resume AudioContext if it's suspended (required by browser autoplay policies)
     if (this.audioContext.state === 'suspended') {
-      console.log('[SoundPlayer] Resuming suspended AudioContext');
+      // console.log('[SoundPlayer] Resuming suspended AudioContext');
       await this.audioContext.resume();
     }
 
     switch (soundType) {
       case 'chime':
-        console.log('[SoundPlayer] Playing chime');
+        // console.log('[SoundPlayer] Playing chime');
         await this.playChime();
         break;
       case 'bell':
-        console.log('[SoundPlayer] Playing bell');
+        // console.log('[SoundPlayer] Playing bell');
         await this.playBell();
         break;
       case 'pop':
-        console.log('[SoundPlayer] Playing pop');
+        // console.log('[SoundPlayer] Playing pop');
         await this.playPop();
         break;
       case 'none':
