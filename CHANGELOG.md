@@ -19,6 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.17] - 2025-11-12
+
+
+### Added
+- Improve search/replace bar with live updates and better UX
+
+### Changed
+- Hide mode-tag button until wired to sessionType
+- Remove unused editorRef from useIPCHandlers
+
+### Fixed
+- Export horizontal rules as --- instead of ***
+- Let dev mode locations fire normally (better for testing)
+- Improve diff matching with text-based guide posts
+- Copy as Markdown menu item now works and preserves newlines correctly
+- Dark mode theming for workspace actions and tracker icons
+- History dialog diff preview respects dark mode theme
+- Scrollbar theming in dark mode on macOS when user has always show scrollbars on
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.16] - 2025-11-11
 
 
