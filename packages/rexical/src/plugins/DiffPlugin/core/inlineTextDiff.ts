@@ -12,7 +12,7 @@ import type {
   SerializedTextNode,
 } from 'lexical';
 
-import {$createTextNode, $isElementNode, $parseSerializedNode} from 'lexical';
+import {$createTextNode, $isElementNode, $isTextNode, $parseSerializedNode} from 'lexical';
 
 import {diffWords} from './diffWords';
 import {$setDiffState} from './DiffState';
@@ -30,46 +30,94 @@ export function $applyInlineTextDiff(
   // Clear the container to rebuild it
   containerNode.clear();
 
-  // Simple case: both have single text nodes
-  if (
-    sourceChildren.length === 1 &&
-    targetChildren.length === 1 &&
-    sourceChildren[0].type === 'text' &&
-    targetChildren[0].type === 'text'
-  ) {
-    const sourceTextNode = sourceChildren[0] as SerializedTextNode;
-    const targetTextNode = targetChildren[0] as SerializedTextNode;
-    const sourceText = sourceTextNode.text;
-    const targetText = targetTextNode.text;
+  // Check if all children are text nodes (can have mixed formatting)
+  const allSourceAreText = sourceChildren.every(c => c.type === 'text');
+  const allTargetAreText = targetChildren.every(c => c.type === 'text');
 
-    // Check if formatting is the same
-    const sourceFormat = sourceTextNode.format || 0;
-    const targetFormat = targetTextNode.format || 0;
+  if (allSourceAreText && allTargetAreText && sourceChildren.length > 0 && targetChildren.length > 0) {
+    // Extract text and build formatting map for target
+    const sourceText = sourceChildren.map(c => (c as SerializedTextNode).text).join('');
+    const targetText = targetChildren.map(c => (c as SerializedTextNode).text).join('');
 
-    if (sourceFormat === targetFormat) {
-      // Use word-level diff when no formatting changes
-      const diffSegments = diffWords(sourceText, targetText);
-      for (const segment of diffSegments) {
-        if (segment.type === 'equal') {
-          const textNode = $createTextNode(segment.text);
-          textNode.setFormat(sourceFormat);
-          containerNode.append(textNode);
-        } else if (segment.type === 'delete') {
-          const textNode = $createTextNode(segment.text);
-          textNode.setFormat(sourceFormat);
-          // Mark as removed content using DiffState
-          $setDiffState(textNode, 'removed');
-          containerNode.append(textNode);
-        } else {
-          const textNode = $createTextNode(segment.text);
-          textNode.setFormat(targetFormat);
-          // Mark as added content using DiffState
-          $setDiffState(textNode, 'added');
-          containerNode.append(textNode);
+    // Build a map of character position -> formatting for target text
+    const targetFormatMap: number[] = [];
+    let pos = 0;
+    for (const child of targetChildren) {
+      const textNode = child as SerializedTextNode;
+      const format = textNode.format || 0;
+      for (let i = 0; i < textNode.text.length; i++) {
+        targetFormatMap[pos++] = format;
+      }
+    }
+
+    // For source, use first node's format (or 0 if no children)
+    const sourceFormat = sourceChildren.length > 0
+      ? ((sourceChildren[0] as SerializedTextNode).format || 0)
+      : 0;
+
+    // Use word-level diff
+    const diffSegments = diffWords(sourceText, targetText);
+
+    let targetPos = 0; // Track position in target text for format lookup
+
+    for (const segment of diffSegments) {
+      if (segment.type === 'equal') {
+        // Unchanged text - use target formatting to show if formatting changed
+        // Split by formatting boundaries in target
+        for (let i = 0; i < segment.text.length; i++) {
+          const char = segment.text[i];
+          const format = targetFormatMap[targetPos++] || 0;
+
+          // Check if this format is different from previous or start of segment
+          if (i === 0 || targetFormatMap[targetPos - 2] !== format) {
+            // Start new text node with this format
+            const text = segment.text[i];
+            const textNode = $createTextNode(text);
+            textNode.setFormat(format);
+
+            // If format changed from source, mark as changed
+            if (format !== sourceFormat) {
+              $setDiffState(textNode, 'modified');
+            }
+
+            containerNode.append(textNode);
+          } else {
+            // Continue current text node
+            const lastChild = containerNode.getLastChild();
+            if (lastChild && $isTextNode(lastChild)) {
+              lastChild.setTextContent(lastChild.getTextContent() + char);
+            }
+          }
+        }
+      } else if (segment.type === 'delete') {
+        // Removed text - use source formatting
+        const textNode = $createTextNode(segment.text);
+        textNode.setFormat(sourceFormat);
+        $setDiffState(textNode, 'removed');
+        containerNode.append(textNode);
+      } else {
+        // Added text - use target formatting for each character
+        for (let i = 0; i < segment.text.length; i++) {
+          const char = segment.text[i];
+          const format = targetFormatMap[targetPos++] || 0;
+
+          // Check if this format is different from previous or start of segment
+          if (i === 0 || targetFormatMap[targetPos - 2] !== format) {
+            const textNode = $createTextNode(char);
+            textNode.setFormat(format);
+            $setDiffState(textNode, 'added');
+            containerNode.append(textNode);
+          } else {
+            // Continue current text node
+            const lastChild = containerNode.getLastChild();
+            if (lastChild && $isTextNode(lastChild)) {
+              lastChild.setTextContent(lastChild.getTextContent() + char);
+            }
+          }
         }
       }
-      return;
     }
+    return;
   }
 
   // Complex case: handle mixed content (text with different formatting, links, etc.)
