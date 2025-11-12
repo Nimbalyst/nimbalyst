@@ -168,7 +168,7 @@ export function registerFileHandlers() {
             if (state?.workspacePath) {
                 const workspacePath = state.workspacePath; // Store in local variable for closure
                 const documentService = documentServices.get(workspacePath);
-                console.log('[SAVE] Workspace mode:', workspacePath, 'documentService exists:', !!documentService);
+                // console.log('[SAVE] Workspace mode:', workspacePath, 'documentService exists:', !!documentService);
                 if (documentService) {
                     // Add a small delay to ensure file is fully written before reading
                     setTimeout(async () => {
@@ -523,7 +523,7 @@ export function registerFileHandlers() {
             return { success: false };
         }
 
-        console.log('[STOP_WATCH] Stopping file watcher for:', filePath);
+        // console.log('[STOP_WATCH] Stopping file watcher for:', filePath);
         // Use the ChokidarFileWatcher's stopFile method to stop watching a specific file
         chokidarFileWatcher.stopFile(windowId, filePath);
         return { success: true };

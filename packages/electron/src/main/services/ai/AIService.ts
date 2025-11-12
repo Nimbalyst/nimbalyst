@@ -160,7 +160,7 @@ export class AIService {
 
         // If we have an env variable and no stored key, save it
         if (process.env.ANTHROPIC_API_KEY && !apiKeys['anthropic']) {
-          console.log('Initializing API key from environment variable');
+          // console.log('Initializing API key from environment variable');
           apiKeys['anthropic'] = process.env.ANTHROPIC_API_KEY;
           this.getSettingsStore().set('apiKeys', apiKeys);
         }
@@ -224,12 +224,12 @@ export class AIService {
       modelId?: string,
       sessionType?: 'chat' | 'planning' | 'coding'
     ) => {
-      console.log('[AIService] ai:createSession called:', {
-        provider,
-        modelId,
-        hasDocumentContext: !!documentContext,
-        workspacePath
-      });
+      // console.log('[AIService] ai:createSession called:', {
+      //   provider,
+      //   modelId,
+      //   hasDocumentContext: !!documentContext,
+      //   workspacePath
+      // });
 
       // Get API key based on provider
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
@@ -427,9 +427,9 @@ export class AIService {
       // });
 
       if (documentContext?.content) {
-        console.log('📋 Document Content Preview (first 500 chars):',
-          documentContext.content.substring(0, 500) +
-          (documentContext.content.length > 500 ? '...' : ''));
+        // console.log('📋 Document Content Preview (first 500 chars):',
+        //   documentContext.content.substring(0, 500) +
+        //   (documentContext.content.length > 500 ? '...' : ''));
 
         // Check for frontmatter
         const frontmatterMatch = documentContext.content.match(/^---\n([\s\S]*?)\n---/);
@@ -442,7 +442,7 @@ export class AIService {
 
       // Show available tools
       const tools = toolRegistry.getAll();
-      console.log('🔧 Available Tools:', tools.map(t => t.name));
+      // console.log('🔧 Available Tools:', tools.map(t => t.name));
       console.groupEnd();
 
       perfLog.provider = session.provider;
@@ -467,9 +467,9 @@ export class AIService {
       const providerStartTime = Date.now();
       const isProviderClaudeCode = session.provider === 'claude-code';
 
-      if (isProviderClaudeCode) {
-        console.log('[CLAUDE-CODE-SERVICE] Getting provider for claude-code, session:', session.id);
-      }
+      // if (isProviderClaudeCode) {
+      //   console.log('[CLAUDE-CODE-SERVICE] Getting provider for claude-code, session:', session.id);
+      // }
 
       // console.log(`[AIService] Getting provider for: ${session.provider}, sessionId: ${session.id}`);
       let provider = ProviderFactory.getProvider(session.provider as AIProviderType, session.id);
@@ -666,16 +666,16 @@ export class AIService {
         // Stream the response
         const isClaudeCode = session.provider === 'claude-code';
         const logPrefix = isClaudeCode ? '[CLAUDE-CODE-SERVICE]' : '[AIService]';
-        console.log(`🚀 ${logPrefix} Starting to stream response from provider: ${session.provider}`);
+        // console.log(`🚀 ${logPrefix} Starting to stream response from provider: ${session.provider}`);
 
         if (isClaudeCode) {
-          console.log(`[CLAUDE-CODE-SERVICE] Calling sendMessage with:`, JSON.stringify({
-            messageLength: message.length,
-            hasContext: !!documentContext,
-            sessionId: session.id,
-            sessionMessages: sessionMessages.length,
-            workspacePath
-          }, null, 2));
+          // console.log(`[CLAUDE-CODE-SERVICE] Calling sendMessage with:`, JSON.stringify({
+          //   messageLength: message.length,
+          //   hasContext: !!documentContext,
+          //   sessionId: session.id,
+          //   sessionMessages: sessionMessages.length,
+          //   workspacePath
+          // }, null, 2));
         }
 
         // Add sessionType and attachments to documentContext for provider to use in system prompt
@@ -691,7 +691,7 @@ export class AIService {
           if (!firstChunkTime) {
             firstChunkTime = Date.now();
             perfLog.timeToFirstChunk = firstChunkTime - startTime;
-            console.log(`${logPrefix} First chunk received after ${perfLog.timeToFirstChunk}ms`);
+            // console.log(`${logPrefix} First chunk received after ${perfLog.timeToFirstChunk}ms`);
 
             // Send first chunk metrics
             event.sender.send('ai:performanceMetrics', {
@@ -704,10 +704,10 @@ export class AIService {
               textChunks++;
               const chunkContent = chunk.content || '';
               fullResponse += chunkContent;
-              if (isClaudeCode && textChunks <= 5) {
-                console.log(`[CLAUDE-CODE-SERVICE] Text chunk #${textChunks}: ${chunkContent.length} chars, first 100:`, chunkContent.substring(0, 100));
-              }
-              console.log(`${logPrefix} Forwarding text chunk #${textChunks}: ${chunkContent.length} chars, total: ${fullResponse.length}`);
+              // if (isClaudeCode && textChunks <= 5) {
+              //   console.log(`[CLAUDE-CODE-SERVICE] Text chunk #${textChunks}: ${chunkContent.length} chars, first 100:`, chunkContent.substring(0, 100));
+              // }
+              // console.log(`${logPrefix} Forwarding text chunk #${textChunks}: ${chunkContent.length} chars, total: ${fullResponse.length}`);
               // Send ACCUMULATED response to renderer (not just the chunk)
               event.sender.send('ai:streamResponse', {
                 sessionId: session.id,
@@ -720,12 +720,12 @@ export class AIService {
               if (chunk.toolCall) {
                 toolCallCount++;
                 toolCalls.push(chunk.toolCall);
-                console.group('🔨 [AIService] Tool call received from AI');
-                console.log('Tool name:', chunk.toolCall.name);
-                console.log('Tool arguments:', chunk.toolCall.arguments);
+                // console.group('🔨 [AIService] Tool call received from AI');
+                // console.log('Tool name:', chunk.toolCall.name);
+                // console.log('Tool arguments:', chunk.toolCall.arguments);
                 console.groupEnd();
-                console.log(`[AIService] Tool call #${toolCallCount}: ${chunk.toolCall.name}`);
-                console.log(`[AIService] Tool arguments:`, JSON.stringify(chunk.toolCall.arguments, null, 2));
+                // console.log(`[AIService] Tool call #${toolCallCount}: ${chunk.toolCall.name}`);
+                // console.log(`[AIService] Tool arguments:`, JSON.stringify(chunk.toolCall.arguments, null, 2));
 
                 // Track file interactions for all tool calls
                 if (workspacePath && chunk.toolCall.arguments) {
@@ -749,11 +749,11 @@ export class AIService {
                 const replacementCount = Array.isArray((toolArgs as any)?.replacements)
                   ? (toolArgs as any).replacements.length
                   : undefined;
-                logger.ai.info('[AIService] Tool call received', {
-                  name: toolName,
-                  replacements: replacementCount,
-                  argKeys: toolArgs ? Object.keys(toolArgs) : []
-                });
+                // logger.ai.info('[AIService] Tool call received', {
+                //   name: toolName,
+                //   replacements: replacementCount,
+                //   argKeys: toolArgs ? Object.keys(toolArgs) : []
+                // });
 
                 if (toolName === 'applyDiff' && (replacementCount === undefined || replacementCount === 0)) {
                   const rawArgs = toolArgs ? JSON.stringify(toolArgs) : 'null';
@@ -848,7 +848,7 @@ export class AIService {
 
             case 'stream_edit_start':
               // Forward streaming edit start event to renderer
-              console.log('[AIService] Forwarding stream_edit_start to renderer:', chunk.config);
+              // console.log('[AIService] Forwarding stream_edit_start to renderer:', chunk.config);
               event.sender.send('ai:streamEditStart', {
                 sessionId: session.id,
                 ...chunk.config
@@ -858,7 +858,7 @@ export class AIService {
 
             case 'stream_edit_content':
               // Forward streaming content to renderer
-              console.log('[AIService] Forwarding stream_edit_content to renderer:', chunk.content?.substring(0, 50));
+              // console.log('[AIService] Forwarding stream_edit_content to renderer:', chunk.content?.substring(0, 50));
               event.sender.send('ai:streamEditContent', {
                 sessionId: session.id,
                 content: chunk.content
@@ -867,7 +867,7 @@ export class AIService {
 
             case 'stream_edit_end':
               // Forward streaming end event to renderer
-              console.log('[AIService] Forwarding stream_edit_end to renderer');
+              // console.log('[AIService] Forwarding stream_edit_end to renderer');
               event.sender.send('ai:streamEditEnd', {
                 sessionId: session.id,
                 ...(chunk.error ? { error: chunk.error } : {})
@@ -876,7 +876,7 @@ export class AIService {
               // Track the streamContent file interaction
               if (documentContext?.filePath && workspacePath) {
                 try {
-                  console.log('[AIService] Tracking streamContent file interaction for:', documentContext.filePath);
+                  // console.log('[AIService] Tracking streamContent file interaction for:', documentContext.filePath);
                   await sessionFileTracker.trackToolExecution(
                     session.id,
                     workspacePath,
@@ -884,7 +884,7 @@ export class AIService {
                     { file_path: documentContext.filePath },
                     { success: !chunk.error }
                   );
-                  console.log('[AIService] streamContent tracking completed');
+                  // console.log('[AIService] streamContent tracking completed');
                   // Notify renderer that files were tracked
                   event.sender.send('session-files:updated', session.id);
                 } catch (trackError) {
@@ -919,11 +919,11 @@ export class AIService {
               break;
 
             case 'complete':
-              if (isClaudeCode) {
-                console.log('[CLAUDE-CODE-SERVICE] COMPLETE CHUNK RECEIVED!');
-                console.log('[CLAUDE-CODE-SERVICE] Final response length:', fullResponse.length);
-              }
-              console.log(`${logPrefix} COMPLETE CHUNK RECEIVED! Sending completion signal to UI`);
+              // if (isClaudeCode) {
+              //   console.log('[CLAUDE-CODE-SERVICE] COMPLETE CHUNK RECEIVED!');
+              //   console.log('[CLAUDE-CODE-SERVICE] Final response length:', fullResponse.length);
+              // }
+              // console.log(`${logPrefix} COMPLETE CHUNK RECEIVED! Sending completion signal to UI`);
               perfLog.totalTime = Date.now() - startTime;
               perfLog.streamTime = Date.now() - streamStartTime;
               perfLog.chunkCount = chunkCount;
@@ -934,10 +934,10 @@ export class AIService {
               // Capture token usage if available
               const tokenUsage = chunk.usage;
 
-              console.log('[AIService] Stream complete - Performance metrics:', perfLog);
-              if (tokenUsage) {
-                console.log('[AIService] Token usage:', tokenUsage);
-              }
+              // console.log('[AIService] Stream complete - Performance metrics:', perfLog);
+              // if (tokenUsage) {
+              //   console.log('[AIService] Token usage:', tokenUsage);
+              // }
               if (fullResponse) {
                 logger.ai.info('[AIService] Assistant final response', {
                   length: fullResponse.length,
@@ -1078,7 +1078,7 @@ export class AIService {
               if (session.provider === 'claude-code' && session.messages.length === 0) {
                 const initData = (provider as any).getInitData?.();
                 if (initData) {
-                  console.log('[AIService] Tracking Claude Code session initialization:', initData);
+                  // console.log('[AIService] Tracking Claude Code session initialization:', initData);
                   this.analytics.sendEvent('claude_code_session_started', {
                     mcpServerCount: initData.mcpServerCount,
                     slashCommandCount: initData.slashCommandCount,
@@ -1091,13 +1091,13 @@ export class AIService {
               }
 
               // Send complete response
-              console.log('[AIService] Sending FINAL ai:streamResponse with isComplete=true, content length:', fullResponse.length);
+              // console.log('[AIService] Sending FINAL ai:streamResponse with isComplete=true, content length:', fullResponse.length);
               event.sender.send('ai:streamResponse', {
                 sessionId: session.id,
                 content: fullResponse,
                 isComplete: true
               });
-              console.log('[AIService] COMPLETION SIGNAL SENT TO UI!');
+              // console.log('[AIService] COMPLETION SIGNAL SENT TO UI!');
 
               // Play completion sound if enabled
               const soundService = SoundNotificationService.getInstance();
@@ -1108,7 +1108,7 @@ export class AIService {
                 ? fullResponse.substring(0, 100) + (fullResponse.length > 100 ? '...' : '')
                 : 'Response complete';
 
-              console.log('[AIService] Calling notification service for session:', session.id);
+              // console.log('[AIService] Calling notification service for session:', session.id);
               await notificationService.showNotification({
                 title: 'Nimbalyst AI Response Ready',
                 body: `${session.provider}: ${notificationBody}`,
@@ -1116,19 +1116,19 @@ export class AIService {
                 workspacePath: workspacePath,
                 provider: session.provider
               });
-              console.log('[AIService] Notification service call completed');
+              // console.log('[AIService] Notification service call completed');
 
               break;
           }
         }
 
         // QUEUE PROCESSING: Check if there are queued prompts and process the next one
-        console.log(`[AIService] Message stream completed, checking for queued prompts...`);
+        // console.log(`[AIService] Message stream completed, checking for queued prompts...`);
 
         const reloadedSession = await this.sessionManager.loadSession(session.id, workspacePath);
         const queuedPrompts = (reloadedSession?.metadata?.queuedPrompts as any[]) || [];
 
-        console.log(`[AIService] Queue check: found ${queuedPrompts.length} queued prompts`);
+        // console.log(`[AIService] Queue check: found ${queuedPrompts.length} queued prompts`);
 
         if (queuedPrompts.length > 0) {
           console.log(`[AIService] Processing next queued prompt...`);
@@ -1152,7 +1152,7 @@ export class AIService {
             queueLength: remainingQueue.length
           });
 
-          console.log(`[AIService] Auto-processing queued prompt: ${nextPrompt.prompt.substring(0, 100)}...`);
+          // console.log(`[AIService] Auto-processing queued prompt: ${nextPrompt.prompt.substring(0, 100)}...`);
 
           // Notify renderer that a queued prompt is starting
           event.sender.send('ai:queue-prompt-starting', {
@@ -1163,7 +1163,7 @@ export class AIService {
           // Process the queued prompt using the stored handler
           setImmediate(() => {
             if (this.sendMessageHandler) {
-              console.log('[AIService] Invoking sendMessageHandler for queued prompt');
+              // console.log('[AIService] Invoking sendMessageHandler for queued prompt');
               this.sendMessageHandler(event, nextPrompt.prompt, nextPrompt.documentContext, session.id, workspacePath)
                 .then(() => {
                   console.log('[AIService] Queued prompt completed successfully');

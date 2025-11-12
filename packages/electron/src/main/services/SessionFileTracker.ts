@@ -130,16 +130,16 @@ export class SessionFileTracker {
     args: any,
     result: any
   ): Promise<void> {
-    console.log('[SessionFileTracker] trackToolExecution called:', { sessionId, workspaceId, toolName, enabled: this.enabled });
+    // console.log('[SessionFileTracker] trackToolExecution called:', { sessionId, workspaceId, toolName, enabled: this.enabled });
 
     if (!this.enabled) {
-      console.log('[SessionFileTracker] Tracking disabled, returning');
+      // console.log('[SessionFileTracker] Tracking disabled, returning');
       return;
     }
 
     try {
       const linkType = getLinkTypeForTool(toolName);
-      console.log('[SessionFileTracker] Link type for tool:', { toolName, linkType });
+      // console.log('[SessionFileTracker] Link type for tool:', { toolName, linkType });
 
       if (!linkType) {
         // Tool doesn't interact with files
@@ -152,7 +152,7 @@ export class SessionFileTracker {
 
       if (!filePath) {
         logger.main.debug(`[SessionFileTracker] No file path found in ${toolName} args`);
-        console.log('[SessionFileTracker] No file path found in args');
+        // console.log('[SessionFileTracker] No file path found in args');
         return;
       }
 

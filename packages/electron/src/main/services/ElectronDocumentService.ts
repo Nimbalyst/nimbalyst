@@ -37,7 +37,7 @@ export class ElectronDocumentService implements DocumentService {
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
 
-    console.log(`[DocumentService] Constructor called for workspace: ${workspacePath}`);
+    // console.log(`[DocumentService] Constructor called for workspace: ${workspacePath}`);
 
     // Start async initial load (non-blocking)
     this.initializationPromise = this.initializeAsync();
@@ -55,7 +55,7 @@ export class ElectronDocumentService implements DocumentService {
     try {
       // Perform initial document scan and metadata extraction
       await this.refreshDocuments();
-      console.log(`[DocumentService] Initial metadata cache loaded: ${this.metadataCache.size} documents`);
+      // console.log(`[DocumentService] Initial metadata cache loaded: ${this.metadataCache.size} documents`);
       // console.log('[DocumentService] Sample metadata:', Array.from(this.metadataCache.values()).slice(0, 3).map(m => ({
       //   path: m.path,
       //   hasFrontmatter: Object.keys(m.frontmatter).length > 0,

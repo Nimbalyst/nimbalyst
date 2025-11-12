@@ -86,16 +86,16 @@ class NotificationService {
    * 3. System allows notifications (respects Do Not Disturb)
    */
   async showNotification(options: NotificationOptions): Promise<void> {
-    logger.main.info('[NotificationService] showNotification called:', {
-      title: options.title,
-      sessionId: options.sessionId,
-    });
+    // logger.main.info('[NotificationService] showNotification called:', {
+    //   title: options.title,
+    //   sessionId: options.sessionId,
+    // });
 
     // Check if OS notifications are enabled in settings
     const osNotificationsEnabled = isOSNotificationsEnabled();
-    logger.main.info('[NotificationService] OS notifications enabled:', osNotificationsEnabled);
+    // logger.main.info('[NotificationService] OS notifications enabled:', osNotificationsEnabled);
     if (!osNotificationsEnabled) {
-      logger.main.info('[NotificationService] SKIPPED: OS notifications disabled in settings');
+      // logger.main.info('[NotificationService] SKIPPED: OS notifications disabled in settings');
       return;
     }
 
@@ -108,9 +108,9 @@ class NotificationService {
     // Check if any window is visible and focused
     const allWindows = BrowserWindow.getAllWindows();
     const hasVisibleFocusedWindow = allWindows.some(win => win.isVisible() && win.isFocused());
-    logger.main.info('[NotificationService] Has visible focused window:', hasVisibleFocusedWindow);
+    // logger.main.info('[NotificationService] Has visible focused window:', hasVisibleFocusedWindow);
     if (hasVisibleFocusedWindow) {
-      logger.main.info('[NotificationService] SKIPPED: App window is focused (notifications only show when app is in background)');
+      // logger.main.info('[NotificationService] SKIPPED: App window is focused (notifications only show when app is in background)');
       return;
     }
 
@@ -154,17 +154,17 @@ class NotificationService {
       // Show the notification
       notification.show();
 
-      logger.main.info('[NotificationService] Notification shown:', {
-        title: options.title,
-        sessionId: options.sessionId,
-      });
+      // logger.main.info('[NotificationService] Notification shown:', {
+      //   title: options.title,
+      //   sessionId: options.sessionId,
+      // });
 
       // Log additional debug info
-      logger.main.info('[NotificationService] Notification object created:', {
-        hasIcon: !!notification,
-        title: options.title,
-        bodyLength: options.body.length,
-      });
+      // logger.main.info('[NotificationService] Notification object created:', {
+      //   hasIcon: !!notification,
+      //   title: options.title,
+      //   bodyLength: options.body.length,
+      // });
     } catch (error) {
       logger.main.error('[NotificationService] Error showing notification:', error);
     }
@@ -174,10 +174,10 @@ class NotificationService {
    * Handle notification click - bring window to focus and switch to session
    */
   private handleNotificationClick(options: NotificationOptions): void {
-    logger.main.info('[NotificationService] Notification clicked:', {
-      sessionId: options.sessionId,
-      workspacePath: options.workspacePath,
-    });
+    // logger.main.info('[NotificationService] Notification clicked:', {
+    //   sessionId: options.sessionId,
+    //   workspacePath: options.workspacePath,
+    // });
 
     // REQUIRED: workspacePath must be provided - sessions are tied to workspaces
     if (!options.workspacePath) {
@@ -192,7 +192,7 @@ class NotificationService {
       return;
     }
 
-    logger.main.info('[NotificationService] Found window for workspace:', options.workspacePath);
+    // logger.main.info('[NotificationService] Found window for workspace:', options.workspacePath);
 
     // Focus the window
     if (targetWindow.isMinimized()) {

@@ -269,7 +269,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const executeReload = async () => {
       // Guard against concurrent reloads for the same session
       if (reloadInProgressRef.current.has(sessionId)) {
-        console.log(`[AgenticPanel] Reload already in progress for session ${sessionId}, skipping`);
+        // console.log(`[AgenticPanel] Reload already in progress for session ${sessionId}, skipping`);
         return;
       }
 

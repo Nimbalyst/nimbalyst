@@ -224,7 +224,7 @@ class AIApi {
           error: data.toolError.error
         });
       }
-      logger.api.info('Normal (non-streaming) response');
+      // logger.api.info('Normal (non-streaming) response');
       this.emit('streamResponse', data);
     };
 
@@ -451,9 +451,9 @@ class AIApi {
         this.lastStreamLength = partialLength;
         
         // Log every 5 chunks or every 200 new characters
-        if (this.streamChunkCount % 5 === 1 || newChars > 200) {
-          logger.api.info(`📝 Chunk #${this.streamChunkCount}: +${newChars} chars (total: ${partialLength})`);
-        }
+        // if (this.streamChunkCount % 5 === 1 || newChars > 200) {
+        //   logger.api.info(`📝 Chunk #${this.streamChunkCount}: +${newChars} chars (total: ${partialLength})`);
+        // }
       }
     } else if (event === 'performanceMetrics') {
       // Show performance metrics concisely

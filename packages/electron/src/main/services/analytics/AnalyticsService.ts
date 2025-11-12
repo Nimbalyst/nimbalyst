@@ -61,7 +61,7 @@ export class AnalyticsService {
         }
       }
 
-      this.log.info(`event: ${eventName}`, eventProperties);
+      // this.log.info(`event: ${eventName}`, eventProperties);
       this.postHogClient.capture({
         distinctId: this.getDistinctId(),
         event: eventName,

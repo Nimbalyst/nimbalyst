@@ -68,13 +68,13 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
   const visited = new WeakSet<object>();
 
   // DEBUG: Log the incoming tool message structure
-  if (tool.name && (tool.name.toLowerCase().includes('edit') || tool.name.toLowerCase().includes('write'))) {
-    console.log('[extractEditsFromToolMessage] Processing tool:', tool.name);
-    console.log('  fallbackPath:', fallbackPath);
-    console.log('  messageHasEdits:', !!message.edits);
-    console.log('  toolArguments:', JSON.stringify(tool.arguments, null, 2));
-    console.log('  toolResult:', JSON.stringify(tool.result, null, 2));
-  }
+  // if (tool.name && (tool.name.toLowerCase().includes('edit') || tool.name.toLowerCase().includes('write'))) {
+  //   console.log('[extractEditsFromToolMessage] Processing tool:', tool.name);
+  //   console.log('  fallbackPath:', fallbackPath);
+  //   console.log('  messageHasEdits:', !!message.edits);
+  //   console.log('  toolArguments:', JSON.stringify(tool.arguments, null, 2));
+  //   console.log('  toolResult:', JSON.stringify(tool.result, null, 2));
+  // }
 
   const pushEdit = (raw: any, fallback?: string) => {
     if (!raw || typeof raw !== 'object') return;
@@ -203,13 +203,13 @@ const extractEditsFromToolMessage = (message: Message): any[] => {
   }
 
   // DEBUG: Log extraction results
-  if (tool.name && (tool.name.toLowerCase().includes('edit') || tool.name.toLowerCase().includes('write'))) {
-    console.log('[extractEditsFromToolMessage] Extraction complete:', {
-      toolName: tool.name,
-      editsFound: edits.length,
-      edits: edits.length > 0 ? edits : 'No edits found'
-    });
-  }
+  // if (tool.name && (tool.name.toLowerCase().includes('edit') || tool.name.toLowerCase().includes('write'))) {
+  //   console.log('[extractEditsFromToolMessage] Extraction complete:', {
+  //     toolName: tool.name,
+  //     editsFound: edits.length,
+  //     edits: edits.length > 0 ? edits : 'No edits found'
+  //   });
+  // }
 
   return edits;
 };
@@ -424,23 +424,23 @@ export const RichTranscriptView = React.forwardRef<
     const editEntries = editTool ? extractEditsFromToolMessage(toolMsg) : [];
 
     // DEBUG: Log tool detection results
-    if (tool.name && (tool.name.toLowerCase().includes('edit') || tool.name.toLowerCase().includes('write'))) {
-      console.log('[RichTranscriptView] Tool detection:', {
-        toolName: tool.name,
-        isEditTool: editTool,
-        editEntriesCount: editEntries.length,
-        toolStructure: {
-          hasArguments: !!tool.arguments,
-          hasResult: !!tool.result,
-          hasEdits: !!toolMsg.edits,
-          argumentsKeys: tool.arguments ? Object.keys(tool.arguments) : [],
-          resultKeys: tool.result ? Object.keys(tool.result) : []
-        }
-      });
-      if (editEntries.length > 0) {
-        console.log('[RichTranscriptView] Edit entries:', editEntries);
-      }
-    }
+    // if (tool.name && (tool.name.toLowerCase().includes('edit') || tool.name.toLowerCase().includes('write'))) {
+    //   console.log('[RichTranscriptView] Tool detection:', {
+    //     toolName: tool.name,
+    //     isEditTool: editTool,
+    //     editEntriesCount: editEntries.length,
+    //     toolStructure: {
+    //       hasArguments: !!tool.arguments,
+    //       hasResult: !!tool.result,
+    //       hasEdits: !!toolMsg.edits,
+    //       argumentsKeys: tool.arguments ? Object.keys(tool.arguments) : [],
+    //       resultKeys: tool.result ? Object.keys(tool.result) : []
+    //     }
+    //   });
+    //   if (editEntries.length > 0) {
+    //     console.log('[RichTranscriptView] Edit entries:', editEntries);
+    //   }
+    // }
 
     if (editTool && editEntries.length > 0) {
       return (

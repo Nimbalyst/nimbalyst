@@ -213,14 +213,14 @@ export function createWindow(
                 const docService = new ElectronDocumentService(workspacePath);
                 documentServices.set(workspacePath, docService);
                 setupDocumentServiceHandlers(resolveDocumentServiceForEvent);
-                console.log('[MAIN] Created DocumentService for workspace:', workspacePath);
+                // console.log('[MAIN] Created DocumentService for workspace:', workspacePath);
             }
             if (!fileSystemServices.has(workspacePath)) {
                 const fileSystemService = new ElectronFileSystemService(workspacePath);
                 fileSystemServices.set(workspacePath, fileSystemService);
                 // Set the file system service globally for the runtime
                 setFileSystemService(fileSystemService);
-                console.log('[MAIN] Created FileSystemService for workspace:', workspacePath);
+                // console.log('[MAIN] Created FileSystemService for workspace:', workspacePath);
             }
 
             // Track workspace feature first use
@@ -237,14 +237,14 @@ export function createWindow(
             const navHistory = getWorkspaceNavigationHistory(workspacePath);
             if (navHistory) {
                 navigationHistoryService.restoreNavigationState(windowId, navHistory);
-                console.log('[MAIN] Restored navigation history for workspace:', workspacePath);
+                // console.log('[MAIN] Restored navigation history for workspace:', workspacePath);
             }
         }
         windowFocusOrder.set(windowId, ++focusOrderCounter); // Track initial focus order
 
-        console.log('[MAIN] Window stored in maps. Mode:', isWorkspaceMode ? 'workspace' : 'document');
-        console.log('[MAIN] Windows Map now has:', windows.size, 'windows');
-        console.log('[MAIN] Window IDs in map:', [...windows.keys()]);
+        // console.log('[MAIN] Window stored in maps. Mode:', isWorkspaceMode ? 'workspace' : 'document');
+        // console.log('[MAIN] Windows Map now has:', windows.size, 'windows');
+        // console.log('[MAIN] Window IDs in map:', [...windows.keys()]);
 
         // Increase max listeners to avoid warning (we have multiple event handlers)
         window.webContents.setMaxListeners(20);
@@ -407,20 +407,20 @@ export function createWindow(
         const loadContent = () => {
             // Add theme to URL query params to prevent flash
             const themeParam = `theme=${currentTheme}`;
-            console.log('[WINDOW-MANAGER] Loading window with theme param:', themeParam);
+            // console.log('[WINDOW-MANAGER] Loading window with theme param:', themeParam);
 
             // Check for explicit renderer URL from environment (for Playwright tests)
             if (process.env.ELECTRON_RENDERER_URL) {
                 const url = new URL(process.env.ELECTRON_RENDERER_URL);
                 url.searchParams.set('theme', currentTheme);
-                console.log('[MAIN] Loading from ELECTRON_RENDERER_URL:', url.toString());
+                // console.log('[MAIN] Loading from ELECTRON_RENDERER_URL:', url.toString());
                 return window.loadURL(url.toString());
             } else if (process.env.NODE_ENV === 'development') {
                 const url = `http://localhost:5273?${themeParam}`;
-                console.log('[MAIN] Loading from dev server:', url);
+                // console.log('[MAIN] Loading from dev server:', url);
                 return window.loadURL(url);
             } else {
-                console.log('[MAIN] Loading from built files with theme:', currentTheme);
+                // console.log('[MAIN] Loading from built files with theme:', currentTheme);
                 // Use loadFile which handles App Translocation properly
                 const htmlPath = join(__dirname, '../renderer/index.html');
                 return window.loadFile(htmlPath, { query: { theme: currentTheme } });
@@ -441,7 +441,7 @@ export function createWindow(
 
         // Show window when ready
         window.once('ready-to-show', () => {
-            console.log('[MAIN] Window ready to show at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
+            // console.log('[MAIN] Window ready to show at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
             window.show();
         });
 
@@ -477,7 +477,7 @@ export function createWindow(
 
         // When the window is ready, send initial data
         window.webContents.once('did-finish-load', () => {
-            console.log('[MAIN] did-finish-load at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
+            // console.log('[MAIN] did-finish-load at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
 
             // DO NOT send theme-change here - the window already got the theme via getThemeSync()
             // Sending it again causes a flash as React re-applies the same theme
@@ -500,7 +500,7 @@ export function createWindow(
             }
         });
 
-        console.log('[MAIN] Window created successfully at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
+        // console.log('[MAIN] Window created successfully at', new Date().toISOString(), 'elapsed:', Date.now() - startTime, 'ms');
         return window;
 
     } catch (error) {

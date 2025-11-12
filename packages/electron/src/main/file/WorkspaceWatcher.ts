@@ -81,7 +81,7 @@ export function startWorkspaceWatcher(window: BrowserWindow, workspacePath: stri
     }
 
     // Use optimized chokidar-based workspace watcher
-    logger.workspaceWatcher.info('Using OptimizedWorkspaceWatcher for:', workspacePath);
+    // logger.workspaceWatcher.info('Using OptimizedWorkspaceWatcher for:', workspacePath);
     optimizedWorkspaceWatcher.start(window, workspacePath);
 }
 

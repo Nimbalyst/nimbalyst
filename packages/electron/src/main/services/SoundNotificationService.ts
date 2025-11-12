@@ -16,17 +16,17 @@ export class SoundNotificationService {
 
   public playCompletionSound(workspacePath: string): void {
     if (!isCompletionSoundEnabled()) {
-      console.log('[SoundNotification] Completion sound disabled, skipping playback');
+      // console.log('[SoundNotification] Completion sound disabled, skipping playback');
       return;
     }
 
     const soundType = getCompletionSoundType();
     if (soundType === 'none') {
-      console.log('[SoundNotification] Sound type is "none", skipping playback');
+      // console.log('[SoundNotification] Sound type is "none", skipping playback');
       return;
     }
 
-    console.log(`[SoundNotification] Playing completion sound: ${soundType} for workspace:`, workspacePath);
+    // console.log(`[SoundNotification] Playing completion sound: ${soundType} for workspace:`, workspacePath);
 
     // REQUIRED: workspacePath must be provided - sessions are tied to workspaces
     if (!workspacePath) {

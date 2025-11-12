@@ -25,8 +25,8 @@ export class OptimizedWorkspaceWatcher {
 
         this.stop(windowId);
 
-        logger.workspaceWatcher.info(`Starting optimized workspace watcher for: ${workspacePath}`);
-        console.log(`[WorkspaceWatcher] Starting watcher for: ${workspacePath}`);
+        // logger.workspaceWatcher.info(`Starting optimized workspace watcher for: ${workspacePath}`);
+        // console.log(`[WorkspaceWatcher] Starting watcher for: ${workspacePath}`);
 
         this.workspacePaths.set(windowId, workspacePath);
         this.watchedPaths.set(windowId, new Set([workspacePath])); // Start by watching the root
@@ -150,8 +150,8 @@ export class OptimizedWorkspaceWatcher {
 
             this.watchers.set(windowId, watcher);
 
-            logger.workspaceWatcher.info(`Optimized workspace watcher started for: ${workspacePath}`);
-            console.log(`[WorkspaceWatcher] Successfully created watcher for window ${windowId}`);
+            // logger.workspaceWatcher.info(`Optimized workspace watcher started for: ${workspacePath}`);
+            // console.log(`[WorkspaceWatcher] Successfully created watcher for window ${windowId}`);
 
         } catch (error) {
             logger.workspaceWatcher.error('Failed to start workspace watcher:', error);

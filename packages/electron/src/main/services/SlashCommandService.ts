@@ -105,7 +105,7 @@ export class SlashCommandService {
     const seen = new Set<string>();
     return allCommands.filter(cmd => {
       if (seen.has(cmd.name)) {
-        console.warn(`[SlashCommandService] Duplicate command ignored: ${cmd.name} (source: ${cmd.source})`);
+        // console.warn(`[SlashCommandService] Duplicate command ignored: ${cmd.name} (source: ${cmd.source})`);
         return false;
       }
       seen.add(cmd.name);

@@ -109,7 +109,7 @@ export class SimpleFileWatcher {
                 return;
             }
 
-            console.log(`[FileWatcher] Restarting watcher for: ${filePath}`);
+            // console.log(`[FileWatcher] Restarting watcher for: ${filePath}`);
             // Must stop first, otherwise start() will see it's already watched and skip
             this.stopFile(windowId, filePath);
             this.start(window, filePath);
