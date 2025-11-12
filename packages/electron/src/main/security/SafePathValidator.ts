@@ -71,7 +71,7 @@ export class SafePathValidator {
       throw new Error('Workspace cannot be in a system directory');
     }
 
-    logger.ai.info('[SafePathValidator] Initialized with workspace:', this.resolvedWorkspace);
+    // logger.ai.info('[SafePathValidator] Initialized with workspace:', this.resolvedWorkspace);
   }
 
   /**

@@ -65,16 +65,16 @@ export const AgentCommandPalette: React.FC<AgentCommandPaletteProps> = ({
   // Load agents when workspacePath changes
   useEffect(() => {
     if (workspacePath) {
-      loadAgents();
+      // loadAgents();
     }
   }, [workspacePath]);
 
   const loadAgents = async () => {
     setIsLoading(true);
     try {
-      const loadedAgents = await agentApi.getAllAgents(workspacePathRef.current);
-      setAgents(loadedAgents);
-      setFilteredAgents(loadedAgents);
+      // const loadedAgents = await agentApi.getAllAgents(workspacePathRef.current);
+      // setAgents(loadedAgents);
+      // setFilteredAgents(loadedAgents);
     } catch (error) {
       console.error('Failed to load agents:', error);
       setAgents([]);

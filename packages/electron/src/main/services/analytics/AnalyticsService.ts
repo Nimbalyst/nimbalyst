@@ -98,7 +98,7 @@ export class AnalyticsService {
    * the same session ID in its events too. You probably never need to call this yourself.
    */
   public setSessionId(sessionId: string): void {
-    this.log.info(`Setting analytics session ID: ${sessionId}, previous session ID: ${this.sessionId}, official build: ${this.isOfficialBuild}`);
+    // this.log.info(`Setting analytics session ID: ${sessionId}, previous session ID: ${this.sessionId}, official build: ${this.isOfficialBuild}`);
     this.sessionId = sessionId;
 
     if (!this.allowedToSendAnalytics()) {

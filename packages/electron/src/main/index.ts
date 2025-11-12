@@ -38,7 +38,7 @@ import { registerNotificationHandlers } from './ipc/NotificationHandlers';
 import { registerGitStatusHandlers } from './ipc/GitStatusHandlers';
 import { getTheme, setTheme, incrementLaunchCount, shouldShowDiscordInvitation, dismissDiscordInvitation, isFirstLaunch, markAppLaunched, type AppTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
-import { AgentService } from './services/agents/AgentService';
+// import { AgentService } from './services/agents/AgentService';
 import { cliManager } from './services/CLIManager';
 import { startMcpHttpServer, updateDocumentState, registerWorkspaceWindow, cleanupMcpServer, shutdownHttpServer } from './mcp/httpServer';
 import { logger, overrideConsole } from './utils/logger';
@@ -73,7 +73,7 @@ const analytics = AnalyticsService.getInstance();
 
 // AI service instance
 let aiService: AIService | null = null;
-let agentService: AgentService | null = null;
+// let agentService: AgentService | null = null;
 let runtimeSessionStore: SessionStore | null = null;
 let mcpHttpServer: any = null;
 
@@ -216,7 +216,7 @@ app.whenReady().then(async () => {
         if (existsSync(iconPath)) {
             const dockIcon = nativeImage.createFromPath(iconPath);
             app.dock.setIcon(dockIcon);
-            logger.main.info('Dock icon set successfully from:', iconPath);
+            // logger.main.info('Dock icon set successfully from:', iconPath);
         } else {
             logger.main.warn(`icon not found at: ${iconPath}`);
         }
@@ -246,7 +246,7 @@ app.whenReady().then(async () => {
     aiService = new AIService(runtimeSessionStore);
 
     // Initialize Agent service
-    agentService = new AgentService(aiService);
+    // agentService = new AgentService(aiService);
 
     // Start MCP SSE server
     try {

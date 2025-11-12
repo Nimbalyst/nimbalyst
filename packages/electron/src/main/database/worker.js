@@ -335,7 +335,7 @@ class PGLiteWorker {
         CREATE INDEX IF NOT EXISTS idx_tracker_updated ON tracker_items(updated);
         CREATE INDEX IF NOT EXISTS idx_tracker_data_gin ON tracker_items USING GIN(data);
       `);
-      console.log('[PGLite Worker] tracker_items table created successfully');
+      // console.log('[PGLite Worker] tracker_items table created successfully');
     } catch (error) {
       console.error('[PGLite Worker] Failed to create tracker_items table:', error);
       throw error;

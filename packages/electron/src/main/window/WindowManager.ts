@@ -93,7 +93,7 @@ export function createWindow(
 ): BrowserWindow {
     const startTime = Date.now();
     try {
-        console.log('[MAIN] Creating window at', new Date().toISOString());
+        // console.log('[MAIN] Creating window at', new Date().toISOString());
 
         // Set up icon path based on platform
         // In dev mode, use icon from root; in production, use from resources
@@ -118,7 +118,7 @@ export function createWindow(
             console.log('[MAIN] Icon not found at:', iconPath);
             iconPath = undefined;
         } else {
-            console.log('[MAIN] Using icon at:', iconPath);
+            // console.log('[MAIN] Using icon at:', iconPath);
         }
 
         // Calculate window position with cascading effect
@@ -157,7 +157,7 @@ export function createWindow(
         // Determine the current theme and set appropriate background color
         // IMPORTANT: These colors MUST match the CSS theme files exactly to prevent flash
         const currentTheme = getTheme();
-        console.log('[WINDOW-MANAGER] Creating window with theme:', currentTheme);
+        // console.log('[WINDOW-MANAGER] Creating window with theme:', currentTheme);
         let backgroundColor = '#ffffff'; // Default to white for light theme
 
         if (currentTheme === 'dark') {
@@ -170,7 +170,7 @@ export function createWindow(
             // system/auto - use nativeTheme which should match prefers-color-scheme
             backgroundColor = nativeTheme.shouldUseDarkColors ? '#2d2d2d' : '#ffffff';
         }
-        console.log('[WINDOW-MANAGER] Background color:', backgroundColor);
+        // console.log('[WINDOW-MANAGER] Background color:', backgroundColor);
 
         const windowOptions: Electron.BrowserWindowConstructorOptions = {
             width,
@@ -198,7 +198,7 @@ export function createWindow(
 
         // Generate a unique window ID
         const windowId = ++windowIdCounter;
-        console.log('[MAIN] Created window with ID:', windowId, 'Electron ID:', window.id);
+        // console.log('[MAIN] Created window with ID:', windowId, 'Electron ID:', window.id);
 
         // Store window and initial state
         windows.set(windowId, window);

@@ -5,9 +5,9 @@ class AgentApi {
 
   async getAllAgents(workspacePath?: string): Promise<Agent[]> {
     try {
-      const agents = await window.electronAPI.invoke('agents:getAll', workspacePath);
-      this.cache.set(workspacePath || 'global', agents);
-      return agents;
+      // const agents = await window.electronAPI.invoke('agents:getAll', workspacePath);
+      // this.cache.set(workspacePath || 'global', agents);
+      // return agents;
     } catch (error) {
       console.error('[AgentApi] Failed to get agents:', error);
       return this.cache.get(workspacePath || 'global') || [];
