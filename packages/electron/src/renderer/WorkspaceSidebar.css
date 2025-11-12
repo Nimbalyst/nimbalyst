@@ -82,7 +82,7 @@
   padding: 6px;
   cursor: pointer;
   border-radius: 4px;
-  color: #6b7280;
+  color: var(--text-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -90,8 +90,8 @@
 }
 
 .workspace-action-button:hover {
-  background-color: #f3f4f6;
-  color: #1f2937;
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
 }
 
 /* Legacy class for backward compatibility */

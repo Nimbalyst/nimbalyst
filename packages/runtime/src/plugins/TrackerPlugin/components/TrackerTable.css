@@ -165,22 +165,22 @@
 }
 
 .type-icon.type-bug {
-  background: #fef2f2;
+  background: rgba(220, 38, 38, 0.1);
   color: #dc2626;
 }
 
 .type-icon.type-task {
-  background: #eff6ff;
+  background: rgba(37, 99, 235, 0.1);
   color: #2563eb;
 }
 
 .type-icon.type-plan {
-  background: #f5f3ff;
+  background: rgba(124, 58, 237, 0.1);
   color: #7c3aed;
 }
 
 .type-icon.type-idea {
-  background: #fefce8;
+  background: rgba(202, 138, 4, 0.1);
   color: #ca8a04;
 }
 
