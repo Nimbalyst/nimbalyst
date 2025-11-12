@@ -35,7 +35,24 @@
   overflow-y: auto;
   position: relative;
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border-secondary) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.rich-transcript-scroll-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.rich-transcript-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rich-transcript-scroll-container::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+.rich-transcript-scroll-container::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
 }
 
 .rich-transcript-content {

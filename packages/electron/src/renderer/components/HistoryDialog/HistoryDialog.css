@@ -568,13 +568,13 @@
 
 .history-items::-webkit-scrollbar-thumb,
 .history-preview-content::-webkit-scrollbar-thumb {
-  background: var(--border-primary, #e5e7eb);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
 .history-items::-webkit-scrollbar-thumb:hover,
 .history-preview-content::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary, #9ca3af);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Dark Theme Adjustments */

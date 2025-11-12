@@ -69,6 +69,11 @@
   --quote-text: #D1D5DB;
   --quote-border: #4B5563;
 
+  /* Scrollbar */
+  --scrollbar-thumb: #374151;
+  --scrollbar-thumb-hover: #4B5563;
+  --scrollbar-track: transparent;
+
   /* Lexical-specific */
   --lexical-indent-base-value: 40px;
 }

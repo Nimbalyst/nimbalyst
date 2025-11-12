@@ -50,12 +50,12 @@
 }
 
 .plans-list::-webkit-scrollbar-thumb {
-  background: var(--surface-secondary);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
 .plans-list::-webkit-scrollbar-thumb:hover {
-  background: var(--surface-tertiary);
+  background: var(--scrollbar-thumb-hover);
 }
 
 .plans-empty {

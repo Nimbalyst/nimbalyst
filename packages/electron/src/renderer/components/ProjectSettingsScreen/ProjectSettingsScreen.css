@@ -548,12 +548,12 @@
 }
 
 .settings-content::-webkit-scrollbar-thumb {
-  background: var(--surface-tertiary);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
 .settings-content::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Section header with actions */

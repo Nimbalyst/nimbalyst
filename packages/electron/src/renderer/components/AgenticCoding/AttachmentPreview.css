@@ -105,10 +105,10 @@
 }
 
 .attachment-preview-list::-webkit-scrollbar-thumb {
-  background: var(--border-primary);
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 
 .attachment-preview-list::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
+  background: var(--scrollbar-thumb-hover);
 }

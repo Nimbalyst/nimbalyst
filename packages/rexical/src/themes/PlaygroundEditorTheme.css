@@ -69,6 +69,11 @@
   --quote-text: rgb(101, 103, 107);
   --quote-border: rgb(206, 208, 212);
 
+  /* Scrollbar */
+  --scrollbar-thumb: #d1d5db;
+  --scrollbar-thumb-hover: #9ca3af;
+  --scrollbar-track: transparent;
+
   /* Lexical-specific */
   --lexical-indent-base-value: 40px;
 }

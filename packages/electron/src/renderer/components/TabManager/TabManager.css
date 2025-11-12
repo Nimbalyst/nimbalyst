@@ -26,6 +26,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .tab-bar-scrollable::-webkit-scrollbar {
@@ -37,8 +38,12 @@
 }
 
 .tab-bar-scrollable::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb, #9ca3af);
+  background: var(--scrollbar-thumb);
   border-radius: 2px;
+}
+
+.tab-bar-scrollable::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Fixed Action Buttons Area */
@@ -382,7 +387,6 @@
   --tab-close-hover-bg: #ef4444;
   --tab-close-hover-color: #ffffff;
   --tab-dirty-indicator: #fbbf24;
-  --scrollbar-thumb: var(--border-primary);
   --menu-bg: var(--surface-secondary);
   --menu-border: var(--border-primary);
   --menu-text: var(--text-secondary);

@@ -201,12 +201,12 @@ body[data-theme="crystal-dark"] {
 }
 
 .release-notes-container::-webkit-scrollbar-thumb {
-  background: var(--border-color);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
 .release-notes-container::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* Buttons */

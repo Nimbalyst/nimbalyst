@@ -270,10 +270,10 @@
 }
 
 .text-diff-content::-webkit-scrollbar-thumb {
-  background: var(--border-primary, #e5e7eb);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
 .text-diff-content::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary, #9ca3af);
+  background: var(--scrollbar-thumb-hover);
 }

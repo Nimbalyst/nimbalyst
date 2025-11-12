@@ -156,7 +156,12 @@ header h1 {
 }
 
 .stravu-editor pre::-webkit-scrollbar-thumb {
-  background: #999;
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+.stravu-editor pre::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 .editor-dev-button {
