@@ -627,18 +627,21 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     if (window.electronAPI.onCopyAsMarkdown) {
       cleanupFns.push(window.electronAPI.onCopyAsMarkdown(() => {
         console.log('Copy as Markdown triggered from menu');
-        // Trigger copy as markdown in the editor
-        const editor = editorRef.current;
-        if (editor) {
-          // Create a synthetic keyboard event to pass to the command
-          const syntheticEvent = new KeyboardEvent('keydown', {
-            code: 'KeyC',
-            shiftKey: true,
-            metaKey: true,
-            bubbles: true,
-            cancelable: true
-          });
-          editor.dispatchCommand(COPY_AS_MARKDOWN_COMMAND, syntheticEvent);
+        // Get the active editor from the registry
+        const activeFilePath = editorRegistry.getActiveFilePath();
+        if (activeFilePath) {
+          const editorInstance = editorRegistry.getEditor(activeFilePath);
+          if (editorInstance && editorInstance.editor) {
+            // Create a synthetic keyboard event to pass to the command
+            const syntheticEvent = new KeyboardEvent('keydown', {
+              code: 'KeyC',
+              shiftKey: true,
+              metaKey: true,
+              bubbles: true,
+              cancelable: true
+            });
+            editorInstance.editor.dispatchCommand(COPY_AS_MARKDOWN_COMMAND, syntheticEvent);
+          }
         }
       }));
     }

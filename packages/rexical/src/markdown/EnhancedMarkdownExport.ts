@@ -178,11 +178,12 @@ export function $convertSelectionToEnhancedMarkdownString(
     processedNodes.add(key);
 
     const result = exportMarkdown(exportNode);
-    if (result) {
+    if (result !== null) {
       output.push(result);
     }
   }
 
+  // Always join with single newline - preserves exact spacing including multiple blank lines
   return output.join('\n');
 }
 
