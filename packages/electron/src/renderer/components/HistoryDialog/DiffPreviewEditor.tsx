@@ -28,6 +28,7 @@ interface DiffPreviewEditorProps {
   onNavigationStateChange?: (state: DiffNavigationState) => void;
   onNavigatePrevious?: () => void;
   onNavigateNext?: () => void;
+  theme?: 'light' | 'dark' | 'crystal-dark';
 }
 
 export function DiffPreviewEditor({
@@ -35,7 +36,8 @@ export function DiffPreviewEditor({
   newMarkdown,
   onNavigationStateChange,
   onNavigatePrevious,
-  onNavigateNext
+  onNavigateNext,
+  theme = 'light'
 }: DiffPreviewEditorProps) {
   const editorRef = useRef<LexicalEditor | null>(null);
   const appliedRef = useRef(false);
@@ -334,6 +336,8 @@ export function DiffPreviewEditor({
     });
   };
 
+  const isDarkTheme = theme === 'dark' || theme === 'crystal-dark';
+
   return (
     <div className={`diff-preview-editor ${!isReady ? 'loading' : ''}`}>
       <div className="diff-preview-editor-container">
@@ -343,6 +347,7 @@ export function DiffPreviewEditor({
             isRichText: true,
             editable: false,
             onEditorReady: handleEditorReady,
+            theme: theme,
           }}
         />
       </div>

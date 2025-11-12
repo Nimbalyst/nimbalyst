@@ -613,6 +613,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
           onClose={() => setIsHistoryDialogOpen(false)}
           filePath={currentFilePath}
           onRestore={handleRestoreFromHistory}
+          theme={theme}
         />
       )}
     </>

@@ -9,6 +9,7 @@ interface HistoryDialogProps {
   onClose: () => void;
   filePath: string | null;
   onRestore?: (content: string) => void;
+  theme?: 'light' | 'dark' | 'crystal-dark';
 }
 
 type VersionSelection = {
@@ -22,7 +23,7 @@ const getSnapshotId = (snapshot: { timestamp: string; baseMarkdownHash: string }
   return `${snapshot.timestamp}-${snapshot.baseMarkdownHash}-${index}`;
 };
 
-export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryDialogProps) {
+export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'light' }: HistoryDialogProps) {
   const { snapshots, loading, refreshSnapshots, loadSnapshot, deleteSnapshot } = useHistory(filePath);
   const [selectedVersions, setSelectedVersions] = useState<VersionSelection[]>([]);
   const [previewContent, setPreviewContent] = useState<string>('');
@@ -521,6 +522,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore }: HistoryD
                     onNavigationStateChange={handleNavigationStateChange}
                     onNavigatePrevious={() => {}}
                     onNavigateNext={() => {}}
+                    theme={theme}
                   />
                 ) : (
                   <TextDiffViewer
