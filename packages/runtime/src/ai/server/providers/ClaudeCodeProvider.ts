@@ -1334,30 +1334,28 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // }
 
         if (pendingTags && pendingTags.length > 0) {
-          // console.log(`[CLAUDE-CODE] PreToolUse: File already has pending tag, skipping new tag:`, {
-          //   filePath,
-          //   existingTagId: pendingTags[0].id,
-          //   existingStatus: pendingTags[0].status,
-          //   requestedToolUseId: toolUseId
-          // });
+          // PRODUCTION LOG: Track when tag creation is skipped due to existing tag
+          const tagAge = Date.now() - pendingTags[0].createdAt.getTime();
+          console.log('[PRE-EDIT SKIP]', JSON.stringify({
+            file: path.basename(filePath),
+            existingTagAge: tagAge + 'ms',
+            existingTagId: pendingTags[0].id,
+            reason: 'existing_pending_tag',
+          }));
           // Don't create a new tag - the existing one covers all edits until user approves/rejects
           return;
         }
 
-        // console.log(`[CLAUDE-CODE] PreToolUse: No pending tags found, creating new tag`);
+        // PRODUCTION LOG: Track when new tag is created
+        const tagId = `ai-edit-pending-${sessionId || 'unknown'}-${toolUseId}`;
+        console.log('[PRE-EDIT TAG]', JSON.stringify({
+          file: path.basename(filePath),
+          tagId,
+        }));
 
         // No pending tags - create the first one for this edit session
         // Read current file content
         const content = fs.readFileSync(filePath, 'utf-8');
-
-        // Create tag ID
-        const tagId = `ai-edit-pending-${sessionId || 'unknown'}-${toolUseId}`;
-
-        // console.log(`[CLAUDE-CODE] PreToolUse: Creating first tag for file:`, {
-        //   filePath,
-        //   tagId,
-        //   contentLength: content.length
-        // });
 
         await historyManager.createTag(
           filePath,

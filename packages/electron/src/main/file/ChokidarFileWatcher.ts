@@ -33,7 +33,7 @@ export class ChokidarFileWatcher {
         }
     }
 
-    private emitFileChanged(window: BrowserWindow, filePath: string) {
+    private async emitFileChanged(window: BrowserWindow, filePath: string) {
         try {
             if (!window || window.isDestroyed()) {
                 return;
@@ -42,6 +42,23 @@ export class ChokidarFileWatcher {
             const contents = window.webContents;
             if (!contents || contents.isDestroyed()) {
                 return;
+            }
+
+            // PRODUCTION LOG: Track file change detection
+            // Import historyManager to check for pending tags
+            try {
+                const { historyManager } = await import('../HistoryManager');
+                const pendingTags = await historyManager.getPendingTags(filePath);
+                const hasPendingTag = pendingTags && pendingTags.length > 0;
+
+                console.log('[FILE CHANGE]', {
+                    file: require('path').basename(filePath),
+                    hasPendingTag,
+                    tagId: hasPendingTag ? pendingTags[0].id : undefined,
+                });
+            } catch (err) {
+                // If historyManager check fails, just log the file change
+                console.log('[FILE CHANGE]', require('path').basename(filePath));
             }
 
             logger.fileWatcher.info(`File changed: ${filePath}`);
