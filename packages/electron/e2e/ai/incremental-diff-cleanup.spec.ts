@@ -119,7 +119,7 @@ test('should clear tag and exit diff mode after incrementally accepting all chan
   // TEMPORARY FIX: Use Accept All instead of incremental accepts
   // TODO: Investigate why incremental accepts leave malformed diff nodes
   // (see error: "This is the third section with moreREVISED third section...")
-  const acceptAllButton = page.locator('button:has-text("Accept All")');
+  const acceptAllButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.acceptAllButton);
   await acceptAllButton.click();
   await page.waitForTimeout(500);
 
@@ -204,7 +204,7 @@ test('should clear tag and exit diff mode after incrementally rejecting all chan
   expect(changeCounter).toContain('3');
 
   // Incrementally reject each change
-  const rejectButton = page.locator('button:has-text("Reject")').first();
+  const rejectButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.diffRejectButton).first();
 
   // Reject first change
   await rejectButton.click();
@@ -303,7 +303,7 @@ test('should allow autosave after incremental accept cleanup', async () => {
   const totalDiffs = parseInt(diffCountText?.match(/of (\d+)/)?.[1] || '0');
   console.log(`Total diff groups: ${totalDiffs}`);
 
-  const acceptButton = page.locator('button:has-text("Accept")').first();
+  const acceptButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.diffAcceptButton).first();
   for (let i = 0; i < totalDiffs; i++) {
     console.log(`Accepting diff ${i + 1} of ${totalDiffs}`);
     await acceptButton.click();
@@ -415,7 +415,7 @@ test('should handle mixed accept/reject incrementally', async () => {
 
   // TEMPORARY FIX: Mixed accept/reject has issues - use Accept All for now
   // TODO: Debug incremental accept/reject leaving malformed diff nodes
-  const acceptAllButton = page.locator('button:has-text("Accept All")');
+  const acceptAllButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.acceptAllButton);
   await acceptAllButton.click();
   await page.waitForTimeout(500);
 
@@ -506,14 +506,14 @@ test('should save partial acceptances correctly with rejections', async () => {
   await nextButton.click();
   await page.waitForTimeout(200);
 
-  const acceptButton = page.locator('button:has-text("Accept")').first();
-  const rejectButton = page.locator('button:has-text("Reject")').first();
+  const acceptButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.diffAcceptButton).first();
+  const rejectButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.diffRejectButton).first();
 
   // Track which operation to do: accept first, reject second, accept the rest
   let operationCount = 0;
 
   // Just use Accept All - incremental operations have bugs that need separate fixing
-  const acceptAllButton = page.locator('button:has-text("Accept All")');
+  const acceptAllButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.acceptAllButton);
   await acceptAllButton.click();
   await page.waitForTimeout(500);
 
@@ -598,7 +598,7 @@ test('should only show remaining diffs after accepting one and reopening file', 
   console.log(`Initial diff groups: ${diffGroupCount}`);
 
   // Accept FIRST change only
-  const acceptButton = page.locator('button:has-text("Accept")').first();
+  const acceptButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.diffAcceptButton).first();
   await acceptButton.click();
   await page.waitForTimeout(500);
 

@@ -141,6 +141,7 @@ export function NewSessionButton({
     <div className="new-session-button" ref={dropdownRef}>
       <button
         className="new-session-button-main"
+        data-testid="new-session-button"
         onClick={handleMainClick}
         disabled={disabled}
         title={`New conversation with ${getCurrentModelName()}`}

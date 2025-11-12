@@ -26,6 +26,7 @@ import {
   triggerManualSave,
   waitForSave
 } from '../utils/aiToolSimulator';
+import { PLAYWRIGHT_TEST_SELECTORS } from '../utils/testHelpers';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -77,7 +78,7 @@ test.describe('Diff Reliability - Complex Structures', () => {
     expect(result.success).toBe(true);
 
     // Accept the suggested changes
-    await page.click('button:has-text("Accept All")');
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.acceptAllButton).click();
     await page.waitForTimeout(200);
 
     // Save the document
@@ -114,7 +115,7 @@ test.describe('Diff Reliability - Complex Structures', () => {
     expect(result.success).toBe(true);
 
     // Accept the suggested changes
-    await page.click('button:has-text("Accept All")');
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.acceptAllButton).click();
     await page.waitForTimeout(200);
 
     // Save the document
@@ -151,7 +152,7 @@ function hello() {
     expect(result.success).toBe(true);
 
     // Accept the suggested changes
-    await page.click('button:has-text("Accept All")');
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.acceptAllButton).click();
     await page.waitForTimeout(200);
 
     // Save the document
@@ -192,7 +193,7 @@ More text here.
     expect(result.success).toBe(true);
 
     // Accept the suggested changes
-    await page.click('button:has-text("Accept All")');
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.acceptAllButton).click();
     await page.waitForTimeout(200);
 
     // Save the document
@@ -227,7 +228,7 @@ More text here.
     expect(result.success).toBe(true);
 
     // Accept the suggested changes
-    await page.click('button:has-text("Accept All")');
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.acceptAllButton).click();
     await page.waitForTimeout(200);
 
     // Save the document
@@ -262,7 +263,7 @@ Another paragraph.
     expect(result.success).toBe(true);
 
     // Accept the suggested changes
-    await page.click('button:has-text("Accept All")');
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.acceptAllButton).click();
     await page.waitForTimeout(200);
 
     // Save the document
@@ -495,7 +496,7 @@ More text with \`backticks\` and |pipes|.
     expect(result.success).toBe(true);
 
     // Accept the suggested changes
-    await page.click('button:has-text("Accept All")');
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.acceptAllButton).click();
     await page.waitForTimeout(200);
 
     // Save the document
@@ -555,7 +556,7 @@ Content C
     expect(result.success).toBe(true);
 
     // Accept the suggested changes
-    await page.click('button:has-text("Accept All")');
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.acceptAllButton).click();
     await page.waitForTimeout(200);
 
     // Save the document

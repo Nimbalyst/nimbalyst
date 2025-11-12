@@ -17,7 +17,7 @@ import { TEST_TIMEOUTS } from '../helpers';
  */
 export const PLAYWRIGHT_TEST_SELECTORS = {
   // Mode switching
-  editorModeButton: '[data-mode="editor"]',
+  editorModeButton: '[data-mode="files"]', // Note: "editor" mode is actually "files" mode in the UI
   agentModeButton: '[data-mode="agent"]',
   filesModeButton: '[data-mode="files"]',
 
@@ -57,8 +57,10 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   // Diff approval - use data-action attributes for reliable targeting
   diffAcceptButton: 'button[data-action="accept-single"]',
   diffRejectButton: 'button[data-action="reject-single"]',
-  diffAcceptAllButton: 'button[data-action="accept-all"]',
-  diffRejectAllButton: 'button[data-action="reject-all"]',
+  diffAcceptAllButton: 'button.diff-accept-all-button[data-action="accept-all"]',
+  diffRejectAllButton: 'button.diff-reject-all-button[data-action="reject-all"]',
+  acceptAllButton: 'button.diff-accept-all-button[data-action="accept-all"]', // Alias for compatibility
+  rejectAllButton: 'button.diff-reject-all-button[data-action="reject-all"]', // Alias for compatibility
   diffApprovalBar: '.diff-approval-bar',
   diffChangeCounter: '.diff-change-counter',
 
@@ -69,6 +71,11 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   // Session tabs
   sessionTabsContainer: '.ai-session-tabs-container',
   sessionTab: '.ai-session-tabs-container .tab',
+
+  // Session history (agent mode sidebar)
+  sessionHistory: '.session-history',
+  sessionHistoryItem: '.session-history-item',
+  sessionHistoryNewButton: '.session-history-new-button',
 
   // Editor
   contentEditable: '[contenteditable="true"]',
@@ -152,8 +159,9 @@ export async function submitChatPrompt(
 ): Promise<void> {
   const { waitForResponse = false, timeout = 15000 } = options;
 
-  // Find the visible chat input
-  const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
+  // Find chat input in the active session (data-active="true")
+  const activeSession = page.locator('[data-active="true"]');
+  const chatInput = activeSession.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
   await chatInput.waitFor({ state: 'visible', timeout: 5000 });
 
   // Fill the message (more reliable than type() for React inputs)
@@ -171,10 +179,13 @@ export async function submitChatPrompt(
 
 /**
  * Create a new agent session
+ * Scopes to session-history sidebar to avoid clicking chat mode button
  */
 export async function createNewAgentSession(page: Page): Promise<void> {
-  const newSessionButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.newSessionButton).first();
-  await newSessionButton.click();
+  // Scope to agent mode sidebar to avoid clicking chat mode button
+  const agentSidebar = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
+  const newSessionButton = agentSidebar.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryNewButton);
+  await newSessionButton.click({ timeout: 5000 });
   await page.waitForTimeout(500);
 }
 
@@ -546,8 +557,8 @@ export async function openAIChatWithSession(page: Page): Promise<void> {
     await page.waitForTimeout(500);
   }
 
-  // Create a new session if needed
-  const newSessionButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.newSessionButton);
+  // Create a new session if needed (filter to visible to avoid clicking hidden buttons)
+  const newSessionButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.newSessionButton).filter({ hasText: /New|Start/i }).first();
   const needsSession = await newSessionButton.isVisible().catch(() => false);
 
   if (needsSession) {
@@ -555,8 +566,9 @@ export async function openAIChatWithSession(page: Page): Promise<void> {
     await page.waitForTimeout(1000);
   }
 
-  // Wait for chat input to be visible (use .first() to avoid strict mode violations)
-  const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
+  // Wait for chat input to be visible in the AI chat panel
+  const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
+  const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
   await chatInput.waitFor({ state: 'visible', timeout: 3000 });
 }
 

@@ -66,7 +66,8 @@ test.describe('AI Image Attachment', () => {
     await openAIChatWithSession(page);
 
     // Find the chat input using constant (use .first() since there may be multiple AI sessions)
-    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
+    const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
+    const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
     await expect(chatInput).toBeVisible();
 
     // Simulate file drop
@@ -94,7 +95,8 @@ test.describe('AI Image Attachment', () => {
     // Open AI chat panel and create session using utility
     await openAIChatWithSession(page);
 
-    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
+    const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
+    const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
     await expect(chatInput).toBeVisible();
 
     // Add an attachment (simplified - assume it's already added from previous test)
@@ -115,7 +117,8 @@ test.describe('AI Image Attachment', () => {
     // Open AI chat panel and create session using utility
     await openAIChatWithSession(page);
 
-    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
+    const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
+    const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
     await expect(chatInput).toBeVisible();
 
     // Type some text first
@@ -147,7 +150,8 @@ test.describe('AI Image Attachment', () => {
     // Open AI chat panel and create session using utility
     await openAIChatWithSession(page);
 
-    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
+    const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
+    const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
     await expect(chatInput).toBeVisible();
 
     // Listen for alert
@@ -177,7 +181,8 @@ test.describe('AI Image Attachment', () => {
     // Open AI chat panel and create session using utility
     await openAIChatWithSession(page);
 
-    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
+    const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
+    const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
     await expect(chatInput).toBeVisible();
 
     // Focus input
@@ -214,7 +219,8 @@ test.describe('AI Image Attachment', () => {
     // Open AI chat panel and create session using utility
     await openAIChatWithSession(page);
 
-    const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput).first();
+    const aiChatPanel = page.locator(PLAYWRIGHT_TEST_SELECTORS.aiChatPanel);
+    const chatInput = aiChatPanel.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
     await expect(chatInput).toBeVisible();
 
     // Add an attachment
