@@ -30,27 +30,27 @@ const fileSystemServices = new Map<string, ElectronFileSystemService>();
 function resolveDocumentServiceForEvent(event: IpcMainEvent | IpcMainInvokeEvent): ElectronDocumentService | null {
     const browserWindow = BrowserWindow.fromWebContents(event.sender);
     if (!browserWindow) {
-        console.log('[DocumentService] No browser window from event');
+        // console.log('[DocumentService] No browser window from event');
         return null;
     }
     const windowId = getWindowId(browserWindow);
     if (windowId === null) {
-        console.log('[DocumentService] No window ID');
+        // console.log('[DocumentService] No window ID');
         return null;
     }
     const state = windowStates.get(windowId);
     // Support both 'workspace' and 'agentic-coding' modes
     if (!state || !state.workspacePath) {
-        console.log('[DocumentService] Window has no workspace path:', {
-            hasState: !!state,
-            mode: state?.mode,
-            hasPath: !!state?.workspacePath
-        });
+        // console.log('[DocumentService] Window has no workspace path:', {
+        //     hasState: !!state,
+        //     mode: state?.mode,
+        //     hasPath: !!state?.workspacePath
+        // });
         return null;
     }
     // Both workspace and agentic-coding windows should have document service access
     if (state.mode !== 'workspace' && state.mode !== 'agentic-coding') {
-        console.log('[DocumentService] Window not in supported mode:', state.mode);
+        // console.log('[DocumentService] Window not in supported mode:', state.mode);
         return null;
     }
     const service = documentServices.get(state.workspacePath);
@@ -514,6 +514,31 @@ export function findWindowByFilePath(filePath: string): BrowserWindow | null {
     for (const [windowId, window] of windows) {
         const state = windowStates.get(windowId);
         if (state?.filePath === filePath) {
+            return window;
+        }
+    }
+    return null;
+}
+
+/**
+ * Find window by workspace path (stable identifier)
+ *
+ * IMPORTANT: This is the preferred way to route to windows for async/deferred operations
+ * (like notifications, sounds, etc.) because workspace paths are STABLE identifiers,
+ * while Electron window IDs are TRANSIENT and change when windows close/reopen.
+ *
+ * Routing Strategy:
+ * - Use workspacePath for: OS notifications, sound notifications, any deferred routing
+ * - Use event.sender for: Immediate IPC responses during the same call
+ * - Window IDs should only be used as a fallback when workspace path is unavailable
+ *
+ * @param workspacePath The absolute path to the workspace directory
+ * @returns The BrowserWindow for that workspace, or null if not found
+ */
+export function findWindowByWorkspace(workspacePath: string): BrowserWindow | null {
+    for (const [windowId, window] of windows) {
+        const state = windowStates.get(windowId);
+        if (state?.workspacePath === workspacePath) {
             return window;
         }
     }

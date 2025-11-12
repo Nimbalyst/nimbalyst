@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { isCompletionSoundEnabled, getCompletionSoundType, CompletionSoundType } from '../utils/store';
+import { findWindowByWorkspace } from '../window/WindowManager';
 
 export class SoundNotificationService {
   private static instance: SoundNotificationService;
@@ -13,7 +14,7 @@ export class SoundNotificationService {
     return SoundNotificationService.instance;
   }
 
-  public playCompletionSound(windowId?: number): void {
+  public playCompletionSound(workspacePath: string): void {
     if (!isCompletionSoundEnabled()) {
       console.log('[SoundNotification] Completion sound disabled, skipping playback');
       return;
@@ -25,26 +26,18 @@ export class SoundNotificationService {
       return;
     }
 
-    console.log(`[SoundNotification] Playing completion sound: ${soundType}`);
+    console.log(`[SoundNotification] Playing completion sound: ${soundType} for workspace:`, workspacePath);
 
-    // Get the target window or use focused window
-    let targetWindow: BrowserWindow | null = null;
-    if (windowId) {
-      targetWindow = BrowserWindow.fromId(windowId);
-    } else {
-      targetWindow = BrowserWindow.getFocusedWindow();
+    // REQUIRED: workspacePath must be provided - sessions are tied to workspaces
+    if (!workspacePath) {
+      throw new Error('workspacePath is required for sound notification routing');
     }
 
-    // If no specific window, play on all windows
-    if (!targetWindow) {
-      const allWindows = BrowserWindow.getAllWindows();
-      if (allWindows.length > 0) {
-        targetWindow = allWindows[0];
-      }
-    }
+    // Find window by workspace path (the only stable identifier)
+    const targetWindow = findWindowByWorkspace(workspacePath);
 
     if (!targetWindow || targetWindow.isDestroyed()) {
-      console.warn('[SoundNotification] No valid window found for sound playback');
+      console.warn('[SoundNotification] No window found for workspace:', workspacePath);
       return;
     }
 

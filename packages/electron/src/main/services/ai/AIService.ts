@@ -1101,7 +1101,7 @@ export class AIService {
 
               // Play completion sound if enabled
               const soundService = SoundNotificationService.getInstance();
-              soundService.playCompletionSound(event.sender.id);
+              soundService.playCompletionSound(workspacePath);
 
               // Show OS notification if enabled and window not focused
               const notificationBody = fullResponse.length > 0
@@ -1113,7 +1113,7 @@ export class AIService {
                 title: 'Nimbalyst AI Response Ready',
                 body: `${session.provider}: ${notificationBody}`,
                 sessionId: session.id,
-                windowId: event.sender.id,
+                workspacePath: workspacePath,
                 provider: session.provider
               });
               console.log('[AIService] Notification service call completed');

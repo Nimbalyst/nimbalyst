@@ -10,6 +10,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { logger } from '../utils/logger';
 import { isOSNotificationsEnabled } from '../utils/store';
+import { findWindowByWorkspace } from '../window/WindowManager';
 
 const execAsync = promisify(exec);
 
@@ -18,7 +19,7 @@ export interface NotificationOptions {
   body: string;
   icon?: string;
   sessionId?: string;
-  windowId?: number;
+  workspacePath: string;  // REQUIRED: stable identifier for routing
   provider?: string;
 }
 
@@ -175,26 +176,23 @@ class NotificationService {
   private handleNotificationClick(options: NotificationOptions): void {
     logger.main.info('[NotificationService] Notification clicked:', {
       sessionId: options.sessionId,
-      windowId: options.windowId,
+      workspacePath: options.workspacePath,
     });
 
-    // Find the target window
-    let targetWindow: BrowserWindow | null = null;
-
-    if (options.windowId) {
-      targetWindow = BrowserWindow.fromId(options.windowId);
+    // REQUIRED: workspacePath must be provided - sessions are tied to workspaces
+    if (!options.workspacePath) {
+      throw new Error('workspacePath is required for notification routing');
     }
 
-    // If no specific window, use the first visible window
-    if (!targetWindow) {
-      const windows = BrowserWindow.getAllWindows();
-      targetWindow = windows.find((w) => w.isVisible()) || windows[0] || null;
-    }
+    // Find window by workspace path (the only stable identifier)
+    const targetWindow = findWindowByWorkspace(options.workspacePath);
 
     if (!targetWindow) {
-      logger.main.warn('[NotificationService] No window found to focus');
+      logger.main.warn('[NotificationService] No window found for workspace:', options.workspacePath);
       return;
     }
+
+    logger.main.info('[NotificationService] Found window for workspace:', options.workspacePath);
 
     // Focus the window
     if (targetWindow.isMinimized()) {
