@@ -1,0 +1,30 @@
+/**
+ * Monaco Code Editor Styles
+ *
+ * Container styles for Monaco editor integration.
+ * Monaco's own styles are loaded automatically via @monaco-editor/react.
+ */
+
+.monaco-code-editor {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface-primary);
+}
+
+/* Ensure Monaco editor fills the container */
+.monaco-code-editor > div {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Override Monaco's default background to match Nimbalyst theme */
+.monaco-code-editor .monaco-editor {
+  background-color: var(--surface-primary) !important;
+}
+
+.monaco-code-editor .monaco-editor .margin {
+  background-color: var(--surface-primary) !important;
+}

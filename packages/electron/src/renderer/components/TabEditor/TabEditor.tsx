@@ -11,11 +11,13 @@
  * Props are minimal - just what the component needs from parent coordination.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import type { ConfigTheme, TextReplacement } from 'rexical';
 import { StravuEditor } from 'rexical';
 import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
 import { FixedTabHeaderContainer } from '@nimbalyst/runtime/plugins/shared/fixedTabHeader';
+import { MonacoCodeEditor } from '../MonacoCodeEditor';
+import { getFileType } from '../../utils/fileTypeDetector';
 import { logger } from '../../utils/logger';
 
 interface TabEditorProps {
@@ -76,6 +78,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                                                       onOpenSessionInChat,
                                                       workspaceId,
                                                     }) => {
+  // Detect file type (markdown vs code)
+  const fileType = useMemo(() => getFileType(filePath), [filePath]);
+  const isMarkdown = fileType === 'markdown';
+
   // Internal state - fully owned by this component
   const [content, setContent] = useState(initialContent);
   const [isDirty, setIsDirty] = useState(false);
@@ -180,6 +186,18 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
             if (editorRef.current) {
               const editorToUpdate = editorRef.current;
+
+              // For code files, skip Lexical-specific diff operations (Phase 2 will handle this)
+              if (!isMarkdown) {
+                logger.ui.info(`[TabEditor] Skipping diff mode for code file (not yet implemented)`);
+                pendingAIEditTagRef.current = {
+                  tagId: pendingTags[0].id,
+                  sessionId: pendingTags[0].sessionId,
+                  filePath: filePath
+                };
+                return;
+              }
+
               (async () => {
                 // Skip if already applying a diff (prevents infinite recursion from editor updates)
                 if (isApplyingDiffRef.current) return;
@@ -252,18 +270,26 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             lastSavedContentRef.current = diskContent;
             contentRef.current = diskContent;
 
-            // Update via Lexical API
+            // Update editor content programmatically
             if (editorRef.current) {
               try {
-                const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-                const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
-                const transformers = getEditorTransformers();
+                if (isMarkdown) {
+                  // Update via Lexical API
+                  const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+                  const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+                  const transformers = getEditorTransformers();
 
-                editorRef.current.update(() => {
-                  const root = $getRoot();
-                  root.clear();
-                  $convertFromEnhancedMarkdownString(diskContent, transformers);
-                }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+                  editorRef.current.update(() => {
+                    const root = $getRoot();
+                    root.clear();
+                    $convertFromEnhancedMarkdownString(diskContent, transformers);
+                  }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+                } else {
+                  // Update via Monaco API
+                  if (editorRef.current.setContent) {
+                    editorRef.current.setContent(diskContent);
+                  }
+                }
               } catch (error) {
                 logger.ui.error(`[TabEditor] Failed to update editor:`, error);
               }
@@ -1042,20 +1068,27 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     // Update editor content
     if (editorRef.current) {
       try {
-        const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-        const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
-        const transformers = getEditorTransformers();
+        if (isMarkdown) {
+          const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+          const { $convertFromEnhancedMarkdownString, getEditorTransformers} = await import('rexical');
+          const transformers = getEditorTransformers();
 
-        editorRef.current.update(() => {
-          const root = $getRoot();
-          root.clear();
-          $convertFromEnhancedMarkdownString(newContent, transformers);
-        }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+          editorRef.current.update(() => {
+            const root = $getRoot();
+            root.clear();
+            $convertFromEnhancedMarkdownString(newContent, transformers);
+          }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+        } else {
+          // Update Monaco editor
+          if (editorRef.current.setContent) {
+            editorRef.current.setContent(newContent);
+          }
+        }
       } catch (error) {
         logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
       }
     }
-  }, [conflictDialogContent, fileName, onDirtyChange]);
+  }, [conflictDialogContent, fileName, onDirtyChange, isMarkdown]);
 
   const handleKeepLocalChanges = useCallback(() => {
     setShowConflictDialog(false);
@@ -1081,20 +1114,27 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     // Update editor content
     if (editorRef.current) {
       try {
-        const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-        const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
-        const transformers = getEditorTransformers();
+        if (isMarkdown) {
+          const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+          const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+          const transformers = getEditorTransformers();
 
-        editorRef.current.update(() => {
-          const root = $getRoot();
-          root.clear();
-          $convertFromEnhancedMarkdownString(diskContent, transformers);
-        }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+          editorRef.current.update(() => {
+            const root = $getRoot();
+            root.clear();
+            $convertFromEnhancedMarkdownString(diskContent, transformers);
+          }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+        } else {
+          // Update Monaco editor
+          if (editorRef.current.setContent) {
+            editorRef.current.setContent(diskContent);
+          }
+        }
       } catch (error) {
         logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
       }
     }
-  }, [backgroundChangeContent, fileName, onDirtyChange]);
+  }, [backgroundChangeContent, fileName, onDirtyChange, isMarkdown]);
 
   const handleKeepEditorContent = useCallback(() => {
     setShowBackgroundChangeDialog(false);
@@ -1110,15 +1150,22 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     if (editorRef.current) {
       (async () => {
         try {
-          const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-          const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
-          const transformers = getEditorTransformers();
+          if (isMarkdown) {
+            const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+            const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+            const transformers = getEditorTransformers();
 
-          editorRef.current.update(() => {
-            const root = $getRoot();
-            root.clear();
-            $convertFromEnhancedMarkdownString(newContent, transformers);
-          }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+            editorRef.current.update(() => {
+              const root = $getRoot();
+              root.clear();
+              $convertFromEnhancedMarkdownString(newContent, transformers);
+            }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+          } else {
+            // Update Monaco editor
+            if (editorRef.current.setContent) {
+              editorRef.current.setContent(newContent);
+            }
+          }
 
           // Update React state and mark as dirty so autosave will persist
           setContent(newContent);
@@ -1134,7 +1181,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         }
       })();
     }
-  }, [onDirtyChange, onContentChange]);
+  }, [onDirtyChange, onContentChange, isMarkdown]);
 
   // PHASE 5: Listen for diff approve/reject commands to update tag status
   useEffect(() => {
@@ -1460,53 +1507,84 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           editor={editorRef.current}
         />
         <div className="tab-editor-scrollable" style={{ flex: 1, overflow: 'auto' }}>
-          <StravuEditor
-            key={filePath}
-            config={{
-              initialContent,
-              theme,
-              onContentChange: handleContentChange,
-              onGetContent: (getContentFn) => {
+          {isMarkdown ? (
+            <StravuEditor
+              key={filePath}
+              config={{
+                initialContent,
+                theme,
+                onContentChange: handleContentChange,
+                onGetContent: (getContentFn) => {
+                  getContentFnRef.current = getContentFn;
+                  if (onGetContentReady) {
+                    onGetContentReady(getContentFn);
+                  }
+                  // Now that we have getContentFn, expose the manual save function
+                  if (onManualSaveReady) {
+                    onManualSaveReady(handleManualSave);
+                  }
+                  // Sync content once when editor is ready to ensure DocumentHeaderContainer
+                  // detects frontmatter on initial load
+                  if (!hasInitialContentSyncRef.current) {
+                    hasInitialContentSyncRef.current = true;
+                    const currentContent = getContentFn();
+                    setContent(currentContent);
+                  }
+                },
+                onEditorReady: (editor) => {
+                  editorRef.current = editor;
+                },
+                onSaveRequest: handleManualSave,
+                onViewHistory,
+                onRenameDocument,
+                onSwitchToAgentMode,
+              onOpenSessionInChat,
+                filePath,
+                workspaceId,
+                onImageDoubleClick: handleImageDoubleClick,
+                onImageDragStart: handleImageDragStart,
+                textReplacements: isActive ? textReplacements : undefined,
+                documentHeader: (
+                  <DocumentHeaderContainer
+                    filePath={filePath}
+                    fileName={fileName}
+                    content={content}
+                    onContentChange={handleDocumentHeaderContentChange}
+                    editor={editorRef.current}
+                  />
+                ),
+              }}
+            />
+          ) : (
+            <MonacoCodeEditor
+              key={filePath}
+              filePath={filePath}
+              fileName={fileName}
+              initialContent={initialContent}
+              theme={theme}
+              onContentChange={handleContentChange}
+              onGetContent={(getContentFn) => {
                 getContentFnRef.current = getContentFn;
                 if (onGetContentReady) {
                   onGetContentReady(getContentFn);
                 }
-                // Now that we have getContentFn, expose the manual save function
+                // Expose the manual save function
                 if (onManualSaveReady) {
                   onManualSaveReady(handleManualSave);
                 }
-                // Sync content once when editor is ready to ensure DocumentHeaderContainer
-                // detects frontmatter on initial load
+                // Sync content once when editor is ready
                 if (!hasInitialContentSyncRef.current) {
                   hasInitialContentSyncRef.current = true;
                   const currentContent = getContentFn();
                   setContent(currentContent);
                 }
-              },
-              onEditorReady: (editor) => {
-                editorRef.current = editor;
-              },
-              onSaveRequest: handleManualSave,
-              onViewHistory,
-              onRenameDocument,
-              onSwitchToAgentMode,
-              onOpenSessionInChat,
-              filePath,
-              workspaceId,
-              onImageDoubleClick: handleImageDoubleClick,
-              onImageDragStart: handleImageDragStart,
-              textReplacements: isActive ? textReplacements : undefined,
-              documentHeader: (
-                <DocumentHeaderContainer
-                  filePath={filePath}
-                  fileName={fileName}
-                  content={content}
-                  onContentChange={handleDocumentHeaderContentChange}
-                  editor={editorRef.current}
-                />
-              ),
-            }}
-        />
+              }}
+              onEditorReady={(editorWrapper) => {
+                // For Monaco, we get a wrapper with editor, setContent, getContent
+                editorRef.current = editorWrapper;
+              }}
+            />
+          )}
         </div>
 
         {showConflictDialog && (

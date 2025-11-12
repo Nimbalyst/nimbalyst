@@ -16,6 +16,11 @@ export function DiffApprovalBarPlugin() {
       priority: 100,
       shouldRender: (context: TabContext) => {
         if (!context.editor) return false;
+        // Only check for diff nodes if this is a Lexical editor
+        // Monaco editors use a different diff system (Phase 2)
+        if (typeof (context.editor as any).getEditorState !== 'function') {
+          return false;
+        }
         return $hasDiffNodes(context.editor);
       },
       component: DiffApprovalBar,

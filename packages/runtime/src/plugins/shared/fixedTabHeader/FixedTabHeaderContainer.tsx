@@ -33,8 +33,15 @@ function FixedTabHeaderContainerComponent({
 
   // Listen to editor updates to re-evaluate shouldRender (for dynamic conditions like $hasDiffNodes)
   // Use a ref to throttle updates and prevent re-rendering on every keystroke
+  // Note: Only Lexical editors have registerUpdateListener
   useEffect(() => {
     if (!editor) return;
+
+    // Check if this is a Lexical editor (has registerUpdateListener method)
+    if (typeof (editor as any).registerUpdateListener !== 'function') {
+      // Not a Lexical editor (probably Monaco), skip update listener
+      return;
+    }
 
     let timeoutId: NodeJS.Timeout | null = null;
 

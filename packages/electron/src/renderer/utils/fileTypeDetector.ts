@@ -1,0 +1,163 @@
+/**
+ * File Type Detection Utility
+ *
+ * Determines whether a file should be edited as markdown (Lexical)
+ * or code (Monaco), and maps file extensions to Monaco language IDs.
+ */
+
+export type EditorType = 'markdown' | 'code';
+
+/**
+ * Browser-compatible path utilities
+ */
+function getExtname(filePath: string): string {
+  const lastDot = filePath.lastIndexOf('.');
+  const lastSlash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  if (lastDot > lastSlash && lastDot > 0) {
+    return filePath.substring(lastDot);
+  }
+  return '';
+}
+
+function getBasename(filePath: string): string {
+  const lastSlash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  return lastSlash >= 0 ? filePath.substring(lastSlash + 1) : filePath;
+}
+
+/**
+ * Determine which editor should be used for a given file
+ */
+export function getFileType(filePath: string): EditorType {
+  const ext = getExtname(filePath).toLowerCase();
+  if (ext === '.md' || ext === '.markdown') {
+    return 'markdown';
+  }
+  return 'code';
+}
+
+/**
+ * Map file extension to Monaco editor language ID
+ *
+ * Monaco supports many languages out of the box. This function
+ * provides the language ID for syntax highlighting.
+ *
+ * See: https://microsoft.github.io/monaco-editor/monarch.html
+ */
+export function getMonacoLanguage(filePath: string): string {
+  const ext = getExtname(filePath).toLowerCase();
+
+  const languageMap: Record<string, string> = {
+    // JavaScript/TypeScript
+    '.js': 'javascript',
+    '.jsx': 'javascript',
+    '.mjs': 'javascript',
+    '.cjs': 'javascript',
+    '.ts': 'typescript',
+    '.tsx': 'typescript',
+    '.d.ts': 'typescript',
+
+    // Web
+    '.html': 'html',
+    '.htm': 'html',
+    '.css': 'css',
+    '.scss': 'scss',
+    '.sass': 'sass',
+    '.less': 'less',
+
+    // Data formats
+    '.json': 'json',
+    '.jsonc': 'json',
+    '.xml': 'xml',
+    '.yaml': 'yaml',
+    '.yml': 'yaml',
+    '.toml': 'ini', // Monaco doesn't have TOML, INI is closest
+
+    // Python
+    '.py': 'python',
+    '.pyw': 'python',
+    '.pyi': 'python',
+
+    // Shell
+    '.sh': 'shell',
+    '.bash': 'shell',
+    '.zsh': 'shell',
+    '.fish': 'shell',
+
+    // C/C++
+    '.c': 'c',
+    '.h': 'c',
+    '.cpp': 'cpp',
+    '.cc': 'cpp',
+    '.cxx': 'cpp',
+    '.hpp': 'cpp',
+    '.hxx': 'cpp',
+
+    // Other compiled languages
+    '.rs': 'rust',
+    '.go': 'go',
+    '.java': 'java',
+    '.kt': 'kotlin',
+    '.swift': 'swift',
+    '.cs': 'csharp',
+
+    // Scripting
+    '.rb': 'ruby',
+    '.php': 'php',
+    '.pl': 'perl',
+    '.lua': 'lua',
+
+    // Functional
+    '.hs': 'haskell',
+    '.scala': 'scala',
+    '.clj': 'clojure',
+    '.fs': 'fsharp',
+    '.fsx': 'fsharp',
+
+    // Markup/Config
+    '.sql': 'sql',
+    '.graphql': 'graphql',
+    '.dockerfile': 'dockerfile',
+    '.dockerignore': 'plaintext',
+    '.gitignore': 'plaintext',
+    '.env': 'plaintext',
+
+    // Text
+    '.txt': 'plaintext',
+    '.log': 'plaintext',
+  };
+
+  // Special case: files without extensions
+  if (!ext) {
+    const basename = getBasename(filePath);
+    if (basename === 'Dockerfile') return 'dockerfile';
+    if (basename === 'Makefile') return 'makefile';
+    if (basename === 'Gemfile') return 'ruby';
+    return 'plaintext';
+  }
+
+  return languageMap[ext] || 'plaintext';
+}
+
+/**
+ * Check if a file is likely binary (not suitable for text editing)
+ */
+export function isBinaryFile(filePath: string): boolean {
+  const ext = getExtname(filePath).toLowerCase();
+
+  const binaryExtensions = [
+    // Images
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', '.webp',
+    // Video/Audio
+    '.mp4', '.avi', '.mov', '.wmv', '.mp3', '.wav', '.ogg', '.flac',
+    // Archives
+    '.zip', '.tar', '.gz', '.bz2', '.7z', '.rar',
+    // Executables
+    '.exe', '.dll', '.so', '.dylib', '.app', '.dmg',
+    // Documents
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    // Other binary
+    '.bin', '.dat', '.db', '.sqlite', '.wasm',
+  ];
+
+  return binaryExtensions.includes(ext);
+}
