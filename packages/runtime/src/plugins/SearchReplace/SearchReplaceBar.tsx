@@ -99,16 +99,26 @@ class HighlightManager {
         const node = $getNodeByKey(match.key);
         if (!$isTextNode(node)) return;
 
+        // Validate offset is still valid for this node
+        const textContent = node.getTextContent();
+        if (match.offset >= textContent.length) return;
+
         const domElement = this.editor.getElementByKey(match.key);
         if (!domElement) return;
 
         const textNode = domElement.firstChild as Text;
         if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
 
+        // Clamp the range to valid offsets
+        const validOffset = Math.min(match.offset, textNode.length);
+        const validEnd = Math.min(match.offset + match.length, textNode.length);
+
+        if (validOffset >= validEnd) return;
+
         const range = document.createRange();
         try {
-          range.setStart(textNode, match.offset);
-          range.setEnd(textNode, match.offset + match.length);
+          range.setStart(textNode, validOffset);
+          range.setEnd(textNode, validEnd);
         } catch (e) {
           return;
         }
@@ -236,48 +246,62 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
 
   // Navigate to a specific match - MUST be defined before performSearch
   const navigateToMatchInternal = useCallback(
-    (matchList: SearchMatch[], index: number) => {
+    (matchList: SearchMatch[], index: number, options?: { refocusInput?: boolean }) => {
       if (!editor || matchList.length === 0 || index < 0 || index >= matchList.length) {
         return;
       }
 
+      const refocusInput = options?.refocusInput ?? true;
       const match = matchList[index];
+
       editor.update(() => {
         const node = $getNodeByKey(match.key);
         if ($isTextNode(node)) {
-          const selection = $createRangeSelection();
-          selection.anchor.set(match.key, match.offset, 'text');
-          selection.focus.set(match.key, match.offset + match.length, 'text');
-          $setSelection(selection);
+          // Validate that the offset is still valid (document may have changed)
+          const textContent = node.getTextContent();
+          const validOffset = Math.min(match.offset, textContent.length);
+          const validLength = Math.min(match.length, textContent.length - validOffset);
 
-          const domNode = editor.getElementByKey(match.key);
-          if (domNode) {
-            domNode.scrollIntoView({
-              behavior: 'smooth',
-              block: 'center',
-            });
+          if (validOffset >= 0 && validLength > 0) {
+            const selection = $createRangeSelection();
+            selection.anchor.set(match.key, validOffset, 'text');
+            selection.focus.set(match.key, validOffset + validLength, 'text');
+            $setSelection(selection);
+
+            const domNode = editor.getElementByKey(match.key);
+            if (domNode) {
+              domNode.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+              });
+            }
           }
         }
       });
 
-      // Keep focus on search input after navigation
-      setTimeout(() => {
-        if (searchInputRef.current) {
-          searchInputRef.current.focus();
-        }
-      }, 0);
+      // Only refocus search input if explicitly requested (user navigation, not auto-update)
+      if (refocusInput) {
+        setTimeout(() => {
+          if (searchInputRef.current) {
+            searchInputRef.current.focus();
+          }
+        }, 0);
+      }
     },
     [editor]
   );
 
   // Perform search
   const performSearch = useCallback(
-    (searchStr: string, caseSensitive: boolean, regex: boolean) => {
+    (searchStr: string, caseSensitive: boolean, regex: boolean, options?: { autoNavigate?: boolean; preserveIndex?: boolean }) => {
       if (!editor || !searchStr) {
         setMatches([]);
         setCurrentMatchIndex(-1);
         return;
       }
+
+      const autoNavigate = options?.autoNavigate ?? true;
+      const preserveIndex = options?.preserveIndex ?? false;
 
       editor.getEditorState().read(() => {
         const foundMatches: SearchMatch[] = [];
@@ -312,19 +336,70 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
         });
 
         setMatches(foundMatches);
-        setCurrentMatchIndex(foundMatches.length > 0 ? 0 : -1);
 
-        // Update highlights
-        highlightManagerRef.current?.updateHighlights(foundMatches, foundMatches.length > 0 ? 0 : -1);
+        // Determine the new current index
+        let newIndex: number;
+        if (preserveIndex) {
+          // Keep the current index if it's still valid, otherwise clamp it
+          setCurrentMatchIndex(prev => {
+            if (foundMatches.length === 0) {
+              newIndex = -1;
+              return -1;
+            }
+            if (prev < 0) {
+              newIndex = 0;
+              return 0;
+            }
+            newIndex = Math.min(prev, foundMatches.length - 1);
+            return newIndex;
+          });
+        } else {
+          newIndex = foundMatches.length > 0 ? 0 : -1;
+          setCurrentMatchIndex(newIndex);
+        }
 
-        // Navigate to first match if found
-        if (foundMatches.length > 0) {
-          navigateToMatchInternal(foundMatches, 0);
+        // Update highlights with the appropriate index
+        // Use setTimeout to ensure we get the updated index after state updates
+        setTimeout(() => {
+          highlightManagerRef.current?.updateHighlights(foundMatches, newIndex);
+        }, 0);
+
+        // Only navigate to first match if autoNavigate is true (when user initiates search)
+        if (autoNavigate && foundMatches.length > 0) {
+          // When auto-navigating, also refocus the input
+          navigateToMatchInternal(foundMatches, 0, { refocusInput: true });
         }
       });
     },
     [editor, navigateToMatchInternal]
   );
+
+  // Listen to editor changes and update highlights (debounced)
+  useEffect(() => {
+    if (!editor || !isOpen || !searchString) {
+      return;
+    }
+
+    let timeoutId: NodeJS.Timeout;
+
+    const removeUpdateListener = editor.registerUpdateListener(({ editorState }) => {
+      // Debounce to avoid updating highlights on every keystroke
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        // Don't auto-navigate when updating due to document changes
+        // Preserve the current match index so it doesn't jump back to 1
+        performSearch(searchString, !caseInsensitive, useRegex, {
+          autoNavigate: false,
+          preserveIndex: true
+        });
+      }, 100); // 100ms debounce
+    });
+
+    return () => {
+      clearTimeout(timeoutId);
+      removeUpdateListener();
+    };
+  }, [editor, isOpen, searchString, caseInsensitive, useRegex, performSearch]);
 
   // Handle search input change
   const handleSearchChange = useCallback(
@@ -389,11 +464,68 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
 
     addToHistory(REPLACE_HISTORY_KEY, replaceString);
 
-    // Re-perform search after replacement
+    // Re-perform search after replacement and jump to next match
+    // Use a longer timeout to ensure the editor state is fully updated
     setTimeout(() => {
-      performSearch(searchString, !caseInsensitive, useRegex);
-    }, 50);
-  }, [editor, matches, currentMatchIndex, replaceString, searchString, caseInsensitive, useRegex, performSearch]);
+      // Re-run the search with fresh editor state
+      editor.getEditorState().read(() => {
+        const foundMatches: SearchMatch[] = [];
+        let searchPattern: RegExp;
+
+        try {
+          const regex = useRegex;
+          const caseSensitive = !caseInsensitive;
+          if (regex) {
+            searchPattern = new RegExp(searchString, caseSensitive ? 'g' : 'gi');
+          } else {
+            const escapedSearchString = searchString.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            searchPattern = new RegExp(escapedSearchString, caseSensitive ? 'g' : 'gi');
+          }
+        } catch (e) {
+          return;
+        }
+
+        const root = $getRoot();
+        $findTextNodes(root, (textNode) => {
+          const text = textNode.getTextContent();
+          const key = textNode.getKey();
+          let match;
+
+          searchPattern.lastIndex = 0;
+          while ((match = searchPattern.exec(text)) !== null) {
+            foundMatches.push({
+              key,
+              offset: match.index,
+              length: match[0].length,
+              text: match[0],
+            });
+          }
+        });
+
+        // Update matches state
+        setMatches(foundMatches);
+
+        // After replacement, the current index now points to what was the next match
+        // If we're at the end, stay at the last match
+        const newIndex = foundMatches.length > 0
+          ? Math.min(currentMatchIndex, foundMatches.length - 1)
+          : -1;
+
+        setCurrentMatchIndex(newIndex);
+
+        // Update highlights and navigate to the new match
+        // Schedule navigation for next tick to ensure state is fully updated
+        requestAnimationFrame(() => {
+          if (newIndex >= 0 && foundMatches[newIndex]) {
+            highlightManagerRef.current?.updateHighlights(foundMatches, newIndex);
+            navigateToMatchInternal(foundMatches, newIndex, { refocusInput: false });
+          } else {
+            highlightManagerRef.current?.clearHighlights();
+          }
+        });
+      });
+    }, 100);
+  }, [editor, matches, currentMatchIndex, replaceString, searchString, caseInsensitive, useRegex, navigateToMatchInternal]);
 
   // Replace all matches
   const handleReplaceAll = useCallback(() => {
@@ -517,6 +649,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
             className="search-replace-input"
             placeholder="Find..."
             value={searchString}
+            tabIndex={1}
             onChange={(e) => handleSearchChange(e.target.value)}
             onKeyDown={(e) => {
               // Only stop propagation if we're actually handling the event
@@ -539,6 +672,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
         <div className="search-replace-options">
           <button
             className={`search-option-button ${!caseInsensitive ? 'active' : ''}`}
+            tabIndex={-1}
             onClick={() => {
               const newValue = !caseInsensitive;
               setCaseInsensitive(newValue);
@@ -551,6 +685,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
           </button>
           <button
             className={`search-option-button ${useRegex ? 'active' : ''}`}
+            tabIndex={-1}
             onClick={() => {
               const newValue = !useRegex;
               setUseRegex(newValue);
@@ -568,6 +703,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
           <button
             onClick={handlePrevious}
             disabled={matches.length === 0}
+            tabIndex={-1}
             aria-label="Previous match"
             className="search-nav-button"
           >
@@ -581,6 +717,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
           <button
             onClick={handleNext}
             disabled={matches.length === 0}
+            tabIndex={-1}
             aria-label="Next match"
             className="search-nav-button"
           >
@@ -594,6 +731,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
         <button
           className="search-replace-close"
           onClick={handleClose}
+          tabIndex={-1}
           aria-label="Close search"
           title="Close (Esc)"
         >
@@ -620,6 +758,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
             className="search-replace-input"
             placeholder="Replace..."
             value={replaceString}
+            tabIndex={2}
             onChange={(e) => handleReplaceChange(e.target.value)}
             onKeyDown={(e) => {
               // Only stop propagation if we're actually handling the event
@@ -644,6 +783,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
             className="search-replace-button"
             onClick={handleReplace}
             disabled={currentMatchIndex < 0}
+            tabIndex={3}
             title="Replace (Cmd+Enter)"
           >
             Replace
@@ -652,6 +792,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
             className="search-replace-button"
             onClick={handleReplaceAll}
             disabled={matches.length === 0}
+            tabIndex={4}
             title="Replace All (Cmd+Shift+Enter)"
           >
             Replace All
