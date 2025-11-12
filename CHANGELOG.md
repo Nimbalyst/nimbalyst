@@ -19,6 +19,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.18] - 2025-11-12
+
+
+### Added
+- Sub-agent result display in AI chat transcript
+- Better visuals for edit/write tools
+- Test normalized Lexical-sourced markdown for original content matching
+
+### Changed
+- Update Claude Agent SDK to latest version
+- Better UX for Claude Code auth settings
+- Hide mode-tag button until wired to sessionType
+
+### Fixed
+- Add diagnostic logging for AI diff display issues
+- Route notifications by workspace path instead of window ID
+- Export horizontal rules as --- instead of ***
+- Let dev mode locations fire normally (better for testing)
+- Improve diff matching with text-based guide posts
+- Copy as Markdown menu item now works and preserves newlines correctly
+- Dark mode theming for workspace actions and tracker icons
+- History dialog diff preview respects dark mode theme
+- Scrollbar theming in dark mode on macOS when user has always show scrollbars on
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.17] - 2025-11-12
 
 
