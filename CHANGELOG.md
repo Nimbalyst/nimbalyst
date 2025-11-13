@@ -19,6 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.20] - 2025-11-13
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Disabled red/green color coding by default
+
+### Fixed
+- Fixed crash: "Error: The 'screen' module can't be used before the app 'ready' event"
+
+### Removed
+- Removed "Getting Started with Nimbalyst" screen
+
 ## [0.45.18] - 2025-11-12
 
 
