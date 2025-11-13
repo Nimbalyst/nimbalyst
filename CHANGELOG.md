@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.21] - 2025-11-13
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- AI diff view now properly refreshes when toggling diff view on/off
+- Disabled automatic acceptance of AI diffs when diff view is turned off, ensuring file content shown matches what's on disk
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.20] - 2025-11-13
 
 
