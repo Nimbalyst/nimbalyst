@@ -357,12 +357,15 @@ function _applyMarkdownEdits(
  * Apply a set of text replacements to an editor
  * This is an alternative to applyMarkdownDiff that takes direct text replacements
  * instead of unified diff strings
+ *
+ * @param showDiffs - If false, directly replaces editor content without showing diffs. Defaults to true.
  */
 export function applyMarkdownReplace(
   editor: LexicalEditor,
   originalMarkdown: string,
   replacements: TextReplacement[],
   transformers: Transformer[],
+  showDiffs: boolean = true,
 ): void {
   // console.log('[applyMarkdownReplace] CALLED with', replacements.length, 'replacements');
   const normalizedReplacements = replacements.map((replacement) => {
@@ -496,6 +499,22 @@ export function applyMarkdownReplace(
   // console.log('📝 Original markdown length:', originalMarkdown.length);
   // console.log('📝 New markdown length:', newMarkdown.length);
   // console.log('🎯 About to call applyMarkdownDiffToDocument...');
+
+  // If showDiffs is false, directly replace the editor content without showing diffs
+  if (!showDiffs) {
+    editor.update(() => {
+      const root = $getRoot();
+      root.clear();
+      $convertFromEnhancedMarkdownString(
+        newMarkdown,
+        transformers,
+        undefined,
+        true,
+        true
+      );
+    });
+    return;
+  }
 
   // Apply the markdown diff to the document using existing infrastructure
   // TreeMatcher will handle structural differences even if text replacement failed

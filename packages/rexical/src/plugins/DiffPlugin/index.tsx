@@ -28,7 +28,7 @@ import {
 import { $getState, $setState } from 'lexical';
 
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { $convertToEnhancedMarkdownString, getEditorTransformers } from '../../markdown';
+import { $convertToEnhancedMarkdownString, $convertFromEnhancedMarkdownString, getEditorTransformers } from '../../markdown';
 import { $isTableNode, $isTableRowNode, $isTableCellNode } from '@lexical/table';
 import {
   $createTextNode,
@@ -229,12 +229,14 @@ export function DiffPlugin(): JSX.Element | null {
           });
 
           // Apply the replacements - applyMarkdownReplace does its own editor.update() internally
+          // Pass diffViewEnabledRef.current to control whether to show diffs or apply directly
           try {
             applyMarkdownReplace(
               editor,
               originalMarkdown,
               replacements,
-              transformers
+              transformers,
+              diffViewEnabledRef.current  // Pass showDiffs parameter
             );
 
             // Success - dispatch completion event
@@ -244,13 +246,6 @@ export function DiffPlugin(): JSX.Element | null {
                   detail: { success: true, requestId }
                 }));
               }, 0);
-            }
-
-            // If diff view is disabled, automatically approve all diffs
-            if (!diffViewEnabledRef.current) {
-              setTimeout(() => {
-                editor.dispatchCommand(APPROVE_DIFF_COMMAND, undefined);
-              }, 50);
             }
           } catch (error: any) {
             // Handle error from applyMarkdownReplace
