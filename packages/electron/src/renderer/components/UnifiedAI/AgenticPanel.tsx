@@ -1151,9 +1151,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     sendingSessionsRef.current.add(sessionId);
     setSendingSessions(prev => new Set(prev).add(sessionId));
 
-    // Get the session to determine sessionType
-    const currentTab = sessionTabs.find(tab => tab.id === sessionId);
-    const sessionType = currentTab?.sessionData?.sessionType || (mode === 'agent' ? 'coding' : 'chat');
+    // Determine sessionType based on current mode (not stored session type)
+    // This ensures correct behavior when switching between AIChat and Agent mode
+    const sessionType = mode === 'agent' ? 'coding' : 'chat';
 
     // Add user message immediately
     setSessionTabs(prev => prev.map(tab => {
@@ -1190,6 +1190,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         // If getLatestContent exists, call it to get the current content
         if (typeof getLatestContent === 'function') {
           serializableContext.content = getLatestContent();
+        }
+
+        // In agent mode, strip out filePath - we work across entire codebase
+        if (mode === 'agent') {
+          delete serializableContext.filePath;
+          delete serializableContext.content;
         }
 
         contextToSend = {

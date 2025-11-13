@@ -113,6 +113,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     this.editedFilesThisTurn.clear();
 
     try {
+      // Prepend document context to message when there's a specific document
+      // AgenticPanel strips out filePath when in agent mode, so this only applies to AIChat panel
+      const currentDocPath = documentContext?.filePath;
+      if (currentDocPath) {
+        const fileName = currentDocPath.split('/').pop() || currentDocPath;
+        message = `[Current document: ${fileName}]\n\n${message}`;
+      }
+
       // Build system prompt with document context
       const promptBuildStart = Date.now();
       const systemPrompt = this.buildSystemPrompt(documentContext);
