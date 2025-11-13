@@ -39,6 +39,20 @@ export function $applyInlineTextDiff(
     const sourceText = sourceChildren.map(c => (c as SerializedTextNode).text).join('');
     const targetText = targetChildren.map(c => (c as SerializedTextNode).text).join('');
 
+    // Check if this is a pure formatting change (text is identical)
+    if (sourceText === targetText) {
+      // Pure formatting change - use full replacement approach for proper accept/reject
+      // This ensures reject can revert to original formatting
+      for (const sourceChild of sourceChildren) {
+        $appendChildAsRemoved(containerNode, sourceChild);
+      }
+      for (const targetChild of targetChildren) {
+        $appendChildAsAdded(containerNode, targetChild);
+      }
+      return;
+    }
+
+    // Text has changed - use inline diff with formatting preservation
     // Build a map of character position -> formatting for target text
     const targetFormatMap: number[] = [];
     let pos = 0;
@@ -75,10 +89,9 @@ export function $applyInlineTextDiff(
             const textNode = $createTextNode(text);
             textNode.setFormat(format);
 
-            // If format changed from source, mark as changed
-            if (format !== sourceFormat) {
-              $setDiffState(textNode, 'modified');
-            }
+            // Note: We don't mark as 'modified' for formatting changes here
+            // Pure formatting changes are handled separately (full replacement)
+            // This code only handles text changes with formatting preservation
 
             containerNode.append(textNode);
           } else {

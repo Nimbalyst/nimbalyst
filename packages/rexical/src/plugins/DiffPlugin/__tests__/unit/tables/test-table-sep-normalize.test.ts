@@ -8,7 +8,7 @@ import {
   $convertFromEnhancedMarkdownString,
 } from '../../../../../markdown/index';
 import {createTestHeadlessEditor, MARKDOWN_TEST_TRANSFORMERS} from '../../utils/testConfig';
-import {canonicalizeForest} from '../../core/canonicalTree';
+import {canonicalizeForest} from '../../../core/canonicalTree';
 
 describe('Table separator normalization', () => {
   it('should normalize table separators to same format', () => {

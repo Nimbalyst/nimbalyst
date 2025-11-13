@@ -9,8 +9,8 @@ import {
   $convertFromEnhancedMarkdownString,
 } from '../../../../../markdown/index';
 import {createTestHeadlessEditor, MARKDOWN_TEST_TRANSFORMERS} from '../../utils/testConfig';
-import {$getDiffState} from '../../core/DiffState';
-import {APPLY_MARKDOWN_REPLACE_COMMAND, applyMarkdownReplace} from '../../core/exports';
+import {$getDiffState} from '../../../core/DiffState';
+import {APPLY_MARKDOWN_REPLACE_COMMAND, applyMarkdownReplace} from '../../../core/exports';
 
 describe('Nested list addition bug', () => {
   it('should show structure of nested list markdown', () => {
