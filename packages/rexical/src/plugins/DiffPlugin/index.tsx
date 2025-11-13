@@ -76,6 +76,26 @@ export function DiffPlugin(): JSX.Element | null {
   // Track if commands are in progress
   const commandInProgressRef = React.useRef(false);
 
+  // Track if diff view is enabled
+  const diffViewEnabledRef = React.useRef(false);
+
+  // Initialize and listen for diff view setting changes
+  useEffect(() => {
+    // Initialize the diff view enabled state
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      (window as any).electronAPI.isAIDiffViewEnabled().then((enabled: boolean) => {
+        diffViewEnabledRef.current = enabled;
+      });
+
+      // Listen for changes to the setting
+      const unsubscribe = (window as any).electronAPI.onAIDiffViewChanged((enabled: boolean) => {
+        diffViewEnabledRef.current = enabled;
+      });
+
+      return unsubscribe;
+    }
+  }, []);
+
   useEffect(() => {
     // Apply diff styling based on node state
     const updateDiffStyling = () => {
@@ -224,6 +244,13 @@ export function DiffPlugin(): JSX.Element | null {
                   detail: { success: true, requestId }
                 }));
               }, 0);
+            }
+
+            // If diff view is disabled, automatically approve all diffs
+            if (!diffViewEnabledRef.current) {
+              setTimeout(() => {
+                editor.dispatchCommand(APPROVE_DIFF_COMMAND, undefined);
+              }, 50);
             }
           } catch (error: any) {
             // Handle error from applyMarkdownReplace

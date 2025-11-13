@@ -5,13 +5,17 @@ interface AdvancedPanelProps {
   onShowToolCallsChange: (value: boolean) => void;
   aiDebugLogging: boolean;
   onAiDebugLoggingChange: (value: boolean) => void;
+  diffViewEnabled: boolean;
+  onDiffViewEnabledChange: (value: boolean) => void;
 }
 
 export function AdvancedPanel({
   showToolCalls,
   onShowToolCallsChange,
   aiDebugLogging,
-  onAiDebugLoggingChange
+  onAiDebugLoggingChange,
+  diffViewEnabled,
+  onDiffViewEnabledChange
 }: AdvancedPanelProps) {
   const isDevelopment = import.meta.env.DEV;
 
@@ -22,6 +26,28 @@ export function AdvancedPanel({
         <p className="provider-panel-description">
           Advanced configuration options for AI features.
         </p>
+      </div>
+
+      <div className="provider-panel-section">
+        <h4 className="provider-panel-section-title">AI Editing</h4>
+
+        <div className="setting-item">
+          <label className="setting-label">
+            <input
+              type="checkbox"
+              checked={diffViewEnabled}
+              onChange={(e) => onDiffViewEnabledChange(e.target.checked)}
+              className="setting-checkbox"
+            />
+            <div className="setting-text">
+              <span className="setting-name">Enable Diff View (alpha)</span>
+              <span className="setting-description">
+                Show a diff view with Accept/Reject buttons when AI makes changes to documents.
+                When disabled, AI changes are applied directly to the editor without review prompts.
+              </span>
+            </div>
+          </label>
+        </div>
       </div>
 
       {isDevelopment ? (

@@ -28,6 +28,8 @@ interface AppStoreSchema {
   completionSoundType?: CompletionSoundType;
   // OS notifications
   osNotificationsEnabled?: boolean;
+  // AI Diff View
+  aiDiffViewEnabled?: boolean;
 }
 
 export interface TabState {
@@ -603,4 +605,13 @@ export function isOSNotificationsEnabled(): boolean {
 
 export function setOSNotificationsEnabled(enabled: boolean): void {
   appStore.set('osNotificationsEnabled', enabled);
+}
+
+// AI Diff View Settings
+export function isAIDiffViewEnabled(): boolean {
+  return appStore.get('aiDiffViewEnabled', false);
+}
+
+export function setAIDiffViewEnabled(enabled: boolean): void {
+  appStore.set('aiDiffViewEnabled', enabled);
 }

@@ -131,6 +131,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('theme-change', handler);
     return () => ipcRenderer.removeListener('theme-change', handler);
   },
+  onAIDiffViewChanged: (callback: (enabled: boolean) => void) => {
+    const handler = (_event: any, enabled: boolean) => callback(enabled);
+    ipcRenderer.on('ai-diff-view-changed', handler);
+    return () => ipcRenderer.removeListener('ai-diff-view-changed', handler);
+  },
   onShowAbout: (callback: () => void) => {
     ipcRenderer.on('show-about', callback);
     return () => ipcRenderer.removeListener('show-about', callback);
@@ -176,6 +181,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getThemeSync: () => ipcRenderer.sendSync('get-theme-sync'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   setTheme: (theme: string) => ipcRenderer.invoke('set-theme', theme),
+
+  // AI Diff View settings
+  isAIDiffViewEnabled: () => ipcRenderer.invoke('ai-diff-view:is-enabled'),
+  setAIDiffViewEnabled: (enabled: boolean) => ipcRenderer.invoke('ai-diff-view:set-enabled', enabled),
 
   // File operations
   openFile: () => ipcRenderer.invoke('open-file'),
