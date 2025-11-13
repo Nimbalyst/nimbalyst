@@ -1061,9 +1061,10 @@ export function $applyNodeDiff(
       const insertBeforeSourceIndex = diff.sourceIndex;
 
       if (!sourceEditor) {
-        console.warn('ADD diff requires sourceEditor to determine insertion position');
-        liveRoot.append(newNode); // Fallback to append
-        break;
+        throw new Error(
+          `ADD diff missing sourceEditor! Cannot determine insertion position. ` +
+          `targetIndex=${diff.targetIndex}, type=${newNode.getType()}`
+        );
       }
 
       // Get the SOURCE node at sourceIndex and extract its live key
@@ -1086,12 +1087,20 @@ export function $applyNodeDiff(
           // the correct position based on context and structural matching
           liveNodeToInsertBefore.insertBefore(newNode);
         } else {
-          console.warn(`Could not find LIVE node with key: ${liveKeyToInsertBefore}`);
-          liveRoot.append(newNode); // Fallback
+          throw new Error(
+            `ADD diff: Could not find LIVE node with key: ${liveKeyToInsertBefore}. ` +
+            `This indicates a state sync issue between source and live editors. ` +
+            `sourceIndex=${insertBeforeSourceIndex}, targetIndex=${diff.targetIndex}, ` +
+            `type=${newNode.getType()}`
+          );
         }
       } else {
-        // No live key found (sourceIndex >= source children length), append to end
-        liveRoot.append(newNode);
+        throw new Error(
+          `ADD diff: No live key found for insertion position. ` +
+          `sourceIndex=${insertBeforeSourceIndex} is out of bounds or node has no live key. ` +
+          `This indicates TreeMatcher produced an invalid sourceIndex. ` +
+          `targetIndex=${diff.targetIndex}, type=${newNode.getType()}`
+        );
       }
 
       break;
@@ -1348,7 +1357,11 @@ export function $applyChildNodeDiff(
       const insertBeforeIndex = diff.sourceIndex;
 
       if (insertBeforeIndex >= liveChildren.length) {
-        // Append to end
+        // Append to end - this is expected for adding new items at the end
+        console.log(
+          `[ChildDiff ADD] Appending to end: insertBeforeIndex=${insertBeforeIndex}, ` +
+          `liveChildren.length=${liveChildren.length}, type=${newNode.getType()}`
+        );
         liveParentNode.append(newNode);
       } else if (insertBeforeIndex <= 0) {
         // Insert at the beginning
