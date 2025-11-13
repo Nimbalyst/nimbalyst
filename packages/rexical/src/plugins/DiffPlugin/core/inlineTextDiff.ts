@@ -41,6 +41,11 @@ export function $applyInlineTextDiff(
 
     // Check if this is a pure formatting change (text is identical)
     if (sourceText === targetText) {
+      // console.log('[inlineTextDiff] Pure formatting change detected:', {
+      //   text: sourceText,
+      //   sourceChildren: sourceChildren.length,
+      //   targetChildren: targetChildren.length,
+      // });
       // Pure formatting change - use full replacement approach for proper accept/reject
       // This ensures reject can revert to original formatting
       for (const sourceChild of sourceChildren) {

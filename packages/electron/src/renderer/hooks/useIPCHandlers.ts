@@ -1033,12 +1033,12 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         };
 
         // DEFENSIVE: Log what we're sending
-        console.log('[Renderer] Sending MCP document state:', {
-          filePath: docState.filePath,
-          workspacePath: docState.workspacePath,
-          hasWorkspacePath: !!docState.workspacePath,
-          workspaceMode: stateRef.current.workspaceMode
-        });
+        // console.log('[Renderer] Sending MCP document state:', {
+        //   filePath: docState.filePath,
+        //   workspacePath: docState.workspacePath,
+        //   hasWorkspacePath: !!docState.workspacePath,
+        //   workspaceMode: stateRef.current.workspaceMode
+        // });
 
         window.electronAPI.updateMcpDocumentState(docState);
       }

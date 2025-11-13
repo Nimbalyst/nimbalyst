@@ -541,7 +541,7 @@ export default function App() {
     // window.electronAPI.on('toggle-agent-palette', handleToggleAgentPalette);
 
     return () => {
-      console.log('[App] Removing IPC listener for set-content-mode');
+      // console.log('[App] Removing IPC listener for set-content-mode');
       window.electronAPI.off?.('set-content-mode', handleSetContentMode);
       window.electronAPI.off?.('agent:insert-plan-reference', handleInsertPlanReference);
       // window.electronAPI.off?.('toggle-agent-palette', handleToggleAgentPalette);
@@ -834,7 +834,7 @@ export default function App() {
 
       try {
         const needsSetup = await OnboardingService.needsOnboarding(workspacePath);
-        console.log('[SETTINGS] Needs first-time setup:', needsSetup);
+        // console.log('[SETTINGS] Needs first-time setup:', needsSetup);
         if (needsSetup) {
           hasShownOnboardingRef.current = true;
           setIsFirstTimeSetup(true);
@@ -1044,12 +1044,12 @@ export default function App() {
 
   useEffect(() => {
     const handleCloseActiveTab = () => {
-      console.log('[App] handleCloseActiveTab called, activeMode:', activeModeRef.current);
+      // console.log('[App] handleCloseActiveTab called, activeMode:', activeModeRef.current);
       if (activeModeRef.current === 'agent') {
-        console.log('[App] Calling agenticPanelRef.current?.closeActiveTab()');
+        // console.log('[App] Calling agenticPanelRef.current?.closeActiveTab()');
         agenticPanelRef.current?.closeActiveTab();
       } else if (activeModeRef.current === 'files' || activeModeRef.current === 'plan') {
-        console.log('[App] Calling editorModeRef.current?.closeActiveTab(), ref exists:', !!editorModeRef.current);
+        // console.log('[App] Calling editorModeRef.current?.closeActiveTab(), ref exists:', !!editorModeRef.current);
         editorModeRef.current?.closeActiveTab();
       }
     };
