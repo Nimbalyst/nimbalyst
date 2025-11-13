@@ -1,5 +1,6 @@
 import React from 'react';
 import './DiffViewer.css';
+import { stripCommonContext } from '../utils/stripCommonContext';
 
 interface DiffViewerProps {
   edit: any;
@@ -15,8 +16,12 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
 
   // Handle single edit with old_string/new_string (Claude Code Edit tool format)
   if (!replacements.length && (edit.old_string || edit.new_string)) {
-    const oldText = edit.old_string || edit.oldText || '';
-    const newText = edit.new_string || edit.newText || '';
+    const oldTextRaw = edit.old_string || edit.oldText || '';
+    const newTextRaw = edit.new_string || edit.newText || '';
+
+    // Strip common prefix and suffix to show only what changed
+    const { oldText, newText } = stripCommonContext(oldTextRaw, newTextRaw);
+
     const oldLines = oldText.split('\n');
     const newLines = newText.split('\n');
 
@@ -57,8 +62,12 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({ edit, filePath: contextF
     return (
       <>
         {replacements.map((replacement: any, idx: number) => {
-          const oldText = replacement.oldText || replacement.old_text || '';
-          const newText = replacement.newText || replacement.new_text || '';
+          const oldTextRaw = replacement.oldText || replacement.old_text || '';
+          const newTextRaw = replacement.newText || replacement.new_text || '';
+
+          // Strip common prefix and suffix to show only what changed
+          const { oldText, newText } = stripCommonContext(oldTextRaw, newTextRaw);
+
           const oldLines = oldText.split('\n');
           const newLines = newText.split('\n');
 
