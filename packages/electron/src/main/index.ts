@@ -496,6 +496,8 @@ app.whenReady().then(async () => {
 app.on('activate', () => {
     // Avoid resurrecting windows while quitting
     if (isAppQuitting) return;
+    // Only create window if app is ready (screen module requires app to be ready)
+    if (!app.isReady()) return;
     // On macOS, re-create window when dock icon is clicked
     if (BrowserWindow.getAllWindows().length === 0) {
         createWindow();
@@ -798,8 +800,10 @@ app.on('before-quit', async (event) => {
 app.on('window-all-closed', () => {
   logger.main.info('All windows closed');
   if (!isAppQuitting) {
-    // Only show the Workspace Manager when not quitting the app
-    createWorkspaceManagerWindow();
+    // Only create Workspace Manager if app is ready
+    if (app.isReady()) {
+      createWorkspaceManagerWindow();
+    }
     // If we are quitting, do nothing here and allow normal quit to proceed
   } else {
     // On other platforms, quit when all windows are closed
