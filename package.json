@@ -57,8 +57,6 @@
     "express": "^5.1.0"
   },
   "overrides": {
-    "prismjs": "^1.30.0",
-    "ajv": "^8.17.1",
-    "ajv-keywords": "^5.1.0"
+    "prismjs": "^1.30.0"
   }
 }
