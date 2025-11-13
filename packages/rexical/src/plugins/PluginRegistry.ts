@@ -15,7 +15,7 @@ class PluginRegistryImpl {
 
   register(plugin: PluginPackage): void {
     if (this.plugins.has(plugin.name)) {
-      console.warn(`Plugin "${plugin.name}" is already registered. Overwriting.`);
+      // console.warn(`Plugin "${plugin.name}" is already registered. Overwriting.`);
     }
     this.plugins.set(plugin.name, plugin);
   }
@@ -31,7 +31,7 @@ class PluginRegistryImpl {
   getAllNodes(): Array<Klass<LexicalNode>> {
     const nodes: Array<Klass<LexicalNode>> = [];
     const seen = new Set<Klass<LexicalNode>>();
-    
+
     for (const plugin of this.plugins.values()) {
       if (plugin.nodes) {
         for (const node of plugin.nodes) {
@@ -42,7 +42,7 @@ class PluginRegistryImpl {
         }
       }
     }
-    
+
     return nodes;
   }
 
@@ -74,13 +74,13 @@ class PluginRegistryImpl {
 
   getAllUserCommands(): Array<UserCommand> {
     const commands: Array<UserCommand> = [];
-    
+
     for (const plugin of this.plugins.values()) {
       if (plugin.userCommands) {
         commands.push(...plugin.userCommands);
       }
     }
-    
+
     return commands;
   }
 }

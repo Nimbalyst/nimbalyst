@@ -92,11 +92,11 @@ export function registerWindowHandlers() {
 
         // Only proceed if the file path actually changed
         if (state?.filePath === filePath) {
-            // No change, skip everything
+            // console.log('[SET_FILE] SKIPPED - file path unchanged:', basename(filePath || ''), 'windowId:', windowId);
             return;
         }
 
-        // console.log('[SET_FILE] Updating file path for window', windowId, 'from', state?.filePath, 'to', filePath);
+        // console.log('[SET_FILE] File path change for windowId', windowId, 'from', state?.filePath ? basename(state.filePath) : 'null', 'to', filePath ? basename(filePath) : 'null');
 
         if (state) {
 
@@ -108,7 +108,7 @@ export function registerWindowHandlers() {
 
             // Start watching the new file
             if (filePath) {
-                // console.log('[SET_FILE] Starting watcher for new file:', filePath);
+                // console.log('[SET_FILE] Starting watcher for file:', basename(filePath), 'windowId:', windowId);
                 startFileWatcher(window, filePath);
             }
         } else {

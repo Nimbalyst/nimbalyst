@@ -362,15 +362,15 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       // NOTE: initialContentRef removed - TabEditor tracks this per-tab
 
       // Add tab for the opened file (works for both single-file and workspace modes)
-      console.log('[FILE_OPS] Checking tabs object:', !!editorModeRef.current?.tabs);
+      // console.log('[FILE_OPS] Checking tabs object:', !!editorModeRef.current?.tabs);
       if (editorModeRef.current?.tabs) {
-        console.log('[FILE_OPS] Adding tab for file opened from OS:', data.filePath);
+        // console.log('[FILE_OPS] Adding tab for file opened from OS:', data.filePath);
 
         // TabContent/TabEditor will handle editor creation and state management
         const tabId = editorModeRef.current.tabs.addTab(data.filePath, data.content);
-        console.log('[FILE_OPS] addTab returned:', tabId);
+        // console.log('[FILE_OPS] addTab returned:', tabId);
         if (tabId) {
-          console.log('[FILE_OPS] Tab added with ID:', tabId);
+          // console.log('[FILE_OPS] Tab added with ID:', tabId);
         } else {
           console.warn('[FILE_OPS] Failed to add tab - max tabs reached or addTab returned falsy');
         }

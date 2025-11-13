@@ -434,9 +434,9 @@ export class AIService {
         // Check for frontmatter
         const frontmatterMatch = documentContext.content.match(/^---\n([\s\S]*?)\n---/);
         if (frontmatterMatch) {
-          console.log('🏷️ Document Frontmatter:', frontmatterMatch[1]);
+          // console.log('🏷️ Document Frontmatter:', frontmatterMatch[1]);
         } else {
-          console.log('⚠️ No frontmatter found in document');
+          // console.log('⚠️ No frontmatter found in document');
         }
       }
 
