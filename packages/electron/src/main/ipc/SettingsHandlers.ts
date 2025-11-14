@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain } from 'electron';
 import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, isAIDiffViewEnabled, setAIDiffViewEnabled } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
@@ -72,9 +72,5 @@ export function registerSettingsHandlers() {
 
     ipcMain.handle('ai-diff-view:set-enabled', (_event, enabled: boolean) => {
         setAIDiffViewEnabled(enabled);
-        // Notify all windows of the change
-        BrowserWindow.getAllWindows().forEach(window => {
-            window.webContents.send('ai-diff-view-changed', enabled);
-        });
     });
 }
