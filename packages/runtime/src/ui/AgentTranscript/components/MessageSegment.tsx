@@ -100,6 +100,22 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     );
   };
 
+  // Helper function to strip the final <NIMBALYST_SYSTEM_MESSAGE> tag from content
+  // This removes only the LAST occurrence, so if user types it in their message it won't break
+  const stripSystemMessage = (content: string): string => {
+    // Find the last occurrence of <NIMBALYST_SYSTEM_MESSAGE>
+    const lastIndex = content.lastIndexOf('<NIMBALYST_SYSTEM_MESSAGE>');
+    if (lastIndex === -1) return content;
+
+    // Find the closing tag after this occurrence
+    const closingTag = '</NIMBALYST_SYSTEM_MESSAGE>';
+    const closingIndex = content.indexOf(closingTag, lastIndex);
+    if (closingIndex === -1) return content;
+
+    // Remove the system message block
+    return content.substring(0, lastIndex) + content.substring(closingIndex + closingTag.length);
+  };
+
   // Render text content
   const renderTextContent = () => {
     if (message.isThinking) return renderThinking();
@@ -121,10 +137,13 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     // Slight visual variation for system messages
     const isSystemMessage = message.isSystem || message.role === 'system';
 
+    // Strip out system message from user messages
+    const displayContent = isUser ? stripSystemMessage(message.content) : message.content;
+
     return (
       <div style={isCollapsed ? { maxHeight: '5rem', overflow: 'hidden', position: 'relative' } : {}}>
         <MarkdownRenderer
-          content={message.content}
+          content={displayContent}
           isUser={isUser}
           isSystemMessage={isSystemMessage}
         />
