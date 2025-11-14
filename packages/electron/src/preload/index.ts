@@ -197,6 +197,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getInitialState: () => ipcRenderer.invoke('get-initial-state'),
   // Workspace operations
   getFolderContents: (dirPath: string) => ipcRenderer.invoke('get-folder-contents', dirPath),
+  refreshFolderContents: (folderPath: string) => ipcRenderer.invoke('refresh-folder-contents', folderPath),
   createFile: (filePath: string, content: string) => ipcRenderer.invoke('create-file', filePath, content),
   createFolder: (folderPath: string) => ipcRenderer.invoke('create-folder', folderPath),
   switchWorkspaceFile: (filePath: string) => ipcRenderer.invoke('switch-workspace-file', filePath),

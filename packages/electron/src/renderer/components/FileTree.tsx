@@ -122,10 +122,23 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
         if (window.electronAPI) {
           window.electronAPI.invoke('workspace-folder-expanded', path);
         }
+
+        // Refresh folder contents when opening (in case file watcher missed changes)
+        if (window.electronAPI?.refreshFolderContents) {
+          window.electronAPI.refreshFolderContents(path).then((refreshedContents) => {
+            if (refreshedContents && onRefreshFileTree) {
+              // Trigger a full tree refresh to incorporate the new data
+              // This ensures the file watcher and UI are in sync
+              onRefreshFileTree();
+            }
+          }).catch((error) => {
+            console.error('Error refreshing folder contents:', error);
+          });
+        }
       }
       return newSet;
     });
-  }, []);
+  }, [onRefreshFileTree]);
 
   const handleFolderClick = useCallback((e: React.MouseEvent, path: string) => {
     // Toggle the folder when clicking anywhere on the row

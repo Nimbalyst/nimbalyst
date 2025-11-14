@@ -46,6 +46,11 @@ export function registerWorkspaceHandlers() {
         return getFolderContents(dirPath);
     });
 
+    // Refresh folder contents (for when user expands a folder)
+    ipcMain.handle('refresh-folder-contents', (event, folderPath: string) => {
+        return getFolderContents(folderPath);
+    });
+
     // Create new file
     ipcMain.handle('create-file', async (event, filePath: string, content: string = '') => {
         try {
