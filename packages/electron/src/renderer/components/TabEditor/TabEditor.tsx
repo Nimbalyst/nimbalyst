@@ -155,7 +155,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // Get the baseline for diff comparison
           // This will be the latest incremental-approval tag if it exists, otherwise the pre-edit tag
           const baseline = await window.electronAPI.invoke('history:get-diff-baseline', filePath);
-          const databaseOldContent = baseline ? baseline.content : pendingTags[0].content;
+          const oldContent = baseline ? baseline.content : pendingTags[0].content;
 
           // Check if this tag is already being shown
           const isAlreadyShowingThisTag = pendingAIEditTagRef.current?.tagId === pendingTags[0].id;
@@ -166,41 +166,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           if (isAlreadyShowingThisTag) {
             console.log(`[TabEditor] Diff already shown for tag ${pendingTags[0].id}, skipping reload`);
             return;
-          }
-
-          // LEXICAL-SOURCED APPROACH: Round-trip the database content through Lexical
-          // to ensure exact matching. This eliminates normalization mismatches.
-          // Uses a headless editor to avoid polluting the visible editor state.
-          let oldContent: string = databaseOldContent;
-          try {
-            const { createHeadlessEditor, $getRoot } = await import('lexical');
-            const { $convertFromEnhancedMarkdownString, $convertToEnhancedMarkdownString, getEditorTransformers, PlaygroundNodes } = await import('rexical');
-            const transformers = getEditorTransformers();
-
-            // Create a headless editor for normalization (no DOM, no side effects)
-            const headlessEditor = createHeadlessEditor({
-              nodes: PlaygroundNodes,
-              onError: (error: Error) => {
-                logger.ui.error('[TabEditor] Headless editor error:', error);
-              }
-            });
-
-            // Parse database content in headless editor
-            headlessEditor.update(() => {
-              const root = $getRoot();
-              root.clear();
-              $convertFromEnhancedMarkdownString(databaseOldContent, transformers);
-            });
-
-            // Extract normalized content
-            oldContent = headlessEditor.getEditorState().read(() => {
-              return $convertToEnhancedMarkdownString(transformers);
-            });
-
-            console.log(`[TabEditor] Tab activation: Normalized old content via headless Lexical: database=${databaseOldContent.length}, normalized=${oldContent.length}`);
-          } catch (error) {
-            logger.ui.warn(`[TabEditor] Failed to normalize old content via Lexical, using database content directly:`, error);
-            oldContent = databaseOldContent;
           }
 
           // If disk content differs from old content, we need to update the diff
@@ -222,36 +187,25 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
                   const transformers = getEditorTransformers();
 
-                  // Load oldContent into the visible editor
+                  // FIRST: Reset editor to old (tagged) content
                   editorToUpdate.update(() => {
                     const root = $getRoot();
                     root.clear();
                     $convertFromEnhancedMarkdownString(oldContent, transformers);
                   }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
 
-                  // Wait for editor to finish loading
+                  // Wait a tick
                   await new Promise(resolve => setTimeout(resolve, 100));
 
-                  // CRITICAL: Verify the editor's serialized content matches our normalized oldContent
-                  const { $convertToEnhancedMarkdownString } = await import('rexical');
-                  const editorContent = await new Promise<string>((resolve) => {
-                    editorToUpdate.getEditorState().read(() => {
-                      const markdown = $convertToEnhancedMarkdownString(transformers);
-                      resolve(markdown);
-                    });
-                  });
-
-                  console.log(`[TabEditor] Tab activation: Verifying editor content matches normalized oldContent: editor=${editorContent.length}, oldContent=${oldContent.length}, match=${editorContent === oldContent}`);
-
-                  // Apply the diff replacement using the editor's actual serialized content
-                  const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
+                  // THEN: Apply the diff replacement
                   const replacements: TextReplacement[] = [{
-                    oldText: editorContent,  // Use editor's serialized content, not our normalized version
+                    oldText: oldContent,
                     newText: diskContent
                   }];
 
                   isApplyingDiffRef.current = true;
                   try {
+                    const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
                     editorToUpdate.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
                     console.log(`[TabEditor] Applied pending AI edit diff on tab activation, waiting for DOM update`);
                   } finally {
@@ -375,45 +329,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // Get the baseline for diff comparison
         // This will be the latest incremental-approval tag if it exists, otherwise the pre-edit tag
         const baseline = await window.electronAPI.invoke('history:get-diff-baseline', filePath);
-        const databaseOldContent = baseline ? baseline.content : pendingTag.content;
+        const oldContent = baseline ? baseline.content : pendingTag.content;
         const newContent = contentRef.current; // Use current content ref to get actual disk content
 
         logger.ui.info(`[TabEditor] Restoring pending AI edit on mount: tagId=${pendingTag.id}, status=${pendingTag.status}`);
-
-        // LEXICAL-SOURCED APPROACH: Round-trip the database content through Lexical
-        // to ensure exact matching. This eliminates normalization mismatches.
-        // Uses a headless editor to avoid polluting the visible editor state.
-        let oldContent: string = databaseOldContent;
-        try {
-          const { createHeadlessEditor, $getRoot } = await import('lexical');
-          const { $convertFromEnhancedMarkdownString, $convertToEnhancedMarkdownString, getEditorTransformers, PlaygroundNodes } = await import('rexical');
-          const transformers = getEditorTransformers();
-
-          // Create a headless editor for normalization (no DOM, no side effects)
-          const headlessEditor = createHeadlessEditor({
-            nodes: PlaygroundNodes,
-            onError: (error: Error) => {
-              logger.ui.error('[TabEditor] Headless editor error:', error);
-            }
-          });
-
-          // Parse database content in headless editor
-          headlessEditor.update(() => {
-            const root = $getRoot();
-            root.clear();
-            $convertFromEnhancedMarkdownString(databaseOldContent, transformers);
-          });
-
-          // Extract normalized content
-          oldContent = headlessEditor.getEditorState().read(() => {
-            return $convertToEnhancedMarkdownString(transformers);
-          });
-
-          console.log(`[TabEditor] Mount effect: Normalized old content via headless Lexical: database=${databaseOldContent.length}, normalized=${oldContent.length}`);
-        } catch (error) {
-          logger.ui.warn(`[TabEditor] Failed to normalize old content via Lexical, using database content directly:`, error);
-          oldContent = databaseOldContent;
-        }
 
         // Set the ref so other parts of the component know we're in diff mode
         pendingAIEditTagRef.current = {
@@ -422,12 +341,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           filePath: filePath
         };
 
-        setContent(oldContent);
-        contentRef.current = oldContent;
-
         // If content differs, apply the diff
         if (oldContent !== newContent) {
-          // Load oldContent into the visible editor first
+          // Reset editor to old (tagged) content first
           const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
           const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
           const transformers = getEditorTransformers();
@@ -438,25 +354,17 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             $convertFromEnhancedMarkdownString(oldContent, transformers);
           }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
 
+          setContent(oldContent);
+          contentRef.current = oldContent;
+
           // Wait a tick before applying diff
           await new Promise(resolve => setTimeout(resolve, 100));
-
-          // CRITICAL: Verify the editor's serialized content matches our normalized oldContent
-          const { $convertToEnhancedMarkdownString } = await import('rexical');
-          const editorContent = await new Promise<string>((resolve) => {
-            editorRef.current!.getEditorState().read(() => {
-              const markdown = $convertToEnhancedMarkdownString(transformers);
-              resolve(markdown);
-            });
-          });
-
-          console.log(`[TabEditor] Mount effect: Verifying editor content matches normalized oldContent: editor=${editorContent.length}, oldContent=${oldContent.length}, match=${editorContent === oldContent}`);
 
           // Apply the diff
           isApplyingDiffRef.current = true;
           try {
             const replacements: TextReplacement[] = [{
-              oldText: editorContent,  // Use editor's serialized content, not our normalized version
+              oldText: oldContent,
               newText: newContent
             }];
             const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
@@ -864,42 +772,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // Get the baseline for diff comparison
           // This will be the latest incremental-approval tag if it exists, otherwise the pre-edit tag
           const baseline = await window.electronAPI.invoke('history:get-diff-baseline', data.path);
-          const databaseOldContent = baseline ? baseline.content : pendingTags[0].content;
-
-          // LEXICAL-SOURCED APPROACH: Round-trip the database content through Lexical
-          // to ensure exact matching. This eliminates normalization mismatches.
-          // Uses a headless editor to avoid polluting the visible editor state.
-          let oldContent: string = databaseOldContent;
-          try {
-            const { createHeadlessEditor, $getRoot } = await import('lexical');
-            const { $convertFromEnhancedMarkdownString, $convertToEnhancedMarkdownString, getEditorTransformers, PlaygroundNodes } = await import('rexical');
-            const transformers = getEditorTransformers();
-
-            // Create a headless editor for normalization (no DOM, no side effects)
-            const headlessEditor = createHeadlessEditor({
-              nodes: PlaygroundNodes,
-              onError: (error: Error) => {
-                logger.ui.error('[TabEditor] Headless editor error:', error);
-              }
-            });
-
-            // Parse database content in headless editor
-            headlessEditor.update(() => {
-              const root = $getRoot();
-              root.clear();
-              $convertFromEnhancedMarkdownString(databaseOldContent, transformers);
-            });
-
-            // Extract normalized content
-            oldContent = headlessEditor.getEditorState().read(() => {
-              return $convertToEnhancedMarkdownString(transformers);
-            });
-
-            console.log(`[TabEditor] File watcher: Normalized old content via headless Lexical: database=${databaseOldContent.length}, normalized=${oldContent.length}`);
-          } catch (error) {
-            logger.ui.warn(`[TabEditor] Failed to normalize old content via Lexical, using database content directly:`, error);
-            oldContent = databaseOldContent;
-          }
+          const oldContent = baseline ? baseline.content : pendingTags[0].content;
 
           console.log('[TabEditor] FILE WATCHER - Applying diff mode:', {
             fileName,
@@ -949,27 +822,16 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     root.clear();
                     $convertFromEnhancedMarkdownString(oldContent, transformers);
                   }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
-
-                  // Wait a tick for the editor to update
-                  await new Promise(resolve => setTimeout(resolve, 100));
-
-                  // CRITICAL: Verify the editor's serialized content matches our normalized oldContent
-                  const { $convertToEnhancedMarkdownString } = await import('rexical');
-                  const editorContent = await new Promise<string>((resolve) => {
-                    editorRef.current!.getEditorState().read(() => {
-                      const markdown = $convertToEnhancedMarkdownString(transformers);
-                      resolve(markdown);
-                    });
-                  });
-
-                  console.log(`[TabEditor] File watcher (updating): Verifying editor content: editor=${editorContent.length}, oldContent=${oldContent.length}, match=${editorContent === oldContent}`);
-
-                  // Apply the new diff replacement using editor's actual serialized content
-                  const replacements: TextReplacement[] = [{
-                    oldText: editorContent,  // Use editor's serialized content
-                    newText: newContent
-                  }];
                 }
+
+                // THEN: Apply the new diff replacement
+                const replacements: TextReplacement[] = [{
+                  oldText: oldContent,
+                  newText: newContent
+                }];
+
+                // Wait a tick for the editor to update
+                await new Promise(resolve => setTimeout(resolve, 100));
 
                 // Mark that we're applying a diff programmatically (not a user edit)
                 isApplyingDiffRef.current = true;
@@ -1014,26 +876,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                     $convertFromEnhancedMarkdownString(oldContent, transformers);
                   }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
 
+                  // THEN: Apply the diff replacement to show changes from old to new
+                  const replacements: TextReplacement[] = [{
+                    oldText: oldContent,
+                    newText: newContent
+                  }];
+
                   // Wait longer for the editor to fully process the content load
                   console.log(`[TabEditor] Waiting for content load to complete...`);
                   await new Promise(resolve => setTimeout(resolve, 250));
-
-                  // CRITICAL: Verify the editor's serialized content matches our normalized oldContent
-                  const { $convertToEnhancedMarkdownString } = await import('rexical');
-                  const editorContent = await new Promise<string>((resolve) => {
-                    editorRef.current!.getEditorState().read(() => {
-                      const markdown = $convertToEnhancedMarkdownString(transformers);
-                      resolve(markdown);
-                    });
-                  });
-
-                  console.log(`[TabEditor] File watcher (first-time): Verifying editor content: editor=${editorContent.length}, oldContent=${oldContent.length}, match=${editorContent === oldContent}`);
-
-                  // Apply the diff replacement using editor's actual serialized content
-                  const replacements: TextReplacement[] = [{
-                    oldText: editorContent,  // Use editor's serialized content
-                    newText: newContent
-                  }];
 
                   // Mark that we're applying a diff programmatically (not a user edit)
                   isApplyingDiffRef.current = true;
