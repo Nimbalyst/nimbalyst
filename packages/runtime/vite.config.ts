@@ -38,7 +38,7 @@ export default defineConfig(({ mode }) => ({
         }
       }
     },
-    sourcemap: true,
+    sourcemap: mode !== 'production',
     watch: mode === 'development' ? {} : null
   },
   optimizeDeps: {

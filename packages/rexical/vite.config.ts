@@ -108,7 +108,7 @@ export default defineConfig(({ mode }) => ({
         }
       }
     },
-    sourcemap: true,
+    sourcemap: mode !== 'production',
     ...(mode === 'production' && {
       minify: 'terser',
       terserOptions: {

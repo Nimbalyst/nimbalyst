@@ -61,6 +61,8 @@ jobs:
 
       - name: Build rexical package
         working-directory: packages/rexical
+        env:
+          NODE_ENV: production
         run: npm run build
 
       # macOS specific setup
@@ -111,6 +113,8 @@ jobs:
       # Build Electron app
       - name: Build Electron app
         env:
+          # Ensure production build (disables sourcemaps, enables optimizations)
+          NODE_ENV: production
           # macOS notarization
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}

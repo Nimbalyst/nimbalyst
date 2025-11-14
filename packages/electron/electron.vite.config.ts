@@ -125,7 +125,7 @@ export default defineConfig({
     },
     build: {
       target: 'node16',
-      sourcemap: true,
+      sourcemap: isDev,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts')
@@ -161,7 +161,7 @@ export default defineConfig({
     },
     build: {
       target: 'node16',
-      sourcemap: true,
+      sourcemap: isDev,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/preload/index.ts')
@@ -218,7 +218,7 @@ export default defineConfig({
     },
     build: {
       target: 'chrome109',
-      sourcemap: true,
+      sourcemap: isDev,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
