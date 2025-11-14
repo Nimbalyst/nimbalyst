@@ -19,6 +19,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.22] - 2025-11-13
+
+
+### Added
+- Strip unchanged context from agent transcript diffs for cleaner display
+
+### Changed
+- Comment out console logs for cleaner output during file operations
+- Logging cleanup in diff operations
+
+### Fixed
+- Handle markdown normalization in diff matching
+- Fix file watcher stats for Chokidar implementation
+- Prepend current document name to ClaudeCode messages in AIChat
+- Remove bad stopFileWatcher causing us to lose track of agent changes
+- Allow re-scrolling to current diff with navigation arrows
+- Separate pure formatting changes from text changes in inline diff
+- Handle formatting changes in inline diff
+
+### Removed
+- Reverted experimental markdown normalization for diff matching
+- Reverted red/green color coding changes
+- Reverted automatic diff acceptance behavior
+- Reverted hacky window refresh approach
+
 ## [0.45.21] - 2025-11-13
 
 
