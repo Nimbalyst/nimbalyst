@@ -196,65 +196,69 @@ export class WindowedTreeMatcher {
   ): Map<number, number> {
     const guidePosts = new Map<number, number>();
 
-    // Create context-aware hash using current node + neighbors
-    // This disambiguates duplicate content by considering position
-    const getContextHash = (
-      nodes: CanonicalTreeNode[],
-      idx: number,
-    ): string => {
-      const node = nodes[idx];
-      const text = (node.text || '').trim();
-      const nodeHash = `${node.type}:${text}`;
+    // Extract markdown text for each node
+    const sourceTexts = sourceNodes.map(n => (n.text || '').trim());
+    const targetTexts = targetNodes.map(n => (n.text || '').trim());
 
-      // Add context from neighbors to make hash more specific
-      const prevType = idx > 0 ? nodes[idx - 1].type : '<start>';
-      const nextType = idx < nodes.length - 1 ? nodes[idx + 1].type : '<end>';
+    // Build full markdown strings with line markers
+    // Use node index as a marker to track which line belongs to which node
+    const sourceMarkdown = sourceTexts.map((text, i) => `${text}\n`).join('');
+    const targetMarkdown = targetTexts.map((text, i) => `${text}\n`).join('');
 
-      return `${prevType}|${nodeHash}|${nextType}`;
-    };
+    try {
+      // Generate unified diff
+      const unifiedDiff = generateUnifiedDiff(sourceMarkdown, targetMarkdown);
+      const parsed = parseUnifiedDiff(unifiedDiff);
 
-    // Build map of context hash -> indices
-    const sourceHashMap = new Map<string, number[]>();
-    sourceNodes.forEach((node, idx) => {
-      const hash = getContextHash(sourceNodes, idx);
-      if (!sourceHashMap.has(hash)) {
-        sourceHashMap.set(hash, []);
+      // Track current line positions in source and target
+      let sourceLine = 1;
+      let targetLine = 1;
+
+      // Process each hunk to find equal lines
+      for (const hunk of parsed.hunks) {
+        // Skip to hunk start
+        sourceLine = hunk.oldStart;
+        targetLine = hunk.newStart;
+
+        for (const line of hunk.lines) {
+          if (line.startsWith(' ')) {
+            // Equal line - this is a guide post
+            // Map line numbers to node indices (0-based)
+            const sourceIdx = sourceLine - 1;
+            const targetIdx = targetLine - 1;
+
+            // Verify indices are valid and texts match
+            if (
+              sourceIdx >= 0 && sourceIdx < sourceNodes.length &&
+              targetIdx >= 0 && targetIdx < targetNodes.length &&
+              sourceTexts[sourceIdx] === targetTexts[targetIdx] &&
+              sourceTexts[sourceIdx].length > 0 // Skip empty lines
+            ) {
+              guidePosts.set(targetIdx, sourceIdx);
+            }
+
+            sourceLine++;
+            targetLine++;
+          } else if (line.startsWith('-')) {
+            // Deleted line
+            sourceLine++;
+          } else if (line.startsWith('+')) {
+            // Added line
+            targetLine++;
+          }
+        }
       }
-      sourceHashMap.get(hash)!.push(idx);
-    });
 
-    const targetHashMap = new Map<string, number[]>();
-    targetNodes.forEach((node, idx) => {
-      const hash = getContextHash(targetNodes, idx);
-      if (!targetHashMap.has(hash)) {
-        targetHashMap.set(hash, []);
+      console.log(`\n[TreeMatcher] Built ${guidePosts.size} guideposts from unified diff matching`);
+      if (guidePosts.size === 0) {
+        console.log('  ⚠️  WARNING: No guideposts! No unchanged content found.');
+      } else {
+        const pct = Math.round((guidePosts.size / sourceNodes.length) * 100);
+        console.log(`  ✓ Matched ${guidePosts.size}/${sourceNodes.length} source nodes (${pct}%)`);
       }
-      targetHashMap.get(hash)!.push(idx);
-    });
-
-    // First pass: Match unique context-aware hashes
-    let contextMatches = 0;
-    targetHashMap.forEach((targetIndices, hash) => {
-      const sourceIndices = sourceHashMap.get(hash);
-      if (!sourceIndices || sourceIndices.length === 0) {
-        return;
-      }
-
-      if (sourceIndices.length === 1 && targetIndices.length === 1) {
-        const sourceIdx = sourceIndices[0];
-        const targetIdx = targetIndices[0];
-        guidePosts.set(targetIdx, sourceIdx);
-        contextMatches++;
-      }
-    });
-
-    console.log(`\n[TreeMatcher] Built ${guidePosts.size} guideposts from context-aware matching`);
-    console.log(`  - ${contextMatches} unique context matches (node + neighbors)`);
-    if (guidePosts.size === 0) {
-      console.log('  ⚠️  WARNING: No guideposts! No unique content found.');
-    } else {
-      const pct = Math.round((guidePosts.size / sourceNodes.length) * 100);
-      console.log(`  ✓ Matched ${guidePosts.size}/${sourceNodes.length} source nodes (${pct}%)`);
+    } catch (error) {
+      // If unified diff fails, continue without guide posts
+      console.log('[TreeMatcher] Failed to build text-based guide posts:', error);
     }
 
     return guidePosts;

@@ -30,6 +30,12 @@ describe('Larger document diff - test2 (PM guide rewrite)', () => {
     // Run comprehensive diff test
     const result = testComprehensiveDiff(oldMarkdown, newMarkdown);
 
+    // Print errors if any
+    if (!result.success) {
+      console.log('\n=== ERRORS ===');
+      result.errors.forEach(err => console.log(err));
+    }
+
     // Verify overall success (accept/reject workflows work)
     expect(result.success).toBe(true);
 
