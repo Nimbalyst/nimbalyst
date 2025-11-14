@@ -8,7 +8,7 @@ import { getDocumentService } from '../services/RendererDocumentService';
 import * as path from 'path';
 
 export async function registerTrackerPlugin(workspacePath?: string | null): Promise<void> {
-  console.log('[TrackerPlugin] registerTrackerPlugin called with workspacePath:', workspacePath);
+  // console.log('[TrackerPlugin] registerTrackerPlugin called with workspacePath:', workspacePath);
 
   // Load built-in tracker models
   loadBuiltinTrackers();

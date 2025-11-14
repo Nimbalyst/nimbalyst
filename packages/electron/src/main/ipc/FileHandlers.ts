@@ -178,9 +178,9 @@ export function registerFileHandlers() {
                             const relativePath = filePath.startsWith(workspacePath)
                                 ? filePath.substring(workspacePath.length + 1)
                                 : filePath;
-                            console.log('[SAVE] Updating tracker items for:', relativePath);
+                            // console.log('[SAVE] Updating tracker items for:', relativePath);
                             await (documentService as any).updateTrackerItemsCache(relativePath);
-                            console.log('[SAVE] Tracker items update completed');
+                            // console.log('[SAVE] Tracker items update completed');
                         } catch (err) {
                             console.error('[SAVE] Failed to refresh metadata/tracker items:', err);
                         }

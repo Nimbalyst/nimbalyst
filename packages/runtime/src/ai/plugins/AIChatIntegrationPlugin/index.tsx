@@ -148,7 +148,7 @@ export function AIChatIntegrationPlugin(): null {
 
     // Set up focus listener to track active editor
     const handleFocus = () => {
-      console.log('[AIChatIntegrationPlugin] Editor focused:', filePath);
+      // console.log('[AIChatIntegrationPlugin] Editor focused:', filePath);
       editorRegistry.setActive(filePath);
     };
 
@@ -274,7 +274,7 @@ export function AIChatIntegrationPlugin(): null {
           (node) => {
             // Mark the streamed node as 'added' in the diff infrastructure
             $setDiffState(node, 'added');
-            console.log('[editor] Node created during streaming and marked as added:', node.getKey());
+            // console.log('[editor] Node created during streaming and marked as added:', node.getKey());
           }
         );
 
@@ -288,7 +288,7 @@ export function AIChatIntegrationPlugin(): null {
 
         if (processor) {
           await processor.insertWithUpdate(content);
-          console.log('[streaming] Content streamed successfully');
+          // console.log('[streaming] Content streamed successfully');
         } else {
           console.error('[streaming] No processor found for stream:', streamId);
         }

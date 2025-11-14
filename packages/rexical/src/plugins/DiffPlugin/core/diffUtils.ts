@@ -1061,16 +1061,19 @@ export function $applyNodeDiff(
       const insertBeforeSourceIndex = diff.sourceIndex;
 
       if (!sourceEditor) {
-        console.warn('ADD diff requires sourceEditor to determine insertion position');
-        liveRoot.append(newNode); // Fallback to append
-        break;
+        throw new Error(
+          `ADD diff missing sourceEditor! Cannot determine insertion position. ` +
+          `targetIndex=${diff.targetIndex}, type=${newNode.getType()}`
+        );
       }
 
       // Get the SOURCE node at sourceIndex and extract its live key
       let liveKeyToInsertBefore: string | null = null;
+      let sourceChildrenLength = 0;
       sourceEditor.getEditorState().read(() => {
         const sourceRoot = $getRoot();
         const sourceChildren = sourceRoot.getChildren();
+        sourceChildrenLength = sourceChildren.length;
         if (insertBeforeSourceIndex < sourceChildren.length) {
           const sourceNode = sourceChildren[insertBeforeSourceIndex];
           liveKeyToInsertBefore = $getState(sourceNode, LiveNodeKeyState);
@@ -1086,12 +1089,40 @@ export function $applyNodeDiff(
           // the correct position based on context and structural matching
           liveNodeToInsertBefore.insertBefore(newNode);
         } else {
-          console.warn(`Could not find LIVE node with key: ${liveKeyToInsertBefore}`);
-          liveRoot.append(newNode); // Fallback
+          throw new Error(
+            `ADD diff: Could not find LIVE node with key: ${liveKeyToInsertBefore}. ` +
+            `This indicates a state sync issue between source and live editors. ` +
+            `sourceIndex=${insertBeforeSourceIndex}, targetIndex=${diff.targetIndex}, ` +
+            `type=${newNode.getType()}`
+          );
         }
       } else {
-        // No live key found (sourceIndex >= source children length), append to end
-        liveRoot.append(newNode);
+        // No live key found - check if this is a valid "append at end" case
+        if (insertBeforeSourceIndex === sourceChildrenLength) {
+          // Valid case: TreeMatcher determined this should be appended at document end
+          console.log(
+            `[ADD diff] Appending to end: sourceIndex=${insertBeforeSourceIndex}, ` +
+            `sourceChildrenLength=${sourceChildrenLength}, targetIndex=${diff.targetIndex}, ` +
+            `type=${newNode.getType()}`
+          );
+          liveRoot.append(newNode);
+        } else if (insertBeforeSourceIndex > sourceChildrenLength) {
+          // Invalid: sourceIndex is beyond document length
+          throw new Error(
+            `ADD diff: sourceIndex out of bounds! ` +
+            `sourceIndex=${insertBeforeSourceIndex} > sourceChildrenLength=${sourceChildrenLength}. ` +
+            `This indicates TreeMatcher produced an invalid sourceIndex. ` +
+            `targetIndex=${diff.targetIndex}, type=${newNode.getType()}`
+          );
+        } else {
+          // Invalid: sourceIndex is valid but node has no live key (state sync issue)
+          throw new Error(
+            `ADD diff: No live key found for node at valid sourceIndex. ` +
+            `sourceIndex=${insertBeforeSourceIndex} < sourceChildrenLength=${sourceChildrenLength} but node has no LiveNodeKeyState. ` +
+            `This indicates a state sync issue - node exists but wasn't marked with live key. ` +
+            `targetIndex=${diff.targetIndex}, type=${newNode.getType()}`
+          );
+        }
       }
 
       break;
@@ -1348,7 +1379,11 @@ export function $applyChildNodeDiff(
       const insertBeforeIndex = diff.sourceIndex;
 
       if (insertBeforeIndex >= liveChildren.length) {
-        // Append to end
+        // Append to end - this is expected for adding new items at the end
+        console.log(
+          `[ChildDiff ADD] Appending to end: insertBeforeIndex=${insertBeforeIndex}, ` +
+          `liveChildren.length=${liveChildren.length}, type=${newNode.getType()}`
+        );
         liveParentNode.append(newNode);
       } else if (insertBeforeIndex <= 0) {
         // Insert at the beginning

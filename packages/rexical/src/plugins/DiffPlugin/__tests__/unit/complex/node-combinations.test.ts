@@ -19,7 +19,7 @@ import {
 import {MARKDOWN_TEST_TRANSFORMERS} from '../../utils/testConfig';
 
 // Direct import to test
-import {applyMarkdownReplace} from '../../core/diffUtils';
+import {applyMarkdownReplace} from '../../../core/diffUtils';
 
 describe('Node Combinations', () => {
   test('Simple formatting test', () => {

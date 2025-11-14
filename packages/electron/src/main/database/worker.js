@@ -79,6 +79,13 @@ class PGLiteWorker {
     }
 
     try {
+      // Ensure parent directory exists (needed for test environments)
+      const fs = require('fs');
+      const parentDir = path.dirname(this.dataDir);
+      if (!fs.existsSync(parentDir)) {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
+
       // Create PGlite instance
       // Use file-based storage for persistent data
       this.db = new PGlite({

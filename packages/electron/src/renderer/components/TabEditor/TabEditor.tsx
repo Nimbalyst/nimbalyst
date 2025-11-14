@@ -198,8 +198,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   await new Promise(resolve => setTimeout(resolve, 100));
 
                   // THEN: Apply the diff replacement
+                  // Don't pass oldText - let the command handler extract it from the editor
+                  // This handles normalization differences (tables, spacing, etc.)
                   const replacements: TextReplacement[] = [{
-                    oldText: oldContent,
                     newText: diskContent
                   }];
 
@@ -361,10 +362,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           await new Promise(resolve => setTimeout(resolve, 100));
 
           // Apply the diff
+          // Don't pass oldText - let the command handler extract it from the editor
+          // This handles normalization differences (tables, spacing, etc.)
           isApplyingDiffRef.current = true;
           try {
             const replacements: TextReplacement[] = [{
-              oldText: oldContent,
               newText: newContent
             }];
             const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
@@ -718,12 +720,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // Skip if already processing a change or applying a diff
       if (processingFileChangeRef.current || isApplyingDiffRef.current) {
-        console.log('[TabEditor] Skipping file-changed event - processing or applying diff');
+        // console.log('[TabEditor] Skipping file-changed event - processing or applying diff');
         return;
       }
       processingFileChangeRef.current = true;
-      console.log('[TabEditor] Processing file-changed event for:', data.path);
-      console.log('[TabEditor] Processing flag set to true');
+      // console.log('[TabEditor] Processing file-changed event for:', data.path);
+      // console.log('[TabEditor] Processing flag set to true');
 
       let diffUpdatePromise: Promise<void> | null = null;
       try {
@@ -825,8 +827,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 }
 
                 // THEN: Apply the new diff replacement
+                // Don't pass oldText - let the command handler extract it from the editor
+                // This handles normalization differences (tables, spacing, etc.)
                 const replacements: TextReplacement[] = [{
-                  oldText: oldContent,
                   newText: newContent
                 }];
 
@@ -877,8 +880,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
 
                   // THEN: Apply the diff replacement to show changes from old to new
+                  // Don't pass oldText - let the command handler extract it from the editor
+                  // This handles normalization differences (tables, spacing, etc.)
                   const replacements: TextReplacement[] = [{
-                    oldText: oldContent,
                     newText: newContent
                   }];
 
@@ -1001,7 +1005,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           });
         }
         processingFileChangeRef.current = false;
-        console.log('[TabEditor] Finished processing file-changed event - processing flag set to false');
+        // console.log('[TabEditor] Finished processing file-changed event - processing flag set to false');
       }
     };
 

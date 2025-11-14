@@ -65,7 +65,7 @@ test.describe('Agent Mode', () => {
     await expect(chatInput).toBeVisible({ timeout: 5000 });
 
     // Verify session history sidebar is visible
-    const sessionHistory = page.locator('.session-history-sidebar');
+    const sessionHistory = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
     await expect(sessionHistory).toBeVisible({ timeout: 3000 });
   });
 
@@ -89,17 +89,17 @@ test.describe('Agent Mode', () => {
     test.setTimeout(TEST_TIMEOUTS.VERY_LONG);
 
     // Open first document in editor mode
-    await page.locator('.file-tree-name', { hasText: 'document1.md' }).click();
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'document1.md' }).click();
     await page.waitForTimeout(500);
 
-    await expect(page.locator('.tab .tab-title', { hasText: 'document1.md' }))
+    await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.tab).locator(PLAYWRIGHT_TEST_SELECTORS.tabTitle, { hasText: 'document1.md' }))
       .toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Open second document in editor mode
-    await page.locator('.file-tree-name', { hasText: 'document2.md' }).click();
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.fileTreeItem, { hasText: 'document2.md' }).click();
     await page.waitForTimeout(500);
 
-    await expect(page.locator('.tab .tab-title', { hasText: 'document2.md' }))
+    await expect(page.locator(PLAYWRIGHT_TEST_SELECTORS.tab).locator(PLAYWRIGHT_TEST_SELECTORS.tabTitle, { hasText: 'document2.md' }))
       .toBeVisible({ timeout: TEST_TIMEOUTS.TAB_SWITCH });
 
     // Switch to agent mode - this will auto-create the first session
@@ -117,7 +117,7 @@ test.describe('Agent Mode', () => {
     await page.waitForTimeout(1000);
 
     // Create second session using the new session button
-    const newSessionButton = page.locator('button.session-history-new-button').first();
+    const newSessionButton = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryNewButton).first();
     await newSessionButton.click();
     await page.waitForTimeout(500);
 
@@ -134,31 +134,32 @@ test.describe('Agent Mode', () => {
 
     // Check second session (currently active) for tool calls
     const activeSession2 = page.locator('[data-active="true"]');
-    const session2ToolCalls = activeSession2.locator('.rich-transcript-tool-container').first();
+    const session2ToolCalls = activeSession2.locator(PLAYWRIGHT_TEST_SELECTORS.richTranscriptToolContainer).first();
     await expect(session2ToolCalls).toBeVisible({ timeout: 10000 });
 
     // Switch to first session tab
-    const sessionTab1 = page.locator('.ai-session-tabs-container .tab').first();
+    const sessionTab1 = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionTab).first();
     await sessionTab1.click();
     await page.waitForTimeout(500);
 
     // Check first session for transcript content (proves isolation)
     const activeSession1 = page.locator('[data-active="true"]');
-    const session1Messages = activeSession1.locator('.rich-transcript-message').first();
+    const session1Messages = activeSession1.locator(PLAYWRIGHT_TEST_SELECTORS.richTranscriptMessage).first();
     await expect(session1Messages).toBeVisible({ timeout: 10000 });
 
     // Switch back to editor mode
     await switchToEditorMode(page);
 
     // Verify both documents were edited
-    await page.locator('.tab', { hasText: 'document1.md' }).click();
+    // Use documentTab selector to avoid matching session tabs
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.documentTab, { hasText: 'document1.md' }).click();
     await page.waitForTimeout(500);
 
     const doc1Path = path.join(workspacePath, 'document1.md');
     const doc1Content = await fs.readFile(doc1Path, 'utf8');
     expect(doc1Content).toContain('First doc edit');
 
-    await page.locator('.tab', { hasText: 'document2.md' }).click();
+    await page.locator(PLAYWRIGHT_TEST_SELECTORS.documentTab, { hasText: 'document2.md' }).click();
     await page.waitForTimeout(500);
 
     const doc2Path = path.join(workspacePath, 'document2.md');
@@ -185,7 +186,7 @@ test.describe('Agent Mode', () => {
     await page.waitForTimeout(1000);
 
     // Verify session history shows multiple sessions
-    const sessionItems = page.locator('.session-history-item');
+    const sessionItems = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistoryItem);
     const sessionCount = await sessionItems.count();
     expect(sessionCount).toBeGreaterThanOrEqual(2);
 
@@ -235,7 +236,7 @@ test.describe('Agent Mode', () => {
     // Verify session auto-created or empty state shown
     // (Depends on implementation - adjust based on actual behavior)
     const chatInput = page.locator(PLAYWRIGHT_TEST_SELECTORS.chatInput);
-    const sessionHistory = page.locator('.session-history-sidebar');
+    const sessionHistory = page.locator(PLAYWRIGHT_TEST_SELECTORS.sessionHistory);
 
     // At minimum, the interface should be present
     await expect(sessionHistory).toBeVisible({ timeout: 5000 });

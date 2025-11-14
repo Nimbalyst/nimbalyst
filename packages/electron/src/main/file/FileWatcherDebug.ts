@@ -1,37 +1,39 @@
 import { BrowserWindow } from 'electron';
 import { windowStates } from '../window/WindowManager';
 import { getFolderContents } from '../utils/FileTree';
-import { simpleFileWatcher } from './SimpleFileWatcher';
-import { simpleWorkspaceWatcher } from './SimpleWorkspaceWatcher.ts';
+import { chokidarFileWatcher } from './FileWatcher';
 import { checkFileForChanges } from './FileWatcher';
+import { basename } from 'path';
 
 // Get global file watcher statistics
 export function getGlobalFileWatcherStats() {
-    const fileStats = simpleFileWatcher.getStats();
-    const workspaceStats = simpleWorkspaceWatcher.getStats();
+    const fileStats = chokidarFileWatcher.getStats();
 
     const lines: string[] = [];
-    lines.push('=== File Watcher Statistics ===');
+    lines.push('=== File Watcher Statistics (Chokidar) ===');
     lines.push(`Type: ${fileStats.type}`);
-    lines.push(`Active file watchers: ${fileStats.activeWatchers}`);
+    lines.push(`Total active watchers: ${fileStats.activeWatchers}`);
 
     if (fileStats.watchers.length > 0) {
         lines.push('\nWatched files:');
+
+        // Group by window
+        const byWindow = new Map<number, string[]>();
         for (const watcher of fileStats.watchers) {
-            lines.push(`  Window ${watcher.windowId}: ${watcher.filePath}`);
+            if (!byWindow.has(watcher.windowId)) {
+                byWindow.set(watcher.windowId, []);
+            }
+            byWindow.get(watcher.windowId)!.push(watcher.filePath);
         }
-    }
 
-    lines.push('\n=== Workspace Watcher Statistics ===');
-    lines.push(`Type: ${workspaceStats.type}`);
-    lines.push(`Active workspace watchers: ${workspaceStats.activeWorkspaces}`);
-
-    if (workspaceStats.workspaces.length > 0) {
-        lines.push('\nWatched workspaces:');
-        for (const workspace of workspaceStats.workspaces) {
-            lines.push(`  Window ${workspace.windowId}: ${workspace.workspacePath}`);
-            lines.push(`    Directories watched: ${workspace.directoriesWatched}`);
+        for (const [windowId, files] of byWindow) {
+            lines.push(`\n  Window ${windowId} (${files.length} files):`);
+            for (const filePath of files) {
+                lines.push(`    - ${basename(filePath)}`);
+            }
         }
+    } else {
+        lines.push('\nNo active file watchers');
     }
 
     // Add performance metrics
@@ -62,31 +64,22 @@ export function getFileWatcherStatus(windowId: number): string {
         lines.push('No window state found');
     }
 
-    // Get file watcher info for this window
-    const fileStats = simpleFileWatcher.getStats();
-    const fileWatcher = fileStats.watchers.find(w => w.windowId === windowId);
+    // Get file watcher info for this window using ChokidarFileWatcher
+    const fileStats = chokidarFileWatcher.getStats();
+    const windowWatchers = fileStats.watchers.filter(w => w.windowId === windowId);
 
-    lines.push('\n=== File Watcher ===');
-    if (fileWatcher) {
-        lines.push(`Status: Active`);
-        lines.push(`Type: ${fileStats.type}`);
-        lines.push(`Watching: ${fileWatcher.filePath}`);
+    lines.push('\n=== File Watchers (Chokidar) ===');
+    lines.push(`Type: ${fileStats.type}`);
+    lines.push(`Active watchers for this window: ${windowWatchers.length}`);
+
+    if (windowWatchers.length > 0) {
+        lines.push('\nWatching files:');
+        for (const watcher of windowWatchers) {
+            lines.push(`  - ${basename(watcher.filePath)}`);
+            lines.push(`    Full path: ${watcher.filePath}`);
+        }
     } else {
-        lines.push('Status: No active file watcher');
-    }
-
-    // Get workspace watcher info for this window
-    const workspaceStats = simpleWorkspaceWatcher.getStats();
-    const workspaceWatcher = workspaceStats.workspaces.find(p => p.windowId === windowId);
-
-    lines.push('\n=== Workspace Watcher ===');
-    if (workspaceWatcher) {
-        lines.push(`Status: Active`);
-        lines.push(`Type: ${workspaceStats.type}`);
-        lines.push(`Watching: ${workspaceWatcher.workspacePath}`);
-        lines.push(`Directories watched: ${workspaceWatcher.directoriesWatched}`);
-    } else {
-        lines.push('Status: No active workspace watcher');
+        lines.push('No active file watchers for this window');
     }
 
     lines.push('\n=== System Info ===');

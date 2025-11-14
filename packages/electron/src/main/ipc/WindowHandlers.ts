@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow, shell, nativeImage } from 'electron';
 import { windowStates, windows, getWindowId } from '../window/WindowManager';
 import { updateApplicationMenu } from '../menu/ApplicationMenu';
-import { stopFileWatcher, startFileWatcher } from '../file/FileWatcher';
+import { startFileWatcher } from '../file/FileWatcher';
 import { createAIModelsWindow } from '../window/AIModelsWindow';
 import { basename, join } from 'path';
 import { getFolderContents } from '../utils/FileTree';
@@ -92,18 +92,13 @@ export function registerWindowHandlers() {
 
         // Only proceed if the file path actually changed
         if (state?.filePath === filePath) {
-            // No change, skip everything
+            // console.log('[SET_FILE] SKIPPED - file path unchanged:', basename(filePath || ''), 'windowId:', windowId);
             return;
         }
 
-        // console.log('[SET_FILE] Updating file path for window', windowId, 'from', state?.filePath, 'to', filePath);
+        // console.log('[SET_FILE] File path change for windowId', windowId, 'from', state?.filePath ? basename(state.filePath) : 'null', 'to', filePath ? basename(filePath) : 'null');
 
         if (state) {
-            // Stop watching the old file
-            if (state.filePath && state.filePath !== filePath) {
-                console.log('[SET_FILE] Stopping watcher for old file:', state.filePath);
-                stopFileWatcher(windowId);
-            }
 
             state.filePath = filePath;
             // console.log('[SET_FILE] Window state after update:', { windowId, filePath: state.filePath });
@@ -113,13 +108,13 @@ export function registerWindowHandlers() {
 
             // Start watching the new file
             if (filePath) {
-                // console.log('[SET_FILE] Starting watcher for new file:', filePath);
+                // console.log('[SET_FILE] Starting watcher for file:', basename(filePath), 'windowId:', windowId);
                 startFileWatcher(window, filePath);
             }
         } else {
             console.log('[SET_FILE] WARNING: No window state found for window', windowId);
         }
-        console.log('[SET_FILE] Current file path updated from renderer:', filePath);
+        // console.log('[SET_FILE] Current file path updated from renderer:', filePath);
     });
 
     // Open image in default application

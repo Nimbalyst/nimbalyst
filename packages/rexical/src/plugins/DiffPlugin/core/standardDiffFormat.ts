@@ -128,11 +128,17 @@ export function generateUnifiedDiff(
   newFileName: string = 'b/document.md',
 ): string {
   try {
+    // Use a HUGE context to ensure shifted content is recognized as equal
+    // Default is 3 lines, which causes shifted content to be treated as removed+added
+    // With context=9999, lines that match will be marked as equal even if far apart
     const patch = createTwoFilesPatch(
       oldFileName,
       newFileName,
       oldText,
       newText,
+      undefined, // oldHeader
+      undefined, // newHeader
+      { context: 9999 }, // options - HUGE context window
     );
 
     // Remove the separator line that createTwoFilesPatch adds

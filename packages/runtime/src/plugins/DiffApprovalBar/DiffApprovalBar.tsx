@@ -218,12 +218,12 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
   }, [editor, changeGroups]);
 
   const handlePrevious = () => {
-    // If no selection, go to last group; otherwise go to previous
-    const newIndex = currentGroupIndex < 0
-      ? changeGroups.length - 1
-      : Math.max(0, currentGroupIndex - 1);
+    if (!editor || changeGroups.length === 0) return;
 
-    if (!editor || newIndex < 0 || newIndex >= changeGroups.length) return;
+    // If at first group, re-scroll to it; otherwise go to previous
+    const newIndex = currentGroupIndex <= 0
+      ? 0  // Stay at first group (re-scroll)
+      : currentGroupIndex - 1;
 
     const targetGroup = changeGroups[newIndex];
 
@@ -262,12 +262,12 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
   };
 
   const handleNext = () => {
-    // If no selection, go to first group; otherwise go to next
-    const newIndex = currentGroupIndex < 0
-      ? 0
-      : Math.min(changeGroups.length - 1, currentGroupIndex + 1);
+    if (!editor || changeGroups.length === 0) return;
 
-    if (!editor || newIndex < 0 || newIndex >= changeGroups.length) return;
+    // If at last group, re-scroll to it; otherwise go to next
+    const newIndex = currentGroupIndex >= changeGroups.length - 1
+      ? changeGroups.length - 1  // Stay at last group (re-scroll)
+      : currentGroupIndex + 1;
 
     const targetGroup = changeGroups[newIndex];
 
@@ -473,7 +473,6 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
         <div className="diff-approval-bar-navigation">
           <button
             onClick={handlePrevious}
-            disabled={hasSelection && currentGroupIndex === 0}
             aria-label="Previous change"
             className="diff-nav-button"
           >
@@ -486,7 +485,6 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
           </span>
           <button
             onClick={handleNext}
-            disabled={hasSelection && currentGroupIndex === changeGroups.length - 1}
             aria-label="Next change"
             className="diff-nav-button"
           >

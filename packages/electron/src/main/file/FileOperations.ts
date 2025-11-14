@@ -8,7 +8,7 @@ import { startFileWatcher } from './FileWatcher';
 // Function to load file into window
 export function loadFileIntoWindow(window: BrowserWindow, filePath: string) {
     try {
-        console.log('[LOAD_FILE] Loading file into window:', filePath, 'window:', window.id);
+        // console.log('[LOAD_FILE] Loading file into window:', filePath, 'window:', window.id);
         const content = readFileSync(filePath, 'utf-8');
         const windowId = getWindowId(window);
         if (windowId === null) {
@@ -24,10 +24,10 @@ export function loadFileIntoWindow(window: BrowserWindow, filePath: string) {
             console.error('[LOAD_FILE] No window state found for window ID:', windowId);
         }
 
-        console.log('[LOAD_FILE] Sending file-opened-from-os event to window', window.id);
-        console.log('[LOAD_FILE] Event payload:', { filePath, contentLength: content.length });
+        // console.log('[LOAD_FILE] Sending file-opened-from-os event to window', window.id);
+        // console.log('[LOAD_FILE] Event payload:', { filePath, contentLength: content.length });
         window.webContents.send('file-opened-from-os', { filePath, content });
-        console.log('[LOAD_FILE] Event sent successfully');
+        // console.log('[LOAD_FILE] Event sent successfully');
 
         // Set represented filename for macOS
         if (process.platform === 'darwin') {

@@ -268,7 +268,7 @@ app.whenReady().then(async () => {
 
         // Register the workspace-to-window mapping for routing
         if (state?.workspacePath && windowId) {
-            logger.mcp.info(`Registering workspace ${state.workspacePath} -> window ${windowId}`);
+            // logger.mcp.info(`Registering workspace ${state.workspacePath} -> window ${windowId}`);
             registerWorkspaceWindow(state.workspacePath, windowId);
         } else {
             logger.mcp.warn(`Cannot register workspace: workspacePath=${state?.workspacePath}, windowId=${windowId}`);

@@ -208,12 +208,24 @@ export function DiffPlugin(): JSX.Element | null {
             return $convertToEnhancedMarkdownString(transformers);
           });
 
+          // Normalize replacements: if oldText is not provided, use the extracted originalMarkdown
+          // This handles history comparison where we load oldMarkdown into editor,
+          // but after normalization it might differ from the raw input
+          const normalizedReplacements = replacements.map(r => {
+            if (!r.oldText) {
+              // No oldText provided - use the extracted editor content
+              // This is the "replace entire document" case for history diffs
+              return { ...r, oldText: originalMarkdown };
+            }
+            return r;
+          });
+
           // Apply the replacements - applyMarkdownReplace does its own editor.update() internally
           try {
             applyMarkdownReplace(
               editor,
               originalMarkdown,
-              replacements,
+              normalizedReplacements,
               transformers
             );
 
