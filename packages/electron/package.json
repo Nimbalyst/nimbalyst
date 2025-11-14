@@ -208,7 +208,10 @@
       ],
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "notarize": false
+      "notarize": false,
+      "extendInfo": {
+        "NSLocalNetworkUsageDescription": "Nimbalyst needs access to local network devices for features like MCP servers and local AI model connections."
+      }
     },
     "dmg": {
       "format": "UDZO",
