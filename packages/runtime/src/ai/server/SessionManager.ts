@@ -38,7 +38,10 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
   const providerConfig = metadata.providerConfig as SessionData['providerConfig'];
   // CRITICAL: providerSessionId is stored at top-level, not in metadata
   const providerSessionId = session.providerSessionId ?? (metadata.providerSessionId as string | undefined);
-  const tokenUsage = metadata.tokenUsage as SessionData['tokenUsage'];
+
+  // NOTE: tokenUsage is no longer stored in ai_sessions metadata
+  // It's parsed from ai_agent_messages /context responses in loadSession()
+  // This function only handles the basic session structure
 
   return {
     id: session.id,
@@ -55,7 +58,7 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     providerConfig,
     providerSessionId,
     lastReadMessageTimestamp: session.lastReadMessageTimestamp ?? undefined,
-    tokenUsage,
+    tokenUsage: undefined, // Will be populated by loadSession() from ai_agent_messages
     metadata: session.metadata ?? {},
   } satisfies SessionData;
 }
@@ -105,6 +108,11 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
 
   // PASS 2: Process messages in order and create tool messages
   for (const agentMsg of agentMessages) {
+    // Skip hidden messages - they shouldn't appear in UI
+    if (agentMsg.hidden) {
+      continue;
+    }
+
     const timestamp = agentMsg.createdAt ? new Date(agentMsg.createdAt).getTime() : Date.now();
 
     try {
@@ -514,10 +522,37 @@ export class SessionManager {
       return null;
     }
 
-    // Fetch raw agent messages from the database
+    // Fetch raw agent messages from the database (already filtered to exclude hidden messages)
     const agentMessages = await AgentMessagesRepository.list(sessionId);
 
+    // PARSE TOKEN USAGE from /context responses
+    // Query for ALL messages including hidden ones to find /context responses
+    // Claude Code logs /context responses which may or may not be marked as hidden
+    const allMessages = await AgentMessagesRepository.list(sessionId, { includeHidden: true });
+    let tokenUsage: SessionData['tokenUsage'] | undefined;
+    for (let i = allMessages.length - 1; i >= 0; i--) {
+      const msg = allMessages[i];
+      // Look for /context output messages (check both hidden and non-hidden)
+      if (msg.direction === 'output' && msg.content?.includes('## Context Usage')) {
+        // Parse token usage from /context response
+        // Format: "**Tokens:** 34.7k / 200.0k (17%)"
+        const tokenMatch = msg.content.match(/\*\*Tokens:\*\*\s+([\d.]+)k\s*\/\s*([\d.]+)k\s*\((\d+)%\)/);
+        if (tokenMatch) {
+          const usedTokens = Math.round(parseFloat(tokenMatch[1]) * 1000);
+          const contextWindow = Math.round(parseFloat(tokenMatch[2]) * 1000);
+          tokenUsage = {
+            inputTokens: 0,  // We don't have breakdown from /context
+            outputTokens: 0,
+            totalTokens: usedTokens,
+            contextWindow: contextWindow
+          };
+          break; // Use most recent
+        }
+      }
+    }
+
     // Transform raw messages into UI format
+    // Hidden messages are already filtered out in transformAgentMessagesToUI
     const uiMessages = transformAgentMessagesToUI(agentMessages);
 
     // Create session data with transformed messages
@@ -527,6 +562,11 @@ export class SessionManager {
     };
 
     const sessionData = sessionDataFromChatSession(normalized, workspace);
+
+    // Add parsed token usage to session data
+    if (tokenUsage) {
+      sessionData.tokenUsage = tokenUsage;
+    }
 
     this.currentSession = sessionData;
     this.currentWorkspacePath = sessionData.workspacePath ?? workspace;
@@ -640,18 +680,6 @@ export class SessionManager {
     }
   }
 
-  async updateSessionTokenUsage(
-    sessionId: string,
-    tokenUsage: {
-      inputTokens: number;
-      outputTokens: number;
-      totalTokens: number;
-      contextWindow?: number;
-    }
-  ): Promise<void> {
-    await AISessionsRepository.updateMetadata(sessionId, { tokenUsage });
-    if (this.currentSession?.id === sessionId) {
-      this.currentSession = { ...this.currentSession, tokenUsage };
-    }
-  }
+  // NOTE: updateSessionTokenUsage removed - token usage is now derived from ai_agent_messages
+  // Token usage is parsed from /context responses in loadSession()
 }

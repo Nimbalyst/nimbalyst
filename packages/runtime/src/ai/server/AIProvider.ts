@@ -60,6 +60,12 @@ export interface AIProvider extends EventEmitter {
   getProviderSessionData?(sessionId: string): any;
 
   /**
+   * Set hidden mode for next message logging (Claude Code only)
+   * When true, the next sendMessage call will mark logged messages as hidden
+   */
+  setHiddenMode?(enabled: boolean): void;
+
+  /**
    * Clean up resources
    */
   destroy(): void;
@@ -184,7 +190,8 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     source: string, // Provider name (e.g., 'claude', 'claude-code', 'openai')
     direction: 'input' | 'output',
     content: string,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
+    hidden?: boolean
   ): void {
     // Fire and forget - don't block the AI request
     AgentMessagesRepository.create({
@@ -192,7 +199,8 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
       source,
       direction,
       content,
-      metadata
+      metadata,
+      hidden
     }).then(() => {
       // Emit event to notify listeners that new message was written to database
       this.emit('message:logged', { sessionId, direction });

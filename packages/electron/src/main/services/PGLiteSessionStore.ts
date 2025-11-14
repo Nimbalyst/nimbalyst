@@ -104,7 +104,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       if (metadata.providerSessionId !== undefined) pushUpdate('provider_session_id =', metadata.providerSessionId ?? null);
       if (metadata.documentContext !== undefined) pushUpdate('document_context =', metadata.documentContext ?? null);
       if (metadata.draftInput !== undefined) pushUpdate('draft_input =', metadata.draftInput ?? null);
-      if ((metadata as any).tokenUsage !== undefined) pushUpdate('token_usage =', (metadata as any).tokenUsage ?? null);
+      // NOTE: tokenUsage removed - it's derived from ai_agent_messages /context responses
       if ((metadata as any).metadata !== undefined) pushUpdate('metadata =', (metadata as any).metadata ?? {});
 
       if (!updates.length) {
@@ -134,11 +134,9 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       const row = rows[0];
       if (!row) return null;
 
-      // Merge tokenUsage from dedicated column into metadata for compatibility
+      // NOTE: tokenUsage is no longer stored in ai_sessions
+      // It's derived from ai_agent_messages /context responses when loading sessions
       const metadata = row.metadata ?? {};
-      if (row.token_usage) {
-        metadata.tokenUsage = row.token_usage;
-      }
 
       return {
         id: row.id,

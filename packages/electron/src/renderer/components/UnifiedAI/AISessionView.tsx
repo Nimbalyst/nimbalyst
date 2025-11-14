@@ -482,6 +482,20 @@ export const AISessionView = React.memo(AISessionViewComponent, (prevProps, next
     return false; // Content changed, should re-render
   }
 
+  // Compare tokenUsage (for ContextUsageDisplay updates)
+  const prevTokenUsage = prevData.tokenUsage;
+  const nextTokenUsage = nextData.tokenUsage;
+  if (prevTokenUsage !== nextTokenUsage) {
+    // Check if the values actually changed (not just reference)
+    if (!prevTokenUsage || !nextTokenUsage ||
+        prevTokenUsage.inputTokens !== nextTokenUsage.inputTokens ||
+        prevTokenUsage.outputTokens !== nextTokenUsage.outputTokens ||
+        prevTokenUsage.totalTokens !== nextTokenUsage.totalTokens ||
+        prevTokenUsage.contextWindow !== nextTokenUsage.contextWindow) {
+      return false; // Token usage changed, should re-render
+    }
+  }
+
   // Check if messages content actually changed (compare last message)
   if (prevData.messages.length > 0) {
     const prevLastMsg = prevData.messages[prevData.messages.length - 1];

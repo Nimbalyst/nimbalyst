@@ -26,6 +26,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   private currentSessionType?: string; // Track session type for prompt customization
   private slashCommands: string[] = []; // Available slash commands from SDK
   private editedFilesThisTurn: Set<string> = new Set(); // Track files edited in current turn
+  private markMessagesAsHidden: boolean = false; // Flag to mark next messages as hidden
 
   static readonly DEFAULT_MODEL = 'claude-code';
 
@@ -41,6 +42,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
     // Claude Code manages its own authentication - do not require or use API key
     // console.log('[CLAUDE-CODE] Claude Code manages authentication internally');
+  }
+
+  /**
+   * Mark the next sendMessage call's logged messages as hidden
+   * Used for auto-triggered commands like /context that shouldn't appear in UI
+   * Flag is automatically reset after sendMessage completes
+   */
+  public setHiddenMode(hidden: boolean): void {
+    this.markMessagesAsHidden = hidden;
   }
 
   async *sendMessage(
@@ -296,7 +306,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             disallowedTools: options.disallowedTools,
             permissionMode: options.permissionMode
           }
-        }));
+        }), undefined, this.markMessagesAsHidden);
       }
 
       const queryIterator = query({
@@ -329,7 +339,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             const rawChunkJson = typeof chunk === 'string'
               ? JSON.stringify({ type: 'text', content: chunk })
               : JSON.stringify(chunk);
-            this.logAgentMessage(sessionId, 'claude-code', 'output', rawChunkJson);
+            this.logAgentMessage(sessionId, 'claude-code', 'output', rawChunkJson, undefined, this.markMessagesAsHidden);
           }
 
           // if (chunkCount <= 5) {
@@ -484,7 +494,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                             input: toolArgs
                           }]
                         }
-                      }));
+                      }), undefined, this.markMessagesAsHidden);
 
                       // Log the tool_result block
                       this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
@@ -497,7 +507,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                             is_error: false
                           }]
                         }
-                      }));
+                      }), undefined, this.markMessagesAsHidden);
                     }
 
                     yield {
@@ -556,7 +566,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                             is_error: toolCall.isError || false
                           }]
                         }
-                      }));
+                      }), undefined, this.markMessagesAsHidden);
                     }
 
                     // Re-emit the tool call with the result
@@ -660,7 +670,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                       input: toolArgs
                     }]
                   }
-                }));
+                }), undefined, this.markMessagesAsHidden);
 
                 // Log the tool_result block
                 this.logAgentMessage(sessionId, 'claude-code', 'output', JSON.stringify({
@@ -673,7 +683,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                       is_error: false
                     }]
                   }
-                }));
+                }), undefined, this.markMessagesAsHidden);
               }
 
               yield {
@@ -898,7 +908,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                             is_error: toolCall.isError || false
                           }]
                         }
-                      }));
+                      }), undefined, this.markMessagesAsHidden);
                     }
 
                     // Re-emit the tool call with the result
@@ -1130,6 +1140,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     } finally {
       // console.log('[CLAUDE-CODE] Cleaning up abort controller');
       this.abortController = null;
+      // Reset hidden mode flag after sendMessage completes
+      this.markMessagesAsHidden = false;
     }
   }
 

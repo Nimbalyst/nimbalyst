@@ -213,8 +213,6 @@ class PGLiteWorker {
         provider_config JSONB,
         provider_session_id TEXT,
         draft_input TEXT,
-        token_usage JSONB DEFAULT '{}',
-        total_tokens JSONB DEFAULT '{"input": 0, "output": 0, "total": 0}',
         metadata JSONB DEFAULT '{}',
         last_read_message_id TEXT,
         last_read_timestamp TIMESTAMP,
@@ -373,6 +371,24 @@ class PGLiteWorker {
       console.log('[PGLite Worker] ai_agent_messages table created successfully');
     } catch (error) {
       console.error('[PGLite Worker] Failed to create ai_agent_messages table:', error);
+      throw error;
+    }
+
+    // Add hidden column to ai_agent_messages table (migration)
+    try {
+      await this.db.exec(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'ai_agent_messages' AND column_name = 'hidden'
+          ) THEN
+            ALTER TABLE ai_agent_messages ADD COLUMN hidden BOOLEAN NOT NULL DEFAULT FALSE;
+          END IF;
+        END $$;
+      `);
+    } catch (error) {
+      console.error('[PGLite Worker] Failed to add hidden column:', error);
       throw error;
     }
   }

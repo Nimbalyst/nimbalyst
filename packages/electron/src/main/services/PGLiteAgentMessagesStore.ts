@@ -26,9 +26,9 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
       await ensureReady();
       await db.query(
         `INSERT INTO ai_agent_messages (
-          session_id, source, direction, content, metadata
+          session_id, source, direction, content, metadata, hidden
         ) VALUES (
-          $1, $2, $3, $4, $5
+          $1, $2, $3, $4, $5, $6
         )`,
         [
           message.sessionId,
@@ -36,18 +36,20 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
           message.direction,
           message.content,
           message.metadata ?? null,
+          message.hidden ?? false,
         ]
       );
     },
 
-    async list(sessionId: string, options?: { limit?: number; offset?: number }): Promise<AgentMessage[]> {
+    async list(sessionId: string, options?: { limit?: number; offset?: number; includeHidden?: boolean }): Promise<AgentMessage[]> {
       await ensureReady();
       const limit = options?.limit;
       const offset = options?.offset ?? 0;
+      const includeHidden = options?.includeHidden ?? false;
 
-      let query = `SELECT id, session_id, created_at, source, direction, content, metadata
+      let query = `SELECT id, session_id, created_at, source, direction, content, metadata, hidden
          FROM ai_agent_messages
-         WHERE session_id = $1
+         WHERE session_id = $1${includeHidden ? '' : ' AND hidden = FALSE'}
          ORDER BY id ASC`;
 
       const params: any[] = [sessionId];
@@ -69,6 +71,7 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
         direction: row.direction,
         content: row.content,
         metadata: row.metadata ?? undefined,
+        hidden: row.hidden ?? false,
       }));
     },
   };

@@ -988,36 +988,9 @@ export class AIService {
                 totalLength: bucketContentLength(fullResponse.length)
               });
 
-              // Update session token usage if available
-              if (tokenUsage) {
-                // Calculate cumulative usage
-                // Check if tokenUsage has valid properties, not just if it exists
-                const currentUsage = (session.tokenUsage && typeof session.tokenUsage.inputTokens === 'number')
-                  ? session.tokenUsage
-                  : {
-                      inputTokens: 0,
-                      outputTokens: 0,
-                      totalTokens: 0
-                    };
-
-                // Calculate new tokens for this message
-                // Note: cache_read_input_tokens represent reused context from previous messages,
-                // so we don't add them to the cumulative total (they were already counted).
-                // We only count: new input tokens + cache creation tokens + output tokens
-                const newInputTokens = (tokenUsage.input_tokens || 0) +
-                                      (tokenUsage.cache_creation_input_tokens || 0);
-                const newOutputTokens = tokenUsage.output_tokens || 0;
-                const newTotalTokens = newInputTokens + newOutputTokens;
-
-                const updatedUsage = {
-                  inputTokens: currentUsage.inputTokens + newInputTokens,
-                  outputTokens: currentUsage.outputTokens + newOutputTokens,
-                  totalTokens: currentUsage.totalTokens + newTotalTokens,
-                  contextWindow: 200000 // Claude Code default context window
-                };
-
-                await this.sessionManager.updateSessionTokenUsage(session.id, updatedUsage);
-              }
+              // Note: Token usage is now fetched via /context command below for Claude Code
+              // This provides accurate context window usage instead of cumulative token counts
+              // For Claude Code, we NEVER use chunk.usage - only /context results
 
               // Only add assistant message if there's actual content or edits
               if (fullResponse && fullResponse.trim() !== '') {
@@ -1026,7 +999,9 @@ export class AIService {
                   content: fullResponse,
                   timestamp: Date.now(),
                   ...(edits.length > 0 && { edits }),  // Include edits if any
-                  ...(tokenUsage && { tokenUsage })  // Include token usage if available
+                  // CRITICAL: Don't include tokenUsage from chunk.usage for claude-code provider
+                  // Token usage for claude-code comes ONLY from /context command below
+                  ...(tokenUsage && session.provider !== 'claude-code' && { tokenUsage })
                 };
                 await this.sessionManager.addMessage(assistantMessage, session.id);
               } else if (edits.length > 0) {
@@ -1036,7 +1011,9 @@ export class AIService {
                   content: '',  // Empty content since the action was just edits
                   timestamp: Date.now(),
                   edits,
-                  ...(tokenUsage && { tokenUsage })  // Include token usage if available
+                  // CRITICAL: Don't include tokenUsage from chunk.usage for claude-code provider
+                  // Token usage for claude-code comes ONLY from /context command below
+                  ...(tokenUsage && session.provider !== 'claude-code' && { tokenUsage })
                 };
                 await this.sessionManager.addMessage(assistantMessage, session.id);
               } else if (hasStreamingContent) {
@@ -1052,7 +1029,9 @@ export class AIService {
                     content: '[Content streamed to editor]',
                     isActive: false
                   },
-                  ...(tokenUsage && { tokenUsage })  // Include token usage if available
+                  // CRITICAL: Don't include tokenUsage from chunk.usage for claude-code provider
+                  // Token usage for claude-code comes ONLY from /context command below
+                  ...(tokenUsage && session.provider !== 'claude-code' && { tokenUsage })
                 };
                 await this.sessionManager.addMessage(assistantMessage, session.id);
               } else if (toolCalls.length > 0) {
@@ -1061,7 +1040,9 @@ export class AIService {
                   role: 'assistant',
                   content: '[Tool calls executed]',
                   timestamp: Date.now(),
-                  ...(tokenUsage && { tokenUsage })  // Include token usage if available
+                  // CRITICAL: Don't include tokenUsage from chunk.usage for claude-code provider
+                  // Token usage for claude-code comes ONLY from /context command below
+                  ...(tokenUsage && session.provider !== 'claude-code' && { tokenUsage })
                 };
                 await this.sessionManager.addMessage(assistantMessage, session.id);
               }
@@ -1117,6 +1098,68 @@ export class AIService {
                 provider: session.provider
               });
               // console.log('[AIService] Notification service call completed');
+
+              // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage
+              if (session.provider === 'claude-code') {
+                try {
+                  // Get the provider
+                  const contextProvider = ProviderFactory.getProvider(session.provider as AIProviderType, session.id);
+                  if (contextProvider) {
+                    let contextResponse = '';
+
+                    // Reload the session to get the updated messages array (including the assistant's response we just added)
+                    const updatedSession = await this.sessionManager.loadSession(session.id, workspacePath);
+                    if (!updatedSession) {
+                      this.log.error('Failed to reload session for /context command');
+                      break;
+                    }
+
+                    // Mark messages as hidden for this auto-triggered /context command
+                    // User-typed /context won't have this flag set, so they'll be visible
+                    if (contextProvider.setHiddenMode) {
+                      contextProvider.setHiddenMode(true);
+                    }
+
+                    // Stream the /context response
+                    // The provider will log messages with hidden=true flag
+                    for await (const chunk of contextProvider.sendMessage('/context', contextWithSession, session.id, updatedSession.messages, workspacePath, [])) {
+                      if (chunk.type === 'text') {
+                        contextResponse += chunk.content || '';
+                      } else if (chunk.type === 'complete') {
+                        // Parse the context response to extract token usage
+                        // Format: "**Tokens:** 34.7k / 200.0k (17%)"
+                        const tokenMatch = contextResponse.match(/\*\*Tokens:\*\*\s+([\d.]+)k\s*\/\s*([\d.]+)k\s*\((\d+)%\)/);
+
+                        if (tokenMatch) {
+                          const usedTokens = Math.round(parseFloat(tokenMatch[1]) * 1000);
+                          const contextWindow = Math.round(parseFloat(tokenMatch[2]) * 1000);
+
+                          // Notify renderer to reload session (which will parse token usage from messages)
+                          event.sender.send('ai:tokenUsageUpdated', {
+                            sessionId: session.id,
+                            tokenUsage: {
+                              inputTokens: 0,
+                              outputTokens: 0,
+                              totalTokens: usedTokens,
+                              contextWindow: contextWindow
+                            }
+                          });
+                        } else {
+                          this.log.warn('Failed to parse /context response for token usage');
+                        }
+
+                        break;
+                      } else if (chunk.type === 'error') {
+                        this.log.error('Error fetching context:', chunk.error);
+                        break;
+                      }
+                    }
+                  }
+                } catch (contextError) {
+                  this.log.error('Failed to fetch context usage:', contextError);
+                  // Don't fail the main request if context fetch fails
+                }
+              }
 
               break;
           }

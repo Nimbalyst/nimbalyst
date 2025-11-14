@@ -11,6 +11,9 @@ interface ContextUsageDisplayProps {
 /**
  * ContextUsageDisplay shows token usage for Claude Code sessions
  * Displays format: "110k/200k Tokens (55%)"
+ *
+ * CRITICAL: Token data comes ONLY from /context command results.
+ * If token data is not yet available (values are 0), shows "--" instead.
  */
 export function ContextUsageDisplay({
   inputTokens,
@@ -18,6 +21,9 @@ export function ContextUsageDisplay({
   totalTokens,
   contextWindow
 }: ContextUsageDisplayProps) {
+  // If no token data is available yet (all zeros), show placeholder
+  const hasTokenData = totalTokens > 0 && contextWindow > 0;
+
   // Calculate percentage used
   const percentage = contextWindow > 0 ? Math.round((totalTokens / contextWindow) * 100) : 0;
 
@@ -31,6 +37,7 @@ export function ContextUsageDisplay({
 
   // Determine color based on usage level
   const getUsageClass = (): string => {
+    if (!hasTokenData) return 'usage-normal';
     if (percentage >= 90) return 'usage-critical';
     if (percentage >= 80) return 'usage-warning';
     return 'usage-normal';
@@ -39,7 +46,11 @@ export function ContextUsageDisplay({
   return (
     <div className={`context-usage-display ${getUsageClass()}`}>
       <span className="usage-text">
-        {formatTokens(totalTokens)}/{formatTokens(contextWindow)} Tokens ({percentage}%)
+        {hasTokenData ? (
+          `${formatTokens(totalTokens)}/${formatTokens(contextWindow)} Tokens (${percentage}%)`
+        ) : (
+          '--'
+        )}
       </span>
     </div>
   );

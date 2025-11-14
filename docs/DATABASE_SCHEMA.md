@@ -24,8 +24,6 @@ erDiagram
         JSONB provider_config
         TEXT provider_session_id
         TEXT draft_input
-        JSONB token_usage
-        JSONB total_tokens
         JSONB metadata
         TIMESTAMP created_at
         TIMESTAMP updated_at
@@ -106,8 +104,6 @@ Stores AI chat conversation sessions with complete message history and provider 
 - `provider_config` (JSONB): Provider-specific configuration
 - `provider_session_id` (TEXT): External provider session ID
 - `draft_input` (TEXT): Unsent draft message
-- `token_usage` (JSONB): Token usage statistics
-- `total_tokens` (JSONB): Cumulative token counts (input, output, total)
 - `metadata` (JSONB): Additional metadata
 - `created_at` (TIMESTAMP): Creation timestamp
 - `updated_at` (TIMESTAMP): Last update timestamp
@@ -254,7 +250,7 @@ The database includes an automatic migration system for schema evolution:
 - Legacy data preservation during migrations
 
 **Key Migrations:**
-- `ai_sessions`: Added `session_type`, `metadata`, `token_usage`, `total_tokens`
+- `ai_sessions`: Added `session_type`, `metadata`
 - Column renames: `project_id` → `workspace_id`, `recent_projects` → `recent_workspaces`
 
 ### Protocol Server
@@ -276,7 +272,6 @@ Several tables use PostgreSQL's JSONB type for flexible, queryable JSON storage:
 - `messages` in `ai_sessions`: Array of chat messages
 - `document_context` in `ai_sessions`: Document state snapshot
 - `provider_config` in `ai_sessions`: Provider-specific settings
-- `token_usage` and `total_tokens` in `ai_sessions`: Usage statistics
 - `metadata` in multiple tables: Extensible metadata fields
 
 ### BYTEA Columns

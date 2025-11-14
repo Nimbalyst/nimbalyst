@@ -152,7 +152,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     });
 
     // Update local state for persistence
-    setSessionTabs(prev => prev.map(t => {
+    setSessionTabs(prev => prev.filter(t => t != null).map(t => {
       if (t.id === sessionId) {
         return {
           ...t,
@@ -280,7 +280,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       try {
         const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePathRef.current);
         if (sessionData) {
-          setSessionTabs(prev => prev.map(tab => {
+          setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
             if (tab.id !== sessionId) {
               return tab;
             }
@@ -366,7 +366,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Open a session in a new tab (agent mode) or load it (chat mode)
   const openSessionInTab = useCallback(async (sessionId: string) => {
     // Check if already open
-    const existingTab = sessionTabs.find(tab => tab.id === sessionId);
+    const existingTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
     if (existingTab) {
       setActiveTabId(sessionId);
       if (onSessionChange) {
@@ -749,6 +749,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     if (!window.electronAPI?.on) return;
 
     const handleMessageLogged = (data: { sessionId: string; direction: string }) => {
+      if (!data || !data.sessionId) return;
       const isRelevantSession = sessionTabsRef.current.some(tab => tab.id === data.sessionId) || data.sessionId === activeTabId;
       if (!isRelevantSession) return;
 
@@ -777,7 +778,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             });
 
             // Update state
-            setSessionTabs(prev => prev.map(t => {
+            setSessionTabs(prev => prev.filter(t => t != null).map(t => {
               if (t.id === data.sessionId) {
                 return {
                   ...t,
@@ -812,8 +813,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Listen for notification clicks to switch to session
   useEffect(() => {
     const handleNotificationClick = (data: { sessionId: string }) => {
+      if (!data || !data.sessionId) return;
       // Find the session tab
-      const sessionTab = sessionTabs.find(tab => tab.id === data.sessionId);
+      const sessionTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === data.sessionId);
 
       if (sessionTab) {
         // Session already open - just switch to it
@@ -838,6 +840,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // - Final completion triggers database reload for consistency
   useEffect(() => {
     const handleStreamResponse = async (data: any) => {
+      if (!data || !data.sessionId) return;
       // Check if this session is relevant to this panel (any open tab)
       const isRelevantSession = sessionTabsRef.current.some(tab => tab.id === data.sessionId);
       if (!isRelevantSession) {
@@ -873,7 +876,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                 });
 
                 // Update local state immediately for responsive UI
-                setSessionTabs(prev => prev.map(t => {
+                setSessionTabs(prev => prev.filter(t => t != null).map(t => {
                   if (t.id === data.sessionId) {
                     return {
                       ...t,
@@ -919,13 +922,14 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     // Handle queued prompt starting
     const handleQueuePromptStarting = (_event: any, data: { sessionId: string; message: string }) => {
+      if (!data || !data.sessionId) return;
       console.log('[AgenticPanel] Queue prompt starting for session:', data.sessionId);
       // Mark session as sending/loading
       sendingSessionsRef.current.add(data.sessionId);
       setSendingSessions(prev => new Set(prev).add(data.sessionId));
 
       // Add user message to UI immediately
-      setSessionTabs(prev => prev.map(tab => {
+      setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
         if (tab.id === data.sessionId) {
           const userMessage = {
             role: 'user' as const,
@@ -946,10 +950,44 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     const cleanupQueuePromptStarting = window.electronAPI.on('ai:queue-prompt-starting', handleQueuePromptStarting);
 
+    // Handle token usage updates
+    const handleTokenUsageUpdated = (_event: any, data: {
+      sessionId: string;
+      tokenUsage: {
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+        contextWindow: number;
+      }
+    }) => {
+      if (!data || !data.sessionId) return;
+      // Update token usage in state
+      setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
+        if (tab.id !== data.sessionId) return tab;
+        return {
+          ...tab,
+          sessionData: {
+            ...tab.sessionData,
+            tokenUsage: data.tokenUsage
+          }
+        };
+      }));
+
+      // Reload session to get filtered messages (removes /context messages)
+      scheduleSessionReload(data.sessionId, {
+        reason: 'token-usage-updated',
+        immediate: true,  // Reload immediately to show updated messages
+        minInterval: 0
+      });
+    };
+
+    const cleanupTokenUsageUpdated = window.electronAPI.on('ai:tokenUsageUpdated', handleTokenUsageUpdated);
+
     return () => {
       cleanupStreamResponse();
       cleanupError();
       cleanupQueuePromptStarting();
+      cleanupTokenUsageUpdated();
     };
   }, [activeTabId, workspacePath, scheduleSessionReload]);
 
@@ -965,13 +1003,14 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Handle draft input change (optimized to avoid recreating all tabs)
   const handleDraftInputChange = useCallback((sessionId: string, value: string) => {
     setSessionTabs(prev => {
-      const index = prev.findIndex(tab => tab.id === sessionId);
-      if (index === -1 || prev[index].draftInput === value) {
-        return prev;
+      const filtered = prev.filter(tab => tab != null);
+      const index = filtered.findIndex(tab => tab.id === sessionId);
+      if (index === -1 || filtered[index].draftInput === value) {
+        return filtered;
       }
 
-      const newTabs = [...prev];
-      newTabs[index] = { ...prev[index], draftInput: value };
+      const newTabs = [...filtered];
+      newTabs[index] = { ...filtered[index], draftInput: value };
       return newTabs;
     });
   }, []);
@@ -1009,18 +1048,19 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Handle draft attachments change (optimized to avoid recreating all tabs)
   const handleDraftAttachmentsChange = useCallback((sessionId: string, attachments: ChatAttachment[]) => {
     setSessionTabs(prev => {
-      const index = prev.findIndex(tab => tab.id === sessionId);
-      if (index === -1 || prev[index].draftAttachments === attachments) return prev;
+      const filtered = prev.filter(tab => tab != null);
+      const index = filtered.findIndex(tab => tab.id === sessionId);
+      if (index === -1 || filtered[index].draftAttachments === attachments) return filtered;
 
-      const newTabs = [...prev];
-      newTabs[index] = { ...prev[index], draftAttachments: attachments };
+      const newTabs = [...filtered];
+      newTabs[index] = { ...filtered[index], draftAttachments: attachments };
       return newTabs;
     });
   }, []);
 
   // Handle history navigation (up/down arrow in input)
   const handleNavigateHistory = useCallback((sessionId: string, direction: 'up' | 'down') => {
-    const currentTab = sessionTabs.find(tab => tab.id === sessionId);
+    const currentTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
     if (!currentTab) return;
 
     // Extract user prompts from session messages
@@ -1083,7 +1123,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Handle mode change (plan <-> agent)
   const handleModeChange = useCallback((sessionId: string, newMode: AIMode) => {
-    setSessionTabs(prev => prev.map(tab =>
+    setSessionTabs(prev => prev.filter(tab => tab != null).map(tab =>
       tab.id === sessionId ? { ...tab, mode: newMode } : tab
     ));
   }, []);
@@ -1099,7 +1139,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     console.log(`[AgenticPanel] Parsed provider: ${newProvider}, model: ${actualModel}`);
 
     // Update local state immediately for responsive UI
-    setSessionTabs(prev => prev.map(tab => {
+    setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
       if (tab.id === sessionId) {
         console.log(`[AgenticPanel] Updating tab ${tab.id}:`);
         console.log(`  - provider: ${tab.sessionData.provider} -> ${newProvider}`);
@@ -1151,12 +1191,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     sendingSessionsRef.current.add(sessionId);
     setSendingSessions(prev => new Set(prev).add(sessionId));
 
-    // Determine sessionType based on current mode (not stored session type)
-    // This ensures correct behavior when switching between AIChat and Agent mode
-    const sessionType = mode === 'agent' ? 'coding' : 'chat';
+    // Get the session to determine sessionType
+    const currentTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
+    const sessionType = currentTab?.sessionData?.sessionType || (mode === 'agent' ? 'coding' : 'chat');
 
     // Add user message immediately
-    setSessionTabs(prev => prev.map(tab => {
+    setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
       if (tab.id === sessionId) {
         const userMessage = {
           role: 'user' as const,
@@ -1238,7 +1278,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       });
 
       // Remove thinking message on error
-      setSessionTabs(prev => prev.map(tab => {
+      setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
         if (tab.id === sessionId) {
           return {
             ...tab,
@@ -1266,7 +1306,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         });
 
         // Remove thinking message
-        setSessionTabs(prev => prev.map(tab => {
+        setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
           if (tab.id === sessionId) {
             return {
               ...tab,
@@ -1312,13 +1352,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }, [onSessionChange, markSessionAsRead]);
 
   const handleTabClose = useCallback((tabId: string) => {
-    const closingTab = sessionTabs.find(t => t.id === tabId);
+    const closingTab = sessionTabs.filter(t => t != null).find(t => t.id === tabId);
     if (closingTab) {
       setClosedSessions(prev => [closingTab, ...prev].slice(0, MAX_CLOSED_SESSION_HISTORY));
     }
 
     setSessionTabs(prev => {
-      const filtered = prev.filter(t => t.id !== tabId);
+      const filtered = prev.filter(t => t != null && t.id !== tabId);
       if (activeTabId === tabId && filtered.length > 0) {
         const newActiveId = filtered[filtered.length - 1].id;
         setActiveTabId(newActiveId);
@@ -1337,7 +1377,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   const handleTabReorder = useCallback((fromIndex: number, toIndex: number) => {
     setSessionTabs(prev => {
-      const newTabs = [...prev];
+      const newTabs = [...prev.filter(t => t != null)];
       const [movedTab] = newTabs.splice(fromIndex, 1);
       newTabs.splice(toIndex, 0, movedTab);
       return newTabs;
@@ -1353,28 +1393,31 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
     },
     nextTab: () => {
-      if (sessionTabs.length === 0 || !activeTabId) return;
-      const currentIndex = sessionTabs.findIndex(t => t.id === activeTabId);
-      const nextIndex = (currentIndex + 1) % sessionTabs.length;
-      handleTabSelect(sessionTabs[nextIndex].id);
+      const filtered = sessionTabs.filter(t => t != null);
+      if (filtered.length === 0 || !activeTabId) return;
+      const currentIndex = filtered.findIndex(t => t.id === activeTabId);
+      const nextIndex = (currentIndex + 1) % filtered.length;
+      handleTabSelect(filtered[nextIndex].id);
     },
     previousTab: () => {
-      if (sessionTabs.length === 0 || !activeTabId) return;
-      const currentIndex = sessionTabs.findIndex(t => t.id === activeTabId);
-      const prevIndex = currentIndex <= 0 ? sessionTabs.length - 1 : currentIndex - 1;
-      handleTabSelect(sessionTabs[prevIndex].id);
+      const filtered = sessionTabs.filter(t => t != null);
+      if (filtered.length === 0 || !activeTabId) return;
+      const currentIndex = filtered.findIndex(t => t.id === activeTabId);
+      const prevIndex = currentIndex <= 0 ? filtered.length - 1 : currentIndex - 1;
+      handleTabSelect(filtered[prevIndex].id);
     }
   }), [createNewSession, activeTabId, handleTabClose, sessionTabs, handleTabSelect]);
 
   const handleTogglePin = useCallback((tabId: string) => {
     setSessionTabs(prev => {
-      const tab = prev.find(t => t.id === tabId);
-      if (!tab) return prev;
+      const filtered = prev.filter(t => t != null);
+      const tab = filtered.find(t => t.id === tabId);
+      if (!tab) return filtered;
 
       const newIsPinned = !tab.isPinned;
       const updatedTab = { ...tab, isPinned: newIsPinned };
 
-      let newTabs = prev.map(t => t.id === tabId ? updatedTab : t);
+      let newTabs = filtered.map(t => t.id === tabId ? updatedTab : t);
 
       if (newIsPinned) {
         newTabs = newTabs.filter(t => t.id !== tabId);
@@ -1394,7 +1437,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   const handleTabRename = useCallback(async (tabId: string, newName: string) => {
     // Update the tab name in sessionTabs
-    setSessionTabs(prev => prev.map(tab => {
+    setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
       if (tab.id === tabId) {
         return { ...tab, name: newName };
       }
@@ -1479,7 +1522,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Create a stable key for unread sessions based only on message state, not draft input
   // This prevents re-computation when only draft input changes (typing in the input field)
   const unreadSessionsKey = React.useMemo(() => {
-    return sessionTabs.map(tab => {
+    return sessionTabs.filter(tab => tab != null).map(tab => {
       const messages = tab.sessionData.messages || [];
       const lastMessage = messages[messages.length - 1];
       const refReadState = readStateRef.current.get(tab.id);
@@ -1490,7 +1533,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   const unreadSessions = React.useMemo(() => {
     const unreadIds = new Set<string>();
-    sessionTabs.forEach(tab => {
+    sessionTabs.filter(tab => tab != null).forEach(tab => {
       if (hasUnreadMessages(tab) && !sendingSessions.has(tab.id)) {
         unreadIds.add(tab.id);
       }
@@ -1501,7 +1544,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Convert SessionTab to Tab format for TabBar
   const convertToTabs = (sessionTabs: SessionTab[]): Tab[] => {
-    return sessionTabs.map(tab => ({
+    return sessionTabs.filter(tab => tab != null).map(tab => ({
       id: tab.id,
       filePath: `session://${tab.id}`,
       fileName: tab.name,
@@ -1536,7 +1579,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Chat mode: single session with dropdown selector
   if (mode === 'chat') {
-    const activeTab = sessionTabs.find(tab => tab.id === activeTabId);
+    const activeTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === activeTabId);
 
     // console.log('[AgenticPanel] Chat mode - onContentModeChange available:', !!onContentModeChange);
 
@@ -1654,7 +1697,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           <SessionHistory
             workspacePath={workspacePath}
             activeSessionId={activeTabId}
-            loadedSessionIds={sessionTabs.map(tab => tab.id)}
+            loadedSessionIds={sessionTabs.filter(tab => tab != null).map(tab => tab.id)}
             processingSessions={processingSessions}
             unreadSessions={unreadSessions}
             renamedSession={renamedSession}
@@ -1689,7 +1732,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             )}
 
             {/* Session views */}
-            {sessionTabs.map(tab => (
+            {sessionTabs.filter(tab => tab != null).map(tab => (
               <AISessionView
                 key={tab.id}
                 ref={getSessionViewRef(tab.id)}
