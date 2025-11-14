@@ -4,10 +4,17 @@
  */
 
 import { app } from 'electron';
+import path from 'path';
 import { database } from './PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
 import type { SessionStore } from '@nimbalyst/runtime';
 import { repositoryManager } from '../services/RepositoryManager';
+import { DatabaseBackupService } from '../services/database/DatabaseBackupService';
+
+// Backup service instance
+let backupService: DatabaseBackupService | null = null;
+let periodicBackupTimer: NodeJS.Timeout | null = null;
+const BACKUP_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 /**
  * Initialize the database system
@@ -20,6 +27,20 @@ export async function initializeDatabase(): Promise<SessionStore> {
   logger.main.info('[Database] Initializing PGLite database system...');
 
   try {
+    // Get database path
+    const userDataPath = process.env.PLAYWRIGHT === '1'
+      ? path.join(app.getPath('temp'), 'nimbalyst-test-db')
+      : app.getPath('userData');
+    const dbPath = path.join(userDataPath, 'pglite-db');
+
+    // Initialize backup service
+    backupService = new DatabaseBackupService(dbPath, database);
+    await backupService.initialize();
+    logger.main.info('[Database] Backup service initialized');
+
+    // Set backup service on database instance
+    database.setBackupService(backupService);
+
     // Initialize PGLite database
     await database.initialize();
     logger.main.info('[Database] PGLite initialized successfully');
@@ -33,23 +54,23 @@ export async function initializeDatabase(): Promise<SessionStore> {
     const stats = await database.getStats();
     logger.main.info('[Database] Database stats:', stats);
 
-    // Set up cleanup on app quit
-    app.on('before-quit', async () => {
-      const t1 = Date.now();
-      logger.main.info('[Database] Closing database connection...');
-      console.log(`[DATABASE] [${t1}] Starting database close`);
-      try {
-        // Add timeout to prevent hanging
-        const closePromise = database.close();
-        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1000));
-        await Promise.race([closePromise, timeoutPromise]);
-        const t2 = Date.now();
-        console.log(`[DATABASE] [${t2}] Database closed (${t2-t1}ms)`);
-      } catch (error) {
-        const t2 = Date.now();
-        console.error(`[DATABASE] [${t2}] Error closing database (${t2-t1}ms):`, error);
-      }
-    });
+    // Start periodic backup timer (only in production, not in tests)
+    if (process.env.PLAYWRIGHT !== '1') {
+      periodicBackupTimer = setInterval(async () => {
+        logger.main.info('[Database] Running periodic backup...');
+        const result = await database.createBackup();
+        if (result.success) {
+          logger.main.info('[Database] Periodic backup completed successfully');
+        } else {
+          logger.main.warn('[Database] Periodic backup failed:', result.error);
+        }
+      }, BACKUP_INTERVAL_MS);
+
+      logger.main.info(`[Database] Periodic backup enabled (every ${BACKUP_INTERVAL_MS / (60 * 60 * 1000)} hours)`);
+    }
+
+    // Note: Database backup on quit is handled in main/index.ts before-quit handler
+    // This ensures it integrates properly with the quit sequence and force-quit timer
 
     logger.main.info('[Database] Database system ready');
 

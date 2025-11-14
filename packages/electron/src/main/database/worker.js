@@ -58,6 +58,8 @@ class PGLiteWorker {
         return await this.close(message);
       case 'getStats':
         return await this.getStats(message);
+      case 'verifyBackup':
+        return await this.verifyBackup(message);
       case 'startProtocolServer':
         return await this.startProtocolServer(message);
       case 'stopProtocolServer':
@@ -86,25 +88,90 @@ class PGLiteWorker {
         fs.mkdirSync(parentDir, { recursive: true });
       }
 
-      // Create PGlite instance
-      // Use file-based storage for persistent data
-      this.db = new PGlite({
-        dataDir: this.dataDir,
-        debug: 0  // Disable PGLite debug logging
-      });
+      // Attempt to initialize database, with automatic recovery on corruption
+      let initAttempt = 0;
+      const maxAttempts = 2;
 
-      // Wait for database to be ready
-      await this.db.waitReady;
+      while (initAttempt < maxAttempts) {
+        initAttempt++;
+
+        try {
+          // Clean up stale lock files before each initialization attempt
+          // This handles crash recovery - if the app crashed, PGlite may have left
+          // a postmaster.pid file that prevents startup
+          try {
+            const lockPath = path.join(this.dataDir, 'postmaster.pid');
+            if (fs.existsSync(lockPath)) {
+              console.log('[PGLite Worker] Removing stale lock file from previous crash:', lockPath);
+              fs.unlinkSync(lockPath);
+            }
+          } catch (lockError) {
+            console.warn('[PGLite Worker] Failed to remove lock file:', lockError);
+            // Continue anyway - PGlite will handle it if it's a real lock
+          }
+
+          // Create PGlite instance
+          // Use file-based storage for persistent data
+          this.db = new PGlite({
+            dataDir: this.dataDir,
+            debug: 0  // Disable PGLite debug logging
+          });
+
+          // Wait for database to be ready
+          await this.db.waitReady;
+
+          // If we get here, initialization succeeded
+          break;
+
+        } catch (dbError) {
+          // Database initialization failed
+          const errorStr = String(dbError?.message || dbError);
+          const errorName = dbError?.name || dbError?.constructor?.name || 'UnknownError';
+
+          console.error(`[PGLite Worker] Database initialization failed (attempt ${initAttempt}/${maxAttempts}):`, errorStr);
+
+          // Check if this looks like corruption/abort (not a real lock)
+          const isCorruptionError = errorStr.includes('Aborted') || errorName === 'RuntimeError';
+
+          if (isCorruptionError && initAttempt < maxAttempts && fs.existsSync(this.dataDir)) {
+            // Database appears corrupted - move it and try fresh
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const backupDir = `${this.dataDir}.backup-${timestamp}`;
+
+            console.log('[PGLite Worker] Database appears corrupted, moving to backup:', backupDir);
+            console.log('[PGLite Worker] Creating fresh database...');
+
+            try {
+              fs.renameSync(this.dataDir, backupDir);
+              console.log('[PGLite Worker] Corrupted database backed up successfully');
+              console.log('[PGLite Worker] User data is preserved at:', backupDir);
+              // Continue to next attempt with fresh database directory
+              continue;
+            } catch (backupError) {
+              console.error('[PGLite Worker] Failed to backup corrupted database:', backupError);
+              // Fall through to re-throw the original error
+            }
+          }
+
+          // Either not a corruption error, or we failed to recover - re-throw
+          throw dbError;
+        }
+      }
 
       // Create schemas
       await this.createSchemas();
+
+      // Check if we recovered from corruption
+      const recovered = initAttempt > 1;
 
       return {
         id: message.id,
         success: true,
         data: {
-          message: 'Database initialized successfully',
-          dataDir: this.dataDir
+          message: recovered ? 'Database recovered from corruption' : 'Database initialized successfully',
+          dataDir: this.dataDir,
+          recovered: recovered,
+          backupLocation: recovered ? `${this.dataDir}.backup-*` : null
         }
       };
     } catch (error) {
@@ -440,6 +507,53 @@ class PGLiteWorker {
       success: true,
       data: result.rows[0]
     };
+  }
+
+  async verifyBackup(message) {
+    const backupPath = message.payload.backupPath;
+    let testDb = null;
+
+    try {
+      console.log('[PGLite Worker] Verifying backup at:', backupPath);
+
+      // Attempt to open the backup database
+      testDb = new PGlite({
+        dataDir: backupPath,
+        debug: 0
+      });
+
+      await testDb.waitReady;
+
+      // Execute a simple query to verify it works
+      await testDb.query('SELECT 1');
+
+      // Close cleanly
+      await testDb.close();
+
+      console.log('[PGLite Worker] Backup verification successful');
+
+      return {
+        id: message.id,
+        success: true,
+        data: { valid: true }
+      };
+    } catch (error) {
+      console.error('[PGLite Worker] Backup verification failed:', error);
+
+      if (testDb) {
+        try {
+          await testDb.close();
+        } catch (closeError) {
+          // Ignore close errors
+        }
+      }
+
+      return {
+        id: message.id,
+        success: true,
+        data: { valid: false, error: error.message || String(error) }
+      };
+    }
   }
 
   async startProtocolServer(message) {

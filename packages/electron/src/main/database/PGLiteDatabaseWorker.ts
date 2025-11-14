@@ -4,11 +4,12 @@
  */
 
 import { Worker } from 'worker_threads';
-import { app } from 'electron';
+import { app, dialog } from 'electron';
 import path from 'path';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import { DatabaseBackupService } from '../services/database/DatabaseBackupService';
 
 // Helper to categorize database errors
 function categorizeDBError(error: any): string {
@@ -32,6 +33,7 @@ export class PGLiteDatabaseWorker {
   private initialized = false;
   private initPromise: Promise<void> | null = null;
   private analytics = AnalyticsService.getInstance();
+  private backupService: DatabaseBackupService | null = null;
 
   /**
    * Initialize the database worker
@@ -51,67 +53,148 @@ export class PGLiteDatabaseWorker {
     return this.initPromise;
   }
 
+  /**
+   * Create and set up a new worker thread
+   */
+  private createWorker(): void {
+    // Create worker thread - use the bundled worker in production
+    // In production, the worker.bundle.js is in the resources directory
+    const workerPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'worker.bundle.js')
+      : path.join(__dirname, '../../src/main/database/worker.js');
+
+    // Use test-specific userData path for Playwright tests to avoid touching production database
+    const userDataPath = process.env.PLAYWRIGHT === '1'
+      ? path.join(app.getPath('temp'), 'nimbalyst-test-db')
+      : app.getPath('userData');
+
+    this.worker = new Worker(workerPath, {
+      workerData: {
+        userDataPath
+      }
+    });
+
+    // Set up message handler
+    this.worker.on('message', (response) => {
+      const pending = this.pendingRequests.get(response.id);
+      if (pending) {
+        this.pendingRequests.delete(response.id);
+        if (response.success) {
+          pending.resolve(response.data);
+        } else {
+          pending.reject(new Error(response.error || 'Unknown error'));
+        }
+      }
+    });
+
+    // Set up error handler
+    this.worker.on('error', (error) => {
+      logger.main.error('[PGLite Worker] Worker error:', error);
+      // Reject all pending requests with the original error
+      this.pendingRequests.forEach((pending) => {
+        pending.reject(error);
+      });
+      this.pendingRequests.clear();
+    });
+
+    // Set up exit handler
+    this.worker.on('exit', (code) => {
+      if (code !== 0) {
+        logger.main.error(`[PGLite Worker] Worker exited with code ${code}`);
+        // Reject all pending requests
+        this.pendingRequests.forEach((pending) => {
+          pending.reject(new Error(`Worker exited with code ${code}`));
+        });
+        this.pendingRequests.clear();
+        this.initialized = false;
+        this.worker = null;
+      }
+    });
+  }
+
   private async doInitialize(): Promise<void> {
     try {
       logger.main.info('[PGLite Worker] Starting database worker thread...');
 
-
-      // Create worker thread - use the bundled worker in production
-      // In production, the worker.bundle.js is in the resources directory
-      const workerPath = app.isPackaged
-        ? path.join(process.resourcesPath, 'worker.bundle.js')
-        : path.join(__dirname, '../../src/main/database/worker.js');
-
-      // Use test-specific userData path for Playwright tests to avoid touching production database
-      const userDataPath = process.env.PLAYWRIGHT === '1'
-        ? path.join(app.getPath('temp'), 'nimbalyst-test-db')
-        : app.getPath('userData');
-
-      this.worker = new Worker(workerPath, {
-        workerData: {
-          userDataPath
-        }
-      });
-
-      // Set up message handler
-      this.worker.on('message', (response) => {
-        const pending = this.pendingRequests.get(response.id);
-        if (pending) {
-          this.pendingRequests.delete(response.id);
-          if (response.success) {
-            pending.resolve(response.data);
-          } else {
-            pending.reject(new Error(response.error || 'Unknown error'));
-          }
-        }
-      });
-
-      // Set up error handler
-      this.worker.on('error', (error) => {
-        logger.main.error('[PGLite Worker] Worker error:', error);
-        // Reject all pending requests with the original error
-        this.pendingRequests.forEach((pending) => {
-          pending.reject(error);
-        });
-        this.pendingRequests.clear();
-      });
-
-      // Set up exit handler
-      this.worker.on('exit', (code) => {
-        if (code !== 0) {
-          logger.main.error(`[PGLite Worker] Worker exited with code ${code}`);
-          // Reject all pending requests
-          this.pendingRequests.forEach((pending) => {
-            pending.reject(new Error(`Worker exited with code ${code}`));
-          });
-          this.pendingRequests.clear();
-          this.initialized = false;
-          this.worker = null;
-        }
-      });
+      // Create the worker
+      this.createWorker();
 
       // Initialize database in worker
-      await this.sendMessage('init');
+      const initResult = await this.sendMessage('init');
+
+      // Check if database was recovered from corruption
+      if (initResult.recovered) {
+        logger.main.warn('[PGLite Worker] Database was corrupted and has been auto-recovered');
+        logger.main.warn('[PGLite Worker] Checking for backups...');
+
+        // Check if we have backups available
+        if (this.backupService && this.backupService.hasBackups()) {
+          logger.main.info('[PGLite Worker] Backups available - offering restore option');
+
+          // Show dialog with restore option
+          const response = await dialog.showMessageBox({
+            type: 'warning',
+            title: 'Database Corruption Detected',
+            message: 'The application database was corrupted, but verified backups are available.',
+            detail: `Would you like to:\n\n• Restore from backup (recommended) - Recover your AI sessions and history\n• Start fresh - Create a new database and lose previous data\n\nThe corrupted database has been backed up to:\n${initResult.dataDir}.backup-[timestamp]`,
+            buttons: ['Restore from Backup', 'Start Fresh'],
+            defaultId: 0,
+            cancelId: 1
+          });
+
+          if (response.response === 0) {
+            // User chose to restore from backup
+            logger.main.info('[PGLite Worker] User chose to restore from backup');
+
+            // Don't close yet - we need the worker for backup verification!
+            // The restore process will handle closing and reopening
+
+            // Attempt restore
+            const restoreResult = await this.backupService.restoreFromBackup();
+
+            if (restoreResult.success) {
+              logger.main.info(`[PGLite Worker] Successfully restored from ${restoreResult.source} backup`);
+
+              // Worker was closed during restore - recreate it
+              logger.main.info('[PGLite Worker] Recreating worker thread after restore...');
+              this.createWorker();
+
+              // Re-initialize with restored database
+              await this.sendMessage('init');
+
+              dialog.showMessageBox({
+                type: 'info',
+                title: 'Database Restored',
+                message: `Your database has been successfully restored from the ${restoreResult.source} backup.`,
+                buttons: ['OK']
+              }).catch(() => {});
+            } else {
+              logger.main.error('[PGLite Worker] Failed to restore from backup:', restoreResult.error);
+
+              dialog.showMessageBox({
+                type: 'error',
+                title: 'Restore Failed',
+                message: 'Failed to restore from backup. Starting with a fresh database.',
+                detail: restoreResult.error,
+                buttons: ['OK']
+              }).catch(() => {});
+            }
+          } else {
+            logger.main.info('[PGLite Worker] User chose to start fresh');
+          }
+        } else {
+          // No backups available - just show the auto-recovery notification
+          logger.main.warn('[PGLite Worker] No backups available - fresh database created');
+
+          dialog.showMessageBox({
+            type: 'warning',
+            title: 'Database Recovered',
+            message: 'The application database was corrupted and has been automatically repaired.',
+            detail: `A fresh database has been created. Your old data has been backed up to:\n\n${initResult.dataDir}.backup-[timestamp]\n\nPrevious AI chat sessions and document history have been lost. Consider enabling regular backups to prevent data loss in the future.`,
+            buttons: ['OK']
+          }).catch(() => {});
+        }
+      }
 
       logger.main.info('[PGLite Worker] Database initialized in worker thread');
 
@@ -287,6 +370,37 @@ export class PGLiteDatabaseWorker {
    */
   async getProtocolServerStatus(): Promise<{ running: boolean; port: number | null; host: string | null }> {
     return await this.sendMessage('getProtocolServerStatus');
+  }
+
+  /**
+   * Verify a backup database
+   */
+  async verifyBackup(backupPath: string): Promise<{ valid: boolean; error?: string }> {
+    return await this.sendMessage('verifyBackup', { backupPath });
+  }
+
+  /**
+   * Set the backup service instance
+   */
+  setBackupService(backupService: DatabaseBackupService): void {
+    this.backupService = backupService;
+  }
+
+  /**
+   * Create a database backup
+   */
+  async createBackup(): Promise<{ success: boolean; error?: string }> {
+    if (!this.backupService) {
+      return { success: false, error: 'Backup service not initialized' };
+    }
+    return await this.backupService.createBackup();
+  }
+
+  /**
+   * Get the backup service instance
+   */
+  getBackupService(): DatabaseBackupService | null {
+    return this.backupService;
   }
 }
 

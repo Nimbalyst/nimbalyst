@@ -35,7 +35,7 @@ export interface HistoryTag {
 }
 
 export class HistoryManager {
-  private maxSnapshots = 50;
+  private maxSnapshots = 250;
   private maxAgeDays = 30;
   private pendingSnapshots = new Map<string, { promise: Promise<void>; timestamp: number }>(); // Track in-flight snapshot creations
   private readonly DEDUP_WINDOW_MS = 1500; // Only deduplicate within 1500ms window
@@ -257,17 +257,24 @@ export class HistoryManager {
       `, [now - maxAge]);
 
       // Keep only maxSnapshots per file
+      // Use CTE to avoid race conditions with corrupted data
       await database.query(`
-        DELETE FROM document_history
-        WHERE id NOT IN (
-          SELECT id FROM (
+        WITH ids_to_keep AS (
+          SELECT id
+          FROM (
             SELECT id, ROW_NUMBER() OVER (PARTITION BY file_path ORDER BY timestamp DESC) as rn
             FROM document_history
           ) t
           WHERE rn <= $1
+        ),
+        ids_to_delete AS (
+          SELECT id FROM document_history WHERE id NOT IN (SELECT id FROM ids_to_keep)
         )
+        DELETE FROM document_history
+        WHERE id IN (SELECT id FROM ids_to_delete)
+        AND EXISTS (SELECT 1 FROM document_history dh WHERE dh.id = document_history.id)
       `, [this.maxSnapshots]);
-    } catch (error) {
+    } catch (error: any) {
       logger.main.error('[HistoryManager] Cleanup failed:', error);
     }
   }

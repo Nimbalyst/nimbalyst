@@ -526,8 +526,9 @@ app.on('before-quit', async (event) => {
     // Mark app as quitting to prevent interval operations
     isAppQuitting = true;
 
-    // Setup force quit timer - shorter for notarized builds to prevent hanging
-    const forceQuitDelay = app.isPackaged ? 3000 : 2000;
+    // Setup force quit timer - allow enough time for database backup
+    // Backup can take up to 5 seconds, plus other cleanup
+    const forceQuitDelay = app.isPackaged ? 10000 : 8000;
     setupForceQuit(forceQuitDelay);
 
     let debugLog: string | null = null;
@@ -719,6 +720,59 @@ app.on('before-quit', async (event) => {
             try {
                 fs.appendFileSync(debugLog, `[QUIT] Error saving session: ${error}\n`);
             } catch (e) {}
+        }
+    }
+
+    // Create database backup (async, but don't wait too long)
+    try {
+        const t11a = Date.now();
+        console.log(`[QUIT] [${t11a}] Creating database backup...`);
+        if (canWriteLogs && debugLog) {
+            try { fs.appendFileSync(debugLog, '[QUIT] Creating database backup\n'); } catch (e) {}
+        }
+
+        // Import database and create backup (with timeout)
+        const { getDatabase } = await import('./database/initialize');
+        const db = getDatabase();
+
+        if (db) {
+            const backupPromise = db.createBackup();
+            const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ success: false, error: 'Timeout' }), 5000));
+            const backupResult: any = await Promise.race([backupPromise, timeoutPromise]);
+
+            const t11b = Date.now();
+            if (backupResult.success) {
+                console.log(`[QUIT] [${t11b}] Database backup created successfully (${t11b-t11a}ms)`);
+                if (canWriteLogs && debugLog) {
+                    try { fs.appendFileSync(debugLog, `[QUIT] Database backup created (${t11b-t11a}ms)\n`); } catch (e) {}
+                }
+            } else {
+                console.log(`[QUIT] [${t11b}] Database backup failed (${t11b-t11a}ms): ${backupResult.error}`);
+                if (canWriteLogs && debugLog) {
+                    try { fs.appendFileSync(debugLog, `[QUIT] Database backup failed: ${backupResult.error}\n`); } catch (e) {}
+                }
+            }
+
+            // Clean up old corrupted backups
+            const backupService = db.getBackupService();
+            if (backupService) {
+                try {
+                    await backupService.cleanupOldCorruptedBackups();
+                    console.log('[QUIT] Old corrupted backups cleaned up');
+                    if (canWriteLogs && debugLog) {
+                        try { fs.appendFileSync(debugLog, '[QUIT] Old backups cleaned up\n'); } catch (e) {}
+                    }
+                } catch (error) {
+                    console.error('[QUIT] Error cleaning up old backups:', error);
+                }
+            }
+        } else {
+            console.log('[QUIT] Database not initialized, skipping backup');
+        }
+    } catch (error) {
+        console.error('[QUIT] Error creating database backup:', error);
+        if (canWriteLogs && debugLog) {
+            try { fs.appendFileSync(debugLog, `[QUIT] Error creating backup: ${error}\n`); } catch (e) {}
         }
     }
 
