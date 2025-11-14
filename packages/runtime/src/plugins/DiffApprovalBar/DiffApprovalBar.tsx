@@ -499,47 +499,47 @@ export function DiffApprovalBar({ editor }: DiffApprovalBarProps) {
             className="diff-reject-button"
             data-action="reject-single"
             onClick={handleRejectThis}
-            title="Reject this change"
+            title="Undo this change"
             disabled={!hasSelection}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M10 4L4 10M4 4L10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
             </svg>
-            Reject
+            Undo
           </button>
           <button
             className="diff-accept-button"
             data-action="accept-single"
             onClick={handleAcceptThis}
-            title="Accept this change"
+            title="Keep this change"
             disabled={!hasSelection}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M12 3L5 10L2 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Accept
+            Keep
           </button>
           <button
             className="diff-reject-all-button"
             data-action="reject-all"
             onClick={handleRejectAll}
-            title="Reject all changes"
+            title="Undo all changes"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M10 4L4 10M4 4L10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
             </svg>
-            Reject All
+            Undo All
           </button>
           <button
             className="diff-accept-all-button"
             data-action="accept-all"
             onClick={handleAcceptAll}
-            title="Accept all changes"
+            title="Keep all changes"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M12 3L5 10L2 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Accept All
+            Keep All
           </button>
         </div>
       </div>
