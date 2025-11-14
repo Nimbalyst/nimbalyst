@@ -2,7 +2,7 @@ import type { CreateAgentMessageInput, AgentMessage } from '../../ai/server/type
 
 export interface AgentMessagesStore {
   create(message: CreateAgentMessageInput): Promise<void>;
-  list(sessionId: string, options?: { limit?: number; offset?: number }): Promise<AgentMessage[]>;
+  list(sessionId: string, options?: { limit?: number; offset?: number; includeHidden?: boolean }): Promise<AgentMessage[]>;
 }
 
 let storeInstance: AgentMessagesStore | null = null;
@@ -35,7 +35,7 @@ export const AgentMessagesRepository = {
     await requireStore().create(message);
   },
 
-  async list(sessionId: string, options?: { limit?: number; offset?: number }): Promise<AgentMessage[]> {
+  async list(sessionId: string, options?: { limit?: number; offset?: number; includeHidden?: boolean }): Promise<AgentMessage[]> {
     return await requireStore().list(sessionId, options);
   },
 };

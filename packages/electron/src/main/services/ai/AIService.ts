@@ -686,6 +686,7 @@ export class AIService {
         } as any : { sessionType: session.sessionType, attachments } as any;
 
         for await (const chunk of provider.sendMessage(message, contextWithSession, session.id, sessionMessages, workspacePath, attachments)) {
+          if (!chunk) continue;
           chunkCount++;
 
           if (!firstChunkTime) {
@@ -895,7 +896,7 @@ export class AIService {
 
             case 'error':
               if (isClaudeCode) {
-                console.error('[CLAUDE-CODE-SERVICE] ERROR FROM PROVIDER:', chunk.error);
+                console.error('[CLAUDE-CODE-SERVICE] ERROR FROM PROVIDER:', chunk.error || 'Unknown error');
                 console.error('[CLAUDE-CODE-SERVICE] Error context:', {
                   chunksSoFar: chunkCount,
                   textChunksSoFar: textChunks,
@@ -903,7 +904,7 @@ export class AIService {
                   timeElapsed: Date.now() - startTime
                 });
               }
-              console.error(`${logPrefix} Provider error:`, chunk.error);
+              console.error(`${logPrefix} Provider error:`, chunk.error || 'Unknown error');
 
               // Track stream interruption due to error
               this.analytics.sendEvent('ai_stream_interrupted', {
@@ -1101,38 +1102,51 @@ export class AIService {
 
               // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage
               if (session.provider === 'claude-code') {
+                console.log('[AIService] Auto-fetching context usage for claude-code session:', session.id);
                 try {
                   // Get the provider
                   const contextProvider = ProviderFactory.getProvider(session.provider as AIProviderType, session.id);
+                  console.log('[AIService] Context provider retrieved:', !!contextProvider);
                   if (contextProvider) {
                     let contextResponse = '';
 
                     // Reload the session to get the updated messages array (including the assistant's response we just added)
                     const updatedSession = await this.sessionManager.loadSession(session.id, workspacePath);
                     if (!updatedSession) {
-                      this.log.error('Failed to reload session for /context command');
+                      console.error('[AIService] Failed to reload session for /context command');
+                      logger.main.error('Failed to reload session for /context command');
                       break;
                     }
+                    console.log('[AIService] Session reloaded, messages count:', updatedSession.messages.length);
 
                     // Mark messages as hidden for this auto-triggered /context command
                     // User-typed /context won't have this flag set, so they'll be visible
                     if (contextProvider.setHiddenMode) {
                       contextProvider.setHiddenMode(true);
+                      console.log('[AIService] Hidden mode set on provider');
                     }
 
                     // Stream the /context response
                     // The provider will log messages with hidden=true flag
-                    for await (const chunk of contextProvider.sendMessage('/context', contextWithSession, session.id, updatedSession.messages, workspacePath, [])) {
+                    // IMPORTANT: Pass undefined for documentContext - /context is a slash command
+                    // that should return token stats, not analyze the current document
+                    console.log('[AIService] Sending /context command...');
+                    for await (const chunk of contextProvider.sendMessage('/context', undefined, session.id, updatedSession.messages, workspacePath, [])) {
+                      if (!chunk) continue;
+                      console.log('[AIService] /context chunk received:', chunk.type, chunk);
                       if (chunk.type === 'text') {
                         contextResponse += chunk.content || '';
+                        console.log('[AIService] Accumulated context response so far:', contextResponse);
                       } else if (chunk.type === 'complete') {
                         // Parse the context response to extract token usage
                         // Format: "**Tokens:** 34.7k / 200.0k (17%)"
+                        console.log('[AIService] /context response received:', contextResponse);
                         const tokenMatch = contextResponse.match(/\*\*Tokens:\*\*\s+([\d.]+)k\s*\/\s*([\d.]+)k\s*\((\d+)%\)/);
 
                         if (tokenMatch) {
                           const usedTokens = Math.round(parseFloat(tokenMatch[1]) * 1000);
                           const contextWindow = Math.round(parseFloat(tokenMatch[2]) * 1000);
+                          console.log('[AIService] Parsed token usage:', { usedTokens, contextWindow });
 
                           // Notify renderer to reload session (which will parse token usage from messages)
                           event.sender.send('ai:tokenUsageUpdated', {
@@ -1145,20 +1159,28 @@ export class AIService {
                             }
                           });
                         } else {
-                          this.log.warn('Failed to parse /context response for token usage');
+                          console.error('[AIService] Failed to parse /context response for token usage. Full response:', contextResponse);
+                          logger.main.warn('Failed to parse /context response for token usage');
                         }
 
                         break;
                       } else if (chunk.type === 'error') {
-                        this.log.error('Error fetching context:', chunk.error);
+                        console.error('[AIService] Error chunk from /context:', chunk.error || 'Unknown error');
+                        logger.main.error('Error fetching context:', chunk.error || 'Unknown error');
                         break;
                       }
                     }
+                    console.log('[AIService] Finished streaming /context response');
+                  } else {
+                    console.warn('[AIService] No context provider found for session:', session.id);
                   }
                 } catch (contextError) {
-                  this.log.error('Failed to fetch context usage:', contextError);
+                  console.error('[AIService] Exception while fetching context usage:', contextError);
+                  logger.main.error('Failed to fetch context usage:', contextError);
                   // Don't fail the main request if context fetch fails
                 }
+              } else {
+                console.log('[AIService] Skipping /context auto-fetch - provider is not claude-code:', session.provider);
               }
 
               break;
@@ -1227,7 +1249,7 @@ export class AIService {
         return { content: fullResponse };
       } catch (error) {
         const errorTime = Date.now() - startTime;
-        const isClaudeCode = session.provider === 'claude-code';
+        const isClaudeCode = session?.provider === 'claude-code';
         const logPrefix = isClaudeCode ? '[CLAUDE-CODE-SERVICE]' : '[AIService]';
 
         if (isClaudeCode) {
@@ -1243,20 +1265,22 @@ export class AIService {
 
         console.error(`${logPrefix} Error after ${errorTime}ms:`, error);
 
-        // Track AI request failure
-        this.analytics.sendEvent('ai_request_failed', {
-          provider: session.provider,
-          errorType: categorizeAIError(error),
-          retryAttempt: 0  // We don't currently track retry attempts
-        });
+        // Track AI request failure (only if we have session info)
+        if (session) {
+          this.analytics.sendEvent('ai_request_failed', {
+            provider: session.provider,
+            errorType: categorizeAIError(error),
+            retryAttempt: 0  // We don't currently track retry attempts
+          });
 
-        // Track ai_response_received with error
-        this.analytics.sendEvent('ai_response_received', {
-          provider: session.provider,
-          responseType: 'error',
-          toolsUsed: [],
-          responseTime: bucketResponseTime(errorTime)
-        });
+          // Track ai_response_received with error
+          this.analytics.sendEvent('ai_response_received', {
+            provider: session.provider,
+            responseType: 'error',
+            toolsUsed: [],
+            responseTime: bucketResponseTime(errorTime)
+          });
+        }
 
         // Send error metrics
         if (event && event.sender) {
@@ -1268,7 +1292,7 @@ export class AIService {
 
           // Send error to renderer
           event.sender.send('ai:error', {
-            sessionId: session.id,
+            sessionId: session?.id,
             message: error instanceof Error ? error.message : 'Unknown error occurred'
           });
         }
@@ -1543,8 +1567,9 @@ export class AIService {
           // Try a simple message
           const response = testProvider.sendMessage('Say "Hello" in one word');
           for await (const chunk of response) {
+            if (!chunk) continue;
             if (chunk.type === 'error') {
-              throw new Error(chunk.error);
+              throw new Error(chunk.error || 'Unknown error');
             }
           }
           testProvider.destroy();
@@ -1566,8 +1591,9 @@ export class AIService {
           // Quick test message
           const response = testProvider.sendMessage('Say "Hello" in one word');
           for await (const chunk of response) {
+            if (!chunk) continue;
             if (chunk.type === 'error') {
-              throw new Error(chunk.error);
+              throw new Error(chunk.error || 'Unknown error');
             }
             // Exit after first response
             if (chunk.type === 'text') {
