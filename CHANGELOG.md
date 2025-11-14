@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.23] - 2025-11-14
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+- Switch from accept/reject to undo/keep for clarity in diff approval actions
+- Use unified diff for guideposts instead of context-aware hashing
+
+### Fixed
+<!-- Bug fixes go here -->
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.22] - 2025-11-13
 
 

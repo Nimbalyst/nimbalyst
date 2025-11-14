@@ -1,6 +1,6 @@
 {
   "name": "@nimbalyst/electron",
-  "version": "0.45.22",
+  "version": "0.45.23",
   "private": true,
   "description": "Electron app for Nimbalyst",
   "main": "out/main/index.js",
