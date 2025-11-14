@@ -58,7 +58,6 @@
     "formdata-node": "^6.0.3",
     "glob": "^11.0.3",
     "js-yaml": "^4.1.0",
-    "libphonenumber-js": "^1.12.25",
     "marked": "^16.4.0",
     "mermaid": "^11.12.0",
     "node-fetch": "^3.3.2",

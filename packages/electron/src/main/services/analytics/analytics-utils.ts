@@ -1,6 +1,5 @@
 import {BeforeSendFn as BeforeSendFnNodeJS, EventMessage} from "posthog-node";
 import {BeforeSendFn as BeforeSendFnWeb, CaptureResult} from "posthog-js";
-import {findPhoneNumbersInText} from "libphonenumber-js/max";
 
 const sensitivePropertyKeyPattern = /email|username|phone|address|key/i;
 const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
@@ -32,12 +31,6 @@ function beforeSend<T extends EventMessage | CaptureResult>(event: T | null): T 
       }
 
       if (typeof value === 'string') {
-        const foundPhoneNumbers = findPhoneNumbersInText(value, {defaultCountry: "US"});
-        if (foundPhoneNumbers.length > 0) {
-          console.warn(`Removing event property "${key}" because it looks like it contains a phone number`);
-          delete eventProps[key];
-          continue;
-        }
         if (emailPattern.test(value) || ccnPattern.test(value)) {
           console.warn(`Removing event property "${key}" because it looks like it contains sensitive data or PII.`);
           delete eventProps[key];
