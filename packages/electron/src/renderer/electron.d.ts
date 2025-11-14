@@ -129,11 +129,6 @@ interface ElectronAPI {
   aiCancelRequest?: () => Promise<{ success: boolean; error?: string }>;
   aiApplyEdit?: (edit: any) => Promise<any>;
 
-  // AI Diff View settings
-  isAIDiffViewEnabled: () => Promise<boolean>;
-  setAIDiffViewEnabled: (enabled: boolean) => Promise<void>;
-  onAIDiffViewChanged: (callback: (enabled: boolean) => void) => () => void;
-
   // AI event listeners
   onAIStreamResponse?: (callback: (data: any) => void) => () => void;
   onAIEditRequest?: (callback: (edit: any) => void) => () => void;

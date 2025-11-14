@@ -507,12 +507,6 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       // The TabEditor component manages its own content state and will preserve it across theme changes.
     }));
 
-    // Listen for AI diff view setting changes and reload the app
-    cleanupFns.push(window.electronAPI.onAIDiffViewChanged(() => {
-      // Reload the entire app to apply the new diff view setting
-      window.location.reload();
-    }));
-
     // Listen for show preferences event
     cleanupFns.push(window.electronAPI.onFileRenamed((data) => {
       console.log('File renamed:', data);
