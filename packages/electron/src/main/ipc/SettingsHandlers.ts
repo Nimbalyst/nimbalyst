@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, isAIDiffViewEnabled, setAIDiffViewEnabled } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 
@@ -63,14 +63,5 @@ export function registerSettingsHandlers() {
     ipcMain.handle('completion-sound:test', (_event, soundType: CompletionSoundType) => {
         const soundService = SoundNotificationService.getInstance();
         soundService.testSound(soundType);
-    });
-
-    // AI Diff View settings
-    ipcMain.handle('ai-diff-view:is-enabled', () => {
-        return isAIDiffViewEnabled();
-    });
-
-    ipcMain.handle('ai-diff-view:set-enabled', (_event, enabled: boolean) => {
-        setAIDiffViewEnabled(enabled);
     });
 }

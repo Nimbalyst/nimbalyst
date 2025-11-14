@@ -187,7 +187,6 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
   const [hasChanges, setHasChanges] = useState(false);
   const [showToolCalls, setShowToolCalls] = useState(false);
   const [aiDebugLogging, setAiDebugLogging] = useState(false);
-  const [diffViewEnabled, setDiffViewEnabled] = useState(false);
   const [completionSoundEnabled, setCompletionSoundEnabled] = useState(false);
   const [completionSoundType, setCompletionSoundType] = useState<'chime' | 'bell' | 'pop' | 'none'>('chime');
   const [osNotificationsEnabled, setOSNotificationsEnabled] = useState(false);
@@ -232,10 +231,6 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
       // Load OS notifications settings
       const osNotifEnabled = await window.electronAPI.invoke('notifications:get-enabled');
       setOSNotificationsEnabled(osNotifEnabled);
-
-      // Load AI diff view setting
-      const diffViewEnabled = await window.electronAPI.isAIDiffViewEnabled();
-      setDiffViewEnabled(diffViewEnabled);
 
       // Fetch ALL models once
       try {
@@ -333,9 +328,6 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
 
     // Save OS notifications settings
     await window.electronAPI.invoke('notifications:set-enabled', osNotificationsEnabled);
-
-    // Save AI diff view setting
-    await window.electronAPI.setAIDiffViewEnabled(diffViewEnabled);
 
     // Clear the model cache to force refresh with new API keys
     await window.electronAPI.aiClearModelCache?.();
@@ -468,11 +460,6 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
           aiDebugLogging={aiDebugLogging}
           onAiDebugLoggingChange={(value) => {
             setAiDebugLogging(value);
-            setHasChanges(true);
-          }}
-          diffViewEnabled={diffViewEnabled}
-          onDiffViewEnabledChange={(value) => {
-            setDiffViewEnabled(value);
             setHasChanges(true);
           }}
         />;
