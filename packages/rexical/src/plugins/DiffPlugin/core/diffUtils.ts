@@ -1069,9 +1069,11 @@ export function $applyNodeDiff(
 
       // Get the SOURCE node at sourceIndex and extract its live key
       let liveKeyToInsertBefore: string | null = null;
+      let sourceChildrenLength = 0;
       sourceEditor.getEditorState().read(() => {
         const sourceRoot = $getRoot();
         const sourceChildren = sourceRoot.getChildren();
+        sourceChildrenLength = sourceChildren.length;
         if (insertBeforeSourceIndex < sourceChildren.length) {
           const sourceNode = sourceChildren[insertBeforeSourceIndex];
           liveKeyToInsertBefore = $getState(sourceNode, LiveNodeKeyState);
@@ -1095,12 +1097,32 @@ export function $applyNodeDiff(
           );
         }
       } else {
-        throw new Error(
-          `ADD diff: No live key found for insertion position. ` +
-          `sourceIndex=${insertBeforeSourceIndex} is out of bounds or node has no live key. ` +
-          `This indicates TreeMatcher produced an invalid sourceIndex. ` +
-          `targetIndex=${diff.targetIndex}, type=${newNode.getType()}`
-        );
+        // No live key found - check if this is a valid "append at end" case
+        if (insertBeforeSourceIndex === sourceChildrenLength) {
+          // Valid case: TreeMatcher determined this should be appended at document end
+          console.log(
+            `[ADD diff] Appending to end: sourceIndex=${insertBeforeSourceIndex}, ` +
+            `sourceChildrenLength=${sourceChildrenLength}, targetIndex=${diff.targetIndex}, ` +
+            `type=${newNode.getType()}`
+          );
+          liveRoot.append(newNode);
+        } else if (insertBeforeSourceIndex > sourceChildrenLength) {
+          // Invalid: sourceIndex is beyond document length
+          throw new Error(
+            `ADD diff: sourceIndex out of bounds! ` +
+            `sourceIndex=${insertBeforeSourceIndex} > sourceChildrenLength=${sourceChildrenLength}. ` +
+            `This indicates TreeMatcher produced an invalid sourceIndex. ` +
+            `targetIndex=${diff.targetIndex}, type=${newNode.getType()}`
+          );
+        } else {
+          // Invalid: sourceIndex is valid but node has no live key (state sync issue)
+          throw new Error(
+            `ADD diff: No live key found for node at valid sourceIndex. ` +
+            `sourceIndex=${insertBeforeSourceIndex} < sourceChildrenLength=${sourceChildrenLength} but node has no LiveNodeKeyState. ` +
+            `This indicates a state sync issue - node exists but wasn't marked with live key. ` +
+            `targetIndex=${diff.targetIndex}, type=${newNode.getType()}`
+          );
+        }
       }
 
       break;

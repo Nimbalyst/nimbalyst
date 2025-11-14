@@ -311,7 +311,9 @@ export function DiffPreviewEditor({
           //   newStart: newMarkdown.substring(0, 100),
           // });
 
-          const replacements = [{ oldText: oldMarkdown, newText: newMarkdown }];
+          // Don't pass oldText - let the command handler extract it from the editor
+          // This handles normalization differences (tables, spacing, etc.)
+          const replacements = [{ newText: newMarkdown }];
 
           try {
             // LiveNodeKeyState is set automatically by applyMarkdownReplace via parallel traversal

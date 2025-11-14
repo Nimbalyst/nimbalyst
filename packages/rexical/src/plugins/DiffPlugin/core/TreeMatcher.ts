@@ -196,70 +196,65 @@ export class WindowedTreeMatcher {
   ): Map<number, number> {
     const guidePosts = new Map<number, number>();
 
-    // Extract markdown text for each node
-    const sourceTexts = sourceNodes.map(n => (n.text || '').trim());
-    const targetTexts = targetNodes.map(n => (n.text || '').trim());
+    // Create context-aware hash using current node + neighbors
+    // This disambiguates duplicate content by considering position
+    const getContextHash = (
+      nodes: CanonicalTreeNode[],
+      idx: number,
+    ): string => {
+      const node = nodes[idx];
+      const text = (node.text || '').trim();
+      const nodeHash = `${node.type}:${text}`;
 
-    // Build full markdown strings with line markers
-    // Use node index as a marker to track which line belongs to which node
-    const sourceMarkdown = sourceTexts.map((text, i) => `${text}\n`).join('');
-    const targetMarkdown = targetTexts.map((text, i) => `${text}\n`).join('');
+      // Add context from neighbors to make hash more specific
+      const prevType = idx > 0 ? nodes[idx - 1].type : '<start>';
+      const nextType = idx < nodes.length - 1 ? nodes[idx + 1].type : '<end>';
 
-    try {
-      // Generate unified diff
-      const unifiedDiff = generateUnifiedDiff(sourceMarkdown, targetMarkdown);
-      const parsed = parseUnifiedDiff(unifiedDiff);
+      return `${prevType}|${nodeHash}|${nextType}`;
+    };
 
-      // Track current line positions in source and target
-      let sourceLine = 1;
-      let targetLine = 1;
+    // Build map of context hash -> indices
+    const sourceHashMap = new Map<string, number[]>();
+    sourceNodes.forEach((node, idx) => {
+      const hash = getContextHash(sourceNodes, idx);
+      if (!sourceHashMap.has(hash)) {
+        sourceHashMap.set(hash, []);
+      }
+      sourceHashMap.get(hash)!.push(idx);
+    });
 
-      // Process each hunk to find equal lines
-      for (const hunk of parsed.hunks) {
-        // Skip to hunk start
-        sourceLine = hunk.oldStart;
-        targetLine = hunk.newStart;
+    const targetHashMap = new Map<string, number[]>();
+    targetNodes.forEach((node, idx) => {
+      const hash = getContextHash(targetNodes, idx);
+      if (!targetHashMap.has(hash)) {
+        targetHashMap.set(hash, []);
+      }
+      targetHashMap.get(hash)!.push(idx);
+    });
 
-        for (const line of hunk.lines) {
-          if (line.startsWith(' ')) {
-            // Equal line - this is a guide post
-            // Map line numbers to node indices (0-based)
-            const sourceIdx = sourceLine - 1;
-            const targetIdx = targetLine - 1;
-
-            // Verify indices are valid and texts match
-            if (
-              sourceIdx >= 0 && sourceIdx < sourceNodes.length &&
-              targetIdx >= 0 && targetIdx < targetNodes.length &&
-              sourceTexts[sourceIdx] === targetTexts[targetIdx] &&
-              sourceTexts[sourceIdx].length > 0 // Skip empty lines
-            ) {
-              guidePosts.set(targetIdx, sourceIdx);
-            }
-
-            sourceLine++;
-            targetLine++;
-          } else if (line.startsWith('-')) {
-            // Deleted line
-            sourceLine++;
-          } else if (line.startsWith('+')) {
-            // Added line
-            targetLine++;
-          }
-        }
+    // First pass: Match unique context-aware hashes
+    let contextMatches = 0;
+    targetHashMap.forEach((targetIndices, hash) => {
+      const sourceIndices = sourceHashMap.get(hash);
+      if (!sourceIndices || sourceIndices.length === 0) {
+        return;
       }
 
-      if (process?.env?.DIFF_DEBUG === '1') {
-        console.log(`\n[TreeMatcher] Built ${guidePosts.size} text-based guide posts:`);
-        guidePosts.forEach((sourceIdx, targetIdx) => {
-          console.log(`  target[${targetIdx}] "${targetTexts[targetIdx].substring(0, 40)}" ← source[${sourceIdx}] "${sourceTexts[sourceIdx].substring(0, 40)}"`);
-        });
+      if (sourceIndices.length === 1 && targetIndices.length === 1) {
+        const sourceIdx = sourceIndices[0];
+        const targetIdx = targetIndices[0];
+        guidePosts.set(targetIdx, sourceIdx);
+        contextMatches++;
       }
-    } catch (error) {
-      // If unified diff fails, continue without guide posts
-      if (process?.env?.DIFF_DEBUG === '1') {
-        console.log('[TreeMatcher] Failed to build text-based guide posts:', error);
-      }
+    });
+
+    console.log(`\n[TreeMatcher] Built ${guidePosts.size} guideposts from context-aware matching`);
+    console.log(`  - ${contextMatches} unique context matches (node + neighbors)`);
+    if (guidePosts.size === 0) {
+      console.log('  ⚠️  WARNING: No guideposts! No unique content found.');
+    } else {
+      const pct = Math.round((guidePosts.size / sourceNodes.length) * 100);
+      console.log(`  ✓ Matched ${guidePosts.size}/${sourceNodes.length} source nodes (${pct}%)`);
     }
 
     return guidePosts;
@@ -355,15 +350,36 @@ export class WindowedTreeMatcher {
     const targetMatched = new Set<number>();
     const targetToSource = new Map<number, number>();
 
-    // Seed targetToSource with text-based guide posts
-    // These provide reliable anchor points for insertion index calculation
+    // FORCE EXACT MATCHES using text-based guideposts
+    // Guideposts identify content that's identical but shifted in position
+    // Override TOPT's decisions and force these to match as EQUAL operations
+    console.log(`[TreeMatcher] Forcing ${textGuidePosts.size} guidepost matches to override TOPT`);
+
+    const forcedEqualOps: typeof diffOps = [];
     textGuidePosts.forEach((sourceIdx, targetIdx) => {
+      // Mark as matched immediately
+      sourceMatched.add(sourceIdx);
+      targetMatched.add(targetIdx);
       targetToSource.set(targetIdx, sourceIdx);
+
+      // Create EQUAL operation for this guidepost
+      if (sourceIdx < sourceNodes.length && targetIdx < targetNodes.length) {
+        forcedEqualOps.push({
+          op: 'equal',
+          aPath: [sourceIdx],
+          bPath: [targetIdx],
+          a: sourceNodes[sourceIdx],
+          b: targetNodes[targetIdx],
+        });
+      }
     });
+
+    // Prepend forced equal ops so they're processed first
+    const enhancedDiffOps = [...forcedEqualOps, ...diffOps];
 
     // Sort diffOps so that equal/replace operations come before insert/delete
     // This ensures targetToSource map is populated before determineInsertionIndex needs it
-    const sortedDiffOps = diffOps.slice().sort((a, b) => {
+    const sortedDiffOps = enhancedDiffOps.slice().sort((a, b) => {
       const opOrder = { 'equal': 0, 'replace': 1, 'delete': 2, 'insert': 3 };
       return opOrder[a.op] - opOrder[b.op];
     });
@@ -437,6 +453,12 @@ export class WindowedTreeMatcher {
         const sourceIdx = op.aPath[0];
         if (sourceIdx >= sourceNodes.length) continue;
 
+        // SKIP if already matched by guidepost
+        if (sourceMatched.has(sourceIdx)) {
+          console.log(`  Skipping DELETE for source[${sourceIdx}] - already matched by guidepost`);
+          continue;
+        }
+
         sourceMatched.add(sourceIdx);
 
         // Create NodeDiff for delete
@@ -461,6 +483,12 @@ export class WindowedTreeMatcher {
       } else if (op.op === 'insert') {
         const targetIdx = op.bPath[0];
         if (targetIdx >= targetNodes.length) continue;
+
+        // SKIP if already matched by guidepost
+        if (targetMatched.has(targetIdx)) {
+          console.log(`  Skipping INSERT for target[${targetIdx}] - already matched by guidepost`);
+          continue;
+        }
 
         targetMatched.add(targetIdx);
 
