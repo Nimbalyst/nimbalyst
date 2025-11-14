@@ -128,7 +128,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const currentDocPath = documentContext?.filePath;
       if (currentDocPath) {
         const fileName = currentDocPath.split('/').pop() || currentDocPath;
-        message = `[Current document: ${fileName}]\n\n${message}`;
+        message = `${message}\n\n[Current document: ${fileName}]\n`;
       }
 
       // Build system prompt with document context
