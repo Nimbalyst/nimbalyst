@@ -125,8 +125,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     try {
       // Append document context to message when there's a specific document
       // AgenticPanel strips out filePath when in agent mode, so this only applies to AIChat panel
+      // Skip adding system message if the prompt starts with a slash command
+      const isSlashCommand = message.trimStart().startsWith('/');
       const currentDocPath = documentContext?.filePath;
-      if (currentDocPath) {
+      if (currentDocPath && !isSlashCommand) {
         const fileName = currentDocPath.split('/').pop() || currentDocPath;
         message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\nThe user is currently viewing this document:\n<current_open_document>${fileName}</current_open_document>\n</NIMBALYST_SYSTEM_MESSAGE>`;
       }
