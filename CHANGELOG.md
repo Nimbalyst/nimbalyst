@@ -19,6 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.26] - 2025-11-14
+
+
+### Added
+- Database backup and corruption recovery system
+- Folder contents refresh on expansion
+- Review-branch slash command
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Built-in slash commands broken by user prompt addendum
+- Open document message showing to user
+- Message formatting to append current document name instead of prepend
+- Local network usage description for Nimbalyst
+- Token count and AI chat broken after merge
+- Correct context window usage calculation
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.25] - 2025-11-14
 
 
