@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef, createRef } from 'react';
-import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/types';
+import type { SessionData, ChatAttachment, Message } from '@nimbalyst/runtime/ai/server/types';
 import { AISessionView, AISessionViewRef } from './AISessionView';
 import { SessionDropdown } from '../AIChat/SessionDropdown';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
@@ -775,13 +775,19 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     const handleMessageLogged = (data: { sessionId: string; direction: string }) => {
       if (!data || !data.sessionId) return;
+
       const isRelevantSession = sessionTabsRef.current.some(tab => tab.id === data.sessionId) || data.sessionId === activeTabId;
-      if (!isRelevantSession) return;
+
+      if (!isRelevantSession) {
+        return;
+      }
 
       // Only reload when assistant messages are saved to the database.
       // User messages are already added to local state before being sent,
       // so reloading on 'input' direction causes race conditions with streaming responses.
-      if (data.direction !== 'output') return;
+      if (data.direction !== 'output') {
+        return;
+      }
 
       scheduleSessionReload(data.sessionId, { reason: 'message-logged', minInterval: 120 });
 
@@ -930,15 +936,21 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     const handleStreamError = (error: any) => {
       console.error('[AgenticPanel] AI error:', error);
-      // Don't set panel-level error state - that's for session loading errors
-      // Streaming errors are saved to the database and will appear via message-logged event
+
       if (typeof error?.sessionId === 'string') {
-        sendingSessionsRef.current.delete(error.sessionId);
+        const sessionId = error.sessionId;
+
+        // Clear sending state immediately
+        sendingSessionsRef.current.delete(sessionId);
         setSendingSessions(prev => {
           const next = new Set(prev);
-          next.delete(error.sessionId);
+          next.delete(sessionId);
           return next;
         });
+
+        // The error is logged to database by ClaudeCodeProvider.logError()
+        // The message-logged event will fire when the write completes
+        // and trigger a session reload automatically via handleMessageLogged
       }
     };
 
@@ -948,7 +960,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     // Handle queued prompt starting
     const handleQueuePromptStarting = (_event: any, data: { sessionId: string; message: string }) => {
       if (!data || !data.sessionId) return;
-      console.log('[AgenticPanel] Queue prompt starting for session:', data.sessionId);
       // Mark session as sending/loading
       sendingSessionsRef.current.add(data.sessionId);
       setSendingSessions(prev => new Set(prev).add(data.sessionId));

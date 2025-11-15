@@ -95,8 +95,9 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
       lowerText.includes('expired token') ||
       lowerText.includes('please obtain a new token') ||
       lowerText.includes('refresh your existing token') ||
-      lowerText.includes('authentication_error') ||
-      lowerText.includes('process exited with code')
+      lowerText.includes('authentication_error')
+      // Note: Removed overly broad 'process exited with code' check
+      // Only authentication-related errors should be treated as login-required
     );
   };
 

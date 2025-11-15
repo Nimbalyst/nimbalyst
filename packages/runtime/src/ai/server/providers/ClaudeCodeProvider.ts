@@ -1130,9 +1130,15 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         };
       } else {
         console.error(`[CLAUDE-CODE] Yielding error to client`);
+        console.error(`[CLAUDE-CODE] Session ID for error logging:`, sessionId);
 
         // Log error to database (as 'output' since errors are provider responses)
-        this.logError(sessionId, 'claude-code', error, 'catch_block', 'exception');
+        if (!sessionId) {
+          console.error(`[CLAUDE-CODE] CRITICAL: Cannot log error - sessionId is undefined!`);
+        } else {
+          console.error(`[CLAUDE-CODE] Logging error to database for session:`, sessionId);
+          this.logError(sessionId, 'claude-code', error, 'catch_block', 'exception');
+        }
 
         yield {
           type: 'error',

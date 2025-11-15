@@ -274,12 +274,13 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
             }
           } else if (parsed.type === 'error' && parsed.error) {
             // Error message from SDK or API
+            const errorContent = typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error);
             uiMessages.push({
               role: 'assistant',
-              content: typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error),
+              content: errorContent,
               timestamp,
               isError: true,
-              errorMessage: typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error)
+              errorMessage: errorContent
             });
           } else if (parsed.type === 'user' && parsed.message) {
             // Skip messages that have parent_tool_use_id - these are sub-agent metadata, not conversation messages

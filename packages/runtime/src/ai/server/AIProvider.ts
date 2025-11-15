@@ -207,6 +207,7 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     }).catch(error => {
       // Don't fail the request if logging fails - just log the error
       console.error('[BaseAIProvider] Failed to log agent message:', error);
+      console.error('[BaseAIProvider] Failed message details:', { sessionId, source, direction, contentLength: content.length });
     });
   }
 
