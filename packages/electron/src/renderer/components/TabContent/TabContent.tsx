@@ -32,6 +32,7 @@ interface TabContentProps {
   onViewHistory?: () => void;
   onRenameDocument?: () => void;
   onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
+  onOpenSessionInChat?: (sessionId: string) => void;
 
   // Document metadata
   workspaceId?: string;
@@ -49,6 +50,7 @@ export const TabContent: React.FC<TabContentProps> = ({
   onViewHistory,
   onRenameDocument,
   onSwitchToAgentMode,
+  onOpenSessionInChat,
   workspaceId,
 }) => {
   // Track manual save functions for each tab
@@ -349,6 +351,7 @@ export const TabContent: React.FC<TabContentProps> = ({
             onViewHistory={onViewHistory}
             onRenameDocument={onRenameDocument}
             onSwitchToAgentMode={onSwitchToAgentMode}
+            onOpenSessionInChat={onOpenSessionInChat}
             workspaceId={workspaceId}
           />
         );

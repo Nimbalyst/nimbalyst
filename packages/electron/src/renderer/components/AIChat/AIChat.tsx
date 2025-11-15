@@ -1,7 +1,11 @@
-import React, { useRef, useEffect, useCallback } from 'react';
-import { AgenticPanel } from '../UnifiedAI';
+import React, { useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
+import { AgenticPanel, type AgenticPanelRef } from '../UnifiedAI';
 import type { DocumentContext } from '../../services/aiApi';
 import './AIChat.css';
+
+export interface AIChatRef {
+  openSessionInTab: (sessionId: string) => Promise<void>;
+}
 
 interface AIChatProps {
   isCollapsed: boolean;
@@ -26,7 +30,7 @@ interface AIChatProps {
  * This is now a thin wrapper around AgenticPanel in chat mode.
  * All AI session management, message handling, and streaming is handled by AgenticPanel.
  */
-export function AIChat({
+export const AIChat = forwardRef<AIChatRef, AIChatProps>(function AIChat({
   isCollapsed,
   onToggleCollapse,
   onContentModeChange,
@@ -41,9 +45,25 @@ export function AIChat({
   onSessionLoaded,
   onSessionIdChange,
   onShowApiKeyError
-}: AIChatProps) {
+}, ref) {
   const isResizingRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const agenticPanelRef = useRef<AgenticPanelRef>(null);
+
+  // Expose methods to parent via ref
+  useImperativeHandle(ref, () => ({
+    openSessionInTab: async (sessionId: string) => {
+      // console.log('[AIChat] openSessionInTab called with sessionId:', sessionId);
+      // console.log('[AIChat] agenticPanelRef.current:', agenticPanelRef.current);
+      if (agenticPanelRef.current) {
+        // console.log('[AIChat] Calling agenticPanelRef.current.openSessionInTab');
+        await agenticPanelRef.current.openSessionInTab(sessionId);
+        // console.log('[AIChat] openSessionInTab completed');
+      } else {
+        console.error('[AIChat] agenticPanelRef.current is null!');
+      }
+    }
+  }), []);
 
   // Handle resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -110,6 +130,7 @@ export function AIChat({
           position: 'relative'
         }}>
           <AgenticPanel
+            ref={agenticPanelRef}
             mode="chat"
             workspacePath={workspacePath}
             documentContext={documentContext}
@@ -120,4 +141,4 @@ export function AIChat({
       )}
     </div>
   );
-}
+});

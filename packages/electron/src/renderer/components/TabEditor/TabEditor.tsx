@@ -49,6 +49,7 @@ interface TabEditorProps {
   onViewHistory?: () => void;
   onRenameDocument?: () => void;
   onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
+  onOpenSessionInChat?: (sessionId: string) => void;
 
   // Document metadata
   workspaceId?: string;
@@ -72,6 +73,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                                                       onViewHistory,
                                                       onRenameDocument,
                                                       onSwitchToAgentMode,
+                                                      onOpenSessionInChat,
                                                       workspaceId,
                                                     }) => {
   // Internal state - fully owned by this component
@@ -1488,6 +1490,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               onViewHistory,
               onRenameDocument,
               onSwitchToAgentMode,
+              onOpenSessionInChat,
               filePath,
               workspaceId,
               onImageDoubleClick: handleImageDoubleClick,

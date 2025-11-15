@@ -11,7 +11,7 @@ import { WorkspaceSidebar } from '../WorkspaceSidebar';
 import { WorkspaceWelcome } from '../WorkspaceWelcome';
 import { TabManager } from '../TabManager/TabManager';
 import { TabContent } from '../TabContent/TabContent';
-import { AIChat } from '../AIChat';
+import { AIChat, type AIChatRef } from '../AIChat';
 import { NewFileDialog } from '../NewFileDialog';
 import { HistoryDialog } from '../HistoryDialog';
 
@@ -90,6 +90,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   const getNavigationStateRef = useRef<(() => any) | null>(null);
   const isInitializedRef = useRef<boolean>(false);
   const isResizingRef = useRef<boolean>(false);
+  const aiChatRef = useRef<AIChatRef>(null);
 
   // Initialize tabs
   const tabs = useTabs({
@@ -240,6 +241,30 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       setCurrentFileName
     });
   }, [currentFilePath, tabs]);
+
+  // Handle opening session in AI Chat panel
+  const handleOpenSessionInChat = useCallback(async (sessionId: string) => {
+    console.log('[EditorMode] handleOpenSessionInChat called with sessionId:', sessionId);
+    console.log('[EditorMode] isAIChatCollapsed:', isAIChatCollapsed);
+    console.log('[EditorMode] aiChatRef.current:', aiChatRef.current);
+
+    // Expand AI chat if collapsed
+    if (isAIChatCollapsed) {
+      console.log('[EditorMode] Expanding AI chat panel');
+      setIsAIChatCollapsed(false);
+    }
+
+    // Wait for next tick to ensure panel is visible
+    setTimeout(async () => {
+      console.log('[EditorMode] Attempting to open session in AI chat');
+      if (aiChatRef.current) {
+        console.log('[EditorMode] Calling aiChatRef.current.openSessionInTab');
+        await aiChatRef.current.openSessionInTab(sessionId);
+      } else {
+        console.error('[EditorMode] aiChatRef.current is null!');
+      }
+    }, 100);
+  }, [isAIChatCollapsed]);
 
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
@@ -561,6 +586,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
                     }
                   }}
                   onSwitchToAgentMode={onSwitchToAgentMode}
+                  onOpenSessionInChat={handleOpenSessionInChat}
                   workspaceId={workspacePath}
                 />
               </TabManager>
@@ -573,6 +599,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
         {/* Right sidebar - AI Chat */}
         {workspacePath && (
           <AIChat
+            ref={aiChatRef}
             isCollapsed={isAIChatCollapsed}
             onToggleCollapse={() => setIsAIChatCollapsed(prev => !prev)}
             width={aiChatWidth}

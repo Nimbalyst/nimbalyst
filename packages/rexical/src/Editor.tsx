@@ -273,6 +273,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
                 filePath={config.filePath}
                 workspaceId={config.workspaceId}
                 onSwitchToAgentMode={config.onSwitchToAgentMode}
+                onOpenSessionInChat={config.onOpenSessionInChat}
               />
             )}
             <RichTextPlugin

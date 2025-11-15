@@ -14,6 +14,7 @@ import { DiffTestDropdown } from "../AIChat/DiffTestDropdown.tsx";
 
 export interface AgenticPanelRef {
   createNewSession: (planPath?: string) => Promise<void>;
+  openSessionInTab: (sessionId: string) => Promise<void>;
   closeActiveTab: () => void;
   nextTab: () => void;
   previousTab: () => void;
@@ -367,20 +368,32 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Open a session in a new tab (agent mode) or load it (chat mode)
   const openSessionInTab = useCallback(async (sessionId: string) => {
-    // Check if already open
-    const existingTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
-    if (existingTab) {
-      setActiveTabId(sessionId);
-      if (onSessionChange) {
-        onSessionChange(sessionId);
+    // console.log('[AgenticPanel] openSessionInTab called with sessionId:', sessionId);
+    // console.log('[AgenticPanel] Current mode:', mode);
+    // console.log('[AgenticPanel] Current sessionTabs:', sessionTabs);
+    // console.log('[AgenticPanel] workspacePath:', workspacePath);
+
+    // In agent mode, check if already open and just switch to it
+    // In chat mode, always reload to ensure we're showing the correct session
+    if (mode === 'agent') {
+      const existingTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
+      if (existingTab) {
+        // console.log('[AgenticPanel] Agent mode: session already open, switching');
+        setActiveTabId(sessionId);
+        if (onSessionChange) {
+          onSessionChange(sessionId);
+        }
+        await markSessionAsRead(sessionId);
+        return;
       }
-      // Mark as read when switching to it
-      await markSessionAsRead(sessionId);
-      return;
     }
 
+    // Chat mode or new session: always load fresh data
+
+    // console.log('[AgenticPanel] Loading session from database...');
     try {
       const sessionData = await window.electronAPI.aiLoadSession(sessionId, workspacePath);
+      // console.log('[AgenticPanel] Session data loaded:', sessionData);
       if (sessionData) {
         const planPath = sessionData.metadata?.planDocumentPath as string | undefined;
         const tabName = planPath
@@ -396,22 +409,32 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           model: sessionData.model || sessionData.provider || 'claude-code'
         };
 
+        // console.log('[AgenticPanel] Created new tab:', newTab);
+        // console.log('[AgenticPanel] Mode is:', mode);
+
         if (mode === 'chat') {
           // In chat mode, replace the current session
+          // console.log('[AgenticPanel] Chat mode: replacing current session');
           setSessionTabs([newTab]);
         } else {
           // In agent mode, add as new tab
+          // console.log('[AgenticPanel] Agent mode: adding new tab');
           setSessionTabs(prev => [...prev, newTab]);
         }
 
         setActiveTabId(sessionData.id);
+        // console.log('[AgenticPanel] Set active tab ID to:', sessionData.id);
 
         if (onSessionChange) {
+          // console.log('[AgenticPanel] Calling onSessionChange with:', sessionData.id);
           onSessionChange(sessionData.id);
         }
 
         // Mark as read when opening a new session
         await markSessionAsRead(sessionData.id);
+        // console.log('[AgenticPanel] Session marked as read');
+      } else {
+        console.error('[AgenticPanel] Session data is null or undefined');
       }
     } catch (err) {
       console.error('[AgenticPanel] Failed to load session:', err);
@@ -1389,6 +1412,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     createNewSession,
+    openSessionInTab,
     closeActiveTab: () => {
       if (activeTabId) {
         handleTabClose(activeTabId);

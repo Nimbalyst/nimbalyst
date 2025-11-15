@@ -243,9 +243,11 @@
 
 .ai-session-item {
   padding: 12px 16px;
-  cursor: pointer;
   transition: background-color 0.15s ease;
   border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .ai-session-item:last-child {
@@ -256,15 +258,16 @@
   background: var(--surface-hover);
 }
 
-.ai-session-item:active {
-  background: var(--surface-secondary);
+.ai-session-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .ai-session-title {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
-  margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -276,4 +279,43 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.ai-session-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ai-session-action-button {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border-primary);
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.ai-session-action-button:hover {
+  background: var(--surface-secondary);
+  border-color: var(--primary-color);
+}
+
+.ai-session-action-button:active {
+  transform: scale(0.97);
+}
+
+.ai-session-action-button svg {
+  opacity: 0.7;
+}
+
+.ai-session-action-button:hover svg {
+  opacity: 1;
 }

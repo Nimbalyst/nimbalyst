@@ -6,6 +6,13 @@ import { $isCodeNode, CodeNode } from '@lexical/code';
 import { $convertFromEnhancedMarkdownString, $convertToEnhancedMarkdownString, getEditorTransformers } from '../../markdown';
 import { EditorConfig } from '../../EditorConfig';
 import { useRuntimeSettings } from '../../context/RuntimeSettingsContext';
+import {
+  getFullDocumentTrackerTypes,
+  applyTrackerType,
+  removeTrackerType,
+  getCurrentTrackerType,
+  type TrackerTypeInfo
+} from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader/TrackerTypeService';
 import './styles.css';
 
 interface TOCItem {
@@ -29,25 +36,31 @@ interface FloatingDocumentActionsPluginProps {
   filePath?: string;
   workspaceId?: string;
   onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
+  onOpenSessionInChat?: (sessionId: string) => void;
 }
 
 export default function FloatingDocumentActionsPlugin({
   config,
   filePath,
   workspaceId,
-  onSwitchToAgentMode
+  onSwitchToAgentMode,
+  onOpenSessionInChat
 }: FloatingDocumentActionsPluginProps): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const runtimeSettings = useRuntimeSettings();
   const [showTOC, setShowTOC] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showAISessions, setShowAISessions] = useState(false);
+  const [showTrackerTypeSubmenu, setShowTrackerTypeSubmenu] = useState(false);
   const [aiSessions, setAISessions] = useState<AISession[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [tocItems, setTocItems] = useState<TOCItem[]>([]);
+  const [trackerTypes, setTrackerTypes] = useState<TrackerTypeInfo[]>([]);
+  const [currentTrackerType, setCurrentTrackerType] = useState<string | null>(null);
   const tocButtonRef = useRef<HTMLButtonElement>(null);
   const actionsButtonRef = useRef<HTMLButtonElement>(null);
   const aiSessionsButtonRef = useRef<HTMLButtonElement>(null);
+  const trackerTypeSubmenuRef = useRef<HTMLDivElement>(null);
 
   // Check if we're in dev mode
   const isDevMode = import.meta.env.DEV;
@@ -93,6 +106,7 @@ export default function FloatingDocumentActionsPlugin({
     setLoadingSessions(true);
     try {
       const sessions = await (window as any).electronAPI.invoke('sessions:get-by-file', workspaceId, filePath);
+      // console.log('[FloatingDocPlugin] Loaded sessions:', sessions);
       setAISessions(sessions || []);
     } catch (error) {
       console.error('Failed to load AI sessions:', error);
@@ -225,12 +239,20 @@ export default function FloatingDocumentActionsPlugin({
     setShowAISessions(false);
   }, [onSwitchToAgentMode, filePath]);
 
-  const handleLoadSession = useCallback((sessionId: string) => {
+  const handleLoadSessionInAgentMode = useCallback((sessionId: string) => {
     if (onSwitchToAgentMode) {
       onSwitchToAgentMode(undefined, sessionId);
     }
     setShowAISessions(false);
   }, [onSwitchToAgentMode]);
+
+  const handleLoadSessionInChat = useCallback((sessionId: string) => {
+    // console.log('[FloatingDocPlugin] handleLoadSessionInChat called with sessionId:', sessionId);
+    if (onOpenSessionInChat) {
+      onOpenSessionInChat(sessionId);
+    }
+    setShowAISessions(false);
+  }, [onOpenSessionInChat]);
 
   const formatRelativeTime = (timestamp: number): string => {
     const now = Date.now();
@@ -324,12 +346,42 @@ export default function FloatingDocumentActionsPlugin({
                     {aiSessions.map((session) => (
                       <div
                         key={session.id}
+                        data-session-id={session.id}
                         className="ai-session-item"
-                        onClick={() => handleLoadSession(session.id)}
                       >
-                        <div className="ai-session-title">{session.title}</div>
-                        <div className="ai-session-meta">
-                          {session.provider} • {formatRelativeTime(session.updatedAt)} • {session.messageCount} turns
+                        <div className="ai-session-header">
+                          <div className="ai-session-title">{session.title}</div>
+                          <div className="ai-session-meta">
+                            {session.provider} • {formatRelativeTime(session.updatedAt)} • {session.messageCount} turns
+                          </div>
+                        </div>
+                        <div className="ai-session-actions">
+                          <button
+                            className="ai-session-action-button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleLoadSessionInChat(session.id);
+                            }}
+                            title="Open in AI Chat panel"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2Z" fill="currentColor"/>
+                            </svg>
+                            Chat
+                          </button>
+                          <button
+                            className="ai-session-action-button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleLoadSessionInAgentMode(session.id);
+                            }}
+                            title="Open in Agent mode"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M19 3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V5H19V19Z" fill="currentColor"/>
+                            </svg>
+                            Agent
+                          </button>
                         </div>
                       </div>
                     ))}
