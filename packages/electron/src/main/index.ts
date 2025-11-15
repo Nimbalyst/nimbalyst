@@ -34,6 +34,7 @@ import { registerWorkspaceWatcherHandlers } from './file/WorkspaceWatcher';
 import { setupSessionFileHandlers } from './ipc/SessionFileHandlers';
 import { registerSlashCommandHandlers } from './ipc/SlashCommandHandlers';
 import { registerClaudeCodeHandlers } from './ipc/ClaudeCodeHandlers';
+import { initializeClaudeCodeSessionHandlers } from './ipc/ClaudeCodeSessionHandlers';
 import { registerNotificationHandlers } from './ipc/NotificationHandlers';
 import { registerGitStatusHandlers } from './ipc/GitStatusHandlers';
 import { getTheme, setTheme, incrementLaunchCount, shouldShowDiscordInvitation, dismissDiscordInvitation, type AppTheme } from './utils/store';
@@ -235,6 +236,7 @@ app.whenReady().then(async () => {
     registerSlashCommandHandlers();
     registerAttachmentHandlers();
     registerClaudeCodeHandlers();
+    initializeClaudeCodeSessionHandlers();  // Initialize Claude Code session import
     registerAnalyticsHandlers();
     registerNotificationHandlers();
     registerGitStatusHandlers();

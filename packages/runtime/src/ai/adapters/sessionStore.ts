@@ -27,6 +27,8 @@ export interface CreateSessionPayload {
   providerConfig?: Record<string, unknown>;
   providerSessionId?: string;
   documentContext?: Record<string, unknown> | undefined;
+  createdAt?: number; // Optional override for imported sessions
+  updatedAt?: number; // Optional override for imported sessions
 }
 
 export interface UpdateSessionMetadataPayload extends Partial<CreateSessionPayload> {

@@ -266,7 +266,15 @@
   color: var(--text-tertiary);
 }
 
-.session-history-new-button {
+.session-history-header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.session-history-new-button,
+.session-history-import-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -280,15 +288,18 @@
   flex-shrink: 0;
 }
 
-.session-history-new-button:hover {
+.session-history-new-button:hover,
+.session-history-import-button:hover {
   background: var(--surface-hover);
   border-color: var(--primary-color);
 }
 
-.session-history-new-button:active {
+.session-history-new-button:active,
+.session-history-import-button:active {
   background: var(--surface-tertiary);
 }
 
-.session-history-new-button svg {
+.session-history-new-button svg,
+.session-history-import-button svg {
   display: block;
 }

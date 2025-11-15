@@ -3,6 +3,7 @@ import type { SessionData, ChatAttachment } from '@nimbalyst/runtime/ai/server/t
 import { AISessionView, AISessionViewRef } from './AISessionView';
 import { SessionDropdown } from '../AIChat/SessionDropdown';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
+import { SessionImportDialog } from '../AgenticCoding/SessionImportDialog';
 import { ResizablePanel } from '../AgenticCoding/ResizablePanel';
 import { TabBar } from '../TabManager/TabBar';
 import type { Tab } from '../TabManager/TabManager';
@@ -99,6 +100,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
   const [sessionHistoryRefreshTrigger, setSessionHistoryRefreshTrigger] = useState(0);
   const [renamedSession, setRenamedSession] = useState<{ id: string; title: string } | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   // Reload coordination for database-backed session state
   const reloadTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -1472,6 +1474,34 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     await openSessionInTab(lastClosed.id);
   }, [closedSessions, openSessionInTab]);
 
+  const handleOpenImportDialog = useCallback(() => {
+    setImportDialogOpen(true);
+  }, []);
+
+  const handleImportSessions = useCallback(async (sessionIds: string[]) => {
+    try {
+      console.log('[AgenticPanel] Importing sessions:', sessionIds);
+
+      const result = await window.electronAPI.invoke('claude-code:sync-sessions', {
+        sessionIds,
+        workspacePath
+      });
+
+      if (result.success) {
+        console.log('[AgenticPanel] Import successful:', result);
+        // Reload sessions to show imported ones
+        await loadSessions();
+        setSessionHistoryRefreshTrigger(prev => prev + 1);
+      } else {
+        console.error('[AgenticPanel] Import failed:', result.error);
+        // TODO: Show error notification to user
+      }
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to import sessions:', err);
+      // TODO: Show error notification to user
+    }
+  }, [loadSessions, workspacePath]);
+
   // Helper to determine if a session has unread messages
   const hasUnreadMessages = useCallback((tab: SessionTab): boolean => {
     const messages = tab.sessionData.messages || [];
@@ -1502,7 +1532,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     // If no read state is tracked yet (undefined or null), consider it unread
     if (!lastReadMessageTimestamp) {
-      console.log(`[AgenticPanel] Session ${tab.id} has no read state - marking as unread`);
+      // console.log(`[AgenticPanel] Session ${tab.id} has no read state - marking as unread`);
       return true;
     }
 
@@ -1704,6 +1734,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onSessionSelect={openSessionInTab}
             onSessionDelete={deleteSession}
             onNewSession={() => createNewSession()}
+            onImportSessions={handleOpenImportDialog}
             collapsedGroups={collapsedGroups}
             onCollapsedGroupsChange={setCollapsedGroups}
             refreshTrigger={sessionHistoryRefreshTrigger}
@@ -1776,6 +1807,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             )}
           </div>
         }
+      />
+
+      {/* Session Import Dialog */}
+      <SessionImportDialog
+        isOpen={importDialogOpen}
+        onClose={() => setImportDialogOpen(false)}
+        onImport={handleImportSessions}
+        currentWorkspacePath={workspacePath}
+        filterByWorkspace={true}  // Only show sessions for current workspace
       />
     </div>
   );

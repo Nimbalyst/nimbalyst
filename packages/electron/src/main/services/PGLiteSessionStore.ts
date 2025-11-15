@@ -41,6 +41,9 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
     async create(payload: CreateSessionPayload): Promise<void> {
       await ensureReady();
       const now = Date.now();
+      const createdAt = payload.createdAt ?? now;
+      const updatedAt = payload.updatedAt ?? now;
+
       await db.query(
         `INSERT INTO ai_sessions (
           id, workspace_id, file_path, provider, model, title, session_type,
@@ -49,7 +52,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7,
           $8, $9, $10, $11, $12,
-          to_timestamp($13 / 1000.0), to_timestamp($13 / 1000.0)
+          to_timestamp($13 / 1000.0), to_timestamp($14 / 1000.0)
         )
         ON CONFLICT (id) DO UPDATE SET
           workspace_id = EXCLUDED.workspace_id,
@@ -78,7 +81,8 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           payload.providerSessionId ?? null,
           null,
           (payload as any).metadata ?? {},
-          now,
+          createdAt,
+          updatedAt,
         ]
       );
     },

@@ -27,6 +27,7 @@ interface SessionHistoryProps {
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete?: (sessionId: string) => void;
   onNewSession?: () => void;
+  onImportSessions?: () => void; // Callback for opening import dialog
   collapsedGroups: string[];
   onCollapsedGroupsChange: (groups: string[]) => void;
   refreshTrigger?: number; // Optional trigger to force refresh
@@ -56,6 +57,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   onSessionSelect,
   onSessionDelete,
   onNewSession,
+  onImportSessions,
   collapsedGroups,
   onCollapsedGroupsChange,
   refreshTrigger
@@ -316,19 +318,34 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           <h3 className="session-history-header-name">{workspaceName}</h3>
           <div className="session-history-header-path">{workspacePath}</div>
         </div>
-        {onNewSession && (
-          <button
-            className="session-history-new-button"
-            data-testid="new-session-button"
-            onClick={onNewSession}
-            title="Create new session"
-            aria-label="Create new session"
-          >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-          </button>
-        )}
+        <div className="session-history-header-buttons">
+          {onImportSessions && (
+            <button
+              className="session-history-import-button"
+              data-testid="import-sessions-button"
+              onClick={onImportSessions}
+              title="Import Claude Code sessions"
+              aria-label="Import sessions"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M13.5 8.5V12.5C13.5 13.0523 13.0523 13.5 12.5 13.5H3.5C2.94772 13.5 2.5 13.0523 2.5 12.5V8.5M8 2.5V10.5M8 10.5L5.5 8M8 10.5L10.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
+          {onNewSession && (
+            <button
+              className="session-history-new-button"
+              data-testid="new-session-button"
+              onClick={onNewSession}
+              title="Create new session"
+              aria-label="Create new session"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
       <div className="session-history-section-label">Agent Sessions</div>
       <div className="session-history-search">
