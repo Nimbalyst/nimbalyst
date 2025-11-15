@@ -28,6 +28,10 @@ interface FileTreeProps {
     isDragCopy: boolean;
     setIsDragCopy: (copy: boolean) => void;
   };
+  sharedExpandedDirs?: {
+    expandedDirs: Set<string>;
+    setExpandedDirs: React.Dispatch<React.SetStateAction<Set<string>>>;
+  };
 }
 
 function getFileIcon(fileName: string) {
@@ -42,7 +46,7 @@ function getFileIcon(fileName: string) {
   return <MaterialSymbol icon="description" size={18} />;
 }
 
-export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, selectedFolder, onFolderSelect, sharedDragState }: FileTreeProps) {
+export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, selectedFolder, onFolderSelect, sharedDragState, sharedExpandedDirs }: FileTreeProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -77,8 +81,8 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
     return null;
   }, []);
 
-  // Initialize expanded directories to show path to current file
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
+  // Create local expanded state for root level, or use shared state for nested levels
+  const [localExpandedDirs, setLocalExpandedDirs] = useState<Set<string>>(() => {
     const initialExpanded = new Set<string>();
 
     if (currentFilePath && level === 0) {
@@ -91,19 +95,38 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
     return initialExpanded;
   });
 
+  // Use shared state if provided (nested), otherwise use local state (root)
+  const expandedDirs = sharedExpandedDirs?.expandedDirs ?? localExpandedDirs;
+  const setExpandedDirs = sharedExpandedDirs?.setExpandedDirs ?? setLocalExpandedDirs;
+
   // Update expanded directories when current file changes
   useEffect(() => {
     if (currentFilePath && level === 0) {
       const parentDirs = findParentDirs(items, currentFilePath);
-      if (parentDirs) {
+      if (parentDirs && parentDirs.length > 0) {
         setExpandedDirs(prev => {
           const newSet = new Set(prev);
-          parentDirs.forEach(dir => newSet.add(dir));
-          return newSet;
+          let hasChanges = false;
+          parentDirs.forEach(dir => {
+            if (!newSet.has(dir)) {
+              newSet.add(dir);
+              hasChanges = true;
+            }
+          });
+          // Only update state if we actually added new directories
+          return hasChanges ? newSet : prev;
         });
       }
+
+      // Scroll the active file into view after a brief delay to allow for expansion
+      setTimeout(() => {
+        const activeFileElement = document.querySelector('.file-tree-file.active');
+        if (activeFileElement) {
+          activeFileElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 100);
     }
-  }, [currentFilePath, items, level, findParentDirs]);
+  }, [currentFilePath, items, level, findParentDirs, setExpandedDirs]);
 
   const toggleDirectory = useCallback(async (path: string) => {
     setExpandedDirs(prev => {
@@ -398,13 +421,23 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
                       isDragCopy,
                       setIsDragCopy
                     }}
+                    sharedExpandedDirs={{
+                      expandedDirs,
+                      setExpandedDirs
+                    }}
                   />
                 )}
               </>
             ) : (
               <div
                 className={`file-tree-file ${currentFilePath === item.path ? 'active' : ''}`}
-                onClick={() => onFileSelect(item.path)}
+                onClick={() => {
+                  // Clear folder selection when clicking a file
+                  if (onFolderSelect) {
+                    onFolderSelect(null);
+                  }
+                  onFileSelect(item.path);
+                }}
                 onContextMenu={(e) => handleContextMenu(e, item)}
                 draggable
                 onDragStart={(e) => handleDragStart(e, item)}
