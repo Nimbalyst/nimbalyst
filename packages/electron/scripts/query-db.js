@@ -49,8 +49,8 @@ Available tables:
     process.exit(0);
   }
 
-  console.log(`📂 Opening database at: ${dbPath}`);
-  const db = new PGlite(dbPath);
+  console.log(`📂 Opening database at: ${dbPath} (read-only mode)`);
+  const db = new PGlite(dbPath, { readonly: true });
 
   try {
     // Handle different command types
