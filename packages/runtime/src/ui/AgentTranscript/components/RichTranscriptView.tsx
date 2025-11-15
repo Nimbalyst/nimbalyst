@@ -8,6 +8,7 @@ import { parseTimestamp } from '../../../utils/dateUtils';
 import { JSONViewer } from './JSONViewer';
 import { formatToolArguments } from '../utils/pathResolver';
 import { EditToolResultCard } from './EditToolResultCard';
+import { TranscriptSearchBar } from './TranscriptSearchBar';
 import './RichTranscriptView.css';
 
 interface RichTranscriptViewProps {
@@ -222,6 +223,7 @@ export const RichTranscriptView = React.forwardRef<
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
+  const [showSearchBar, setShowSearchBar] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -272,6 +274,32 @@ export const RichTranscriptView = React.forwardRef<
 
     return () => container.removeEventListener('scroll', handleScroll);
   }, [messages]);
+
+  // Handle keyboard shortcuts for search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+F or Ctrl+F to open search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        setShowSearchBar(true);
+      }
+      // Cmd+G or Ctrl+G to go to next match (only when search is open)
+      else if ((e.metaKey || e.ctrlKey) && e.key === 'g' && showSearchBar) {
+        e.preventDefault();
+        // Trigger next/previous match navigation
+        if (e.shiftKey) {
+          // Cmd+Shift+G for previous
+          window.dispatchEvent(new CustomEvent('transcript-search-prev'));
+        } else {
+          // Cmd+G for next
+          window.dispatchEvent(new CustomEvent('transcript-search-next'));
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showSearchBar]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -580,6 +608,13 @@ export const RichTranscriptView = React.forwardRef<
 
   return (
     <div className="rich-transcript-view">
+      {/* Search Bar */}
+      <TranscriptSearchBar
+        isVisible={showSearchBar}
+        containerRef={scrollContainerRef}
+        onClose={() => setShowSearchBar(false)}
+      />
+
       {/* Settings Panel */}
       {showSettings && onSettingsChange && (
         <div className="rich-transcript-settings">
