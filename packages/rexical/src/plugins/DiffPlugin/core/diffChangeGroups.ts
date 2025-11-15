@@ -239,12 +239,26 @@ export function scrollToChangeGroup(
   editor.update(() => {
     try {
       const element = editor.getElementByKey(startNode.getKey());
-      if (element) {
-        element.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-        });
+      if (!element) {
+        return;
       }
+
+      // Use CSS scroll-margin-top to create space from the top
+      // This accounts for the DiffApprovalBar (~48px) plus breathing room
+      const previousScrollMargin = (element as HTMLElement).style.scrollMarginTop;
+      (element as HTMLElement).style.scrollMarginTop = '100px';
+
+      // Use scrollIntoView with block: 'start' to position element below the margin
+      element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+
+      // Restore previous scroll margin after a brief delay
+      // (scrollIntoView is async but doesn't return a promise)
+      setTimeout(() => {
+        (element as HTMLElement).style.scrollMarginTop = previousScrollMargin;
+      }, 100);
     } catch (error) {
       console.warn('Failed to scroll to change group:', error);
     }
