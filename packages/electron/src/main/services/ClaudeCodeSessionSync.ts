@@ -67,7 +67,17 @@ async function parseSessionFile(filePath: string): Promise<ClaudeCodeEntry[]> {
 /**
  * Convert Claude Code entry to Nimbalyst message format
  */
-function entryToMessage(entry: ClaudeCodeEntry): { direction: 'input' | 'output'; content: string; metadata: any } | null {
+function entryToMessage(entry: ClaudeCodeEntry): { direction: 'input' | 'output'; content: string; metadata: any; timestamp: string } | null {
+  // Skip meta messages (command outputs, caveats, etc.)
+  if ((entry as any).isMeta) {
+    return null;
+  }
+
+  // Skip system/summary/snapshot entries
+  if (entry.type !== 'user' && entry.type !== 'assistant') {
+    return null;
+  }
+
   if (entry.type === 'user') {
     // User message
     let content = '';
@@ -81,9 +91,15 @@ function entryToMessage(entry: ClaudeCodeEntry): { direction: 'input' | 'output'
         .join('\n');
     }
 
+    // Skip empty messages
+    if (!content.trim()) {
+      return null;
+    }
+
     return {
       direction: 'input',
       content,
+      timestamp: entry.timestamp,
       metadata: {
         role: 'user',
         timestamp: entry.timestamp,
@@ -105,9 +121,15 @@ function entryToMessage(entry: ClaudeCodeEntry): { direction: 'input' | 'output'
         .join('\n');
     }
 
+    // Skip empty messages
+    if (!content.trim()) {
+      return null;
+    }
+
     return {
       direction: 'output',
       content,
+      timestamp: entry.timestamp,
       metadata: {
         role: 'assistant',
         timestamp: entry.timestamp,
@@ -118,7 +140,6 @@ function entryToMessage(entry: ClaudeCodeEntry): { direction: 'input' | 'output'
     };
   }
 
-  // Skip other entry types (summary, system, file-history-snapshot)
   return null;
 }
 
@@ -231,25 +252,28 @@ export async function syncSession(
       log.info(`Updated existing session ${metadata.sessionId}`);
     }
 
+    // Convert entries to messages and sort by timestamp
+    const allMessages = entries
+      .map(entryToMessage)
+      .filter((msg): msg is NonNullable<typeof msg> => msg !== null)
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
     // Import messages (skip already imported ones)
     let messagesAdded = 0;
-    const messagesToImport = entries.slice(skipCount);
+    const messagesToImport = allMessages.slice(skipCount);
 
-    for (const entry of messagesToImport) {
-      const message = entryToMessage(entry);
-      if (message) {
-        await messagesStore.create({
-          sessionId: metadata.sessionId,
-          source: 'claude-code-import',
-          direction: message.direction,
-          content: message.content,
-          metadata: message.metadata,
-        });
-        messagesAdded++;
-      }
+    for (const message of messagesToImport) {
+      await messagesStore.create({
+        sessionId: metadata.sessionId,
+        source: 'claude-code-import',
+        direction: message.direction,
+        content: message.content,
+        metadata: message.metadata,
+      });
+      messagesAdded++;
     }
 
-    log.info(`Synced session ${metadata.sessionId}: ${messagesAdded} messages added`);
+    log.info(`Synced session ${metadata.sessionId}: ${messagesAdded} messages added (${allMessages.length} total after filtering)`);
 
     return {
       sessionId: metadata.sessionId,

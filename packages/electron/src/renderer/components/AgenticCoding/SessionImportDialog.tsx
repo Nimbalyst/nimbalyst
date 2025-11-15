@@ -43,6 +43,7 @@ export const SessionImportDialog: React.FC<SessionImportDialogProps> = ({
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Load sessions when dialog opens
   useEffect(() => {
@@ -142,8 +143,15 @@ export const SessionImportDialog: React.FC<SessionImportDialogProps> = ({
     setSessions(prev => prev.map(s => ({ ...s, selected: false })));
   };
 
+  // Filter sessions by search query
+  const filteredSessions = sessions.filter(session => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return session.title.toLowerCase().includes(query);
+  });
+
   // Group sessions by workspace and sort by updatedAt (most recent first)
-  const sessionsByWorkspace: SessionsByWorkspace = sessions.reduce((acc, session) => {
+  const sessionsByWorkspace: SessionsByWorkspace = filteredSessions.reduce((acc, session) => {
     if (!acc[session.workspacePath]) {
       acc[session.workspacePath] = [];
     }
@@ -213,6 +221,16 @@ export const SessionImportDialog: React.FC<SessionImportDialogProps> = ({
                 <span className="session-import-stat-value">{inSync}</span>
                 <span className="session-import-stat-label">In Sync</span>
               </div>
+            </div>
+
+            <div className="session-import-dialog-search">
+              <input
+                type="text"
+                className="session-import-search-input"
+                placeholder="Search sessions by title..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
 
             <div className="session-import-dialog-actions">

@@ -102,6 +102,31 @@
   letter-spacing: 0.5px;
 }
 
+.session-import-dialog-search {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.session-import-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.session-import-search-input:focus {
+  border-color: var(--primary-color);
+}
+
+.session-import-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
 .session-import-dialog-actions {
   display: flex;
   gap: 8px;
