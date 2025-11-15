@@ -161,6 +161,69 @@
   background: var(--surface-secondary);
 }
 
+/* Action Menu with Submenu */
+.action-menu-item-with-submenu {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.action-menu-item-with-submenu .chevron-right {
+  font-style: normal;
+  font-size: 16px;
+  opacity: 0.6;
+}
+
+.action-menu-submenu {
+  position: absolute;
+  right: 100%;
+  top: 0;
+  min-width: 200px;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px 0;
+  margin-right: 4px;
+  z-index: 12;
+}
+
+.action-menu-submenu .action-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+}
+
+.action-menu-submenu .action-menu-item .tracker-type-icon {
+  font-size: 16px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-menu-submenu .action-menu-item .checkmark {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 16px;
+  color: var(--primary-color);
+}
+
+.action-menu-submenu .action-menu-item > span:not(.tracker-type-icon):not(.checkmark) {
+  flex: 1;
+}
+
+.action-menu-divider {
+  height: 1px;
+  background: var(--border-primary);
+  margin: 4px 0;
+}
+
 /* AI Sessions Button */
 .floating-doc-ai-button {
   position: relative;

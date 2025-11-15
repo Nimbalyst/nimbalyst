@@ -7,12 +7,12 @@ import { $convertFromEnhancedMarkdownString, $convertToEnhancedMarkdownString, g
 import { EditorConfig } from '../../EditorConfig';
 import { useRuntimeSettings } from '../../context/RuntimeSettingsContext';
 import {
-  getFullDocumentTrackerTypes,
-  applyTrackerType,
-  removeTrackerType,
-  getCurrentTrackerType,
+  getBuiltInFullDocumentTrackerTypes,
+  applyTrackerTypeToMarkdown,
+  removeTrackerTypeFromMarkdown,
+  getCurrentTrackerTypeFromMarkdown,
   type TrackerTypeInfo
-} from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader/TrackerTypeService';
+} from './TrackerTypeHelper';
 import './styles.css';
 
 interface TOCItem {
@@ -64,6 +64,34 @@ export default function FloatingDocumentActionsPlugin({
 
   // Check if we're in dev mode
   const isDevMode = import.meta.env.DEV;
+
+  // Load available tracker types
+  useEffect(() => {
+    const types = getBuiltInFullDocumentTrackerTypes();
+    setTrackerTypes(types);
+  }, []);
+
+  // Detect current tracker type from editor content
+  useEffect(() => {
+    const detectCurrentType = () => {
+      editor.getEditorState().read(() => {
+        const transformers = getEditorTransformers();
+        const markdown = $convertToEnhancedMarkdownString(transformers);
+        const currentType = getCurrentTrackerTypeFromMarkdown(markdown);
+        setCurrentTrackerType(currentType);
+      });
+    };
+
+    detectCurrentType();
+
+    const unregister = editor.registerUpdateListener(() => {
+      detectCurrentType();
+    });
+
+    return () => {
+      unregister();
+    };
+  }, [editor]);
 
   // Extract TOC from editor content
   const extractTOC = useCallback(() => {
@@ -254,6 +282,50 @@ export default function FloatingDocumentActionsPlugin({
     setShowAISessions(false);
   }, [onOpenSessionInChat]);
 
+  const handleSetTrackerType = useCallback((trackerType: string) => {
+    editor.update(() => {
+      const transformers = getEditorTransformers();
+      const markdown = $convertToEnhancedMarkdownString(transformers);
+
+      try {
+        const updatedMarkdown = applyTrackerTypeToMarkdown(markdown, trackerType);
+        $convertFromEnhancedMarkdownString(updatedMarkdown, transformers);
+
+        // Trigger save if available
+        if (config?.onContentChange) {
+          config.onContentChange();
+        }
+      } catch (error) {
+        console.error('Failed to apply tracker type:', error);
+      }
+    });
+
+    setShowTrackerTypeSubmenu(false);
+    setShowActionsMenu(false);
+  }, [editor, config]);
+
+  const handleRemoveTrackerType = useCallback(() => {
+    editor.update(() => {
+      const transformers = getEditorTransformers();
+      const markdown = $convertToEnhancedMarkdownString(transformers);
+
+      try {
+        const updatedMarkdown = removeTrackerTypeFromMarkdown(markdown);
+        $convertFromEnhancedMarkdownString(updatedMarkdown, transformers);
+
+        // Trigger save if available
+        if (config?.onContentChange) {
+          config.onContentChange();
+        }
+      } catch (error) {
+        console.error('Failed to remove tracker type:', error);
+      }
+    });
+
+    setShowTrackerTypeSubmenu(false);
+    setShowActionsMenu(false);
+  }, [editor, config]);
+
   const formatRelativeTime = (timestamp: number): string => {
     const now = Date.now();
     const diff = now - timestamp;
@@ -422,6 +494,48 @@ export default function FloatingDocumentActionsPlugin({
           <button className="action-menu-item" onClick={handleCopyAsMarkdown}>
             Copy as Markdown
           </button>
+          <div
+            className="action-menu-item action-menu-item-with-submenu"
+            onMouseEnter={() => setShowTrackerTypeSubmenu(true)}
+            onMouseLeave={() => setShowTrackerTypeSubmenu(false)}
+          >
+            <span>Set Document Type</span>
+            <i className="icon chevron-right">›</i>
+
+            {showTrackerTypeSubmenu && (
+              <div className="action-menu-submenu" ref={trackerTypeSubmenuRef}>
+                {trackerTypes.map((type) => (
+                  <button
+                    key={type.type}
+                    className="action-menu-item"
+                    onClick={() => handleSetTrackerType(type.type)}
+                  >
+                    <span className="material-symbols-outlined tracker-type-icon" style={{ color: type.color, fontSize: '18px' }}>
+                      {type.icon}
+                    </span>
+                    <span>{type.displayName}</span>
+                    {currentTrackerType === type.type && (
+                      <span className="checkmark">✓</span>
+                    )}
+                  </button>
+                ))}
+                {currentTrackerType && (
+                  <>
+                    <div className="action-menu-divider" />
+                    <button
+                      className="action-menu-item"
+                      onClick={handleRemoveTrackerType}
+                    >
+                      <span className="material-symbols-outlined tracker-type-icon" style={{ fontSize: '18px' }}>
+                        close
+                      </span>
+                      <span>Remove Type</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
           {isDevMode && (
             <button className="action-menu-item" onClick={handleToggleDebugTree}>
               Toggle Debug Tree
