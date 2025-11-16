@@ -82,11 +82,7 @@ export class OptimizedWorkspaceWatcher {
                         return true;
                     }
 
-                    // Ignore non-markdown files
-                    if (relativePath.match(/\.(js|ts|jsx|tsx|css|scss|json|lock|log|tmp)$/)) {
-                        return true;
-                    }
-
+                    // Watch all files - filtering happens in the UI
                     return false;
                 },
 
@@ -126,6 +122,10 @@ export class OptimizedWorkspaceWatcher {
                 })
                 .on('change', (path) => {
                     console.log(`[WorkspaceWatcher] File changed: ${path}`);
+                    // Send file-changed-on-disk event to renderer for editor updates
+                    if (!window.isDestroyed()) {
+                        window.webContents.send('file-changed-on-disk', { path });
+                    }
                     triggerUpdate();
                 })
                 .on('unlink', (path) => {
