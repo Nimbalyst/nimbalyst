@@ -2,6 +2,12 @@ import { readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { FileTreeItem } from '../types';
 
+// Natural sort collator for handling numbers in filenames
+const naturalCollator = new Intl.Collator(undefined, {
+    numeric: true,
+    sensitivity: 'base'
+});
+
 export function getFolderContents(dirPath: string): FileTreeItem[] {
     const result: FileTreeItem[] = [];
     
@@ -34,12 +40,12 @@ export function getFolderContents(dirPath: string): FileTreeItem[] {
             }
         }
         
-        // Sort: directories first, then files, alphabetically
+        // Sort: directories first, then files, using natural sort for numbers
         result.sort((a, b) => {
             if (a.type !== b.type) {
                 return a.type === 'directory' ? -1 : 1;
             }
-            return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+            return naturalCollator.compare(a.name, b.name);
         });
     } catch (error: any) {
         // Silently handle ENOENT errors (directory doesn't exist)
