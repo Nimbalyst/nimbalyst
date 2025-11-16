@@ -24,7 +24,8 @@ export function getFolderContents(dirPath: string): FileTreeItem[] {
                     path: fullPath,
                     children: getFolderContents(fullPath)
                 });
-            } else if (stats.isFile() && (item.endsWith('.md') || item.endsWith('.markdown'))) {
+            } else if (stats.isFile()) {
+                // Include all files - filtering happens in the UI
                 result.push({
                     name: item,
                     type: 'file',

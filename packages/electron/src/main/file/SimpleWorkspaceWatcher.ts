@@ -62,22 +62,20 @@ export class SimpleWorkspaceWatcher {
                 const watcher = watch(dirPath, { recursive: false }, (eventType, filename) => {
                     if (!filename) return;
 
-                    // Only care about markdown files and directories
-                    if (filename.endsWith('.md') || filename.endsWith('.markdown') || !filename.includes('.')) {
-                        // logger.workspaceWatcher.debug(`Change detected: ${eventType} ${filename} in ${dirPath}`);
-                        triggerUpdate();
+                    // Watch all files and directories - filtering happens in the UI
+                    // logger.workspaceWatcher.debug(`Change detected: ${eventType} ${filename} in ${dirPath}`);
+                    triggerUpdate();
 
-                        // If a new directory was created, watch it
-                        if (eventType === 'rename' && !filename.includes('.')) {
-                            const newPath = join(dirPath, filename);
-                            stat(newPath).then(stats => {
-                                if (stats.isDirectory()) {
-                                    watchDirectory(newPath, depth + 1);
-                                }
-                            }).catch(() => {
-                                // File/dir was deleted, ignore
-                            });
-                        }
+                    // If a new directory was created, watch it
+                    if (eventType === 'rename' && !filename.includes('.')) {
+                        const newPath = join(dirPath, filename);
+                        stat(newPath).then(stats => {
+                            if (stats.isDirectory()) {
+                                watchDirectory(newPath, depth + 1);
+                            }
+                        }).catch(() => {
+                            // File/dir was deleted, ignore
+                        });
                     }
                 });
                 // Keep a strong reference to prevent garbage collection

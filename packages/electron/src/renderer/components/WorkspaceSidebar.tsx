@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { FileTree } from './FileTree';
 import { InputModal } from './InputModal';
 import { PlansPanel } from './PlansPanel/PlansPanel';
+import { FileTreeFilterMenu, FileTreeFilter } from './FileTreeFilterMenu';
 import { createInitialFileContent } from '../utils/fileUtils';
 import '../WorkspaceSidebar.css';
 
@@ -62,6 +63,10 @@ export function WorkspaceSidebar({
   const [isDragOverRoot, setIsDragOverRoot] = useState(false);
   const [draggedItem, setDraggedItem] = useState<any | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [fileTreeFilter, setFileTreeFilter] = useState<FileTreeFilter>('all');
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [filterMenuPosition, setFilterMenuPosition] = useState({ x: 0, y: 0 });
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
 
   // Notify parent when selected folder changes
   const handleSelectedFolderChange = (folderPath: string | null) => {
@@ -162,6 +167,70 @@ export function WorkspaceSidebar({
     handleSelectedFolderChange(null); // Clear folder selection when a file is selected
     onFileSelect(filePath);
   };
+
+  // Filter menu handlers
+  const handleFilterButtonClick = () => {
+    if (filterButtonRef.current) {
+      const rect = filterButtonRef.current.getBoundingClientRect();
+      setFilterMenuPosition({
+        x: rect.right + 4,
+        y: rect.top
+      });
+      setShowFilterMenu(true);
+    }
+  };
+
+  const handleFilterChange = (filter: FileTreeFilter) => {
+    setFileTreeFilter(filter);
+  };
+
+  // Filter file tree based on current filter
+  const filterFileTree = (items: FileTreeItem[], filter: FileTreeFilter): FileTreeItem[] => {
+    if (filter === 'all') {
+      return items;
+    }
+
+    const knownExtensions = ['.md', '.markdown', '.txt', '.json', '.js', '.ts', '.tsx', '.jsx', '.css', '.html', '.xml', '.yaml', '.yml'];
+
+    const shouldIncludeFile = (fileName: string): boolean => {
+      const lowerName = fileName.toLowerCase();
+
+      if (filter === 'markdown') {
+        return lowerName.endsWith('.md') || lowerName.endsWith('.markdown');
+      }
+
+      if (filter === 'known') {
+        return knownExtensions.some(ext => lowerName.endsWith(ext));
+      }
+
+      return true;
+    };
+
+    const filterItems = (items: FileTreeItem[]): FileTreeItem[] => {
+      return items.reduce((acc: FileTreeItem[], item) => {
+        if (item.type === 'directory') {
+          const filteredChildren = item.children ? filterItems(item.children) : [];
+          // Include directory if it has any matching children
+          if (filteredChildren.length > 0) {
+            acc.push({
+              ...item,
+              children: filteredChildren
+            });
+          }
+        } else if (shouldIncludeFile(item.name)) {
+          acc.push(item);
+        }
+        return acc;
+      }, []);
+    };
+
+    return filterItems(items);
+  };
+
+  const filteredFileTree = useMemo(
+    () => filterFileTree(fileTree, fileTreeFilter),
+    [fileTree, fileTreeFilter]
+  );
 
   // Root folder drag and drop handlers
   const handleRootDragOver = (e: React.DragEvent) => {
@@ -289,6 +358,17 @@ export function WorkspaceSidebar({
                   </span>
                 </button>
               )}
+              <button
+                ref={filterButtonRef}
+                className="workspace-action-button"
+                onClick={handleFilterButtonClick}
+                title="Filter files"
+                aria-label="Filter files"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                  more_vert
+                </span>
+              </button>
             </>
           )}
           {currentView === 'plans' && (
@@ -327,7 +407,7 @@ export function WorkspaceSidebar({
           <div className="workspace-section-label">Files</div>
           <div className={`workspace-file-tree ${isDragOverRoot ? 'drag-over-root' : ''}`}>
             <FileTree
-              items={fileTree}
+              items={filteredFileTree}
               currentFilePath={currentFilePath}
               onFileSelect={handleFileSelect}
               level={0}
@@ -344,6 +424,15 @@ export function WorkspaceSidebar({
               </div>
             )}
           </div>
+          {showFilterMenu && (
+            <FileTreeFilterMenu
+              x={filterMenuPosition.x}
+              y={filterMenuPosition.y}
+              currentFilter={fileTreeFilter}
+              onFilterChange={handleFilterChange}
+              onClose={() => setShowFilterMenu(false)}
+            />
+          )}
         </>
       ) : (
         <PlansPanel
