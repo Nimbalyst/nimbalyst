@@ -17,6 +17,7 @@ import { StravuEditor } from 'rexical';
 import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
 import { FixedTabHeaderContainer } from '@nimbalyst/runtime/plugins/shared/fixedTabHeader';
 import { MonacoCodeEditor } from '../MonacoCodeEditor';
+import { ImageViewer } from '../ImageViewer';
 import { getFileType } from '../../utils/fileTypeDetector';
 import { logger } from '../../utils/logger';
 
@@ -78,9 +79,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                                                       onOpenSessionInChat,
                                                       workspaceId,
                                                     }) => {
-  // Detect file type (markdown vs code)
+  // Detect file type (markdown vs code vs image)
   const fileType = useMemo(() => getFileType(filePath), [filePath]);
   const isMarkdown = fileType === 'markdown';
+  const isImage = fileType === 'image';
 
   // Internal state - fully owned by this component
   const [content, setContent] = useState(initialContent);
@@ -1535,7 +1537,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           editor={editorRef.current}
         />
         <div className="tab-editor-scrollable" style={{ flex: 1, overflow: 'auto' }}>
-          {isMarkdown ? (
+          {isImage ? (
+            <ImageViewer
+              key={filePath}
+              filePath={filePath}
+              fileName={fileName}
+            />
+          ) : isMarkdown ? (
             <StravuEditor
               key={filePath}
               config={{

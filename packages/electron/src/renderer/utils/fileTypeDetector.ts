@@ -5,7 +5,7 @@
  * or code (Monaco), and maps file extensions to Monaco language IDs.
  */
 
-export type EditorType = 'markdown' | 'code';
+export type EditorType = 'markdown' | 'code' | 'image';
 
 /**
  * Browser-compatible path utilities
@@ -25,13 +25,28 @@ function getBasename(filePath: string): string {
 }
 
 /**
+ * Check if a file is an image
+ */
+export function isImageFile(filePath: string): boolean {
+  const ext = getExtname(filePath).toLowerCase();
+  const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', '.webp'];
+  return imageExtensions.includes(ext);
+}
+
+/**
  * Determine which editor should be used for a given file
  */
 export function getFileType(filePath: string): EditorType {
   const ext = getExtname(filePath).toLowerCase();
+
   if (ext === '.md' || ext === '.markdown') {
     return 'markdown';
   }
+
+  if (isImageFile(filePath)) {
+    return 'image';
+  }
+
   return 'code';
 }
 
