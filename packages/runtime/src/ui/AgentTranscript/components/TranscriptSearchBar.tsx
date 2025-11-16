@@ -1,6 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './TranscriptSearchBar.css';
 
+ /**
+ * TranscriptSearchBar - Find-in-page search UI for agent transcript messages.
+ *
+ * Provides browser-style text search with highlighting, case sensitivity toggle,
+ * and keyboard navigation (Enter/Shift+Enter, Cmd+G/Cmd+Shift+G, Escape).
+ *
+ * Features:
+ * - Walks DOM tree to find all text matches across transcript messages
+ * - Highlights matches with visual indicators (yellow for all, orange for current)
+ * - Scrolls nested containers and main view to bring current match into view
+ * - Supports case-sensitive and case-insensitive search modes
+ * - Cleans up all highlights when search bar is closed
+ */
+
 interface SearchMatch {
   node: Node;
   offset: number;
