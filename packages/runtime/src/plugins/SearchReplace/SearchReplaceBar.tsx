@@ -198,6 +198,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const highlightManagerRef = useRef<HighlightManager | null>(null);
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Listen to state changes from SearchReplaceStateManager
   useEffect(() => {
@@ -234,6 +235,10 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
     return () => {
       highlightManagerRef.current?.destroy();
       highlightManagerRef.current = null;
+      // Clean up debounce timeout on unmount
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
     };
   }, [editor]);
 
@@ -246,12 +251,13 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
 
   // Navigate to a specific match - MUST be defined before performSearch
   const navigateToMatchInternal = useCallback(
-    (matchList: SearchMatch[], index: number, options?: { refocusInput?: boolean }) => {
+    (matchList: SearchMatch[], index: number, options?: { refocusInput?: boolean; setSelection?: boolean }) => {
       if (!editor || matchList.length === 0 || index < 0 || index >= matchList.length) {
         return;
       }
 
       const refocusInput = options?.refocusInput ?? true;
+      const setSelection = options?.setSelection ?? true;
       const match = matchList[index];
 
       editor.update(() => {
@@ -263,10 +269,13 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
           const validLength = Math.min(match.length, textContent.length - validOffset);
 
           if (validOffset >= 0 && validLength > 0) {
-            const selection = $createRangeSelection();
-            selection.anchor.set(match.key, validOffset, 'text');
-            selection.focus.set(match.key, validOffset + validLength, 'text');
-            $setSelection(selection);
+            // Only set selection if explicitly requested (prevents focus steal)
+            if (setSelection) {
+              const selection = $createRangeSelection();
+              selection.anchor.set(match.key, validOffset, 'text');
+              selection.focus.set(match.key, validOffset + validLength, 'text');
+              $setSelection(selection);
+            }
 
             const domNode = editor.getElementByKey(match.key);
             if (domNode) {
@@ -293,7 +302,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
 
   // Perform search
   const performSearch = useCallback(
-    (searchStr: string, caseSensitive: boolean, regex: boolean, options?: { autoNavigate?: boolean; preserveIndex?: boolean }) => {
+    (searchStr: string, caseSensitive: boolean, regex: boolean, options?: { autoNavigate?: boolean; preserveIndex?: boolean; setSelection?: boolean }) => {
       if (!editor || !searchStr) {
         setMatches([]);
         setCurrentMatchIndex(-1);
@@ -302,6 +311,7 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
 
       const autoNavigate = options?.autoNavigate ?? true;
       const preserveIndex = options?.preserveIndex ?? false;
+      const setSelection = options?.setSelection ?? true;
 
       editor.getEditorState().read(() => {
         const foundMatches: SearchMatch[] = [];
@@ -366,8 +376,8 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
 
         // Only navigate to first match if autoNavigate is true (when user initiates search)
         if (autoNavigate && foundMatches.length > 0) {
-          // When auto-navigating, also refocus the input
-          navigateToMatchInternal(foundMatches, 0, { refocusInput: true });
+          // When auto-navigating, pass through the setSelection option
+          navigateToMatchInternal(foundMatches, 0, { refocusInput: true, setSelection });
         }
       });
     },
@@ -410,7 +420,17 @@ export function SearchReplaceBar({ filePath, editor }: SearchReplaceBarProps) {
       const selectionEnd = searchInputRef.current?.selectionEnd ?? 0;
 
       setSearchString(value);
-      performSearch(value, !caseInsensitive, useRegex);
+
+      // Clear existing debounce timeout
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+
+      // Debounce the search to avoid performance issues while typing
+      searchDebounceRef.current = setTimeout(() => {
+        // Navigate and scroll to matches while typing, but don't set selection (prevents focus steal)
+        performSearch(value, !caseInsensitive, useRegex, { autoNavigate: true, setSelection: false });
+      }, 150);
 
       // Restore focus after state updates
       if (hadFocus && searchInputRef.current) {
