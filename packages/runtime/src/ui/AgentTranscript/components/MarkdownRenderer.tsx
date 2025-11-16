@@ -148,7 +148,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               marginTop: '0.5rem',
               marginBottom: '0.5rem',
               lineHeight: '1.625',
-              color: 'var(--text-primary)'
+              color: 'var(--text-primary)',
+              ...(isUser && { whiteSpace: 'pre-wrap' })
             }}>
               {children}
             </p>
