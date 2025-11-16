@@ -275,31 +275,40 @@ export const RichTranscriptView = React.forwardRef<
     return () => container.removeEventListener('scroll', handleScroll);
   }, [messages]);
 
-  // Handle keyboard shortcuts for search
+  // Listen for routed search events from the menu system
+  // Only respond if this session is the active one
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd+F or Ctrl+F to open search
-      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
-        e.preventDefault();
+    const handleFind = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.sessionId === sessionId) {
         setShowSearchBar(true);
-      }
-      // Cmd+G or Ctrl+G to go to next match (only when search is open)
-      else if ((e.metaKey || e.ctrlKey) && e.key === 'g' && showSearchBar) {
-        e.preventDefault();
-        // Trigger next/previous match navigation
-        if (e.shiftKey) {
-          // Cmd+Shift+G for previous
-          window.dispatchEvent(new CustomEvent('transcript-search-prev'));
-        } else {
-          // Cmd+G for next
-          window.dispatchEvent(new CustomEvent('transcript-search-next'));
-        }
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSearchBar]);
+    const handleFindNext = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.sessionId === sessionId && showSearchBar) {
+        window.dispatchEvent(new CustomEvent('transcript-search-next'));
+      }
+    };
+
+    const handleFindPrevious = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.sessionId === sessionId && showSearchBar) {
+        window.dispatchEvent(new CustomEvent('transcript-search-prev'));
+      }
+    };
+
+    window.addEventListener('menu:find', handleFind);
+    window.addEventListener('menu:find-next', handleFindNext);
+    window.addEventListener('menu:find-previous', handleFindPrevious);
+
+    return () => {
+      window.removeEventListener('menu:find', handleFind);
+      window.removeEventListener('menu:find-next', handleFindNext);
+      window.removeEventListener('menu:find-previous', handleFindPrevious);
+    };
+  }, [sessionId, showSearchBar]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

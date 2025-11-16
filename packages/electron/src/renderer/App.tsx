@@ -181,6 +181,9 @@ export default function App() {
     setActiveModeRaw(mode);
   };
 
+  // Track active session ID for agent mode (needed for search routing)
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
   // Expose test helpers for testing
   useEffect(() => {
     // Always expose in development
@@ -893,6 +896,10 @@ export default function App() {
     handleNextTab,
     handlePreviousTab,
 
+    // State
+    activeMode,
+    activeSessionId,
+
     // State setters
     setIsApiKeyDialogOpen,
     setWorkspaceMode,
@@ -923,7 +930,6 @@ export default function App() {
     workspacePath,
     sessionToLoad,
     isDirty,
-    activeMode,
 
     // Config
     LOG_CONFIG,
@@ -1213,6 +1219,7 @@ export default function App() {
                   documentContext={documentContext}
                   planDocumentPath={agentPlanReference || undefined}
                   onContentModeChange={setActiveMode}
+                  onSessionChange={setActiveSessionId}
                   isActive={activeMode === 'agent'}
                 />
               ) : (

@@ -613,7 +613,27 @@ export async function createApplicationMenu() {
                     click: async () => {
                         const focused = getFocusedWindow();
                         if (focused) {
-                            focused.webContents.send('toggle-search-replace');
+                            focused.webContents.send('menu:find');
+                        }
+                    }
+                },
+                {
+                    label: 'Find Next',
+                    accelerator: KeyboardShortcuts.edit.findNext,
+                    click: async () => {
+                        const focused = getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('menu:find-next');
+                        }
+                    }
+                },
+                {
+                    label: 'Find Previous',
+                    accelerator: KeyboardShortcuts.edit.findPrevious,
+                    click: async () => {
+                        const focused = getFocusedWindow();
+                        if (focused) {
+                            focused.webContents.send('menu:find-previous');
                         }
                     }
                 },

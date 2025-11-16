@@ -73,6 +73,10 @@ interface UseIPCHandlersProps {
   handleNextTab?: () => void;
   handlePreviousTab?: () => void;
 
+  // State
+  activeMode?: string; // Current active mode (files, agent, etc.)
+  activeSessionId?: string | null; // Current active session ID in agent mode
+
   // State setters
   setIsApiKeyDialogOpen: (open: boolean) => void;
   setWorkspaceMode: (mode: boolean) => void;
@@ -173,6 +177,12 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     // Config
     LOG_CONFIG
   } = props;
+
+  // Create a ref to hold current props for event handlers
+  const propsRef = useRef(props);
+  useEffect(() => {
+    propsRef.current = props;
+  }, [props]);
 
   // Create refs for all handlers and state to avoid re-registering IPC handlers
   const handlersRef = useRef({
@@ -425,19 +435,52 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         window.electronAPI.setDocumentEdited(true);
       }
     }));
-    cleanupFns.push(window.electronAPI.onToggleSearch(() => {
-      console.log('Toggle search command received');
-      const activeFilePath = editorRegistry.getActiveFilePath();
-      if (activeFilePath) {
-        SearchReplaceStateManager.toggle(activeFilePath);
+    // Handle menu:find - route to appropriate component based on active mode
+    cleanupFns.push(window.electronAPI.on('menu:find', () => {
+      // console.log('[IPC] menu:find received, activeMode:', propsRef.current.activeMode);
+      const mode = propsRef.current.activeMode;
+
+      if (mode === 'files' || mode === 'plan') {
+        // Editor mode - open SearchReplace dialog
+        const activeFilePath = editorRegistry.getActiveFilePath();
+        if (activeFilePath) {
+          SearchReplaceStateManager.toggle(activeFilePath);
+        }
+      } else if (mode === 'agent') {
+        // Agent mode - dispatch event to active session's transcript
+        const sessionId = propsRef.current.activeSessionId;
+        if (sessionId) {
+          window.dispatchEvent(new CustomEvent('menu:find', { detail: { sessionId } }));
+        }
       }
     }));
-    cleanupFns.push(window.electronAPI.onToggleSearchReplace(() => {
-      console.log('Toggle search replace command received');
-      const activeFilePath = editorRegistry.getActiveFilePath();
-      if (activeFilePath) {
-        SearchReplaceStateManager.toggle(activeFilePath);
+
+    // Handle menu:find-next - route to appropriate component
+    cleanupFns.push(window.electronAPI.on('menu:find-next', () => {
+      // console.log('[IPC] menu:find-next received, activeMode:', propsRef.current.activeMode);
+      const mode = propsRef.current.activeMode;
+
+      if (mode === 'agent') {
+        const sessionId = propsRef.current.activeSessionId;
+        if (sessionId) {
+          window.dispatchEvent(new CustomEvent('menu:find-next', { detail: { sessionId } }));
+        }
       }
+      // Note: Editor search handles Cmd+G internally
+    }));
+
+    // Handle menu:find-previous - route to appropriate component
+    cleanupFns.push(window.electronAPI.on('menu:find-previous', () => {
+      // console.log('[IPC] menu:find-previous received, activeMode:', propsRef.current.activeMode);
+      const mode = propsRef.current.activeMode;
+
+      if (mode === 'agent') {
+        const sessionId = propsRef.current.activeSessionId;
+        if (sessionId) {
+          window.dispatchEvent(new CustomEvent('menu:find-previous', { detail: { sessionId } }));
+        }
+      }
+      // Note: Editor search handles Cmd+Shift+G internally
     }));
     cleanupFns.push(window.electronAPI.onFileDeleted((data) => {
       console.log('[FILE_DELETED] File deleted event received:', data.filePath);
