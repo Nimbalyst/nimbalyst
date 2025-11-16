@@ -1,28 +1,74 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface AdvancedPanelProps {
   showToolCalls: boolean;
   onShowToolCallsChange: (value: boolean) => void;
   aiDebugLogging: boolean;
   onAiDebugLoggingChange: (value: boolean) => void;
+  releaseChannel: 'stable' | 'alpha';
+  onReleaseChannelChange: (value: 'stable' | 'alpha') => void;
 }
 
 export function AdvancedPanel({
   showToolCalls,
   onShowToolCallsChange,
   aiDebugLogging,
-  onAiDebugLoggingChange
+  onAiDebugLoggingChange,
+  releaseChannel,
+  onReleaseChannelChange
 }: AdvancedPanelProps) {
   const isDevelopment = import.meta.env.DEV;
+  const [showReleaseChannel, setShowReleaseChannel] = useState(false);
+
+  const handleTitleClick = (e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey) {
+      setShowReleaseChannel(true);
+    }
+  };
 
   return (
     <div className="provider-panel">
       <div className="provider-panel-header">
-        <h3 className="provider-panel-title">Advanced Settings</h3>
+        <h3
+          className="provider-panel-title"
+          onClick={handleTitleClick}
+          style={{ cursor: 'pointer' }}
+          title="Command/Ctrl-click to reveal release channel options"
+        >
+          Advanced Settings
+        </h3>
         <p className="provider-panel-description">
           Advanced configuration options for AI features.
         </p>
       </div>
+
+      {showReleaseChannel && (
+        <div className="provider-panel-section">
+          <h4 className="provider-panel-section-title">Release Channel</h4>
+          <p className="provider-panel-hint">
+            Choose which release channel to receive updates from.
+          </p>
+
+          <div className="setting-item">
+            <div className="setting-text">
+              <span className="setting-name">Update Channel</span>
+              <span className="setting-description">
+                <strong>Stable:</strong> Production-ready releases from GitHub (recommended for most users).<br/>
+                <strong>Alpha:</strong> Early access to new features for internal testing. May be unstable.
+              </span>
+            </div>
+            <select
+              value={releaseChannel}
+              onChange={(e) => onReleaseChannelChange(e.target.value as 'stable' | 'alpha')}
+              className="setting-select"
+              style={{ marginTop: '8px', width: '100%', padding: '8px', borderRadius: '4px' }}
+            >
+              <option value="stable">Stable</option>
+              <option value="alpha">Alpha (Internal Testing)</option>
+            </select>
+          </div>
+        </div>
+      )}
 
       {isDevelopment ? (
         <div className="provider-panel-section">

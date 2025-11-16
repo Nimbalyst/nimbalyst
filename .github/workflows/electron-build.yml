@@ -19,6 +19,14 @@ on:
         options:
           - 'true'
           - 'false'
+      create_github_release:
+        description: 'Create GitHub Release (for public promotion)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 permissions:
   contents: write
@@ -194,6 +202,29 @@ jobs:
           find release-artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.yml" -o -name "*.yaml" \) -exec cp {} release-files/ \;
           ls -la release-files/
 
+      # Upload to Cloudflare R2 (always happens for all releases)
+      - name: Upload to Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # Install AWS CLI
+          pip install awscli
+
+          # Upload to R2 (overwrites previous release)
+          aws s3 sync release-files/ s3://nimbalyst-alpha-updates-4357a3345db7463580090984c0e4e2ba/ \
+            --endpoint-url https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com \
+            --exclude "*" \
+            --include "*.dmg" \
+            --include "*.zip" \
+            --include "*.exe" \
+            --include "*.AppImage" \
+            --include "*.yml" \
+            --include "*.yaml"
+
+          echo "✅ Uploaded to R2 alpha channel"
+
       - name: Get version from tag
         id: get_version
         run: |
@@ -206,7 +237,10 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Create Release
+      # GitHub Release creation is now OPTIONAL (only when explicitly requested)
+      # All releases go to R2 by default for alpha testing
+      - name: Create GitHub Release (Optional - for stable promotion)
+        if: github.event.inputs.create_github_release == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.VERSION }}
@@ -226,20 +260,29 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # NOTE: Public repository publishing is now a separate manual step
-      # After testing the internal build, use the /release-public command or workflow
-      # This separates internal testing from public release
-      - name: Internal Release Complete
+      # NOTE: All releases are uploaded to R2 for alpha channel testing
+      # GitHub Release creation is now MANUAL (set create_github_release=true)
+      # This allows testing alpha builds before promoting to stable/public
+      - name: Release Complete
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
-          echo "✅ Internal release $VERSION complete!"
+          echo "✅ Release $VERSION complete!"
           echo ""
-          echo "📦 Build artifacts available at:"
-          echo "   https://github.com/nimbalyst/nimbalyst-code/releases/tag/$VERSION"
+          echo "📦 Alpha channel updated (R2):"
+          echo "   https://pub-4357a3345db7463580090984c0e4e2ba.r2.dev/"
           echo ""
-          echo "🧪 Next steps:"
-          echo "   1. Download and test the build artifacts"
-          echo "   2. Verify all features work as expected"
-          echo "   3. When ready, use /release-public command to publish to public repo"
+          echo "🧪 Testing instructions:"
+          echo "   1. Open Nimbalyst Global Settings"
+          echo "   2. Go to Advanced Settings"
+          echo "   3. Command/Ctrl-click on 'Advanced Settings' title"
+          echo "   4. Select 'Alpha (Internal Testing)' from dropdown"
+          echo "   5. Save and restart the app"
+          echo "   6. Check for updates (should find version $VERSION)"
           echo ""
-          echo "ℹ️  Public repo release is now a separate manual step to allow for testing."
+          if [[ "${{ github.event.inputs.create_github_release }}" == "true" ]]; then
+            echo "✅ GitHub Release created at:"
+            echo "   https://github.com/nimbalyst/nimbalyst-code/releases/tag/$VERSION"
+          else
+            echo "ℹ️  GitHub Release NOT created (alpha testing only)"
+            echo "   To promote to stable, re-run workflow with create_github_release=true"
+          fi

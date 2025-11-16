@@ -10,6 +10,7 @@ export type AppTheme = 'dark' | 'light' | 'system' | 'crystal-dark';
 export type { SessionState, SessionWindow } from '../types';
 
 export type CompletionSoundType = 'chime' | 'bell' | 'pop' | 'none';
+export type ReleaseChannel = 'stable' | 'alpha';
 
 interface AppStoreSchema {
   theme: AppTheme;
@@ -28,6 +29,8 @@ interface AppStoreSchema {
   completionSoundType?: CompletionSoundType;
   // OS notifications
   osNotificationsEnabled?: boolean;
+  // Release channel
+  releaseChannel?: ReleaseChannel;
 }
 
 export interface TabState {
@@ -639,4 +642,13 @@ export function isOSNotificationsEnabled(): boolean {
 
 export function setOSNotificationsEnabled(enabled: boolean): void {
   appStore.set('osNotificationsEnabled', enabled);
+}
+
+// Release Channel Settings
+export function getReleaseChannel(): ReleaseChannel {
+  return appStore.get('releaseChannel', 'stable');
+}
+
+export function setReleaseChannel(channel: ReleaseChannel): void {
+  appStore.set('releaseChannel', channel);
 }

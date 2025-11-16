@@ -2,6 +2,7 @@ import { autoUpdater } from 'electron-updater';
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import log from 'electron-log';
 import { showUpdateAvailable, showDownloadProgress, showUpdateReady, showUpdateError, closeUpdateWindow } from '../window/UpdateWindow';
+import { getReleaseChannel } from '../utils/store';
 
 export class AutoUpdaterService {
   private updateCheckInterval: NodeJS.Timeout | null = null;
@@ -16,20 +17,37 @@ export class AutoUpdaterService {
     // Configure auto-updater
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
-    
-    // Set the feed URL for GitHub releases
-    // This will look for latest-mac.yml, latest.yml, etc. in the release assets
-    autoUpdater.setFeedURL({
-      provider: 'github',
-      owner: 'nimbalyst',
-      repo: 'nimbalyst'
-    });
+
+    // Configure feed URL based on release channel
+    this.configureFeedURL();
 
     // Set up event handlers
     this.setupEventHandlers();
-    
+
     // Set up IPC handlers for renderer communication
     this.setupIpcHandlers();
+  }
+
+  private configureFeedURL() {
+    const channel = getReleaseChannel();
+
+    if (channel === 'alpha') {
+      // Alpha channel: Use Cloudflare R2 bucket
+      const alphaFeedURL = 'https://pub-4357a3345db7463580090984c0e4e2ba.r2.dev/';
+      log.info(`Configuring alpha channel updates from: ${alphaFeedURL}`);
+      autoUpdater.setFeedURL({
+        provider: 'generic',
+        url: alphaFeedURL
+      });
+    } else {
+      // Stable channel: Use GitHub releases (default)
+      log.info('Configuring stable channel updates from GitHub');
+      autoUpdater.setFeedURL({
+        provider: 'github',
+        owner: 'nimbalyst',
+        repo: 'nimbalyst'
+      });
+    }
   }
 
   private setupEventHandlers() {
@@ -98,6 +116,10 @@ export class AutoUpdaterService {
 
       this.sendToAllWindows('update-downloaded', info);
     });
+  }
+
+  public reconfigureFeedURL() {
+    this.configureFeedURL();
   }
 
   private setupIpcHandlers() {

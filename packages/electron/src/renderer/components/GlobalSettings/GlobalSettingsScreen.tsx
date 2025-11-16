@@ -190,6 +190,7 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
   const [completionSoundEnabled, setCompletionSoundEnabled] = useState(false);
   const [completionSoundType, setCompletionSoundType] = useState<'chime' | 'bell' | 'pop' | 'none'>('chime');
   const [osNotificationsEnabled, setOSNotificationsEnabled] = useState(false);
+  const [releaseChannel, setReleaseChannel] = useState<'stable' | 'alpha'>('stable');
 
   // Load current settings on mount
   useEffect(() => {
@@ -231,6 +232,10 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
       // Load OS notifications settings
       const osNotifEnabled = await window.electronAPI.invoke('notifications:get-enabled');
       setOSNotificationsEnabled(osNotifEnabled);
+
+      // Load release channel setting
+      const channel = await window.electronAPI.invoke('release-channel:get');
+      setReleaseChannel(channel);
 
       // Fetch ALL models once
       try {
@@ -328,6 +333,9 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
 
     // Save OS notifications settings
     await window.electronAPI.invoke('notifications:set-enabled', osNotificationsEnabled);
+
+    // Save release channel setting
+    await window.electronAPI.invoke('release-channel:set', releaseChannel);
 
     // Clear the model cache to force refresh with new API keys
     await window.electronAPI.aiClearModelCache?.();
@@ -460,6 +468,11 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
           aiDebugLogging={aiDebugLogging}
           onAiDebugLoggingChange={(value) => {
             setAiDebugLogging(value);
+            setHasChanges(true);
+          }}
+          releaseChannel={releaseChannel}
+          onReleaseChannelChange={(value) => {
+            setReleaseChannel(value);
             setHasChanges(true);
           }}
         />;

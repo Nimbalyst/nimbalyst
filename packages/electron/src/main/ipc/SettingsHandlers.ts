@@ -1,7 +1,8 @@
 import { ipcMain } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
+import { autoUpdaterService } from '../services/autoUpdater';
 
 export function registerSettingsHandlers() {
     // Get sidebar width
@@ -63,5 +64,17 @@ export function registerSettingsHandlers() {
     ipcMain.handle('completion-sound:test', (_event, soundType: CompletionSoundType) => {
         const soundService = SoundNotificationService.getInstance();
         soundService.testSound(soundType);
+    });
+
+    // Release channel settings
+    ipcMain.handle('release-channel:get', () => {
+        return getReleaseChannel();
+    });
+
+    ipcMain.handle('release-channel:set', (_event, channel: ReleaseChannel) => {
+        setReleaseChannel(channel);
+        // Reconfigure auto-updater with new channel
+        autoUpdaterService.reconfigureFeedURL();
+        logger.store.info(`[SettingsHandlers] Release channel changed to ${channel}, auto-updater reconfigured`);
     });
 }
