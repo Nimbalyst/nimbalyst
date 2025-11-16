@@ -50,12 +50,24 @@ function getReleaseNotes() {
 
 // Function to generate latest-mac.yml
 function generateMacYml() {
-  // Find the DMG and ZIP files
-  const dmgFile = `${productName}-${version}-arm64.dmg`;
-  const zipFile = `${productName}-${version}-arm64.zip`;
+  // Find the DMG and ZIP files - try both with and without version
+  let dmgFile = `${productName}-${version}-arm64.dmg`;
+  let dmgPath = path.join(releaseDir, dmgFile);
 
-  const dmgPath = path.join(releaseDir, dmgFile);
-  const zipPath = path.join(releaseDir, zipFile);
+  // If versioned file doesn't exist, try without version
+  if (!fs.existsSync(dmgPath)) {
+    dmgFile = `${productName}-arm64.dmg`;
+    dmgPath = path.join(releaseDir, dmgFile);
+  }
+
+  let zipFile = `${productName}-${version}-arm64.zip`;
+  let zipPath = path.join(releaseDir, zipFile);
+
+  // If versioned file doesn't exist, try without version
+  if (!fs.existsSync(zipPath)) {
+    zipFile = `${productName}-arm64.zip`;
+    zipPath = path.join(releaseDir, zipFile);
+  }
 
   const files = [];
 
