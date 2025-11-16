@@ -19,6 +19,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.27] - 2025-11-16
+
+
+### Added
+- Alpha release channel for internal testing
+- Image viewer for standalone image files
+- File tree filtering with type-specific icons
+- Find functionality to agent transcript
+- Tracker type assignment UI to document actions menu
+- Dual session opening from floating AI sessions dropdown
+- Claude Code session import and sync system
+
+### Changed
+- Replace dynamic imports with static imports
+- Persist file tree filter and icon visibility settings
+
+### Fixed
+- Debounce search input to prevent focus steal
+- Route search shortcuts through menu system
+- Remove quick open name match badge
+- Preserve newlines in user messages in transcript
+- OptimizedWorkspaceWatcher not sending file-changed-on-disk events
+- Monaco editor not updating when file changes on disk
+- Improve scrolling behavior for change groups in editor
+- Remove overly broad process exit error classification
+- FileTree auto-expand and selection clearing
+- Claude Code session import message filtering and ordering
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.26] - 2025-11-14
 
 
