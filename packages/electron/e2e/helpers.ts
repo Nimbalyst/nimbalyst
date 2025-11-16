@@ -70,11 +70,18 @@ export async function launchElectronApp(options?: {
     delete testEnv.ENABLE_SESSION_RESTORE; // Don't pass this to Electron
   }
 
-  return await _electron.launch({
+  const app = await _electron.launch({
     args,
     cwd: electronCwd,
     env: testEnv
   });
+
+  // Automatically setup console logging for the first window
+  app.on('window', async (page) => {
+    await setupPageWithLogging(page);
+  });
+
+  return app;
 }
 
 export async function createTempWorkspace(): Promise<string> {

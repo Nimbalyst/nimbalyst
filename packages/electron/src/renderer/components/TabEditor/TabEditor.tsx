@@ -589,6 +589,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
     const currentContent = getContentFnRef.current();
 
+    // Update content ref to track current editor state
+    // This is critical for file watcher comparisons
+    contentRef.current = currentContent;
+
     // CRITICAL: In diff mode, the editor content includes diff nodes which export
     // to markdown differently than the baseline. This causes false dirty flags.
     // Don't mark as dirty when in diff mode - user must explicitly approve/reject.
@@ -766,12 +770,28 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         const newContent = result.content || '';
         const currentContent = contentRef.current;
 
-        // Check if disk content matches current editor content
-        if (newContent === currentContent) {
-          console.log('[TabEditor] Skipping - disk content matches current editor content');
+        // CRITICAL FIX: For code files (Monaco), don't skip based on contentRef comparison
+        // Monaco updates contentRef synchronously via onDidChangeModelContent, but we still need
+        // to call setContent to update the Monaco editor itself. The setContent call is idempotent.
+        // For markdown files, we can safely skip if content matches.
+        if (isMarkdown && newContent === currentContent) {
+          console.log('[TabEditor] Skipping - disk content matches current editor content', {
+            fileName,
+            diskLength: newContent.length,
+            editorLength: currentContent.length,
+            firstDiff: newContent.length > 0 ? newContent.substring(0, 100) : '(empty)',
+          });
           processingFileChangeRef.current = false;
           return;
         }
+
+        console.log('[TabEditor] File content differs - will update editor', {
+          fileName,
+          diskLength: newContent.length,
+          editorLength: currentContent.length,
+          diskPreview: newContent.substring(0, 100),
+          editorPreview: currentContent.substring(0, 100),
+        });
 
         // CRITICAL: Check if this is content we just saved
         // If the disk content matches what we last saved, this is definitely our own save
@@ -993,19 +1013,27 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           isDirtyRef.current = false;
           onDirtyChange?.(false);
 
-          // Update editor content programmatically using Lexical API
+          // Update editor content programmatically
           // Works for both active and inactive tabs since editor is still mounted
           if (editorRef.current) {
             try {
-              const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-              const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
-              const transformers = getEditorTransformers();
+              if (isMarkdown) {
+                // Update Lexical editor for markdown files
+                const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
+                const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
+                const transformers = getEditorTransformers();
 
-              editorRef.current.update(() => {
-                const root = $getRoot();
-                root.clear();
-                $convertFromEnhancedMarkdownString(newContent, transformers);
-              }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+                editorRef.current.update(() => {
+                  const root = $getRoot();
+                  root.clear();
+                  $convertFromEnhancedMarkdownString(newContent, transformers);
+                }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+              } else {
+                // Update Monaco editor for code files
+                if (editorRef.current.setContent) {
+                  editorRef.current.setContent(newContent);
+                }
+              }
             } catch (error) {
               logger.ui.error(`[TabEditor] Failed to update editor content:`, error);
             }
