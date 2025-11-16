@@ -67,10 +67,17 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
    * Used for external updates (e.g., file watcher reloads)
    */
   const setEditorContent = useCallback((newContent: string) => {
-    if (editorRef.current) {
-      editorRef.current.setValue(newContent);
-    }
+    // Update state first
     setContent(newContent);
+
+    // Then update Monaco editor if it's mounted
+    if (editorRef.current) {
+      const currentValue = editorRef.current.getValue();
+      // Only update if content is different to avoid unnecessary operations
+      if (currentValue !== newContent) {
+        editorRef.current.setValue(newContent);
+      }
+    }
   }, []);
 
   /**
