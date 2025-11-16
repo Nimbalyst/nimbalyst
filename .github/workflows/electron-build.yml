@@ -213,7 +213,7 @@ jobs:
           pip install awscli
 
           # Upload to R2 (overwrites previous release)
-          aws s3 sync release-files/ s3://nimbalyst-alpha-updates-4357a3345db7463580090984c0e4e2ba/ \
+          aws s3 sync release-files/ s3://nimbalyst-alpha-updates-a7592ff2/ \
             --endpoint-url https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com \
             --exclude "*" \
             --include "*.dmg" \
@@ -269,7 +269,8 @@ jobs:
           echo "✅ Release $VERSION complete!"
           echo ""
           echo "📦 Alpha channel updated (R2):"
-          echo "   https://pub-4357a3345db7463580090984c0e4e2ba.r2.dev/"
+          echo "   Bucket: nimbalyst-alpha-updates-a7592ff2"
+          echo "   URL: https://pub-4357a3345db7463580090984c0e4e2ba.r2.dev/"
           echo ""
           echo "🧪 Testing instructions:"
           echo "   1. Open Nimbalyst Global Settings"
