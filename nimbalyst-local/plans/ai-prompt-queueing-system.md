@@ -19,7 +19,6 @@ planStatus:
   progress: 90
   startDate: "2025-11-09"
 ---
-
 ## Implementation Progress
 
 - [x] Add `queuedPrompts` array to SessionData type

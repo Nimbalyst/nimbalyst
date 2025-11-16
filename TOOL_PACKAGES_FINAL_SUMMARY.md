@@ -26,12 +26,12 @@ Successfully implemented a comprehensive tool packages system with version track
 - Custom commands include YAML frontmatter with `packageVersion` and `packageId`
 - Tracker schemas include version metadata in YAML comments
 - Example:
-  ```yaml
+```yaml
   ---
   packageVersion: 1.0.0
   packageId: developer
   ---
-  ```
+```
 
 **Automatic Version Detection**
 - PackageService reads installed files and extracts versions

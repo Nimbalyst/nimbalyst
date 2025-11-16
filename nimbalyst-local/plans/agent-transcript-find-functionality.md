@@ -18,7 +18,6 @@ planStatus:
   startDate: "2025-11-15"
   progress: 100
 ---
-
 ## Implementation Progress
 
 - [x] User can press Cmd+F to open search bar in transcript
@@ -198,9 +197,9 @@ For very long transcripts (1000+ messages), the current implementation performs 
 1. **Search persistence**: Search state (query, current index) does not persist when switching between session tabs. This would require lifting state to AgentTranscriptPanel and using localStorage.
 
 2. **Tab switching**: When switching between transcript sessions, the search bar closes and state is reset. To implement persistence:
-   - Lift `showSearchBar` and search query state to `AgentTranscriptPanel`
-   - Store in localStorage with session ID key
-   - Pass as props to `TranscriptSearchBar`
+  - Lift `showSearchBar` and search query state to `AgentTranscriptPanel`
+  - Store in localStorage with session ID key
+  - Pass as props to `TranscriptSearchBar`
 
 ## Future Enhancements
 
