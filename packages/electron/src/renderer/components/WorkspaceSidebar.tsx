@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { FileTree } from './FileTree';
 import { InputModal } from './InputModal';
 import { PlansPanel } from './PlansPanel/PlansPanel';
@@ -64,9 +64,52 @@ export function WorkspaceSidebar({
   const [draggedItem, setDraggedItem] = useState<any | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [fileTreeFilter, setFileTreeFilter] = useState<FileTreeFilter>('all');
+  const [showFileIcons, setShowFileIcons] = useState(true);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [filterMenuPosition, setFilterMenuPosition] = useState({ x: 0, y: 0 });
   const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const hasLoadedSettingsRef = useRef(false);
+
+  // Load file tree settings from workspace state
+  useEffect(() => {
+    if (!workspacePath || !window.electronAPI?.invoke) return;
+
+    // Reset loaded flag when workspace changes
+    hasLoadedSettingsRef.current = false;
+
+    window.electronAPI.invoke('workspace:get-state', workspacePath)
+      .then(state => {
+        // Set filter if it exists, otherwise keep default
+        if (state?.fileTreeFilter) {
+          setFileTreeFilter(state.fileTreeFilter);
+        }
+
+        // Set showFileIcons - handle both explicit false and undefined
+        if (state?.showFileIcons !== undefined) {
+          setShowFileIcons(state.showFileIcons);
+        }
+
+        hasLoadedSettingsRef.current = true;
+      })
+      .catch(error => {
+        console.error('Failed to load file tree settings:', error);
+        hasLoadedSettingsRef.current = true;
+      });
+  }, [workspacePath]);
+
+  // Save file tree settings to workspace state
+  useEffect(() => {
+    // Don't save until we've loaded the initial settings
+    if (!hasLoadedSettingsRef.current) return;
+    if (!workspacePath || !window.electronAPI?.invoke) return;
+
+    window.electronAPI.invoke('workspace:update-state', workspacePath, {
+      fileTreeFilter,
+      showFileIcons
+    }).catch(error => {
+      console.error('Failed to save file tree settings:', error);
+    });
+  }, [workspacePath, fileTreeFilter, showFileIcons]);
 
   // Notify parent when selected folder changes
   const handleSelectedFolderChange = (folderPath: string | null) => {
@@ -411,6 +454,7 @@ export function WorkspaceSidebar({
               currentFilePath={currentFilePath}
               onFileSelect={handleFileSelect}
               level={0}
+              showIcons={showFileIcons}
               onNewFile={handleNewFileInFolder}
               onNewFolder={handleNewFolderInFolder}
               onRefreshFileTree={onRefreshFileTree}
@@ -429,7 +473,9 @@ export function WorkspaceSidebar({
               x={filterMenuPosition.x}
               y={filterMenuPosition.y}
               currentFilter={fileTreeFilter}
+              showIcons={showFileIcons}
               onFilterChange={handleFilterChange}
+              onShowIconsChange={setShowFileIcons}
               onClose={() => setShowFilterMenu(false)}
             />
           )}

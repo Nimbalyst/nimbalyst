@@ -8,7 +8,9 @@ interface FileTreeFilterMenuProps {
   x: number;
   y: number;
   currentFilter: FileTreeFilter;
+  showIcons: boolean;
   onFilterChange: (filter: FileTreeFilter) => void;
+  onShowIconsChange: (showIcons: boolean) => void;
   onClose: () => void;
 }
 
@@ -16,7 +18,9 @@ export function FileTreeFilterMenu({
   x,
   y,
   currentFilter,
+  showIcons,
   onFilterChange,
+  onShowIconsChange,
   onClose
 }: FileTreeFilterMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -81,17 +85,6 @@ export function FileTreeFilterMenu({
       <div className="filter-menu-section-label">Show Files</div>
 
       <div
-        className={`filter-menu-item ${currentFilter === 'all' ? 'active' : ''}`}
-        onClick={() => handleFilterSelect('all')}
-      >
-        <MaterialSymbol icon="folder_open" size={18} />
-        <span>All Files</span>
-        {currentFilter === 'all' && (
-          <MaterialSymbol icon="check" size={16} className="filter-menu-check" />
-        )}
-      </div>
-
-      <div
         className={`filter-menu-item ${currentFilter === 'markdown' ? 'active' : ''}`}
         onClick={() => handleFilterSelect('markdown')}
       >
@@ -111,6 +104,27 @@ export function FileTreeFilterMenu({
         {currentFilter === 'known' && (
           <MaterialSymbol icon="check" size={16} className="filter-menu-check" />
         )}
+      </div>
+
+      <div
+          className={`filter-menu-item ${currentFilter === 'all' ? 'active' : ''}`}
+          onClick={() => handleFilterSelect('all')}
+      >
+        <MaterialSymbol icon="folder_open" size={18} />
+        <span>All Files</span>
+        {currentFilter === 'all' && (
+            <MaterialSymbol icon="check" size={16} className="filter-menu-check" />
+        )}
+      </div>
+
+      <div className="filter-menu-separator" />
+
+      <div
+        className="filter-menu-item"
+        onClick={() => onShowIconsChange(!showIcons)}
+      >
+        <MaterialSymbol icon={showIcons ? 'check_box' : 'check_box_outline_blank'} size={18} />
+        <span>Show Icons</span>
       </div>
     </div>
   );

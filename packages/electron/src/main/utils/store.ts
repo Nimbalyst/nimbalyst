@@ -107,6 +107,10 @@ export interface WorkspaceState {
   onboarding?: OnboardingConfig;
   // Installed tool packages
   installedPackages?: InstalledPackage[];
+  // File tree filter state
+  fileTreeFilter?: 'all' | 'markdown' | 'known';
+  // File tree icons visibility
+  showFileIcons?: boolean;
   lastUpdated: number;
 }
 
@@ -156,6 +160,14 @@ function workspaceKey(path: string): string {
  * CRITICAL: ALL fields in WorkspaceState MUST be parsed/initialized here.
  * This includes both `tabs` AND `agenticTabs`. Missing fields will be undefined
  * in the normalized state, which can cause state corruption.
+ *
+ * ⚠️  WHEN ADDING NEW FIELDS TO WorkspaceState:
+ * 1. Add the field to the WorkspaceState interface (line ~90)
+ * 2. Add the field to the return object in this function (line ~209)
+ * 3. Add the field to cloneWorkspaceState function (line ~257)
+ *
+ * If you forget step 2, the field will be SILENTLY DROPPED on load and users will
+ * lose their settings. This has happened multiple times. Don't fuck it up again.
  */
 function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
   if (!raw) {
@@ -171,6 +183,10 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       navigationHistory: undefined,
       trackerBottomPanel: null,
       trackerBottomPanelHeight: 300,
+      onboarding: undefined,
+      installedPackages: undefined,
+      fileTreeFilter: undefined,
+      showFileIcons: undefined,
       lastUpdated: Date.now(),
     };
   }
@@ -243,6 +259,9 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
     trackerBottomPanel: raw.trackerBottomPanel ?? raw.bottomPanel ?? null,
     trackerBottomPanelHeight: raw.trackerBottomPanelHeight ?? raw.bottomPanelHeight ?? 300,
     onboarding: raw.onboarding ? { ...raw.onboarding } : undefined,
+    installedPackages: raw.installedPackages ? [...raw.installedPackages] : undefined,
+    fileTreeFilter: raw.fileTreeFilter ?? undefined,
+    showFileIcons: raw.showFileIcons ?? undefined,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),
   };
 }
@@ -254,6 +273,9 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
  * Missing fields will be dropped during save/load, corrupting state.
  * This includes both `tabs` AND `agenticTabs` - forgetting agenticTabs
  * caused a critical bug where plans couldn't be opened.
+ *
+ * ⚠️  WHEN ADDING NEW FIELDS TO WorkspaceState:
+ * You MUST add them here too. See normalizeWorkspaceState comment for details.
  */
 function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
   return {
@@ -291,6 +313,9 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
     trackerBottomPanel: state.trackerBottomPanel,
     trackerBottomPanelHeight: state.trackerBottomPanelHeight,
     onboarding: state.onboarding ? { ...state.onboarding } : undefined,
+    installedPackages: state.installedPackages ? [...state.installedPackages] : undefined,
+    fileTreeFilter: state.fileTreeFilter,
+    showFileIcons: state.showFileIcons,
     lastUpdated: state.lastUpdated,
   };
 }
@@ -550,6 +575,17 @@ export function saveAgenticTabState(workspacePath: string, state: TabManagerStat
       activeTabId: state.activeTabId,
       tabOrder: [...state.tabOrder],
     };
+  });
+}
+
+// File Tree Filter State Management
+export function getFileTreeFilter(workspacePath: string): 'all' | 'markdown' | 'known' {
+  return getWorkspaceState(workspacePath).fileTreeFilter ?? 'all';
+}
+
+export function saveFileTreeFilter(workspacePath: string, filter: 'all' | 'markdown' | 'known'): void {
+  updateWorkspaceState(workspacePath, workspace => {
+    workspace.fileTreeFilter = filter;
   });
 }
 

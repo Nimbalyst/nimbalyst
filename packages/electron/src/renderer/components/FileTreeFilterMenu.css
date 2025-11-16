@@ -45,6 +45,12 @@
   color: #3b82f6;
 }
 
+.filter-menu-separator {
+  height: 1px;
+  background-color: #e5e7eb;
+  margin: 4px 8px;
+}
+
 /* Dark theme support */
 .dark-theme .file-tree-filter-menu {
   background: #1a1a1a;
@@ -70,6 +76,10 @@
 
 .dark-theme .filter-menu-check {
   color: #60a5fa;
+}
+
+.dark-theme .filter-menu-separator {
+  background-color: #4a4a4a;
 }
 
 /* Crystal Dark theme */
@@ -99,6 +109,10 @@
   color: #3B82F6;
 }
 
+.crystal-dark-theme .filter-menu-separator {
+  background-color: #374151;
+}
+
 /* System preference dark mode */
 @media (prefers-color-scheme: dark) {
   html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .file-tree-filter-menu {
@@ -125,5 +139,9 @@
 
   html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .filter-menu-check {
     color: #3b82f6;
+  }
+
+  html:not(.light-theme):not(.dark-theme):not(.crystal-dark-theme) .filter-menu-separator {
+    background-color: #374151;
   }
 }

@@ -14,6 +14,7 @@ interface FileTreeProps {
   currentFilePath: string | null;
   onFileSelect: (filePath: string) => void;
   level: number;
+  showIcons?: boolean;
   onNewFile?: (folderPath: string) => void;
   onNewFolder?: (folderPath: string) => void;
   onRefreshFileTree?: () => void;
@@ -169,7 +170,7 @@ function getFileIcon(fileName: string) {
   return <MaterialSymbol icon="insert_drive_file" size={18} />;
 }
 
-export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, selectedFolder, onFolderSelect, sharedDragState, sharedExpandedDirs }: FileTreeProps) {
+export function FileTree({ items, currentFilePath, onFileSelect, level, showIcons = true, onNewFile, onNewFolder, onRefreshFileTree, onViewHistory, selectedFolder, onFolderSelect, sharedDragState, sharedExpandedDirs }: FileTreeProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -513,12 +514,14 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
                       size={16}
                     />
                   </span>
-                  <span className="file-tree-icon">
-                    <MaterialSymbol
-                      icon={isExpanded ? "folder_open" : "folder"}
-                      size={18}
-                    />
-                  </span>
+                  {showIcons && (
+                    <span className="file-tree-icon">
+                      <MaterialSymbol
+                        icon={isExpanded ? "folder_open" : "folder"}
+                        size={18}
+                      />
+                    </span>
+                  )}
                   <span className="file-tree-name">
                     {item.name}
                     {isDragOver && isDragCopy && <span style={{ marginLeft: '4px', fontSize: '10px', opacity: 0.7 }}>(copy)</span>}
@@ -530,6 +533,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
                     currentFilePath={currentFilePath}
                     onFileSelect={onFileSelect}
                     level={level + 1}
+                    showIcons={showIcons}
                     onNewFile={onNewFile}
                     onNewFolder={onNewFolder}
                     onRefreshFileTree={onRefreshFileTree}
@@ -570,9 +574,11 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, onNewFil
                 }}
               >
                 <span className="file-tree-spacer"></span>
-                <span className="file-tree-icon">
-                  {getFileIcon(item.name)}
-                </span>
+                {showIcons && (
+                  <span className="file-tree-icon">
+                    {getFileIcon(item.name)}
+                  </span>
+                )}
                 <span className="file-tree-name">
                   {item.name}
                 </span>

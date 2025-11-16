@@ -24,6 +24,12 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   // Workspace and file tree
   workspaceSidebar: '.workspace-sidebar',
   fileTreeItem: '.file-tree-name',
+  fileTreeFilterButton: '.workspace-action-button[aria-label="Filter files"]',
+  fileTreeFilterMenu: '.file-tree-filter-menu',
+  filterMenuAllFiles: '.filter-menu-item:has-text("All Files")',
+  filterMenuMarkdownOnly: '.filter-menu-item:has-text("Markdown Only")',
+  filterMenuKnownFiles: '.filter-menu-item:has-text("Known Files")',
+  filterMenuShowIcons: '.filter-menu-item:has-text("Show Icons")',
 
   // Tabs
   tab: '.tab',
