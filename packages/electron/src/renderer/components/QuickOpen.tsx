@@ -423,9 +423,9 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
                     {file.isRecent && !searchQuery && (
                       <span className="quick-open-badge">Recent</span>
                     )}
-                    {file.isFileNameMatch && (
-                      <span className="quick-open-badge name-badge">Name</span>
-                    )}
+                    {/*{file.isFileNameMatch && (*/}
+                    {/*  <span className="quick-open-badge name-badge">Name</span>*/}
+                    {/*)}*/}
                     {file.matches && file.matches.length > 0 && (
                       <span className="quick-open-badge content-badge">{file.matches.length} match{file.matches.length > 1 ? 'es' : ''}</span>
                     )}
