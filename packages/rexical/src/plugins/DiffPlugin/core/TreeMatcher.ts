@@ -249,12 +249,12 @@ export class WindowedTreeMatcher {
         }
       }
 
-      console.log(`\n[TreeMatcher] Built ${guidePosts.size} guideposts from unified diff matching`);
+      // console.log(`\n[TreeMatcher] Built ${guidePosts.size} guideposts from unified diff matching`);
       if (guidePosts.size === 0) {
-        console.log('  ⚠️  WARNING: No guideposts! No unchanged content found.');
+        // console.log('  ⚠️  WARNING: No guideposts! No unchanged content found.');
       } else {
         const pct = Math.round((guidePosts.size / sourceNodes.length) * 100);
-        console.log(`  ✓ Matched ${guidePosts.size}/${sourceNodes.length} source nodes (${pct}%)`);
+        // console.log(`  ✓ Matched ${guidePosts.size}/${sourceNodes.length} source nodes (${pct}%)`);
       }
     } catch (error) {
       // If unified diff fails, continue without guide posts

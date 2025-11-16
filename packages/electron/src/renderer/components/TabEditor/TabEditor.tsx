@@ -13,7 +13,19 @@
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import type { ConfigTheme, TextReplacement } from 'rexical';
-import { StravuEditor } from 'rexical';
+import {
+  StravuEditor,
+  $convertFromEnhancedMarkdownString,
+  $convertToEnhancedMarkdownString,
+  getEditorTransformers,
+  APPLY_MARKDOWN_REPLACE_COMMAND,
+  APPROVE_DIFF_COMMAND,
+  REJECT_DIFF_COMMAND,
+  CLEAR_DIFF_TAG_COMMAND,
+  INCREMENTAL_APPROVAL_COMMAND,
+  $hasDiffNodes
+} from 'rexical';
+import { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG, COMMAND_PRIORITY_LOW } from 'lexical';
 import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
 import { FixedTabHeaderContainer } from '@nimbalyst/runtime/plugins/shared/fixedTabHeader';
 import { MonacoCodeEditor } from '../MonacoCodeEditor';
@@ -205,8 +217,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 if (isApplyingDiffRef.current) return;
                 isApplyingDiffRef.current = true;
                 try {
-                  const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-                  const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
                   const transformers = getEditorTransformers();
 
                   // FIRST: Reset editor to old (tagged) content
@@ -228,7 +238,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
                   isApplyingDiffRef.current = true;
                   try {
-                    const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
                     editorToUpdate.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
                     console.log(`[TabEditor] Applied pending AI edit diff on tab activation, waiting for DOM update`);
                   } finally {
@@ -277,8 +286,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               try {
                 if (isMarkdown) {
                   // Update via Lexical API
-                  const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-                  const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
                   const transformers = getEditorTransformers();
 
                   editorRef.current.update(() => {
@@ -375,8 +382,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // If content differs, apply the diff
         if (oldContent !== newContent) {
           // Reset editor to old (tagged) content first
-          const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-          const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
           const transformers = getEditorTransformers();
 
           editorRef.current.update(() => {
@@ -399,7 +404,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             const replacements: TextReplacement[] = [{
               newText: newContent
             }];
-            const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
             editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
             console.log(`[TabEditor] Applied pending AI edit diff on mount`);
           } finally {
@@ -491,8 +495,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             if (editorRef.current) {
               try {
                 // Import Lexical functions from 'lexical' and rexical functions from 'rexical'
-                const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-                const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
                 const transformers = getEditorTransformers();
 
                 editorRef.current.update(() => {
@@ -533,7 +535,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // ONLY check for user-initiated saves (manual/autosave), NOT AI operations
         // During AI operations (apply/accept/reject), skipDiffCheck will be true
         if (!skipDiffCheck && editorRef.current && pendingAIEditTagRef.current?.tagId) {
-          const { $hasDiffNodes } = await import('rexical');
           const hasDiffs = editorRef.current.getEditorState().read(() => {
             return $hasDiffNodes(editorRef.current!);
           });
@@ -864,8 +865,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               try {
                 // FIRST: Reset editor to old (tagged) content to clear existing diff nodes
                 // This is NECESSARY - editor must have oldContent before applyMarkdownReplace can find it
-                const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-                const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
                 const transformers = getEditorTransformers();
 
                 if (editorRef.current) {
@@ -890,7 +889,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 isApplyingDiffRef.current = true;
                 try {
                   if (editorRef.current) {
-                    const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
                     editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
                     console.log(`[TabEditor] Updated diff with new edits`);
                   }
@@ -916,8 +914,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             diffUpdatePromise = (async () => {
               try {
                 if (editorRef.current) {
-                  const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-                  const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
                   const transformers = getEditorTransformers();
 
                   console.log(`[TabEditor] Loading old content for first-time diff (length: ${oldContent.length})`);
@@ -943,7 +939,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                   // Mark that we're applying a diff programmatically (not a user edit)
                   isApplyingDiffRef.current = true;
                   try {
-                    const { APPLY_MARKDOWN_REPLACE_COMMAND } = await import('rexical');
                     editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
                     console.log(`[TabEditor] Dispatched APPLY_MARKDOWN_REPLACE_COMMAND`);
                   } finally {
@@ -1021,8 +1016,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             try {
               if (isMarkdown) {
                 // Update Lexical editor for markdown files
-                const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-                const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
                 const transformers = getEditorTransformers();
 
                 editorRef.current.update(() => {
@@ -1099,8 +1092,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     if (editorRef.current) {
       try {
         if (isMarkdown) {
-          const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-          const { $convertFromEnhancedMarkdownString, getEditorTransformers} = await import('rexical');
           const transformers = getEditorTransformers();
 
           editorRef.current.update(() => {
@@ -1145,8 +1136,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     if (editorRef.current) {
       try {
         if (isMarkdown) {
-          const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-          const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
           const transformers = getEditorTransformers();
 
           editorRef.current.update(() => {
@@ -1181,8 +1170,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       (async () => {
         try {
           if (isMarkdown) {
-            const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-            const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
             const transformers = getEditorTransformers();
 
             editorRef.current.update(() => {
@@ -1244,8 +1231,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
             // Update editor to show final content (no diff)
             if (editorRef.current) {
-              const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-              const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
               const transformers = getEditorTransformers();
 
               editorRef.current.update(() => {
@@ -1292,8 +1277,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
           // Update editor to show original content (no diff)
           if (editorRef.current) {
-            const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-            const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
             const transformers = getEditorTransformers();
 
             editorRef.current.update(() => {
@@ -1319,7 +1302,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         // Get current editor content (includes the accepted/rejected changes)
         if (editorRef.current) {
-          const { $convertToEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
           const transformers = getEditorTransformers();
 
           // Get the APPROVED content (normal export - what's actually in the editor)
@@ -1380,7 +1362,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // CRITICAL: Save current editor state to disk FIRST
         // This preserves all the incremental accept/reject decisions the user made
         if (editorRef.current) {
-            const { $convertToEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
             const transformers = getEditorTransformers();
 
             const currentContent = editorRef.current.getEditorState().read(() => {
@@ -1420,8 +1401,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
             // Update editor to show final content (no diff)
             if (editorRef.current) {
-              const { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG } = await import('lexical');
-              const { $convertFromEnhancedMarkdownString, getEditorTransformers } = await import('rexical');
               const transformers = getEditorTransformers();
 
               editorRef.current.update(() => {
@@ -1437,11 +1416,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     };
 
     // Register command listeners
-    const importCommands = async () => {
-      const { APPROVE_DIFF_COMMAND, REJECT_DIFF_COMMAND, CLEAR_DIFF_TAG_COMMAND, INCREMENTAL_APPROVAL_COMMAND } = await import('rexical');
-      const { COMMAND_PRIORITY_LOW } = await import('lexical');
-
-      const unregisterApprove = editor.registerCommand(
+    const unregisterApprove = editor.registerCommand(
         APPROVE_DIFF_COMMAND,
         () => {
           handleApprove();
@@ -1481,19 +1456,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         COMMAND_PRIORITY_LOW
       );
 
-      return () => {
-        unregisterApprove();
-        unregisterReject();
-        unregisterIncremental();
-        unregisterClear();
-      };
-    };
-
-    let cleanup: (() => void) | undefined;
-    importCommands().then(fn => { cleanup = fn; });
-
     return () => {
-      if (cleanup) cleanup();
+      unregisterApprove();
+      unregisterReject();
+      unregisterIncremental();
+      unregisterClear();
     };
   }, [filePath]);
 
