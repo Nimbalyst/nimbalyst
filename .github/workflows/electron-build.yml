@@ -202,6 +202,34 @@ jobs:
           find release-artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.yml" -o -name "*.yaml" \) -exec cp {} release-files/ \;
           ls -la release-files/
 
+      - name: Generate release notes for R2
+        id: release_notes
+        run: |
+          # Get recent commits for release notes
+          git fetch --depth=50
+          COMMITS=$(git log --oneline -10 --pretty=format:"- %s" || echo "- Release build")
+
+          # Create release notes
+          cat > release-files/RELEASE_NOTES.md << 'EOF'
+          ## Recent Changes
+
+          $COMMITS
+
+          ## Installation
+
+          Download and install the appropriate file for your platform:
+          - **macOS**: .dmg file
+          - **Windows**: .exe file
+          - **Linux**: .AppImage file
+          EOF
+
+          # Replace $COMMITS with actual commits
+          sed -i.bak "s|\$COMMITS|$COMMITS|g" release-files/RELEASE_NOTES.md
+          rm release-files/RELEASE_NOTES.md.bak 2>/dev/null || true
+
+          echo "Release notes generated"
+          cat release-files/RELEASE_NOTES.md
+
       # Upload to Cloudflare R2 (always happens for all releases)
       - name: Upload to Cloudflare R2
         env:
@@ -221,9 +249,10 @@ jobs:
             --include "*.exe" \
             --include "*.AppImage" \
             --include "*.yml" \
-            --include "*.yaml"
+            --include "*.yaml" \
+            --include "RELEASE_NOTES.md"
 
-          echo "✅ Uploaded to R2 alpha channel"
+          echo "✅ Uploaded to R2 alpha channel (with release notes)"
 
       - name: Get version from tag
         id: get_version

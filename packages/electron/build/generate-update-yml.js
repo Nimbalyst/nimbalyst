@@ -33,17 +33,32 @@ function getFileSize(filePath) {
   return stats.size;
 }
 
+// Function to get release notes
+function getReleaseNotes() {
+  const releaseNotesPath = path.join(releaseDir, 'RELEASE_NOTES.md');
+  if (fs.existsSync(releaseNotesPath)) {
+    return fs.readFileSync(releaseNotesPath, 'utf8').trim();
+  }
+  // Fallback: get recent git commits
+  try {
+    const commits = execSync('git log --oneline -5 --pretty=format:"- %s"', { encoding: 'utf8' });
+    return `## Recent Changes\n\n${commits}`;
+  } catch (e) {
+    return 'New release available';
+  }
+}
+
 // Function to generate latest-mac.yml
 function generateMacYml() {
   // Find the DMG and ZIP files
   const dmgFile = `${productName}-${version}-arm64.dmg`;
   const zipFile = `${productName}-${version}-arm64.zip`;
-  
+
   const dmgPath = path.join(releaseDir, dmgFile);
   const zipPath = path.join(releaseDir, zipFile);
-  
+
   const files = [];
-  
+
   // Add DMG file if it exists
   if (fs.existsSync(dmgPath)) {
     files.push({
@@ -52,7 +67,7 @@ function generateMacYml() {
       size: getFileSize(dmgPath)
     });
   }
-  
+
   // Add ZIP file if it exists
   if (fs.existsSync(zipPath)) {
     files.push({
@@ -61,21 +76,25 @@ function generateMacYml() {
       size: getFileSize(zipPath)
     });
   }
-  
+
   if (files.length === 0) {
     console.error('No DMG or ZIP files found in release directory');
     return false;
   }
-  
+
+  // Get release notes
+  const releaseNotes = getReleaseNotes();
+
   // Generate the YAML content
   const yamlContent = {
     version: version,
     files: files,
     path: files[0].url, // Primary file
     sha512: files[0].sha512,
-    releaseDate: new Date().toISOString()
+    releaseDate: new Date().toISOString(),
+    releaseNotes: releaseNotes
   };
-  
+
   // Convert to YAML format
   let yamlString = `version: ${yamlContent.version}\n`;
   yamlString += `files:\n`;
@@ -87,12 +106,17 @@ function generateMacYml() {
   yamlString += `path: ${yamlContent.path}\n`;
   yamlString += `sha512: ${yamlContent.sha512}\n`;
   yamlString += `releaseDate: '${yamlContent.releaseDate}'\n`;
-  
+  // Add release notes as multi-line string
+  yamlString += `releaseNotes: |\n`;
+  yamlContent.releaseNotes.split('\n').forEach(line => {
+    yamlString += `  ${line}\n`;
+  });
+
   // Write the file
   const outputPath = path.join(releaseDir, 'latest-mac.yml');
   fs.writeFileSync(outputPath, yamlString);
   console.log(`Generated ${outputPath}`);
-  
+
   return true;
 }
 
