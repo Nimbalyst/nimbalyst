@@ -152,40 +152,50 @@ export function setupWorkspaceManagerHandlers() {
   ipcMain.handle('workspace-manager:get-recent-workspaces', async () => {
     const recentWorkspaces = await getRecentItems('workspaces');
 
-    // Add additional info for each workspace
-    const workspacesWithInfo = recentWorkspaces.map(workspace => {
-      try {
-        if (existsSync(workspace.path)) {
-          const stats = statSync(workspace.path);
-          const files = getWorkspaceFiles(workspace.path);
+    // Process workspaces in parallel with Promise.all for faster loading
+    const workspacesWithInfo = await Promise.all(
+      recentWorkspaces.map(async workspace => {
+        try {
+          if (existsSync(workspace.path)) {
+            const stats = statSync(workspace.path);
+            // Use quick scan with low limits for listing view (just enough to show info)
+            // Wrap in Promise to allow concurrent scanning
+            const { files, limited } = await new Promise<{ files: string[], limited: boolean }>((resolve) => {
+              setImmediate(() => {
+                resolve(getWorkspaceFiles(workspace.path, '', 1000, 5));
+              });
+            });
 
-          return {
-            ...workspace,
-            lastOpened: workspace.timestamp, // Use the timestamp from the recent items
-            lastModified: stats.mtime.getTime(),
-            fileCount: files.length,
-            markdownCount: files.filter(f => f.endsWith('.md') || f.endsWith('.markdown')).length,
-            exists: true
-          };
+            return {
+              ...workspace,
+              lastOpened: workspace.timestamp, // Use the timestamp from the recent items
+              lastModified: stats.mtime.getTime(),
+              fileCount: limited ? `${files.length}+` : files.length,
+              markdownCount: files.filter(f => f.endsWith('.md') || f.endsWith('.markdown')).length,
+              exists: true,
+              limited
+            };
+          }
+        } catch (error) {
+          console.error('Error getting workspace info:', error);
         }
-      } catch (error) {
-        console.error('Error getting workspace info:', error);
-      }
 
-      return {
-        ...workspace,
-        lastOpened: workspace.timestamp || Date.now(), // Fallback to now if no timestamp
-        exists: false
-      };
-    }).filter(w => w.exists);
+        return {
+          ...workspace,
+          lastOpened: workspace.timestamp || Date.now(), // Fallback to now if no timestamp
+          exists: false
+        };
+      })
+    );
 
-    return workspacesWithInfo;
+    return workspacesWithInfo.filter(w => w.exists);
   });
 
   // Get workspace statistics
   ipcMain.handle('workspace-manager:get-workspace-stats', async (event, workspacePath: string) => {
     try {
-      const files = getWorkspaceFiles(workspacePath);
+      // Use higher limits for stats (when user clicks on a workspace)
+      const { files, limited } = getWorkspaceFiles(workspacePath, '', 10000, 10);
       let totalSize = 0;
       const markdownFiles = [];
 
@@ -207,10 +217,11 @@ export function setupWorkspaceManagerHandlers() {
       const recentFiles = store.get(`workspaceRecentFiles.${workspacePath}`, []) as string[];
 
       return {
-        fileCount: files.length,
+        fileCount: limited ? `${files.length}+` : files.length,
         markdownCount: markdownFiles.length,
         totalSize,
-        recentFiles: recentFiles.slice(0, 5)
+        recentFiles: recentFiles.slice(0, 5),
+        limited
       };
     } catch (error) {
       console.error('Failed to get workspace stats:', error);
@@ -218,7 +229,8 @@ export function setupWorkspaceManagerHandlers() {
         fileCount: 0,
         markdownCount: 0,
         totalSize: 0,
-        recentFiles: []
+        recentFiles: [],
+        limited: false
       };
     }
   });
@@ -273,9 +285,9 @@ export function setupWorkspaceManagerHandlers() {
     // Add to recent workspaces
     addToRecentItems('workspaces', workspacePath, basename(workspacePath));
 
-    // Track workspace opened analytics event
+    // Track workspace opened analytics event (use quick scan for analytics)
     try {
-      const files = getWorkspaceFiles(workspacePath);
+      const { files } = getWorkspaceFiles(workspacePath, '', 1000, 8);
       const analytics = AnalyticsService.getInstance();
       analytics.sendEvent('workspace_opened', {
         fileCount: bucketFileCount(files.length),
@@ -325,15 +337,37 @@ export function setupWorkspaceManagerHandlers() {
   });
 }
 
-// Helper function to get all files in a workspace
-function getWorkspaceFiles(workspacePath: string, relativePath: string = ''): string[] {
+// Helper function to get all files in a workspace with limits
+// Returns { files: string[], limited: boolean } where limited=true if we hit a limit
+function getWorkspaceFiles(
+  workspacePath: string,
+  relativePath: string = '',
+  maxFiles: number = 10000,
+  maxDepth: number = 10,
+  currentDepth: number = 0
+): { files: string[], limited: boolean } {
   const files: string[] = [];
+  let limited = false;
+
+  // Stop if we've gone too deep
+  if (currentDepth >= maxDepth) {
+    console.warn(`[WorkspaceManager] Max depth ${maxDepth} reached for ${workspacePath}`);
+    return { files, limited: true };
+  }
+
   const fullPath = join(workspacePath, relativePath);
 
   try {
     const items = readdirSync(fullPath);
 
     for (const item of items) {
+      // Stop if we've found enough files
+      if (files.length >= maxFiles) {
+        console.warn(`[WorkspaceManager] Max files ${maxFiles} reached for ${workspacePath}`);
+        limited = true;
+        break;
+      }
+
       // Skip hidden files and common ignore patterns
       if (item.startsWith('.') || item === 'node_modules' || item === 'dist' || item === 'out') {
         continue;
@@ -341,19 +375,30 @@ function getWorkspaceFiles(workspacePath: string, relativePath: string = ''): st
 
       const itemPath = join(relativePath, item);
       const fullItemPath = join(workspacePath, itemPath);
-      const stats = statSync(fullItemPath);
 
-      if (stats.isDirectory()) {
-        files.push(...getWorkspaceFiles(workspacePath, itemPath));
-      } else {
-        files.push(itemPath);
+      try {
+        const stats = statSync(fullItemPath);
+
+        if (stats.isDirectory()) {
+          const result = getWorkspaceFiles(workspacePath, itemPath, maxFiles - files.length, maxDepth, currentDepth + 1);
+          files.push(...result.files);
+          if (result.limited) {
+            limited = true;
+            break;
+          }
+        } else {
+          files.push(itemPath);
+        }
+      } catch (error) {
+        // Skip files/folders we can't access
+        console.debug(`[WorkspaceManager] Cannot access ${fullItemPath}:`, error.message);
       }
     }
   } catch (error) {
-    console.error('Error reading directory:', error);
+    console.error('[WorkspaceManager] Error reading directory:', fullPath, error);
   }
 
-  return files;
+  return { files, limited };
 }
 
 export function closeWorkspaceManagerWindow() {

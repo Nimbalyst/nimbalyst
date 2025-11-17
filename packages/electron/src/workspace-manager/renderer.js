@@ -60,10 +60,11 @@ function renderWorkspaceList() {
     const isSelected = selectedWorkspace && selectedWorkspace.path === workspace.path;
     const lastModified = workspace.lastModified ? formatDate(workspace.lastModified) : 'Unknown';
     const fileCount = workspace.fileCount || 0;
+    const warning = workspace.limited ? ' <span style="color: #f59e0b;" title="Large workspace - file count is approximate">⚠️</span>' : '';
 
     return `
       <div class="workspace-item ${isSelected ? 'selected' : ''}" data-path="${escapeHtml(workspace.path)}">
-        <div class="workspace-name">${escapeHtml(workspace.name)}</div>
+        <div class="workspace-name">${escapeHtml(workspace.name)}${warning}</div>
         <div class="workspace-path">${escapeHtml(workspace.path)}</div>
         <div class="workspace-meta">
           <span>${fileCount} files</span>
@@ -144,7 +145,14 @@ function showWorkspacePreview(workspace, stats) {
           </svg>
         </button>
       </div>
-      
+
+      ${stats.limited ? `
+        <div style="padding: 12px; background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: #92400e;">
+          <strong>⚠️ Large Workspace</strong><br>
+          This workspace contains many files. File counts shown are approximate. The workspace will still open normally.
+        </div>
+      ` : ''}
+
       <div class="preview-stats">
         <div class="stat-item">
           <div class="stat-value">${stats.fileCount || 0}</div>
