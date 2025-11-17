@@ -1,0 +1,167 @@
+/* Floating Transcript Actions - Container */
+.floating-transcript-actions {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  z-index: 100;
+  pointer-events: none; /* Container ignores pointer events */
+}
+
+/* Floating Action Buttons */
+.floating-transcript-button {
+  pointer-events: auto; /* Buttons capture clicks */
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  position: relative;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.floating-transcript-button:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-focus);
+}
+
+.floating-transcript-button:active {
+  transform: scale(0.95);
+}
+
+/* Table of Contents Icon */
+.floating-transcript-button .icon.table-of-contents {
+  background-image: url('../../../images/icons/table-of-contents.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  width: 20px;
+  height: 20px;
+}
+
+/* Dark theme support for TOC icon */
+.dark-theme .floating-transcript-button .icon.table-of-contents,
+[data-theme="dark"] .floating-transcript-button .icon.table-of-contents,
+[data-theme="crystal-dark"] .floating-transcript-button .icon.table-of-contents {
+  filter: invert(1);
+}
+
+/* Prompts Count Badge */
+.prompts-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--primary-color);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Prompts Dropdown Menu */
+.floating-transcript-prompts-dropdown {
+  position: absolute;
+  top: 44px;
+  right: 44px;
+  min-width: 320px;
+  max-width: 480px;
+  max-height: 500px;
+  overflow-y: auto;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 11;
+  pointer-events: auto;
+}
+
+/* Prompts List */
+.prompts-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.prompts-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.prompts-item:last-child {
+  border-bottom: none;
+}
+
+.prompts-item:hover {
+  background: var(--surface-hover);
+}
+
+.prompts-item-number {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 32px;
+  text-align: right;
+  padding-top: 2px;
+}
+
+.prompts-item-text {
+  flex: 1;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.prompts-item-timestamp {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+  padding-top: 2px;
+}
+
+/* Empty State */
+.prompts-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* Scrollbar Styling for Prompts Dropdown */
+.floating-transcript-prompts-dropdown::-webkit-scrollbar {
+  width: 8px;
+}
+
+.floating-transcript-prompts-dropdown::-webkit-scrollbar-track {
+  background: var(--surface-secondary);
+  border-radius: 0 6px 6px 0;
+}
+
+.floating-transcript-prompts-dropdown::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 4px;
+}
+
+.floating-transcript-prompts-dropdown::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}

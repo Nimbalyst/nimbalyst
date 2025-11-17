@@ -4,9 +4,8 @@ import type { TranscriptSettings, PromptMarker, FileEditSummary } from '../types
 import { RichTranscriptView } from './RichTranscriptView';
 import { TranscriptSidebar } from './TranscriptSidebar';
 import { FileEditsSidebar } from './FileEditsSidebar';
+import { FloatingTranscriptActions } from './FloatingTranscriptActions';
 import { formatISO } from '../../../utils/dateUtils';
-
-type SidebarTab = 'prompts' | 'files';
 
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
@@ -45,10 +44,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
     return stored ? parseInt(stored, 10) : 256; // 16rem = 256px
   });
 
-  const [activeTab, setActiveTab] = useState<SidebarTab>(() => {
-    const stored = localStorage.getItem(`agent-transcript-tab-${sessionId}`);
-    return (stored as SidebarTab) || 'prompts';
-  });
+  // Removed activeTab state - sidebar now only shows Files tab
 
   const [prompts, setPrompts] = useState<PromptMarker[]>([]);
   const [fileEdits, setFileEdits] = useState<FileEditSummary[]>([]);
@@ -69,10 +65,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
     localStorage.setItem(`agent-transcript-sidebar-width-${sessionId}`, String(sidebarWidth));
   }, [sidebarWidth, sessionId]);
 
-  // Save active tab
-  useEffect(() => {
-    localStorage.setItem(`agent-transcript-tab-${sessionId}`, activeTab);
-  }, [activeTab, sessionId]);
+  // Removed - no longer need to save active tab since sidebar only shows Files
 
   // Extract prompts from messages
   useEffect(() => {
@@ -204,7 +197,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   return (
     <div className="agent-transcript-panel" style={{ display: 'flex', height: '100%', position: 'relative' }}>
       {/* Main Content */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
+      <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
         <RichTranscriptView
           ref={transcriptRef}
           sessionId={sessionId}
@@ -217,45 +210,17 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
           documentContext={sessionData.documentContext}
           workspacePath={sessionData.workspacePath}
         />
-      </div>
 
-      {/* Toggle Button - hidden if hideSidebar is true */}
-      {!hideSidebar && <button
-        onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-        style={{
-          position: 'absolute',
-          top: '1rem',
-          right: isSidebarCollapsed ? '0' : `${sidebarWidth}px`,
-          zIndex: 10,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.25rem',
-          padding: '0.5rem',
-          backgroundColor: 'var(--surface-secondary)',
-          border: '1px solid var(--border-primary)',
-          borderRadius: isSidebarCollapsed ? '0.5rem' : '0.5rem 0 0 0.5rem',
-          transition: 'all 0.3s ease-in-out',
-          cursor: 'pointer'
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-hover)'}
-        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-secondary)'}
-        title={isSidebarCollapsed ? 'Show prompt history' : 'Hide prompt history'}
-      >
-        {isSidebarCollapsed ? (
-          <>
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: '1rem', height: '1rem', color: 'var(--text-secondary)' }}>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: '1rem', height: '1rem', color: 'var(--text-secondary)' }}>
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </>
-        ) : (
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: '1rem', height: '1rem', color: 'var(--text-secondary)' }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
+        {/* Floating Actions - hidden if hideSidebar is true */}
+        {!hideSidebar && (
+          <FloatingTranscriptActions
+            prompts={prompts}
+            isSidebarCollapsed={isSidebarCollapsed}
+            onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            onNavigateToPrompt={handleNavigateToPrompt}
+          />
         )}
-      </button>}
+      </div>
 
       {/* Sidebar with tabs - hidden if hideSidebar is true */}
       {!hideSidebar && (
@@ -295,83 +260,42 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
           >
         {!isSidebarCollapsed && (
           <>
-            {/* Tab Navigation */}
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-primary)', backgroundColor: 'var(--surface-secondary)' }}>
-              <button
-                onClick={() => setActiveTab('prompts')}
-                style={{
-                  flex: 1,
-                  padding: '0.375rem 0.5rem',
-                  fontSize: '1rem',
+            {/* Header with Files label */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem',
+              borderBottom: '1px solid var(--border-primary)',
+              backgroundColor: 'var(--surface-secondary)'
+            }}>
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: '1rem', height: '1rem', color: 'var(--text-primary)' }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>Files</span>
+              {fileEdits.length > 0 && (
+                <span style={{
+                  marginLeft: 'auto',
+                  padding: '0.125rem 0.375rem',
+                  backgroundColor: 'var(--surface-tertiary)',
+                  borderRadius: '0.25rem',
+                  fontSize: '11px',
                   fontWeight: 500,
-                  transition: 'colors 0.2s',
-                  color: activeTab === 'prompts' ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                  cursor: 'pointer',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  borderBottom: activeTab === 'prompts' ? '2px solid var(--primary-color)' : '2px solid transparent'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: '0.75rem', height: '0.75rem' }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>Prompts</span>
-                  {prompts.length > 0 && (
-                    <span style={{ marginLeft: '0.25rem', padding: '0.125rem 0.25rem', backgroundColor: 'var(--surface-tertiary)', borderRadius: '0.25rem', fontSize: '9px' }}>
-                      {prompts.length}
-                    </span>
-                  )}
-                </div>
-              </button>
-              <button
-                onClick={() => setActiveTab('files')}
-                style={{
-                  flex: 1,
-                  padding: '0.375rem 0.5rem',
-                  fontSize: '1rem',
-                  fontWeight: 500,
-                  transition: 'colors 0.2s',
-                  color: activeTab === 'files' ? 'var(--text-primary)' : 'var(--text-tertiary)',
-                  cursor: 'pointer',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  borderBottom: activeTab === 'files' ? '2px solid var(--primary-color)' : '2px solid transparent'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: '0.75rem', height: '0.75rem' }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <span>Files</span>
-                  {fileEdits.length > 0 && (
-                    <span style={{ marginLeft: '0.25rem', padding: '0.125rem 0.25rem', backgroundColor: 'var(--surface-tertiary)', borderRadius: '0.25rem', fontSize: '9px' }}>
-                      {fileEdits.length}
-                    </span>
-                  )}
-                </div>
-              </button>
+                  color: 'var(--text-tertiary)'
+                }}>
+                  {fileEdits.length}
+                </span>
+              )}
             </div>
 
-            {/* Tab Content */}
+            {/* Files Content */}
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               <div style={{ flex: 1, overflow: 'hidden' }}>
-                {activeTab === 'prompts' && (
-                  <TranscriptSidebar
-                    sessionId={sessionId}
-                    prompts={prompts}
-                    onNavigateToPrompt={handleNavigateToPrompt}
-                    isCollapsed={false}
-                    onToggleCollapse={() => setIsSidebarCollapsed(true)}
-                  />
-                )}
-                {activeTab === 'files' && (
-                  <FileEditsSidebar
-                    fileEdits={fileEdits}
-                    onFileClick={onFileClick}
-                    workspacePath={sessionData.workspacePath}
-                  />
-                )}
+                <FileEditsSidebar
+                  fileEdits={fileEdits}
+                  onFileClick={onFileClick}
+                  workspacePath={sessionData.workspacePath}
+                />
               </div>
 
               {/* TodoList below tab content */}
