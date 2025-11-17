@@ -223,6 +223,9 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
   const expandedDirs = sharedExpandedDirs?.expandedDirs ?? localExpandedDirs;
   const setExpandedDirs = sharedExpandedDirs?.setExpandedDirs ?? setLocalExpandedDirs;
 
+  // Track previous currentFilePath to detect actual file changes
+  const prevFilePathRef = useRef<string | null>(null);
+
   // Update expanded directories when current file changes
   useEffect(() => {
     if (currentFilePath && level === 0) {
@@ -242,13 +245,20 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
         });
       }
 
-      // Scroll the active file into view after a brief delay to allow for expansion
-      setTimeout(() => {
-        const activeFileElement = document.querySelector('.file-tree-file.active');
-        if (activeFileElement) {
-          activeFileElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      }, 100);
+      // ONLY scroll if the file path actually changed (user switched files)
+      // Don't scroll when user is just browsing/clicking folders in the tree
+      const filePathChanged = prevFilePathRef.current !== currentFilePath;
+      if (filePathChanged) {
+        prevFilePathRef.current = currentFilePath;
+
+        // Scroll the active file into view after a brief delay to allow for expansion
+        setTimeout(() => {
+          const activeFileElement = document.querySelector('.file-tree-file.active');
+          if (activeFileElement) {
+            activeFileElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }, 100);
+      }
     }
   }, [currentFilePath, items, level, findParentDirs, setExpandedDirs]);
 

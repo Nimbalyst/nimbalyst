@@ -13,8 +13,6 @@ interface FileSelectOptions {
   currentFilePath: string | null;
   tabs: any;
   isInitializedRef: React.MutableRefObject<boolean>;
-  setCurrentFilePath: (path: string | null) => void;
-  setCurrentFileName: (name: string) => void;
 }
 
 export async function handleWorkspaceFileSelect(options: FileSelectOptions): Promise<void> {
@@ -23,8 +21,6 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
     currentFilePath,
     tabs,
     isInitializedRef,
-    setCurrentFilePath,
-    setCurrentFileName,
   } = options;
 
   // NOTE: autoSaveCancellationRef removed - EditorContainer handles all autosave now

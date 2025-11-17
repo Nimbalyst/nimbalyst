@@ -63,9 +63,8 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   const [sidebarWidth, setSidebarWidth] = useState<number>(250);
   const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null);
 
-  // Current file state
-  const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);
-  const [currentFileName, setCurrentFileName] = useState<string | null>(null);
+  // Current file state - DERIVED from active tab (don't maintain separate state)
+  // This ensures currentFilePath is always in sync with the active tab
   const isDirtyRef = useRef(false);
   const [isDirty, setIsDirty] = useState(false);
 
@@ -100,8 +99,6 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     getNavigationState: () => getNavigationStateRef.current?.(),
     onTabChange: async (tab) => {
       if (tab.filePath) {
-        setCurrentFilePath(tab.filePath);
-        setCurrentFileName(tab.fileName);
         setIsDirty(tab.isDirty || false);
 
         // Notify parent of file change
@@ -111,16 +108,11 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       }
     },
     onTabClose: (tab) => {
-      // Clear currentFilePath if closing the currently active file
-      // onTabChange will update it if switching to another tab
-      if (tab.filePath === currentFilePath) {
-        setCurrentFilePath(null);
-        setCurrentFileName(null);
-        setIsDirty(false);
+      // Just clear the isDirty flag - active tab tracking is automatic
+      setIsDirty(false);
 
-        if (onCurrentFileChange) {
-          onCurrentFileChange(null, null, false);
-        }
+      if (onCurrentFileChange) {
+        onCurrentFileChange(null, null, false);
       }
     }
   });
@@ -129,6 +121,11 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
+
+  // Derive current file info from active tab - this is the SINGLE SOURCE OF TRUTH
+  // This prevents the state desynchronization bug where currentFilePath was out of sync
+  const currentFilePath = tabs.activeTab?.filePath || null;
+  const currentFileName = tabs.activeTab?.fileName || null;
 
   // Build document context for AI features
   const documentContext = useDocumentContext({
@@ -206,11 +203,10 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     try {
       const result = await window.electronAPI.saveFileAs(content);
       if (result) {
-        setCurrentFilePath(result.filePath);
-        setCurrentFileName(result.filePath.split('/').pop() || result.filePath);
+        // No need to set currentFilePath - it's derived from active tab
         setIsDirty(false);
 
-        // Update tab state
+        // Update tab state - this will automatically update currentFilePath
         if (tabs.activeTabId) {
           tabs.updateTab(tabs.activeTabId, {
             filePath: result.filePath,
@@ -236,9 +232,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       filePath,
       currentFilePath,
       tabs,
-      isInitializedRef,
-      setCurrentFilePath,
-      setCurrentFileName
+      isInitializedRef
     });
   }, [currentFilePath, tabs]);
 
@@ -549,8 +543,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
                     handleSaveRef.current = saveFn;
                   }}
                   onSaveComplete={(filePath) => {
-                    setCurrentFilePath(filePath);
-                    setCurrentFileName(filePath.split('/').pop() || filePath);
+                    // No need to set currentFilePath - it's derived from active tab
                     setIsDirty(false);
 
                     if (tabs.activeTabId) {
