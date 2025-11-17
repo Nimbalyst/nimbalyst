@@ -133,20 +133,25 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   const exitDiffMode = useCallback(() => {
     console.log('[MonacoCodeEditor] Exiting diff mode');
 
-    // Dispose the diff editor properly to avoid "TextModel got disposed" errors
+    // Clear the diff editor model before React unmounts the component
+    // This prevents the "TextModel got disposed before DiffEditorWidget model got reset" error
     if (diffEditorRef.current) {
       try {
-        console.log('[MonacoCodeEditor] Disposing diff editor before unmount');
-        // Clear the model first to avoid disposal order issues
+        console.log('[MonacoCodeEditor] Clearing diff editor model before unmount');
+        // Setting model to null tells the DiffEditorWidget to release its references
+        // BEFORE the @monaco-editor/react component disposes the TextModels
         diffEditorRef.current.setModel(null);
-        diffEditorRef.current.dispose();
-        diffEditorRef.current = null;
+        // Don't call dispose() here - let the React component handle disposal on unmount
       } catch (error) {
-        console.warn('[MonacoCodeEditor] Error disposing diff editor:', error);
+        console.warn('[MonacoCodeEditor] Error clearing diff editor model:', error);
       }
     }
 
+    // Now trigger React unmount - the component will dispose the editor safely
     setDiffMode(null);
+
+    // Clear the ref after state update
+    diffEditorRef.current = null;
   }, []);
 
   /**
@@ -313,6 +318,25 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   useEffect(() => {
     initialContentRef.current = initialContent;
   }, [initialContent]);
+
+  /**
+   * Cleanup on unmount - clear diff editor model to avoid disposal order errors
+   */
+  useEffect(() => {
+    return () => {
+      // If we're in diff mode when component unmounts, clear the model first
+      // The @monaco-editor/react component will handle disposal
+      if (diffEditorRef.current) {
+        try {
+          console.log('[MonacoCodeEditor] Unmounting - clearing diff editor model');
+          // Clear the model to release references before disposal
+          diffEditorRef.current.setModel(null);
+        } catch (error) {
+          console.warn('[MonacoCodeEditor] Error clearing diff editor model on unmount:', error);
+        }
+      }
+    };
+  }, []); // Empty deps - only run on unmount
 
   // Render diff editor when in diff mode, normal editor otherwise
   return (
