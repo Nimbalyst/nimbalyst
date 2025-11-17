@@ -15,7 +15,7 @@ if (process.env.ELECTRON_RUN_AS_NODE === '1' && process.platform === 'darwin') {
   }
 }
 
-import { createWindow, windows, windowStates, findWindowByFilePath } from './window/WindowManager';
+import { createWindow, windows, windowStates, findWindowByFilePath, findWindowByWorkspace, getWindowId } from './window/WindowManager';
 import { loadFileIntoWindow } from './file/FileOperations';
 import { createApplicationMenu, updateApplicationMenu } from './menu/ApplicationMenu';
 import { createAIModelsWindow } from './window/AIModelsWindow';
@@ -37,8 +37,10 @@ import { registerClaudeCodeHandlers } from './ipc/ClaudeCodeHandlers';
 import { initializeClaudeCodeSessionHandlers } from './ipc/ClaudeCodeSessionHandlers';
 import { registerNotificationHandlers } from './ipc/NotificationHandlers';
 import { registerGitStatusHandlers } from './ipc/GitStatusHandlers';
+import { registerProjectSelectionHandlers } from './ipc/ProjectSelectionHandlers';
 import { getTheme, setTheme, incrementLaunchCount, shouldShowDiscordInvitation, dismissDiscordInvitation, type AppTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
+import { detectFileWorkspace, suggestWorkspaceForFile } from './utils/workspaceDetection';
 // import { AgentService } from './services/agents/AgentService';
 import { cliManager } from './services/CLIManager';
 import { startMcpHttpServer, updateDocumentState, registerWorkspaceWindow, cleanupMcpServer, shutdownHttpServer } from './mcp/httpServer';
@@ -122,23 +124,65 @@ app.on('open-file', (event, path) => {
     logger.main.info(`open-file event received: ${path}`);
 
     if (app.isReady()) {
-        // Check if file is already open in a window
-        const existingWindow = findWindowByFilePath(path);
-        if (existingWindow) {
-            existingWindow.focus();
-            return;
-        }
-
-        // Open in new window
-        const window = createWindow(true);
-        window.once('ready-to-show', () => {
-            loadFileIntoWindow(window, path);
-        });
+        openFileWithWorkspaceDetection(path);
     } else {
         // Store the file path to open after app is ready
         pendingFilePath = path;
     }
 });
+
+// Helper function to open a file with workspace detection
+async function openFileWithWorkspaceDetection(filePath: string): Promise<void> {
+    // Check if file is already open in a window
+    const existingWindow = findWindowByFilePath(filePath);
+    if (existingWindow) {
+        existingWindow.focus();
+        return;
+    }
+
+    // Detect which workspace this file belongs to
+    const workspacePath = detectFileWorkspace(filePath);
+
+    if (workspacePath) {
+        // File belongs to a known workspace
+        logger.main.info(`File belongs to workspace: ${workspacePath}`);
+
+        // Find or create workspace window
+        let workspaceWindow = findWindowByWorkspace(workspacePath);
+
+        if (workspaceWindow) {
+            // Workspace window exists, use it
+            workspaceWindow.focus();
+            await loadFileIntoWindow(workspaceWindow, filePath);
+        } else {
+            // Create new workspace window for this workspace
+            workspaceWindow = createWindow(false, true, workspacePath);
+            workspaceWindow.once('ready-to-show', async () => {
+                workspaceWindow!.show();
+                // Window state is already set by createWindow with workspace path
+                // Just load the file
+                await loadFileIntoWindow(workspaceWindow!, filePath);
+            });
+        }
+    } else {
+        // File is not in a known workspace - send event to show project selection dialog
+        logger.main.info(`File not in known workspace, requesting project selection`);
+
+        // Create a temporary window to host the dialog
+        const tempWindow = createWindow(true);
+        tempWindow.once('ready-to-show', () => {
+            tempWindow.show();
+            // Wait a bit for renderer to initialize, then send event to show project selection dialog
+            setTimeout(() => {
+                tempWindow.webContents.send('show-project-selection-dialog', {
+                    filePath,
+                    fileName: path.basename(filePath),
+                    suggestedWorkspace: suggestWorkspaceForFile(filePath)
+                });
+            }, 100);
+        });
+    }
+}
 
 // Parse command line arguments
 function parseCommandLineArgs() {
@@ -235,6 +279,7 @@ app.whenReady().then(async () => {
     setupSessionFileHandlers();
     registerSlashCommandHandlers();
     registerAttachmentHandlers();
+    registerProjectSelectionHandlers();
     registerClaudeCodeHandlers();
     initializeClaudeCodeSessionHandlers();  // Initialize Claude Code session import
     registerAnalyticsHandlers();
@@ -357,17 +402,10 @@ app.whenReady().then(async () => {
         // No session to restore and no file to open - show Workspace Manager
         createWorkspaceManagerWindow();
     } else if (pendingFilePath) {
-        // Handle pending file if we have one
-        const window = createWindow(true);
-        window.once('ready-to-show', () => {
-            window.show();
-            // Wait for renderer to finish initializing before sending file
-            // The renderer needs time to register IPC handlers
-            setTimeout(() => {
-                loadFileIntoWindow(window, pendingFilePath!);
-                pendingFilePath = null;
-            }, 100); // Give renderer 100ms to initialize
-        });
+        // Handle pending file with workspace detection
+        const fileToOpen = pendingFilePath;
+        pendingFilePath = null;
+        await openFileWithWorkspaceDetection(fileToOpen);
     }
 
     // Check if we should show Discord invitation after windows are fully loaded

@@ -349,7 +349,9 @@ function getRecentKey(type: 'workspaces' | 'documents'): `recent.workspaces` | `
 }
 
 function getRecentLimit(type: 'workspaces' | 'documents'): number {
-  return type === 'workspaces' ? 10 : 10;
+  // No limit for workspaces - track all projects user has opened
+  // Keep limit for documents to avoid unbounded growth
+  return type === 'workspaces' ? Infinity : 50;
 }
 
 export const store = appStore;

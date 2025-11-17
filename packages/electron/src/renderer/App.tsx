@@ -24,6 +24,7 @@ import { KeyboardShortcutsDialog } from './components/KeyboardShortcutsDialog/Ke
 import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
 import { ApiKeyDialog } from './components/ApiKeyDialog';
+import { ProjectSelectionDialog } from './components/ProjectSelectionDialog/ProjectSelectionDialog';
 import { GlobalSettingsScreen as AIModels } from './components/GlobalSettings/GlobalSettingsScreen.tsx';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { AgenticCodingWindow } from './components/AgenticCodingWindow';
@@ -170,6 +171,12 @@ export default function App() {
     message: '',
     details: undefined
   });
+  const [projectSelection, setProjectSelection] = useState<{
+    isOpen: boolean;
+    filePath: string;
+    fileName: string;
+    suggestedWorkspace?: string;
+  } | null>(null);
 
   // Navigation gutter state
   const [sidebarView, setSidebarView] = useState<SidebarView>('files');
@@ -537,9 +544,20 @@ export default function App() {
       setAgentPlanReference(planPath);
     };
 
+    const handleShowProjectSelectionDialog = (data: { filePath: string; fileName: string; suggestedWorkspace?: string }) => {
+      console.log('[App] handleShowProjectSelectionDialog called with data:', data);
+      setProjectSelection({
+        isOpen: true,
+        filePath: data.filePath,
+        fileName: data.fileName,
+        suggestedWorkspace: data.suggestedWorkspace
+      });
+    };
+
     // console.log('[App] Setting up IPC listener for set-content-mode');
     window.electronAPI.on('set-content-mode', handleSetContentMode);
     window.electronAPI.on('agent:insert-plan-reference', handleInsertPlanReference);
+    window.electronAPI.on('show-project-selection-dialog', handleShowProjectSelectionDialog);
     // COMMENTED OUT - Cmd+K now switches to Agent mode
     // window.electronAPI.on('toggle-agent-palette', handleToggleAgentPalette);
 
@@ -547,6 +565,7 @@ export default function App() {
       // console.log('[App] Removing IPC listener for set-content-mode');
       window.electronAPI.off?.('set-content-mode', handleSetContentMode);
       window.electronAPI.off?.('agent:insert-plan-reference', handleInsertPlanReference);
+      window.electronAPI.off?.('show-project-selection-dialog', handleShowProjectSelectionDialog);
       // window.electronAPI.off?.('toggle-agent-palette', handleToggleAgentPalette);
     };
   }, []); // Remove workspaceMode dependency - listener should always be active
@@ -1304,6 +1323,28 @@ export default function App() {
           window.electronAPI.openAIModels();
         }}
       />
+      {projectSelection && (
+        <ProjectSelectionDialog
+          isOpen={projectSelection.isOpen}
+          fileName={projectSelection.fileName}
+          suggestedWorkspace={projectSelection.suggestedWorkspace}
+          onSelectProject={async (selectedWorkspacePath) => {
+            // Send IPC event to main process with selected project
+            await window.electronAPI.invoke('project-selected', {
+              filePath: projectSelection.filePath,
+              workspacePath: selectedWorkspacePath
+            });
+            setProjectSelection(null);
+          }}
+          onCancel={() => {
+            // User cancelled - just open file without workspace
+            window.electronAPI.invoke('project-selection-cancelled', {
+              filePath: projectSelection.filePath
+            });
+            setProjectSelection(null);
+          }}
+        />
+      )}
       <ErrorDialog
         isOpen={diffError.isOpen}
         onClose={() => setDiffError(prev => ({ ...prev, isOpen: false }))}

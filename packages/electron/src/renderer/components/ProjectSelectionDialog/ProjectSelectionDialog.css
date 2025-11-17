@@ -1,0 +1,170 @@
+.project-selection-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.project-selection-dialog {
+  background-color: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 24px;
+  min-width: 500px;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.project-selection-dialog-title {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.project-selection-dialog-message {
+  margin: 0 0 24px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.project-selection-dialog-message strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.project-selection-section-title {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.project-selection-suggested {
+  margin-bottom: 24px;
+  padding: 16px;
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+}
+
+.project-selection-suggested-item {
+  margin-bottom: 12px;
+}
+
+.project-selection-recent {
+  margin-bottom: 24px;
+}
+
+.project-selection-list {
+  margin-bottom: 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  overflow: hidden;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.project-selection-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-primary);
+  transition: background-color 0.15s;
+}
+
+.project-selection-item:last-child {
+  border-bottom: none;
+}
+
+.project-selection-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.project-selection-item.selected {
+  background-color: var(--primary-color);
+}
+
+.project-selection-item.selected .project-selection-item-name,
+.project-selection-item.selected .project-selection-item-path {
+  color: white;
+}
+
+.project-selection-item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.project-selection-item-path {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+}
+
+.project-selection-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.project-selection-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.project-selection-button {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
+.project-selection-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.project-selection-button-primary {
+  background-color: var(--primary-color);
+  color: white;
+  width: 100%;
+}
+
+.project-selection-button-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.project-selection-button-secondary {
+  background-color: var(--surface-secondary);
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.project-selection-button-secondary:hover {
+  background-color: var(--surface-hover);
+}
+
+.project-selection-button-cancel {
+  background-color: var(--surface-secondary);
+  color: var(--text-primary);
+}
+
+.project-selection-button-cancel:hover {
+  background-color: var(--surface-hover);
+}
