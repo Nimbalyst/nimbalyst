@@ -129,6 +129,8 @@ export function getMonacoLanguage(filePath: string): string {
     '.fsx': 'fsharp',
 
     // Markup/Config
+    '.md': 'markdown',
+    '.markdown': 'markdown',
     '.sql': 'sql',
     '.graphql': 'graphql',
     '.dockerfile': 'dockerfile',
