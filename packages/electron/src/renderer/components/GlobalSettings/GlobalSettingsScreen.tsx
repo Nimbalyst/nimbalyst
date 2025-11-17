@@ -607,9 +607,6 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
             >
               Advanced Settings
             </button>
-            <button className="nav-action-button">
-              Documentation
-            </button>
           </div>
         </nav>
 
