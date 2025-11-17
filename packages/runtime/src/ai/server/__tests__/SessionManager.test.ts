@@ -80,6 +80,40 @@ class InMemorySessionStore implements SessionStore {
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }
 
+  async search(workspaceId: string, query: string): Promise<SessionListItem[]> {
+    // Simple in-memory search for testing
+    if (!query || query.trim().length === 0) {
+      return this.list(workspaceId);
+    }
+
+    const lowerQuery = query.toLowerCase();
+    return [...this.sessions.values()]
+      .filter(session => {
+        if ((session.metadata as any)?.workspaceId !== workspaceId) {
+          return false;
+        }
+        // Search in title
+        if (session.title?.toLowerCase().includes(lowerQuery)) {
+          return true;
+        }
+        // Search in messages
+        return session.messages.some(msg => {
+          const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+          return content.toLowerCase().includes(lowerQuery);
+        });
+      })
+      .map(session => ({
+        id: session.id,
+        provider: session.provider,
+        model: session.model,
+        title: session.title,
+        workspaceId: (session.metadata as any)?.workspaceId,
+        createdAt: session.createdAt || 0,
+        updatedAt: session.updatedAt || 0,
+      }))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  }
+
   async delete(sessionId: string): Promise<void> {
     this.sessions.delete(sessionId);
   }

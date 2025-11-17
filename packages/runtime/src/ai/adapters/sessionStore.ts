@@ -42,6 +42,7 @@ export interface SessionStore {
   updateMetadata(sessionId: string, metadata: UpdateSessionMetadataPayload): Promise<void>;
   get(sessionId: string): Promise<SessionData | null>;
   list(workspaceId: string): Promise<SessionListItem[]>;
+  search(workspaceId: string, query: string): Promise<SessionListItem[]>;
   delete(sessionId: string): Promise<void>;
 }
 

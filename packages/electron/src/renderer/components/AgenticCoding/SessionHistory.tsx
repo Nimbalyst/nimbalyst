@@ -77,11 +77,15 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   const workspaceColor = generateWorkspaceColor(workspacePath);
 
   // Load sessions from database
-  const loadSessions = useCallback(async () => {
+  const loadSessions = useCallback(async (query?: string) => {
     try {
       setLoading(true);
       setError(null);
-      const result = await window.electronAPI.invoke('sessions:list', workspacePath);
+
+      // Use search endpoint if query is provided, otherwise use list endpoint
+      const result = query && query.trim()
+        ? await window.electronAPI.invoke('sessions:search', workspacePath, query.trim())
+        : await window.electronAPI.invoke('sessions:list', workspacePath);
 
       if (result.success && Array.isArray(result.sessions)) {
         // Map sessions with base data only. Visual indicators (isProcessing, hasUnread)
@@ -111,6 +115,15 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   useEffect(() => {
     loadSessions();
   }, [loadSessions, refreshTrigger]);
+
+  // Debounced search effect
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadSessions(searchQuery);
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, loadSessions]);
 
   // Update visual indicators (processing state, unread badges) without reloading from database
   useEffect(() => {
@@ -185,20 +198,11 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [sortDropdownOpen]);
 
-  // Filter sessions by session type and search query
+  // Filter sessions by session type only (search is now done server-side)
   const filteredSessions = sessions.filter(session => {
     // Apply session type filter
     const sessionType = session.sessionType || 'chat';
-    if (!sessionTypeFilters.has(sessionType)) {
-      return false;
-    }
-
-    // Apply search filter
-    if (searchQuery) {
-      return session.title?.toLowerCase().includes(searchQuery.toLowerCase());
-    }
-
-    return true;
+    return sessionTypeFilters.has(sessionType);
   });
 
   // Group sessions by time using the selected sort field
@@ -214,26 +218,109 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
             <h3 className="session-history-header-name">{workspaceName}</h3>
             <div className="session-history-header-path">{workspacePath}</div>
           </div>
-          {onNewSession && (
-            <button
-              className="session-history-new-button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNewSession();
-              }}
-              title="Create new session"
-              aria-label="Create new session"
-              type="button"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-            </button>
-          )}
+          <div className="session-history-header-buttons">
+            {onImportSessions && (
+              <button
+                className="session-history-import-button"
+                data-testid="import-sessions-button"
+                onClick={onImportSessions}
+                title="Import Claude Code sessions"
+                aria-label="Import sessions"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M13.5 8.5V12.5C13.5 13.0523 13.0523 13.5 12.5 13.5H3.5C2.94772 13.5 2.5 13.0523 2.5 12.5V8.5M8 2.5V10.5M8 10.5L5.5 8M8 10.5L10.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
+            {onNewSession && (
+              <button
+                className="session-history-new-button"
+                data-testid="new-session-button"
+                onClick={onNewSession}
+                title="Create new session"
+                aria-label="Create new session"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
         <div className="session-history-section-label">Agent Sessions</div>
+        <div className="session-history-search">
+          <input
+            type="text"
+            className="session-history-search-input"
+            placeholder="Search sessions..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search sessions"
+          />
+        </div>
+        <div className="session-history-filters">
+          <button
+            className={`session-history-filter-button chat ${sessionTypeFilters.has('chat') ? 'active' : ''}`}
+            onClick={() => toggleSessionTypeFilter('chat')}
+            title="Toggle chat sessions"
+          >
+            Chat
+          </button>
+          <button
+            className={`session-history-filter-button planning ${sessionTypeFilters.has('planning') ? 'active' : ''}`}
+            onClick={() => toggleSessionTypeFilter('planning')}
+            title="Toggle planning sessions"
+          >
+            Planning
+          </button>
+          <button
+            className={`session-history-filter-button coding ${sessionTypeFilters.has('coding') ? 'active' : ''}`}
+            onClick={() => toggleSessionTypeFilter('coding')}
+            title="Toggle coding sessions"
+          >
+            Coding
+          </button>
+          <div className="session-history-sort-dropdown">
+            <button
+              className="session-history-sort-button"
+              onClick={toggleSortDropdown}
+              title={`Sorted by: ${sortBy === 'updated' ? 'Last Updated' : 'Created'}`}
+              aria-label="Sort sessions"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 2V14M8 14L4 10M8 14L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            {sortDropdownOpen && (
+              <div className="session-history-sort-menu">
+                <button
+                  className={`session-history-sort-option ${sortBy === 'updated' ? 'active' : ''}`}
+                  onClick={() => selectSortOption('updated')}
+                >
+                  <span>Last Updated</span>
+                  {sortBy === 'updated' && (
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M13 4L6 11L3 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </button>
+                <button
+                  className={`session-history-sort-option ${sortBy === 'created' ? 'active' : ''}`}
+                  onClick={() => selectSortOption('created')}
+                >
+                  <span>Created</span>
+                  {sortBy === 'created' && (
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M13 4L6 11L3 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
         <div className="session-history-loading">
-          <span>Loading sessions...</span>
+          <span>Searching sessions...</span>
         </div>
       </div>
     );

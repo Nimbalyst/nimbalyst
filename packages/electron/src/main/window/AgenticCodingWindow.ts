@@ -245,6 +245,36 @@ ipcMain.handle('sessions:list', async (_event, workspacePath: string) => {
   }
 });
 
+ipcMain.handle('sessions:search', async (_event, workspacePath: string, query: string) => {
+  try {
+    const entries = await AISessionsRepository.search(workspacePath, query);
+    const sessions = [];
+
+    for (const entry of entries) {
+      const session = await AISessionsRepository.get(entry.id);
+      if (session) {
+        sessions.push({
+          id: session.id,
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+          name: session.title,
+          title: session.title,
+          provider: session.provider,
+          model: session.model,
+          sessionType: session.sessionType || 'chat',
+          messageCount: entry.messageCount || 0,
+          metadata: session.metadata || {}
+        });
+      }
+    }
+
+    return { success: true, sessions };
+  } catch (error) {
+    console.error('[AgenticCoding] Failed to search sessions:', error);
+    return { success: false, error: String(error), sessions: [] };
+  }
+});
+
 ipcMain.handle('sessions:delete', async (_event, sessionId: string) => {
   try {
     await AISessionsRepository.delete(sessionId);

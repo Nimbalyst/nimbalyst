@@ -53,6 +53,10 @@ export const AISessionsRepository = {
     return await requireStore().list(workspaceId);
   },
 
+  async search(workspaceId: string, query: string): Promise<SessionListItem[]> {
+    return await requireStore().search(workspaceId, query);
+  },
+
   async delete(sessionId: string): Promise<void> {
     await requireStore().delete(sessionId);
   },

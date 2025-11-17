@@ -192,6 +192,91 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       });
     },
 
+    async search(workspaceId: string, query: string): Promise<SessionListItem[]> {
+      await ensureReady();
+
+      // If query is empty, return all sessions (same as list)
+      if (!query || query.trim().length === 0) {
+        return this.list(workspaceId);
+      }
+
+      // Sanitize query for FTS - replace special characters and prepare for tsquery
+      const searchTerms = query.trim().split(/\s+/).filter(Boolean).join(' & ');
+
+      const { rows } = await db.query<any>(
+        `WITH session_matches AS (
+          -- Search in session titles
+          SELECT
+            s.id,
+            s.provider,
+            s.model,
+            s.session_type,
+            s.title,
+            s.workspace_id,
+            s.created_at,
+            s.updated_at,
+            ts_rank_cd(to_tsvector('english', COALESCE(s.title, '')), to_tsquery('english', $2)) * 2 as rank
+          FROM ai_sessions s
+          WHERE s.workspace_id = $1
+            AND to_tsvector('english', COALESCE(s.title, '')) @@ to_tsquery('english', $2)
+
+          UNION
+
+          -- Search in message content
+          SELECT DISTINCT
+            s.id,
+            s.provider,
+            s.model,
+            s.session_type,
+            s.title,
+            s.workspace_id,
+            s.created_at,
+            s.updated_at,
+            MAX(ts_rank_cd(to_tsvector('english', m.content), to_tsquery('english', $2))) as rank
+          FROM ai_sessions s
+          INNER JOIN ai_agent_messages m ON s.id = m.session_id
+          WHERE s.workspace_id = $1
+            AND to_tsvector('english', m.content) @@ to_tsquery('english', $2)
+          GROUP BY s.id, s.provider, s.model, s.session_type, s.title, s.workspace_id,
+                   s.created_at, s.updated_at
+        )
+        SELECT
+          sm.id,
+          sm.provider,
+          sm.model,
+          sm.session_type,
+          sm.title,
+          sm.workspace_id,
+          sm.created_at,
+          sm.updated_at,
+          MAX(sm.rank) as max_rank,
+          COUNT(m.id) as message_count
+        FROM session_matches sm
+        LEFT JOIN ai_agent_messages m ON sm.id = m.session_id AND m.direction = 'input'
+        GROUP BY sm.id, sm.provider, sm.model, sm.session_type, sm.title, sm.workspace_id,
+                 sm.created_at, sm.updated_at
+        ORDER BY max_rank DESC, sm.updated_at DESC`,
+        [workspaceId, searchTerms]
+      );
+
+      return rows.map(row => {
+        const createdAt = toMillis(row.created_at);
+        const updatedAt = toMillis(row.updated_at);
+        const messageCount = parseInt(row.message_count) || 0;
+        return {
+          id: row.id,
+          provider: row.provider,
+          model: row.model ?? undefined,
+          sessionType: row.session_type ?? undefined,
+          title: row.title ?? undefined,
+          workspaceId: row.workspace_id,
+          createdAt,
+          updatedAt,
+          messageCount,
+        };
+      });
+    },
+
     async delete(sessionId: string): Promise<void> {
       await ensureReady();
       await db.query('DELETE FROM ai_sessions WHERE id=$1', [sessionId]);

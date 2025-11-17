@@ -1,3 +1,13 @@
+/**
+ * FloatingTranscriptActions - Floating action buttons for AgentTranscriptPanel
+ *
+ * Provides two floating buttons in the top-right corner of the transcript:
+ * 1. Prompts menu (TOC icon) - Dropdown showing all user prompts in the session
+ * 2. Toggle history button - Shows/hides the file history sidebar
+ *
+ * This component follows the same design pattern as FloatingDocumentActionsPlugin
+ * in the TabEditor, with consistent styling, positioning, and interaction patterns.
+ */
 import React, { useState, useRef, useEffect } from 'react';
 import type { PromptMarker } from '../types';
 import './FloatingTranscriptActions.css';
