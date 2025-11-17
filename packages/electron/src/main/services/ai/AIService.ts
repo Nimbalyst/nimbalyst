@@ -1102,11 +1102,11 @@ export class AIService {
 
               // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage
               if (session.provider === 'claude-code') {
-                console.log('[AIService] Auto-fetching context usage for claude-code session:', session.id);
+                // console.log('[AIService] Auto-fetching context usage for claude-code session:', session.id);
                 try {
                   // Get the provider
                   const contextProvider = ProviderFactory.getProvider(session.provider as AIProviderType, session.id);
-                  console.log('[AIService] Context provider retrieved:', !!contextProvider);
+                  // console.log('[AIService] Context provider retrieved:', !!contextProvider);
                   if (contextProvider) {
                     let contextResponse = '';
 
@@ -1117,36 +1117,36 @@ export class AIService {
                       logger.main.error('Failed to reload session for /context command');
                       break;
                     }
-                    console.log('[AIService] Session reloaded, messages count:', updatedSession.messages.length);
+                    // console.log('[AIService] Session reloaded, messages count:', updatedSession.messages.length);
 
                     // Mark messages as hidden for this auto-triggered /context command
                     // User-typed /context won't have this flag set, so they'll be visible
                     if (contextProvider.setHiddenMode) {
                       contextProvider.setHiddenMode(true);
-                      console.log('[AIService] Hidden mode set on provider');
+                      // console.log('[AIService] Hidden mode set on provider');
                     }
 
                     // Stream the /context response
                     // The provider will log messages with hidden=true flag
                     // IMPORTANT: Pass undefined for documentContext - /context is a slash command
                     // that should return token stats, not analyze the current document
-                    console.log('[AIService] Sending /context command...');
+                    // console.log('[AIService] Sending /context command...');
                     for await (const chunk of contextProvider.sendMessage('/context', undefined, session.id, updatedSession.messages, workspacePath, [])) {
                       if (!chunk) continue;
-                      console.log('[AIService] /context chunk received:', chunk.type, chunk);
+                      // console.log('[AIService] /context chunk received:', chunk.type, chunk);
                       if (chunk.type === 'text') {
                         contextResponse += chunk.content || '';
-                        console.log('[AIService] Accumulated context response so far:', contextResponse);
+                        // console.log('[AIService] Accumulated context response so far:', contextResponse);
                       } else if (chunk.type === 'complete') {
                         // Parse the context response to extract token usage
                         // Format: "**Tokens:** 34.7k / 200.0k (17%)"
-                        console.log('[AIService] /context response received:', contextResponse);
+                        // console.log('[AIService] /context response received:', contextResponse);
                         const tokenMatch = contextResponse.match(/\*\*Tokens:\*\*\s+([\d.]+)k\s*\/\s*([\d.]+)k\s*\((\d+)%\)/);
 
                         if (tokenMatch) {
                           const usedTokens = Math.round(parseFloat(tokenMatch[1]) * 1000);
                           const contextWindow = Math.round(parseFloat(tokenMatch[2]) * 1000);
-                          console.log('[AIService] Parsed token usage:', { usedTokens, contextWindow });
+                          // console.log('[AIService] Parsed token usage:', { usedTokens, contextWindow });
 
                           // Notify renderer to reload session (which will parse token usage from messages)
                           event.sender.send('ai:tokenUsageUpdated', {
@@ -1170,7 +1170,7 @@ export class AIService {
                         break;
                       }
                     }
-                    console.log('[AIService] Finished streaming /context response');
+                    // console.log('[AIService] Finished streaming /context response');
                   } else {
                     console.warn('[AIService] No context provider found for session:', session.id);
                   }
@@ -1180,7 +1180,7 @@ export class AIService {
                   // Don't fail the main request if context fetch fails
                 }
               } else {
-                console.log('[AIService] Skipping /context auto-fetch - provider is not claude-code:', session.provider);
+                // console.log('[AIService] Skipping /context auto-fetch - provider is not claude-code:', session.provider);
               }
 
               break;

@@ -357,7 +357,7 @@ export class WindowedTreeMatcher {
     // FORCE EXACT MATCHES using text-based guideposts
     // Guideposts identify content that's identical but shifted in position
     // Override TOPT's decisions and force these to match as EQUAL operations
-    console.log(`[TreeMatcher] Forcing ${textGuidePosts.size} guidepost matches to override TOPT`);
+    // console.log(`[TreeMatcher] Forcing ${textGuidePosts.size} guidepost matches to override TOPT`);
 
     const forcedEqualOps: typeof diffOps = [];
     textGuidePosts.forEach((sourceIdx, targetIdx) => {
