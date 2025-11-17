@@ -27,7 +27,7 @@ import {
 } from 'rexical';
 import { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG, COMMAND_PRIORITY_LOW } from 'lexical';
 import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
-import { FixedTabHeaderContainer } from '@nimbalyst/runtime/plugins/shared/fixedTabHeader';
+import { FixedTabHeaderContainer, FixedTabHeaderRegistry } from '@nimbalyst/runtime/plugins/shared/fixedTabHeader';
 import { MonacoCodeEditor } from '../MonacoCodeEditor';
 import { ImageViewer } from '../ImageViewer';
 import { getFileType } from '../../utils/fileTypeDetector';
@@ -1540,6 +1540,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 },
                 onEditorReady: (editor) => {
                   editorRef.current = editor;
+                  // Force FixedTabHeaderRegistry to re-evaluate after editor remounts
+                  // This ensures DiffApprovalBar appears when switching back from Monaco mode
+                  setTimeout(() => {
+                    FixedTabHeaderRegistry.getInstance().notifyChange();
+                  }, 150);
                 },
                 onSaveRequest: handleManualSave,
                 onViewHistory,
