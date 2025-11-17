@@ -67,21 +67,20 @@ jobs:
           echo "Downloaded artifacts:"
           ls -lh public-release-files/
 
-      - name: Fetch public release notes from R2
+      - name: Fetch public release notes from repository
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          # Fetch PUBLIC_RELEASE_NOTES.md from R2
-          RELEASE_NOTES_URL="https://pub-4357a3345db7463580090984c0e4e2ba.r2.dev/PUBLIC_RELEASE_NOTES.md"
-
-          echo "Fetching release notes from: $RELEASE_NOTES_URL"
-
-          if curl -f -o public-release-notes.md "$RELEASE_NOTES_URL"; then
-            echo "✅ Successfully fetched PUBLIC_RELEASE_NOTES.md from R2"
+          # Check if PUBLIC_RELEASE_NOTES.md exists in repo root
+          if [ -f "PUBLIC_RELEASE_NOTES.md" ]; then
+            cp PUBLIC_RELEASE_NOTES.md public-release-notes.md
+            echo "✅ Found PUBLIC_RELEASE_NOTES.md in repository"
             echo "Release notes content:"
             cat public-release-notes.md
           else
-            echo "⚠️  Failed to fetch release notes from R2, using fallback"
+            echo "⚠️  PUBLIC_RELEASE_NOTES.md not found in repository"
+            echo "Please run /release-public command first to generate release notes"
+            echo "Using fallback message..."
             echo "New release with improvements and bug fixes." > public-release-notes.md
           fi
 

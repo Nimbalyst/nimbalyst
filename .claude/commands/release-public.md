@@ -1,83 +1,73 @@
 ---
 description: Publish tested internal release to public repo
 ---
-Publish the tested internal release to the public repository:
+Publish the tested internal release to the public repository following this automated workflow:
 
-## Prerequisites
+## PHASE 1: COLLECT INFORMATION
 
-Before running this command, ensure:
-1. You have completed Phase 1 of the release process (`/release [patch|minor|major]`)
-2. The internal build has been created on the private repo (nimbalyst/nimbalyst-code)
-3. You have downloaded and tested the internal build
-4. No critical issues were found during testing
+1. **Ask user for version to promote**:
+  - Prompt: "Which version do you want to promote to public? (e.g., v0.45.29)"
+  - Get the version tag from user input
 
-## Steps
+2. **Ask user for last public release**:
+  - Prompt: "What was the last public release version? (e.g., v0.45.25)"
+  - This determines which CHANGELOG entries to include
+  - Public release notes will cover ALL changes from that version to the new version
 
-1. **Get current version**:
-  - Run: `git describe --tags --abbrev=0`
-  - This shows the version that was just released internally
+## PHASE 2: GENERATE PUBLIC RELEASE NOTES
 
-2. **Extract public release notes**:
-  - Read the CHANGELOG.md file
-  - Find the release notes for the current version
-  - Filter to ONLY user-facing changes:
-    - Include: New features, bug fixes, UI improvements
-    - Exclude: Internal refactoring, TypeScript fixes, developer tooling
-  - Format in user-friendly language (present tense, marketing style)
+1. **Extract cumulative CHANGELOG entries**:
+  - Read CHANGELOG.md
+  - Find all release sections from the last public version through the new version
+  - Extract all entries from Added, Changed, and Fixed categories
+  - Skip Removed and internal-only changes
 
-3. **Verify release exists on private repo**:
-  - Check: https://github.com/nimbalyst/nimbalyst-code/releases
-  - Confirm the release exists and has build artifacts attached
+2. **Transform to user-friendly format**:
+  - Convert categories:
+    - Added → "### New Features"
+    - Changed → "### Improvements"
+    - Fixed → "### Fixed"
+  - Filter out internal/technical items:
+    - Remove: TypeScript fixes, refactoring, developer tooling, internal optimizations
+    - Keep: User-facing features, UI improvements, bug fixes
+  - Use present tense and marketing language
 
-4. **Show publication options**:
+3. **Create PUBLIC_RELEASE_NOTES.md**:
+  - Write formatted notes to `PUBLIC_RELEASE_NOTES.md` in repository root
+  - Show the user what will be published
+  - Ask for approval before proceeding
 
-  **Option A: GitHub Actions Workflow (Recommended)**
-  - Trigger the "Publish to Public Repository" workflow:
-    - Visit: https://github.com/nimbalyst/nimbalyst-code/actions/workflows/publish-public.yml
-    - Click "Run workflow"
-    - Enter the version tag (e.g., v0.42.61)
-    - Paste the public release notes (provided by this command)
-    - Click "Run workflow"
+## PHASE 3: COMMIT AND PUBLISH
+
+1. **Commit the release notes**:
+  - Stage: `git add PUBLIC_RELEASE_NOTES.md`
+  - Commit: `git commit -m "docs: public release notes for [VERSION]"`
+  - Push: `git push origin main`
+
+2. **Trigger publish workflow**:
+  - Use GitHub CLI to trigger the workflow:
+    ```bash
+    gh workflow run publish-public.yml -f version=[VERSION]
+    ```
+  - This triggers: https://github.com/nimbalyst/nimbalyst-code/actions/workflows/publish-public.yml
   - The workflow will:
-    - Validate the version exists
-    - Download artifacts from private repo
-    - Create release on public repo (nimbalyst/nimbalyst)
+    - Fetch PUBLIC_RELEASE_NOTES.md from the repo
+    - Download artifacts from private release
+    - Create public release with the notes
     - Upload all build artifacts
 
-  **Option B: Manual Publication**
-  - Visit: https://github.com/nimbalyst/nimbalyst/releases/new
-  - Create new release with:
-    - Tag: v[VERSION] (same as private repo)
-    - Title: "Nimbalyst v[VERSION]"
-    - Description: [PUBLIC RELEASE NOTES]
-  - Manually download and upload artifacts from private repo release
+3. **Provide confirmation**:
+  - Show workflow trigger URL
+  - Show expected public release URL: https://github.com/nimbalyst/nimbalyst/releases/tag/[VERSION]
+  - Note: Workflow takes 2-3 minutes to complete
 
-5. **Provide public release notes**:
-  - Display the filtered, user-friendly release notes
-  - User can copy these to the public GitHub release description
+## Example Usage
 
-6. **Verify publication**:
-  - After publishing, check: https://github.com/nimbalyst/nimbalyst/releases
-  - Confirm the public release is visible with correct notes
-  - Verify no internal details are exposed
-
-## Example Public Release Notes
-
-For a release that fixed bugs and added features, the public notes might look like:
-
-```markdown
-This release brings several improvements to your editing experience:
-
-- Find and replace text across your documents with the new search panel
-- Improved performance when working with large markdown files
-- Fixed an issue where autosave could fail on network drives
-- Enhanced AI chat with better context awareness
-
-Download the latest version and let us know what you think!
 ```
+User: /release-public
+Assistant: Which version do you want to promote to public? (e.g., v0.45.29)
+User: v0.45.29
+Assistant: What was the last public release version? (e.g., v0.45.25)
+User: v0.45.25
 
-Note how this:
-- Uses present tense and active voice
-- Focuses on user benefits
-- Omits technical/internal details
-- Keeps a friendly, approachable tone
+[Generates cumulative notes covering v0.45.26, v0.45.27, v0.45.28, v0.45.29]
