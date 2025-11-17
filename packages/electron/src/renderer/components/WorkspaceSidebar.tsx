@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { FileTree } from './FileTree';
 import { InputModal } from './InputModal';
 import { PlansPanel } from './PlansPanel/PlansPanel';
@@ -27,6 +27,49 @@ interface WorkspaceSidebarProps {
   onNewPlan?: () => void;
   onOpenPlansTable?: () => void;
   onSelectedFolderChange?: (folderPath: string | null) => void;
+  currentAISessionId?: string | null;
+}
+
+const FILE_TREE_FILTER_OPTIONS: ReadonlyArray<FileTreeFilter> = ['all', 'markdown', 'known', 'ai-read', 'ai-written'];
+const CLAUDE_SESSION_FILTERS = new Set<FileTreeFilter>(['ai-read', 'ai-written']);
+
+interface SessionFileFilterState {
+  read: string[];
+  written: string[];
+}
+
+function isValidFileTreeFilter(value: unknown): value is FileTreeFilter {
+  return typeof value === 'string' && FILE_TREE_FILTER_OPTIONS.includes(value as FileTreeFilter);
+}
+
+function normalizeSlashes(path: string): string {
+  return path.replace(/\\/g, '/');
+}
+
+function normalizeFilePath(path: string): string {
+  if (!path) return '';
+  let normalized = normalizeSlashes(path);
+  if (/^[a-zA-Z]:\/$/i.test(normalized)) {
+    return normalized;
+  }
+  if (normalized !== '/' && normalized.endsWith('/')) {
+    normalized = normalized.replace(/\/+$/, '');
+  }
+  return normalized;
+}
+
+function resolveSessionFilePath(filePath: string, workspacePath?: string): string | null {
+  if (!filePath) return null;
+  const sanitized = normalizeSlashes(filePath);
+  if (sanitized.startsWith('/') || /^[a-zA-Z]:\//.test(sanitized)) {
+    return normalizeFilePath(sanitized);
+  }
+  if (!workspacePath) {
+    return normalizeFilePath(sanitized);
+  }
+  const base = normalizeFilePath(workspacePath);
+  const relative = sanitized.replace(/^\.?\//, '');
+  return normalizeFilePath(`${base}/${relative}`);
 }
 
 // Generate a consistent color based on workspace path
@@ -56,7 +99,8 @@ export function WorkspaceSidebar({
   onViewHistory,
   onNewPlan,
   onOpenPlansTable,
-  onSelectedFolderChange
+  onSelectedFolderChange,
+  currentAISessionId
 }: WorkspaceSidebarProps) {
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
@@ -67,6 +111,7 @@ export function WorkspaceSidebar({
   const [showFileIcons, setShowFileIcons] = useState(true);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [filterMenuPosition, setFilterMenuPosition] = useState({ x: 0, y: 0 });
+  const [sessionFileFilters, setSessionFileFilters] = useState<SessionFileFilterState>({ read: [], written: [] });
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const hasLoadedSettingsRef = useRef(false);
 
@@ -80,7 +125,7 @@ export function WorkspaceSidebar({
     window.electronAPI.invoke('workspace:get-state', workspacePath)
       .then(state => {
         // Set filter if it exists, otherwise keep default
-        if (state?.fileTreeFilter) {
+        if (state?.fileTreeFilter && isValidFileTreeFilter(state.fileTreeFilter)) {
           setFileTreeFilter(state.fileTreeFilter);
         }
 
@@ -227,10 +272,109 @@ export function WorkspaceSidebar({
     setFileTreeFilter(filter);
   };
 
+  const loadClaudeSessionFiles = useCallback(async (sessionId: string | null) => {
+    if (!sessionId) {
+      setSessionFileFilters({ read: [], written: [] });
+      return;
+    }
+
+    if (!window.electronAPI?.invoke) {
+      return;
+    }
+
+    const normalizeResponse = (response: any): string[] => {
+      if (!response?.success || !Array.isArray(response.files)) {
+        return [];
+      }
+      const normalizedPaths = response.files
+        .map((file: any) => resolveSessionFilePath(file.filePath, workspacePath))
+        .filter((value): value is string => Boolean(value));
+
+      return Array.from(new Set(normalizedPaths));
+    };
+
+    try {
+      const [readResult, writtenResult] = await Promise.all([
+        window.electronAPI.invoke('session-files:get-by-session', sessionId, 'read'),
+        window.electronAPI.invoke('session-files:get-by-session', sessionId, 'edited')
+      ]);
+
+      setSessionFileFilters({
+        read: normalizeResponse(readResult),
+        written: normalizeResponse(writtenResult)
+      });
+    } catch (error) {
+      console.error('Failed to load Claude session files:', error);
+      setSessionFileFilters({ read: [], written: [] });
+    }
+  }, [workspacePath]);
+
+  useEffect(() => {
+    if (!currentAISessionId) {
+      setSessionFileFilters({ read: [], written: [] });
+      return;
+    }
+
+    setSessionFileFilters({ read: [], written: [] });
+    loadClaudeSessionFiles(currentAISessionId);
+  }, [currentAISessionId, loadClaudeSessionFiles]);
+
+  useEffect(() => {
+    if (!currentAISessionId || !window.electronAPI?.on) {
+      return;
+    }
+
+    const handler = (sessionId: string) => {
+      if (sessionId === currentAISessionId) {
+        loadClaudeSessionFiles(currentAISessionId);
+      }
+    };
+
+    const unsubscribe = window.electronAPI.on('session-files:updated', handler);
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [currentAISessionId, loadClaudeSessionFiles]);
+
+  const aiReadPathSet = useMemo(() => new Set(sessionFileFilters.read), [sessionFileFilters.read]);
+  const aiWrittenPathSet = useMemo(() => new Set(sessionFileFilters.written), [sessionFileFilters.written]);
+
   // Filter file tree based on current filter
-  const filterFileTree = (items: FileTreeItem[], filter: FileTreeFilter): FileTreeItem[] => {
+  const filterFileTree = useCallback((items: FileTreeItem[], filter: FileTreeFilter): FileTreeItem[] => {
     if (filter === 'all') {
       return items;
+    }
+
+    if (CLAUDE_SESSION_FILTERS.has(filter)) {
+      const trackedSet = filter === 'ai-read' ? aiReadPathSet : aiWrittenPathSet;
+      if (trackedSet.size === 0) {
+        return [];
+      }
+
+      const filterTrackedItems = (entries: FileTreeItem[]): FileTreeItem[] => {
+        return entries.reduce((acc: FileTreeItem[], item) => {
+          if (item.type === 'directory') {
+            const filteredChildren = item.children ? filterTrackedItems(item.children) : [];
+            if (filteredChildren.length > 0) {
+              acc.push({
+                ...item,
+                children: filteredChildren
+              });
+            }
+          } else {
+            const normalizedPath = normalizeFilePath(item.path);
+            if (trackedSet.has(normalizedPath)) {
+              acc.push(item);
+            }
+          }
+          return acc;
+        }, []);
+      };
+
+      return filterTrackedItems(items);
     }
 
     const knownExtensions = ['.md', '.markdown', '.txt', '.json', '.js', '.ts', '.tsx', '.jsx', '.css', '.html', '.xml', '.yaml', '.yml'];
@@ -249,8 +393,8 @@ export function WorkspaceSidebar({
       return true;
     };
 
-    const filterItems = (items: FileTreeItem[]): FileTreeItem[] => {
-      return items.reduce((acc: FileTreeItem[], item) => {
+    const filterItems = (entries: FileTreeItem[]): FileTreeItem[] => {
+      return entries.reduce((acc: FileTreeItem[], item) => {
         if (item.type === 'directory') {
           const filteredChildren = item.children ? filterItems(item.children) : [];
           // Include directory if it has any matching children
@@ -268,12 +412,26 @@ export function WorkspaceSidebar({
     };
 
     return filterItems(items);
-  };
+  }, [aiReadPathSet, aiWrittenPathSet]);
 
   const filteredFileTree = useMemo(
     () => filterFileTree(fileTree, fileTreeFilter),
-    [fileTree, fileTreeFilter]
+    [fileTree, fileTreeFilter, filterFileTree]
   );
+
+  const isAISessionFilter = CLAUDE_SESSION_FILTERS.has(fileTreeFilter);
+  const hasActiveClaudeSession = Boolean(currentAISessionId);
+  const activeClaudeFilterCount = fileTreeFilter === 'ai-read'
+    ? aiReadPathSet.size
+    : fileTreeFilter === 'ai-written'
+      ? aiWrittenPathSet.size
+      : 0;
+  const shouldShowFilterHint = isAISessionFilter && (!hasActiveClaudeSession || activeClaudeFilterCount === 0);
+  const aiFilterHintText = !hasActiveClaudeSession
+    ? 'Open a Claude Code session to see which files the agent reads or writes.'
+    : fileTreeFilter === 'ai-read'
+      ? 'No files have been read by this Claude Code session yet.'
+      : 'No files have been written by this Claude Code session yet.';
 
   // Root folder drag and drop handlers
   const handleRootDragOver = (e: React.DragEvent) => {
@@ -449,6 +607,11 @@ export function WorkspaceSidebar({
         <>
           <div className="workspace-section-label">Files</div>
           <div className={`workspace-file-tree ${isDragOverRoot ? 'drag-over-root' : ''}`}>
+            {shouldShowFilterHint && (
+              <div className="file-tree-filter-hint">
+                {aiFilterHintText}
+              </div>
+            )}
             <FileTree
               items={filteredFileTree}
               currentFilePath={currentFilePath}
@@ -476,6 +639,11 @@ export function WorkspaceSidebar({
               showIcons={showFileIcons}
               onFilterChange={handleFilterChange}
               onShowIconsChange={setShowFileIcons}
+              hasActiveClaudeSession={hasActiveClaudeSession}
+              claudeSessionFileCounts={{
+                read: sessionFileFilters.read.length,
+                written: sessionFileFilters.written.length
+              }}
               onClose={() => setShowFilterMenu(false)}
             />
           )}

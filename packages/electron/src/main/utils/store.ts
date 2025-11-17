@@ -11,6 +11,7 @@ export type { SessionState, SessionWindow } from '../types';
 
 export type CompletionSoundType = 'chime' | 'bell' | 'pop' | 'none';
 export type ReleaseChannel = 'stable' | 'alpha';
+export type WorkspaceFileTreeFilter = 'all' | 'markdown' | 'known' | 'ai-read' | 'ai-written';
 
 interface AppStoreSchema {
   theme: AppTheme;
@@ -111,7 +112,7 @@ export interface WorkspaceState {
   // Installed tool packages
   installedPackages?: InstalledPackage[];
   // File tree filter state
-  fileTreeFilter?: 'all' | 'markdown' | 'known';
+  fileTreeFilter?: WorkspaceFileTreeFilter;
   // File tree icons visibility
   showFileIcons?: boolean;
   lastUpdated: number;
@@ -584,11 +585,11 @@ export function saveAgenticTabState(workspacePath: string, state: TabManagerStat
 }
 
 // File Tree Filter State Management
-export function getFileTreeFilter(workspacePath: string): 'all' | 'markdown' | 'known' {
+export function getFileTreeFilter(workspacePath: string): WorkspaceFileTreeFilter {
   return getWorkspaceState(workspacePath).fileTreeFilter ?? 'all';
 }
 
-export function saveFileTreeFilter(workspacePath: string, filter: 'all' | 'markdown' | 'known'): void {
+export function saveFileTreeFilter(workspacePath: string, filter: WorkspaceFileTreeFilter): void {
   updateWorkspaceState(workspacePath, workspace => {
     workspace.fileTreeFilter = filter;
   });

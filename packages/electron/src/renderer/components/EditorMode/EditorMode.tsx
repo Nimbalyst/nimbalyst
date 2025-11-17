@@ -487,6 +487,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
               setIsHistoryDialogOpen(true);
             }}
             onSelectedFolderChange={setSelectedFolderPath}
+            currentAISessionId={currentAISessionId}
           />
         </div>
 

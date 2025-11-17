@@ -144,6 +144,15 @@
   transition: background-color 0.2s;
 }
 
+.file-tree-filter-hint {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.4;
+  border-bottom: 1px solid var(--border-primary);
+  margin-bottom: 4px;
+}
+
 /* Root drop zone styles */
 .workspace-file-tree.drag-over-root {
   background-color: rgba(59, 130, 246, 0.05);

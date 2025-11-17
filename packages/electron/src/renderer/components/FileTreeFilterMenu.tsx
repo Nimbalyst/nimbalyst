@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MaterialSymbol } from './MaterialSymbol';
 import './FileTreeFilterMenu.css';
 
-export type FileTreeFilter = 'all' | 'markdown' | 'known';
+export type FileTreeFilter = 'all' | 'markdown' | 'known' | 'ai-read' | 'ai-written';
 
 interface FileTreeFilterMenuProps {
   x: number;
@@ -11,6 +11,8 @@ interface FileTreeFilterMenuProps {
   showIcons: boolean;
   onFilterChange: (filter: FileTreeFilter) => void;
   onShowIconsChange: (showIcons: boolean) => void;
+  hasActiveClaudeSession: boolean;
+  claudeSessionFileCounts: { read: number; written: number };
   onClose: () => void;
 }
 
@@ -21,6 +23,8 @@ export function FileTreeFilterMenu({
   showIcons,
   onFilterChange,
   onShowIconsChange,
+  hasActiveClaudeSession,
+  claudeSessionFileCounts,
   onClose
 }: FileTreeFilterMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -71,7 +75,10 @@ export function FileTreeFilterMenu({
     }
   }, [x, y]);
 
-  const handleFilterSelect = (filter: FileTreeFilter) => {
+  const handleFilterSelect = (filter: FileTreeFilter, disabled?: boolean) => {
+    if (disabled) {
+      return;
+    }
     onFilterChange(filter);
     onClose();
   };
@@ -116,6 +123,42 @@ export function FileTreeFilterMenu({
             <MaterialSymbol icon="check" size={16} className="filter-menu-check" />
         )}
       </div>
+
+      <div className="filter-menu-section-label">Claude Code Session</div>
+
+      <div
+        className={`filter-menu-item ${currentFilter === 'ai-read' ? 'active' : ''} ${!hasActiveClaudeSession ? 'disabled' : ''}`}
+        onClick={() => handleFilterSelect('ai-read', !hasActiveClaudeSession)}
+      >
+        <MaterialSymbol icon="visibility" size={18} />
+        <span>Files Read</span>
+        {claudeSessionFileCounts.read > 0 && (
+          <span className="filter-menu-pill">{claudeSessionFileCounts.read}</span>
+        )}
+        {currentFilter === 'ai-read' && (
+          <MaterialSymbol icon="check" size={16} className="filter-menu-check" />
+        )}
+      </div>
+
+      <div
+        className={`filter-menu-item ${currentFilter === 'ai-written' ? 'active' : ''} ${!hasActiveClaudeSession ? 'disabled' : ''}`}
+        onClick={() => handleFilterSelect('ai-written', !hasActiveClaudeSession)}
+      >
+        <MaterialSymbol icon="edit_note" size={18} />
+        <span>Files Written</span>
+        {claudeSessionFileCounts.written > 0 && (
+          <span className="filter-menu-pill">{claudeSessionFileCounts.written}</span>
+        )}
+        {currentFilter === 'ai-written' && (
+          <MaterialSymbol icon="check" size={16} className="filter-menu-check" />
+        )}
+      </div>
+
+      {!hasActiveClaudeSession && (
+        <div className="filter-menu-hint">
+          Open a Claude Code session to enable these filters.
+        </div>
+      )}
 
       <div className="filter-menu-separator" />
 
