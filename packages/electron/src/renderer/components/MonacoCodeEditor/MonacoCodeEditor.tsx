@@ -107,6 +107,25 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
   const handleEditorMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
 
+    // Disable TypeScript/JavaScript diagnostics globally
+    // We're primarily using Monaco for viewing AI diffs, not for code editing
+    // This prevents error markers from showing up for incomplete/out-of-context code
+    try {
+      monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+        noSemanticValidation: true,
+        noSyntaxValidation: true,
+        noSuggestionDiagnostics: true,
+      });
+
+      monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+        noSemanticValidation: true,
+        noSyntaxValidation: true,
+        noSuggestionDiagnostics: true,
+      });
+    } catch (error) {
+      console.warn('[MonacoCodeEditor] Failed to disable diagnostics:', error);
+    }
+
     // Expose getContent function to parent
     if (onGetContent) {
       onGetContent(getContent);
@@ -194,6 +213,10 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
           bracketPairColorization: {
             enabled: true,
           },
+          // Disable error markers and diagnostics UI
+          // We're primarily viewing AI diffs, not editing with full language support
+          renderValidationDecorations: 'off', // No error squiggles
+          glyphMargin: false, // No error icons in margin
           // Accessibility
           accessibilitySupport: 'auto',
         }}
