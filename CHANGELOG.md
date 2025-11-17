@@ -19,6 +19,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.29] - 2025-11-17
+
+
+### Added
+- Full-text search to session history
+- Floating actions to agent transcript
+- Inline diff mode for Monaco code editor
+- Markdown syntax highlighting to Monaco editor
+- Project-aware file opening from OS
+- Natural sorting to file tree
+- Release notes to alpha channel updates
+
+### Changed
+- Replace markdown mode conversion with view mode toggle
+
+### Fixed
+- Disable console logs for context fetching in AIService and TreeMatcher
+- Disable error markers in Monaco editor
+- Ensure DiffApprovalBar appears after view mode switch
+- Handle DMG/ZIP files without version in filename
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.28] - 2025-11-16
 
 
