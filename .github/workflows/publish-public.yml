@@ -7,10 +7,6 @@ on:
         description: 'Version to publish (e.g., v0.42.61)'
         required: true
         type: string
-      release_notes:
-        description: 'User-facing release notes (paste from /release-public command)'
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -71,6 +67,24 @@ jobs:
           echo "Downloaded artifacts:"
           ls -lh public-release-files/
 
+      - name: Fetch public release notes from R2
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          # Fetch PUBLIC_RELEASE_NOTES.md from R2
+          RELEASE_NOTES_URL="https://pub-4357a3345db7463580090984c0e4e2ba.r2.dev/PUBLIC_RELEASE_NOTES.md"
+
+          echo "Fetching release notes from: $RELEASE_NOTES_URL"
+
+          if curl -f -o public-release-notes.md "$RELEASE_NOTES_URL"; then
+            echo "✅ Successfully fetched PUBLIC_RELEASE_NOTES.md from R2"
+            echo "Release notes content:"
+            cat public-release-notes.md
+          else
+            echo "⚠️  Failed to fetch release notes from R2, using fallback"
+            echo "New release with improvements and bug fixes." > public-release-notes.md
+          fi
+
       - name: Check if release already exists in public repo
         id: check_public
         env:
@@ -90,7 +104,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
           VERSION: ${{ inputs.version }}
-          RELEASE_NOTES: ${{ inputs.release_notes }}
         run: |
           # Verify we have artifacts to upload
           if [ ! -d "public-release-files" ] || [ -z "$(ls -A public-release-files)" ]; then
@@ -98,7 +111,10 @@ jobs:
             exit 1
           fi
 
-          # Create the release body with user-provided notes and installation instructions
+          # Read release notes from file
+          RELEASE_NOTES=$(cat public-release-notes.md)
+
+          # Create the release body with fetched notes and installation instructions
           RELEASE_BODY="${RELEASE_NOTES}
 
           ### Installation
@@ -132,9 +148,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_PAT }}
           VERSION: ${{ inputs.version }}
-          RELEASE_NOTES: ${{ inputs.release_notes }}
         run: |
           echo "ℹ️  Release already exists. Updating release notes..."
+
+          # Read release notes from file
+          RELEASE_NOTES=$(cat public-release-notes.md)
 
           # Update the release body
           RELEASE_BODY="${RELEASE_NOTES}

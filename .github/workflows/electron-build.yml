@@ -202,13 +202,13 @@ jobs:
           find release-artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.yml" -o -name "*.yaml" \) -exec cp {} release-files/ \;
           ls -la release-files/
 
-      - name: Generate release notes for R2
+      - name: Generate release notes for R2 and public release
         id: release_notes
         run: |
           # Get recent commits for release notes
           git fetch --depth=50
 
-          # Create release notes file
+          # Create technical release notes file for R2 (commit-based)
           {
             echo "## Recent Changes"
             echo ""
@@ -223,8 +223,60 @@ jobs:
             echo "- **Linux**: .AppImage file"
           } > release-files/RELEASE_NOTES.md
 
+          # Extract public release notes from CHANGELOG.md
+          # This gets the most recent release section (not [Unreleased])
+          VERSION=${GITHUB_REF#refs/tags/v}
+
+          # Get the release section from CHANGELOG
+          awk -v version="$VERSION" '
+            /^## \['"$VERSION"'\]/ { found=1; next }
+            found && /^## \[/ { exit }
+            found && /^### (Added|Changed|Fixed|Removed)/ {
+              category=$0
+              next
+            }
+            found && /^- / && category ~ /Added/ {
+              sub(/^- /, "")
+              if (!seen_added_header) {
+                print "### New Features"
+                print ""
+                seen_added_header=1
+              }
+              print "- " $0
+            }
+            found && /^- / && category ~ /Changed/ {
+              sub(/^- /, "")
+              if (!seen_changed_header) {
+                print ""
+                print "### Improvements"
+                print ""
+                seen_changed_header=1
+              }
+              print "- " $0
+            }
+            found && /^- / && category ~ /Fixed/ {
+              sub(/^- /, "")
+              if (!seen_fixed_header) {
+                print ""
+                print "### Fixed"
+                print ""
+                seen_fixed_header=1
+              }
+              print "- " $0
+            }
+          ' CHANGELOG.md > release-files/PUBLIC_RELEASE_NOTES.md
+
+          # If no public release notes were generated, fall back to basic message
+          if [ ! -s release-files/PUBLIC_RELEASE_NOTES.md ]; then
+            echo "New release with improvements and bug fixes." > release-files/PUBLIC_RELEASE_NOTES.md
+          fi
+
           echo "Release notes generated"
+          echo "=== Technical Release Notes (RELEASE_NOTES.md) ==="
           cat release-files/RELEASE_NOTES.md
+          echo ""
+          echo "=== Public Release Notes (PUBLIC_RELEASE_NOTES.md) ==="
+          cat release-files/PUBLIC_RELEASE_NOTES.md
 
       # Upload to Cloudflare R2 (always happens for all releases)
       - name: Upload to Cloudflare R2
@@ -246,7 +298,8 @@ jobs:
             --include "*.AppImage" \
             --include "*.yml" \
             --include "*.yaml" \
-            --include "RELEASE_NOTES.md"
+            --include "RELEASE_NOTES.md" \
+            --include "PUBLIC_RELEASE_NOTES.md"
 
           echo "✅ Uploaded to R2 alpha channel (with release notes)"
 
