@@ -1428,6 +1428,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       }
     };
 
+    // Safety check - editor must have registerCommand method
+    if (!editor || typeof editor.registerCommand !== 'function') {
+      logger.ui.warn('[TabEditor] Editor instance is invalid, skipping command registration');
+      return;
+    }
+
     // Register command listeners
     const unregisterApprove = editor.registerCommand(
         APPROVE_DIFF_COMMAND,
