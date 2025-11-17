@@ -207,25 +207,21 @@ jobs:
         run: |
           # Get recent commits for release notes
           git fetch --depth=50
-          COMMITS=$(git log --oneline -10 --pretty=format:"- %s" || echo "- Release build")
 
-          # Create release notes
-          cat > release-files/RELEASE_NOTES.md << 'EOF'
-          ## Recent Changes
-
-          $COMMITS
-
-          ## Installation
-
-          Download and install the appropriate file for your platform:
-          - **macOS**: .dmg file
-          - **Windows**: .exe file
-          - **Linux**: .AppImage file
-          EOF
-
-          # Replace $COMMITS with actual commits
-          sed -i.bak "s|\$COMMITS|$COMMITS|g" release-files/RELEASE_NOTES.md
-          rm release-files/RELEASE_NOTES.md.bak 2>/dev/null || true
+          # Create release notes file
+          {
+            echo "## Recent Changes"
+            echo ""
+            git log --oneline -10 --pretty=format:"- %s" || echo "- Release build"
+            echo ""
+            echo ""
+            echo "## Installation"
+            echo ""
+            echo "Download and install the appropriate file for your platform:"
+            echo "- **macOS**: .dmg file"
+            echo "- **Windows**: .exe file"
+            echo "- **Linux**: .AppImage file"
+          } > release-files/RELEASE_NOTES.md
 
           echo "Release notes generated"
           cat release-files/RELEASE_NOTES.md
