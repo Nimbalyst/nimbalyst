@@ -6,6 +6,7 @@ import { ipcMain, BrowserWindow } from 'electron';
 import Store from 'electron-store';
 import { SessionManager, ProviderFactory, ModelRegistry, AIProvider } from '@nimbalyst/runtime/ai/server';
 import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
+import { parseContextUsageMessage } from '@nimbalyst/runtime/ai/server/utils/contextUsage';
 import type { SessionStore } from '@nimbalyst/runtime';
 import type {
   DocumentContext,
@@ -1162,24 +1163,20 @@ export class AIService {
                         contextResponse += chunk.content || '';
                         // console.log('[AIService] Accumulated context response so far:', contextResponse);
                       } else if (chunk.type === 'complete') {
-                        // Parse the context response to extract token usage
-                        // Format: "**Tokens:** 34.7k / 200.0k (17%)"
+                        // Parse the context response to extract token usage and category breakdown
                         // console.log('[AIService] /context response received:', contextResponse);
-                        const tokenMatch = contextResponse.match(/\*\*Tokens:\*\*\s+([\d.]+)k\s*\/\s*([\d.]+)k\s*\((\d+)%\)/);
+                        const parsedUsage = parseContextUsageMessage(contextResponse);
 
-                        if (tokenMatch) {
-                          const usedTokens = Math.round(parseFloat(tokenMatch[1]) * 1000);
-                          const contextWindow = Math.round(parseFloat(tokenMatch[2]) * 1000);
-                          // console.log('[AIService] Parsed token usage:', { usedTokens, contextWindow });
-
+                        if (parsedUsage) {
                           // Notify renderer to reload session (which will parse token usage from messages)
                           event.sender.send('ai:tokenUsageUpdated', {
                             sessionId: session.id,
                             tokenUsage: {
                               inputTokens: 0,
                               outputTokens: 0,
-                              totalTokens: usedTokens,
-                              contextWindow: contextWindow
+                              totalTokens: parsedUsage.totalTokens,
+                              contextWindow: parsedUsage.contextWindow,
+                              categories: parsedUsage.categories
                             }
                           });
                         } else {

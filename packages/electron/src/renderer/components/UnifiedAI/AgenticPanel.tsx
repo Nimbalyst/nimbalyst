@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef, createRef } from 'react';
-import type { SessionData, ChatAttachment, Message } from '@nimbalyst/runtime/ai/server/types';
+import type { SessionData, ChatAttachment, Message, TokenUsageCategory } from '@nimbalyst/runtime/ai/server/types';
 import { AISessionView, AISessionViewRef } from './AISessionView';
 import { SessionDropdown } from '../AIChat/SessionDropdown';
 import { SessionHistory } from '../AgenticCoding/SessionHistory';
@@ -1136,6 +1136,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         outputTokens: number;
         totalTokens: number;
         contextWindow: number;
+        categories?: TokenUsageCategory[];
       }
     }) => {
       if (!data || !data.sessionId) return;

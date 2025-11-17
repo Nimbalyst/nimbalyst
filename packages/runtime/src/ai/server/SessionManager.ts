@@ -8,6 +8,7 @@ import { AgentMessagesRepository } from '../../storage/repositories/AgentMessage
 import { getSessionStore, hasSessionStore, setSessionStore, type SessionStore } from '../adapters/sessionStore';
 import { SessionData, Message, DocumentContext, AIProviderType } from './types';
 import type { SessionData as ChatSession } from './types';
+import { parseContextUsageMessage } from './utils/contextUsage';
 
 function toTimestampMillis(value: unknown): number {
   if (!value) return Date.now();
@@ -535,19 +536,16 @@ export class SessionManager {
       const msg = allMessages[i];
       // Look for /context output messages (check both hidden and non-hidden)
       if (msg.direction === 'output' && msg.content?.includes('## Context Usage')) {
-        // Parse token usage from /context response
-        // Format: "**Tokens:** 34.7k / 200.0k (17%)"
-        const tokenMatch = msg.content.match(/\*\*Tokens:\*\*\s+([\d.]+)k\s*\/\s*([\d.]+)k\s*\((\d+)%\)/);
-        if (tokenMatch) {
-          const usedTokens = Math.round(parseFloat(tokenMatch[1]) * 1000);
-          const contextWindow = Math.round(parseFloat(tokenMatch[2]) * 1000);
+        const parsedUsage = parseContextUsageMessage(msg.content);
+        if (parsedUsage) {
           tokenUsage = {
-            inputTokens: 0,  // We don't have breakdown from /context
+            inputTokens: 0,  // Detailed breakdown isn't included in /context
             outputTokens: 0,
-            totalTokens: usedTokens,
-            contextWindow: contextWindow
+            totalTokens: parsedUsage.totalTokens,
+            contextWindow: parsedUsage.contextWindow,
+            categories: parsedUsage.categories
           };
-          break; // Use most recent
+          break; // Use most recent response
         }
       }
     }

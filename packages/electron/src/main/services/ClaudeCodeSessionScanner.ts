@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { homedir } from 'os';
 import { logger } from '../utils/logger';
+import type { TokenUsageCategory } from '@nimbalyst/runtime/ai/server/types';
 
 const log = logger.aiSession;
 
@@ -23,6 +24,7 @@ export interface SessionMetadata {
     inputTokens: number;
     outputTokens: number;
     totalTokens: number;
+    categories?: TokenUsageCategory[];
   };
   firstMessage: string | null;
   hasErrors: boolean;

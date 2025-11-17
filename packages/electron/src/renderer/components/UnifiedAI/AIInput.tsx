@@ -535,6 +535,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
                 outputTokens={tokenUsage?.outputTokens || 0}
                 totalTokens={tokenUsage?.totalTokens || 0}
                 contextWindow={tokenUsage?.contextWindow || 0}
+                categories={tokenUsage?.categories}
               />
             )}
           </div>

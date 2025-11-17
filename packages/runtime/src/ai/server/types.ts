@@ -86,6 +86,12 @@ export interface QueuedPrompt {
   attachments?: ChatAttachment[]; // Optional attachments
 }
 
+export interface TokenUsageCategory {
+  name: string;
+  tokens: number;
+  percentage: number;
+}
+
 export interface SessionData {
   id: string;  // Our session ID
   provider: AIProviderType | string;  // Provider type
@@ -111,6 +117,7 @@ export interface SessionData {
     outputTokens: number;     // Total output tokens used
     totalTokens: number;      // Total tokens (input + output)
     contextWindow?: number;   // Max context window size for the model
+    categories?: TokenUsageCategory[]; // Breakdown parsed from /context output
   };
 
   // Additional metadata

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import './SessionImportDialog.css';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
+import type { TokenUsageCategory } from '@nimbalyst/runtime/ai/server/types';
 
 interface SessionToImport {
   sessionId: string;
@@ -13,6 +14,7 @@ interface SessionToImport {
     inputTokens: number;
     outputTokens: number;
     totalTokens: number;
+    categories?: TokenUsageCategory[];
   };
   syncStatus: 'new' | 'up-to-date' | 'needs-update';
   dbMessageCount: number;
