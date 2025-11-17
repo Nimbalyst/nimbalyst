@@ -1639,7 +1639,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           fileName={fileName}
           editor={editorRef.current}
         />
-        <div className="tab-editor-scrollable" style={{ flex: 1, overflow: 'auto' }}>
           {isImage ? (
             <ImageViewer
               key={filePath}
@@ -1647,7 +1646,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               fileName={fileName}
             />
           ) : isMarkdown && markdownViewMode === 'lexical' ? (
-            <StravuEditor
+              <div className="tab-editor-scrollable" style={{ flex: 1, overflow: 'auto' }}>
+
+              <StravuEditor
               key={`${filePath}-lexical-v${viewModeVersion}`}
               config={{
                 initialContent: content,
@@ -1708,6 +1709,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 ),
               }}
             />
+              </div>
           ) : isMarkdown && markdownViewMode === 'monaco' ? (
             <>
               <div className="monaco-markdown-toolbar" style={{
@@ -1817,7 +1819,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               />
             </>
           )}
-        </div>
+
 
         {showConflictDialog && (
           <div
