@@ -29,6 +29,9 @@ export class SessionStateManager extends EventEmitter {
 
   constructor() {
     super();
+    // Increase max listeners to accommodate multiple windows
+    // Each window subscribes with 7 event listeners, so 50 allows ~7 windows
+    this.setMaxListeners(50);
   }
 
   /**

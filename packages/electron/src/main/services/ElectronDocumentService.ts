@@ -34,21 +34,31 @@ export class ElectronDocumentService implements DocumentService {
   // Tracker items cache
   private trackerItemWatchers: Map<string, (change: TrackerItemChangeEvent) => void> = new Map();
 
+  // Performance limits - VERY aggressive to prevent hanging
+  private static readonly MAX_FILES_TO_SCAN = 200;   // Stop scanning after 100 files
+  private static readonly MAX_SCAN_TIME_MS = 1000;    // Stop scanning after 500ms
+  private static readonly MAX_DEPTH = 6;             // Maximum directory depth - very shallow!
+
+  private isScanning = false; // Prevent concurrent scans
+
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
 
-    // console.log(`[DocumentService] Constructor called for workspace: ${workspacePath}`);
+    console.log(`[DocumentService] Constructor called for workspace: ${workspacePath}`);
+    console.log(`[DocumentService] SKIPPING initial scan - scan will happen on-demand only`);
 
-    // Start async initial load (non-blocking)
-    this.initializationPromise = this.initializeAsync();
+    // DON'T scan on startup - it freezes the app for large projects
+    // Scanning will happen lazily when documents are actually requested
+    this.initializationPromise = Promise.resolve();
 
-    // Start polling for changes every 2 seconds after a short delay
-    // This ensures the initial scan doesn't conflict with the first poll
+    // Start polling for changes every 30 seconds ONLY after a delay
+    // This gives the app time to fully load before background scanning starts
+    // Polling is VERY slow to avoid freezing on large projects
     setTimeout(() => {
       this.watchInterval = setInterval(() => {
         this.refreshDocuments();
-      }, 2000);
-    }, 500);
+      }, 2000); // Poll every 2 seconds
+    }, 6000); // Wait 6 seconds before starting background scans
   }
 
   private async initializeAsync(): Promise<void> {
@@ -73,20 +83,30 @@ export class ElectronDocumentService implements DocumentService {
   }
 
   private async refreshDocuments() {
-    const oldDocuments = this.documents;
-    this.documents = await this.scanDocuments();
+    // Prevent concurrent scans
+    if (this.isScanning) {
+      return;
+    }
 
-    // console.log(`[DocumentService] refreshDocuments: found ${this.documents.length} documents`);
-    // if (this.documents.length > 0) {
-    //   console.log(`[DocumentService] Sample documents:`, this.documents.slice(0, 3).map(d => d.path));
-    // }
+    this.isScanning = true;
+    try {
+      const oldDocuments = this.documents;
+      this.documents = await this.scanDocuments();
 
-    // Update metadata cache
-    await this.updateMetadataCache(oldDocuments, this.documents);
+      // console.log(`[DocumentService] refreshDocuments: found ${this.documents.length} documents`);
+      // if (this.documents.length > 0) {
+      //   console.log(`[DocumentService] Sample documents:`, this.documents.slice(0, 3).map(d => d.path));
+      // }
 
-    // Only notify watchers if the document list actually changed
-    if (this.hasDocumentListChanged(oldDocuments, this.documents)) {
-      this.watchers.forEach(callback => callback(this.documents));
+      // Update metadata cache
+      await this.updateMetadataCache(oldDocuments, this.documents);
+
+      // Only notify watchers if the document list actually changed
+      if (this.hasDocumentListChanged(oldDocuments, this.documents)) {
+        this.watchers.forEach(callback => callback(this.documents));
+      }
+    } finally {
+      this.isScanning = false;
     }
   }
 
@@ -200,8 +220,7 @@ export class ElectronDocumentService implements DocumentService {
           }
 
           // Update tracker items cache whenever file content changes (mtime changed)
-          // This ensures tracker items are updated even if frontmatter didn't change
-          // console.log(`[DocumentService] Calling updateTrackerItemsCache for: ${newDoc.path}`);
+          // This only runs for files that actually changed, not all files
           await this.updateTrackerItemsCache(newDoc.path);
         } catch (error) {
           console.error(`[DocumentService] Failed to extract metadata for ${newDoc.path}:`, error);
@@ -224,8 +243,37 @@ export class ElectronDocumentService implements DocumentService {
     }
   }
 
-  private scanDirectory(dirPath: string, basePath: string = ''): Document[] {
+  private scanDirectory(
+    dirPath: string,
+    basePath: string = '',
+    depth: number = 0,
+    scanState: { count: number; startTime: number; stopped: boolean } = { count: 0, startTime: Date.now(), stopped: false }
+  ): Document[] {
     const documents: Document[] = [];
+
+    // Check limits BEFORE scanning this directory
+    if (scanState.stopped) {
+      return documents;
+    }
+
+    if (scanState.count >= ElectronDocumentService.MAX_FILES_TO_SCAN) {
+      console.warn(`[DocumentService] Stopped scanning at ${scanState.count} files (limit: ${ElectronDocumentService.MAX_FILES_TO_SCAN})`);
+      scanState.stopped = true;
+      return documents;
+    }
+
+    const elapsed = Date.now() - scanState.startTime;
+    if (elapsed > ElectronDocumentService.MAX_SCAN_TIME_MS) {
+      console.warn(`[DocumentService] Stopped scanning after ${elapsed}ms (limit: ${ElectronDocumentService.MAX_SCAN_TIME_MS}ms, scanned ${scanState.count} files)`);
+      scanState.stopped = true;
+      return documents;
+    }
+
+    if (depth > ElectronDocumentService.MAX_DEPTH) {
+      console.warn(`[DocumentService] Stopped scanning at depth ${depth} (limit: ${ElectronDocumentService.MAX_DEPTH})`);
+      return documents;
+    }
+
     // Only support markdown files
     const supportedExtensions = ['.md', '.markdown'];
 
@@ -233,6 +281,23 @@ export class ElectronDocumentService implements DocumentService {
       const items = fsSync.readdirSync(dirPath);
 
       for (const item of items) {
+        // Check time limit on EVERY iteration to bail out quickly
+        if (Date.now() - scanState.startTime > ElectronDocumentService.MAX_SCAN_TIME_MS) {
+          console.warn(`[DocumentService] Time limit exceeded during scan (${Date.now() - scanState.startTime}ms)`);
+          scanState.stopped = true;
+          break;
+        }
+
+        if (scanState.stopped) {
+          break;
+        }
+
+        // Check file count limit on every iteration
+        if (scanState.count >= ElectronDocumentService.MAX_FILES_TO_SCAN) {
+          scanState.stopped = true;
+          break;
+        }
+
         // Skip hidden files and excluded directories (including worktrees)
         if (item.startsWith('.') && item !== '.nimbalyst') {
           continue;
@@ -245,25 +310,32 @@ export class ElectronDocumentService implements DocumentService {
 
         const fullPath = path.join(dirPath, item);
         const relativePath = basePath ? path.join(basePath, item) : item;
-        const stats = fsSync.statSync(fullPath);
 
-        if (stats.isDirectory()) {
-          // Recursively scan subdirectories
-          documents.push(...this.scanDirectory(fullPath, relativePath));
-        } else if (stats.isFile()) {
-          const ext = path.extname(item).toLowerCase();
-          if (supportedExtensions.includes(ext)) {
-            const id = crypto.createHash('md5').update(relativePath).digest('hex');
+        try {
+          const stats = fsSync.statSync(fullPath);
 
-            documents.push({
-              id,
-              name: item,
-              path: relativePath,
-              workspace: basePath || undefined,
-              lastModified: stats.mtime,
-              type: ext.slice(1)
-            });
+          if (stats.isDirectory()) {
+            // Recursively scan subdirectories with incremented depth
+            documents.push(...this.scanDirectory(fullPath, relativePath, depth + 1, scanState));
+          } else if (stats.isFile()) {
+            const ext = path.extname(item).toLowerCase();
+            if (supportedExtensions.includes(ext)) {
+              scanState.count++;
+
+              const id = crypto.createHash('md5').update(relativePath).digest('hex');
+
+              documents.push({
+                id,
+                name: item,
+                path: relativePath,
+                workspace: basePath || undefined,
+                lastModified: stats.mtime,
+                type: ext.slice(1)
+              });
+            }
           }
+        } catch (error) {
+          // Skip files/dirs we can't stat (permissions, broken symlinks, etc.)
         }
       }
     } catch (error) {
