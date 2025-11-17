@@ -29,6 +29,7 @@ import { $getRoot, SKIP_SCROLL_INTO_VIEW_TAG, COMMAND_PRIORITY_LOW } from 'lexic
 import { DocumentHeaderContainer } from '@nimbalyst/runtime/plugins/TrackerPlugin/documentHeader';
 import { FixedTabHeaderContainer, FixedTabHeaderRegistry } from '@nimbalyst/runtime/plugins/shared/fixedTabHeader';
 import { MonacoCodeEditor } from '../MonacoCodeEditor';
+import { MonacoDiffApprovalBar } from '../MonacoDiffApprovalBar';
 import { ImageViewer } from '../ImageViewer';
 import { getFileType } from '../../utils/fileTypeDetector';
 import { logger } from '../../utils/logger';
@@ -205,14 +206,22 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             if (editorRef.current) {
               const editorToUpdate = editorRef.current;
 
-              // For code files, skip Lexical-specific diff operations (Phase 2 will handle this)
+              // For code files, use Monaco diff mode
               if (!isMarkdown) {
-                logger.ui.info(`[TabEditor] Skipping diff mode for code file (not yet implemented)`);
-                pendingAIEditTagRef.current = {
-                  tagId: pendingTags[0].id,
-                  sessionId: pendingTags[0].sessionId,
-                  filePath: filePath
-                };
+                logger.ui.info(`[TabEditor] Applying Monaco diff mode for code file`);
+
+                // Monaco editor has showDiff method exposed
+                if (editorToUpdate.showDiff) {
+                  editorToUpdate.showDiff(oldContent, diskContent);
+
+                  pendingAIEditTagRef.current = {
+                    tagId: pendingTags[0].id,
+                    sessionId: pendingTags[0].sessionId,
+                    filePath: filePath
+                  };
+                } else {
+                  logger.ui.warn(`[TabEditor] Monaco editor doesn't have showDiff method`);
+                }
                 return;
               }
 
@@ -1489,6 +1498,129 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     }
   }, []);
 
+  // Monaco diff mode accept/reject handlers
+  const handleMonacoDiffAccept = useCallback(async () => {
+    console.log('[TabEditor] !!!!! handleMonacoDiffAccept CALLED !!!!!');
+    console.log('[TabEditor] editorRef.current:', !!editorRef.current);
+    console.log('[TabEditor] editorRef.current.acceptDiff:', !!editorRef.current?.acceptDiff);
+    console.log('[TabEditor] pendingAIEditTagRef.current:', !!pendingAIEditTagRef.current);
+
+    if (!editorRef.current?.acceptDiff || !pendingAIEditTagRef.current) {
+      logger.ui.warn('[TabEditor] Cannot accept Monaco diff - no editor or pending tag', {
+        hasEditor: !!editorRef.current,
+        hasAcceptDiff: !!editorRef.current?.acceptDiff,
+        hasPendingTag: !!pendingAIEditTagRef.current
+      });
+      return;
+    }
+
+    console.log('[TabEditor] PASSED THE CHECK, ABOUT TO ENTER TRY BLOCK');
+
+    try {
+      console.log('[TabEditor] INSIDE TRY BLOCK');
+      logger.ui.info('[TabEditor] Accepting Monaco diff', {
+        tagId: pendingAIEditTagRef.current.tagId,
+        filePath
+      });
+
+      console.log('[TabEditor] ABOUT TO CALL acceptDiff');
+      // Get the new content from Monaco diff editor
+      const newContent = editorRef.current.acceptDiff();
+      console.log('[TabEditor] acceptDiff RETURNED:', newContent.length);
+
+      console.log('[TabEditor] ABOUT TO WRITE TO DISK');
+      // Write to disk - use saveFile with (content, filePath) parameter order
+      try {
+        await window.electronAPI.saveFile(newContent, filePath);
+        console.log('[TabEditor] WROTE TO DISK SUCCESSFULLY');
+      } catch (writeError) {
+        console.error('[TabEditor] ERROR WRITING TO DISK:', writeError);
+        throw writeError;
+      }
+
+      // Mark tag as reviewed (must pass filePath, tagId, status)
+      if (window.electronAPI.history) {
+        console.log('[TabEditor] About to call updateTagStatus', {
+          filePath,
+          tagId: pendingAIEditTagRef.current.tagId,
+          status: 'reviewed'
+        });
+
+        await window.electronAPI.history.updateTagStatus(
+          filePath,
+          pendingAIEditTagRef.current.tagId,
+          'reviewed'
+        );
+
+        console.log('[TabEditor] Successfully marked tag as reviewed');
+      } else {
+        console.warn('[TabEditor] No history API available');
+      }
+
+      // Exit diff mode
+      console.log('[TabEditor] ABOUT TO EXIT DIFF MODE');
+      editorRef.current.exitDiffMode();
+      console.log('[TabEditor] EXIT DIFF MODE CALLED');
+
+      // Clear pending tag ref
+      pendingAIEditTagRef.current = null;
+
+      // Update content and saved state
+      setContent(newContent);
+      setLastSavedContent(newContent);
+      lastSavedContentRef.current = newContent;
+      contentRef.current = newContent;
+      setIsDirty(false);
+
+      logger.ui.info('[TabEditor] Monaco diff accepted successfully');
+    } catch (error) {
+      logger.ui.error('[TabEditor] Error accepting Monaco diff:', error);
+    }
+  }, [filePath]);
+
+  const handleMonacoDiffReject = useCallback(async () => {
+    if (!editorRef.current?.rejectDiff || !pendingAIEditTagRef.current) {
+      logger.ui.warn('[TabEditor] Cannot reject Monaco diff - no editor or pending tag');
+      return;
+    }
+
+    try {
+      logger.ui.info('[TabEditor] Rejecting Monaco diff');
+
+      // Get the old content from Monaco diff editor
+      const oldContent = editorRef.current.rejectDiff();
+
+      // Write to disk - use saveFile with (content, filePath) parameter order
+      await window.electronAPI.saveFile(oldContent, filePath);
+
+      // Mark tag as reviewed (must pass filePath, tagId, status)
+      if (window.electronAPI.history) {
+        await window.electronAPI.history.updateTagStatus(
+          filePath,
+          pendingAIEditTagRef.current.tagId,
+          'reviewed'
+        );
+      }
+
+      // Exit diff mode
+      editorRef.current.exitDiffMode();
+
+      // Clear pending tag ref
+      pendingAIEditTagRef.current = null;
+
+      // Update content and saved state
+      setContent(oldContent);
+      setLastSavedContent(oldContent);
+      lastSavedContentRef.current = oldContent;
+      contentRef.current = oldContent;
+      setIsDirty(false);
+
+      logger.ui.info('[TabEditor] Monaco diff rejected successfully');
+    } catch (error) {
+      logger.ui.error('[TabEditor] Error rejecting Monaco diff:', error);
+    }
+  }, [filePath]);
+
   return (
       <div
           className={`tab-editor multi-editor-instance ${isActive ? 'active' : 'hidden'}`}
@@ -1647,34 +1779,43 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               />
             </>
           ) : (
-            <MonacoCodeEditor
-              key={filePath}
-              filePath={filePath}
-              fileName={fileName}
-              initialContent={initialContent}
-              theme={theme}
-              onContentChange={handleContentChange}
-              onGetContent={(getContentFn) => {
-                getContentFnRef.current = getContentFn;
-                if (onGetContentReady) {
-                  onGetContentReady(getContentFn);
-                }
-                // Expose the manual save function
-                if (onManualSaveReady) {
-                  onManualSaveReady(handleManualSave);
-                }
-                // Sync content once when editor is ready
-                if (!hasInitialContentSyncRef.current) {
-                  hasInitialContentSyncRef.current = true;
-                  const currentContent = getContentFn();
-                  setContent(currentContent);
-                }
-              }}
-              onEditorReady={(editorWrapper) => {
-                // For Monaco, we get a wrapper with editor, setContent, getContent
-                editorRef.current = editorWrapper;
-              }}
-            />
+            <>
+              {!isMarkdown && pendingAIEditTagRef.current && (
+                <MonacoDiffApprovalBar
+                  fileName={fileName}
+                  onAcceptAll={handleMonacoDiffAccept}
+                  onRejectAll={handleMonacoDiffReject}
+                />
+              )}
+              <MonacoCodeEditor
+                key={filePath}
+                filePath={filePath}
+                fileName={fileName}
+                initialContent={initialContent}
+                theme={theme}
+                onContentChange={handleContentChange}
+                onGetContent={(getContentFn) => {
+                  getContentFnRef.current = getContentFn;
+                  if (onGetContentReady) {
+                    onGetContentReady(getContentFn);
+                  }
+                  // Expose the manual save function
+                  if (onManualSaveReady) {
+                    onManualSaveReady(handleManualSave);
+                  }
+                  // Sync content once when editor is ready
+                  if (!hasInitialContentSyncRef.current) {
+                    hasInitialContentSyncRef.current = true;
+                    const currentContent = getContentFn();
+                    setContent(currentContent);
+                  }
+                }}
+                onEditorReady={(editorWrapper) => {
+                  // For Monaco, we get a wrapper with editor, setContent, getContent, showDiff, etc.
+                  editorRef.current = editorWrapper;
+                }}
+              />
+            </>
           )}
         </div>
 
