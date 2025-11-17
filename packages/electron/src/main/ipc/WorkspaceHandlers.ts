@@ -777,6 +777,11 @@ export function registerWorkspaceHandlers() {
         try {
             const { workspacePath, filePath } = options;
 
+            // Resolve workspace-relative path to absolute path
+            const absoluteFilePath = path.isAbsolute(filePath)
+                ? filePath
+                : path.join(workspacePath, filePath);
+
             // Find the workspace window for this workspace path
             let targetWindow: BrowserWindow | null = null;
             for (const [windowId, state] of windowStates) {
@@ -808,12 +813,12 @@ export function registerWorkspaceHandlers() {
 
             // Focus the window and load the file
             targetWindow.focus();
-            await loadFileIntoWindow(targetWindow, filePath);
+            await loadFileIntoWindow(targetWindow, absoluteFilePath);
 
             // Track file opened from workspace
             analytics.sendEvent('file_opened', {
                 source: 'workspace_tree',
-                fileType: getFileType(filePath),
+                fileType: getFileType(absoluteFilePath),
                 hasWorkspace: true
             });
 
