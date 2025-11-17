@@ -309,6 +309,21 @@ class PGLiteWorker {
         ) THEN
           ALTER TABLE ai_sessions ADD COLUMN last_read_timestamp TIMESTAMP;
         END IF;
+
+        -- Add session state tracking columns (migration)
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'ai_sessions' AND column_name = 'status'
+        ) THEN
+          ALTER TABLE ai_sessions ADD COLUMN status TEXT DEFAULT 'idle' CHECK (status IN ('idle', 'running', 'waiting_for_input', 'error', 'interrupted'));
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'ai_sessions' AND column_name = 'last_activity'
+        ) THEN
+          ALTER TABLE ai_sessions ADD COLUMN last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        END IF;
       END $$;
     `);
 

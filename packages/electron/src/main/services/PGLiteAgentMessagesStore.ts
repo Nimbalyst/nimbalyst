@@ -24,21 +24,38 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
   return {
     async create(message: CreateAgentMessageInput): Promise<void> {
       await ensureReady();
-      await db.query(
-        `INSERT INTO ai_agent_messages (
-          session_id, source, direction, content, metadata, hidden
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6
-        )`,
-        [
-          message.sessionId,
-          message.source,
-          message.direction,
-          message.content,
-          message.metadata ?? null,
-          message.hidden ?? false,
-        ]
-      );
+
+      // Insert the message and update the session's updated_at timestamp in one transaction
+      await db.query('BEGIN', []);
+
+      try {
+        await db.query(
+          `INSERT INTO ai_agent_messages (
+            session_id, source, direction, content, metadata, hidden
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6
+          )`,
+          [
+            message.sessionId,
+            message.source,
+            message.direction,
+            message.content,
+            message.metadata ?? null,
+            message.hidden ?? false,
+          ]
+        );
+
+        // Update the session's updated_at timestamp so it appears at the top of the list
+        await db.query(
+          `UPDATE ai_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+          [message.sessionId]
+        );
+
+        await db.query('COMMIT', []);
+      } catch (error) {
+        await db.query('ROLLBACK', []);
+        throw error;
+      }
     },
 
     async list(sessionId: string, options?: { limit?: number; offset?: number; includeHidden?: boolean }): Promise<AgentMessage[]> {

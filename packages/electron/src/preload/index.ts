@@ -302,11 +302,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('session:create-checkpoint', sessionId, state),
   },
 
+  // Session state tracking operations
+  sessionState: {
+    getActiveSessionIds: () =>
+      ipcRenderer.invoke('ai-session-state:get-active'),
+    getSessionState: (sessionId: string) =>
+      ipcRenderer.invoke('ai-session-state:get-state', sessionId),
+    isSessionActive: (sessionId: string) =>
+      ipcRenderer.invoke('ai-session-state:is-active', sessionId),
+    subscribe: () =>
+      ipcRenderer.invoke('ai-session-state:subscribe'),
+    unsubscribe: () =>
+      ipcRenderer.invoke('ai-session-state:unsubscribe'),
+    startSession: (sessionId: string) =>
+      ipcRenderer.invoke('ai-session-state:start', sessionId),
+    updateActivity: (sessionId: string, status?: string, isStreaming?: boolean) =>
+      ipcRenderer.invoke('ai-session-state:update-activity', sessionId, status, isStreaming),
+    endSession: (sessionId: string) =>
+      ipcRenderer.invoke('ai-session-state:end', sessionId),
+    interruptSession: (sessionId: string) =>
+      ipcRenderer.invoke('ai-session-state:interrupt', sessionId),
+    onStateChange: (callback: (event: any) => void) =>
+      ipcRenderer.on('ai-session-state:event', (_event, data) => callback(data)),
+    removeStateChangeListener: (callback: (event: any) => void) =>
+      ipcRenderer.removeListener('ai-session-state:event', callback),
+  },
+
   // AI operations (new unified interface)
   aiHasApiKey: () => ipcRenderer.invoke('ai:hasApiKey'),
   aiInitialize: (provider?: string, apiKey?: string) => ipcRenderer.invoke('ai:initialize', provider, apiKey),
-  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding') =>
-    ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId, sessionType),
+  aiCreateSession: (provider: 'claude' | 'claude-code' | 'openai' | 'lmstudio', documentContext?: any, workspacePath?: string, modelId?: string, sessionType?: 'chat' | 'planning' | 'coding') => {
+    console.log('[Preload] aiCreateSession called:', { provider, workspacePath, sessionType });
+    return ipcRenderer.invoke('ai:createSession', provider, documentContext, workspacePath, modelId, sessionType);
+  },
   aiSendMessage: (message: string, documentContext?: any, sessionId?: string, workspacePath?: string) =>
     ipcRenderer.invoke('ai:sendMessage', message, documentContext, sessionId, workspacePath),
   aiGetSessions: (workspacePath?: string) => ipcRenderer.invoke('ai:getSessions', workspacePath),

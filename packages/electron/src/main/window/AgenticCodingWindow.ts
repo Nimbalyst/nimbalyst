@@ -217,13 +217,22 @@ ipcMain.handle('agentic-coding:update-session-metadata', async (_event, sessionI
 
 ipcMain.handle('sessions:list', async (_event, workspacePath: string) => {
   try {
+    // TODO: Debug logging - uncomment if needed
+    // const logMsg = `[sessions:list] Querying for workspace: ${workspacePath}`;
+    // console.error(logMsg); // Use stderr to ensure it's visible
     const entries = await AISessionsRepository.list(workspacePath);
+    // TODO: Debug logging - uncomment if needed
+    // console.error(`[sessions:list] Found ${entries.length} entries`);
     const sessions = [];
 
     for (const entry of entries) {
+      // TODO: Debug logging - uncomment if needed
+      // console.error(`[sessions:list] Processing entry: ${entry.id}`);
       const session = await AISessionsRepository.get(entry.id);
+      // TODO: Debug logging - uncomment if needed
+      // console.error(`[sessions:list] Session loaded: ${!!session}, type: ${session ? session.sessionType : 'null'}`);
       if (session) {
-        sessions.push({
+        const sessionData = {
           id: session.id,
           createdAt: session.createdAt,
           updatedAt: session.updatedAt,
@@ -232,12 +241,19 @@ ipcMain.handle('sessions:list', async (_event, workspacePath: string) => {
           provider: session.provider,
           model: session.model,
           sessionType: session.sessionType || 'chat',
-          messageCount: entry.messageCount || 0, // Use messageCount from list entry, not session.messages
+          messageCount: entry.messageCount || 0,
           metadata: session.metadata || {}
-        });
+        };
+        // TODO: Debug logging - uncomment if needed
+        // console.error(`[sessions:list] Adding session: ${sessionData.id}, type: ${sessionData.sessionType}`);
+        sessions.push(sessionData);
+      } else {
+        console.error(`[sessions:list] WARNING: Entry has no session data: ${entry.id}`);
       }
     }
 
+    // TODO: Debug logging - uncomment if needed
+    // console.error(`[sessions:list] Returning ${sessions.length} sessions`);
     return { success: true, sessions };
   } catch (error) {
     console.error('[AgenticCoding] Failed to list sessions:', error);

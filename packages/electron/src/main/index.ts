@@ -29,6 +29,7 @@ import { registerSettingsHandlers } from './ipc/SettingsHandlers';
 import { registerWindowHandlers } from './ipc/WindowHandlers';
 import { registerHistoryHandlers } from './ipc/HistoryHandlers';
 import { registerSessionHandlers } from './ipc/SessionHandlers';
+import { registerSessionStateHandlers, shutdownSessionStateHandlers } from './ipc/SessionStateHandlers';
 import { registerAttachmentHandlers } from './ipc/AttachmentHandlers';
 import { registerWorkspaceWatcherHandlers } from './file/WorkspaceWatcher';
 import { setupSessionFileHandlers } from './ipc/SessionFileHandlers';
@@ -275,6 +276,7 @@ app.whenReady().then(async () => {
     registerWindowHandlers();
     await registerHistoryHandlers();
     await registerSessionHandlers();
+    await registerSessionStateHandlers();
     setupWorkspaceManagerHandlers();
     setupSessionFileHandlers();
     registerSlashCommandHandlers();
@@ -652,6 +654,27 @@ app.on('before-quit', async (event) => {
         if (canWriteLogs && debugLog) {
             try {
                 fs.appendFileSync(debugLog, `[QUIT] Error cleaning up file watchers: ${error}\n`);
+            } catch (e) {}
+        }
+    }
+
+    try {
+        // Clean up session state manager
+        const t3_5 = Date.now();
+        console.log(`[QUIT] [${t3_5}] Shutting down session state manager`);
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, '[QUIT] Shutting down session state manager\n');
+            } catch (e) {}
+        }
+        await shutdownSessionStateHandlers();
+        const t3_6 = Date.now();
+        console.log(`[QUIT] [${t3_6}] Session state manager shutdown (${t3_6-t3_5}ms)`);
+    } catch (error) {
+        console.error('[QUIT] Error shutting down session state manager:', error);
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, `[QUIT] Error shutting down session state manager: ${error}\n`);
             } catch (e) {}
         }
     }

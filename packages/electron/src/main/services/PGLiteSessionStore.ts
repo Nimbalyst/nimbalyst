@@ -44,6 +44,14 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       const createdAt = payload.createdAt ?? now;
       const updatedAt = payload.updatedAt ?? now;
 
+      // TODO: Debug logging - uncomment if needed
+      // console.log('[PGLiteSessionStore] Creating session:', {
+      //   id: payload.id,
+      //   workspaceId: payload.workspaceId,
+      //   provider: payload.provider,
+      //   sessionType: (payload as any).sessionType
+      // });
+
       await db.query(
         `INSERT INTO ai_sessions (
           id, workspace_id, file_path, provider, model, title, session_type,
@@ -85,6 +93,9 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           updatedAt,
         ]
       );
+
+      // TODO: Debug logging - uncomment if needed
+      // console.log('[PGLiteSessionStore] Session created successfully in database');
     },
 
 

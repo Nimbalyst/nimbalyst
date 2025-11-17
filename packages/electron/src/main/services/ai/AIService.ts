@@ -5,6 +5,7 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import Store from 'electron-store';
 import { SessionManager, ProviderFactory, ModelRegistry, AIProvider } from '@nimbalyst/runtime/ai/server';
+import { getSessionStateManager } from '@nimbalyst/runtime/ai/server/SessionStateManager';
 import type { SessionStore } from '@nimbalyst/runtime';
 import type {
   DocumentContext,
@@ -101,6 +102,15 @@ export class AIService {
 
   constructor(sessionStore: SessionStore) {
     this.sessionManager = new SessionManager(sessionStore);
+
+    // Initialize SessionStateManager with the database worker
+    // Import dynamically to avoid circular dependencies
+    import('../../database/PGLiteDatabaseWorker').then(({ database }) => {
+      const stateManager = getSessionStateManager();
+      stateManager.setDatabase(database);
+    }).catch(err => {
+      console.error('[AIService] Failed to initialize SessionStateManager:', err);
+    });
 
     // Register built-in tools (which now includes file tools)
     // console.log('[AIService] Registering built-in tools...');
@@ -224,11 +234,13 @@ export class AIService {
       modelId?: string,
       sessionType?: 'chat' | 'planning' | 'coding'
     ) => {
+      // TODO: Debug logging - uncomment if needed
       // console.log('[AIService] ai:createSession called:', {
       //   provider,
       //   modelId,
       //   hasDocumentContext: !!documentContext,
-      //   workspacePath
+      //   workspacePath,
+      //   sessionType
       // });
 
       // Get API key based on provider
@@ -638,6 +650,10 @@ export class AIService {
         messageLength: bucketMessageLength(message.length)
       });
 
+      // Mark session as running/active
+      const stateManager = getSessionStateManager();
+      await stateManager.startSession({ sessionId: session.id });
+
       try {
         let fullResponse = '';
         const toolCalls: any[] = [];
@@ -705,6 +721,14 @@ export class AIService {
               textChunks++;
               const chunkContent = chunk.content || '';
               fullResponse += chunkContent;
+
+              // Update activity to indicate streaming
+              if (textChunks === 1) {
+                await stateManager.updateActivity({
+                  sessionId: session.id,
+                  isStreaming: true
+                });
+              }
               // if (isClaudeCode && textChunks <= 5) {
               //   console.log(`[CLAUDE-CODE-SERVICE] Text chunk #${textChunks}: ${chunkContent.length} chars, first 100:`, chunkContent.substring(0, 100));
               // }
@@ -1183,6 +1207,9 @@ export class AIService {
                 // console.log('[AIService] Skipping /context auto-fetch - provider is not claude-code:', session.provider);
               }
 
+              // Mark session as idle/complete
+              await stateManager.endSession(session.id);
+
               break;
           }
         }
@@ -1279,6 +1306,14 @@ export class AIService {
             responseType: 'error',
             toolsUsed: [],
             responseTime: bucketResponseTime(errorTime)
+          });
+        }
+
+        // Mark session as error
+        if (session?.id) {
+          await stateManager.updateActivity({
+            sessionId: session.id,
+            status: 'error'
           });
         }
 

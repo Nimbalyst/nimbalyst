@@ -1,0 +1,351 @@
+/**
+ * Session State Manager
+ *
+ * Manages in-memory state for AI sessions and synchronizes with database.
+ * Provides event-based notifications for state changes.
+ */
+
+import { EventEmitter } from 'events';
+import {
+  SessionStatus,
+  SessionState,
+  SessionStateEvent,
+  SessionStateListener,
+  StartSessionOptions,
+  UpdateActivityOptions,
+} from './types/SessionState';
+
+const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes (as specified in requirements)
+
+// Database interface for direct SQL access
+interface DatabaseWorker {
+  query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }>;
+}
+
+export class SessionStateManager extends EventEmitter {
+  private activeSessions: Map<string, SessionState> = new Map();
+  private database: DatabaseWorker | null = null;
+  private activityUpdateTimers: Map<string, NodeJS.Timeout> = new Map();
+
+  constructor() {
+    super();
+  }
+
+  /**
+   * Set the database worker (called after initialization)
+   */
+  setDatabase(database: DatabaseWorker): void {
+    this.database = database;
+  }
+
+  /**
+   * Initialize the state manager
+   * - Recovers stale sessions from database
+   * - Marks sessions as interrupted if they were running
+   */
+  async initialize(): Promise<void> {
+    if (!this.database) {
+      console.warn('[SessionStateManager] No database configured, skipping initialization');
+      return;
+    }
+
+    try {
+      await this.recoverStaleSessions();
+    } catch (error) {
+      console.error('[SessionStateManager] Failed to recover stale sessions:', error);
+    }
+  }
+
+  /**
+   * Start tracking a session
+   */
+  async startSession(options: StartSessionOptions): Promise<void> {
+    const { sessionId, initialStatus = 'running' } = options;
+
+    const state: SessionState = {
+      sessionId,
+      status: initialStatus,
+      lastActivity: new Date(),
+      isStreaming: false,
+    };
+
+    this.activeSessions.set(sessionId, state);
+
+    // Update database
+    await this.updateDatabase(sessionId, initialStatus);
+
+    // Emit event
+    this.emitEvent({
+      type: 'session:started',
+      sessionId,
+      timestamp: new Date(),
+    });
+  }
+
+  /**
+   * Update session activity
+   */
+  async updateActivity(options: UpdateActivityOptions): Promise<void> {
+    const { sessionId, status, isStreaming } = options;
+
+    const state = this.activeSessions.get(sessionId);
+    if (!state) {
+      console.warn(`[SessionStateManager] Cannot update activity for unknown session: ${sessionId}`);
+      return;
+    }
+
+    // Update in-memory state
+    state.lastActivity = new Date();
+    if (status !== undefined) {
+      state.status = status;
+    }
+    if (isStreaming !== undefined) {
+      state.isStreaming = isStreaming;
+    }
+
+    // Update database
+    if (status !== undefined) {
+      await this.updateDatabase(sessionId, status);
+    } else {
+      // Just update last_activity without changing status
+      await this.updateLastActivity(sessionId);
+    }
+
+    // Emit appropriate event
+    if (status === 'running') {
+      this.emitEvent({
+        type: isStreaming ? 'session:streaming' : 'session:started',
+        sessionId,
+        timestamp: new Date(),
+      });
+    } else if (status === 'waiting_for_input') {
+      this.emitEvent({
+        type: 'session:waiting',
+        sessionId,
+        timestamp: new Date(),
+      });
+    } else if (status === 'error') {
+      this.emitEvent({
+        type: 'session:error',
+        sessionId,
+        error: 'Session encountered an error',
+        timestamp: new Date(),
+      });
+    } else {
+      this.emitEvent({
+        type: 'session:activity',
+        sessionId,
+        timestamp: new Date(),
+      });
+    }
+  }
+
+  /**
+   * End a session (mark as idle)
+   */
+  async endSession(sessionId: string): Promise<void> {
+    const state = this.activeSessions.get(sessionId);
+    if (!state) {
+      console.warn(`[SessionStateManager] Cannot end unknown session: ${sessionId}`);
+      return;
+    }
+
+    // Remove from active sessions
+    this.activeSessions.delete(sessionId);
+
+    // Clear any activity update timer
+    const timer = this.activityUpdateTimers.get(sessionId);
+    if (timer) {
+      clearTimeout(timer);
+      this.activityUpdateTimers.delete(sessionId);
+    }
+
+    // Update database
+    await this.updateDatabase(sessionId, 'idle');
+
+    // Emit event
+    this.emitEvent({
+      type: 'session:completed',
+      sessionId,
+      timestamp: new Date(),
+    });
+  }
+
+  /**
+   * Mark a session as interrupted (for crashes or force stops)
+   */
+  async interruptSession(sessionId: string): Promise<void> {
+    const state = this.activeSessions.get(sessionId);
+    if (state) {
+      this.activeSessions.delete(sessionId);
+    }
+
+    // Update database
+    await this.updateDatabase(sessionId, 'interrupted');
+
+    // Emit event
+    this.emitEvent({
+      type: 'session:interrupted',
+      sessionId,
+      timestamp: new Date(),
+    });
+  }
+
+  /**
+   * Get all active session IDs
+   */
+  getActiveSessionIds(): string[] {
+    return Array.from(this.activeSessions.keys());
+  }
+
+  /**
+   * Get state for a specific session
+   */
+  getSessionState(sessionId: string): SessionState | null {
+    return this.activeSessions.get(sessionId) ?? null;
+  }
+
+  /**
+   * Check if a session is active
+   */
+  isSessionActive(sessionId: string): boolean {
+    return this.activeSessions.has(sessionId);
+  }
+
+  /**
+   * Subscribe to state change events
+   */
+  subscribe(listener: SessionStateListener): () => void {
+    const handler = (event: SessionStateEvent) => listener(event);
+
+    // Listen to all event types
+    this.on('session:started', (data) => handler({ ...data, type: 'session:started' }));
+    this.on('session:streaming', (data) => handler({ ...data, type: 'session:streaming' }));
+    this.on('session:waiting', (data) => handler({ ...data, type: 'session:waiting' }));
+    this.on('session:completed', (data) => handler({ ...data, type: 'session:completed' }));
+    this.on('session:error', (data) => handler({ ...data, type: 'session:error' }));
+    this.on('session:interrupted', (data) => handler({ ...data, type: 'session:interrupted' }));
+    this.on('session:activity', (data) => handler({ ...data, type: 'session:activity' }));
+
+    // Return unsubscribe function
+    return () => {
+      this.removeListener('session:started', handler);
+      this.removeListener('session:streaming', handler);
+      this.removeListener('session:waiting', handler);
+      this.removeListener('session:completed', handler);
+      this.removeListener('session:error', handler);
+      this.removeListener('session:interrupted', handler);
+      this.removeListener('session:activity', handler);
+    };
+  }
+
+  /**
+   * Cleanup all active sessions on shutdown
+   */
+  async shutdown(): Promise<void> {
+    const sessionIds = Array.from(this.activeSessions.keys());
+
+    // Mark all active sessions as interrupted
+    for (const sessionId of sessionIds) {
+      await this.interruptSession(sessionId);
+    }
+
+    // Clear all timers
+    for (const timer of this.activityUpdateTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.activityUpdateTimers.clear();
+
+    // Clear state
+    this.activeSessions.clear();
+  }
+
+  /**
+   * Private: Recover stale sessions from database
+   */
+  private async recoverStaleSessions(): Promise<void> {
+    if (!this.database) return;
+
+    try {
+      // Query for sessions that were marked as running
+      const result = await this.database.query(
+        `SELECT id, last_activity FROM ai_sessions WHERE status = 'running'`,
+        []
+      );
+
+      const now = Date.now();
+
+      for (const row of result.rows) {
+        const sessionId = row.id;
+        const lastActivity = row.last_activity ? new Date(row.last_activity).getTime() : 0;
+        const elapsed = now - lastActivity;
+
+        if (elapsed > STALE_THRESHOLD_MS) {
+          // Mark as interrupted
+          await this.updateDatabase(sessionId, 'interrupted');
+          console.log(`[SessionStateManager] Marked stale session as interrupted: ${sessionId}`);
+        } else {
+          // Recent activity - could still be active, but we'll mark as interrupted to be safe
+          // since the app just started and we don't know the real state
+          await this.updateDatabase(sessionId, 'interrupted');
+          console.log(`[SessionStateManager] Marked recently active session as interrupted: ${sessionId}`);
+        }
+      }
+    } catch (error) {
+      console.error('[SessionStateManager] Failed to recover stale sessions:', error);
+    }
+  }
+
+  /**
+   * Private: Update database with new status
+   */
+  private async updateDatabase(sessionId: string, status: SessionStatus): Promise<void> {
+    if (!this.database) return;
+
+    try {
+      await this.database.query(
+        `UPDATE ai_sessions SET status = $1, last_activity = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        [status, sessionId]
+      );
+    } catch (error) {
+      console.error(`[SessionStateManager] Failed to update database for session ${sessionId}:`, error);
+    }
+  }
+
+  /**
+   * Private: Update last_activity timestamp in database
+   */
+  private async updateLastActivity(sessionId: string): Promise<void> {
+    if (!this.database) return;
+
+    try {
+      await this.database.query(
+        `UPDATE ai_sessions SET last_activity = CURRENT_TIMESTAMP WHERE id = $1`,
+        [sessionId]
+      );
+    } catch (error) {
+      console.error(`[SessionStateManager] Failed to update last_activity for session ${sessionId}:`, error);
+    }
+  }
+
+  /**
+   * Private: Emit an event
+   */
+  private emitEvent(event: SessionStateEvent): void {
+    this.emit(event.type, event);
+  }
+}
+
+// Singleton instance
+let instance: SessionStateManager | null = null;
+
+export function getSessionStateManager(): SessionStateManager {
+  if (!instance) {
+    instance = new SessionStateManager();
+  }
+  return instance;
+}
+
+export function setSessionStateManager(manager: SessionStateManager): void {
+  instance = manager;
+}

@@ -79,6 +79,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   // Load sessions from database
   const loadSessions = useCallback(async (query?: string) => {
     try {
+      // TODO: Debug logging - uncomment if needed
+      // console.log('[SessionHistory] loadSessions called, workspace:', workspacePath, 'query:', query);
       setLoading(true);
       setError(null);
 
@@ -86,6 +88,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       const result = query && query.trim()
         ? await window.electronAPI.invoke('sessions:search', workspacePath, query.trim())
         : await window.electronAPI.invoke('sessions:list', workspacePath);
+      // TODO: Debug logging - uncomment if needed
+      // console.log('[SessionHistory] Loaded', result?.sessions?.length || 0, 'sessions');
 
       if (result.success && Array.isArray(result.sessions)) {
         // Map sessions with base data only. Visual indicators (isProcessing, hasUnread)

@@ -57,6 +57,14 @@ type SessionListItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'title' |
   messageCount?: number;
 };
 
+const SESSION_HISTORY_REFRESH_EVENT = 'agentic:session-history-refresh';
+
+interface SessionHistoryRefreshDetail {
+  workspacePath?: string;
+  sourceId: string;
+  reason?: string;
+}
+
 /**
  * AgenticPanel is the top-level container for unified AI interface.
  *
@@ -91,6 +99,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const [sendingSessions, setSendingSessions] = useState<Set<string>>(new Set());
   const sendingSessionsRef = useRef<Set<string>>(new Set());
 
+  // Track sessions that are actively running (from session state manager)
+  const [runningSessions, setRunningSessions] = useState<Set<string>>(new Set());
+
   // Prompt history navigation state (per session)
   const [historyPosition, setHistoryPosition] = useState<Map<string, number>>(new Map());
   const [savedDraft, setSavedDraft] = useState<Map<string, string>>(new Map());
@@ -109,6 +120,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const reloadInProgressRef = useRef<Set<string>>(new Set()); // Track in-flight reloads
   const sessionTabsRef = useRef<SessionTab[]>(sessionTabs);
   const workspacePathRef = useRef(workspacePath);
+  const panelInstanceIdRef = useRef<string>(`agentic-panel-${Math.random().toString(36).slice(2)}`);
 
   // Read state tracking - synchronous ref to avoid React state update delay
   const readStateRef = useRef<Map<string, { lastReadMessageTimestamp: number | null }>>(new Map());
@@ -232,15 +244,86 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     return () => clearTimeout(timer);
   }, [workspacePath, sessionHistoryWidth, sessionHistoryCollapsed, collapsedGroups, mode]);
 
+  // Subscribe to session state changes to track running sessions
+  useEffect(() => {
+    const initSessionState = async () => {
+      try {
+        // TODO: Debug logging - uncomment if needed
+        // console.log('[AgenticPanel] Initializing session state subscription');
+
+        // Get initial active sessions
+        const result = await window.electronAPI.sessionState.getActiveSessionIds();
+        // TODO: Debug logging - uncomment if needed
+        // console.log('[AgenticPanel] Initial active sessions:', result);
+        if (result.success && result.sessionIds) {
+          // TODO: Debug logging - uncomment if needed
+          // console.log('[AgenticPanel] Setting running sessions:', result.sessionIds);
+          setRunningSessions(new Set(result.sessionIds));
+        }
+
+        // Subscribe to state changes
+        // TODO: Debug logging - uncomment if needed
+        // console.log('[AgenticPanel] Subscribing to session state changes');
+        await window.electronAPI.sessionState.subscribe();
+
+        // Listen for state change events
+        const handleStateChange = (event: any) => {
+          // TODO: Debug logging - uncomment if needed
+          // console.log('[AgenticPanel] Session state changed:', event);
+          setRunningSessions(prev => {
+            const next = new Set(prev);
+
+            switch (event.type) {
+              case 'session:started':
+              case 'session:streaming':
+              case 'session:waiting':
+                next.add(event.sessionId);
+                // TODO: Debug logging - uncomment if needed
+                // console.log('[AgenticPanel] Added running session:', event.sessionId, 'Total:', next.size);
+                break;
+              case 'session:completed':
+              case 'session:error':
+              case 'session:interrupted':
+                next.delete(event.sessionId);
+                // TODO: Debug logging - uncomment if needed
+                // console.log('[AgenticPanel] Removed running session:', event.sessionId, 'Total:', next.size);
+                break;
+            }
+
+            return next;
+          });
+        };
+
+        window.electronAPI.sessionState.onStateChange(handleStateChange);
+
+        return () => {
+          // TODO: Debug logging - uncomment if needed
+          // console.log('[AgenticPanel] Cleaning up session state subscription');
+          window.electronAPI.sessionState.removeStateChangeListener(handleStateChange);
+          window.electronAPI.sessionState.unsubscribe();
+        };
+      } catch (err) {
+        console.error('[AgenticPanel] Failed to subscribe to session state:', err);
+      }
+    };
+
+    const cleanup = initSessionState();
+    return () => {
+      cleanup.then(fn => fn?.());
+    };
+  }, []);
 
   // Load all sessions for the workspace
   const loadSessions = useCallback(async () => {
     try {
-      const sessionType = mode === 'agent' ? 'coding' : undefined; // Filter by type in agent mode
+      // TODO: Debug logging - uncomment if needed
+      // console.log('[AgenticPanel] loadSessions called, mode:', mode, 'workspace:', workspacePath);
+      // Don't filter by session type - show all sessions in agent mode
       const result = await window.electronAPI.invoke('sessions:list', workspacePath);
+      // TODO: Debug logging - uncomment if needed
+      // console.log('[AgenticPanel] sessions:list result:', result);
       if (result.success && Array.isArray(result.sessions)) {
         const sessions = result.sessions
-          .filter((s: any) => !sessionType || s.sessionType === sessionType)
           .map((s: any) => ({
             id: s.id,
             createdAt: s.createdAt,
@@ -248,14 +331,64 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             title: s.title,
             provider: s.provider,
             model: s.model,
-            messageCount: s.messageCount || 0
+            messageCount: s.messageCount || 0,
+            sessionType: s.sessionType
           }));
+        // TODO: Debug logging - uncomment if needed
+        // console.log('[AgenticPanel] Setting availableSessions:', sessions.length, 'sessions');
+        // console.log('[AgenticPanel] Session details:', sessions.map(s => ({ id: s.id, type: s.sessionType })));
         setAvailableSessions(sessions);
       }
     } catch (err) {
       console.error('[AgenticPanel] Failed to load sessions:', err);
     }
   }, [workspacePath, mode]);
+
+  const triggerSessionHistoryRefresh = useCallback((reason?: string) => {
+    setSessionHistoryRefreshTrigger(prev => prev + 1);
+
+    if (typeof window !== 'undefined') {
+      const detail: SessionHistoryRefreshDetail = {
+        workspacePath,
+        sourceId: panelInstanceIdRef.current,
+        reason
+      };
+      window.dispatchEvent(new CustomEvent(SESSION_HISTORY_REFRESH_EVENT, { detail }));
+    }
+  }, [workspacePath]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleExternalRefresh = (event: Event) => {
+      const customEvent = event as CustomEvent<SessionHistoryRefreshDetail>;
+      const detail = customEvent.detail;
+      if (!detail) {
+        return;
+      }
+      if (detail.sourceId === panelInstanceIdRef.current) {
+        return;
+      }
+      if (detail.workspacePath && detail.workspacePath !== workspacePath) {
+        return;
+      }
+      setSessionHistoryRefreshTrigger(prev => prev + 1);
+    };
+
+    window.addEventListener(SESSION_HISTORY_REFRESH_EVENT, handleExternalRefresh as EventListener);
+    return () => {
+      window.removeEventListener(SESSION_HISTORY_REFRESH_EVENT, handleExternalRefresh as EventListener);
+    };
+  }, [workspacePath]);
+
+  // When switching TO agent mode, refresh SessionHistory to pick up any sessions created in other modes
+  useEffect(() => {
+    if (mode === 'agent') {
+      triggerSessionHistoryRefresh('mode-switch');
+    }
+  }, [mode, triggerSessionHistoryRefresh]);
 
   const scheduleSessionReload = useCallback((
     sessionId: string,
@@ -471,13 +604,18 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Create a new session
   const createNewSession = useCallback(async (planPath?: string) => {
-    const session = await window.electronAPI.aiCreateSession(
-      'claude-code',
-      undefined,
-      workspacePath,
-      undefined,
-      mode === 'agent' ? 'coding' : 'chat'
-    );
+    try {
+      // TODO: Debug logging - uncomment if needed
+      // console.log('[AgenticPanel] createNewSession called, mode:', mode, 'workspace:', workspacePath);
+      const session = await window.electronAPI.aiCreateSession(
+        'claude-code',
+        undefined,
+        workspacePath,
+        undefined,
+        mode === 'agent' ? 'coding' : 'chat'
+      );
+      // TODO: Debug logging - uncomment if needed
+      // console.log('[AgenticPanel] aiCreateSession returned:', session.id);
 
     // Add metadata if needed
     if (mode === 'agent') {
@@ -533,7 +671,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     await loadSessions();
 
     // Trigger SessionHistory refresh
-    setSessionHistoryRefreshTrigger(prev => prev + 1);
+    triggerSessionHistoryRefresh('new-session');
 
     if (planPath && mode === 'agent') {
       await window.electronAPI.invoke('plan-status:notify-session-created', {
@@ -566,8 +704,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
     }, 50);
 
-    return sessionData;
-  }, [sessionTabs, workspacePath, mode, loadSessions, onSessionChange]);
+      return sessionData;
+    } catch (error) {
+      console.error('[AgenticPanel] Failed to create session:', error);
+      throw error;
+    }
+  }, [sessionTabs, workspacePath, mode, loadSessions, onSessionChange, triggerSessionHistoryRefresh]);
 
   // Load or create initial session
   useEffect(() => {
@@ -1526,7 +1668,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         console.log('[AgenticPanel] Import successful:', result);
         // Reload sessions to show imported ones
         await loadSessions();
-        setSessionHistoryRefreshTrigger(prev => prev + 1);
+        triggerSessionHistoryRefresh('import');
       } else {
         console.error('[AgenticPanel] Import failed:', result.error);
         // TODO: Show error notification to user
@@ -1535,7 +1677,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       console.error('[AgenticPanel] Failed to import sessions:', err);
       // TODO: Show error notification to user
     }
-  }, [loadSessions, workspacePath]);
+  }, [loadSessions, workspacePath, triggerSessionHistoryRefresh]);
 
   // Helper to determine if a session has unread messages
   const hasUnreadMessages = useCallback((tab: SessionTab): boolean => {
@@ -1580,9 +1722,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Get sets of processing and unread session IDs
   // Memoize these Sets to prevent unnecessary re-renders of SessionHistory
+  // Combines both local sending state and global running state from session state manager
   const processingSessions = React.useMemo(() => {
-    return new Set(sendingSessions);
-  }, [sendingSessions]);
+    const combined = new Set<string>();
+    sendingSessions.forEach(id => combined.add(id));
+    runningSessions.forEach(id => combined.add(id));
+    return combined;
+  }, [sendingSessions, runningSessions]);
 
   // Create a stable key for unread sessions based only on message state, not draft input
   // This prevents re-computation when only draft input changes (typing in the input field)
@@ -1607,6 +1753,11 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unreadSessionsKey]);
 
+  // Memoize loadedSessionIds to prevent creating new array on every render
+  const loadedSessionIds = React.useMemo(() => {
+    return sessionTabs.filter(tab => tab != null).map(tab => tab.id);
+  }, [sessionTabs]);
+
   // Convert SessionTab to Tab format for TabBar
   const convertToTabs = (sessionTabs: SessionTab[]): Tab[] => {
     return sessionTabs.filter(tab => tab != null).map(tab => ({
@@ -1617,9 +1768,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       isDirty: false,
       isPinned: tab.isPinned || false,
       isVirtual: true,
-      isProcessing: sendingSessions.has(tab.id),
+      isProcessing: processingSessions.has(tab.id),
       // Only show unread for inactive tabs that aren't processing
-      hasUnread: tab.id !== activeTabId && !sendingSessions.has(tab.id) && hasUnreadMessages(tab)
+      hasUnread: tab.id !== activeTabId && !processingSessions.has(tab.id) && hasUnreadMessages(tab)
     }));
   };
 
@@ -1762,13 +1913,13 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           <SessionHistory
             workspacePath={workspacePath}
             activeSessionId={activeTabId}
-            loadedSessionIds={sessionTabs.filter(tab => tab != null).map(tab => tab.id)}
+            loadedSessionIds={loadedSessionIds}
             processingSessions={processingSessions}
             unreadSessions={unreadSessions}
             renamedSession={renamedSession}
             onSessionSelect={openSessionInTab}
             onSessionDelete={deleteSession}
-            onNewSession={() => createNewSession()}
+            onNewSession={createNewSession}
             onImportSessions={handleOpenImportDialog}
             collapsedGroups={collapsedGroups}
             onCollapsedGroupsChange={setCollapsedGroups}
