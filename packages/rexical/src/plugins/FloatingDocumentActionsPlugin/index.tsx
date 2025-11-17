@@ -199,30 +199,12 @@ export default function FloatingDocumentActionsPlugin({
   };
 
   const handleMarkdownMode = useCallback(() => {
-    editor.update(() => {
-      const transformers = getEditorTransformers();
-      const root = $getRoot();
-      const firstChild = root.getFirstChild();
-
-      if ($isCodeNode(firstChild) && firstChild.getLanguage() === 'markdown') {
-        // Convert from markdown to rich text
-        $convertFromEnhancedMarkdownString(
-          firstChild.getTextContent(),
-          transformers
-        );
-      } else {
-        // Convert from rich text to markdown
-        const markdown = $convertToEnhancedMarkdownString(transformers);
-        const codeNode = new CodeNode('markdown');
-        codeNode.append($createTextNode(markdown));
-        root.clear().append(codeNode);
-        if (markdown.length === 0) {
-          codeNode.select();
-        }
-      }
-    });
+    // Toggle to Monaco editor view for raw markdown editing
+    if (config?.onToggleMarkdownMode) {
+      config.onToggleMarkdownMode();
+    }
     setShowActionsMenu(false);
-  }, [editor]);
+  }, [config]);
 
   const handleViewHistory = useCallback(() => {
     if (config?.onViewHistory) {

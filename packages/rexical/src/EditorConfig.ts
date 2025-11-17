@@ -100,6 +100,7 @@ export interface EditorConfig {
   onRenameDocument?: () => void;
   onSwitchToAgentMode?: (planDocumentPath?: string, sessionId?: string) => void;
   onOpenSessionInChat?: (sessionId: string) => void;
+  onToggleMarkdownMode?: () => void;
 
   // Document metadata for AI sessions
   filePath?: string;

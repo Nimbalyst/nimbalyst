@@ -96,6 +96,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const isMarkdown = fileType === 'markdown';
   const isImage = fileType === 'image';
 
+  // View mode state for markdown files (lexical = rich text editor, monaco = raw markdown)
+  const [markdownViewMode, setMarkdownViewMode] = useState<'lexical' | 'monaco'>('lexical');
+  const [viewModeVersion, setViewModeVersion] = useState(0);
+
   // Internal state - fully owned by this component
   const [content, setContent] = useState(initialContent);
   const [isDirty, setIsDirty] = useState(false);
@@ -1510,11 +1514,11 @@ export const TabEditor: React.FC<TabEditorProps> = ({
               filePath={filePath}
               fileName={fileName}
             />
-          ) : isMarkdown ? (
+          ) : isMarkdown && markdownViewMode === 'lexical' ? (
             <StravuEditor
-              key={filePath}
+              key={`${filePath}-lexical-v${viewModeVersion}`}
               config={{
-                initialContent,
+                initialContent: content,
                 theme,
                 onContentChange: handleContentChange,
                 onGetContent: (getContentFn) => {
@@ -1542,6 +1546,15 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 onRenameDocument,
                 onSwitchToAgentMode,
               onOpenSessionInChat,
+                onToggleMarkdownMode: () => {
+                  // Get current content from Lexical editor before switching
+                  if (getContentFnRef.current) {
+                    const currentContent = getContentFnRef.current();
+                    setContent(currentContent);
+                  }
+                  setMarkdownViewMode('monaco');
+                  setViewModeVersion(v => v + 1);
+                },
                 filePath,
                 workspaceId,
                 onImageDoubleClick: handleImageDoubleClick,
@@ -1558,6 +1571,76 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 ),
               }}
             />
+          ) : isMarkdown && markdownViewMode === 'monaco' ? (
+            <>
+              <div className="monaco-markdown-toolbar" style={{
+                padding: '8px 16px',
+                borderBottom: '1px solid var(--border-primary)',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'var(--surface-secondary)',
+              }}>
+                <span style={{
+                  marginRight: 'auto',
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)'
+                }}>
+                  Raw Markdown Mode
+                </span>
+                <button
+                  onClick={() => {
+                    // Get current content from Monaco editor before switching
+                    if (getContentFnRef.current) {
+                      const currentContent = getContentFnRef.current();
+                      setContent(currentContent);
+                    }
+                    setMarkdownViewMode('lexical');
+                    setViewModeVersion(v => v + 1);
+                  }}
+                  style={{
+                    padding: '4px 12px',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    background: 'var(--surface-primary)',
+                    border: '1px solid var(--border-primary)',
+                    borderRadius: '4px',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  Switch to Rich Text Editor
+                </button>
+              </div>
+              <MonacoCodeEditor
+                key={`${filePath}-monaco`}
+                filePath={filePath}
+                fileName={fileName}
+                initialContent={content}
+                theme={theme}
+                onContentChange={handleContentChange}
+                onGetContent={(getContentFn) => {
+                  getContentFnRef.current = getContentFn;
+                  if (onGetContentReady) {
+                    onGetContentReady(getContentFn);
+                  }
+                  // Expose the manual save function
+                  if (onManualSaveReady) {
+                    onManualSaveReady(handleManualSave);
+                  }
+                  // Sync content once when editor is ready
+                  if (!hasInitialContentSyncRef.current) {
+                    hasInitialContentSyncRef.current = true;
+                    const currentContent = getContentFn();
+                    setContent(currentContent);
+                  }
+                }}
+                onEditorReady={(editorWrapper) => {
+                  // For Monaco, we get a wrapper with editor, setContent, getContent
+                  editorRef.current = editorWrapper;
+                }}
+              />
+            </>
           ) : (
             <MonacoCodeEditor
               key={filePath}
