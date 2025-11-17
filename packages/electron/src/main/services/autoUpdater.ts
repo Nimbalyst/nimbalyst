@@ -57,14 +57,33 @@ export class AutoUpdaterService {
       this.sendToAllWindows('update-checking');
     });
 
-    autoUpdater.on('update-available', (info) => {
+    autoUpdater.on('update-available', async (info) => {
       log.info('Update available:', info);
       this.isCheckingForUpdate = false;
+
+      // Fetch release notes from R2 if using alpha channel
+      let releaseNotes = info.releaseNotes as string;
+      const channel = getReleaseChannel();
+      if (channel === 'alpha' && (!releaseNotes || releaseNotes.trim() === '')) {
+        try {
+          const releaseNotesURL = 'https://pub-4357a3345db7463580090984c0e4e2ba.r2.dev/RELEASE_NOTES.md';
+          log.info(`Fetching release notes from: ${releaseNotesURL}`);
+          const response = await fetch(releaseNotesURL);
+          if (response.ok) {
+            releaseNotes = await response.text();
+            log.info('Successfully fetched release notes from R2');
+          } else {
+            log.warn(`Failed to fetch release notes: ${response.status}`);
+          }
+        } catch (err) {
+          log.error('Error fetching release notes from R2:', err);
+        }
+      }
 
       // Show custom update window
       showUpdateAvailable({
         version: info.version,
-        releaseNotes: info.releaseNotes as string,
+        releaseNotes: releaseNotes,
         releaseDate: info.releaseDate
       });
 
