@@ -19,6 +19,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.31] - 2025-11-18
+
+
+### Added
+- Planning mode file restrictions
+- Word boundaries in diff context stripping
+- Discord link to Help menu
+- Read/written file filters to file tree
+- Token usage category breakdown to AI chat
+- Auto-name sessions via MCP
+
+### Changed
+- Refactor: remove AgenticCodingWindow in favor of unified agent mode
+- Refactor: add mode field to separate session behavior from origin
+- Better display for MCP tool calls
+- Keep showing login button even when logged in (prevents OAuth expiry issues)
+- Log reduction
+
+### Fixed
+- Preserve search box when no sessions match in agent mode
+- Update Discord invite URL to correct link
+- Monaco diff editor disposal errors
+- Session not opening when switching from Files to Agent mode
+- Always fetch release notes from R2 for alpha channel
+- Remove duplicate Files header in agent sidebar
+- Fork AutoLinkPlugin to filter base64 URLs
+- Comment out console warnings for depth scanning limits
+- Prevent false diffs for hashtags in unchanged content
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.30] - 2025-11-17
 
 
