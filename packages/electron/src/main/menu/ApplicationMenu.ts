@@ -1332,6 +1332,18 @@ Note: Only one connection at a time is supported.`,
                             focusedWindow.webContents.send('open-keyboard-shortcuts');
                         }
                     }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Join Discord Community',
+                    click: async () => {
+                        // Track help accessed
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'discord',
+                            context: 'menu',
+                        });
+                        shell.openExternal('https://discord.gg/nimbalyst');
+                    }
                 }
             ]
         });
@@ -1379,6 +1391,18 @@ Note: Only one connection at a time is supported.`,
                         if (focusedWindow) {
                             focusedWindow.webContents.send('open-keyboard-shortcuts');
                         }
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Join Discord Community',
+                    click: async () => {
+                        // Track help accessed
+                        AnalyticsService.getInstance().sendEvent('help_accessed', {
+                            helpType: 'discord',
+                            context: 'menu',
+                        });
+                        shell.openExternal('https://discord.gg/nimbalyst');
                     }
                 },
                 { type: 'separator' },
