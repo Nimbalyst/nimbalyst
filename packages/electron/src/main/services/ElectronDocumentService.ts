@@ -270,7 +270,7 @@ export class ElectronDocumentService implements DocumentService {
     }
 
     if (depth > ElectronDocumentService.MAX_DEPTH) {
-      console.warn(`[DocumentService] Stopped scanning at depth ${depth} (limit: ${ElectronDocumentService.MAX_DEPTH})`);
+      // console.warn(`[DocumentService] Stopped scanning at depth ${depth} (limit: ${ElectronDocumentService.MAX_DEPTH})`);
       return documents;
     }
 

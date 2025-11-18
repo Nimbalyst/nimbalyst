@@ -26,7 +26,7 @@ export function getFolderContents(dirPath: string, depth: number = 0): FileTreeI
 
     // Stop if we've hit limits
     if (depth > MAX_DEPTH) {
-        console.warn(`[FileTree] Stopped scanning at depth ${depth} for: ${dirPath}`);
+        // console.warn(`[FileTree] Stopped scanning at depth ${depth} for: ${dirPath}`);
         return result;
     }
 
