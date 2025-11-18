@@ -362,7 +362,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
     }
 
     cleanupFns.push(window.electronAPI.onFileOpenedFromOS(async (data) => {
-      console.log('[FILE_OPS] ✓✓✓ File opened from OS event received:', data.filePath);
+      // console.log('[FILE_OPS] ✓✓✓ File opened from OS event received:', data.filePath);
       // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
       isInitializedRef.current = false;
       handlersRef.current.setCurrentFilePath(data.filePath);

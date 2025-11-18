@@ -175,7 +175,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           // CRITICAL: Skip if the mount effect already handled pending diffs for this file
           // The mount effect runs synchronously first, so if it found diffs, it's already applying them
           if (mountEffectHandledPendingDiffRef.current) {
-            console.log(`[TabEditor] Mount effect already handled pending diff on tab activation, skipping`);
+            // console.log(`[TabEditor] Mount effect already handled pending diff on tab activation, skipping`);
             return;
           }
 
@@ -791,12 +791,12 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // to call setContent to update the Monaco editor itself. The setContent call is idempotent.
         // For markdown files, we can safely skip if content matches.
         if (isMarkdown && newContent === currentContent) {
-          console.log('[TabEditor] Skipping - disk content matches current editor content', {
-            fileName,
-            diskLength: newContent.length,
-            editorLength: currentContent.length,
-            firstDiff: newContent.length > 0 ? newContent.substring(0, 100) : '(empty)',
-          });
+          // console.log('[TabEditor] Skipping - disk content matches current editor content', {
+          //   fileName,
+          //   diskLength: newContent.length,
+          //   editorLength: currentContent.length,
+          //   firstDiff: newContent.length > 0 ? newContent.substring(0, 100) : '(empty)',
+          // });
           processingFileChangeRef.current = false;
           return;
         }

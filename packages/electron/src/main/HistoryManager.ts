@@ -470,7 +470,7 @@ export class HistoryManager {
 
       const now = Date.now();
 
-      logger.main.info('[HistoryManager] BEFORE updateTagStatus:', { filePath, tagId, status });
+      // logger.main.info('[HistoryManager] BEFORE updateTagStatus:', { filePath, tagId, status });
 
       const result = await database.query(`
         UPDATE document_history
@@ -482,7 +482,7 @@ export class HistoryManager {
           AND metadata->>'tagId' = $4
       `, [status, now, filePath, tagId]);
 
-      logger.main.info('[HistoryManager] AFTER updateTagStatus - rows affected:', (result as any).rowCount || 0);
+      // logger.main.info('[HistoryManager] AFTER updateTagStatus - rows affected:', (result as any).rowCount || 0);
 
       // Verify the update worked
       const checkResult = await database.query(`
@@ -492,9 +492,9 @@ export class HistoryManager {
           AND (metadata->>'type' = 'pre-edit' OR metadata->>'type' = 'incremental-approval')
       `, [filePath]);
 
-      logger.main.info('[HistoryManager] All tags for file after update:',
-        checkResult.rows.map((r: any) => ({ tagId: r.tag_id, type: r.type, status: r.status }))
-      );
+      // logger.main.info('[HistoryManager] All tags for file after update:',
+      //   checkResult.rows.map((r: any) => ({ tagId: r.tag_id, type: r.type, status: r.status }))
+      // );
     } catch (error) {
       logger.main.error('[HistoryManager] Failed to update tag status:', error);
       throw error;
