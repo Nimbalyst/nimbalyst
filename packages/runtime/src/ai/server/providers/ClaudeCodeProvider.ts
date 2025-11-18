@@ -1288,7 +1288,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const toolName = input.tool_name;
       const toolInput = input.tool_input;
 
-      console.log(`[CLAUDE-CODE] PreToolUse hook: ${toolName}`, { toolUseID, toolInput });
+      // console.log(`[CLAUDE-CODE] PreToolUse hook: ${toolName}`, { toolUseID, toolInput });
 
       // Only intercept file editing tools
       if (toolName !== 'Edit' && toolName !== 'Write' && toolName !== 'MultiEdit') {
