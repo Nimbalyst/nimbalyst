@@ -257,7 +257,7 @@ export class ElectronDocumentService implements DocumentService {
     }
 
     if (scanState.count >= ElectronDocumentService.MAX_FILES_TO_SCAN) {
-      console.warn(`[DocumentService] Stopped scanning at ${scanState.count} files (limit: ${ElectronDocumentService.MAX_FILES_TO_SCAN})`);
+      // console.warn(`[DocumentService] Stopped scanning at ${scanState.count} files (limit: ${ElectronDocumentService.MAX_FILES_TO_SCAN})`);
       scanState.stopped = true;
       return documents;
     }
