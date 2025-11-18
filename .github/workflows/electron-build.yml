@@ -213,14 +213,6 @@ jobs:
             echo "## Recent Changes"
             echo ""
             git log --oneline -10 --pretty=format:"- %s" || echo "- Release build"
-            echo ""
-            echo ""
-            echo "## Installation"
-            echo ""
-            echo "Download and install the appropriate file for your platform:"
-            echo "- **macOS**: .dmg file"
-            echo "- **Windows**: .exe file"
-            echo "- **Linux**: .AppImage file"
           } > release-files/RELEASE_NOTES.md
 
           # Extract public release notes from CHANGELOG.md
