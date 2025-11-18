@@ -288,16 +288,21 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       }
 
       // Use claude-code-sdk query function
-      // console.log(`[CLAUDE-CODE] Full options object:`, JSON.stringify(options, null, 2));
-      // console.log(`[CLAUDE-CODE] Calling query with options:`, {
+      // const optionsSummary = {
       //   model: options.model,
-      //   hasSystemPrompt: !!options.customSystemPrompt,
-      //   systemPromptLength: options.customSystemPrompt?.length,
+      //   hasSystemPrompt: !!options.systemPrompt,
       //   hasMcpServers: !!options.mcpServers,
+      //   mcpServers: options.mcpServers ? Object.keys(options.mcpServers) : [],
       //   cwd: options.cwd,
       //   resume: options.resume,
-      //   hasAbortController: !!options.abortController
-      // });
+      //   hasAbortController: !!options.abortController,
+      //   executable: options.executable,
+      //   executableArgs: options.executableArgs,
+      //   pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable,
+      //   hasEnv: !!options.env,
+      //   envKeys: options.env ? Object.keys(options.env).filter(k => k.includes('ANTHROPIC') || k.includes('NODE') || k.includes('ELECTRON') || k.includes('HOME') || k.includes('PATH')) : []
+      // };
+      // console.log(`[CLAUDE-CODE] Calling query with options:`, JSON.stringify(optionsSummary, null, 2));
 
       const queryStartTime = Date.now();
 
@@ -1140,6 +1145,24 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           isComplete: true
         };
       } else {
+        console.error(`[CLAUDE-CODE] Error occurred`);
+
+        // If we were trying to resume a session, check if it's missing
+        const resumeSessionId = sessionId ? this.claudeSessionIds.get(sessionId) : null;
+        if (resumeSessionId) {
+          const sessionExists = await this.checkSessionExists(resumeSessionId);
+          if (!sessionExists) {
+            console.error(`[CLAUDE-CODE] Session ${resumeSessionId} not found - user needs to create new session`);
+            this.claudeSessionIds.delete(sessionId!);
+
+            yield {
+              type: 'error',
+              error: 'Your previous conversation session has expired or been cleaned up. Please create a new session to continue.'
+            };
+            return;
+          }
+        }
+
         console.error(`[CLAUDE-CODE] Yielding error to client`);
         console.error(`[CLAUDE-CODE] Session ID for error logging:`, sessionId);
 
@@ -1716,5 +1739,33 @@ Do NOT call this tool more than once per session. It should be called early, typ
     toolCount: number;
   } | null {
     return (this as any)._initData || null;
+  }
+
+  /**
+   * Quick check if a Claude Code session exists
+   * Reads the history file to see if the session ID is present
+   */
+  private async checkSessionExists(sessionId: string): Promise<boolean> {
+    try {
+      const os = await import('os');
+      const fs = await import('fs/promises');
+      const path = await import('path');
+
+      const historyPath = path.join(os.homedir(), '.claude', 'history.jsonl');
+
+      // Quick existence check
+      try {
+        await fs.access(historyPath);
+      } catch {
+        return false; // No history file = no sessions
+      }
+
+      // Read file and search for session ID
+      const content = await fs.readFile(historyPath, 'utf-8');
+      return content.includes(sessionId);
+    } catch (error) {
+      console.warn('[CLAUDE-CODE] Failed to check session existence:', error);
+      return true; // Assume it exists if we can't check (fail open)
+    }
   }
 }
