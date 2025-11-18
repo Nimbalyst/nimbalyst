@@ -93,6 +93,17 @@ export async function registerSessionHandlers() {
         await sessionManager.updateSessionDraftInput(sessionId, draftInput);
     });
 
+    // Update session metadata (including mode)
+    ipcMain.handle('ai-sessions:update-metadata', async (event, sessionId: string, updates: any) => {
+        try {
+            await AISessionsRepository.updateMetadata(sessionId, updates);
+            return { success: true };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to update session metadata:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
     // Mark session as read (update read state)
     ipcMain.handle('sessions:mark-read', async (event, sessionId: string, lastMessageTimestamp: number | null) => {
         try {

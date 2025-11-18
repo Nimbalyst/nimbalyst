@@ -194,10 +194,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         // API key is passed via environment variable if configured (see env setup below)
       };
 
-      // Apply tool restrictions based on session type
-      // Planning mode: restrict to read-only tools + ExitPlanMode; allow MCP server for edits
+      // Apply tool restrictions based on session mode
+      // Planning mode: restrict to read-only tools + Write/Edit/MultiEdit for markdown files
       const DEFAULT_PLANNING_TOOLS = [
-        'Read', 'Glob', 'Grep', 'LS',
+        'Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'LS',
         'WebFetch', 'WebSearch',
         'TodoRead', 'Task',
         'ExitPlanMode'
@@ -1288,7 +1288,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const toolName = input.tool_name;
       const toolInput = input.tool_input;
 
-      // console.log(`[CLAUDE-CODE] PreToolUse hook: ${toolName}`, { toolUseID, toolInput });
+      console.log(`[CLAUDE-CODE] PreToolUse hook: ${toolName}`, { toolUseID, toolInput });
 
       // Only intercept file editing tools
       if (toolName !== 'Edit' && toolName !== 'Write' && toolName !== 'MultiEdit') {
@@ -1318,6 +1318,25 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               filePaths.push(editFilePath);
             }
           }
+        }
+
+        // PLANNING MODE VALIDATION: Restrict file edits to markdown files only
+        if (this.currentMode === 'planning') {
+          for (const filePath of filePaths) {
+            if (!filePath.endsWith('.md')) {
+              console.error(`[CLAUDE-CODE] Planning mode validation FAILED: ${toolName} on ${filePath}`);
+              return {
+                hookSpecificOutput: {
+                  hookEventName: 'PreToolUse' as const,
+                  permissionDecision: 'deny' as const,
+                  errorMessage: `Planning mode restricts file operations to markdown files only. ` +
+                    `Cannot use ${toolName} on '${filePath}'. ` +
+                    `Please only edit .md files in the nimbalyst-local/plans/ directory.`
+                }
+              };
+            }
+          }
+          console.log(`[CLAUDE-CODE] Planning mode validation passed for: ${filePaths.join(', ')}`);
         }
 
         // Tag each file and track for end-of-turn snapshot

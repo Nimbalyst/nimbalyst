@@ -524,8 +524,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             padding: '4px 0',
             marginBottom: '4px'
           }}>
-            {/* TODO: Mode-tag button needs to be wired up to sessionType before re-enabling */}
-            {/* {onModeChange && <ModeTag mode={mode} onModeChange={onModeChange} />} */}
+            {onModeChange && provider === 'claude-code' && <ModeTag mode={mode} onModeChange={onModeChange} />}
+
             {onModelChange && currentModel && <ModelSelector currentModel={currentModel} onModelChange={onModelChange} />}
             {/* Show context usage only for Claude Code provider */}
             {/* Always show for claude-code, display will show "--" if no data yet */}
