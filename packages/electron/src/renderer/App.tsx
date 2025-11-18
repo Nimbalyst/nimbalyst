@@ -1207,9 +1207,8 @@ export default function App() {
                         }
                       } else if (sessionId && agenticPanelRef.current) {
                         // Load existing session
-                        // Note: AgenticPanel will need to handle loading the session by ID
-                        // For now, we just switch to agent mode and the user can select from history
                         console.log('Load session:', sessionId);
+                        agenticPanelRef.current.openSessionInTab(sessionId);
                       }
                     }, 100);
                   }}
