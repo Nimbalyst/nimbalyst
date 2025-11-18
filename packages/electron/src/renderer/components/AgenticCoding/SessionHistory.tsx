@@ -66,9 +66,6 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sessionTypeFilters, setSessionTypeFilters] = useState<Set<'chat' | 'planning' | 'coding'>>(
-    new Set(['chat', 'planning', 'coding'])
-  );
   const [sortBy, setSortBy] = useState<'updated' | 'created'>('updated');
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
@@ -166,19 +163,6 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     }
   };
 
-  const toggleSessionTypeFilter = (type: 'chat' | 'planning' | 'coding') => {
-    const newFilters = new Set(sessionTypeFilters);
-    if (newFilters.has(type)) {
-      // Don't allow unchecking the last filter
-      if (newFilters.size > 1) {
-        newFilters.delete(type);
-      }
-    } else {
-      newFilters.add(type);
-    }
-    setSessionTypeFilters(newFilters);
-  };
-
   const toggleSortDropdown = () => {
     setSortDropdownOpen(!sortDropdownOpen);
   };
@@ -202,15 +186,9 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [sortDropdownOpen]);
 
-  // Filter sessions by session type only (search is now done server-side)
-  const filteredSessions = sessions.filter(session => {
-    // Apply session type filter
-    const sessionType = session.sessionType || 'chat';
-    return sessionTypeFilters.has(sessionType);
-  });
-
+  // No client-side filtering - search is done server-side
   // Group sessions by time using the selected sort field
-  const groupedSessions = groupSessionsByTime(filteredSessions, sortBy === 'updated' ? 'updatedAt' : 'createdAt');
+  const groupedSessions = groupSessionsByTime(sessions, sortBy === 'updated' ? 'updatedAt' : 'createdAt');
   const groupKeys = Object.keys(groupedSessions) as TimeGroupKey[];
 
   if (loading) {
@@ -263,27 +241,6 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           />
         </div>
         <div className="session-history-filters">
-          <button
-            className={`session-history-filter-button chat ${sessionTypeFilters.has('chat') ? 'active' : ''}`}
-            onClick={() => toggleSessionTypeFilter('chat')}
-            title="Toggle chat sessions"
-          >
-            Chat
-          </button>
-          <button
-            className={`session-history-filter-button planning ${sessionTypeFilters.has('planning') ? 'active' : ''}`}
-            onClick={() => toggleSessionTypeFilter('planning')}
-            title="Toggle planning sessions"
-          >
-            Planning
-          </button>
-          <button
-            className={`session-history-filter-button coding ${sessionTypeFilters.has('coding') ? 'active' : ''}`}
-            onClick={() => toggleSessionTypeFilter('coding')}
-            title="Toggle coding sessions"
-          >
-            Coding
-          </button>
           <div className="session-history-sort-dropdown">
             <button
               className="session-history-sort-button"
@@ -450,27 +407,6 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
         />
       </div>
       <div className="session-history-filters">
-        <button
-          className={`session-history-filter-button chat ${sessionTypeFilters.has('chat') ? 'active' : ''}`}
-          onClick={() => toggleSessionTypeFilter('chat')}
-          title="Toggle chat sessions"
-        >
-          Chat
-        </button>
-        <button
-          className={`session-history-filter-button planning ${sessionTypeFilters.has('planning') ? 'active' : ''}`}
-          onClick={() => toggleSessionTypeFilter('planning')}
-          title="Toggle planning sessions"
-        >
-          Planning
-        </button>
-        <button
-          className={`session-history-filter-button coding ${sessionTypeFilters.has('coding') ? 'active' : ''}`}
-          onClick={() => toggleSessionTypeFilter('coding')}
-          title="Toggle coding sessions"
-        >
-          Coding
-        </button>
         <div className="session-history-sort-dropdown">
           <button
             className="session-history-sort-button"

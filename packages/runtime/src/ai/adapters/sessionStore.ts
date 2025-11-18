@@ -1,4 +1,4 @@
-import type { Message, SessionData } from '../server/types';
+import type { Message, SessionData, SessionMode } from '../server/types';
 
 // Type aliases for compatibility
 export type ChatMessage = Message;
@@ -10,6 +10,7 @@ export interface SessionListItem {
   model?: string;
   title?: string;
   sessionType?: string;
+  mode?: SessionMode;
   workspaceId: string;
   createdAt: number;
   updatedAt: number;
@@ -21,6 +22,7 @@ export interface CreateSessionPayload {
   provider: string;
   model?: string;
   sessionType?: 'chat' | 'planning' | 'coding';
+  mode?: SessionMode;
   title?: string;
   workspaceId: string;
   filePath?: string;

@@ -54,13 +54,13 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
 
       await db.query(
         `INSERT INTO ai_sessions (
-          id, workspace_id, file_path, provider, model, title, session_type,
+          id, workspace_id, file_path, provider, model, title, session_type, mode,
           document_context, provider_config, provider_session_id, draft_input, metadata,
           has_been_named, created_at, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7,
-          $8, $9, $10, $11, $12,
-          $13, to_timestamp($14 / 1000.0), to_timestamp($15 / 1000.0)
+          $1, $2, $3, $4, $5, $6, $7, $8,
+          $9, $10, $11, $12, $13,
+          $14, to_timestamp($15 / 1000.0), to_timestamp($16 / 1000.0)
         )
         ON CONFLICT (id) DO UPDATE SET
           workspace_id = EXCLUDED.workspace_id,
@@ -69,6 +69,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           model = EXCLUDED.model,
           title = EXCLUDED.title,
           session_type = EXCLUDED.session_type,
+          mode = EXCLUDED.mode,
           document_context = EXCLUDED.document_context,
           provider_config = EXCLUDED.provider_config,
           provider_session_id = EXCLUDED.provider_session_id,
@@ -85,6 +86,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           payload.model ?? null,
           payload.title ?? 'New conversation',
           (payload as any).sessionType ?? 'chat',
+          (payload as any).mode ?? 'agent',
           payload.documentContext ?? null,
           payload.providerConfig ?? null,
           payload.providerSessionId ?? null,
@@ -115,6 +117,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       if (metadata.model !== undefined) pushUpdate('model =', metadata.model);
       if (metadata.title !== undefined) pushUpdate('title =', metadata.title ?? 'New conversation');
       if ((metadata as any).sessionType !== undefined) pushUpdate('session_type =', (metadata as any).sessionType);
+      if ((metadata as any).mode !== undefined) pushUpdate('mode =', (metadata as any).mode);
       if (metadata.workspaceId !== undefined) pushUpdate('workspace_id =', metadata.workspaceId);
       if (metadata.filePath !== undefined) pushUpdate('file_path =', metadata.filePath ?? null);
       if (metadata.providerConfig !== undefined) pushUpdate('provider_config =', metadata.providerConfig ?? null);
@@ -161,6 +164,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         provider: row.provider,
         model: row.model ?? undefined,
         sessionType: row.session_type ?? undefined,
+        mode: row.mode ?? undefined,
         title: row.title ?? undefined,
         draftInput: row.draft_input ?? undefined,
         messages: [], // Messages are now stored in ai_agent_messages table
@@ -179,12 +183,12 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
     async list(workspaceId: string): Promise<SessionListItem[]> {
       await ensureReady();
       const { rows } = await db.query<any>(
-        `SELECT s.id, s.provider, s.model, s.session_type, s.title, s.workspace_id,
+        `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
                 s.created_at, s.updated_at, COUNT(m.id) as message_count
          FROM ai_sessions s
          LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input'
          WHERE s.workspace_id=$1
-         GROUP BY s.id, s.provider, s.model, s.session_type, s.title, s.workspace_id,
+         GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
                   s.created_at, s.updated_at
          ORDER BY s.updated_at DESC`,
         [workspaceId]
@@ -198,6 +202,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           provider: row.provider,
           model: row.model ?? undefined,
           sessionType: row.session_type ?? undefined,
+          mode: row.mode ?? undefined,
           title: row.title ?? undefined,
           workspaceId: row.workspace_id,
           createdAt,
@@ -226,6 +231,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
             s.provider,
             s.model,
             s.session_type,
+            s.mode,
             s.title,
             s.workspace_id,
             s.created_at,
@@ -243,6 +249,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
             s.provider,
             s.model,
             s.session_type,
+            s.mode,
             s.title,
             s.workspace_id,
             s.created_at,
@@ -252,7 +259,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           INNER JOIN ai_agent_messages m ON s.id = m.session_id
           WHERE s.workspace_id = $1
             AND to_tsvector('english', m.content) @@ to_tsquery('english', $2)
-          GROUP BY s.id, s.provider, s.model, s.session_type, s.title, s.workspace_id,
+          GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
                    s.created_at, s.updated_at
         )
         SELECT
@@ -260,6 +267,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           sm.provider,
           sm.model,
           sm.session_type,
+          sm.mode,
           sm.title,
           sm.workspace_id,
           sm.created_at,
@@ -268,7 +276,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           COUNT(m.id) as message_count
         FROM session_matches sm
         LEFT JOIN ai_agent_messages m ON sm.id = m.session_id AND m.direction = 'input'
-        GROUP BY sm.id, sm.provider, sm.model, sm.session_type, sm.title, sm.workspace_id,
+        GROUP BY sm.id, sm.provider, sm.model, sm.session_type, sm.mode, sm.title, sm.workspace_id,
                  sm.created_at, sm.updated_at
         ORDER BY max_rank DESC, sm.updated_at DESC`,
         [workspaceId, searchTerms]
@@ -283,6 +291,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           provider: row.provider,
           model: row.model ?? undefined,
           sessionType: row.session_type ?? undefined,
+          mode: row.mode ?? undefined,
           title: row.title ?? undefined,
           workspaceId: row.workspace_id,
           createdAt,

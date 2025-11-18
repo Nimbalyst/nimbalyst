@@ -183,7 +183,7 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   onTodoClick,
   isLoading = false,
   onNavigateHistory,
-  aiMode = 'plan',
+  aiMode = 'agent',
   onAIModeChange,
   currentModel,
   onModelChange

@@ -49,7 +49,7 @@ interface SessionTab {
   isPinned?: boolean;
   draftInput?: string;
   draftAttachments?: ChatAttachment[];
-  mode?: AIMode; // Plan vs Agent mode (default: plan)
+  mode?: AIMode; // Planning vs Agent mode (default: agent)
   model?: string; // Current model ID (provider:model format)
 }
 
@@ -538,7 +538,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           name: tabName,
           sessionData,
           draftInput: sessionData.draftInput,
-          mode: 'plan',
+          mode: sessionData.mode || 'agent',
           model: sessionData.model || sessionData.provider || 'claude-code'
         };
 
@@ -656,7 +656,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       name: tabName,
       sessionData,
       draftInput: initialDraftInput,
-      mode: 'plan',
+      mode: sessionData.mode || 'agent',
       model: sessionData.model || sessionData.provider || 'claude-code'
     };
 
@@ -744,7 +744,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                     sessionData,
                     isPinned: savedTab.isPinned,
                     draftInput: sessionData.draftInput,
-                    mode: 'plan',
+                    mode: sessionData.mode || 'agent',
                     model: sessionData.model || sessionData.provider || 'claude-code'
                   });
                 }
@@ -780,7 +780,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                   name: sessionData.title || 'Session',
                   sessionData,
                   draftInput: sessionData.draftInput,
-                  mode: 'plan',
+                  mode: sessionData.mode || 'agent',
                   model: sessionData.model || sessionData.provider || 'claude-code'
                 };
 
@@ -814,7 +814,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
               name: tabName,
               sessionData,
               draftInput: sessionData.draftInput,
-              mode: 'plan',
+              mode: sessionData.mode || 'agent',
               model: sessionData.model || sessionData.provider || 'claude-code'
             };
 
@@ -1340,10 +1340,18 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }, [sessionTabs, historyPosition, savedDraft, handleDraftInputChange]);
 
   // Handle mode change (plan <-> agent)
-  const handleModeChange = useCallback((sessionId: string, newMode: AIMode) => {
+  const handleModeChange = useCallback(async (sessionId: string, newMode: AIMode) => {
+    // Update local state
     setSessionTabs(prev => prev.filter(tab => tab != null).map(tab =>
       tab.id === sessionId ? { ...tab, mode: newMode } : tab
     ));
+
+    // Persist mode to database
+    try {
+      await window.electronAPI.invoke('ai-sessions:update-metadata', sessionId, { mode: newMode });
+    } catch (error) {
+      console.error('[AgenticPanel] Failed to update session mode:', error);
+    }
   }, []);
 
   // Handle model change
@@ -1906,7 +1914,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             onFileMentionSelect={handleFileMentionSelect}
             onFileClick={handleFileClick}
             isLoading={sendingSessions.has(activeTab.id)}
-            aiMode={activeTab.mode || 'plan'}
+            aiMode={activeTab.mode || 'agent'}
             onAIModeChange={(newMode) => handleModeChange(activeTab.id, newMode)}
             currentModel={activeTab.model || activeTab.sessionData.model || 'claude-code'}
             onModelChange={(newModel) => handleModelChange(activeTab.id, newModel)}
@@ -2011,7 +2019,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
                 onFileMentionSelect={handleFileMentionSelect}
                 onFileClick={handleFileClick}
                 isLoading={sendingSessions.has(tab.id)}
-                aiMode={tab.mode || 'plan'}
+                aiMode={tab.mode || 'agent'}
                 onAIModeChange={(newMode) => handleModeChange(tab.id, newMode)}
                 currentModel={tab.model || tab.sessionData.model || 'claude-code'}
                 onModelChange={(newModel) => handleModelChange(tab.id, newModel)}

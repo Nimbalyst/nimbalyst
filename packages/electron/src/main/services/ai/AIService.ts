@@ -701,12 +701,13 @@ export class AIService {
           // No need to configure per-session context
         }
 
-        // Add sessionType and attachments to documentContext for provider to use in system prompt
+        // Add sessionType, mode, and attachments to documentContext for provider to use in system prompt
         const contextWithSession = documentContext ? {
           ...documentContext,
           sessionType: (documentContext as any)?.sessionType ?? session.sessionType,
+          mode: (documentContext as any)?.mode ?? session.mode,
           attachments
-        } as any : { sessionType: session.sessionType, attachments } as any;
+        } as any : { sessionType: session.sessionType, mode: session.mode, attachments } as any;
 
         for await (const chunk of provider.sendMessage(message, contextWithSession, session.id, sessionMessages, workspacePath, attachments)) {
           if (!chunk) continue;

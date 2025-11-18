@@ -1,7 +1,7 @@
 import React from 'react';
 import './ModeTag.css';
 
-export type AIMode = 'plan' | 'agent';
+export type AIMode = 'planning' | 'agent';
 
 interface ModeTagProps {
   mode: AIMode;
@@ -11,24 +11,24 @@ interface ModeTagProps {
 /**
  * ModeTag - Compact toggle between Plan and Agent modes
  *
- * Plan mode: Read-only tools, safer operations
+ * Plan mode: Creates plan documents, restricted to markdown files
  * Agent mode: Full tool access, write operations enabled
  */
 export function ModeTag({ mode, onModeChange }: ModeTagProps) {
   const handleToggle = () => {
-    onModeChange(mode === 'plan' ? 'agent' : 'plan');
+    onModeChange(mode === 'planning' ? 'agent' : 'planning');
   };
 
   return (
     <button
       className={`mode-tag mode-tag-${mode}`}
       onClick={handleToggle}
-      title={mode === 'plan'
-        ? 'Planning mode: Read-only tools (click to enable full agent mode)'
-        : 'Agent mode: Full tool access (click to switch to planning mode)'}
+      title={mode === 'planning'
+        ? 'Plan mode: Creates plan documents (click to enable full agent mode)'
+        : 'Agent mode: Full tool access (click to switch to plan mode)'}
       type="button"
     >
-      {mode === 'plan' ? 'Plan' : 'Agent'}
+      {mode === 'planning' ? 'Plan' : 'Agent'}
     </button>
   );
 }

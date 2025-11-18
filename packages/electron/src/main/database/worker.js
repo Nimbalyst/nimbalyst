@@ -332,6 +332,14 @@ class PGLiteWorker {
         ) THEN
           ALTER TABLE ai_sessions ADD COLUMN has_been_named BOOLEAN DEFAULT FALSE;
         END IF;
+
+        -- Add mode column for session behavior (planning vs agent)
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'ai_sessions' AND column_name = 'mode'
+        ) THEN
+          ALTER TABLE ai_sessions ADD COLUMN mode TEXT DEFAULT 'agent' CHECK (mode IN ('planning', 'agent'));
+        END IF;
       END $$;
     `);
 

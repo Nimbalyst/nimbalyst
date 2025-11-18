@@ -78,6 +78,8 @@ export interface AIModel {
 
 export type SessionType = 'chat' | 'planning' | 'coding';
 
+export type SessionMode = 'planning' | 'agent';
+
 export interface QueuedPrompt {
   id: string;           // Unique ID for this queued item
   prompt: string;       // The user's message
@@ -96,7 +98,8 @@ export interface SessionData {
   id: string;  // Our session ID
   provider: AIProviderType | string;  // Provider type
   model?: string;  // Specific model used (e.g., 'gpt-4', 'claude-3-5-sonnet')
-  sessionType?: SessionType;  // Type of session: 'chat', 'planning', 'coding'
+  sessionType?: SessionType;  // Type of session: 'chat', 'planning', 'coding' (deprecated, use mode instead)
+  mode?: SessionMode;  // Session behavior mode: 'planning' | 'agent'
   messages: Message[];
   documentContext?: DocumentContext;
   workspacePath?: string;

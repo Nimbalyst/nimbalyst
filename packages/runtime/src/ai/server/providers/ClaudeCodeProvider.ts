@@ -24,7 +24,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // Single abort controller - each provider instance is per-session via ProviderFactory
   private abortController: AbortController | null = null;
   private claudeSessionIds: Map<string, string> = new Map(); // Our session ID -> Claude session ID
-  private currentSessionType?: string; // Track session type for prompt customization
+  private currentMode?: 'planning' | 'agent'; // Track session mode for prompt customization and tool filtering
   private slashCommands: string[] = []; // Available slash commands from SDK
   private editedFilesThisTurn: Set<string> = new Set(); // Track files edited in current turn
   private markMessagesAsHidden: boolean = false; // Flag to mark next messages as hidden
@@ -83,9 +83,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     // console.log(`[CLAUDE-CODE] First 200 chars of message:`, message.substring(0, 200));
     // console.log(`[CLAUDE-CODE] Has attachments: ${!!attachments && attachments.length > 0}`);
 
-    // Track session type for MCP server configuration
-    this.currentSessionType = (documentContext as any)?.sessionType;
-    // console.log(`[CLAUDE-CODE] Session type: ${this.currentSessionType}`);
+    // Track session mode for MCP server configuration and tool filtering
+    this.currentMode = (documentContext as any)?.mode || 'agent';
+    // console.log(`[CLAUDE-CODE] Session mode: ${this.currentMode}`);
 
     // Handle attachments by copying them to a temp location Claude can access
     let attachmentRefs: string[] = [];
@@ -213,13 +213,14 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       ];
 
       let allowedList: string[] | undefined;
-      if (this.currentSessionType === 'planning') {
+      if (this.currentMode === 'planning') {
         // In planning mode, enforce read-only toolset regardless of configured settings
         allowedList = DEFAULT_PLANNING_TOOLS;
-      } else if (this.currentSessionType === 'coding') {
-        allowedList = ['*'];
       } else if ((this.config as any)?.allowedTools) {
         allowedList = (this.config as any).allowedTools as string[];
+      } else {
+        // Default to full tool access in agent mode
+        allowedList = ['*'];
       }
 
       if (allowedList) {
