@@ -19,6 +19,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.30] - 2025-11-17
+
+
+### Added
+- Session state tracking for cross-mode visibility
+- /bug-report command for interactive bug reports
+- Automated /release-public command with cumulative release notes
+- Automated public release notes from CHANGELOG
+- Release notes fetching from R2 for alpha channel updates
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Add performance limits to workspace manager file scanning
+- Prevent app freezing on large workspace directories
+- Remove unused Documentation button from Global Settings
+- Prevent Monaco diff editor disposal error when closing tabs
+- Resolve workspace-relative paths in workspace:open-file handler
+- File tree sync and auto-scroll issues
+- Prevent editor.registerCommand crash during HMR
+- Remove double scrollbars in Monaco markdown mode
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.29] - 2025-11-17
 
 
