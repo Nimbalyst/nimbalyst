@@ -56,11 +56,11 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         `INSERT INTO ai_sessions (
           id, workspace_id, file_path, provider, model, title, session_type,
           document_context, provider_config, provider_session_id, draft_input, metadata,
-          created_at, updated_at
+          has_been_named, created_at, updated_at
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7,
           $8, $9, $10, $11, $12,
-          to_timestamp($13 / 1000.0), to_timestamp($14 / 1000.0)
+          $13, to_timestamp($14 / 1000.0), to_timestamp($15 / 1000.0)
         )
         ON CONFLICT (id) DO UPDATE SET
           workspace_id = EXCLUDED.workspace_id,
@@ -74,6 +74,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           provider_session_id = EXCLUDED.provider_session_id,
           draft_input = EXCLUDED.draft_input,
           metadata = EXCLUDED.metadata,
+          has_been_named = EXCLUDED.has_been_named,
           updated_at = EXCLUDED.updated_at
       `,
         [
@@ -89,6 +90,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           payload.providerSessionId ?? null,
           null,
           (payload as any).metadata ?? {},
+          (payload as any).hasBeenNamed ?? false,
           createdAt,
           updatedAt,
         ]
@@ -121,6 +123,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       if (metadata.draftInput !== undefined) pushUpdate('draft_input =', metadata.draftInput ?? null);
       // NOTE: tokenUsage removed - it's derived from ai_agent_messages /context responses
       if ((metadata as any).metadata !== undefined) pushUpdate('metadata =', (metadata as any).metadata ?? {});
+      if ((metadata as any).hasBeenNamed !== undefined) pushUpdate('has_been_named =', (metadata as any).hasBeenNamed);
 
       if (!updates.length) {
         // Nothing to update but still touch the row so updated_at changes
@@ -169,6 +172,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         providerConfig: row.provider_config ?? undefined,
         providerSessionId: row.provider_session_id ?? undefined,
         lastReadMessageTimestamp: row.last_read_ms ? Number(row.last_read_ms) : undefined,
+        hasBeenNamed: row.has_been_named ?? false,
       } satisfies ChatSession;
     },
 
@@ -291,6 +295,18 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
     async delete(sessionId: string): Promise<void> {
       await ensureReady();
       await db.query('DELETE FROM ai_sessions WHERE id=$1', [sessionId]);
+    },
+
+    async updateTitleIfNotNamed(sessionId: string, title: string): Promise<boolean> {
+      await ensureReady();
+      const { rows } = await db.query<{ affected_rows: number }>(
+        `UPDATE ai_sessions
+         SET title = $2, has_been_named = true, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND (has_been_named = false OR has_been_named IS NULL)
+         RETURNING 1 as affected_rows`,
+        [sessionId, title]
+      );
+      return rows.length > 0;
     },
   };
 }

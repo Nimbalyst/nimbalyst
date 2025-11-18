@@ -111,6 +111,9 @@ export interface SessionData {
   // Read state tracking
   lastReadMessageTimestamp?: number;  // Timestamp of the last message the user has read
 
+  // Session naming tracking
+  hasBeenNamed?: boolean;  // Whether the session has been named by name_session tool
+
   // Token usage tracking (for providers that support it)
   tokenUsage?: {
     inputTokens: number;      // Total input tokens used

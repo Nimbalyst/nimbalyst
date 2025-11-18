@@ -44,6 +44,11 @@ export interface SessionStore {
   list(workspaceId: string): Promise<SessionListItem[]>;
   search(workspaceId: string, query: string): Promise<SessionListItem[]>;
   delete(sessionId: string): Promise<void>;
+  /**
+   * Atomically update session title if it has not been named yet.
+   * Returns true if the update succeeded, false if the session was already named.
+   */
+  updateTitleIfNotNamed?(sessionId: string, title: string): Promise<boolean>;
 }
 
 let activeSessionStore: SessionStore | null = null;

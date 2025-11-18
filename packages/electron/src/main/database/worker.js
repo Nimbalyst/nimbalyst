@@ -283,6 +283,7 @@ class PGLiteWorker {
         metadata JSONB DEFAULT '{}',
         last_read_message_id TEXT,
         last_read_timestamp TIMESTAMP,
+        has_been_named BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -323,6 +324,13 @@ class PGLiteWorker {
           WHERE table_name = 'ai_sessions' AND column_name = 'last_activity'
         ) THEN
           ALTER TABLE ai_sessions ADD COLUMN last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'ai_sessions' AND column_name = 'has_been_named'
+        ) THEN
+          ALTER TABLE ai_sessions ADD COLUMN has_been_named BOOLEAN DEFAULT FALSE;
         END IF;
       END $$;
     `);

@@ -72,7 +72,10 @@ export async function registerSessionHandlers() {
 
     // Update session title
     ipcMain.handle('sessions:update-title', async (event, sessionId: string, title: string) => {
-        await sessionManager.updateSessionTitle(sessionId, title);
+        await sessionManager.updateSessionTitle(sessionId, title, {
+            force: true,
+            markAsNamed: true,
+        });
     });
 
     // Update session model

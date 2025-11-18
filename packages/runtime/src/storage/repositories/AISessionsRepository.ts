@@ -60,6 +60,20 @@ export const AISessionsRepository = {
   async delete(sessionId: string): Promise<void> {
     await requireStore().delete(sessionId);
   },
+
+  async updateTitleIfNotNamed(sessionId: string, title: string): Promise<boolean> {
+    const store = requireStore();
+    if (store.updateTitleIfNotNamed) {
+      return await store.updateTitleIfNotNamed(sessionId, title);
+    }
+    // Fallback for stores that don't implement atomic update
+    const session = await store.get(sessionId);
+    if (session?.hasBeenNamed) {
+      return false;
+    }
+    await store.updateMetadata(sessionId, { title, hasBeenNamed: true } as any);
+    return true;
+  },
 };
 
 export type {

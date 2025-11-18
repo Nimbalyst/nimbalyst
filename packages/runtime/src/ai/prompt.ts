@@ -161,7 +161,7 @@ ALWAYS use applyDiff for table modifications - it's more reliable than streaming
 }
 
 
-export function buildClaudeCodeSystemPromptAddendum(documentContext?: DocumentContext): string {
+export function buildClaudeCodeSystemPromptAddendum(documentContext?: DocumentContext, hasSessionNaming?: boolean): string {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
@@ -176,12 +176,30 @@ export function buildClaudeCodeSystemPromptAddendum(documentContext?: DocumentCo
 You are a customized version of Claude Code acting as an AI assistant integrated into the Nimbalyst editor, a markdown-focused text editor.
 When asked about your identity, say that you are Claude Code running inside Nimbalyst.`;
 
+  // Add session naming instructions if available
+  if (hasSessionNaming) {
+    base += `
+
+## Session Naming
+
+You have access to a special tool called \`name_session\` that allows you to name this conversation session.
+
+IMPORTANT: Call the \`name_session\` tool ONCE at the very start of this conversation, as soon as you understand the user's task or goal. The name should be:
+- 2-5 words long
+- Concise and descriptive
+- Task-focused (e.g., "Fix authentication bug", "Add dark mode", "Refactor database layer")
+
+Do NOT call this tool more than once per session. It should be called early, typically in your first response after understanding what the user wants to accomplish.`;
+  }
+
   if (!hasDocument) {
     return base + `
 
 IMPORTANT: No document is currently open. You cannot perform any editing operations.
 The user needs to open a document first before you can help with editing.
-You can still answer questions, provide information, and have general conversations.`;
+You can still answer questions, provide information, and have general conversations.
+</addendum>
+`;
   }
 
   let selectionPreview = '';

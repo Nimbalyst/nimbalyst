@@ -471,9 +471,12 @@ export class AIService {
 
       // Update session title if this is the first user message
       if (session.messages.length === 0 || (session.messages.length === 1 && session.messages[0].role === 'user')) {
-        // Generate a title from the first message (truncate to 100 chars)
+        // Generate a provisional title from the first message without locking out auto-naming
         const title = message.length > 100 ? message.substring(0, 97) + '...' : message;
-        await this.sessionManager.updateSessionTitle(session.id, title);
+        await this.sessionManager.updateSessionTitle(session.id, title, {
+          force: true,
+          markAsNamed: false,
+        });
       }
 
       // Get or create provider for this session
@@ -693,6 +696,9 @@ export class AIService {
           //   sessionMessages: sessionMessages.length,
           //   workspacePath
           // }, null, 2));
+
+          // Session naming is now handled automatically via MCP URL parameters
+          // No need to configure per-session context
         }
 
         // Add sessionType and attachments to documentContext for provider to use in system prompt

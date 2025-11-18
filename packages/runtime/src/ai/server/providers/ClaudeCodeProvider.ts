@@ -18,6 +18,7 @@ import fs from 'fs';
 import { app } from 'electron';
 import { buildClaudeCodeSystemPromptAddendum } from '../../prompt';
 import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions } from '../../../electron/claudeCodeEnvironment';
+import { SessionManager } from '../SessionManager';
 
 export class ClaudeCodeProvider extends BaseAIProvider {
   // Single abort controller - each provider instance is per-session via ProviderFactory
@@ -28,7 +29,18 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   private editedFilesThisTurn: Set<string> = new Set(); // Track files edited in current turn
   private markMessagesAsHidden: boolean = false; // Flag to mark next messages as hidden
 
+  // Session naming MCP server port (injected from electron main process)
+  private static sessionNamingServerPort: number | null = null;
+
   static readonly DEFAULT_MODEL = 'claude-code';
+
+  /**
+   * Set the session naming MCP server port (called from electron main process)
+   * This allows the runtime package to use the MCP server without directly depending on electron code
+   */
+  public static setSessionNamingServerPort(port: number | null): void {
+    ClaudeCodeProvider.sessionNamingServerPort = port;
+  }
 
   async initialize(config: ProviderConfig): Promise<void> {
     const safeConfig = { ...config, apiKey: config.apiKey ? '***' : undefined };
@@ -52,6 +64,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   public setHiddenMode(hidden: boolean): void {
     this.markMessagesAsHidden = hidden;
   }
+
 
   async *sendMessage(
     message: string,
@@ -159,7 +172,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         },
         // BREAKING CHANGE: Claude Agent SDK requires explicit settings sources
         settingSources: ['user', 'project', 'local'],
-        mcpServers: this.getMcpServersConfig(),
+        mcpServers: this.getMcpServersConfig(sessionId),
         cwd: workspacePath,
         abortController: this.abortController,
         model: 'sonnet',
@@ -225,11 +238,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Set up environment variables for the SDK
       // If user has configured a claude-code API key, pass it via environment
       const env: any = {
-        ...process.env,
-        // PHASE 2: Force disable MCP completely
-        CLAUDE_MCP_DISABLED: '1',
-        DISABLE_MCP: '1',
-        NO_MCP: '1'
+        ...process.env
+        // Note: MCP is enabled when we have MCP servers configured (like session naming)
       };
 
       if (this.config.apiKey) {
@@ -1244,12 +1254,24 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     };
   }
 
-  private getMcpServersConfig() {
+  private getMcpServersConfig(sessionId?: string) {
     // PHASE 2: MCP server disabled for file-watcher-based diff approval
-    // Don't include MCP servers - let Claude use native Edit/Write tools
+    // Don't include general MCP servers - let Claude use native Edit/Write tools
     // The PreToolUse hook will capture "before" state and file watcher will show diffs
-    // console.log('[CLAUDE-CODE] MCP server disabled - using native tools with file-watcher diff approval');
-    return {};
+    //
+    // However, we DO include the session naming MCP server if it's started
+    const config: any = {};
+
+    if (ClaudeCodeProvider.sessionNamingServerPort !== null && sessionId) {
+      config['nimbalyst-session-naming'] = {
+        type: 'sse',
+        transport: 'sse',
+        url: `http://127.0.0.1:${ClaudeCodeProvider.sessionNamingServerPort}/mcp?sessionId=${encodeURIComponent(sessionId)}`
+      };
+      console.log('[CLAUDE-CODE] Session naming MCP server configured on port', ClaudeCodeProvider.sessionNamingServerPort, 'for session', sessionId);
+    }
+
+    return config;
   }
 
   /**
@@ -1553,14 +1575,33 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       });
       const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
-      return `Current date and time: ${dateStr} at ${timeStr}
+      let prompt = `Current date and time: ${dateStr} at ${timeStr}
 
 You are an AI assistant integrated into the Nimbalyst editor's agentic coding workspace.
 When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
+
+      // Add session naming instructions if MCP server is available
+      if (ClaudeCodeProvider.sessionNamingServerPort !== null) {
+        prompt += `
+
+## Session Naming
+
+You have access to a special tool called \`name_session\` that allows you to name this conversation session.
+
+IMPORTANT: Call the \`name_session\` tool ONCE at the very start of this conversation, as soon as you understand the user's task or goal. The name should be:
+- 2-5 words long
+- Concise and descriptive
+- Task-focused (e.g., "Fix authentication bug", "Add dark mode", "Refactor database layer")
+
+Do NOT call this tool more than once per session. It should be called early, typically in your first response after understanding what the user wants to accomplish.`;
+      }
+
+      return prompt;
     }
 
     // For non-coding sessions, use the addendum-based approach
-    const addendum = buildClaudeCodeSystemPromptAddendum(documentContext);
+    const hasSessionNaming = ClaudeCodeProvider.sessionNamingServerPort !== null;
+    const addendum = buildClaudeCodeSystemPromptAddendum(documentContext, hasSessionNaming);
     return addendum;
   }
 

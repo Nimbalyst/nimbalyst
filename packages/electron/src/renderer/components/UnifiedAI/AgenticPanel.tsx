@@ -1006,6 +1006,45 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     };
   }, [sessionTabs, openSessionInTab]);
 
+  // Listen for session title updates (from automatic naming)
+  useEffect(() => {
+    const handleSessionTitleUpdated = (data: { sessionId: string; title: string }) => {
+      if (!data || !data.sessionId || !data.title) return;
+
+      // Update session tabs if the session is open
+      setSessionTabs(prev => prev.map(tab => {
+        if (tab && tab.id === data.sessionId) {
+          return {
+            ...tab,
+            name: data.title,
+            sessionData: {
+              ...tab.sessionData,
+              title: data.title
+            }
+          };
+        }
+        return tab;
+      }));
+
+      // Update available sessions list
+      setAvailableSessions(prev => prev.map(session => {
+        if (session.id === data.sessionId) {
+          return { ...session, title: data.title, name: data.title };
+        }
+        return session;
+      }));
+
+      // Update session history efficiently without database reload
+      setRenamedSession({ id: data.sessionId, title: data.title });
+    };
+
+    const cleanup = window.electronAPI.on('session:title-updated', handleSessionTitleUpdated);
+
+    return () => {
+      cleanup?.();
+    };
+  }, []);
+
   // Listen for streaming responses and completion
   // This handles real-time updates during AI streaming:
   // - Updates assistant message content as it streams in

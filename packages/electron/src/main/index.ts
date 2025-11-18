@@ -45,6 +45,7 @@ import { detectFileWorkspace, suggestWorkspaceForFile } from './utils/workspaceD
 // import { AgentService } from './services/agents/AgentService';
 import { cliManager } from './services/CLIManager';
 import { startMcpHttpServer, updateDocumentState, registerWorkspaceWindow, cleanupMcpServer, shutdownHttpServer } from './mcp/httpServer';
+import { SessionNamingService } from './services/SessionNamingService';
 import { logger, overrideConsole } from './utils/logger';
 import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
 import { setupForceQuit, cancelForceQuit } from './utils/forceQuit';
@@ -307,6 +308,15 @@ app.whenReady().then(async () => {
         (global as any).mcpServerPort = result.port;
     } catch (error) {
             logger.mcp.error('Failed to start MCP SSE server:', error);
+    }
+
+    // Start session naming MCP server
+    try {
+        const sessionNamingService = SessionNamingService.getInstance();
+        await sessionNamingService.start();
+        logger.mcp.info('Session naming MCP server started');
+    } catch (error) {
+        logger.mcp.error('Failed to start session naming MCP server:', error);
     }
 
     // Set up IPC handler to update document state for MCP
@@ -739,6 +749,37 @@ app.on('before-quit', async (event) => {
         if (canWriteLogs && debugLog) {
             try {
                 fs.appendFileSync(debugLog, `[QUIT] Error closing MCP server: ${error}\n`);
+            } catch (e) {}
+        }
+    }
+
+    try {
+        // Shutdown session naming MCP HTTP server
+        const t6a = Date.now();
+        console.log(`[QUIT] [${t6a}] Shutting down session naming MCP HTTP server`);
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, '[QUIT] Shutting down session naming MCP HTTP server\n');
+            } catch (e) {}
+        }
+
+        const sessionNamingService = SessionNamingService.getInstance();
+        const shutdownPromise = sessionNamingService.shutdown();
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 500));
+        await Promise.race([shutdownPromise, timeoutPromise]);
+        const t7a = Date.now();
+        console.log(`[QUIT] [${t7a}] Session naming MCP HTTP server shutdown complete (${t7a-t6a}ms)`);
+
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, '[QUIT] Session naming MCP HTTP server shutdown complete\n');
+            } catch (e) {}
+        }
+    } catch (error) {
+        console.error('[QUIT] Error closing session naming MCP server:', error);
+        if (canWriteLogs && debugLog) {
+            try {
+                fs.appendFileSync(debugLog, `[QUIT] Error closing session naming MCP server: ${error}\n`);
             } catch (e) {}
         }
     }

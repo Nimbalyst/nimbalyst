@@ -5,7 +5,13 @@
 import { v4 as uuidv4 } from 'uuid';
 import { AISessionsRepository } from '../../storage/repositories/AISessionsRepository';
 import { AgentMessagesRepository } from '../../storage/repositories/AgentMessagesRepository';
-import { getSessionStore, hasSessionStore, setSessionStore, type SessionStore } from '../adapters/sessionStore';
+import {
+  getSessionStore,
+  hasSessionStore,
+  setSessionStore,
+  type SessionStore,
+  type UpdateSessionMetadataPayload,
+} from '../adapters/sessionStore';
 import { SessionData, Message, DocumentContext, AIProviderType } from './types';
 import type { SessionData as ChatSession } from './types';
 import { parseContextUsageMessage } from './utils/contextUsage';
@@ -425,6 +431,19 @@ async function fetchSessionsForWorkspace(workspace: string): Promise<SessionData
   return sessions.filter((session): session is SessionData => session !== null);
 }
 
+interface UpdateSessionTitleOptions {
+  /**
+   * Force-update the session title regardless of hasBeenNamed flag.
+   * When true, the update skips the atomic guard used by the session naming tool.
+   */
+  force?: boolean;
+  /**
+   * Explicitly set the hasBeenNamed flag when force-updating a title.
+   * Useful for provisional titles (false) or manual renames (true).
+   */
+  markAsNamed?: boolean;
+}
+
 export class SessionManager {
   private currentSession: SessionData | null = null;
   private currentWorkspacePath: string | null = null;
@@ -638,10 +657,27 @@ export class SessionManager {
     }
   }
 
-  async updateSessionTitle(sessionId: string, title: string): Promise<void> {
-    await AISessionsRepository.updateMetadata(sessionId, { title });
+  async updateSessionTitle(sessionId: string, title: string, options?: UpdateSessionTitleOptions): Promise<void> {
+    if (options?.force) {
+      const metadata: UpdateSessionMetadataPayload = { title };
+      if (options.markAsNamed !== undefined) {
+        (metadata as any).hasBeenNamed = options.markAsNamed;
+      }
+      await AISessionsRepository.updateMetadata(sessionId, metadata);
+    } else {
+      const updated = await AISessionsRepository.updateTitleIfNotNamed(sessionId, title);
+      if (!updated) {
+        throw new Error('Session has already been named');
+      }
+    }
     if (this.currentSession?.id === sessionId) {
-      this.currentSession = { ...this.currentSession, title };
+      const updatedSession: SessionData = { ...this.currentSession, title };
+      if (options?.markAsNamed !== undefined) {
+        updatedSession.hasBeenNamed = options.markAsNamed;
+      } else if (!options?.force) {
+        updatedSession.hasBeenNamed = true;
+      }
+      this.currentSession = updatedSession;
     }
   }
 
