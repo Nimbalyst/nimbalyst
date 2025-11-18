@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 
 export interface FileGitStatus {
   filePath: string;
@@ -49,11 +49,7 @@ export class GitStatusService {
 
     try {
       // Get git status for the entire repository using porcelain format
-      const statusOutput = execSync('git status --porcelain', {
-        cwd: workspacePath,
-        encoding: 'utf8',
-        timeout: 5000 // 5 second timeout
-      }).trim();
+      const statusOutput = this.executeGitStatus(workspacePath);
 
       // Parse status output
       const statusMap = this.parseGitStatus(statusOutput);
@@ -77,6 +73,19 @@ export class GitStatusService {
       // On error, return empty status (treat as unchanged)
       return this.createEmptyResult(filePaths);
     }
+  }
+
+  /**
+   * Execute git status --porcelain command and return raw output
+   * @private
+   */
+  private executeGitStatus(workspacePath: string): string {
+    // IMPORTANT: Don't trim() here as it removes the leading space from status codes
+    return execSync('git status --porcelain', {
+      cwd: workspacePath,
+      encoding: 'utf8',
+      timeout: 5000 // 5 second timeout
+    });
   }
 
   /**
@@ -108,6 +117,7 @@ export class GitStatusService {
       if (!line.trim()) continue;
 
       // Git status format: XY PATH (or XY PATH -> NEWPATH for renames)
+      // where XY is 2 characters and there's a single space separator
       const code = line.substring(0, 2);
       let filePath = line.substring(3);
 
@@ -184,6 +194,86 @@ export class GitStatusService {
       };
     }
     return result;
+  }
+
+  /**
+   * Get all uncommitted files in the workspace.
+   * Returns files that are either:
+   * - Untracked (not yet in git)
+   * - Modified and not committed
+   *
+   * Does NOT include:
+   * - Gitignored files
+   * - Unchanged files
+   *
+   * @param workspacePath The workspace/repository path
+   * @returns Array of file paths (relative to workspace) that have uncommitted changes
+   */
+  async getUncommittedFiles(workspacePath: string): Promise<string[]> {
+    if (!workspacePath) {
+      return [];
+    }
+
+    // Check if this is a git repository
+    if (!this.isGitRepository(workspacePath)) {
+      return [];
+    }
+
+    // Check cache
+    const cacheKey = `${workspacePath}:uncommitted`;
+    const cached = this.cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL_MS) {
+      // Cache stores GitStatusResult, but we need string[] for uncommitted files
+      // Convert to array of file paths
+      return Object.keys(cached.status);
+    }
+
+    try {
+      // Get git status for the entire repository using porcelain format
+      const statusOutput = this.executeGitStatus(workspacePath);
+
+      // Parse status output
+      const statusMap = this.parseGitStatus(statusOutput);
+
+      // Filter for uncommitted files (untracked or modified, not deleted)
+      // Convert relative paths to absolute paths using path.resolve
+      const uncommittedFiles: string[] = [];
+      const cacheResult: GitStatusResult = {};
+
+      for (const [relativePath, fileStatus] of statusMap.entries()) {
+        // Include if untracked, modified, or staged (but not deleted or unchanged)
+        if (fileStatus.status === 'untracked' ||
+            fileStatus.status === 'modified' ||
+            fileStatus.status === 'staged') {
+          // Convert to absolute path (git returns paths relative to workspace)
+          const absolutePath = resolve(workspacePath, relativePath);
+          uncommittedFiles.push(absolutePath);
+
+          // Cache with absolute path as key
+          cacheResult[absolutePath] = {
+            ...fileStatus,
+            filePath: absolutePath
+          };
+        }
+      }
+      this.cache.set(cacheKey, { status: cacheResult, timestamp: Date.now() });
+
+      return uncommittedFiles;
+    } catch (error) {
+      console.error('[GitStatusService] Error getting uncommitted files:', error);
+      // On error, return empty array
+      return [];
+    }
+  }
+
+  /**
+   * Check if a workspace is a git repository
+   *
+   * @param workspacePath The workspace path to check
+   * @returns True if workspace is a git repository
+   */
+  async isGitRepo(workspacePath: string): Promise<boolean> {
+    return this.isGitRepository(workspacePath);
   }
 
   /**

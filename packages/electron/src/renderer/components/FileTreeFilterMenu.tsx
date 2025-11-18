@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MaterialSymbol } from './MaterialSymbol';
 import './FileTreeFilterMenu.css';
 
-export type FileTreeFilter = 'all' | 'markdown' | 'known' | 'ai-read' | 'ai-written';
+export type FileTreeFilter = 'all' | 'markdown' | 'known' | 'git-uncommitted' | 'ai-read' | 'ai-written';
 
 interface FileTreeFilterMenuProps {
   x: number;
@@ -13,6 +13,8 @@ interface FileTreeFilterMenuProps {
   onShowIconsChange: (showIcons: boolean) => void;
   hasActiveClaudeSession: boolean;
   claudeSessionFileCounts: { read: number; written: number };
+  isGitRepo: boolean;
+  gitUncommittedCount: number;
   onClose: () => void;
 }
 
@@ -25,6 +27,8 @@ export function FileTreeFilterMenu({
   onShowIconsChange,
   hasActiveClaudeSession,
   claudeSessionFileCounts,
+  isGitRepo,
+  gitUncommittedCount,
   onClose
 }: FileTreeFilterMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -123,6 +127,28 @@ export function FileTreeFilterMenu({
             <MaterialSymbol icon="check" size={16} className="filter-menu-check" />
         )}
       </div>
+
+      <div className="filter-menu-section-label">Git</div>
+
+      <div
+        className={`filter-menu-item ${currentFilter === 'git-uncommitted' ? 'active' : ''} ${!isGitRepo ? 'disabled' : ''}`}
+        onClick={() => handleFilterSelect('git-uncommitted', !isGitRepo)}
+      >
+        <MaterialSymbol icon="difference" size={18} />
+        <span>Uncommitted Changes</span>
+        {gitUncommittedCount > 0 && (
+          <span className="filter-menu-pill">{gitUncommittedCount}</span>
+        )}
+        {currentFilter === 'git-uncommitted' && (
+          <MaterialSymbol icon="check" size={16} className="filter-menu-check" />
+        )}
+      </div>
+
+      {!isGitRepo && (
+        <div className="filter-menu-hint">
+          Not a git repository.
+        </div>
+      )}
 
       <div className="filter-menu-section-label">Claude Code Session</div>
 

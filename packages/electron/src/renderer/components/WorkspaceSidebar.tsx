@@ -30,8 +30,9 @@ interface WorkspaceSidebarProps {
   currentAISessionId?: string | null;
 }
 
-const FILE_TREE_FILTER_OPTIONS: ReadonlyArray<FileTreeFilter> = ['all', 'markdown', 'known', 'ai-read', 'ai-written'];
+const FILE_TREE_FILTER_OPTIONS: ReadonlyArray<FileTreeFilter> = ['all', 'markdown', 'known', 'git-uncommitted', 'ai-read', 'ai-written'];
 const CLAUDE_SESSION_FILTERS = new Set<FileTreeFilter>(['ai-read', 'ai-written']);
+const GIT_FILTERS = new Set<FileTreeFilter>(['git-uncommitted']);
 
 interface SessionFileFilterState {
   read: string[];
@@ -112,6 +113,8 @@ export function WorkspaceSidebar({
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [filterMenuPosition, setFilterMenuPosition] = useState({ x: 0, y: 0 });
   const [sessionFileFilters, setSessionFileFilters] = useState<SessionFileFilterState>({ read: [], written: [] });
+  const [gitUncommittedFiles, setGitUncommittedFiles] = useState<string[]>([]);
+  const [isGitRepo, setIsGitRepo] = useState(false);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const hasLoadedSettingsRef = useRef(false);
 
@@ -339,8 +342,77 @@ export function WorkspaceSidebar({
     };
   }, [currentAISessionId, loadClaudeSessionFiles]);
 
+  // Check if workspace is a git repository
+  useEffect(() => {
+    if (!workspacePath || !window.electronAPI?.invoke) {
+      setIsGitRepo(false);
+      return;
+    }
+
+    window.electronAPI.invoke('git:is-repo', workspacePath)
+      .then(result => {
+        if (result?.success) {
+          setIsGitRepo(result.isRepo);
+        } else {
+          setIsGitRepo(false);
+        }
+      })
+      .catch(error => {
+        console.error('Failed to check if git repo:', error);
+        setIsGitRepo(false);
+      });
+  }, [workspacePath]);
+
+  // Load git uncommitted files when filter is active
+  const loadGitUncommittedFiles = useCallback(async () => {
+    if (!workspacePath || !window.electronAPI?.invoke) {
+      setGitUncommittedFiles([]);
+      return;
+    }
+
+    try {
+      const result = await window.electronAPI.invoke('git:get-uncommitted-files', workspacePath);
+
+      if (result?.success && Array.isArray(result.files)) {
+        // Files are already absolute paths from the service, just normalize them
+        const normalizedFiles = result.files
+          .map((file: string) => normalizeFilePath(file))
+          .filter((value): value is string => Boolean(value));
+        setGitUncommittedFiles(Array.from(new Set(normalizedFiles)));
+      } else {
+        setGitUncommittedFiles([]);
+      }
+    } catch (error) {
+      console.error('Failed to load git uncommitted files:', error);
+      setGitUncommittedFiles([]);
+    }
+  }, [workspacePath]);
+
+  useEffect(() => {
+    if (fileTreeFilter === 'git-uncommitted' && isGitRepo) {
+      loadGitUncommittedFiles();
+    } else if (!GIT_FILTERS.has(fileTreeFilter)) {
+      setGitUncommittedFiles([]);
+    }
+  }, [fileTreeFilter, isGitRepo, loadGitUncommittedFiles]);
+
+  // Refresh git status when file tree changes (files added/modified/deleted)
+  // Debounced to avoid excessive git status calls during rapid file changes
+  useEffect(() => {
+    if (fileTreeFilter !== 'git-uncommitted' || !isGitRepo) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      loadGitUncommittedFiles();
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [fileTree, fileTreeFilter, isGitRepo, loadGitUncommittedFiles]);
+
   const aiReadPathSet = useMemo(() => new Set(sessionFileFilters.read), [sessionFileFilters.read]);
   const aiWrittenPathSet = useMemo(() => new Set(sessionFileFilters.written), [sessionFileFilters.written]);
+  const gitUncommittedPathSet = useMemo(() => new Set(gitUncommittedFiles), [gitUncommittedFiles]);
 
   // Filter file tree based on current filter
   const filterFileTree = useCallback((items: FileTreeItem[], filter: FileTreeFilter): FileTreeItem[] => {
@@ -375,6 +447,34 @@ export function WorkspaceSidebar({
       };
 
       return filterTrackedItems(items);
+    }
+
+    if (GIT_FILTERS.has(filter)) {
+      if (gitUncommittedPathSet.size === 0) {
+        return [];
+      }
+
+      const filterGitItems = (entries: FileTreeItem[]): FileTreeItem[] => {
+        return entries.reduce((acc: FileTreeItem[], item) => {
+          if (item.type === 'directory') {
+            const filteredChildren = item.children ? filterGitItems(item.children) : [];
+            if (filteredChildren.length > 0) {
+              acc.push({
+                ...item,
+                children: filteredChildren
+              });
+            }
+          } else {
+            const normalizedPath = normalizeFilePath(item.path);
+            if (gitUncommittedPathSet.has(normalizedPath)) {
+              acc.push(item);
+            }
+          }
+          return acc;
+        }, []);
+      };
+
+      return filterGitItems(items);
     }
 
     const knownExtensions = ['.md', '.markdown', '.txt', '.json', '.js', '.ts', '.tsx', '.jsx', '.css', '.html', '.xml', '.yaml', '.yml'];
@@ -412,7 +512,7 @@ export function WorkspaceSidebar({
     };
 
     return filterItems(items);
-  }, [aiReadPathSet, aiWrittenPathSet]);
+  }, [aiReadPathSet, aiWrittenPathSet, gitUncommittedPathSet]);
 
   const filteredFileTree = useMemo(
     () => filterFileTree(fileTree, fileTreeFilter),
@@ -644,6 +744,8 @@ export function WorkspaceSidebar({
                 read: sessionFileFilters.read.length,
                 written: sessionFileFilters.written.length
               }}
+              isGitRepo={isGitRepo}
+              gitUncommittedCount={gitUncommittedFiles.length}
               onClose={() => setShowFilterMenu(false)}
             />
           )}
