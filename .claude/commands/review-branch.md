@@ -30,6 +30,7 @@ Provide your review in the following format:
 | Database Changes | ✅ None / ⚠️ Schema / ⚠️ Migration | [Brief description if any] |
 | Security Issues | ✅ None Found / ⚠️ See Below / ❌ Critical | [Count if any] |
 | Performance Concerns | ✅ None Found / ⚠️ See Below | [Brief assessment] |
+| Cross-Platform Compatibility | ✅ Compatible / ⚠️ See Below / ❌ Blocking | [Issues if any] |
 | Dependencies | ✅ No Changes / ⚠️ Added/Updated | [List if any] |
 | Logging | ✅ Appropriate / ⚠️ Too Verbose / ⚠️ Insufficient | [Brief assessment] |
 | Type Safety | ✅ Fully Typed / ⚠️ Some Any Types / ❌ Missing Types | [Issues if any] |
@@ -60,6 +61,20 @@ Provide your review in the following format:
 - Large payload sizes
 - Unnecessary re-renders
 [Note "None found" if clean]
+
+### Cross-Platform Compatibility (OSX/Windows/Linux)
+[Check for platform-specific issues that could break functionality on different operating systems:]
+- **File paths**: Hardcoded separators (/ vs \) instead of path.join() or path.resolve()
+- **Keyboard shortcuts**: Hardcoded 'Meta' or 'Cmd' instead of platform-aware shortcuts (should use 'CmdOrCtrl' or detect platform)
+- **Environment variables**: Platform-specific env vars (e.g., HOME vs USERPROFILE)
+- **System commands**: Bash/shell commands that don't work on Windows (should use cross-platform alternatives)
+- **File system case sensitivity**: Code assuming case-insensitive file systems (macOS/Windows) that will break on Linux
+- **Line endings**: Missing .gitattributes or code that assumes LF vs CRLF
+- **Native dependencies**: Binaries or node modules that need platform-specific builds
+- **Process handling**: Platform-specific process spawning or signal handling
+- **File permissions**: Unix-style chmod/permissions that don't translate to Windows
+- **Path length limits**: Windows MAX_PATH (260 char) limitations not accounted for
+[Note "Fully compatible" or "Not applicable" if clean]
 
 ### Dependencies
 [Check package.json, package-lock.json for changes:]
