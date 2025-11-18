@@ -7,7 +7,6 @@ import { startWorkspaceWatcher } from '../file/WorkspaceWatcher.ts';
 import { getFolderContents } from '../utils/FileTree';
 import { basename } from 'path';
 import { logger } from '../utils/logger';
-import { createAgenticCodingWindow } from '../window/AgenticCodingWindow';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 
 // Save session state
@@ -151,17 +150,6 @@ export async function restoreSessionState(): Promise<boolean> {
                         }
                     } else {
                         logger.session.warn(`File no longer exists: ${sessionWindow.filePath}`);
-                    }
-                } else if (sessionWindow.mode === 'agentic-coding' && sessionWindow.workspacePath) {
-                    // Check if workspace path still exists
-                    if (existsSync(sessionWindow.workspacePath)) {
-                        // Restore agentic coding window
-                        window = createAgenticCodingWindow({
-                            workspacePath: sessionWindow.workspacePath
-                        });
-                        logger.session.info(`Restored agentic coding window: ${sessionWindow.workspacePath}`);
-                    } else {
-                        logger.session.warn(`Workspace path no longer exists: ${sessionWindow.workspacePath}`);
                     }
                 }
 

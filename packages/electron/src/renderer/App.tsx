@@ -27,7 +27,6 @@ import { ApiKeyDialog } from './components/ApiKeyDialog';
 import { ProjectSelectionDialog } from './components/ProjectSelectionDialog/ProjectSelectionDialog';
 import { GlobalSettingsScreen as AIModels } from './components/GlobalSettings/GlobalSettingsScreen.tsx';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
-import { AgenticCodingWindow } from './components/AgenticCodingWindow';
 import { AgenticPanel, type AgenticPanelRef } from './components/UnifiedAI';
 import EditorMode, { type EditorModeRef } from './components/EditorMode/EditorMode';
 import { NavigationGutter, type SidebarView } from './components/NavigationGutter';
@@ -105,27 +104,7 @@ export default function App() {
     return <AIModels onClose={() => window.close()} />;
   }
 
-  if (windowMode === 'agentic-coding') {
-    const sessionId = urlParams.get('sessionId') || undefined;
-    const workspacePath = urlParams.get('workspacePath');
-    const planDocumentPath = urlParams.get('planDocumentPath') || undefined;
 
-    if (!workspacePath) {
-      return (
-        <div className="h-screen flex items-center justify-center bg-bg-primary">
-          <div className="text-status-error">Missing workspace path</div>
-        </div>
-      );
-    }
-
-    return (
-      <AgenticCodingWindow
-        sessionId={sessionId}
-        workspacePath={workspacePath}
-        planDocumentPath={planDocumentPath}
-      />
-    );
-  }
 
   if (windowMode === 'workspace-manager') {
     // Set window title for Workspace Manager

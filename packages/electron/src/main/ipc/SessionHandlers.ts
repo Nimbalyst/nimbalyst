@@ -104,6 +104,111 @@ export async function registerSessionHandlers() {
         }
     });
 
+    // Update session metadata with extended fields
+    ipcMain.handle('sessions:update-session-metadata', async (event, sessionId: string, updates: any) => {
+        try {
+            // Extract sessionType and metadata from updates
+            const { sessionType, ...metadataFields } = updates;
+
+            // Build update payload
+            const updatePayload: any = {};
+            if (sessionType !== undefined) {
+                updatePayload.sessionType = sessionType;
+            }
+            if (Object.keys(metadataFields).length > 0) {
+                updatePayload.metadata = metadataFields;
+            }
+
+            await AISessionsRepository.updateMetadata(sessionId, updatePayload);
+
+            // Notify all windows about the update
+            const { BrowserWindow } = await import('electron');
+            BrowserWindow.getAllWindows().forEach(window => {
+                if (!window.isDestroyed()) {
+                    window.webContents.send('sessions:session-updated', sessionId, metadataFields);
+                }
+            });
+
+            return { success: true };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to update session metadata:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
+    // List sessions for workspace
+    ipcMain.handle('sessions:list', async (event, workspacePath: string) => {
+        try {
+            const entries = await AISessionsRepository.list(workspacePath);
+            const sessions = [];
+
+            for (const entry of entries) {
+                const session = await AISessionsRepository.get(entry.id);
+                if (session) {
+                    sessions.push({
+                        id: session.id,
+                        createdAt: session.createdAt,
+                        updatedAt: session.updatedAt,
+                        name: session.title,
+                        title: session.title,
+                        provider: session.provider,
+                        model: session.model,
+                        sessionType: session.sessionType || 'chat',
+                        messageCount: entry.messageCount || 0,
+                        metadata: session.metadata || {}
+                    });
+                }
+            }
+
+            return { success: true, sessions };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to list sessions:', error);
+            return { success: false, error: String(error), sessions: [] };
+        }
+    });
+
+    // Search sessions for workspace
+    ipcMain.handle('sessions:search', async (event, workspacePath: string, query: string) => {
+        try {
+            const entries = await AISessionsRepository.search(workspacePath, query);
+            const sessions = [];
+
+            for (const entry of entries) {
+                const session = await AISessionsRepository.get(entry.id);
+                if (session) {
+                    sessions.push({
+                        id: session.id,
+                        createdAt: session.createdAt,
+                        updatedAt: session.updatedAt,
+                        name: session.title,
+                        title: session.title,
+                        provider: session.provider,
+                        model: session.model,
+                        sessionType: session.sessionType || 'chat',
+                        messageCount: entry.messageCount || 0,
+                        metadata: session.metadata || {}
+                    });
+                }
+            }
+
+            return { success: true, sessions };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to search sessions:', error);
+            return { success: false, error: String(error), sessions: [] };
+        }
+    });
+
+    // Delete session
+    ipcMain.handle('sessions:delete', async (event, sessionId: string) => {
+        try {
+            await AISessionsRepository.delete(sessionId);
+            return { success: true };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to delete session:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
     // Mark session as read (update read state)
     ipcMain.handle('sessions:mark-read', async (event, sessionId: string, lastMessageTimestamp: number | null) => {
         try {

@@ -7,7 +7,6 @@ import { windows, windowStates, createWindow, findWindowByFilePath, getWindowId 
 import { createAboutWindow } from '../window/AboutWindow';
 import { createWorkspaceManagerWindow } from '../window/WorkspaceManagerWindow.ts';
 import { createAIModelsWindow } from '../window/AIModelsWindow';
-import { createAgenticCodingWindow } from '../window/AgenticCodingWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceState, getWorkspaceWindowState } from '../utils/store';
 import { updateWindowTitleBars, updateNativeTheme } from '../theme/ThemeManager';

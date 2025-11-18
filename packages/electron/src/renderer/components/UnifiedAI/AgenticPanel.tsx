@@ -619,7 +619,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     // Add metadata if needed
     if (mode === 'agent') {
-      await window.electronAPI.invoke('agentic-coding:update-session-metadata', session.id, {
+      await window.electronAPI.invoke('sessions:update-session-metadata', session.id, {
         sessionType: 'coding',
         planDocumentPath: planPath,
         fileEdits: [],
