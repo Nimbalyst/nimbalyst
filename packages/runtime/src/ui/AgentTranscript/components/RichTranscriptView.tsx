@@ -9,6 +9,7 @@ import { JSONViewer } from './JSONViewer';
 import { formatToolArguments } from '../utils/pathResolver';
 import { EditToolResultCard } from './EditToolResultCard';
 import { TranscriptSearchBar } from './TranscriptSearchBar';
+import { formatToolDisplayName } from '../utils/toolNameFormatter';
 import './RichTranscriptView.css';
 
 interface RichTranscriptViewProps {
@@ -459,6 +460,7 @@ export const RichTranscriptView = React.forwardRef<
 
     const editTool = isEditToolName(tool.name);
     const editEntries = editTool ? extractEditsFromToolMessage(toolMsg) : [];
+    const toolDisplayName = formatToolDisplayName(tool.name || '') || tool.name || 'Tool';
 
     // DEBUG: Log tool detection results
     // if (tool.name && (tool.name.toLowerCase().includes('edit') || tool.name.toLowerCase().includes('write'))) {
@@ -525,8 +527,8 @@ export const RichTranscriptView = React.forwardRef<
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             )}
-            <span className="rich-transcript-tool-name">
-              {isSubAgent ? 'Sub-Agent' : tool.name}
+            <span className="rich-transcript-tool-name" title={tool.name || undefined}>
+              {isSubAgent ? 'Sub-Agent' : toolDisplayName}
               {isSubAgent && tool.subAgentType && (
                 <span className="rich-transcript-tool-subagent-type"> [{tool.subAgentType}]</span>
               )}

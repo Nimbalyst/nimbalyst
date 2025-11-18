@@ -2,6 +2,7 @@ import React from 'react';
 import type { Message } from '../../../ai/server/types';
 import { DiffViewer } from './DiffViewer';
 import { toProjectRelative, shortenPath } from '../utils/pathResolver';
+import { formatToolDisplayName } from '../utils/toolNameFormatter';
 
 interface EditToolResultCardProps {
   toolMessage: Message;
@@ -46,6 +47,7 @@ export const EditToolResultCard: React.FC<EditToolResultCardProps> = ({ toolMess
   const firstEditPath = resolveEditFilePath(edits[0], toolMessage);
   const displayPath = firstEditPath ? toProjectRelative(firstEditPath, workspacePath) : '';
   const prettyPath = displayPath ? shortenPath(displayPath, 64) : '';
+  const toolDisplayName = formatToolDisplayName(tool.name || '') || tool.name || 'Edit';
 
   const instruction = truncateInstruction(getInstructionText(toolMessage));
   const statusLabel = toolMessage.isError ? 'Failed' : 'Applied';
@@ -62,7 +64,7 @@ export const EditToolResultCard: React.FC<EditToolResultCardProps> = ({ toolMess
         </div>
         <div className="rich-transcript-edit-card__details">
           <div className="rich-transcript-edit-card__title">
-            {tool.name || 'Edit'}
+            {toolDisplayName}
             {prettyPath && (
               <span className="rich-transcript-edit-card__file">· {prettyPath}</span>
             )}
