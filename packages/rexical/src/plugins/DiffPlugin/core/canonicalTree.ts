@@ -55,13 +55,44 @@ function extractAttrs(serialized: SerializedLexicalNode): Record<string, any> | 
 
   const attrs: Record<string, any> = {...rest};
 
-  if (detail !== undefined) {
+  // CRITICAL: Normalize direction attribute
+  // "ltr" and null are both left-to-right and should be treated as equivalent
+  // This prevents false positives where only the direction attribute differs
+  if (attrs.direction === 'ltr' || attrs.direction === null) {
+    delete attrs.direction;
+  }
+
+  // CRITICAL: Exclude `detail` and `mode` for HashtagNode specifically
+  // These are implementation details that shouldn't affect whether hashtag nodes are "the same":
+  // - `detail`: Internal flags like IS_DIRECTIONLESS, IS_UNMERGEABLE, etc.
+  // - `mode`: Editor mode (normal, token, segmented, inert)
+  // This fixes the HashtagNode bug where identical hashtags (#idea) were shown as removed+added
+  // just because their detail/mode attributes differed.
+  //
+  // We DO include `format` because it represents meaningful formatting (bold, italic, etc.)
+  // that should affect node equality.
+  //
+  // We ONLY do this for 'hashtag' type to avoid breaking other node types (tables, etc.)
+  const nodeType = (serialized as any).type as string;
+  const isHashtagNode = nodeType === 'hashtag';
+
+  // Debug logging for hashtag nodes (commented out - enable for debugging)
+  // if (isHashtagNode) {
+  //   console.log(`[extractAttrs] Processing hashtag node:`);
+  //   console.log(`  text: "${(serialized as any).text}"`);
+  //   console.log(`  detail (excluded): ${detail}`);
+  //   console.log(`  format (included): ${format}`);
+  //   console.log(`  mode (excluded): ${mode}`);
+  //   console.log(`  other attrs:`, JSON.stringify(rest, null, 2));
+  // }
+
+  if (detail !== undefined && !isHashtagNode) {
     attrs.detail = detail;
   }
   if (format !== undefined) {
     attrs.format = format;
   }
-  if (mode !== undefined) {
+  if (mode !== undefined && !isHashtagNode) {
     attrs.mode = mode;
   }
 

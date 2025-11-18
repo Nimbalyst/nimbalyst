@@ -27,6 +27,14 @@ export function $applyInlineTextDiff(
   sourceChildren: SerializedLexicalNode[],
   targetChildren: SerializedLexicalNode[],
 ): void {
+  // Debug logging (commented out - enable for debugging inline diff issues)
+  // const hasHashtag = [...sourceChildren, ...targetChildren].some(c => c.type === 'hashtag');
+  // if (hasHashtag) {
+  //   console.log('[inlineTextDiff] Processing paragraph with hashtag');
+  //   console.log('  sourceChildren:', sourceChildren.map(c => `${c.type}:${(c as any).text || ''}`));
+  //   console.log('  targetChildren:', targetChildren.map(c => `${c.type}:${(c as any).text || ''}`));
+  // }
+
   // Clear the container to rebuild it
   containerNode.clear();
 
@@ -138,8 +146,58 @@ export function $applyInlineTextDiff(
     return;
   }
 
-  // Complex case: handle mixed content (text with different formatting, links, etc.)
-  // Show the entire source content as removed and target content as added
+  // Complex case: handle mixed content (text with different formatting, links, hashtags, etc.)
+
+  // Check if source and target are IDENTICAL (same structure and content)
+  // This prevents false positives where hashtag/emoji nodes cause unnecessary red/green
+  if (sourceChildren.length === targetChildren.length) {
+    let identical = true;
+    for (let i = 0; i < sourceChildren.length; i++) {
+      const source = sourceChildren[i];
+      const target = targetChildren[i];
+
+      // Compare type
+      if (source.type !== target.type) {
+        identical = false;
+        break;
+      }
+
+      // Compare text content (works for text, hashtag, emoji nodes)
+      const sourceText = (source as any).text || '';
+      const targetText = (target as any).text || '';
+      if (sourceText !== targetText) {
+        identical = false;
+        break;
+      }
+
+      // Compare format for text nodes
+      if (source.type === 'text') {
+        const sourceFormat = (source as SerializedTextNode).format || 0;
+        const targetFormat = (target as SerializedTextNode).format || 0;
+        if (sourceFormat !== targetFormat) {
+          identical = false;
+          break;
+        }
+      }
+    }
+
+    // If identical, just add target children without diff markers
+    if (identical) {
+      // if (hasHashtag) {
+      //   console.log('[inlineTextDiff] Children are IDENTICAL! Adding without diff markers');
+      // }
+      for (const targetChild of targetChildren) {
+        const node = $parseSerializedNode(targetChild);
+        containerNode.append(node);
+      }
+      return;
+    }
+    // else if (hasHashtag) {
+    //   console.log('[inlineTextDiff] Children are NOT identical, falling back to remove+add');
+    // }
+  }
+
+  // Content is different - show the entire source content as removed and target content as added
 
   // Add all source children as removed
   for (const sourceChild of sourceChildren) {

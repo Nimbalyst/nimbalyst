@@ -59,7 +59,17 @@ function calculateSimilarity(
   source: CanonicalTreeNode,
   target: CanonicalTreeNode,
 ): number {
+  // Debug: log when comparing hashtag nodes (commented out - enable for debugging)
+  // if (source.type === 'hashtag' || target.type === 'hashtag') {
+  //   console.log(`[HASHTAG DEBUG] Comparing nodes:`);
+  //   console.log(`  source.type: "${source.type}", text: "${source.text}"`);
+  //   console.log(`  target.type: "${target.type}", text: "${target.text}"`);
+  // }
+
   if (source.type !== target.type) {
+    // if (source.type === 'hashtag' || target.type === 'hashtag') {
+    //   console.log(`[HASHTAG DEBUG] Types don't match! Returning 0`);
+    // }
     return 0;
   }
 
@@ -67,19 +77,31 @@ function calculateSimilarity(
   const attrsMatch = JSON.stringify(source.attrs) === JSON.stringify(target.attrs);
 
   if (textMatches && attrsMatch) {
+    // if (source.type === 'hashtag') {
+    //   console.log(`[HASHTAG DEBUG] Perfect match! Returning 1`);
+    // }
     return 1;
   }
 
-  // Debug: log why similarity is not 1.0
-  if (process?.env?.DIFF_DEBUG === '1' && (!textMatches || !attrsMatch)) {
-    console.log(`[calculateSimilarity] NOT exact match for ${source.type}:`);
-    console.log(`  textMatches: ${textMatches} (source="${source.text?.substring(0, 30)}", target="${target.text?.substring(0, 30)}")`);
-    console.log(`  attrsMatch: ${attrsMatch}`);
-    if (!attrsMatch) {
-      console.log(`  source.attrs:`, JSON.stringify(source.attrs)?.substring(0, 100));
-      console.log(`  target.attrs:`, JSON.stringify(target.attrs)?.substring(0, 100));
-    }
-  }
+  // Debug: log why similarity is not 1.0 (commented out - enable for debugging)
+  // Uncomment this block to debug node matching issues
+  // if (source.type === 'hashtag' && (!textMatches || !attrsMatch)) {
+  //   console.log(`[HASHTAG BUG DEBUG] Hashtag nodes not matching:`);
+  //   console.log(`  textMatches: ${textMatches}`);
+  //   console.log(`  source.text: "${source.text}"`);
+  //   console.log(`  target.text: "${target.text}"`);
+  //   console.log(`  attrsMatch: ${attrsMatch}`);
+  //   console.log(`  source.attrs:`, JSON.stringify(source.attrs, null, 2));
+  //   console.log(`  target.attrs:`, JSON.stringify(target.attrs, null, 2));
+  // } else if (process?.env?.DIFF_DEBUG === '1' && (!textMatches || !attrsMatch)) {
+  //   console.log(`[calculateSimilarity] NOT exact match for ${source.type}:`);
+  //   console.log(`  textMatches: ${textMatches} (source="${source.text?.substring(0, 30)}", target="${target.text?.substring(0, 30)}")`);
+  //   console.log(`  attrsMatch: ${attrsMatch}`);
+  //   if (!attrsMatch) {
+  //     console.log(`  source.attrs:`, JSON.stringify(source.attrs)?.substring(0, 100));
+  //     console.log(`  target.attrs:`, JSON.stringify(target.attrs)?.substring(0, 100));
+  //   }
+  // }
 
   const textDistance = levenshteinDistance(source.text || '', target.text || '');
   const maxLength = Math.max((source.text || '').length, (target.text || '').length, 1);

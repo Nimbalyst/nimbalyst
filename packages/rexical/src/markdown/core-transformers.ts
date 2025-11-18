@@ -26,6 +26,7 @@ import {
 
 import { HR_TRANSFORMER } from './HorizontalRuleTransformer';
 import { PAGE_BREAK_TRANSFORMER } from '../plugins/PageBreakPlugin';
+import { HASHTAG_TRANSFORMER } from './HashtagTransformer';
 
 // Element transformers
 const ELEMENT_TRANSFORMERS: Array<Transformer> = [
@@ -56,6 +57,7 @@ const TEXT_FORMAT_TRANSFORMERS: Array<Transformer> = [
 // Text match transformers
 const TEXT_MATCH_TRANSFORMERS: Array<Transformer> = [
   LINK,
+  HASHTAG_TRANSFORMER,
 ];
 
 /**
