@@ -321,7 +321,11 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     );
   }
 
-  if (sessions.length === 0) {
+  // Check if we have an active search query
+  const hasSearchQuery = searchQuery.trim().length > 0;
+
+  if (sessions.length === 0 && !hasSearchQuery) {
+    // No sessions at all - show simple empty state without search
     return (
       <div className="session-history">
         <div className="workspace-color-accent" style={{ backgroundColor: workspaceColor }} />
@@ -447,38 +451,55 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
         </div>
       </div>
       <div className="session-history-list">
-        {groupKeys.map(groupKey => {
-          const groupSessions = groupedSessions[groupKey];
-          const isExpanded = !collapsedGroups.includes(groupKey);
+        {groupKeys.length === 0 && hasSearchQuery ? (
+          // No search results - show message with option to clear
+          <div className="session-history-empty">
+            <p>No matching sessions found</p>
+            <p className="session-history-empty-hint">
+              Try a different search term or{' '}
+              <button
+                className="session-history-clear-search-link"
+                onClick={() => setSearchQuery('')}
+                type="button"
+              >
+                clear search
+              </button>
+            </p>
+          </div>
+        ) : (
+          groupKeys.map(groupKey => {
+            const groupSessions = groupedSessions[groupKey];
+            const isExpanded = !collapsedGroups.includes(groupKey);
 
-          return (
-            <CollapsibleGroup
-              key={groupKey}
-              title={groupKey}
-              isExpanded={isExpanded}
-              onToggle={() => handleToggleGroup(groupKey)}
-              count={groupSessions.length}
-            >
-              {groupSessions.map(session => (
-                <SessionListItem
-                  key={session.id}
-                  id={session.id}
-                  title={session.title || 'Untitled Session'}
-                  createdAt={session.createdAt}
-                  isActive={session.id === activeSessionId}
-                  isLoaded={loadedSessionIds.includes(session.id)}
-                  onClick={() => onSessionSelect(session.id)}
-                  onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
-                  provider={session.provider}
-                  model={session.model}
-                  messageCount={session.messageCount}
-                  isProcessing={session.isProcessing}
-                  hasUnread={session.hasUnread}
-                />
-              ))}
-            </CollapsibleGroup>
-          );
-        })}
+            return (
+              <CollapsibleGroup
+                key={groupKey}
+                title={groupKey}
+                isExpanded={isExpanded}
+                onToggle={() => handleToggleGroup(groupKey)}
+                count={groupSessions.length}
+              >
+                {groupSessions.map(session => (
+                  <SessionListItem
+                    key={session.id}
+                    id={session.id}
+                    title={session.title || 'Untitled Session'}
+                    createdAt={session.createdAt}
+                    isActive={session.id === activeSessionId}
+                    isLoaded={loadedSessionIds.includes(session.id)}
+                    onClick={() => onSessionSelect(session.id)}
+                    onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
+                    provider={session.provider}
+                    model={session.model}
+                    messageCount={session.messageCount}
+                    isProcessing={session.isProcessing}
+                    hasUnread={session.hasUnread}
+                  />
+                ))}
+              </CollapsibleGroup>
+            );
+          })
+        )}
       </div>
     </div>
   );

@@ -266,6 +266,21 @@
   color: var(--text-tertiary);
 }
 
+.session-history-clear-search-link {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+.session-history-clear-search-link:hover {
+  opacity: 0.8;
+}
+
 .session-history-header-buttons {
   display: flex;
   align-items: center;
