@@ -100,6 +100,12 @@ export const LoginRequiredWidget: React.FC = () => {
   };
 
   const isLoggedIn = loginStatus?.success && loginStatus?.accountInfo;
+  const loginButtonLabel = isLoggingIn
+    ? 'Opening Login...'
+    : isLoggedIn
+      ? 'Log In Again'
+      : 'Log In';
+  const statusButtonLabel = isChecking ? 'Checking...' : 'Check Status';
 
   return (
     <div className={`login-required-widget ${isLoggedIn ? 'logged-in' : ''}`}>
@@ -134,25 +140,23 @@ export const LoginRequiredWidget: React.FC = () => {
         </div>
       )}
 
-      {!isLoggedIn && (
-        <div className="login-actions">
-          <button
-            onClick={handleLogin}
-            disabled={isLoggingIn}
-            className="login-button"
-          >
-            {isLoggingIn ? 'Opening Login...' : 'Login'}
-          </button>
+      <div className="login-actions">
+        <button
+          onClick={handleLogin}
+          disabled={isLoggingIn}
+          className="login-button"
+        >
+          {loginButtonLabel}
+        </button>
 
-          <button
-            onClick={handleRefreshStatus}
-            disabled={isChecking}
-            className="status-button"
-          >
-            {isChecking ? 'Checking...' : 'Check Status'}
-          </button>
-        </div>
-      )}
+        <button
+          onClick={handleRefreshStatus}
+          disabled={isChecking}
+          className="status-button"
+        >
+          {statusButtonLabel}
+        </button>
+      </div>
     </div>
   );
 };
