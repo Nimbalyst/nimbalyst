@@ -190,11 +190,22 @@ if (typeof window !== 'undefined') {
   });
 
   window.addEventListener('unhandledrejection', (event) => {
+    // Ignore Monaco editor's internal "Canceled" errors - these are benign
+    // Monaco uses cancellation tokens for async operations and throws "Canceled" when disposing
+    const reason = event.reason;
+    const message = reason?.message || String(reason);
+
+    if (message === 'Canceled' || message === 'Canceled: Canceled') {
+      // This is a Monaco internal cancellation, not a real error
+      console.debug('[ErrorNotificationService] Ignoring Monaco cancellation:', message);
+      return;
+    }
+
     errorNotificationService.showError(
       'Unhandled Promise Rejection',
-      event.reason?.message || String(event.reason),
+      message,
       {
-        stack: event.reason?.stack
+        stack: reason?.stack
       }
     );
   });
