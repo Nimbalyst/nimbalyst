@@ -62,9 +62,13 @@ export class AutoUpdaterService {
       this.isCheckingForUpdate = false;
 
       // Fetch release notes from R2 if using alpha channel
-      let releaseNotes = info.releaseNotes as string;
+      let releaseNotes = info.releaseNotes as string | undefined;
       const channel = getReleaseChannel();
-      if (channel === 'alpha' && (!releaseNotes || releaseNotes.trim() === '')) {
+      log.info(`Release channel: ${channel}, releaseNotes from info: "${releaseNotes}"`);
+
+      // Always fetch release notes from R2 for alpha channel
+      // The latest-mac.yml doesn't include releaseNotes, so we need to fetch it separately
+      if (channel === 'alpha') {
         try {
           const releaseNotesURL = 'https://pub-4357a3345db7463580090984c0e4e2ba.r2.dev/RELEASE_NOTES.md';
           log.info(`Fetching release notes from: ${releaseNotesURL}`);
@@ -72,13 +76,18 @@ export class AutoUpdaterService {
           if (response.ok) {
             releaseNotes = await response.text();
             log.info('Successfully fetched release notes from R2');
+            log.info(`Release notes length: ${releaseNotes.length} characters`);
           } else {
             log.warn(`Failed to fetch release notes: ${response.status}`);
           }
         } catch (err) {
           log.error('Error fetching release notes from R2:', err);
         }
+      } else {
+        log.info('Not fetching from R2 - either not alpha channel or releaseNotes already present');
       }
+
+      log.info(`Final releaseNotes being sent to window: "${releaseNotes?.substring(0, 100)}..."`);
 
       // Show custom update window
       showUpdateAvailable({
