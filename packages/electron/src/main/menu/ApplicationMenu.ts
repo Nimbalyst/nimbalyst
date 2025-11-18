@@ -1341,7 +1341,7 @@ Note: Only one connection at a time is supported.`,
                             helpType: 'discord',
                             context: 'menu',
                         });
-                        shell.openExternal('https://discord.gg/nimbalyst');
+                        shell.openExternal('https://discord.gg/ubZDt4esEn');
                     }
                 }
             ]
@@ -1401,7 +1401,7 @@ Note: Only one connection at a time is supported.`,
                             helpType: 'discord',
                             context: 'menu',
                         });
-                        shell.openExternal('https://discord.gg/nimbalyst');
+                        shell.openExternal('https://discord.gg/ubZDt4esEn');
                     }
                 },
                 { type: 'separator' },
