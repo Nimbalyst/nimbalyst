@@ -2,9 +2,10 @@
 
 Nimbalyst is an integrated markdown environment for managing Claude Code
 
-![Version](https://img.shields.io/github/v/release/nimbalyst/nimbalyst/releases)
-![Downloads](https://img.shields.io/github/downloads/nimbalyst/nimbalyst/releases/total)
+![Version](https://img.shields.io/github/v/release/nimbalyst/nimbalyst)
+![Downloads](https://img.shields.io/github/downloads/nimbalyst/nimbalyst/total)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
+
 
 ## Features
 
