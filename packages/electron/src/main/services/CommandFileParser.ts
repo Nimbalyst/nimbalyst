@@ -5,6 +5,7 @@
 
 import * as fs from 'fs';
 import * as yaml from 'js-yaml';
+import path from "path";
 
 export interface SlashCommand {
   name: string;                  // Command name (without "/")
@@ -33,8 +34,7 @@ export function parseCommandFile(filePath: string, source: 'project' | 'user'): 
     const content = fs.readFileSync(filePath, 'utf-8');
 
     // Extract command name from filename (without .md extension)
-    const fileName = filePath.split('/').pop() || '';
-    const commandName = fileName.replace(/\.md$/, '');
+    const commandName = path.basename(filePath, '.md').trim();
 
     if (!commandName) {
       console.warn(`[CommandFileParser] Could not extract command name from: ${filePath}`);

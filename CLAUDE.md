@@ -159,6 +159,27 @@ The Electron app includes comprehensive window state persistence:
 - **Draft input persistence**: Unsent messages in the chat input are saved with the session
 - **Session continuity**: Chat sessions persist across app restarts
 
+## Electron Main and Renderer Processes
+Electron apps are split into two main contexts: the **main process** and one or more **renderer processes**.
+- **Main process**: Runs Node.js, manages application lifecycle, windows, menus, and system interactions
+- **Renderer process**: Runs in a Chromium browser context, handles UI rendering and user interactions
+
+Whenever working in the main process, do your best to use the NodeJS APIs to write platform-independent code. This is
+crucial because we target platforms that use different conventions (Windows, macOS, Linux).
+Example:
+```typescript
+// GOOD: Cross-platform path handling
+import * as path from 'path';
+const fileName = path.basename(filePath, '.md');
+
+// BAD: Hardcoded path separators
+const fileName = filePath.split('/').pop()?.replace('.md', '');
+```
+
+But the renderer processes cannot access Node.js APIs directly for security reasons. Do not attempt to re-implement NodeJS
+native APIs in the renderer as this is fraught with cross-platform challenges. Instead, use IPC to request services from
+the main process.
+
 ## IPC Communication
 
 The Electron app uses IPC (Inter-Process Communication) between main and renderer processes:
