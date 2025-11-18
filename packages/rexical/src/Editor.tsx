@@ -76,6 +76,7 @@ const ExcalidrawPlugin = React.lazy(() => import('./plugins/ExcalidrawPlugin'));
 import { KanbanBoardPlugin } from './plugins/KanbanBoardPlugin';
 import CommentPlugin from "./plugins/CommentPlugin";
 import FloatingDocumentActionsPlugin from './plugins/FloatingDocumentActionsPlugin';
+import AutoLinkPlugin from './plugins/AutoLinkPlugin';
 
 
 interface EditorProps {
@@ -248,9 +249,7 @@ export default function Editor({config = DEFAULT_EDITOR_CONFIG}: EditorProps): J
         {/*<EmojisPlugin />*/}
         <HashtagPlugin />
         <SpeechToTextPlugin />
-
-        {/*  This doesn't play well with images embedded as base64 urls (spins forever) */}
-        {/*<AutoLinkPlugin />*/}
+        <AutoLinkPlugin />
 
         {/*<CommentPlugin*/}
         {/*  // providerFactory={isCollab ? createWebsocketProvider : undefined}*/}
