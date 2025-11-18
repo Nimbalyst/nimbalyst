@@ -84,6 +84,8 @@ const optimizeExcalidrawPlugin = () => {
 
 const isDev = process.env.NODE_ENV !== 'production';
 const isOfficialBuild = process.env.OFFICIAL_BUILD === 'true';
+// IS_DEV_MODE is true only when running `npm run dev`, not for any packaged builds
+const isDevMode = isDev;
 const runtimeSrcDir = resolve(__dirname, '../runtime/src');
 const runtimeDistDir = resolve(__dirname, '../runtime/dist');
 const rexicalDistDir = resolve(__dirname, '../rexical/dist');
@@ -110,7 +112,8 @@ const resolveWorkspaceSubpaths = () => {
 export default defineConfig({
   main: {
     define: {
-      'process.env.OFFICIAL_BUILD': JSON.stringify(isOfficialBuild ? 'true' : 'false')
+      'process.env.OFFICIAL_BUILD': JSON.stringify(isOfficialBuild ? 'true' : 'false'),
+      'process.env.IS_DEV_MODE': JSON.stringify(isDevMode ? 'true' : 'false')
     },
     plugins: [resolveWorkspaceSubpaths()],
     resolve: {
@@ -174,6 +177,7 @@ export default defineConfig({
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       'process.env.OFFICIAL_BUILD': JSON.stringify(isOfficialBuild ? 'true' : 'false'),
+      'process.env.IS_DEV_MODE': JSON.stringify(isDevMode ? 'true' : 'false'),
       'process.env': '{}'
     },
     plugins: [

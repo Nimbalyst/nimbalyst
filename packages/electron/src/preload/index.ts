@@ -5,6 +5,10 @@ if (process.env.PLAYWRIGHT === '1') {
   contextBridge.exposeInMainWorld('PLAYWRIGHT', true);
 }
 
+// Expose build mode flags to renderer for dev mode indicators
+contextBridge.exposeInMainWorld('IS_OFFICIAL_BUILD', process.env.OFFICIAL_BUILD === 'true');
+contextBridge.exposeInMainWorld('IS_DEV_MODE', process.env.IS_DEV_MODE === 'true');
+
 // Capture console logs in development
 if (process.env.NODE_ENV !== 'production') {
   const originalConsole = {

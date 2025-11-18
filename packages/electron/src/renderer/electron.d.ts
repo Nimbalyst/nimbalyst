@@ -184,4 +184,7 @@ interface ElectronAPI {
   interface Window {
     electronAPI: ElectronAPI;
     electron: ElectronAPI; // Alias for compatibility
+    PLAYWRIGHT?: boolean;
+    IS_OFFICIAL_BUILD?: boolean;
+    IS_DEV_MODE?: boolean;
   }

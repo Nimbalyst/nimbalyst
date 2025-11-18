@@ -10,6 +10,12 @@
   flex-shrink: 0;
 }
 
+/* Dev mode indicator - make navigation gutter orange */
+body[data-dev-mode="true"] .navigation-gutter {
+  background-color: #ffb74d !important;
+  border-right: 3px solid #ff9800 !important;
+}
+
 .nav-section {
   display: flex;
   flex-direction: column;

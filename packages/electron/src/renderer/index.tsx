@@ -19,7 +19,13 @@ const root = ReactDOM.createRoot(rootElement);
 const analyticsId = await window.electronAPI.analytics?.getDistinctId() ?? '';
 const analyticsAllowed = await window.electronAPI.analytics?.allowedToSendAnalytics() ?? false;
 const isDevInstallation = process.env.NODE_ENV?.toLowerCase() === 'development';
+const isDevMode = process.env.IS_DEV_MODE === 'true';
 const isOfficialBuild = process.env.OFFICIAL_BUILD === 'true';
+
+// Add dev mode indicator to body for styling (only for npm run dev, not packaged builds)
+if (isDevMode) {
+  document.body.setAttribute('data-dev-mode', 'true');
+}
 
 const posthogClient = posthog.init(
   'phc_s3lQIILexwlGHvxrMBqti355xUgkRocjMXW4LjV0ATw',
