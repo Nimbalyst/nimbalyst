@@ -277,6 +277,228 @@ export class GitStatusService {
   }
 
   /**
+   * Check if a workspace is a git worktree
+   * A worktree is detected when .git is a file (not a directory) or when git rev-parse --git-dir contains "worktrees/"
+   *
+   * @param workspacePath The workspace path to check
+   * @returns True if workspace is a git worktree
+   */
+  async isGitWorktree(workspacePath: string): Promise<boolean> {
+    if (!workspacePath) {
+      return false;
+    }
+
+    try {
+      // Check if .git exists and is a file (not a directory)
+      // In a worktree, .git is a file that points to the actual git directory
+      const gitPath = join(workspacePath, '.git');
+      const fs = require('fs');
+
+      if (!existsSync(gitPath)) {
+        return false;
+      }
+
+      const stats = fs.statSync(gitPath);
+      if (stats.isFile()) {
+        return true; // .git is a file = worktree
+      }
+
+      // Also check via git command as a fallback
+      const gitDir = execSync('git rev-parse --git-dir', {
+        cwd: workspacePath,
+        encoding: 'utf8',
+        timeout: 5000
+      }).trim();
+
+      // If git-dir contains "worktrees/", it's a worktree
+      return gitDir.includes('worktrees/');
+    } catch (error) {
+      // If git command fails, not a git repo or worktree
+      return false;
+    }
+  }
+
+  /**
+   * Get the main worktree path (repository root) for a given worktree
+   *
+   * @param workspacePath The worktree path
+   * @returns The main worktree path, or null if not a worktree
+   */
+  private getMainWorktreePath(workspacePath: string): string | null {
+    try {
+      // Get the common git directory (contains the actual repo)
+      const commonDir = execSync('git rev-parse --git-common-dir', {
+        cwd: workspacePath,
+        encoding: 'utf8',
+        timeout: 5000
+      }).trim();
+
+      // List all worktrees
+      const worktreeList = execSync('git worktree list --porcelain', {
+        cwd: workspacePath,
+        encoding: 'utf8',
+        timeout: 5000
+      });
+
+      // Parse worktree list to find the main worktree
+      const lines = worktreeList.split('\n');
+      let currentPath: string | null = null;
+      let currentBranch: string | null = null;
+
+      for (const line of lines) {
+        if (line.startsWith('worktree ')) {
+          currentPath = line.substring('worktree '.length);
+        } else if (line.startsWith('HEAD ')) {
+          // This is the main worktree (has HEAD but no branch line follows)
+          if (currentPath) {
+            return currentPath;
+          }
+        } else if (line.startsWith('branch ')) {
+          currentBranch = line.substring('branch '.length).replace('refs/heads/', '');
+        } else if (line === '') {
+          // End of worktree entry
+          // Main worktree typically comes first and has no specific branch in the format
+          currentPath = null;
+          currentBranch = null;
+        }
+      }
+
+      // Fallback: find the first worktree (which is usually the main one)
+      const firstWorktreeMatch = worktreeList.match(/^worktree (.+)$/m);
+      if (firstWorktreeMatch) {
+        return firstWorktreeMatch[1];
+      }
+
+      return null;
+    } catch (error) {
+      console.error('[GitStatusService] Error getting main worktree path:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get the current branch name for a workspace
+   *
+   * @param workspacePath The workspace path
+   * @returns The current branch name, or null if detached HEAD or error
+   */
+  private getCurrentBranch(workspacePath: string): string | null {
+    try {
+      const branch = execSync('git branch --show-current', {
+        cwd: workspacePath,
+        encoding: 'utf8',
+        timeout: 5000
+      }).trim();
+
+      return branch || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Get files modified in the worktree relative to the main repository branch
+   * Returns absolute file paths for:
+   * 1. Files committed in worktree branch but not in main branch
+   * 2. Files with uncommitted changes (staged, modified, or untracked)
+   *
+   * @param workspacePath The worktree path
+   * @returns Array of absolute file paths modified in the worktree
+   */
+  async getWorktreeModifiedFiles(workspacePath: string): Promise<string[]> {
+    if (!workspacePath) {
+      return [];
+    }
+
+    // Check if this is a worktree
+    const isWorktree = await this.isGitWorktree(workspacePath);
+    if (!isWorktree) {
+      return [];
+    }
+
+    // Check cache
+    const cacheKey = `${workspacePath}:worktree-modified`;
+    const cached = this.cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL_MS) {
+      return Object.keys(cached.status);
+    }
+
+    try {
+      // Get the current branch of this worktree
+      const worktreeBranch = this.getCurrentBranch(workspacePath);
+      if (!worktreeBranch) {
+        console.error('[GitStatusService] Could not determine worktree branch');
+        return [];
+      }
+
+      // Get the main worktree path
+      const mainWorktreePath = this.getMainWorktreePath(workspacePath);
+      if (!mainWorktreePath) {
+        console.error('[GitStatusService] Could not determine main worktree path');
+        return [];
+      }
+
+      // Get the current branch of the main repository
+      const mainBranch = this.getCurrentBranch(mainWorktreePath);
+      if (!mainBranch) {
+        console.error('[GitStatusService] Could not determine main repository branch');
+        return [];
+      }
+
+      // Use a Set to collect unique file paths
+      const filePathSet = new Set<string>();
+      const cacheResult: GitStatusResult = {};
+
+      // 1. Get files committed in worktree branch but not in main branch
+      // Use three-dot diff to show changes in worktree branch since it diverged from main branch
+      const diffOutput = execSync(`git diff --name-only ${mainBranch}...${worktreeBranch}`, {
+        cwd: workspacePath,
+        encoding: 'utf8',
+        timeout: 5000
+      }).trim();
+
+      if (diffOutput) {
+        const lines = diffOutput.split('\n');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          const relativePath = this.normalizePath(line);
+          const absolutePath = resolve(workspacePath, relativePath);
+          filePathSet.add(absolutePath);
+
+          cacheResult[absolutePath] = {
+            filePath: absolutePath,
+            status: 'modified'
+          };
+        }
+      }
+
+      // 2. Get uncommitted files (staged, modified, or untracked)
+      const uncommittedFiles = await this.getUncommittedFiles(workspacePath);
+      for (const absolutePath of uncommittedFiles) {
+        filePathSet.add(absolutePath);
+
+        // Only add to cache if not already there
+        if (!cacheResult[absolutePath]) {
+          cacheResult[absolutePath] = {
+            filePath: absolutePath,
+            status: 'modified'
+          };
+        }
+      }
+
+      // Cache the result
+      this.cache.set(cacheKey, { status: cacheResult, timestamp: Date.now() });
+
+      // Convert Set to Array
+      return Array.from(filePathSet);
+    } catch (error) {
+      console.error('[GitStatusService] Error getting worktree modified files:', error);
+      return [];
+    }
+  }
+
+  /**
    * Clear the cache for a specific workspace or all workspaces
    */
   clearCache(workspacePath?: string): void {

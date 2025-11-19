@@ -66,6 +66,47 @@ export function registerGitStatusHandlers(): void {
   });
 
   /**
+   * Check if a workspace is a git worktree
+   *
+   * @param workspacePath The workspace path to check
+   * @returns Boolean indicating if workspace is a git worktree
+   */
+  ipcMain.handle('git:is-worktree', async (_event, workspacePath: string) => {
+    try {
+      const isWorktree = await gitStatusService.isGitWorktree(workspacePath);
+      return { success: true, isWorktree };
+    } catch (error) {
+      console.error('[GitStatusHandlers] Failed to check if git worktree:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to check if git worktree',
+        isWorktree: false
+      };
+    }
+  });
+
+  /**
+   * Get all files modified in the worktree relative to the main repository branch
+   * Returns files that differ between the worktree branch and the main repo branch
+   *
+   * @param workspacePath The worktree path
+   * @returns Array of file paths with modifications
+   */
+  ipcMain.handle('git:get-worktree-modified-files', async (_event, workspacePath: string) => {
+    try {
+      const files = await gitStatusService.getWorktreeModifiedFiles(workspacePath);
+      return { success: true, files };
+    } catch (error) {
+      console.error('[GitStatusHandlers] Failed to get worktree modified files:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get worktree modified files',
+        files: []
+      };
+    }
+  });
+
+  /**
    * Clear the git status cache for a workspace
    *
    * @param workspacePath Optional workspace path (clears all if not specified)

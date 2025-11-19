@@ -30,9 +30,9 @@ interface WorkspaceSidebarProps {
   currentAISessionId?: string | null;
 }
 
-const FILE_TREE_FILTER_OPTIONS: ReadonlyArray<FileTreeFilter> = ['all', 'markdown', 'known', 'git-uncommitted', 'ai-read', 'ai-written'];
+const FILE_TREE_FILTER_OPTIONS: ReadonlyArray<FileTreeFilter> = ['all', 'markdown', 'known', 'git-uncommitted', 'git-worktree', 'ai-read', 'ai-written'];
 const CLAUDE_SESSION_FILTERS = new Set<FileTreeFilter>(['ai-read', 'ai-written']);
-const GIT_FILTERS = new Set<FileTreeFilter>(['git-uncommitted']);
+const GIT_FILTERS = new Set<FileTreeFilter>(['git-uncommitted', 'git-worktree']);
 
 interface SessionFileFilterState {
   read: string[];
@@ -115,6 +115,8 @@ export function WorkspaceSidebar({
   const [sessionFileFilters, setSessionFileFilters] = useState<SessionFileFilterState>({ read: [], written: [] });
   const [gitUncommittedFiles, setGitUncommittedFiles] = useState<string[]>([]);
   const [isGitRepo, setIsGitRepo] = useState(false);
+  const [gitWorktreeModifiedFiles, setGitWorktreeModifiedFiles] = useState<string[]>([]);
+  const [isGitWorktree, setIsGitWorktree] = useState(false);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const hasLoadedSettingsRef = useRef(false);
 
@@ -363,6 +365,27 @@ export function WorkspaceSidebar({
       });
   }, [workspacePath]);
 
+  // Check if workspace is a git worktree
+  useEffect(() => {
+    if (!workspacePath || !window.electronAPI?.invoke) {
+      setIsGitWorktree(false);
+      return;
+    }
+
+    window.electronAPI.invoke('git:is-worktree', workspacePath)
+      .then(result => {
+        if (result?.success) {
+          setIsGitWorktree(result.isWorktree);
+        } else {
+          setIsGitWorktree(false);
+        }
+      })
+      .catch(error => {
+        console.error('Failed to check if git worktree:', error);
+        setIsGitWorktree(false);
+      });
+  }, [workspacePath]);
+
   // Load git uncommitted files when filter is active
   const loadGitUncommittedFiles = useCallback(async () => {
     if (!workspacePath || !window.electronAPI?.invoke) {
@@ -391,7 +414,7 @@ export function WorkspaceSidebar({
   useEffect(() => {
     if (fileTreeFilter === 'git-uncommitted' && isGitRepo) {
       loadGitUncommittedFiles();
-    } else if (!GIT_FILTERS.has(fileTreeFilter)) {
+    } else if (fileTreeFilter !== 'git-worktree' && !GIT_FILTERS.has(fileTreeFilter)) {
       setGitUncommittedFiles([]);
     }
   }, [fileTreeFilter, isGitRepo, loadGitUncommittedFiles]);
@@ -410,9 +433,57 @@ export function WorkspaceSidebar({
     return () => clearTimeout(timeoutId);
   }, [fileTree, fileTreeFilter, isGitRepo, loadGitUncommittedFiles]);
 
+  // Load git worktree modified files when filter is active
+  const loadGitWorktreeModifiedFiles = useCallback(async () => {
+    if (!workspacePath || !window.electronAPI?.invoke) {
+      setGitWorktreeModifiedFiles([]);
+      return;
+    }
+
+    try {
+      const result = await window.electronAPI.invoke('git:get-worktree-modified-files', workspacePath);
+
+      if (result?.success && Array.isArray(result.files)) {
+        // Files are already absolute paths from the service, just normalize them
+        const normalizedFiles = result.files
+          .map((file: string) => normalizeFilePath(file))
+          .filter((value): value is string => Boolean(value));
+        setGitWorktreeModifiedFiles(Array.from(new Set(normalizedFiles)));
+      } else {
+        setGitWorktreeModifiedFiles([]);
+      }
+    } catch (error) {
+      console.error('Failed to load git worktree modified files:', error);
+      setGitWorktreeModifiedFiles([]);
+    }
+  }, [workspacePath]);
+
+  useEffect(() => {
+    if (fileTreeFilter === 'git-worktree' && isGitWorktree) {
+      loadGitWorktreeModifiedFiles();
+    } else if (!GIT_FILTERS.has(fileTreeFilter)) {
+      setGitWorktreeModifiedFiles([]);
+    }
+  }, [fileTreeFilter, isGitWorktree, loadGitWorktreeModifiedFiles]);
+
+  // Refresh worktree status when file tree changes (files added/modified/deleted)
+  // Debounced to avoid excessive git diff calls during rapid file changes
+  useEffect(() => {
+    if (fileTreeFilter !== 'git-worktree' || !isGitWorktree) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      loadGitWorktreeModifiedFiles();
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [fileTree, fileTreeFilter, isGitWorktree, loadGitWorktreeModifiedFiles]);
+
   const aiReadPathSet = useMemo(() => new Set(sessionFileFilters.read), [sessionFileFilters.read]);
   const aiWrittenPathSet = useMemo(() => new Set(sessionFileFilters.written), [sessionFileFilters.written]);
   const gitUncommittedPathSet = useMemo(() => new Set(gitUncommittedFiles), [gitUncommittedFiles]);
+  const gitWorktreeModifiedPathSet = useMemo(() => new Set(gitWorktreeModifiedFiles), [gitWorktreeModifiedFiles]);
 
   // Filter file tree based on current filter
   const filterFileTree = useCallback((items: FileTreeItem[], filter: FileTreeFilter): FileTreeItem[] => {
@@ -450,7 +521,8 @@ export function WorkspaceSidebar({
     }
 
     if (GIT_FILTERS.has(filter)) {
-      if (gitUncommittedPathSet.size === 0) {
+      const pathSet = filter === 'git-worktree' ? gitWorktreeModifiedPathSet : gitUncommittedPathSet;
+      if (pathSet.size === 0) {
         return [];
       }
 
@@ -466,7 +538,7 @@ export function WorkspaceSidebar({
             }
           } else {
             const normalizedPath = normalizeFilePath(item.path);
-            if (gitUncommittedPathSet.has(normalizedPath)) {
+            if (pathSet.has(normalizedPath)) {
               acc.push(item);
             }
           }
@@ -512,7 +584,7 @@ export function WorkspaceSidebar({
     };
 
     return filterItems(items);
-  }, [aiReadPathSet, aiWrittenPathSet, gitUncommittedPathSet]);
+  }, [aiReadPathSet, aiWrittenPathSet, gitUncommittedPathSet, gitWorktreeModifiedPathSet]);
 
   const filteredFileTree = useMemo(
     () => filterFileTree(fileTree, fileTreeFilter),
@@ -746,6 +818,8 @@ export function WorkspaceSidebar({
               }}
               isGitRepo={isGitRepo}
               gitUncommittedCount={gitUncommittedFiles.length}
+              isGitWorktree={isGitWorktree}
+              gitWorktreeCount={gitWorktreeModifiedFiles.length}
               onClose={() => setShowFilterMenu(false)}
             />
           )}

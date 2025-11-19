@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MaterialSymbol } from './MaterialSymbol';
 import './FileTreeFilterMenu.css';
 
-export type FileTreeFilter = 'all' | 'markdown' | 'known' | 'git-uncommitted' | 'ai-read' | 'ai-written';
+export type FileTreeFilter = 'all' | 'markdown' | 'known' | 'git-uncommitted' | 'git-worktree' | 'ai-read' | 'ai-written';
 
 interface FileTreeFilterMenuProps {
   x: number;
@@ -15,6 +15,8 @@ interface FileTreeFilterMenuProps {
   claudeSessionFileCounts: { read: number; written: number };
   isGitRepo: boolean;
   gitUncommittedCount: number;
+  isGitWorktree: boolean;
+  gitWorktreeCount: number;
   onClose: () => void;
 }
 
@@ -29,6 +31,8 @@ export function FileTreeFilterMenu({
   claudeSessionFileCounts,
   isGitRepo,
   gitUncommittedCount,
+  isGitWorktree,
+  gitWorktreeCount,
   onClose
 }: FileTreeFilterMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -143,6 +147,22 @@ export function FileTreeFilterMenu({
           <MaterialSymbol icon="check" size={16} className="filter-menu-check" />
         )}
       </div>
+
+      {isGitWorktree && (
+        <div
+          className={`filter-menu-item ${currentFilter === 'git-worktree' ? 'active' : ''}`}
+          onClick={() => handleFilterSelect('git-worktree')}
+        >
+          <MaterialSymbol icon="account_tree" size={18} />
+          <span>Worktree Changes</span>
+          {gitWorktreeCount > 0 && (
+            <span className="filter-menu-pill">{gitWorktreeCount}</span>
+          )}
+          {currentFilter === 'git-worktree' && (
+            <MaterialSymbol icon="check" size={16} className="filter-menu-check" />
+          )}
+        </div>
+      )}
 
       {!isGitRepo && (
         <div className="filter-menu-hint">
