@@ -17,6 +17,7 @@ interface FileItem {
   isContentMatch?: boolean;
 }
 
+// QuickOpen works in all modes (Editor, Agent, Files)
 interface QuickOpenProps {
   isOpen: boolean;
   onClose: () => void;

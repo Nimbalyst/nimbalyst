@@ -1,3 +1,26 @@
+/**
+ * Application menu builder for Nimbalyst Electron app.
+ *
+ * Creates and manages the native application menu bar with support for:
+ * - File operations (new, open, save, recent items)
+ * - Edit commands (undo/redo, copy/paste, find/replace)
+ * - View modes (files, agent) and panels (AI chat, bottom panel)
+ * - Window management (minimize, close, window list with keyboard shortcuts)
+ * - Theme switching (light, dark, crystal-dark, system)
+ * - Developer tools (console, file watcher diagnostics, database server)
+ * - Help and documentation
+ *
+ * The menu adapts based on:
+ * - Platform (macOS vs Windows/Linux)
+ * - Window state (workspace vs document mode)
+ * - Active mode (files vs agent mode for context-aware New command)
+ * - Development vs production build (shows/hides dev-only features)
+ *
+ * Menu updates are triggered when:
+ * - Theme changes
+ * - Recent items change
+ * - Windows are opened/closed/focused
+ */
 import { Menu, BrowserWindow, app, dialog, shell, nativeTheme } from 'electron';
 import { basename, join } from 'path';
 import * as path from 'path';

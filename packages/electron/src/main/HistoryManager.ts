@@ -34,6 +34,18 @@ export interface HistoryTag {
   updatedAt: Date;
 }
 
+/**
+ * Manages document history snapshots and tags for version control and AI diff tracking.
+ *
+ * Features:
+ * - Snapshot creation with compression and deduplication
+ * - Tag-based tracking for AI editing sessions (pre-edit and incremental-approval tags)
+ * - Automatic cleanup of old snapshots based on age and count limits
+ * - Baseline content retrieval for diff comparison during AI sessions
+ *
+ * Storage: All data is stored in the PGLite database (document_history table) with
+ * compressed content to minimize disk usage.
+ */
 export class HistoryManager {
   private maxSnapshots = 250;
   private maxAgeDays = 30;
