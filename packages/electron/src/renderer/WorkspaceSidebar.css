@@ -153,6 +153,60 @@
   margin-bottom: 4px;
 }
 
+/* Empty state styles */
+.file-tree-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  min-height: 300px;
+}
+
+.file-tree-empty-icon {
+  font-size: 48px;
+  color: var(--text-tertiary);
+  opacity: 0.5;
+  margin-bottom: 16px;
+}
+
+.file-tree-empty-title {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.file-tree-empty-description {
+  margin: 0 0 24px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 280px;
+}
+
+.file-tree-clear-filter-btn {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.file-tree-clear-filter-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.file-tree-clear-filter-btn:active {
+  transform: translateY(0);
+}
+
 /* Root drop zone styles */
 .workspace-file-tree.drag-over-root {
   background-color: rgba(59, 130, 246, 0.05);

@@ -605,6 +605,58 @@ export function WorkspaceSidebar({
       ? 'No files have been read by this Claude Code session yet.'
       : 'No files have been written by this Claude Code session yet.';
 
+  // Check if filtered tree is empty
+  const isFilteredTreeEmpty = filteredFileTree.length === 0;
+
+  // Generate empty state message based on filter type
+  const getEmptyStateMessage = (): { title: string; description: string } => {
+    switch (fileTreeFilter) {
+      case 'markdown':
+        return {
+          title: 'No Markdown Files',
+          description: 'No .md or .markdown files found in this workspace.'
+        };
+      case 'known':
+        return {
+          title: 'No Known File Types',
+          description: 'No files with recognized extensions found. Showing files with extensions like .md, .txt, .json, .js, .ts, etc.'
+        };
+      case 'git-uncommitted':
+        return {
+          title: 'No Uncommitted Changes',
+          description: isGitRepo
+            ? 'No uncommitted files found in this git repository.'
+            : 'This workspace is not a git repository.'
+        };
+      case 'git-worktree':
+        return {
+          title: 'No Worktree Changes',
+          description: isGitWorktree
+            ? 'No files modified in this git worktree.'
+            : 'This workspace is not a git worktree.'
+        };
+      case 'ai-read':
+        return {
+          title: 'No Files Read',
+          description: hasActiveClaudeSession
+            ? 'No files have been read by this Claude Code session yet.'
+            : 'Open a Claude Code session to see which files the agent reads.'
+        };
+      case 'ai-written':
+        return {
+          title: 'No Files Written',
+          description: hasActiveClaudeSession
+            ? 'No files have been written by this Claude Code session yet.'
+            : 'Open a Claude Code session to see which files the agent writes.'
+        };
+      default:
+        return {
+          title: 'No Files',
+          description: 'No files match the current filter.'
+        };
+    }
+  };
+
   // Root folder drag and drop handlers
   const handleRootDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -784,19 +836,35 @@ export function WorkspaceSidebar({
                 {aiFilterHintText}
               </div>
             )}
-            <FileTree
-              items={filteredFileTree}
-              currentFilePath={currentFilePath}
-              onFileSelect={handleFileSelect}
-              level={0}
-              showIcons={showFileIcons}
-              onNewFile={handleNewFileInFolder}
-              onNewFolder={handleNewFolderInFolder}
-              onRefreshFileTree={onRefreshFileTree}
-              onViewHistory={onViewHistory}
-              selectedFolder={selectedFolder}
-              onFolderSelect={handleSelectedFolderChange}
-            />
+            {isFilteredTreeEmpty && fileTreeFilter !== 'all' ? (
+              <div className="file-tree-empty-state">
+                <span className="material-symbols-outlined file-tree-empty-icon">
+                  filter_list_off
+                </span>
+                <h3 className="file-tree-empty-title">{getEmptyStateMessage().title}</h3>
+                <p className="file-tree-empty-description">{getEmptyStateMessage().description}</p>
+                <button
+                  className="file-tree-clear-filter-btn"
+                  onClick={() => handleFilterChange('all')}
+                >
+                  Clear Filter
+                </button>
+              </div>
+            ) : (
+              <FileTree
+                items={filteredFileTree}
+                currentFilePath={currentFilePath}
+                onFileSelect={handleFileSelect}
+                level={0}
+                showIcons={showFileIcons}
+                onNewFile={handleNewFileInFolder}
+                onNewFolder={handleNewFolderInFolder}
+                onRefreshFileTree={onRefreshFileTree}
+                onViewHistory={onViewHistory}
+                selectedFolder={selectedFolder}
+                onFolderSelect={handleSelectedFolderChange}
+              />
+            )}
             {isDragOverRoot && (
               <div className="root-drop-indicator">
                 Drop here to move to workspace root
