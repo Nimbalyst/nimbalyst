@@ -71,6 +71,7 @@
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--border-primary);
   flex-shrink: 0;
+  position: relative;
 }
 
 .session-history-search-input {
@@ -92,6 +93,39 @@
 .session-history-search-input:focus {
   border-color: var(--border-focus);
   background: var(--surface-primary);
+}
+
+.session-history-search-status {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.session-history-content-search-hint {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.session-history-content-search-hint:hover {
+  background: var(--surface-hover);
+  color: var(--primary-color);
 }
 
 .session-history-filters {

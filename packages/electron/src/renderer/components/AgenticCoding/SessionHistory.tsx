@@ -64,32 +64,32 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   onCollapsedGroupsChange,
   refreshTrigger
 }) => {
-  const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [allSessions, setAllSessions] = useState<SessionItem[]>([]); // All sessions from DB
+  const [sessions, setSessions] = useState<SessionItem[]>([]); // Filtered sessions to display
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'updated' | 'created'>('updated');
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const [contentSearchTriggered, setContentSearchTriggered] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Extract workspace name from path
   const workspaceName = workspacePath.split('/').filter(Boolean).pop() || 'Workspace';
   const workspaceColor = generateWorkspaceColor(workspacePath);
 
-  // Load sessions from database
-  const loadSessions = useCallback(async (query?: string) => {
+  // Load all sessions from database (no search query)
+  const loadAllSessions = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Use search endpoint if query is provided, otherwise use list endpoint
-      const result = query && query.trim()
-        ? await window.electronAPI.invoke('sessions:search', workspacePath, query.trim())
-        : await window.electronAPI.invoke('sessions:list', workspacePath);
+      const result = await window.electronAPI.invoke('sessions:list', workspacePath);
 
       if (result.success && Array.isArray(result.sessions)) {
         // Map sessions with base data only. Visual indicators (isProcessing, hasUnread)
         // are applied separately by the useEffect below to avoid stale closure issues.
-        const allSessions = result.sessions.map((s: any) => ({
+        const mappedSessions = result.sessions.map((s: any) => ({
           id: s.id,
           title: s.title || s.name || 'Untitled Session',
           createdAt: s.createdAt,
@@ -101,7 +101,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           isProcessing: false,  // Will be updated by visual indicator effect
           hasUnread: false      // Will be updated by visual indicator effect
         }));
-        setSessions(allSessions);
+        setAllSessions(mappedSessions);
+        setSessions(mappedSessions); // Initially show all
       }
     } catch (err) {
       console.error('[SessionHistory] Failed to load sessions:', err);
@@ -111,18 +112,69 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     }
   }, [workspacePath]);
 
-  useEffect(() => {
-    loadSessions();
-  }, [loadSessions, refreshTrigger]);
+  // Search message content in database (heavy operation)
+  const searchMessageContent = useCallback(async (query: string) => {
+    try {
+      setIsSearching(true);
+      setError(null);
 
-  // Debounced search effect
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      loadSessions(searchQuery);
-    }, 300); // 300ms debounce
+      const result = await window.electronAPI.invoke('sessions:search', workspacePath, query.trim());
 
-    return () => clearTimeout(timeoutId);
-  }, [searchQuery, loadSessions]);
+      if (result.success && Array.isArray(result.sessions)) {
+        const searchResults = result.sessions.map((s: any) => ({
+          id: s.id,
+          title: s.title || s.name || 'Untitled Session',
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+          provider: s.provider || 'claude',
+          model: s.model,
+          sessionType: s.sessionType || 'chat',
+          messageCount: s.messageCount || 0,
+          isProcessing: false,
+          hasUnread: false
+        }));
+        setSessions(searchResults);
+      }
+    } catch (err) {
+      console.error('[SessionHistory] Failed to search sessions:', err);
+      setError('Failed to search sessions');
+    } finally {
+      setIsSearching(false);
+    }
+  }, [workspacePath]);
+
+  // Load all sessions on mount and when refreshTrigger changes
+  useEffect(() => {
+    loadAllSessions();
+  }, [loadAllSessions, refreshTrigger]);
+
+  // Client-side title filtering (instant, no database query)
+  useEffect(() => {
+    // Reset content search trigger when query changes
+    setContentSearchTriggered(false);
+
+    if (!searchQuery.trim()) {
+      // No search query - show all sessions
+      setSessions(allSessions);
+      return;
+    }
+
+    // Filter sessions by title in memory (case-insensitive)
+    const query = searchQuery.toLowerCase();
+    const filtered = allSessions.filter(session =>
+      session.title.toLowerCase().includes(query)
+    );
+    setSessions(filtered);
+  }, [searchQuery, allSessions]);
+
+  // Function to trigger content search (database query for message content)
+  const searchMessageContents = useCallback(() => {
+    if (!searchQuery.trim() || contentSearchTriggered) {
+      return; // Don't search if already triggered or no query
+    }
+    setContentSearchTriggered(true);
+    searchMessageContent(searchQuery);
+  }, [searchQuery, contentSearchTriggered, searchMessageContent]);
 
   // Update visual indicators (processing state, unread badges) without reloading from database
   useEffect(() => {
@@ -196,7 +248,6 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [sortDropdownOpen]);
 
-  // No client-side filtering - search is done server-side
   // Group sessions by time - use the selected sort field
   const groupedSessions = groupSessionsByTime(sessions, sortBy === 'updated' ? 'updatedAt' : 'createdAt');
   const groupKeys = Object.keys(groupedSessions) as TimeGroupKey[];
@@ -417,8 +468,28 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           placeholder="Search sessions..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && searchQuery && !contentSearchTriggered) {
+              e.preventDefault();
+              searchMessageContents();
+            }
+          }}
           aria-label="Search sessions"
         />
+        {isSearching && (
+          <div className="session-history-search-status">
+            {contentSearchTriggered ? 'Searching messages...' : 'Searching...'}
+          </div>
+        )}
+        {!isSearching && searchQuery && !contentSearchTriggered && (
+          <button
+            className="session-history-content-search-hint"
+            onClick={searchMessageContents}
+            title="Press Tab to search message contents"
+          >
+            ⇥ Search contents
+          </button>
+        )}
       </div>
       <div className="session-history-filters">
         <div className="session-history-sort-dropdown">

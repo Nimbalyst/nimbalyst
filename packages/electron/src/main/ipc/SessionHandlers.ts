@@ -161,7 +161,7 @@ export async function registerSessionHandlers() {
         }
     });
 
-    // Search sessions for workspace
+    // Search sessions for workspace (full content search)
     ipcMain.handle('sessions:search', async (event, workspacePath: string, query: string) => {
         try {
             const entries = await AISessionsRepository.search(workspacePath, query);
