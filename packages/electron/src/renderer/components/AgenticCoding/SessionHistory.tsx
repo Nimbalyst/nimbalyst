@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
 import { groupSessionsByTime, TimeGroupKey } from '../../utils/dateFormatting';
@@ -74,6 +74,23 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   const [contentSearchTriggered, setContentSearchTriggered] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
 
+  // Track scroll position to restore after refresh
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const scrollPositionRef = useRef<number>(0);
+
+  // Save scroll position on scroll
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      scrollPositionRef.current = container.scrollTop;
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
+
   // Extract workspace name from path
   const workspaceName = workspacePath.split('/').filter(Boolean).pop() || 'Workspace';
   const workspaceColor = generateWorkspaceColor(workspacePath);
@@ -81,7 +98,11 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   // Load all sessions from database (no search query)
   const loadAllSessions = useCallback(async () => {
     try {
-      setLoading(true);
+      // Don't show loading spinner if we already have sessions (just refreshing)
+      const hasExistingSessions = allSessions.length > 0;
+      if (!hasExistingSessions) {
+        setLoading(true);
+      }
       setError(null);
 
       const result = await window.electronAPI.invoke('sessions:list', workspacePath);
@@ -89,7 +110,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       if (result.success && Array.isArray(result.sessions)) {
         // Map sessions with base data only. Visual indicators (isProcessing, hasUnread)
         // are applied separately by the useEffect below to avoid stale closure issues.
-        const mappedSessions = result.sessions.map((s: any) => ({
+        const incomingSessions = result.sessions.map((s: any) => ({
           id: s.id,
           title: s.title || s.name || 'Untitled Session',
           createdAt: s.createdAt,
@@ -101,8 +122,68 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           isProcessing: false,  // Will be updated by visual indicator effect
           hasUnread: false      // Will be updated by visual indicator effect
         }));
-        setAllSessions(mappedSessions);
-        setSessions(mappedSessions); // Initially show all
+
+        // Merge incoming sessions with existing ones to preserve React keys and reduce flicker
+        setAllSessions(prev => {
+          // If first load, just set the new sessions
+          if (prev.length === 0) {
+            return incomingSessions;
+          }
+
+          // Create a map of incoming sessions by ID
+          const incomingMap = new Map(incomingSessions.map(s => [s.id, s]));
+
+          // Update existing sessions and add new ones
+          const merged = prev.map(existing => {
+            const incoming = incomingMap.get(existing.id);
+            if (incoming) {
+              // Session still exists, update it while preserving visual state
+              incomingMap.delete(existing.id); // Mark as processed
+              return {
+                ...incoming,
+                isProcessing: existing.isProcessing, // Preserve these from current state
+                hasUnread: existing.hasUnread
+              };
+            }
+            return null; // Session was deleted
+          }).filter((s): s is SessionItem => s !== null);
+
+          // Add any new sessions that weren't in the previous list
+          const newSessions = Array.from(incomingMap.values());
+
+          return [...merged, ...newSessions];
+        });
+
+        // Apply the same merge logic to filtered sessions
+        setSessions(prev => {
+          if (prev.length === 0) {
+            return incomingSessions;
+          }
+
+          const incomingMap = new Map(incomingSessions.map(s => [s.id, s]));
+          const merged = prev.map(existing => {
+            const incoming = incomingMap.get(existing.id);
+            if (incoming) {
+              incomingMap.delete(existing.id);
+              return {
+                ...incoming,
+                isProcessing: existing.isProcessing,
+                hasUnread: existing.hasUnread
+              };
+            }
+            return null;
+          }).filter((s): s is SessionItem => s !== null);
+
+          const newSessions = Array.from(incomingMap.values());
+          return [...merged, ...newSessions];
+        });
+
+        // Restore scroll position after update
+        requestAnimationFrame(() => {
+          if (scrollContainerRef.current && scrollPositionRef.current > 0) {
+            scrollContainerRef.current.scrollTop = scrollPositionRef.current;
+          }
+        });
       }
     } catch (err) {
       console.error('[SessionHistory] Failed to load sessions:', err);
@@ -110,7 +191,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [workspacePath]);
+  }, [workspacePath, allSessions.length]);
 
   // Search message content in database (heavy operation)
   const searchMessageContent = useCallback(async (query: string) => {
@@ -531,7 +612,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           )}
         </div>
       </div>
-      <div className="session-history-list">
+      <div className="session-history-list" ref={scrollContainerRef}>
         {groupKeys.length === 0 && hasSearchQuery ? (
           // No search results - show message with option to clear
           <div className="session-history-empty">

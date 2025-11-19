@@ -255,6 +255,8 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0.5rem 0;
+  /* Smooth scroll behavior for better UX */
+  scroll-behavior: smooth;
 }
 
 .session-history-list::-webkit-scrollbar {

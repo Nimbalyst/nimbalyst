@@ -7,7 +7,8 @@
   cursor: pointer;
   border-radius: 0.25rem;
   margin: 0 0.5rem;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+  opacity: 1;
 }
 
 .session-list-item:hover {
@@ -78,6 +79,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   margin-bottom: 0.125rem;
+  transition: color 0.15s ease;
 }
 
 .session-list-item.active .session-list-item-title {
@@ -97,6 +99,7 @@
   font-size: 0.6875rem;
   color: var(--text-tertiary);
   white-space: nowrap;
+  transition: color 0.15s ease;
 }
 
 .session-list-item-model {
