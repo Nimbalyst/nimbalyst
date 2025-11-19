@@ -38,7 +38,7 @@ import { initializeClaudeCodeSessionHandlers } from './ipc/ClaudeCodeSessionHand
 import { registerNotificationHandlers } from './ipc/NotificationHandlers';
 import { registerGitStatusHandlers } from './ipc/GitStatusHandlers';
 import { registerProjectSelectionHandlers } from './ipc/ProjectSelectionHandlers';
-import { getTheme, setTheme, incrementLaunchCount, shouldShowDiscordInvitation, dismissDiscordInvitation, type AppTheme } from './utils/store';
+import { getTheme, setTheme, incrementLaunchCount, shouldShowDiscordInvitation, dismissDiscordInvitation, updateWorkspaceState, type AppTheme } from './utils/store';
 import { AIService } from './services/ai/AIService';
 import { detectFileWorkspace, suggestWorkspaceForFile } from './utils/workspaceDetection';
 // import { AgentService } from './services/agents/AgentService';
@@ -59,6 +59,8 @@ import {registerAnalyticsHandlers} from "./ipc/AnalyticsHandlers.ts";
 let pendingFilePath: string | null = null;
 // Track pending workspace to open
 let pendingWorkspacePath: string | null = null;
+// Track pending filter to apply
+let pendingFilter: string | null = null;
 
 // Session save interval
 let sessionSaveInterval: NodeJS.Timeout | null = null;
@@ -198,6 +200,9 @@ function parseCommandLineArgs() {
         if (arg === '--workspace' && i + 1 < args.length) {
             pendingWorkspacePath = args[i + 1];
             logger.main.info(`✓ Workspace path from CLI: ${pendingWorkspacePath}`);
+        } else if (arg === '--filter' && i + 1 < args.length) {
+            pendingFilter = args[i + 1];
+            logger.main.info(`✓ Filter from CLI: ${pendingFilter}`);
         } else if (!arg.startsWith('--') && !arg.startsWith('-')) {
             // Handle plain file path argument (e.g., "preditor file.md")
             const argExists = existsSync(arg);
@@ -211,7 +216,7 @@ function parseCommandLineArgs() {
         }
     }
 
-    logger.main.info(`FINAL: pendingFilePath=${pendingFilePath}, pendingWorkspacePath=${pendingWorkspacePath}`);
+    logger.main.info(`FINAL: pendingFilePath=${pendingFilePath}, pendingWorkspacePath=${pendingWorkspacePath}, pendingFilter=${pendingFilter}`);
 }
 
 
@@ -352,13 +357,16 @@ app.whenReady().then(async () => {
         dismissDiscordInvitation();
     });
 
-    // Try to restore session, otherwise show Workspace Manager
-    const sessionRestored = await restoreSessionState();
+    // Skip session restoration if opening a specific workspace from CLI
+    const shouldSkipSessionRestore = !!pendingWorkspacePath;
+    const sessionRestored = shouldSkipSessionRestore ? false : await restoreSessionState();
 
     if (pendingWorkspacePath) {
         // Handle workspace path from CLI
         const workspacePath = pendingWorkspacePath;
+        const filterToApply = pendingFilter;
         pendingWorkspacePath = null;
+        pendingFilter = null;
 
         // Track workspace opened from CLI
         try {
@@ -402,6 +410,19 @@ app.whenReady().then(async () => {
         //     const { getTrackerLoaderService } = await import('./services/TrackerLoaderService');
         //     await getTrackerLoaderService().ensureTrackersDirectory(workspacePath);
         // }
+
+        // Apply filter to workspace state if specified
+        if (filterToApply) {
+            const validFilters = ['all', 'markdown', 'known', 'git-uncommitted', 'git-worktree', 'ai-read', 'ai-written'];
+            if (validFilters.includes(filterToApply)) {
+                logger.main.info(`Applying filter '${filterToApply}' to workspace ${workspacePath}`);
+                updateWorkspaceState(workspacePath, (state) => {
+                    state.fileTreeFilter = filterToApply as any;
+                });
+            } else {
+                logger.main.warn(`Invalid filter '${filterToApply}' specified via CLI. Valid filters: ${validFilters.join(', ')}`);
+            }
+        }
 
         const window = createWindow(false, true, workspacePath);
         window.once('ready-to-show', () => {

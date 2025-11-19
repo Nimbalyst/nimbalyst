@@ -11,7 +11,7 @@ export type { SessionState, SessionWindow } from '../types';
 
 export type CompletionSoundType = 'chime' | 'bell' | 'pop' | 'none';
 export type ReleaseChannel = 'stable' | 'alpha';
-export type WorkspaceFileTreeFilter = 'all' | 'markdown' | 'known' | 'ai-read' | 'ai-written';
+export type WorkspaceFileTreeFilter = 'all' | 'markdown' | 'known' | 'git-uncommitted' | 'git-worktree' | 'ai-read' | 'ai-written';
 
 interface AppStoreSchema {
   theme: AppTheme;
