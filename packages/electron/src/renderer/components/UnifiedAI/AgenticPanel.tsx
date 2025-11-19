@@ -606,8 +606,6 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Create a new session
   const createNewSession = useCallback(async (planPath?: string) => {
     try {
-      // TODO: Debug logging - uncomment if needed
-      // console.log('[AgenticPanel] createNewSession called, mode:', mode, 'workspace:', workspacePath);
       const session = await window.electronAPI.aiCreateSession(
         'claude-code',
         undefined,
@@ -615,17 +613,20 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         undefined,
         mode === 'agent' ? 'coding' : 'chat'
       );
-      // TODO: Debug logging - uncomment if needed
-      // console.log('[AgenticPanel] aiCreateSession returned:', session.id);
 
     // Add metadata if needed
     if (mode === 'agent') {
-      await window.electronAPI.invoke('sessions:update-session-metadata', session.id, {
+      const metadata: any = {
         sessionType: 'coding',
-        planDocumentPath: planPath,
         fileEdits: [],
         todos: []
-      });
+      };
+
+      if (planPath !== undefined) {
+        metadata.planDocumentPath = planPath;
+      }
+
+      await window.electronAPI.invoke('sessions:update-session-metadata', session.id, metadata);
     }
 
     const tabName = planPath
@@ -1972,7 +1973,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             updatedSession={updatedSession}
             onSessionSelect={openSessionInTab}
             onSessionDelete={deleteSession}
-            onNewSession={createNewSession}
+            onNewSession={() => createNewSession()}
             onImportSessions={handleOpenImportDialog}
             collapsedGroups={collapsedGroups}
             onCollapsedGroupsChange={setCollapsedGroups}

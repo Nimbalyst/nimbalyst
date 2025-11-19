@@ -279,7 +279,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
               <button
                 className="session-history-new-button"
                 data-testid="new-session-button"
-                onClick={onNewSession}
+                onClick={() => onNewSession()}
                 title="Create new session"
                 aria-label="Create new session"
               >
