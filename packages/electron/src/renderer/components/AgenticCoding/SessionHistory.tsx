@@ -197,8 +197,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   }, [sortDropdownOpen]);
 
   // No client-side filtering - search is done server-side
-  // Group sessions by time - ALWAYS use updatedAt for grouping
-  const groupedSessions = groupSessionsByTime(sessions, 'updatedAt');
+  // Group sessions by time - use the selected sort field
+  const groupedSessions = groupSessionsByTime(sessions, sortBy === 'updated' ? 'updatedAt' : 'createdAt');
   const groupKeys = Object.keys(groupedSessions) as TimeGroupKey[];
 
   if (loading) {
