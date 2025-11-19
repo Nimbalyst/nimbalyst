@@ -739,7 +739,7 @@ export function WorkspaceSidebar({
                 aria-label="Filter files"
               >
                 <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                  more_vert
+                  filter_alt
                 </span>
               </button>
             </>
