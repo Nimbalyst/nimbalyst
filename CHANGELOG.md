@@ -19,6 +19,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.33] - 2025-11-19
+
+
+### Added
+- Tab-triggered content search to session history
+- E2E test for Monaco diff approval
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Prevent React event from being passed to createNewSession
+- Respect sort selection in session history grouping
+
+### Removed
+- Unnecessary log statements
+
 ## [0.45.32] - 2025-11-19
 
 
