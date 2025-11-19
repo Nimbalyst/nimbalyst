@@ -221,7 +221,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     if (onSessionDelete) {
       onSessionDelete(sessionId);
       // Reload sessions after delete
-      await loadSessions();
+      await loadAllSessions();
     }
   };
 
