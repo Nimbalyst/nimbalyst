@@ -17,6 +17,7 @@ import type {
   DiffResult,
   AIProviderType,
   AIModel,
+  SessionData,
 } from '@nimbalyst/runtime/ai/server/types';
 // MCP imports removed - no longer using MCP HTTP server
 import { ToolExecutor, toolRegistry, BUILT_IN_TOOLS } from './tools';
@@ -179,6 +180,72 @@ export class AIService {
         console.error('[AIService] Error initializing API keys:', error);
       }
     });
+  }
+
+  private async runAutoContextCommand(
+    session: SessionData,
+    workspacePath: string,
+    event: Electron.IpcMainInvokeEvent
+  ): Promise<void> {
+    if (session.provider !== 'claude-code') {
+      return;
+    }
+
+    try {
+      const contextProvider = ProviderFactory.getProvider(session.provider as AIProviderType, session.id);
+      if (!contextProvider) {
+        console.warn('[AIService] No context provider found for session:', session.id);
+        return;
+      }
+
+      const updatedSession = await this.sessionManager.loadSession(session.id, workspacePath);
+      if (!updatedSession) {
+        console.error('[AIService] Failed to reload session for /context command');
+        logger.main.error('Failed to reload session for /context command');
+        return;
+      }
+
+      if (contextProvider.setHiddenMode) {
+        contextProvider.setHiddenMode(true);
+      }
+
+      let contextResponse = '';
+      for await (const chunk of contextProvider.sendMessage('/context', undefined, session.id, updatedSession.messages, workspacePath, [])) {
+        if (!chunk) continue;
+
+        if (chunk.type === 'text') {
+          contextResponse += chunk.content || '';
+        } else if (chunk.type === 'complete') {
+          const parsedUsage = parseContextUsageMessage(contextResponse);
+
+          if (parsedUsage) {
+            event.sender.send('ai:tokenUsageUpdated', {
+              sessionId: session.id,
+              tokenUsage: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: parsedUsage.totalTokens,
+                contextWindow: parsedUsage.contextWindow,
+                categories: parsedUsage.categories
+              }
+            });
+          } else {
+            console.error('[AIService] Failed to parse /context response for token usage. Full response:', contextResponse);
+            logger.main.warn('Failed to parse /context response for token usage');
+          }
+
+          break;
+        } else if (chunk.type === 'error') {
+          console.error('[AIService] Error chunk from /context:', chunk.error || 'Unknown error');
+          logger.main.error('Error fetching context:', chunk.error || 'Unknown error');
+          break;
+        }
+      }
+    } catch (contextError) {
+      console.error('[AIService] Exception while fetching context usage:', contextError);
+      logger.main.error('Failed to fetch context usage:', contextError);
+      // Don't fail the main request if context fetch fails
+    }
   }
 
   private setupIpcHandlers() {
@@ -656,6 +723,7 @@ export class AIService {
 
       // Mark session as running/active
       const stateManager = getSessionStateManager();
+      let autoContextPromise: Promise<void> | null = null;
       await stateManager.startSession({ sessionId: session.id });
 
       try {
@@ -1132,91 +1200,26 @@ export class AIService {
               });
               // console.log('[AIService] Notification service call completed');
 
-              // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage
+              // AUTO-FETCH CONTEXT USAGE: For claude-code provider, automatically send /context to get accurate token usage.
+              // We defer awaiting the promise until after streaming completes so that queued prompts don't start early.
               if (session.provider === 'claude-code') {
-                // console.log('[AIService] Auto-fetching context usage for claude-code session:', session.id);
-                try {
-                  // Get the provider
-                  const contextProvider = ProviderFactory.getProvider(session.provider as AIProviderType, session.id);
-                  // console.log('[AIService] Context provider retrieved:', !!contextProvider);
-                  if (contextProvider) {
-                    let contextResponse = '';
-
-                    // Reload the session to get the updated messages array (including the assistant's response we just added)
-                    const updatedSession = await this.sessionManager.loadSession(session.id, workspacePath);
-                    if (!updatedSession) {
-                      console.error('[AIService] Failed to reload session for /context command');
-                      logger.main.error('Failed to reload session for /context command');
-                      break;
-                    }
-                    // console.log('[AIService] Session reloaded, messages count:', updatedSession.messages.length);
-
-                    // Mark messages as hidden for this auto-triggered /context command
-                    // User-typed /context won't have this flag set, so they'll be visible
-                    if (contextProvider.setHiddenMode) {
-                      contextProvider.setHiddenMode(true);
-                      // console.log('[AIService] Hidden mode set on provider');
-                    }
-
-                    // Stream the /context response
-                    // The provider will log messages with hidden=true flag
-                    // IMPORTANT: Pass undefined for documentContext - /context is a slash command
-                    // that should return token stats, not analyze the current document
-                    // console.log('[AIService] Sending /context command...');
-                    for await (const chunk of contextProvider.sendMessage('/context', undefined, session.id, updatedSession.messages, workspacePath, [])) {
-                      if (!chunk) continue;
-                      // console.log('[AIService] /context chunk received:', chunk.type, chunk);
-                      if (chunk.type === 'text') {
-                        contextResponse += chunk.content || '';
-                        // console.log('[AIService] Accumulated context response so far:', contextResponse);
-                      } else if (chunk.type === 'complete') {
-                        // Parse the context response to extract token usage and category breakdown
-                        // console.log('[AIService] /context response received:', contextResponse);
-                        const parsedUsage = parseContextUsageMessage(contextResponse);
-
-                        if (parsedUsage) {
-                          // Notify renderer to reload session (which will parse token usage from messages)
-                          event.sender.send('ai:tokenUsageUpdated', {
-                            sessionId: session.id,
-                            tokenUsage: {
-                              inputTokens: 0,
-                              outputTokens: 0,
-                              totalTokens: parsedUsage.totalTokens,
-                              contextWindow: parsedUsage.contextWindow,
-                              categories: parsedUsage.categories
-                            }
-                          });
-                        } else {
-                          console.error('[AIService] Failed to parse /context response for token usage. Full response:', contextResponse);
-                          logger.main.warn('Failed to parse /context response for token usage');
-                        }
-
-                        break;
-                      } else if (chunk.type === 'error') {
-                        console.error('[AIService] Error chunk from /context:', chunk.error || 'Unknown error');
-                        logger.main.error('Error fetching context:', chunk.error || 'Unknown error');
-                        break;
-                      }
-                    }
-                    // console.log('[AIService] Finished streaming /context response');
-                  } else {
-                    console.warn('[AIService] No context provider found for session:', session.id);
-                  }
-                } catch (contextError) {
-                  console.error('[AIService] Exception while fetching context usage:', contextError);
-                  logger.main.error('Failed to fetch context usage:', contextError);
-                  // Don't fail the main request if context fetch fails
-                }
-              } else {
-                // console.log('[AIService] Skipping /context auto-fetch - provider is not claude-code:', session.provider);
+                autoContextPromise = this.runAutoContextCommand(session, workspacePath, event);
               }
-
-              // Mark session as idle/complete
-              await stateManager.endSession(session.id);
 
               break;
           }
         }
+
+        if (autoContextPromise) {
+          try {
+            await autoContextPromise;
+          } catch (contextError) {
+            console.error('[AIService] Auto /context fetch promise rejected:', contextError);
+            logger.main.error('Auto /context fetch promise rejected', contextError);
+          }
+        }
+
+        await stateManager.endSession(session.id);
 
         // QUEUE PROCESSING: Check if there are queued prompts and process the next one
         // console.log(`[AIService] Message stream completed, checking for queued prompts...`);
