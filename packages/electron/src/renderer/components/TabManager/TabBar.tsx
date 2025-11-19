@@ -484,7 +484,8 @@ export const TabBar: React.FC<TabBarProps> = ({
               ) : (
                 <span className="tab-title">
                   {tab.fileName}
-                  {tab.isDirty && <span className="tab-dirty-indicator">•</span>}
+                  {tab.hasUnacceptedChanges && <span className="tab-unaccepted-indicator" title="Has unaccepted AI changes">•</span>}
+                  {tab.isDirty && !tab.hasUnacceptedChanges && <span className="tab-dirty-indicator" title="Unsaved changes">•</span>}
                 </span>
               )}
               {!tab.isPinned && (
@@ -542,7 +543,8 @@ export const TabBar: React.FC<TabBarProps> = ({
                           <span className="tab-menu-title">
                             {tab.isPinned && '📌 '}
                             {tab.fileName}
-                            {tab.isDirty && ' •'}
+                            {tab.hasUnacceptedChanges && ' •'}
+                            {tab.isDirty && !tab.hasUnacceptedChanges && ' •'}
                           </span>
                         </div>
                       ))}

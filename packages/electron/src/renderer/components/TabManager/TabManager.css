@@ -146,6 +146,14 @@
   margin-left: 2px;
 }
 
+.tab-unaccepted-indicator {
+  color: var(--tab-unaccepted-indicator, #3b82f6);
+  font-weight: bold;
+  margin-left: 2px;
+  font-size: 16px;
+  line-height: 1;
+}
+
 /* Close Button */
 .tab-close-button {
   display: flex;
@@ -387,6 +395,7 @@
   --tab-close-hover-bg: #ef4444;
   --tab-close-hover-color: #ffffff;
   --tab-dirty-indicator: #fbbf24;
+  --tab-unaccepted-indicator: #3b82f6;
   --menu-bg: var(--surface-secondary);
   --menu-border: var(--border-primary);
   --menu-text: var(--text-secondary);

@@ -518,7 +518,10 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
           {tabs.activeTab ? (
             <div className="file-tabs-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <TabManager
-                tabs={tabs.tabs}
+                tabs={tabs.tabs.map(tab => ({
+                  ...tab,
+                  hasUnacceptedChanges: editorRegistry.getEditor(tab.filePath)?.hasPendingDiffs() || false
+                }))}
                 activeTabId={tabs.activeTabId}
                 onTabSelect={tabs.switchTab}
                 onTabClose={tabs.removeTab}

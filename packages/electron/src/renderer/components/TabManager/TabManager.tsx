@@ -13,6 +13,7 @@ export interface Tab {
   isVirtual?: boolean;
   isProcessing?: boolean; // Session is actively processing AI response
   hasUnread?: boolean; // Session has unread AI response
+  hasUnacceptedChanges?: boolean; // Tab has pending AI diffs that haven't been accepted
 }
 
 interface TabManagerProps {

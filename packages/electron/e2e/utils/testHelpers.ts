@@ -37,6 +37,7 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   documentTab: '.tab[data-tab-type="document"]',
   tabTitle: '.tab-title',
   tabDirtyIndicator: '.tab-dirty-indicator',
+  tabUnacceptedIndicator: '.tab-unaccepted-indicator',
   tabProcessingIndicator: '.tab-processing-indicator',
   tabUnreadIndicator: '.tab-unread-indicator',
   fileTabsContainer: '.file-tabs-container',
