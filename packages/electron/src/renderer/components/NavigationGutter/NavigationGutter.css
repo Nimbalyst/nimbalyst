@@ -10,10 +10,26 @@
   flex-shrink: 0;
 }
 
-/* Dev mode indicator - make navigation gutter orange */
-body[data-dev-mode="true"] .navigation-gutter {
-  background-color: #ffb74d !important;
-  border-right: 3px solid #ff9800 !important;
+/* Dev mode indicator - show "TEST MODE" text sideways in quick access area */
+body[data-dev-mode="true"] .nav-quick-access {
+  position: relative;
+}
+
+body[data-dev-mode="true"] .nav-quick-access::before {
+  content: 'TEST MODE';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center;
+  font-size: 20dpx;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--warning-color);
+  opacity: 0.8;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 0;
 }
 
 .nav-section {
