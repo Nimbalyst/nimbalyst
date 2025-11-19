@@ -111,6 +111,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [conflictDialogContent, setConflictDialogContent] = useState<string>('');
   const [showBackgroundChangeDialog, setShowBackgroundChangeDialog] = useState(false);
   const [backgroundChangeContent, setBackgroundChangeContent] = useState<string>('');
+  const [showMonacoDiffBar, setShowMonacoDiffBar] = useState(false); // For Monaco diff approval bar
 
   // Refs for stable access in timers/callbacks
   const contentRef = useRef(content);
@@ -213,6 +214,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 // Monaco editor has showDiff method exposed
                 if (editorToUpdate.showDiff) {
                   editorToUpdate.showDiff(oldContent, diskContent);
+                  setShowMonacoDiffBar(true);
 
                   pendingAIEditTagRef.current = {
                     tagId: pendingTags[0].id,
@@ -876,39 +878,49 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             // CRITICAL FIX RC2: Create a promise for the diff update and don't release lock until it completes
             diffUpdatePromise = (async () => {
               try {
-                // FIRST: Reset editor to old (tagged) content to clear existing diff nodes
-                // This is NECESSARY - editor must have oldContent before applyMarkdownReplace can find it
-                const transformers = getEditorTransformers();
+                if (isMarkdown) {
+                  // Markdown files: Use Lexical diff nodes
+                  // FIRST: Reset editor to old (tagged) content to clear existing diff nodes
+                  // This is NECESSARY - editor must have oldContent before applyMarkdownReplace can find it
+                  const transformers = getEditorTransformers();
 
-                if (editorRef.current) {
-                  editorRef.current.update(() => {
-                    const root = $getRoot();
-                    root.clear();
-                    $convertFromEnhancedMarkdownString(oldContent, transformers);
-                  }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
-                }
-
-                // THEN: Apply the new diff replacement
-                // Don't pass oldText - let the command handler extract it from the editor
-                // This handles normalization differences (tables, spacing, etc.)
-                const replacements: TextReplacement[] = [{
-                  newText: newContent
-                }];
-
-                // Wait a tick for the editor to update
-                await new Promise(resolve => setTimeout(resolve, 100));
-
-                // Mark that we're applying a diff programmatically (not a user edit)
-                isApplyingDiffRef.current = true;
-                try {
                   if (editorRef.current) {
-                    editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
-                    console.log(`[TabEditor] Updated diff with new edits`);
+                    editorRef.current.update(() => {
+                      const root = $getRoot();
+                      root.clear();
+                      $convertFromEnhancedMarkdownString(oldContent, transformers);
+                    }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
                   }
-                } finally {
-                  // Wait for DOM to fully render with CSS classes
-                  await new Promise(resolve => setTimeout(resolve, 500));
-                  isApplyingDiffRef.current = false;
+
+                  // THEN: Apply the new diff replacement
+                  // Don't pass oldText - let the command handler extract it from the editor
+                  // This handles normalization differences (tables, spacing, etc.)
+                  const replacements: TextReplacement[] = [{
+                    newText: newContent
+                  }];
+
+                  // Wait a tick for the editor to update
+                  await new Promise(resolve => setTimeout(resolve, 100));
+
+                  // Mark that we're applying a diff programmatically (not a user edit)
+                  isApplyingDiffRef.current = true;
+                  try {
+                    if (editorRef.current) {
+                      editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+                      console.log(`[TabEditor] Updated diff with new edits`);
+                    }
+                  } finally {
+                    // Wait for DOM to fully render with CSS classes
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    isApplyingDiffRef.current = false;
+                  }
+                } else {
+                  // Code files: Use Monaco's built-in diff editor
+                  if (editorRef.current && editorRef.current.showDiff) {
+                    console.log(`[TabEditor] Showing Monaco diff - old: ${oldContent.length}, new: ${newContent.length}`);
+                    editorRef.current.showDiff(oldContent, newContent);
+                    setShowMonacoDiffBar(true);
+                  }
                 }
               } catch (error) {
                 logger.ui.error(`[TabEditor] Failed to update diff:`, error);
@@ -927,37 +939,47 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             diffUpdatePromise = (async () => {
               try {
                 if (editorRef.current) {
-                  const transformers = getEditorTransformers();
+                  if (isMarkdown) {
+                    // Markdown files: Use Lexical diff nodes
+                    const transformers = getEditorTransformers();
 
-                  console.log(`[TabEditor] Loading old content for first-time diff (length: ${oldContent.length})`);
+                    console.log(`[TabEditor] Loading old content for first-time diff (length: ${oldContent.length})`);
 
-                  // Load the old (tagged) content - this will be the baseline for diff
-                  editorRef.current.update(() => {
-                    const root = $getRoot();
-                    root.clear();
-                    $convertFromEnhancedMarkdownString(oldContent, transformers);
-                  }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
+                    // Load the old (tagged) content - this will be the baseline for diff
+                    editorRef.current.update(() => {
+                      const root = $getRoot();
+                      root.clear();
+                      $convertFromEnhancedMarkdownString(oldContent, transformers);
+                    }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
 
-                  // THEN: Apply the diff replacement to show changes from old to new
-                  // Don't pass oldText - let the command handler extract it from the editor
-                  // This handles normalization differences (tables, spacing, etc.)
-                  const replacements: TextReplacement[] = [{
-                    newText: newContent
-                  }];
+                    // THEN: Apply the diff replacement to show changes from old to new
+                    // Don't pass oldText - let the command handler extract it from the editor
+                    // This handles normalization differences (tables, spacing, etc.)
+                    const replacements: TextReplacement[] = [{
+                      newText: newContent
+                    }];
 
-                  // Wait longer for the editor to fully process the content load
-                  console.log(`[TabEditor] Waiting for content load to complete...`);
-                  await new Promise(resolve => setTimeout(resolve, 250));
+                    // Wait longer for the editor to fully process the content load
+                    console.log(`[TabEditor] Waiting for content load to complete...`);
+                    await new Promise(resolve => setTimeout(resolve, 250));
 
-                  // Mark that we're applying a diff programmatically (not a user edit)
-                  isApplyingDiffRef.current = true;
-                  try {
-                    editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
-                    console.log(`[TabEditor] Dispatched APPLY_MARKDOWN_REPLACE_COMMAND`);
-                  } finally {
-                    // Reset flag after a small delay to ensure content change handler has run
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    isApplyingDiffRef.current = false;
+                    // Mark that we're applying a diff programmatically (not a user edit)
+                    isApplyingDiffRef.current = true;
+                    try {
+                      editorRef.current.dispatchCommand(APPLY_MARKDOWN_REPLACE_COMMAND, replacements);
+                      console.log(`[TabEditor] Dispatched APPLY_MARKDOWN_REPLACE_COMMAND`);
+                    } finally {
+                      // Reset flag after a small delay to ensure content change handler has run
+                      await new Promise(resolve => setTimeout(resolve, 100));
+                      isApplyingDiffRef.current = false;
+                    }
+                  } else {
+                    // Code files: Use Monaco's built-in diff editor
+                    if (editorRef.current.showDiff) {
+                      console.log(`[TabEditor] Showing Monaco diff (first time) - old: ${oldContent.length}, new: ${newContent.length}`);
+                      editorRef.current.showDiff(oldContent, newContent);
+                      setShowMonacoDiffBar(true);
+                    }
                   }
 
                   // CRITICAL FIX RC7: Store tag info ONLY after successful diff application
@@ -1571,6 +1593,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       // Clear pending tag ref
       pendingAIEditTagRef.current = null;
 
+      // Hide the diff approval bar
+      setShowMonacoDiffBar(false);
+
       // Update content and saved state
       setContent(newContent);
       setLastSavedContent(newContent);
@@ -1613,6 +1638,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
       // Clear pending tag ref
       pendingAIEditTagRef.current = null;
+
+      // Hide the diff approval bar
+      setShowMonacoDiffBar(false);
 
       // Update content and saved state
       setContent(oldContent);
@@ -1788,7 +1816,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
             </>
           ) : (
             <>
-              {!isMarkdown && pendingAIEditTagRef.current && (
+              {!isMarkdown && showMonacoDiffBar && (
                 <MonacoDiffApprovalBar
                   fileName={fileName}
                   onAcceptAll={handleMonacoDiffAccept}
