@@ -7,15 +7,15 @@
 - Full-text search across all your AI chat sessions
 
 **File Tree**
+- Natural sorting for easier navigation
 - Filter file tree to show only git modified files
 - Filter files by read/written status
 - Type-specific icons for better file type recognition
-- Natural sorting for easier navigation
 
 **AI Chat**
 - Token usage breakdown showing category details
 - Sessions automatically named via MCP
-- Floating actions in agent transcript for quick access
+- Floating prompts outline dropdown in agent transcript for quick access
 - Find functionality in agent transcript
 
 **Code Editing**
@@ -23,8 +23,6 @@
 - Markdown syntax highlighting in Monaco editor
 - AI edits to code files now show approval controls for review
 
-**Commands**
-- /bug-report command for interactive bug reports
 
 **Other**
 - Discord link added to Help menu
