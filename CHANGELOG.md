@@ -19,6 +19,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.32] - 2025-11-19
+
+
+### Added
+- File tree filter for git modified files
+- Orange gutter indicator when running in dev mode
+
+### Changed
+- Replace orange dev mode background with "TEST MODE" text indicator
+- Update review-branch.md to include OS interoperability
+
+### Fixed
+- Session history timestamp display and timezone handling
+- Monaco diff approval bar now appears for AI edits to code files
+- Detect expired Claude Code sessions and show clear error message
+- Path bug causing slash commands not to load
+
+### Removed
+- Debug logs from MonacoDiffApprovalBar
+
 ## [0.45.31] - 2025-11-18
 
 
