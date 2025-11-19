@@ -7,6 +7,7 @@ interface SessionListItemProps {
   id: string;
   title: string;
   createdAt: number;
+  updatedAt?: number;
   isActive: boolean;
   isLoaded?: boolean; // Whether session is loaded in a tab
   isProcessing?: boolean; // Whether session is actively processing
@@ -22,6 +23,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   id,
   title,
   createdAt,
+  updatedAt,
   isActive,
   isLoaded = false,
   isProcessing = false,
@@ -47,7 +49,20 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
     ? displayTitle.substring(0, 40) + '...'
     : displayTitle;
 
-  const relativeTime = getRelativeTimeString(createdAt);
+  // Use updatedAt if available, otherwise fall back to createdAt
+  const timestamp = updatedAt || createdAt;
+  const relativeTime = getRelativeTimeString(timestamp);
+
+  // Format the full datetime for display in local timezone
+  const fullDateTime = new Date(timestamp).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short'
+  });
 
   // Extract model ID from provider:model format
   const displayModel = model?.includes(':') ? model.split(':')[1] : model;
@@ -79,6 +94,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
       <div className="session-list-item-content">
         <div className="session-list-item-title">{truncatedTitle}</div>
         <div className="session-list-item-meta">
+          <span className="session-list-item-datetime">{fullDateTime}</span>
           {displayModel && <span className="session-list-item-model">{displayModel}</span>}
         </div>
       </div>

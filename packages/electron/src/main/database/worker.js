@@ -1,6 +1,27 @@
 /**
  * PGLite Worker Thread (JavaScript)
  * Runs PGLite in an isolated worker thread to avoid module conflicts
+ *
+ * CRITICAL: Date/Timestamp Handling
+ * ==================================
+ * PostgreSQL TIMESTAMP columns store UTC time but return Date objects to JavaScript
+ * that are parsed as LOCAL time. This creates a timezone mismatch.
+ *
+ * Example:
+ *   - PostgreSQL stores: "2025-11-19 04:25:00" (UTC)
+ *   - PGlite returns: Date object representing "2025-11-19 04:25:00 EST" (local)
+ *   - This is WRONG - it should be converted to "2025-11-18 23:25:00 EST"
+ *
+ * Solution:
+ *   - The toMillis() function in PGLiteSessionStore.ts handles this conversion
+ *   - It treats Date object components as UTC and converts to proper epoch milliseconds
+ *   - JavaScript's toLocaleString() then correctly displays in local timezone
+ *
+ * Rules:
+ *   1. Always use CURRENT_TIMESTAMP for database inserts/updates (PostgreSQL handles as UTC)
+ *   2. Never use Date.now() with to_timestamp() - causes double timezone conversion
+ *   3. All timestamp retrieval must go through toMillis() for proper UTC conversion
+ *   4. Display timestamps using toLocaleString() to show in user's local timezone
  */
 
 const { parentPort, workerData } = require('worker_threads');
@@ -291,6 +312,13 @@ class PGLiteWorker {
       CREATE INDEX IF NOT EXISTS idx_ai_sessions_workspace ON ai_sessions(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_ai_sessions_created ON ai_sessions(created_at);
       CREATE INDEX IF NOT EXISTS idx_ai_sessions_type ON ai_sessions(session_type);
+      CREATE INDEX IF NOT EXISTS idx_ai_sessions_updated ON ai_sessions(updated_at);
+
+      -- One-time fix: Ensure all sessions have updated_at set to at least created_at
+      -- This fixes sessions created before updated_at tracking was working properly
+      UPDATE ai_sessions
+      SET updated_at = created_at
+      WHERE updated_at < created_at OR updated_at IS NULL;
     `);
 
     // Add read state columns to existing ai_sessions tables (migration)

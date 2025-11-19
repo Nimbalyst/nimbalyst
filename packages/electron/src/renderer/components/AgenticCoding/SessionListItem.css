@@ -93,6 +93,12 @@
   margin-top: 0.125rem;
 }
 
+.session-list-item-datetime {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
 .session-list-item-model {
   overflow: hidden;
   text-overflow: ellipsis;

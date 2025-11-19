@@ -140,25 +140,19 @@ export async function registerSessionHandlers() {
     ipcMain.handle('sessions:list', async (event, workspacePath: string) => {
         try {
             const entries = await AISessionsRepository.list(workspacePath);
-            const sessions = [];
-
-            for (const entry of entries) {
-                const session = await AISessionsRepository.get(entry.id);
-                if (session) {
-                    sessions.push({
-                        id: session.id,
-                        createdAt: session.createdAt,
-                        updatedAt: session.updatedAt,
-                        name: session.title,
-                        title: session.title,
-                        provider: session.provider,
-                        model: session.model,
-                        sessionType: session.sessionType || 'chat',
-                        messageCount: entry.messageCount || 0,
-                        metadata: session.metadata || {}
-                    });
-                }
-            }
+            // Use entry data directly - it already has all the info we need including updatedAt
+            const sessions = entries.map(entry => ({
+                id: entry.id,
+                createdAt: entry.createdAt,
+                updatedAt: entry.updatedAt,
+                name: entry.title,
+                title: entry.title,
+                provider: entry.provider,
+                model: entry.model,
+                sessionType: entry.sessionType || 'chat',
+                messageCount: entry.messageCount || 0,
+                metadata: {}
+            }));
 
             return { success: true, sessions };
         } catch (error) {

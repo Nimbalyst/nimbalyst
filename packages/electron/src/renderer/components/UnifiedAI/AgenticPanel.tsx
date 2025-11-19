@@ -112,6 +112,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
   const [sessionHistoryRefreshTrigger, setSessionHistoryRefreshTrigger] = useState(0);
   const [renamedSession, setRenamedSession] = useState<{ id: string; title: string } | null>(null);
+  const [updatedSession, setUpdatedSession] = useState<{ id: string; timestamp: number } | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   // Reload coordination for database-backed session state
@@ -932,6 +933,9 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       }
 
       scheduleSessionReload(data.sessionId, { reason: 'message-logged', minInterval: 120 });
+
+      // Update session timestamp in SessionHistory without database reload
+      setUpdatedSession({ id: data.sessionId, timestamp: Date.now() });
 
       // If this is the active tab, auto-mark as read after message completion
       // Use a delay to ensure the reload completes first
@@ -1965,6 +1969,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             processingSessions={processingSessions}
             unreadSessions={unreadSessions}
             renamedSession={renamedSession}
+            updatedSession={updatedSession}
             onSessionSelect={openSessionInTab}
             onSessionDelete={deleteSession}
             onNewSession={createNewSession}

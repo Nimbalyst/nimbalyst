@@ -24,6 +24,7 @@ interface SessionHistoryProps {
   processingSessions?: Set<string>; // IDs of sessions currently processing
   unreadSessions?: Set<string>; // IDs of sessions with unread messages
   renamedSession?: { id: string; title: string } | null; // Session that was just renamed
+  updatedSession?: { id: string; timestamp: number } | null; // Session that was just updated
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete?: (sessionId: string) => void;
   onNewSession?: () => void;
@@ -54,6 +55,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   processingSessions = new Set(),
   unreadSessions = new Set(),
   renamedSession = null,
+  updatedSession = null,
   onSessionSelect,
   onSessionDelete,
   onNewSession,
@@ -76,8 +78,6 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   // Load sessions from database
   const loadSessions = useCallback(async (query?: string) => {
     try {
-      // TODO: Debug logging - uncomment if needed
-      // console.log('[SessionHistory] loadSessions called, workspace:', workspacePath, 'query:', query);
       setLoading(true);
       setError(null);
 
@@ -85,8 +85,6 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       const result = query && query.trim()
         ? await window.electronAPI.invoke('sessions:search', workspacePath, query.trim())
         : await window.electronAPI.invoke('sessions:list', workspacePath);
-      // TODO: Debug logging - uncomment if needed
-      // console.log('[SessionHistory] Loaded', result?.sessions?.length || 0, 'sessions');
 
       if (result.success && Array.isArray(result.sessions)) {
         // Map sessions with base data only. Visual indicators (isProcessing, hasUnread)
@@ -147,6 +145,18 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     }
   }, [renamedSession]);
 
+  // Update session timestamp when updated (efficient update without database reload)
+  useEffect(() => {
+    if (updatedSession) {
+      setSessions(prevSessions => prevSessions.map(session => {
+        if (session.id === updatedSession.id) {
+          return { ...session, updatedAt: updatedSession.timestamp };
+        }
+        return session;
+      }));
+    }
+  }, [updatedSession]);
+
   const handleToggleGroup = (groupName: string) => {
     if (collapsedGroups.includes(groupName)) {
       onCollapsedGroupsChange(collapsedGroups.filter(g => g !== groupName));
@@ -187,8 +197,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   }, [sortDropdownOpen]);
 
   // No client-side filtering - search is done server-side
-  // Group sessions by time using the selected sort field
-  const groupedSessions = groupSessionsByTime(sessions, sortBy === 'updated' ? 'updatedAt' : 'createdAt');
+  // Group sessions by time - ALWAYS use updatedAt for grouping
+  const groupedSessions = groupSessionsByTime(sessions, 'updatedAt');
   const groupKeys = Object.keys(groupedSessions) as TimeGroupKey[];
 
   if (loading) {
@@ -485,6 +495,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
                     id={session.id}
                     title={session.title || 'Untitled Session'}
                     createdAt={session.createdAt}
+                    updatedAt={session.updatedAt}
                     isActive={session.id === activeSessionId}
                     isLoaded={loadedSessionIds.includes(session.id)}
                     onClick={() => onSessionSelect(session.id)}

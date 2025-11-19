@@ -319,6 +319,54 @@ The Nimbalyst app uses **PGLite** (PostgreSQL in WebAssembly) for all data stora
 - **Indexing**: Optimized indexes for fast queries on projects, timestamps, and file paths
 - **Protocol server**: Optional PostgreSQL protocol server for external database access
 
+### CRITICAL: Date/Timestamp Handling
+
+**Problem:** PostgreSQL TIMESTAMP columns store UTC time, but PGlite returns Date objects that JavaScript interprets as LOCAL time, creating a timezone mismatch.
+
+**Example of the bug:**
+```javascript
+// PostgreSQL stores: "2025-11-19 04:25:00" (UTC)
+// PGlite returns: Date object parsed as "2025-11-19 04:25:00 EST" (local)
+// This is WRONG - should be "2025-11-18 23:25:00 EST"
+```
+
+**Solution implemented:**
+- The `toMillis()` function in `PGLiteSessionStore.ts` handles timezone conversion
+- It extracts Date components and treats them as UTC using `Date.UTC()`
+- JavaScript's `toLocaleString()` then correctly displays in the user's timezone
+
+**Rules when working with database timestamps:**
+
+1. ✅ **DO**: Use `CURRENT_TIMESTAMP` for database inserts/updates
+   ```sql
+   UPDATE ai_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = $1
+   ```
+
+2. ❌ **DON'T**: Use `Date.now()` with `to_timestamp()` - causes double conversion
+   ```sql
+   -- WRONG - Don't do this!
+   UPDATE ai_sessions SET updated_at = to_timestamp($1 / 1000.0) WHERE id = $1
+   ```
+
+3. ✅ **DO**: Retrieve timestamps through `toMillis()` function
+   ```typescript
+   const createdAt = toMillis(row.created_at);  // Converts UTC to proper epoch ms
+   ```
+
+4. ✅ **DO**: Display with `toLocaleString()` for user's local timezone
+   ```typescript
+   new Date(timestamp).toLocaleString(undefined, {
+     month: 'short', day: 'numeric', year: 'numeric',
+     hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+   });
+   ```
+
+**Related files:**
+- `packages/electron/src/main/database/worker.js` - Database schema and comments
+- `packages/electron/src/main/services/PGLiteSessionStore.ts` - toMillis() implementation
+- `packages/electron/src/main/services/PGLiteAgentMessagesStore.ts` - Uses CURRENT_TIMESTAMP
+- `packages/electron/src/renderer/components/AgenticCoding/SessionListItem.tsx` - Displays timestamps
+
 ## File Operations
 
 ### Project Sidebar
