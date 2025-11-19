@@ -295,12 +295,12 @@ async function tryCreateSessionNamingServer(port: number): Promise<any> {
           aiSessionId
         });
 
-        console.log(`[Session Naming MCP] New connection for AI session ${aiSessionId}, transport ID: ${transport.sessionId}`);
+        // console.log(`[Session Naming MCP] New connection for AI session ${aiSessionId}, transport ID: ${transport.sessionId}`);
 
         // Connect server to transport
         server.connect(transport).then(() => {
           transport.onclose = () => {
-            console.log(`[Session Naming MCP] Connection closed for AI session ${aiSessionId}`);
+            // console.log(`[Session Naming MCP] Connection closed for AI session ${aiSessionId}`);
             activeTransports.delete(transport.sessionId);
           };
         }).catch(error => {
