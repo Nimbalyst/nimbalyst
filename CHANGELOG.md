@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.34] - 2025-11-19
+
+
+### Added
+<!-- New features go here -->
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- Improve session history refresh experience
+- Correct function name in session delete handler
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.33] - 2025-11-19
 
 
