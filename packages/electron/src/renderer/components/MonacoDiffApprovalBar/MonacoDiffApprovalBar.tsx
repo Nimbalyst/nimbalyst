@@ -21,23 +21,15 @@ export const MonacoDiffApprovalBar: React.FC<MonacoDiffApprovalBarProps> = ({
   onRejectAll,
   fileName,
 }) => {
-  console.log('[MonacoDiffApprovalBar] Rendering approval bar for file:', fileName);
-  console.log('[MonacoDiffApprovalBar] onAcceptAll type:', typeof onAcceptAll);
-  console.log('[MonacoDiffApprovalBar] onAcceptAll name:', onAcceptAll?.name);
-
   const handleAcceptClick = () => {
-    console.log('[MonacoDiffApprovalBar] Accept All clicked');
-    console.log('[MonacoDiffApprovalBar] About to call onAcceptAll');
     try {
       onAcceptAll();
-      console.log('[MonacoDiffApprovalBar] onAcceptAll returned successfully');
     } catch (error) {
       console.error('[MonacoDiffApprovalBar] Error calling onAcceptAll:', error);
     }
   };
 
   const handleRejectClick = () => {
-    console.log('[MonacoDiffApprovalBar] Reject All clicked');
     onRejectAll();
   };
 
