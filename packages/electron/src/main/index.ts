@@ -419,6 +419,16 @@ app.whenReady().then(async () => {
                 updateWorkspaceState(workspacePath, (state) => {
                     state.fileTreeFilter = filterToApply as any;
                 });
+
+                // Track git-worktree filter usage with set-once property
+                if (filterToApply === 'git-worktree') {
+                    analytics.sendEvent('workspace_opened_with_filter', {
+                        filter: 'git-worktree',
+                        $set_once: {
+                            'ever_opened_direct_to_worktree': true
+                        }
+                    });
+                }
             } else {
                 logger.main.warn(`Invalid filter '${filterToApply}' specified via CLI. Valid filters: ${validFilters.join(', ')}`);
             }
