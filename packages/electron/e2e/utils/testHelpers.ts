@@ -60,7 +60,7 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   attachmentFilename: '.attachment-filename',
   attachmentRemoveButton: '.attachment-remove',
 
-  // Diff approval - use data-action attributes for reliable targeting
+  // Diff approval (Lexical/Markdown) - use data-action attributes for reliable targeting
   diffAcceptButton: 'button[data-action="accept-single"]',
   diffRejectButton: 'button[data-action="reject-single"]',
   diffAcceptAllButton: 'button.diff-accept-all-button[data-action="accept-all"]',
@@ -69,6 +69,13 @@ export const PLAYWRIGHT_TEST_SELECTORS = {
   rejectAllButton: 'button.diff-reject-all-button[data-action="reject-all"]', // Alias for compatibility
   diffApprovalBar: '.diff-approval-bar',
   diffChangeCounter: '.diff-change-counter',
+
+  // Monaco diff approval (Code files)
+  monacoDiffApprovalBar: '.monaco-diff-approval-bar',
+  monacoDiffApprovalBarLabel: '.monaco-diff-approval-bar-label',
+  monacoDiffAcceptButton: '.monaco-diff-approval-bar-button-accept',
+  monacoDiffRejectButton: '.monaco-diff-approval-bar-button-reject',
+  monacoDiffEditor: '.monaco-diff-editor',
 
   // Transcript elements
   richTranscriptMessage: '.rich-transcript-message',

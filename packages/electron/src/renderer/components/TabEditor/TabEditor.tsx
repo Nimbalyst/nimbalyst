@@ -1603,6 +1603,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       contentRef.current = newContent;
       setIsDirty(false);
 
+      // CRITICAL: Update Monaco editor's content after exiting diff mode
+      // Without this, Monaco will revert to the old content when it switches back to normal mode
+      if (editorRef.current.setContent) {
+        console.log('[TabEditor] Updating Monaco editor content after diff acceptance');
+        editorRef.current.setContent(newContent);
+      }
+
       logger.ui.info('[TabEditor] Monaco diff accepted successfully');
     } catch (error) {
       logger.ui.error('[TabEditor] Error accepting Monaco diff:', error);

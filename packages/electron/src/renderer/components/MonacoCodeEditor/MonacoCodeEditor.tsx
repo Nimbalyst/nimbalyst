@@ -372,7 +372,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
         <Editor
           height="100%"
           language={language}
-          value={initialContent}
+          value={content}
           theme={monacoTheme}
           onMount={handleEditorMount}
           options={{
