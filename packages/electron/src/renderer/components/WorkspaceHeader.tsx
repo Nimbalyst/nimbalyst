@@ -21,32 +21,3 @@ export interface WorkspaceHeaderProps {
   subtitle: string; // e.g., "Plan", "Code", "History"
   actions?: React.ReactNode; // Optional action buttons
 }
-
-export function WorkspaceHeader({
-  workspacePath,
-  workspaceName,
-  subtitle,
-  actions
-}: WorkspaceHeaderProps) {
-  const workspaceColor = generateWorkspaceColor(workspacePath);
-  const displayName = workspaceName || workspacePath.split('/').pop() || workspacePath;
-
-  return (
-    <div className="workspace-header-container" style={{ borderLeftColor: workspaceColor }}>
-      <div className="workspace-identity">
-        <div className="workspace-name-row">
-          <h3 className="workspace-name">{displayName}</h3>
-          <span className="workspace-subtitle">{subtitle}</span>
-        </div>
-        <div className="workspace-path" title={workspacePath}>
-          {workspacePath}
-        </div>
-      </div>
-      {actions && (
-        <div className="workspace-header-actions">
-          {actions}
-        </div>
-      )}
-    </div>
-  );
-}
