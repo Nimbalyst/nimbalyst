@@ -120,10 +120,10 @@ test.describe('AI Prompt Queueing', () => {
     // Wait for AI to start processing (loading state)
     await page.waitForTimeout(1000);
 
-    // Check that send button is replaced with queue button
-    const queueButton = page.locator('.ai-chat-queue-button');
-    await expect(queueButton).toBeVisible({ timeout: 5000 });
-    console.log('[TEST] ✓ Queue button visible (AI is processing)');
+    // Check that send button is replaced with cancel button (indicating loading state)
+    const cancelButton = page.locator('.ai-chat-cancel-button');
+    await expect(cancelButton).toBeVisible({ timeout: 5000 });
+    console.log('[TEST] ✓ Cancel button visible (AI is processing)');
 
     // While AI is processing, queue a second prompt
     console.log('\n========== QUEUEING SECOND PROMPT ==========');
@@ -133,12 +133,6 @@ test.describe('AI Prompt Queueing', () => {
 
     console.log('[TEST] Checking queue state...');
 
-    // Verify queue count badge shows 1
-    const queueBadge = page.locator('.ai-chat-queue-button .queue-badge');
-    await expect(queueBadge).toBeVisible({ timeout: 2000 });
-    await expect(queueBadge).toHaveText('1');
-    console.log('[TEST] ✓ Queue badge shows: 1');
-
     // Verify queue list shows the queued prompt
     const queueList = page.locator('.prompt-queue-list');
     await expect(queueList).toBeVisible({ timeout: 2000 });
@@ -146,7 +140,12 @@ test.describe('AI Prompt Queueing', () => {
     const queueItem = page.locator('.prompt-queue-item');
     await expect(queueItem).toBeVisible();
     await expect(queueItem.locator('.prompt-queue-text')).toContainText('What is 3+3');
-    console.log('[TEST] ✓ Queue list shows queued prompt');
+
+    // Verify queue header shows count
+    const queueCount = page.locator('.prompt-queue-count');
+    await expect(queueCount).toBeVisible();
+    await expect(queueCount).toContainText('1 queued');
+    console.log('[TEST] ✓ Queue list shows queued prompt with count');
 
     console.log('\n========== WAITING FOR FIRST PROMPT TO COMPLETE ==========');
 
@@ -166,29 +165,12 @@ test.describe('AI Prompt Queueing', () => {
     console.log('[TEST] Waiting 2 seconds for queue processing...');
     await page.waitForTimeout(2000);
 
-    // Queue count should decrease to 0
-    console.log('[TEST] Checking queue count after first prompt completion...');
-    const queueButtonAfter = page.locator('.ai-chat-queue-button');
-    if (await queueButtonAfter.isVisible({ timeout: 2000 }).catch(() => false)) {
-      const badgeAfter = queueButtonAfter.locator('.queue-badge');
-      // Badge might not be visible if queue is empty, which is good
-      const badgeExists = await badgeAfter.count();
-      if (badgeExists > 0) {
-        const badgeText = await badgeAfter.textContent();
-        console.log(`[TEST] Queue badge text: "${badgeText}"`);
-        await expect(badgeAfter).toHaveText('0');
-      } else {
-        console.log('[TEST] Queue badge not visible (queue empty)');
-      }
-    } else {
-      console.log('[TEST] Queue button not visible');
-    }
-
     // Queue list should be hidden (empty queue)
     const queueListAfter = page.locator('.prompt-queue-list');
     const queueListVisible = await queueListAfter.isVisible().catch(() => false);
     console.log(`[TEST] Queue list visible: ${queueListVisible}`);
     expect(queueListVisible).toBe(false);
+    console.log('[TEST] ✓ Queue cleared after processing');
 
     console.log('\n========== WAITING FOR SECOND PROMPT TO COMPLETE ==========');
 
@@ -310,15 +292,15 @@ test.describe('AI Prompt Queueing', () => {
     await aiInput.fill('Third queued prompt');
     await aiInput.press('Enter');
 
-    // Check queue badge shows 3
-    const queueBadge = page.locator('.ai-chat-queue-button .queue-badge');
-    await expect(queueBadge).toBeVisible({ timeout: 2000 });
-    await expect(queueBadge).toHaveText('3');
-
     // Verify queue list shows all 3 items
     const queueItems = page.locator('.prompt-queue-item');
     await expect(queueItems).toHaveCount(3);
 
-    console.log('[Test] Queue badge and list verified with 3 items');
+    // Check queue header shows count
+    const queueCount = page.locator('.prompt-queue-count');
+    await expect(queueCount).toBeVisible({ timeout: 2000 });
+    await expect(queueCount).toContainText('3 queued');
+
+    console.log('[Test] Queue list verified with 3 items');
   });
 });

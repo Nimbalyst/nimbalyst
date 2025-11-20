@@ -577,37 +577,18 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             }}
           />
           {isLoading ? (
-            <>
-              {onQueue && (
-                <button
-                  className="ai-chat-queue-button"
-                  onClick={handleQueue}
-                  disabled={disabled || !value.trim()}
-                  title="Queue this prompt (Cmd+Shift+Enter)"
-                  aria-label="Queue prompt"
-                  style={{
-                    marginRight: '4px'
-                  }}
-                >
-                  {queueCount > 0 && <span className="queue-badge">{queueCount}</span>}
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                </button>
-              )}
-              {onCancel && (
-                <button
-                  className="ai-chat-cancel-button"
-                  onClick={onCancel}
-                  title="Cancel request (Esc)"
-                  aria-label="Cancel request"
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-              )}
-            </>
+            onCancel && (
+              <button
+                className="ai-chat-cancel-button"
+                onClick={onCancel}
+                title="Cancel request (Esc)"
+                aria-label="Cancel request"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )
           ) : (
             <button
               className="ai-chat-send-button"

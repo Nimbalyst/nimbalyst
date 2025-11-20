@@ -550,45 +550,6 @@
   animation: none;
 }
 
-.ai-chat-queue-button {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface-tertiary);
-  border: 1px solid var(--border-primary);
-  border-radius: 6px;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all 0.2s;
-  position: relative;
-}
-
-.ai-chat-queue-button:hover:not(:disabled) {
-  background: var(--surface-hover);
-  transform: scale(1.05);
-}
-
-.ai-chat-queue-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.ai-chat-queue-button .queue-badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  background: var(--accent-primary);
-  color: white;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 5px;
-  border-radius: 10px;
-  min-width: 16px;
-  text-align: center;
-}
-
 @keyframes pulse {
   0%, 100% {
     opacity: 1;
