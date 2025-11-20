@@ -135,8 +135,8 @@ export class PGLiteDatabaseWorker {
           const response = await dialog.showMessageBox({
             type: 'warning',
             title: 'Database Corruption Detected',
-            message: 'The application database was corrupted, but verified backups are available.',
-            detail: `Would you like to:\n\n• Restore from backup (recommended) - Recover your AI sessions and history\n• Start fresh - Create a new database and lose previous data\n\nThe corrupted database has been backed up to:\n${initResult.dataDir}.backup-[timestamp]`,
+            message: 'The application database was corrupted, but verified backups are available.\n\nNo file data has been lost.',
+            detail: `Would you like to:\n\n• Restore from backup (recommended) - Recover your AI sessions and history\nor\n• Start fresh - Create a new database and lose previous data\n\nThe corrupted database has been backed up to:\n${initResult.dataDir}.backup-[timestamp]`,
             buttons: ['Restore from Backup', 'Start Fresh'],
             defaultId: 0,
             cancelId: 1
@@ -190,7 +190,7 @@ export class PGLiteDatabaseWorker {
             type: 'warning',
             title: 'Database Recovered',
             message: 'The application database was corrupted and has been automatically repaired.',
-            detail: `A fresh database has been created. Your old data has been backed up to:\n\n${initResult.dataDir}.backup-[timestamp]\n\nPrevious AI chat sessions and document history have been lost. Consider enabling regular backups to prevent data loss in the future.`,
+            detail: `A fresh database has been created. Your old data has been backed up to:\n\n${initResult.dataDir}.backup-[timestamp]\n\nYour document files have not been lost - they are still on disk. Only the internal application database (AI chat sessions and document history) needs to be rebuilt.`,
             buttons: ['OK']
           }).catch(() => {});
         }
