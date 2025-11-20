@@ -568,12 +568,12 @@ export class HistoryManager {
       if (filePath && tags.length === 0) {
         // console.log('[TAG CHECK] No pending tags found for file:', filePath);
       } else if (filePath && tags.length > 0) {
-        console.log('[TAG CHECK] Found pending tag:', JSON.stringify({
-          file: path.basename(filePath),
-          tagId: tags[0].id,
-          status: tags[0].status,
-          age: Date.now() - tags[0].createdAt.getTime() + 'ms',
-        }));
+        // console.log('[TAG CHECK] Found pending tag:', JSON.stringify({
+        //   file: path.basename(filePath),
+        //   tagId: tags[0].id,
+        //   status: tags[0].status,
+        //   age: Date.now() - tags[0].createdAt.getTime() + 'ms',
+        // }));
       }
 
       return tags;

@@ -1,4 +1,4 @@
-/**
+ /**
  * TabEditor - Fully encapsulated editor component for a single file
  *
  * This component owns ALL state for managing one editor instance:
@@ -803,13 +803,13 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           return;
         }
 
-        console.log('[TabEditor] File content differs - will update editor', {
-          fileName,
-          diskLength: newContent.length,
-          editorLength: currentContent.length,
-          diskPreview: newContent.substring(0, 100),
-          editorPreview: currentContent.substring(0, 100),
-        });
+        // console.log('[TabEditor] File content differs - will update editor', {
+        //   fileName,
+        //   diskLength: newContent.length,
+        //   editorLength: currentContent.length,
+        //   diskPreview: newContent.substring(0, 100),
+        //   editorPreview: currentContent.substring(0, 100),
+        // });
 
         // CRITICAL: Check if this is content we just saved
         // If the disk content matches what we last saved, this is definitely our own save
