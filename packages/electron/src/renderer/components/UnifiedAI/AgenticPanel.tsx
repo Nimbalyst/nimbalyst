@@ -66,6 +66,17 @@ interface SessionHistoryRefreshDetail {
 }
 
 /**
+ * Helper function to strip NIMBALYST_SYSTEM_MESSAGE from message content.
+ * The ClaudeCodeProvider appends system messages to user prompts before sending them,
+ * but we don't want these system messages to appear when users navigate history with arrow keys.
+ */
+function stripSystemMessage(content: string): string {
+  // Remove the NIMBALYST_SYSTEM_MESSAGE section that gets appended in ClaudeCodeProvider
+  const systemMessagePattern = /\n\n<NIMBALYST_SYSTEM_MESSAGE>[\s\S]*?<\/NIMBALYST_SYSTEM_MESSAGE>$/;
+  return content.replace(systemMessagePattern, '').trim();
+}
+
+/**
  * AgenticPanel is the top-level container for unified AI interface.
  *
  * Key features:
@@ -1323,10 +1334,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const currentTab = sessionTabs.filter(tab => tab != null).find(tab => tab.id === sessionId);
     if (!currentTab) return;
 
-    // Extract user prompts from session messages
+    // Extract user prompts from session messages, stripping system messages
     const userPrompts = currentTab.sessionData.messages
       .filter(msg => msg.role === 'user')
-      .map(msg => msg.content);
+      .map(msg => stripSystemMessage(msg.content));
 
     if (userPrompts.length === 0) return;
 
