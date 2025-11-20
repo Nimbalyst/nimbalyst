@@ -2,6 +2,9 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useHistory } from '../../hooks/useHistory';
 import { DiffPreviewEditor, type DiffNavigationState } from './DiffPreviewEditor';
 import { TextDiffViewer, type TextDiffNavigationState } from './TextDiffViewer';
+import { MonacoDiffViewer } from './MonacoDiffViewer';
+import { ImageDiffViewer } from './ImageDiffViewer';
+import { getFileType, type EditorType } from '../../utils/fileTypeDetector';
 import './HistoryDialog.css';
 
 interface HistoryDialogProps {
@@ -36,6 +39,11 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
   const [versionAMeta, setVersionAMeta] = useState<{ type: string; timestamp: string } | null>(null);
   const [versionBMeta, setVersionBMeta] = useState<{ type: string; timestamp: string } | null>(null);
   const [navigationState, setNavigationState] = useState<DiffNavigationState | TextDiffNavigationState | null>(null);
+
+  // Detect file type
+  const fileType: EditorType = useMemo(() => {
+    return filePath ? getFileType(filePath) : 'markdown';
+  }, [filePath]);
 
   const displayedSnapshots = useMemo(() => {
     if (!compactView || snapshots.length === 0) {
@@ -449,7 +457,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
                     </span>
                   </div>
                 )}
-                {diffMode && (
+                {diffMode && fileType === 'markdown' && (
                   <>
                     <div className="diff-mode-toggle">
                       <button
@@ -514,30 +522,56 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
 
             {diffMode ? (
               <div className="history-preview-content">
-                {diffViewMode === 'rich' ? (
-                  <DiffPreviewEditor
+                {fileType === 'markdown' ? (
+                  // Markdown files: use rich or text diff
+                  diffViewMode === 'rich' ? (
+                    <DiffPreviewEditor
+                      key={`${versionAMeta?.timestamp}-${versionBMeta?.timestamp}`}
+                      oldMarkdown={versionAContent}
+                      newMarkdown={versionBContent}
+                      onNavigationStateChange={handleNavigationStateChange}
+                      onNavigatePrevious={() => {}}
+                      onNavigateNext={() => {}}
+                      theme={theme}
+                    />
+                  ) : (
+                    <TextDiffViewer
+                      key={`${versionAMeta?.timestamp}-${versionBMeta?.timestamp}`}
+                      oldText={versionAContent}
+                      newText={versionBContent}
+                      onNavigationStateChange={handleNavigationStateChange}
+                      onNavigatePrevious={() => {}}
+                      onNavigateNext={() => {}}
+                    />
+                  )
+                ) : fileType === 'image' ? (
+                  // Image files: use image diff viewer
+                  <ImageDiffViewer
                     key={`${versionAMeta?.timestamp}-${versionBMeta?.timestamp}`}
-                    oldMarkdown={versionAContent}
-                    newMarkdown={versionBContent}
-                    onNavigationStateChange={handleNavigationStateChange}
-                    onNavigatePrevious={() => {}}
-                    onNavigateNext={() => {}}
-                    theme={theme}
+                    oldImagePath={filePath || ''}
+                    newImagePath={filePath || ''}
+                    filePath={filePath || ''}
                   />
                 ) : (
-                  <TextDiffViewer
+                  // Code files: use Monaco diff viewer
+                  <MonacoDiffViewer
                     key={`${versionAMeta?.timestamp}-${versionBMeta?.timestamp}`}
-                    oldText={versionAContent}
-                    newText={versionBContent}
-                    onNavigationStateChange={handleNavigationStateChange}
-                    onNavigatePrevious={() => {}}
-                    onNavigateNext={() => {}}
+                    oldContent={versionAContent}
+                    newContent={versionBContent}
+                    filePath={filePath || ''}
+                    theme={theme}
                   />
                 )}
               </div>
             ) : selectedVersions.length === 1 ? (
               <div className="history-preview-content">
-                <pre>{previewContent}</pre>
+                {fileType === 'image' ? (
+                  <div className="image-preview">
+                    <img src={`file://${filePath}`} alt="Preview" />
+                  </div>
+                ) : (
+                  <pre>{previewContent}</pre>
+                )}
               </div>
             ) : (
               <div className="history-preview-empty">
