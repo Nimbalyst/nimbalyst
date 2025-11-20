@@ -142,7 +142,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       const isSlashCommand = message.trimStart().startsWith('/');
       const currentDocPath = documentContext?.filePath;
       if (currentDocPath && !isSlashCommand) {
-        const fileName = currentDocPath.split('/').pop() || currentDocPath;
+        const fileName = path.basename(currentDocPath) || currentDocPath;
         message = `${message}\n\n<NIMBALYST_SYSTEM_MESSAGE>\nThe user is currently viewing this document:\n<current_open_document>${fileName}</current_open_document>\n</NIMBALYST_SYSTEM_MESSAGE>`;
       }
 
