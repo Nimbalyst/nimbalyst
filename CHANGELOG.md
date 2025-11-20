@@ -19,6 +19,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.35] - 2025-11-20
+
+
+### Added
+- MCP server configuration UI for alpha users
+- File type support to history dialog
+- Export pathResolver utility from utils
+- E2E test for file mention typeahead with all file types
+- Blue dot indicator for pending diffs
+- Track users who have opened from Crystal
+- Message displayed when file tree filter has no results
+- Support for --workspace and --filter CLI arguments to launch with specific workspace and filter
+
+### Changed
+- Improve file mention typeahead display and scrolling
+- Improve tracker loading and file mention path handling
+- Force TrackerTable reload when data changes
+- Maintain running state between queued messages
+- Update filter icon to use actual filter icon
+- Improve database corruption message
+- Remove redundant hamburger menu
+- Remove unused WorkspaceHeader function
+- Logging cleanup
+
+### Fixed
+- Configure Monaco Editor to use local workers in Electron
+- Support URLs with parentheses in markdown links
+- Send completion token on error so UI knows agent turn is done
+- NIMBALYST_SYSTEM_MESSAGE showing when pressing up arrow
+- Wrong path parsing in non-render components
+- Queued messages race conditions with auto-context
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.34] - 2025-11-19
 
 
