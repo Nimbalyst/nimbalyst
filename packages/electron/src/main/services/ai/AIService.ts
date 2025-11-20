@@ -191,6 +191,18 @@ export class AIService {
       return;
     }
 
+    const sendAutoContextEvent = (phase: 'start' | 'end') => {
+      try {
+        event.sender.send(`ai:auto-context-${phase}`, {
+          sessionId: session.id
+        });
+      } catch (err) {
+        console.error('[AIService] Failed to send auto-context lifecycle event:', err);
+      }
+    };
+
+    sendAutoContextEvent('start');
+
     try {
       const contextProvider = ProviderFactory.getProvider(session.provider as AIProviderType, session.id);
       if (!contextProvider) {
@@ -245,6 +257,8 @@ export class AIService {
       console.error('[AIService] Exception while fetching context usage:', contextError);
       logger.main.error('Failed to fetch context usage:', contextError);
       // Don't fail the main request if context fetch fails
+    } finally {
+      sendAutoContextEvent('end');
     }
   }
 
@@ -1177,7 +1191,8 @@ export class AIService {
               event.sender.send('ai:streamResponse', {
                 sessionId: session.id,
                 content: fullResponse,
-                isComplete: true
+                isComplete: true,
+                autoContextPending: session.provider === 'claude-code'
               });
               // console.log('[AIService] COMPLETION SIGNAL SENT TO UI!');
 

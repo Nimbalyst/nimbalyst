@@ -122,6 +122,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   const sessionTabsRef = useRef<SessionTab[]>(sessionTabs);
   const workspacePathRef = useRef(workspacePath);
   const panelInstanceIdRef = useRef<string>(`agentic-panel-${Math.random().toString(36).slice(2)}`);
+  const autoContextSessionsRef = useRef<Set<string>>(new Set());
 
   // Read state tracking - synchronous ref to avoid React state update delay
   const readStateRef = useRef<Map<string, { lastReadMessageTimestamp: number | null }>>(new Map());
@@ -1067,12 +1068,18 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       const reason = data.isComplete ? 'stream-complete' : 'stream-update';
 
       if (data.isComplete) {
-        sendingSessionsRef.current.delete(data.sessionId);
-        setSendingSessions(prev => {
-          const next = new Set(prev);
-          next.delete(data.sessionId);
-          return next;
-        });
+        const holdForAutoContext = data.autoContextPending === true;
+
+        if (holdForAutoContext) {
+          autoContextSessionsRef.current.add(data.sessionId);
+        } else {
+          sendingSessionsRef.current.delete(data.sessionId);
+          setSendingSessions(prev => {
+            const next = new Set(prev);
+            next.delete(data.sessionId);
+            return next;
+          });
+        }
         // Schedule reload to get the latest message from database
         scheduleSessionReload(data.sessionId, { immediate: true, reason });
 
@@ -1144,7 +1151,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const cleanupError = window.electronAPI.onAIError(handleStreamError);
 
     // Handle queued prompt starting
-    const handleQueuePromptStarting = (_event: any, data: { sessionId: string; message: string }) => {
+    const handleQueuePromptStarting = (data: { sessionId: string; message: string }) => {
       if (!data || !data.sessionId) return;
       // Mark session as sending/loading
       sendingSessionsRef.current.add(data.sessionId);
@@ -1153,16 +1160,23 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       // Add user message to UI immediately
       setSessionTabs(prev => prev.filter(tab => tab != null).map(tab => {
         if (tab.id === data.sessionId) {
+          const baseMessages = tab.sessionData.messages || [];
           const userMessage = {
             role: 'user' as const,
             content: data.message,
             timestamp: Date.now()
           };
+          const thinkingMessage = {
+            role: 'assistant' as const,
+            content: '',
+            timestamp: Date.now(),
+            isThinking: true
+          };
           return {
             ...tab,
             sessionData: {
               ...tab.sessionData,
-              messages: [...(tab.sessionData.messages || []), userMessage]
+              messages: [...baseMessages, userMessage, thinkingMessage]
             }
           };
         }
@@ -1173,7 +1187,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     const cleanupQueuePromptStarting = window.electronAPI.on('ai:queue-prompt-starting', handleQueuePromptStarting);
 
     // Handle token usage updates
-    const handleTokenUsageUpdated = (_event: any, data: {
+    const handleTokenUsageUpdated = (data: {
       sessionId: string;
       tokenUsage: {
         inputTokens: number;
@@ -1213,6 +1227,29 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       cleanupTokenUsageUpdated();
     };
   }, [activeTabId, workspacePath, scheduleSessionReload]);
+
+  useEffect(() => {
+    const handleAutoContextEnd = (data: { sessionId: string }) => {
+      if (!data || !data.sessionId) return;
+      if (!autoContextSessionsRef.current.has(data.sessionId)) {
+        return;
+      }
+
+      autoContextSessionsRef.current.delete(data.sessionId);
+      sendingSessionsRef.current.delete(data.sessionId);
+      setSendingSessions(prev => {
+        const next = new Set(prev);
+        next.delete(data.sessionId);
+        return next;
+      });
+    };
+
+    const cleanup = window.electronAPI.on('ai:auto-context-end', handleAutoContextEnd);
+
+    return () => {
+      cleanup?.();
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
