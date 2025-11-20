@@ -50,6 +50,9 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
     return counts;
   });
 
+  // Refresh key to force TrackerTable to reload when data changes
+  const [refreshKey, setRefreshKey] = useState(0);
+
   // Debug logging
    // useEffect(() => {
   //   console.log('[TrackerBottomPanel Component] activePanel:', activePanel, 'height:', height, 'visible:', activePanel !== null);
@@ -145,13 +148,19 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
 
     if (documentService && documentService.watchTrackerItems) {
       unsubscribeTracker = documentService.watchTrackerItems(() => {
-        if (mounted) loadCounts();
+        if (mounted) {
+          loadCounts();
+          setRefreshKey(prev => prev + 1); // Force TrackerTable to reload
+        }
       });
     }
 
     if (documentService && documentService.watchDocumentMetadata) {
       unsubscribeMetadata = documentService.watchDocumentMetadata(() => {
-        if (mounted) loadCounts();
+        if (mounted) {
+          loadCounts();
+          setRefreshKey(prev => prev + 1); // Force TrackerTable to reload
+        }
       });
     }
 
@@ -261,6 +270,7 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
             <div className="bottom-panel-content">
               {activePanel && (
                 <TrackerTable
+                  key={refreshKey}
                   filterType={activePanel}
                   sortBy={trackerSortBy}
                   sortDirection={trackerSortDirection}
