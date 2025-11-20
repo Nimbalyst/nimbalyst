@@ -14,6 +14,7 @@ import type {
 import { globalRegistry } from '../models';
 import './TrackerTable.css';
 import {usePostHog} from "posthog-js/react";
+import path from "path";
 
 export type SortColumn = 'title' | 'type' | 'status' | 'priority' | 'progress' | 'module' | 'lastIndexed';
 export type SortDirection = 'asc' | 'desc';
@@ -136,7 +137,7 @@ function convertFullDocumentToTrackerItems(metadata: any[], trackerType: Tracker
 
       return {
         type: trackerType,
-        title: trackerStatus.title || frontmatter.title || doc.path.split('/').pop()?.replace('.md', '') || 'Untitled',
+        title: trackerStatus.title || frontmatter.title || path.basename(doc.path, '.md') || 'Untitled',
         status,
         priority: (trackerStatus.priority || frontmatter.priority || 'medium') as TrackerItemPriority,
         module: doc.path,

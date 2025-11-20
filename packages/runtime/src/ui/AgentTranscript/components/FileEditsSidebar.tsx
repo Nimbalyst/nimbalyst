@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import type { FileEditSummary } from '../types';
 import { formatTimeAgo } from '../../../utils/dateUtils';
 import './FileEditsSidebar.css';
+import path from "path";
 
 interface FileEditsSidebarProps {
   fileEdits: FileEditSummary[];
@@ -159,7 +160,7 @@ export const FileEditsSidebar: React.FC<FileEditsSidebarProps> = ({
   };
 
   const formatFileName = (filePath: string) => {
-    const parts = filePath.split('/');
+    const parts = filePath.split(path.sep);
     return parts[parts.length - 1];
   };
 
