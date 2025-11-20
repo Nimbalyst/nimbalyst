@@ -12,6 +12,7 @@ import { LMStudioPanel } from './panels/LMStudioPanel';
 import { AdvancedPanel } from './panels/AdvancedPanel';
 import {AnalyticsSettingsPanel} from "./panels/AnalyticsPanel.tsx";
 import { NotificationsPanel } from './panels/NotificationsPanel';
+import { MCPServersPanel } from './panels/MCPServersPanel';
 
 // Apply theme IMMEDIATELY when module loads - BEFORE React renders
 // This prevents flash of wrong theme
@@ -104,7 +105,7 @@ interface AIModelsProps {
   onClose: () => void;
 }
 
-type ProviderId = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio' | 'advanced' | 'analytics' | 'notifications';
+type ProviderId = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio' | 'advanced' | 'analytics' | 'notifications' | 'mcp-servers';
 type NavItemId = ProviderId;
 
 interface Provider {
@@ -340,15 +341,18 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
     // Clear the model cache to force refresh with new API keys
     await window.electronAPI.aiClearModelCache?.();
 
-    // Refresh models for all enabled providers with new API keys
-    for (const [provider, config] of Object.entries(providers)) {
-      if (config.enabled) {
-        await fetchModels(provider);
-      }
-    }
-
+    // Close dialog immediately for better UX
     setHasChanges(false);
     onClose();
+
+    // Refresh models for all enabled providers in the background
+    Promise.all(
+      Object.entries(providers)
+        .filter(([_, config]) => config.enabled)
+        .map(([provider, _]) => fetchModels(provider))
+    ).catch(error => {
+      console.error('Failed to refresh models in background:', error);
+    });
   };
 
   const renderProviderPanel = () => {
@@ -494,6 +498,12 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
             setHasChanges(true);
           }}
         />;
+      case 'mcp-servers':
+        // MCP Servers panel only available in alpha release channel
+        if (releaseChannel === 'alpha') {
+          return <MCPServersPanel />;
+        }
+        return null;
       default:
         return null;
     }
@@ -595,6 +605,14 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
           </div>
 
           <div className="nav-section nav-section-bottom">
+            {releaseChannel === 'alpha' && (
+              <button
+                className={`nav-action-button ${selectedNav === 'mcp-servers' ? 'active' : ''}`}
+                onClick={() => setSelectedNav('mcp-servers')}
+              >
+                MCP Servers
+              </button>
+            )}
             <button
               className={`nav-action-button ${selectedNav === 'notifications' ? 'active' : ''}`}
               onClick={() => setSelectedNav('notifications')}

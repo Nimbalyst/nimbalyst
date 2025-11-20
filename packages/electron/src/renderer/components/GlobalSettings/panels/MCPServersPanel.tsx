@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import './MCPServersPanel.css';
 
 interface MCPServerConfig {
-  command: string;
+  command?: string;
   args?: string[];
+  url?: string;
+  type?: 'stdio' | 'sse';
   env?: Record<string, string>;
 }
 
@@ -15,28 +17,187 @@ interface MCPConfig {
   mcpServers: Record<string, MCPServerConfig>;
 }
 
+interface MCPServerTemplate {
+  id: string;
+  name: string;
+  description: string;
+  docsUrl?: string;
+  config: MCPServerConfig;
+}
+
+const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
+  {
+    id: 'linear',
+    name: 'Linear',
+    description: 'Issue tracking and project management (Official Remote Server)',
+    docsUrl: 'https://linear.app/docs/mcp',
+    config: {
+      type: 'sse',
+      url: 'https://mcp.linear.app/sse',
+      env: {
+        LINEAR_API_KEY: '${LINEAR_API_KEY}'
+      }
+    }
+  },
+  {
+    id: 'github',
+    name: 'GitHub',
+    description: 'Repository management and code collaboration',
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/github',
+    config: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-github'],
+      env: {
+        GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}'
+      }
+    }
+  },
+  {
+    id: 'gitlab',
+    name: 'GitLab',
+    description: 'DevOps platform and repository management',
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab',
+    config: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-gitlab'],
+      env: {
+        GITLAB_PERSONAL_ACCESS_TOKEN: '${GITLAB_PERSONAL_ACCESS_TOKEN}',
+        GITLAB_API_URL: '${GITLAB_API_URL:-https://gitlab.com}'
+      }
+    }
+  },
+  {
+    id: 'slack',
+    name: 'Slack',
+    description: 'Team communication and messaging',
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/slack',
+    config: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-slack'],
+      env: {
+        SLACK_BOT_TOKEN: '${SLACK_BOT_TOKEN}',
+        SLACK_TEAM_ID: '${SLACK_TEAM_ID}'
+      }
+    }
+  },
+  {
+    id: 'postgres',
+    name: 'PostgreSQL',
+    description: 'Database queries and management',
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/postgres',
+    config: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-postgres'],
+      env: {
+        POSTGRES_CONNECTION_STRING: '${POSTGRES_CONNECTION_STRING}'
+      }
+    }
+  },
+  {
+    id: 'filesystem',
+    name: 'Filesystem',
+    description: 'Local file system access',
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem',
+    config: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-filesystem'],
+      env: {}
+    }
+  },
+  {
+    id: 'brave-search',
+    name: 'Brave Search',
+    description: 'Web search capabilities',
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search',
+    config: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-brave-search'],
+      env: {
+        BRAVE_API_KEY: '${BRAVE_API_KEY}'
+      }
+    }
+  },
+  {
+    id: 'google-drive',
+    name: 'Google Drive',
+    description: 'Access files and documents in Google Drive',
+    docsUrl: 'https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive',
+    config: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-gdrive'],
+      env: {}
+    }
+  }
+];
+
 export function MCPServersPanel() {
   const [servers, setServers] = useState<MCPServerWithName[]>([]);
   const [selectedServer, setSelectedServer] = useState<MCPServerWithName | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const [configScope, setConfigScope] = useState<'user' | 'workspace'>('user');
+  const [availableProjects, setAvailableProjects] = useState<Array<{ path: string; name: string }>>([]);
+  const [selectedProjectPath, setSelectedProjectPath] = useState<string | null>(null);
 
   // Form state
   const [formName, setFormName] = useState('');
+  const [formType, setFormType] = useState<'stdio' | 'sse'>('stdio');
   const [formCommand, setFormCommand] = useState('');
+  const [formUrl, setFormUrl] = useState('');
   const [formArgs, setFormArgs] = useState<string[]>([]);
   const [formEnv, setFormEnv] = useState<Array<{ key: string; value: string }>>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [testMessage, setTestMessage] = useState<string>('');
 
   useEffect(() => {
-    loadServers();
+    // Get current workspace and recent projects
+    const loadProjects = async () => {
+      try {
+        // Get current workspace
+        const workspace = await window.electronAPI.invoke('workspace:get-current');
+        const currentPath = workspace?.path || null;
+        setWorkspacePath(currentPath);
+
+        // Get recent projects from settings
+        const recentProjects = await window.electronAPI.invoke('settings:get-recent-projects');
+        if (recentProjects && Array.isArray(recentProjects)) {
+          const projects = recentProjects.map((p: any) => ({
+            path: typeof p === 'string' ? p : p.path,
+            name: typeof p === 'string' ? p.split('/').pop() : (p.name || p.path.split('/').pop())
+          }));
+          setAvailableProjects(projects);
+
+          // Pre-select current workspace or most recent project
+          if (currentPath) {
+            setSelectedProjectPath(currentPath);
+          } else if (projects.length > 0) {
+            setSelectedProjectPath(projects[0].path);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load projects:', err);
+      }
+    };
+    loadProjects();
   }, []);
+
+  // Reload servers when scope or selected project changes
+  useEffect(() => {
+    loadServers();
+  }, [configScope, selectedProjectPath]);
 
   const loadServers = async () => {
     try {
       setLoading(true);
       setError(null);
-      const config: MCPConfig = await window.electronAPI.invoke('mcp-config:read-user');
+
+      // Load from the appropriate scope
+      const config: MCPConfig = configScope === 'workspace' && selectedProjectPath
+        ? await window.electronAPI.invoke('mcp-config:read-workspace', selectedProjectPath)
+        : await window.electronAPI.invoke('mcp-config:read-user');
 
       const serverList: MCPServerWithName[] = Object.entries(config.mcpServers || {}).map(
         ([name, serverConfig]) => ({
@@ -60,7 +221,9 @@ export function MCPServersPanel() {
 
     // Populate form
     setFormName(server.name);
-    setFormCommand(server.command);
+    setFormType(server.type || 'stdio');
+    setFormCommand(server.command || '');
+    setFormUrl(server.url || '');
     setFormArgs(server.args || []);
     setFormEnv(
       Object.entries(server.env || {}).map(([key, value]) => ({ key, value }))
@@ -73,9 +236,32 @@ export function MCPServersPanel() {
 
     // Clear form
     setFormName('');
+    setFormType('stdio');
     setFormCommand('');
+    setFormUrl('');
     setFormArgs([]);
     setFormEnv([]);
+  };
+
+  const handleTemplateSelect = (templateId: string) => {
+    if (!templateId) {
+      setSelectedTemplateId(null);
+      return;
+    }
+
+    const template = MCP_SERVER_TEMPLATES.find(t => t.id === templateId);
+    if (!template) return;
+
+    // Populate form with template
+    setFormName(template.id);
+    setFormType(template.config.type || 'stdio');
+    setFormCommand(template.config.command || '');
+    setFormUrl(template.config.url || '');
+    setFormArgs(template.config.args || []);
+    setFormEnv(
+      Object.entries(template.config.env || {}).map(([key, value]) => ({ key, value }))
+    );
+    setSelectedTemplateId(templateId);
   };
 
   const handleEdit = () => {
@@ -86,7 +272,9 @@ export function MCPServersPanel() {
     if (selectedServer) {
       // Restore form to selected server
       setFormName(selectedServer.name);
-      setFormCommand(selectedServer.command);
+      setFormType(selectedServer.type || 'stdio');
+      setFormCommand(selectedServer.command || '');
+      setFormUrl(selectedServer.url || '');
       setFormArgs(selectedServer.args || []);
       setFormEnv(
         Object.entries(selectedServer.env || {}).map(([key, value]) => ({ key, value }))
@@ -94,7 +282,9 @@ export function MCPServersPanel() {
     } else {
       // Clear form
       setFormName('');
+      setFormType('stdio');
       setFormCommand('');
+      setFormUrl('');
       setFormArgs([]);
       setFormEnv([]);
     }
@@ -107,30 +297,49 @@ export function MCPServersPanel() {
         alert('Server name is required');
         return;
       }
-      if (!formCommand.trim()) {
-        alert('Command is required');
-        return;
+
+      // Validate based on transport type
+      if (formType === 'stdio') {
+        if (!formCommand.trim()) {
+          alert('Command is required for stdio transport');
+          return;
+        }
+      } else if (formType === 'sse') {
+        if (!formUrl.trim()) {
+          alert('URL is required for SSE transport');
+          return;
+        }
       }
 
-      // Build server config
+      // Build server config based on type
       const serverConfig: MCPServerConfig = {
-        command: formCommand.trim(),
-        args: formArgs.filter(arg => arg.trim()).map(arg => arg.trim()),
+        type: formType,
         env: Object.fromEntries(
           formEnv.filter(({ key, value }) => key.trim()).map(({ key, value }) => [key.trim(), value])
         )
       };
 
-      // Remove empty args and env if not needed
-      if (serverConfig.args?.length === 0) {
-        delete serverConfig.args;
+      if (formType === 'stdio') {
+        serverConfig.command = formCommand.trim();
+        serverConfig.args = formArgs.filter(arg => arg.trim()).map(arg => arg.trim());
+
+        // Remove empty args if not needed
+        if (serverConfig.args?.length === 0) {
+          delete serverConfig.args;
+        }
+      } else if (formType === 'sse') {
+        serverConfig.url = formUrl.trim();
       }
+
+      // Remove empty env if not needed
       if (Object.keys(serverConfig.env || {}).length === 0) {
         delete serverConfig.env;
       }
 
-      // Build new config
-      const config: MCPConfig = await window.electronAPI.invoke('mcp-config:read-user');
+      // Build new config - read from the appropriate scope
+      const config: MCPConfig = configScope === 'workspace' && selectedProjectPath
+        ? await window.electronAPI.invoke('mcp-config:read-workspace', selectedProjectPath)
+        : await window.electronAPI.invoke('mcp-config:read-user');
 
       // If renaming, delete old entry
       if (selectedServer && selectedServer.name !== formName.trim()) {
@@ -146,8 +355,10 @@ export function MCPServersPanel() {
         return;
       }
 
-      // Save
-      const result = await window.electronAPI.invoke('mcp-config:write-user', config);
+      // Save to the appropriate scope
+      const result = configScope === 'workspace' && selectedProjectPath
+        ? await window.electronAPI.invoke('mcp-config:write-workspace', selectedProjectPath, config)
+        : await window.electronAPI.invoke('mcp-config:write-user', config);
       if (!result.success) {
         alert(`Failed to save: ${result.error}`);
         return;
@@ -175,10 +386,16 @@ export function MCPServersPanel() {
     }
 
     try {
-      const config: MCPConfig = await window.electronAPI.invoke('mcp-config:read-user');
+      // Delete from the appropriate scope
+      const config: MCPConfig = configScope === 'workspace' && selectedProjectPath
+        ? await window.electronAPI.invoke('mcp-config:read-workspace', selectedProjectPath)
+        : await window.electronAPI.invoke('mcp-config:read-user');
+
       delete config.mcpServers[selectedServer.name];
 
-      const result = await window.electronAPI.invoke('mcp-config:write-user', config);
+      const result = configScope === 'workspace' && selectedProjectPath
+        ? await window.electronAPI.invoke('mcp-config:write-workspace', selectedProjectPath, config)
+        : await window.electronAPI.invoke('mcp-config:write-user', config);
       if (!result.success) {
         alert(`Failed to delete: ${result.error}`);
         return;
@@ -221,6 +438,54 @@ export function MCPServersPanel() {
     setFormEnv(formEnv.filter((_, i) => i !== index));
   };
 
+  const handleTestConnection = async () => {
+    // Validate based on type
+    if (formType === 'stdio' && !formCommand.trim()) {
+      setTestStatus('error');
+      setTestMessage('Command is required');
+      return;
+    }
+    if (formType === 'sse' && !formUrl.trim()) {
+      setTestStatus('error');
+      setTestMessage('URL is required');
+      return;
+    }
+
+    setTestStatus('testing');
+    setTestMessage('');
+
+    try {
+      // Build temporary server config for testing
+      const testConfig: MCPServerConfig = {
+        type: formType,
+        env: Object.fromEntries(
+          formEnv.filter(({ key, value }) => key.trim()).map(({ key, value }) => [key.trim(), value])
+        )
+      };
+
+      if (formType === 'stdio') {
+        testConfig.command = formCommand.trim();
+        testConfig.args = formArgs.filter(arg => arg.trim()).map(arg => arg.trim());
+      } else if (formType === 'sse') {
+        testConfig.url = formUrl.trim();
+      }
+
+      // Test the MCP server connection
+      const result = await window.electronAPI.invoke('mcp-config:test-server', testConfig);
+
+      if (result.success) {
+        setTestStatus('success');
+        setTestMessage('Connection successful');
+      } else {
+        setTestStatus('error');
+        setTestMessage(result.error || 'Connection failed');
+      }
+    } catch (error: any) {
+      setTestStatus('error');
+      setTestMessage(error.message || 'Test failed');
+    }
+  };
+
   if (loading) {
     return (
       <div className="provider-panel">
@@ -246,8 +511,52 @@ export function MCPServersPanel() {
         <h3 className="provider-panel-title">MCP Servers</h3>
         <p className="provider-panel-description">
           Configure Model Context Protocol (MCP) servers for Claude Code.
-          These servers are available globally across all projects.
         </p>
+      </div>
+
+      <div className="mcp-scope-selector">
+        <label>Configuration Scope:</label>
+        <div className="mcp-scope-buttons">
+          <button
+            className={`mcp-scope-button ${configScope === 'user' ? 'active' : ''}`}
+            onClick={() => setConfigScope('user')}
+          >
+            User (Global)
+          </button>
+          <button
+            className={`mcp-scope-button ${configScope === 'workspace' ? 'active' : ''}`}
+            onClick={() => setConfigScope('workspace')}
+            disabled={availableProjects.length === 0}
+          >
+            Workspace (Project)
+          </button>
+        </div>
+
+        {configScope === 'workspace' && availableProjects.length > 0 && (
+          <div className="mcp-project-selector">
+            <label>Project:</label>
+            <select
+              value={selectedProjectPath || ''}
+              onChange={(e) => setSelectedProjectPath(e.target.value)}
+              className="mcp-project-select"
+            >
+              {availableProjects.map((project) => (
+                <option key={project.path} value={project.path}>
+                  {project.name}
+                  {project.path === workspacePath && ' (current)'}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="mcp-scope-hint">
+          {configScope === 'user'
+            ? 'Global servers available in all projects'
+            : availableProjects.length === 0
+            ? 'No projects available. Open a workspace to configure project-specific servers.'
+            : 'Project-specific servers (saved to .mcp.json)'}
+        </div>
       </div>
 
       <div className="mcp-servers-container">
@@ -282,6 +591,40 @@ export function MCPServersPanel() {
             </div>
           ) : (
             <div className="mcp-server-form">
+              {isEditing && !selectedServer && (
+                <>
+                  <div className="mcp-form-group">
+                    <label>Start from Template</label>
+                    <select
+                      onChange={(e) => handleTemplateSelect(e.target.value)}
+                      defaultValue=""
+                      className="mcp-template-select"
+                    >
+                      <option value="">Choose a template or create from scratch</option>
+                      {MCP_SERVER_TEMPLATES.map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.name} - {template.description}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {selectedTemplateId && (
+                    <div className="mcp-docs-link">
+                      {MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.docsUrl && (
+                        <a
+                          href={MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.docsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mcp-docs-link-button"
+                        >
+                          View {MCP_SERVER_TEMPLATES.find(t => t.id === selectedTemplateId)?.name} Documentation →
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
               <div className="mcp-form-group">
                 <label>Server Name</label>
                 <input
@@ -294,37 +637,105 @@ export function MCPServersPanel() {
               </div>
 
               <div className="mcp-form-group">
-                <label>Command</label>
-                <input
-                  type="text"
-                  value={formCommand}
-                  onChange={(e) => setFormCommand(e.target.value)}
+                <label>Transport Type</label>
+                <select
+                  value={formType}
+                  onChange={(e) => setFormType(e.target.value as 'stdio' | 'sse')}
                   disabled={!isEditing}
-                  placeholder="/path/to/server or npx @modelcontextprotocol/server-name"
-                />
-                <div className="mcp-form-hint">Supports ${'{VAR}'} and ${'{VAR:-default}'} syntax</div>
+                  className="mcp-type-select"
+                >
+                  <option value="stdio">stdio (Local executable)</option>
+                  <option value="sse">SSE (Remote server)</option>
+                </select>
+                <div className="mcp-form-hint">
+                  {formType === 'stdio'
+                    ? 'Runs a local executable that communicates via stdin/stdout'
+                    : 'Connects to a remote server via Server-Sent Events (more secure)'}
+                </div>
               </div>
 
-              <div className="mcp-form-group">
-                <label>Arguments</label>
-                {formArgs.map((arg, index) => (
-                  <div key={index} className="mcp-array-item">
-                    <input
-                      type="text"
-                      value={arg}
-                      onChange={(e) => updateArg(index, e.target.value)}
-                      disabled={!isEditing}
-                      placeholder="argument"
-                    />
+              {formType === 'stdio' ? (
+                <>
+                  <div className="mcp-form-group">
+                    <label>Command</label>
+                    <div className="mcp-command-row">
+                      <input
+                        type="text"
+                        value={formCommand}
+                        onChange={(e) => setFormCommand(e.target.value)}
+                        disabled={!isEditing}
+                        placeholder="/path/to/server or npx @modelcontextprotocol/server-name"
+                        className="mcp-command-input"
+                      />
+                      <button
+                        onClick={handleTestConnection}
+                        disabled={testStatus === 'testing' || !formCommand.trim()}
+                        className={`mcp-test-button ${testStatus}`}
+                      >
+                        {testStatus === 'testing' ? 'Testing...' :
+                         testStatus === 'success' ? '✓ Connected' :
+                         testStatus === 'error' ? '✗ Failed' : 'Test'}
+                      </button>
+                    </div>
+                    {testMessage && (
+                      <div className={`mcp-test-message ${testStatus}`}>
+                        {testMessage}
+                      </div>
+                    )}
+                    <div className="mcp-form-hint">Supports ${'{VAR}'} and ${'{VAR:-default}'} syntax</div>
+                  </div>
+
+                  <div className="mcp-form-group">
+                    <label>Arguments</label>
+                    {formArgs.map((arg, index) => (
+                      <div key={index} className="mcp-array-item">
+                        <input
+                          type="text"
+                          value={arg}
+                          onChange={(e) => updateArg(index, e.target.value)}
+                          disabled={!isEditing}
+                          placeholder="argument"
+                        />
+                        {isEditing && (
+                          <button onClick={() => removeArg(index)} className="mcp-remove-button">×</button>
+                        )}
+                      </div>
+                    ))}
                     {isEditing && (
-                      <button onClick={() => removeArg(index)} className="mcp-remove-button">×</button>
+                      <button onClick={addArg} className="mcp-add-button">+ Add Argument</button>
                     )}
                   </div>
-                ))}
-                {isEditing && (
-                  <button onClick={addArg} className="mcp-add-button">+ Add Argument</button>
-                )}
-              </div>
+                </>
+              ) : (
+                <div className="mcp-form-group">
+                  <label>Server URL</label>
+                  <div className="mcp-command-row">
+                    <input
+                      type="url"
+                      value={formUrl}
+                      onChange={(e) => setFormUrl(e.target.value)}
+                      disabled={!isEditing}
+                      placeholder="https://example.com/mcp/sse"
+                      className="mcp-command-input"
+                    />
+                    <button
+                      onClick={handleTestConnection}
+                      disabled={testStatus === 'testing' || !formUrl.trim()}
+                      className={`mcp-test-button ${testStatus}`}
+                    >
+                      {testStatus === 'testing' ? 'Testing...' :
+                       testStatus === 'success' ? '✓ Connected' :
+                       testStatus === 'error' ? '✗ Failed' : 'Test'}
+                    </button>
+                  </div>
+                  {testMessage && (
+                    <div className={`mcp-test-message ${testStatus}`}>
+                      {testMessage}
+                    </div>
+                  )}
+                  <div className="mcp-form-hint">Remote MCP server endpoint (HTTPS recommended)</div>
+                </div>
+              )}
 
               <div className="mcp-form-group">
                 <label>Environment Variables</label>

@@ -172,7 +172,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         },
         // BREAKING CHANGE: Claude Agent SDK requires explicit settings sources
         settingSources: ['user', 'project', 'local'],
-        mcpServers: this.getMcpServersConfig(sessionId),
+        mcpServers: await this.getMcpServersConfig(sessionId, workspacePath),
         cwd: workspacePath,
         abortController: this.abortController,
         model: 'sonnet',
@@ -326,6 +326,10 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           }
         }), undefined, this.markMessagesAsHidden);
       }
+
+      // TODO: Debug logging - uncomment if needed for MCP troubleshooting
+      // Log MCP servers being passed to SDK (CONTAINS SENSITIVE CONFIG - commented out for production)
+      // console.log('[CLAUDE-CODE] Final MCP config for SDK:', JSON.stringify(options.mcpServers, null, 2));
 
       const queryIterator = query({
         prompt: message,
@@ -1288,14 +1292,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     };
   }
 
-  private getMcpServersConfig(sessionId?: string) {
-    // PHASE 2: MCP server disabled for file-watcher-based diff approval
-    // Don't include general MCP servers - let Claude use native Edit/Write tools
-    // The PreToolUse hook will capture "before" state and file watcher will show diffs
-    //
-    // However, we DO include the session naming MCP server if it's started
+  private async getMcpServersConfig(sessionId?: string, workspacePath?: string) {
+    // Load MCP servers from .mcp.json in the workspace (if available)
+    // and merge with built-in session naming server
     const config: any = {};
 
+    // Include session naming MCP server if it's started
     if (ClaudeCodeProvider.sessionNamingServerPort !== null && sessionId) {
       config['nimbalyst-session-naming'] = {
         type: 'sse',
@@ -1305,7 +1307,85 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       console.log('[CLAUDE-CODE] Session naming MCP server configured on port', ClaudeCodeProvider.sessionNamingServerPort, 'for session', sessionId);
     }
 
+    // Load user and workspace MCP servers from .mcp.json
+    if (workspacePath) {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const mcpJsonPath = path.join(workspacePath, '.mcp.json');
+
+        if (fs.existsSync(mcpJsonPath)) {
+          const mcpJsonContent = fs.readFileSync(mcpJsonPath, 'utf8');
+          const mcpConfig = JSON.parse(mcpJsonContent);
+
+          if (mcpConfig.mcpServers && typeof mcpConfig.mcpServers === 'object') {
+            // Process and merge workspace MCP servers with built-in servers
+            for (const [serverName, serverConfig] of Object.entries(mcpConfig.mcpServers)) {
+              const processedConfig = { ...serverConfig as any };
+
+              // For SSE transport, convert env vars to headers (SDK requirement)
+              if (processedConfig.type === 'sse' && processedConfig.env) {
+                // TODO: Debug logging - uncomment if needed for MCP SSE troubleshooting (CONTAINS SENSITIVE DATA)
+                // console.log(`[CLAUDE-CODE] Processing SSE server "${serverName}", converting env to headers`);
+                processedConfig.headers = processedConfig.headers || {};
+
+                // Convert API keys from env to Authorization headers
+                for (const [key, value] of Object.entries(processedConfig.env)) {
+                  if (key.endsWith('_API_KEY')) {
+                    // TODO: Debug logging - uncomment if needed (LOGS API KEY FRAGMENTS - SECURITY RISK)
+                    // console.log(`[CLAUDE-CODE] Found API key: ${key}, value starts with:`, value.substring(0, 10));
+                    // Expand environment variable if needed
+                    const expandedValue = this.expandEnvVar(value as string, process.env as Record<string, string | undefined>);
+                    // TODO: Debug logging - uncomment if needed (LOGS API KEY FRAGMENTS - SECURITY RISK)
+                    // console.log(`[CLAUDE-CODE] Expanded value starts with:`, expandedValue.substring(0, 10));
+                    if (expandedValue && !expandedValue.startsWith('${')) {
+                      processedConfig.headers['Authorization'] = `Bearer ${expandedValue}`;
+                      // TODO: Debug logging - uncomment if needed for MCP SSE troubleshooting
+                      // console.log(`[CLAUDE-CODE] Converted ${key} to Authorization header for SSE server "${serverName}"`);
+                    } else {
+                      // TODO: Debug logging - uncomment if needed for MCP SSE troubleshooting
+                      // console.log(`[CLAUDE-CODE] Skipped ${key} - unexpanded or empty`);
+                    }
+                  }
+                }
+
+                // Remove env from SSE config (not used for SSE transport)
+                delete processedConfig.env;
+                // TODO: Debug logging - uncomment if needed (CONTAINS AUTHORIZATION HEADERS - SECURITY RISK)
+                // console.log(`[CLAUDE-CODE] Removed env field, headers:`, JSON.stringify(processedConfig.headers));
+              }
+
+              config[serverName] = processedConfig;
+              // TODO: Debug logging - uncomment if needed (MAY CONTAIN SENSITIVE CONFIG - SECURITY RISK)
+              // console.log(`[CLAUDE-CODE] Loaded MCP server "${serverName}":`, JSON.stringify(processedConfig));
+            }
+            // TODO: Debug logging - uncomment if needed for MCP troubleshooting
+            // console.log('[CLAUDE-CODE] Loaded MCP servers from .mcp.json:', Object.keys(mcpConfig.mcpServers));
+          }
+        }
+      } catch (error) {
+        console.error('[CLAUDE-CODE] Failed to load .mcp.json:', error);
+      }
+    }
+
     return config;
+  }
+
+  /**
+   * Expand environment variable syntax: ${VAR} and ${VAR:-default}
+   */
+  private expandEnvVar(value: string, env: Record<string, string | undefined>): string {
+    return value.replace(/\$\{([^}:]+)(:-([^}]+))?\}/g, (_, varName, __, defaultValue) => {
+      const envValue = env[varName];
+      if (envValue !== undefined) {
+        return envValue;
+      }
+      if (defaultValue !== undefined) {
+        return defaultValue;
+      }
+      // Variable not set and no default - return original
+      return `\${${varName}}`;
+    });
   }
 
   /**
@@ -1369,7 +1449,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               };
             }
           }
-          console.log(`[CLAUDE-CODE] Planning mode validation passed for: ${filePaths.join(', ')}`);
+          // TODO: Debug logging - uncomment if needed for planning mode troubleshooting
+          // console.log(`[CLAUDE-CODE] Planning mode validation passed for: ${filePaths.join(', ')}`);
         }
 
         // Tag each file and track for end-of-turn snapshot

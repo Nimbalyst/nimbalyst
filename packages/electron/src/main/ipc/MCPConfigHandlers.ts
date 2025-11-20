@@ -87,4 +87,15 @@ export function registerMCPConfigHandlers() {
     }
     return mcpConfigService.getWorkspaceConfigPath(workspacePath);
   });
+
+  // Test MCP server connection
+  ipcMain.handle('mcp-config:test-server', async (_event, config: any) => {
+    try {
+      const result = await mcpConfigService.testServerConnection(config);
+      return result;
+    } catch (error: any) {
+      logger.main.error('[MCP] Failed to test server:', error);
+      return { success: false, error: error.message };
+    }
+  });
 }

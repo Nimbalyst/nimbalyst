@@ -1,26 +1,14 @@
-import { app, BrowserWindow, nativeTheme, nativeImage, ipcMain, globalShortcut, dialog } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme } from 'electron';
 import type { SessionStore } from '@nimbalyst/runtime';
-import { join } from 'path';
 import * as path from 'path';
-import { existsSync, writeFileSync, appendFileSync, readFileSync } from 'fs';
+import { join } from 'path';
 import * as fs from 'fs';
-
-// CRITICAL: Hide dock icon when running as background Node process
-// This prevents Terminal icon from appearing when Claude Code spawns child processes
-if (process.env.ELECTRON_RUN_AS_NODE === '1' && process.platform === 'darwin') {
-  // When Electron runs as Node (ELECTRON_RUN_AS_NODE=1), hide from dock
-  // This must happen before app.whenReady()
-  if (app.dock) {
-    app.dock.hide();
-  }
-}
-
-import { createWindow, windows, windowStates, findWindowByFilePath, findWindowByWorkspace, getWindowId } from './window/WindowManager';
+import { appendFileSync, existsSync, writeFileSync } from 'fs';
+import { createWindow, findWindowByFilePath, findWindowByWorkspace } from './window/WindowManager';
 import { loadFileIntoWindow } from './file/FileOperations';
-import { createApplicationMenu, updateApplicationMenu } from './menu/ApplicationMenu';
-import { createAIModelsWindow } from './window/AIModelsWindow';
+import { createApplicationMenu } from './menu/ApplicationMenu';
 import { updateNativeTheme, updateWindowTitleBars } from './theme/ThemeManager';
-import { saveSessionState, restoreSessionState } from './session/SessionState';
+import { restoreSessionState, saveSessionState } from './session/SessionState';
 import { createWorkspaceManagerWindow, setupWorkspaceManagerHandlers } from './window/WorkspaceManagerWindow.ts';
 import { registerFileHandlers } from './ipc/FileHandlers';
 import { registerWorkspaceHandlers } from './ipc/WorkspaceHandlers.ts';
@@ -38,22 +26,41 @@ import { initializeClaudeCodeSessionHandlers } from './ipc/ClaudeCodeSessionHand
 import { registerNotificationHandlers } from './ipc/NotificationHandlers';
 import { registerGitStatusHandlers } from './ipc/GitStatusHandlers';
 import { registerProjectSelectionHandlers } from './ipc/ProjectSelectionHandlers';
-import { getTheme, setTheme, incrementLaunchCount, shouldShowDiscordInvitation, dismissDiscordInvitation, updateWorkspaceState, type AppTheme } from './utils/store';
+import {
+    type AppTheme,
+    dismissDiscordInvitation,
+    getTheme,
+    incrementLaunchCount,
+    setTheme,
+    shouldShowDiscordInvitation,
+    updateWorkspaceState
+} from './utils/store';
+import { registerMCPConfigHandlers } from './ipc/MCPConfigHandlers';
 import { AIService } from './services/ai/AIService';
 import { detectFileWorkspace, suggestWorkspaceForFile } from './utils/workspaceDetection';
 // import { AgentService } from './services/agents/AgentService';
 import { cliManager } from './services/CLIManager';
-import { startMcpHttpServer, updateDocumentState, registerWorkspaceWindow, cleanupMcpServer, shutdownHttpServer } from './mcp/httpServer';
+import { registerWorkspaceWindow, shutdownHttpServer, startMcpHttpServer, updateDocumentState } from './mcp/httpServer';
 import { SessionNamingService } from './services/SessionNamingService';
 import { logger, overrideConsole } from './utils/logger';
 import { startPerformanceMonitoring, stopPerformanceMonitoring } from './utils/performanceMonitor';
-import { setupForceQuit, cancelForceQuit } from './utils/forceQuit';
+import { setupForceQuit } from './utils/forceQuit';
 import { stopAllFileWatchers } from './file/FileWatcher';
 import { stopAllWorkspaceWatchers } from './file/WorkspaceWatcher.ts';
 import { autoUpdaterService, AutoUpdaterService } from './services/autoUpdater';
 import { initializeDatabase } from './database/initialize';
-import {AnalyticsService} from "./services/analytics/AnalyticsService.ts";
-import {registerAnalyticsHandlers} from "./ipc/AnalyticsHandlers.ts";
+import { AnalyticsService } from "./services/analytics/AnalyticsService.ts";
+import { registerAnalyticsHandlers } from "./ipc/AnalyticsHandlers.ts";
+
+// CRITICAL: Hide dock icon when running as background Node process
+// This prevents Terminal icon from appearing when Claude Code spawns child processes
+if (process.env.ELECTRON_RUN_AS_NODE === '1' && process.platform === 'darwin') {
+  // When Electron runs as Node (ELECTRON_RUN_AS_NODE=1), hide from dock
+  // This must happen before app.whenReady()
+  if (app.dock) {
+    app.dock.hide();
+  }
+}
 
 // Track pending file to open
 let pendingFilePath: string | null = null;
@@ -292,6 +299,7 @@ app.whenReady().then(async () => {
     registerAnalyticsHandlers();
     registerNotificationHandlers();
     registerGitStatusHandlers();
+    registerMCPConfigHandlers();
 
     // Initialize AI service
     if (!runtimeSessionStore) {

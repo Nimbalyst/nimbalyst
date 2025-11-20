@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
@@ -76,5 +76,10 @@ export function registerSettingsHandlers() {
         // Reconfigure auto-updater with new channel
         autoUpdaterService.reconfigureFeedURL();
         logger.store.info(`[SettingsHandlers] Release channel changed to ${channel}, auto-updater reconfigured`);
+    });
+
+    // Get recent projects
+    ipcMain.handle('settings:get-recent-projects', () => {
+        return getRecentItems('workspaces');
     });
 }

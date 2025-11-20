@@ -1,3 +1,80 @@
+.mcp-scope-selector {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: var(--surface-secondary);
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+}
+
+.mcp-scope-selector label {
+  display: block;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.mcp-scope-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.mcp-scope-button {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mcp-scope-button:hover {
+  background: var(--surface-hover);
+}
+
+.mcp-scope-button.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.mcp-scope-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mcp-project-selector {
+  margin-top: 0.75rem;
+}
+
+.mcp-project-selector label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.mcp-project-select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.mcp-scope-hint {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  margin-top: 0.5rem;
+}
+
 .mcp-loading,
 .mcp-error {
   padding: 2rem;
@@ -165,6 +242,104 @@
 .mcp-form-group input[type="text"]:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.mcp-template-select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.mcp-docs-link {
+  margin-top: -0.75rem;
+  margin-bottom: 1rem;
+}
+
+.mcp-docs-link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--surface-secondary);
+  color: var(--primary-color);
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+
+.mcp-docs-link-button:hover {
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+
+.mcp-command-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.mcp-command-input {
+  flex: 1;
+}
+
+.mcp-test-button {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  white-space: nowrap;
+  min-width: 100px;
+}
+
+.mcp-test-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mcp-test-button.testing {
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+}
+
+.mcp-test-button.success {
+  background: #27ae60;
+  color: white;
+  border-color: #27ae60;
+}
+
+.mcp-test-button.error {
+  background: #e74c3c;
+  color: white;
+  border-color: #e74c3c;
+}
+
+.mcp-test-message {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.mcp-test-message.success {
+  background: rgba(39, 174, 96, 0.1);
+  color: #27ae60;
+  border: 1px solid rgba(39, 174, 96, 0.3);
+}
+
+.mcp-test-message.error {
+  background: rgba(231, 76, 60, 0.1);
+  color: #e74c3c;
+  border: 1px solid rgba(231, 76, 60, 0.3);
 }
 
 .mcp-form-hint {

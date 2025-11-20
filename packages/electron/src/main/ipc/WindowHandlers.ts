@@ -48,6 +48,23 @@ export function registerWindowHandlers() {
             await shell.openExternal(url);
         }
     });
+
+    // Get current workspace path for the calling window
+    ipcMain.handle('workspace:get-current', (event) => {
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) return null;
+
+        const windowId = [...windows.entries()].find(([, win]) => win === window)?.[0];
+        if (windowId === undefined) return null;
+
+        const state = windowStates.get(windowId);
+        if (!state || state.mode !== 'workspace') return null;
+
+        return {
+            path: state.workspacePath,
+            name: state.workspacePath ? basename(state.workspacePath) : null
+        };
+    });
     // Set document edited state
     ipcMain.on('set-document-edited', (event, edited: boolean) => {
         const window = BrowserWindow.fromWebContents(event.sender);

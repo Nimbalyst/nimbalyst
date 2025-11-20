@@ -34,10 +34,10 @@ export class ElectronDocumentService implements DocumentService {
   // Tracker items cache
   private trackerItemWatchers: Map<string, (change: TrackerItemChangeEvent) => void> = new Map();
 
-  // Performance limits - VERY aggressive to prevent hanging
-  private static readonly MAX_FILES_TO_SCAN = 200;   // Stop scanning after 100 files
-  private static readonly MAX_SCAN_TIME_MS = 1000;    // Stop scanning after 500ms
-  private static readonly MAX_DEPTH = 6;             // Maximum directory depth - very shallow!
+  // Performance limits - balance between completeness and performance
+  private static readonly MAX_FILES_TO_SCAN = 1000;   // Stop scanning after 1000 files
+  private static readonly MAX_SCAN_TIME_MS = 2000;    // Stop scanning after 2 seconds
+  private static readonly MAX_DEPTH = 8;              // Maximum directory depth
 
   private isScanning = false; // Prevent concurrent scans
 
@@ -51,14 +51,9 @@ export class ElectronDocumentService implements DocumentService {
     // Scanning will happen lazily when documents are actually requested
     this.initializationPromise = Promise.resolve();
 
-    // Start polling for changes every 30 seconds ONLY after a delay
-    // This gives the app time to fully load before background scanning starts
-    // Polling is VERY slow to avoid freezing on large projects
-    setTimeout(() => {
-      this.watchInterval = setInterval(() => {
-        this.refreshDocuments();
-      }, 2000); // Poll every 2 seconds
-    }, 6000); // Wait 6 seconds before starting background scans
+    // Disable automatic background scanning - only scan on-demand
+    // Background scanning was causing performance issues with large projects
+    // Documents will be scanned when listDocuments() is called (e.g., when @ mention is triggered)
   }
 
   private async initializeAsync(): Promise<void> {
@@ -80,6 +75,11 @@ export class ElectronDocumentService implements DocumentService {
     if (this.initializationPromise) {
       await this.initializationPromise;
     }
+  }
+
+  // Public method to trigger a full refresh (for tracker panel initialization, etc.)
+  async refreshWorkspaceData() {
+    await this.refreshDocuments();
   }
 
   private async refreshDocuments() {
@@ -161,9 +161,11 @@ export class ElectronDocumentService implements DocumentService {
                          cachedState.mtime !== stats.mtime;
 
       if (needsUpdate) {
+        // TODO: Debug logging - uncomment if needed for troubleshooting
         // console.log(`[DocumentService] File needs update: ${newDoc.path} (oldDoc=${!!oldDoc}, cachedState=${!!cachedState}, mtimeChanged=${cachedState?.mtime !== stats.mtime})`);
         try {
           // Extract frontmatter
+          // TODO: Debug logging - uncomment if needed for troubleshooting
           // console.log(`[DocumentService] Extracting frontmatter from: ${fullPath}`);
           const { data, hash, parseErrors } = await extractFrontmatter(fullPath);
 
@@ -274,8 +276,28 @@ export class ElectronDocumentService implements DocumentService {
       return documents;
     }
 
-    // Only support markdown files
-    const supportedExtensions = ['.md', '.markdown'];
+    // Support all common text-based file types for @ mentions
+    const supportedExtensions = [
+      // Markdown
+      '.md', '.markdown',
+      // Web
+      '.html', '.htm', '.css', '.scss', '.sass', '.less',
+      // JavaScript/TypeScript
+      '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
+      // Other programming languages
+      '.py', '.rb', '.php', '.java', '.c', '.cpp', '.cc', '.h', '.hpp',
+      '.cs', '.go', '.rs', '.swift', '.kt', '.scala', '.r',
+      // Scripting and config
+      '.sh', '.bash', '.zsh', '.fish', '.ps1',
+      '.json', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf',
+      '.xml', '.graphql', '.proto',
+      // Documentation
+      '.txt', '.rst', '.adoc', '.tex',
+      // SQL
+      '.sql',
+      // Other
+      '.vue', '.svelte', '.astro'
+    ];
 
     try {
       const items = fsSync.readdirSync(dirPath);
@@ -348,16 +370,43 @@ export class ElectronDocumentService implements DocumentService {
   private async scanDocuments(): Promise<Document[]> {
     try {
       // Use synchronous file system operations like the file tree
-      return this.scanDirectory(this.workspacePath);
+      const docs = this.scanDirectory(this.workspacePath);
+
+      // Debug logging - comment out for production
+      // const typeCount = new Map<string, number>();
+      // docs.forEach(doc => {
+      //   const type = doc.type || 'unknown';
+      //   typeCount.set(type, (typeCount.get(type) || 0) + 1);
+      // });
+      // if (typeCount.size > 0) {
+      //   console.log('[DocumentService] File types found:', JSON.stringify(Object.fromEntries(typeCount)));
+      // }
+
+      return docs;
     } catch (err) {
       // Silent - document scanning errors are not critical
+      console.error('[DocumentService] Scan error:', err);
       return [];
     }
   }
 
+  private lastScanTime = 0;
+  private readonly SCAN_CACHE_MS = 30000; // Only rescan every 30 seconds max
+
   async listDocuments(): Promise<Document[]> {
-    if (this.documents.length === 0) {
+    const now = Date.now();
+    const timeSinceLastScan = now - this.lastScanTime;
+
+    // Only scan if we have no documents OR it's been > 30 seconds since last scan
+    if (this.documents.length === 0 || timeSinceLastScan > this.SCAN_CACHE_MS) {
+      // Debug logging - comment out for production
+      // console.log('[DocumentService] Scanning workspace (cache expired or empty)...');
       this.documents = await this.scanDocuments();
+      this.lastScanTime = now;
+      // console.log(`[DocumentService] Scan complete: found ${this.documents.length} documents`);
+    } else {
+      // Debug logging - comment out for production
+      // console.log(`[DocumentService] Using cached documents: ${this.documents.length} (scanned ${Math.round(timeSinceLastScan/1000)}s ago)`);
     }
     return this.documents;
   }
@@ -366,11 +415,18 @@ export class ElectronDocumentService implements DocumentService {
     const documents = await this.listDocuments();
     const lowerQuery = query.toLowerCase();
 
-    return documents.filter(doc =>
+    // Debug logging - comment out for production
+    // console.log(`[DocumentService] searchDocuments: query="${query}", total docs=${documents.length}`);
+
+    const results = documents.filter(doc =>
       doc.name.toLowerCase().includes(lowerQuery) ||
       doc.path.toLowerCase().includes(lowerQuery) ||
       (doc.workspace && doc.workspace.toLowerCase().includes(lowerQuery))
     );
+
+    // Debug logging - comment out for production
+    // console.log(`[DocumentService] searchDocuments: found ${results.length} matching documents`);
+    return results;
   }
 
   async getDocument(id: string): Promise<Document | null> {
@@ -715,6 +771,7 @@ export class ElectronDocumentService implements DocumentService {
 
   /**
    * Parse tracker items from markdown content
+   * Note: This function is only called for .md and .markdown files
    */
   private async parseTrackerItems(filePath: string, relativePath: string): Promise<TrackerItem[]> {
     try {
@@ -820,16 +877,25 @@ export class ElectronDocumentService implements DocumentService {
 
   /**
    * Update tracker items cache for a file
+   * Only processes markdown files - tracker items are not parsed from code files
    */
   private async updateTrackerItemsCache(relativePath: string): Promise<void> {
+    // Only parse tracker items from markdown files
+    const ext = path.extname(relativePath).toLowerCase();
+    if (ext !== '.md' && ext !== '.markdown') {
+      return;
+    }
+
     const fullPath = path.join(this.workspacePath, relativePath);
 
+    // TODO: Debug logging - uncomment if needed for troubleshooting
     // console.log(`[DocumentService] updateTrackerItemsCache called for: ${relativePath}`);
     // console.log(`[DocumentService] Full path: ${fullPath}`);
 
     try {
       // Parse tracker items from the file
       const items = await this.parseTrackerItems(fullPath, relativePath);
+      // TODO: Debug logging - uncomment if needed for troubleshooting
       // console.log(`[DocumentService] Found ${items.length} tracker items in ${relativePath}`);
       // if (items.length > 0) {
       //   console.log(`[DocumentService] Sample tracker item:`, items[0]);
@@ -1054,7 +1120,11 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
 
   ipcMain.handle('document-service:list', async (event) => {
     try {
-      return await requireDocumentService(event).listDocuments();
+      // Debug logging - comment out for production
+      // console.log('[DocumentService IPC] list handler called');
+      const docs = await requireDocumentService(event).listDocuments();
+      // console.log('[DocumentService IPC] list returning', docs.length, 'documents');
+      return docs;
     } catch (error) {
       console.error('[DocumentService] list failed:', error);
       return [];
@@ -1063,7 +1133,11 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
 
   ipcMain.handle('document-service:search', async (event, query: string) => {
     try {
-      return await requireDocumentService(event).searchDocuments(query);
+      // Debug logging - comment out for production
+      // console.log('[DocumentService IPC] search handler called with query:', query);
+      const results = await requireDocumentService(event).searchDocuments(query);
+      // console.log('[DocumentService IPC] search returning', results.length, 'results');
+      return results;
     } catch (error) {
       console.error('[DocumentService] search failed:', error);
       return [];
@@ -1186,6 +1260,17 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
     if (unsubscribe) {
       // Clean up when renderer is destroyed
       event.sender.once('destroyed', unsubscribe);
+    }
+  });
+
+  // Refresh workspace data (scan documents and update tracker/metadata caches)
+  ipcMain.handle('document-service:refresh-workspace', async (event) => {
+    try {
+      await requireDocumentService(event).refreshWorkspaceData();
+      return { success: true };
+    } catch (error) {
+      console.error('[DocumentService] refresh-workspace failed:', error);
+      return { success: false, error: String(error) };
     }
   });
 
