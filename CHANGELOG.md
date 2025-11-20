@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
-## [0.45.37] - 2025-11-20
+## [0.45.38] - 2025-11-20
 
 
 ### Added
@@ -42,7 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove redundant hamburger menu
 - Remove unused WorkspaceHeader function
 - Logging cleanup
-- Add legacy-peer-deps to .npmrc to stabilize dependency resolution
 
 ### Fixed
 - Configure Monaco Editor to use local workers in Electron
@@ -51,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - NIMBALYST_SYSTEM_MESSAGE showing when pressing up arrow
 - Wrong path parsing in non-render components
 - Queued messages race conditions with auto-context
-- CI build failures caused by peer dependency conflicts
+- CI build failures caused by peer dependency conflicts and missing MCP SDK dependencies
 
 ### Removed
 <!-- Removed features go here -->
