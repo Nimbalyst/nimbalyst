@@ -56,7 +56,8 @@
     "cors": "^2.8.5",
     "eventsource": "^4.1.0",
     "eventsource-parser": "^3.0.6",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "openai": "^6.9.1"
   },
   "overrides": {
     "prismjs": "^1.30.0",
