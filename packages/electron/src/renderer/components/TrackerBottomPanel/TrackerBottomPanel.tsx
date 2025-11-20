@@ -81,6 +81,11 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
       }
 
       try {
+        // Trigger initial scan if needed (this will populate tracker items)
+        if (documentService.refreshWorkspaceData) {
+          await documentService.refreshWorkspaceData();
+        }
+
         const items = await documentService.listTrackerItems();
         if (!mounted) return;
 
@@ -159,6 +164,7 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
   }, [trackerTypes]);
 
   // Track analytics when panel is opened or switched
+  // Only fire when activePanel changes, not when itemCounts updates
   useEffect(() => {
     if (activePanel && posthog) {
       posthog.capture('tracker_tab_opened', {
@@ -166,7 +172,7 @@ export const  TrackerBottomPanel: React.FC<BottomPanelProps> = ({
         itemCount: itemCounts[activePanel] || 0,
       });
     }
-  }, [activePanel, posthog, itemCounts]);
+  }, [activePanel, posthog]); // Removed itemCounts dependency
 
   const [trackerSortBy, setTrackerSortBy] = useState<TrackerSortColumn>('lastIndexed');
   const [trackerSortDirection, setTrackerSortDirection] = useState<TrackerSortDirection>('desc');

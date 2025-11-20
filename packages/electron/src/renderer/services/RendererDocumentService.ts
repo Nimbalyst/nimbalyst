@@ -59,6 +59,14 @@ export class RendererDocumentService implements DocumentService {
     return window.electronAPI.invoke('document-service:search', query);
   }
 
+  async refreshWorkspaceData(): Promise<void> {
+    if (!window.electronAPI) return;
+    const result = await window.electronAPI.invoke('document-service:refresh-workspace');
+    if (!result.success && result.error) {
+      throw new Error(result.error);
+    }
+  }
+
   async getDocument(id: string): Promise<Document | null> {
     if (!window.electronAPI) return null;
     return window.electronAPI.invoke('document-service:get', id);

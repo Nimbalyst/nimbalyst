@@ -2,7 +2,14 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getDocumentService } from '../services/RendererDocumentService';
 import type { Document } from '@nimbalyst/runtime';
 import type { TypeaheadOption } from '../components/Typeahead/GenericTypeahead';
-import { shortenPath } from '@nimbalyst/runtime/src/ui/AgentTranscript/utils/pathResolver';
+
+
+const shortenPath = (fullPath: string, maxLength = 80): string => {
+  if (!fullPath) return '';
+  if (fullPath.length <= maxLength) return fullPath;
+  const keep = Math.floor((maxLength - 3) / 2);
+  return `${fullPath.slice(0, keep)}...${fullPath.slice(fullPath.length - keep)}`;
+};
 
 export interface FileMentionReference {
   documentId: string;
