@@ -7,8 +7,12 @@ import './index.css';
 import posthog from "posthog-js";
 import {PostHogProvider} from "posthog-js/react";
 import {beforePostHogSendWeb} from "../main/services/analytics/analytics-utils.ts";
+import { initMonacoEditor } from './utils/monacoConfig';
 
 // console.log('[RENDERER] Imports complete at', new Date().toISOString());
+
+// Initialize Monaco Editor before rendering any components
+initMonacoEditor();
 
 const rootElement = document.getElementById('root') as HTMLElement;
 // console.log('[RENDERER] Root element:', rootElement, 'at', new Date().toISOString());
