@@ -9,7 +9,6 @@ import {
   clearFileSystemService,
   type FileSystemService
 } from '../../core/FileSystemService';
-import path from "path";
 
 describe('File Tools Integration with Tool Registry', () => {
   let toolRegistry: ToolRegistry;
@@ -48,7 +47,7 @@ describe('File Tools Integration with Tool Registry', () => {
       listFiles: vi.fn(async (options) => {
         let files = testFiles.map(file => ({
           path: file.path,
-          name: path.basename(file.path) || '',
+          name: file.path.split('/').pop() || '',
           type: 'file' as const,
           size: file.content.length,
           modified: new Date().toISOString()

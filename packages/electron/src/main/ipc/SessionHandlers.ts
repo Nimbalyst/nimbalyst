@@ -2,7 +2,6 @@ import { ipcMain } from 'electron';
 import { SessionManager } from '@nimbalyst/runtime/ai/server';
 import { AISessionsRepository } from '@nimbalyst/runtime';
 import type { AIProviderType } from '@nimbalyst/runtime/ai/server/types';
-import path from "path";
 
 // Initialize session manager
 const sessionManager = new SessionManager();
@@ -34,7 +33,7 @@ export async function registerSessionHandlers() {
                 id: session.id,
                 provider: session.provider,
                 model: session.model,
-                title: session.metadata?.planDocumentPath ? `Plan: ${path.basename(session.metadata.planDocumentPath).trim()}` : 'Agentic Coding',
+                title: session.metadata?.planDocumentPath ? `Plan: ${session.metadata.planDocumentPath.split('/').pop()}` : 'Agentic Coding',
                 workspaceId: workspaceId,
                 providerConfig: session.providerConfig,
                 providerSessionId: session.providerSessionId

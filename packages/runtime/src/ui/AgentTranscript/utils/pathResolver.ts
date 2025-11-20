@@ -2,8 +2,6 @@
  * Utilities for resolving and formatting file paths in the agent transcript
  */
 
-import path from "path";
-
 /**
  * Convert an absolute path to a project-relative path
  * @param absolutePath - Full system path
@@ -32,24 +30,24 @@ export function toProjectRelative(absolutePath: string, workspacePath?: string):
 
 /**
  * Intelligently shorten a path for display while preserving the filename
- * @param fsPath - Path to shorten
+ * @param path - Path to shorten
  * @param maxLength - Maximum display length (default: 60)
  * @returns Shortened path with filename always preserved
  */
-export function shortenPath(fsPath: string, maxLength: number = 60): string {
-  if (fsPath.length <= maxLength) {
-    return fsPath;
+export function shortenPath(path: string, maxLength: number = 60): string {
+  if (path.length <= maxLength) {
+    return path;
   }
 
   // Extract filename and directory
-  const lastSlashIndex = fsPath.lastIndexOf('/');
+  const lastSlashIndex = path.lastIndexOf('/');
   if (lastSlashIndex === -1) {
     // No directory separator, just truncate
-    return fsPath.length > maxLength ? fsPath.slice(0, maxLength - 3) + '...' : fsPath;
+    return path.length > maxLength ? path.slice(0, maxLength - 3) + '...' : path;
   }
 
-  const filename = fsPath.slice(lastSlashIndex + 1);
-  const directory = fsPath.slice(0, lastSlashIndex);
+  const filename = path.slice(lastSlashIndex + 1);
+  const directory = path.slice(0, lastSlashIndex);
 
   // If filename alone is too long, show it anyway (it's the most important part)
   if (filename.length >= maxLength - 10) {
@@ -65,11 +63,11 @@ export function shortenPath(fsPath: string, maxLength: number = 60): string {
 
   // Try to preserve the start of the directory path
   if (directory.length <= remainingLength) {
-    return fsPath; // Fits without truncation
+    return path; // Fits without truncation
   }
 
   // Truncate directory from the middle
-  const dirParts = directory.split(path.sep);
+  const dirParts = directory.split('/');
   if (dirParts.length === 1) {
     // Single directory, truncate it
     return directory.slice(0, remainingLength) + '.../' + filename;

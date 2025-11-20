@@ -5,15 +5,12 @@ import { getWindowId, windowStates } from '../window/WindowManager';
 import { optimizedWorkspaceWatcher } from './OptimizedWorkspaceWatcher';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
 import { readdirSync } from 'fs';
-import path from "path";
 
 // Helper function to calculate folder depth relative to workspace
 function calculateFolderDepth(folderPath: string, workspacePath: string): number {
-    const relativePath = path.relative(path.normalize(folderPath), path.normalize(workspacePath));
+    const relativePath = folderPath.replace(workspacePath, '').replace(/^\//, '');
     if (!relativePath) return 0;
-    const depth =  relativePath.split(path.sep).length;
-    console.log(`[WorkspaceWatcher] Calculated folder depth: ${depth} for folderPath: ${folderPath} relative to workspacePath: ${workspacePath}`);
-    return depth;
+    return relativePath.split('/').length;
 }
 
 // Helper function to bucket file counts

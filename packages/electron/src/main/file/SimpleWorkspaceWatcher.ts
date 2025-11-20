@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { watch, FSWatcher } from 'fs';
-import path, { join, dirname } from 'path';
+import { join, dirname } from 'path';
 import { readdir, stat } from 'fs/promises';
 import { getFolderContents } from '../utils/FileTree';
 import { logger } from '../utils/logger';
@@ -52,8 +52,7 @@ export class SimpleWorkspaceWatcher {
 
             // Skip certain directories
             const skipDirs = ['.git', 'node_modules', 'dist', 'build', 'out', 'coverage', '.next'];
-            const dirName = path.basename(dirPath).trim();
-            console.log(`Watching directory: ${dirName}`);
+            const dirName = dirPath.split('/').pop();
             if (dirName && skipDirs.includes(dirName)) {
                 return;
             }
