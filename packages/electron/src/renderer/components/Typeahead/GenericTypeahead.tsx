@@ -51,7 +51,7 @@ export function GenericTypeahead({
   className = '',
   maxHeight = 300,
   minWidth = 250,
-  maxWidth = 400
+  maxWidth = 600
 }: GenericTypeaheadProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });

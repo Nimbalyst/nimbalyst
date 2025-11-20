@@ -5,11 +5,15 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 1000;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .generic-typeahead-content {
   overflow-y: auto;
   overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
 }
 
 .generic-typeahead-section {

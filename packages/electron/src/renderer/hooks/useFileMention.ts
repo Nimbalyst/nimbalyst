@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getDocumentService } from '../services/RendererDocumentService';
 import type { Document } from '@nimbalyst/runtime';
 import type { TypeaheadOption } from '../components/Typeahead/GenericTypeahead';
+import { shortenPath } from '@nimbalyst/runtime/src/ui/AgentTranscript/utils/pathResolver';
 
 export interface FileMentionReference {
   documentId: string;
@@ -40,12 +41,20 @@ export function useFileMention({
 
     // Skip fetch if cache is still valid
     if (timeSinceLastFetch < CACHE_DURATION_MS && documents.length > 0) {
+      // Debug logging - comment out for production
+      // console.log('[useFileMention] Using cached documents:', documents.length);
       return documents;
     }
 
     try {
       setIsLoading(true);
+      // Debug logging - comment out for production
+      // console.log('[useFileMention] Loading documents from service...');
       const docs = await documentService.listDocuments();
+      // console.log('[useFileMention] Loaded documents:', docs.length);
+      // if (docs.length > 0 && docs.length <= 20) {
+      //   console.log('[useFileMention] Document list:', docs.map(d => `${d.name} (${d.type})`));
+      // }
       setDocuments(docs);
       lastFetchTimeRef.current = now;
       return docs;
@@ -59,35 +68,84 @@ export function useFileMention({
 
   // Handle search query changes
   const handleSearch = useCallback(async (query: string) => {
+    // Debug logging - comment out for production
+    // console.log('[useFileMention] handleSearch called with query:', query);
     setSearchQuery(query);
 
     if (!query.trim()) {
       // Empty query - load all documents (with cache)
+      // Debug logging - comment out for production
+      // console.log('[useFileMention] Empty query, loading all documents');
       await loadDocuments();
+      // console.log('[useFileMention] After loadDocuments, documents.length:', documents.length);
       return;
     }
 
     try {
       // Search documents by query
+      // Debug logging - comment out for production
+      // console.log('[useFileMention] Searching documents with query:', query);
       const results = await documentService.searchDocuments(query);
+      // console.log('[useFileMention] Search results:', results.length);
       setDocuments(results);
     } catch (err) {
       console.error('[useFileMention] Search failed:', err);
     }
-  }, [documentService, loadDocuments]);
+  }, [documentService, loadDocuments, documents.length]);
+
+  // Get icon based on file type
+  const getFileIcon = (doc: Document): string => {
+    const ext = doc.type?.toLowerCase();
+
+    // Markdown
+    if (ext === 'md' || ext === 'markdown') return 'description';
+
+    // Web
+    if (ext === 'html' || ext === 'htm') return 'code';
+    if (ext === 'css' || ext === 'scss' || ext === 'sass' || ext === 'less') return 'palette';
+
+    // JavaScript/TypeScript
+    if (['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs'].includes(ext || '')) return 'javascript';
+
+    // Python
+    if (ext === 'py') return 'code';
+
+    // Config files
+    if (['json', 'yaml', 'yml', 'toml', 'xml'].includes(ext || '')) return 'settings';
+
+    // Shell scripts
+    if (['sh', 'bash', 'zsh', 'fish', 'ps1'].includes(ext || '')) return 'terminal';
+
+    // SQL
+    if (ext === 'sql') return 'storage';
+
+    // Text files
+    if (ext === 'txt') return 'article';
+
+    // Default to generic file icon
+    return 'insert_drive_file';
+  };
 
   // Convert documents to typeahead options
   const options = useMemo<TypeaheadOption[]>(() => {
-    const opts = documents.map(doc => ({
-      id: doc.id,
-      label: doc.path || doc.name,
-      icon: 'description',
-      data: doc
-    }));
-    // Only log on initial load or significant changes
-    if (opts.length > 0 && documents.length > 0) {
-      // console.log('[useFileMention] Generated options:', opts.length);
-    }
+    // Debug logging - comment out for production
+    // console.log('[useFileMention] Converting documents to options, documents.length:', documents.length);
+    const opts = documents.map(doc => {
+      const fullPath = doc.path || doc.name;
+      // Use shortenPath with 80 character max to show beginning and end
+      const displayLabel = shortenPath(fullPath, 80);
+
+      return {
+        id: doc.id,
+        label: displayLabel,
+        icon: getFileIcon(doc),
+        data: doc
+      };
+    });
+    // console.log('[useFileMention] Generated options:', opts.length);
+    // if (opts.length > 0 && opts.length <= 10) {
+    //   console.log('[useFileMention] Sample options:', opts.slice(0, 5).map(o => o.label));
+    // }
     return opts;
   }, [documents]);
 
