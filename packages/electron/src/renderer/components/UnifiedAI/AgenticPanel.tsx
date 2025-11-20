@@ -1152,6 +1152,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           return next;
         });
 
+        // Also clear autoContext state if session was waiting for it
+        // This ensures the UI is fully cleaned up even if completion signal is missing
+        autoContextSessionsRef.current.delete(sessionId);
+
         // The error is logged to database by ClaudeCodeProvider.logError()
         // The message-logged event will fire when the write completes
         // and trigger a session reload automatically via handleMessageLogged

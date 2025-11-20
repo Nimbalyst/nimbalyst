@@ -1159,6 +1159,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
               type: 'error',
               error: 'Your previous conversation session has expired or been cleaned up. Please create a new session to continue.'
             };
+
+            // CRITICAL: Always send completion after error to clean up UI state
+            yield {
+              type: 'complete'
+            };
             return;
           }
         }
@@ -1177,6 +1182,11 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         yield {
           type: 'error',
           error: error.message
+        };
+
+        // CRITICAL: Always send completion after error to clean up UI state
+        yield {
+          type: 'complete'
         };
       }
     } finally {
