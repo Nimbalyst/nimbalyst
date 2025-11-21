@@ -39,7 +39,6 @@
     "@anthropic-ai/sdk": "^0.67.0",
     "@electric-sql/pglite": "^0.3.11",
     "@excalidraw/excalidraw": "0.17.6",
-    "@img/sharp-win32-arm64": "^0.34.5",
     "@modelcontextprotocol/sdk": "^1.22.0",
     "@monaco-editor/react": "^4.7.0",
     "@nimbalyst/runtime": "*",
