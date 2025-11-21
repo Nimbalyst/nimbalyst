@@ -1,4 +1,4 @@
-# Nimbalyst - Markdown Editor for Claude Code
+# Nimbalyst - UI for Claude Code
 
 Nimbalyst is an integrated markdown environment for managing Claude Code
 
@@ -9,8 +9,8 @@ Nimbalyst is an integrated markdown environment for managing Claude Code
 
 ## Features
 
-- Developers and PMs to research, write, edit and plan in a local, WYSIWIG, agentic markdown editor
-- Collaboration with Claude Code through UI, workflow, and human/AI iteration on markdown documents
+- Edit markdown in a local, WYSIWIG, agentic editor powered by Claude Code
+- Manage agents' work across parallel Claude Code sessions in a UI
 - Open storage of content and status in markdown, workflow in Claude Code / commands, and plain files on disk or in git
 
 
@@ -22,7 +22,6 @@ Download the latest version for your platform:
 | --- | --- | --- |
 | macOS | [Download .dmg](https://github.com/nimbalyst/nimbalyst/releases/latest/download/Nimbalyst-macOS.dmg) | macOS 10.15+ |
 | Windows | [Download .exe](https://github.com/nimbalyst/nimbalyst/releases/latest/download/Nimbalyst-Setup.exe) | Windows 10+ |
-| Linux | [Download .AppImage](https://github.com/nimbalyst/nimbalyst/releases/latest/download/Nimbalyst.AppImage) | Ubuntu 20.04+ |
 
 ### Installation Instructions
 
@@ -38,18 +37,14 @@ Download the latest version for your platform:
 3. Follow the installation wizard
 4. Launch from Start Menu or Desktop shortcut
 
-#### Linux
-1. Download the `.AppImage` file
-2. Make it executable: `chmod +x Nimbalyst-*.AppImage`
-3. Run the AppImage: `./Nimbalyst-*.AppImage`
-
 ## Getting Started
 
-1. **Create a new document** - Click "New" or press `Cmd/Ctrl+N`
-2. **Write in markdown** - Use the editor pane on the left
-3. **See live preview** - Preview updates in real-time on the right
-4. **Use AI assistant** - Press `Cmd/Ctrl+Shift+A` to open AI chat
-5. **Export your work** - File → Export to share your documents
+1. **Create a new (or open existing) document** - Click "New" or press `Cmd/Ctrl+N`
+2. **Write in markdown** - Write/edit in the WYSIWYG editor
+3. **Use AI assistant** - Ask AI to research, edit the document, work across your files
+4. **Accept/Reject AI changes** - Step through suggested AI edits, 
+5. **Work in Agent Manager** - Switch to the agent manager view and run multiple agent sessions in parallel
+6. **Search/Resume sessions** - Search and resume sessions, manage your work
 
 ## Auto-Updates
 
@@ -65,23 +60,19 @@ Before creating an issue:
 - Provide steps to reproduce bugs
 
 ## Community
-
-- [Discussions](https://github.com/nimbalyst/nimbalyst/discussions) - Ask questions and share tips
+- [Documentation](https://docs.nimbalyst.com/) - Watch video and read documentation
+- [Discord](https://discord.gg/FgD9S2MCYB) - Join the discussion on Discord
+- [Github Discussions](https://github.com/nimbalyst/nimbalyst/discussions) - Ask questions and share tips
 - [Announcements](https://github.com/nimbalyst/nimbalyst/discussions/categories/announcements) - Stay updated on new features
 
 ## License
 
-Nimbalyst is proprietary software. All rights reserved.
-
-© 2024 Stravu. The source code is not publicly available.
+Nimbalyst is proprietary software. All rights reserved. © 2025 Nimbalyst. 
 
 ## Privacy & Security
 
 - All documents are stored locally on your device
 - AI features require internet connection but documents are never uploaded
-- No telemetry or tracking
-- Code signed and notarized for macOS
-- Regular security updates
 
 ## Acknowledgments
 
