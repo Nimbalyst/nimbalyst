@@ -5,6 +5,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { PlanListItem, type PlanData } from './PlanListItem';
 import { PlanFilters } from './PlanFilters';
+import { getFileName } from '../../utils/pathUtils';
 import type { DocumentMetadataEntry, MetadataChangeEvent } from '../../../../../runtime/src/core/DocumentService';
 import './PlansPanel.css';
 
@@ -93,7 +94,7 @@ export function PlansPanel({ currentFilePath, onPlanSelect }: PlansPanelProps): 
 
         return {
           id: planStatus.planId || doc.id,
-          title: planStatus.title || frontmatter.title || doc.path.split('/').pop()?.replace('.md', '') || 'Untitled',
+          title: planStatus.title || frontmatter.title || getFileName(doc.path).replace('.md', '') || 'Untitled',
           status: planStatus.status || frontmatter.status || 'draft',
           owner: planStatus.owner || frontmatter.owner || 'unassigned',
           priority: planStatus.priority || frontmatter.priority || 'medium',

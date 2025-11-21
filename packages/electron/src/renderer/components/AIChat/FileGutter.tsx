@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getFileName } from '../../utils/pathUtils';
 import './FileGutter.css';
 
 interface FileGutterProps {
@@ -112,7 +113,7 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick }: File
 
   // If only one file, show it directly
   if (files.length === 1) {
-    const fileName = files[0].split('/').pop() || files[0];
+    const fileName = getFileName(files[0]);
     return (
       <div className={`file-gutter file-gutter-${type}`}>
         <button
@@ -152,7 +153,7 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick }: File
       {isExpanded && (
         <div className="file-gutter-list">
           {files.map((filePath, index) => {
-            const fileName = filePath.split('/').pop() || filePath;
+            const fileName = getFileName(filePath);
             return (
               <button
                 key={index}

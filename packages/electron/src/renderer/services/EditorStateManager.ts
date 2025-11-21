@@ -3,6 +3,8 @@
  * Extracted from App.tsx as part of Phase 2 refactoring
  */
 
+import { getFileName } from '../utils/pathUtils';
+
 interface EditorState {
   currentFilePath: string | null;
   currentFileName: string;
@@ -53,7 +55,7 @@ class EditorStateManager {
     this.state = {
       ...this.state,
       currentFilePath: path,
-      currentFileName: name || (path ? path.split('/').pop() || 'Untitled' : 'Untitled'),
+      currentFileName: name || (path ? getFileName(path) || 'Untitled' : 'Untitled'),
     };
     this.notify();
   }

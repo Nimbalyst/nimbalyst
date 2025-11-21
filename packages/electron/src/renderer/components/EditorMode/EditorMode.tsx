@@ -5,6 +5,7 @@ import { useTabNavigation } from '../../hooks/useTabNavigation';
 import { useDocumentContext } from '../../hooks/useDocumentContext';
 import { handleWorkspaceFileSelect as handleWorkspaceFileSelectUtil } from '../../utils/workspaceFileOperations';
 import { createInitialFileContent } from '../../utils/fileUtils';
+import { getFileName } from '../../utils/pathUtils';
 import { aiToolService } from '../../services/AIToolService';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { WorkspaceSidebar } from '../WorkspaceSidebar';
@@ -210,7 +211,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
         if (tabs.activeTabId) {
           tabs.updateTab(tabs.activeTabId, {
             filePath: result.filePath,
-            fileName: result.filePath.split('/').pop() || result.filePath,
+            fileName: getFileName(result.filePath),
             isDirty: false,
             lastSaved: new Date()
           });
@@ -218,7 +219,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
 
         // Notify parent of file change
         if (onCurrentFileChange) {
-          onCurrentFileChange(result.filePath, result.filePath.split('/').pop() || result.filePath, false);
+          onCurrentFileChange(result.filePath, getFileName(result.filePath), false);
         }
       }
     } catch (error) {

@@ -5,6 +5,7 @@ import { TextDiffViewer, type TextDiffNavigationState } from './TextDiffViewer';
 import { MonacoDiffViewer } from './MonacoDiffViewer';
 import { ImageDiffViewer } from './ImageDiffViewer';
 import { getFileType, type EditorType } from '../../utils/fileTypeDetector';
+import { getFileName } from '../../utils/pathUtils';
 import './HistoryDialog.css';
 
 interface HistoryDialogProps {
@@ -364,7 +365,7 @@ export function HistoryDialog({ isOpen, onClose, filePath, onRestore, theme = 'l
       <div className="history-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="history-dialog-header">
           <div className="history-dialog-title">
-            <h2>{filePath ? filePath.split('/').pop() : 'Document History'}</h2>
+            <h2>{filePath ? getFileName(filePath) : 'Document History'}</h2>
             {filePath && <span className="history-dialog-path">{filePath}</span>}
           </div>
           <button className="history-dialog-close" onClick={onClose}>

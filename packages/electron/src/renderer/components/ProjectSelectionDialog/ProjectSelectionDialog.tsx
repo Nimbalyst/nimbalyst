@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getFileName } from '../../utils/pathUtils';
 import './ProjectSelectionDialog.css';
 
 export interface ProjectOption {
@@ -103,7 +104,7 @@ export const ProjectSelectionDialog: React.FC<ProjectSelectionDialogProps> = ({
             <h3 className="project-selection-section-title">Suggested Project</h3>
             <div className="project-selection-suggested-item">
               <div className="project-selection-item-name">
-                {suggestedWorkspace.split('/').pop()}
+                {getFileName(suggestedWorkspace)}
               </div>
               <div className="project-selection-item-path">{suggestedWorkspace}</div>
             </div>

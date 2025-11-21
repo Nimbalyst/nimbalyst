@@ -4,6 +4,7 @@ import { InputModal } from './InputModal';
 import { PlansPanel } from './PlansPanel/PlansPanel';
 import { FileTreeFilterMenu, FileTreeFilter } from './FileTreeFilterMenu';
 import { createInitialFileContent } from '../utils/fileUtils';
+import { getFileName } from '../utils/pathUtils';
 import '../WorkspaceSidebar.css';
 
 interface FileTreeItem {
@@ -901,7 +902,7 @@ export function WorkspaceSidebar({
 
       <InputModal
         isOpen={isFileModalOpen}
-        title={targetFolder ? `New File in ${targetFolder.split('/').pop()}` : "New File"}
+        title={targetFolder ? `New File in ${getFileName(targetFolder)}` : "New File"}
         placeholder="Enter file name (e.g., document.md)"
         defaultValue=""
         onConfirm={handleCreateFile}
@@ -913,7 +914,7 @@ export function WorkspaceSidebar({
 
       <InputModal
         isOpen={isFolderModalOpen}
-        title={targetFolder ? `New Folder in ${targetFolder.split('/').pop()}` : "New Folder"}
+        title={targetFolder ? `New Folder in ${getFileName(targetFolder)}` : "New Folder"}
         placeholder="Enter folder name"
         defaultValue=""
         onConfirm={handleCreateFolder}

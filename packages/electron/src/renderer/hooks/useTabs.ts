@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
+import { getFileName } from '../utils/pathUtils';
 
 export interface TabData {
   id: string;
@@ -122,7 +123,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
 
     // Create new tab
     const tabId = generateTabId();
-    const fileName = filePath.split('/').pop() || 'Untitled';
+    const fileName = getFileName(filePath) || 'Untitled';
 
     const newTab: TabData = {
       id: tabId,

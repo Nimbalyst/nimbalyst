@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { usePostHog } from 'posthog-js/react';
+import { getFileName, getRelativeDir } from '../utils/pathUtils';
 import './QuickOpen.css';
 
 interface FileItem {
@@ -51,7 +52,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
     .filter(path => path !== currentFilePath)
     .map(path => ({
       path,
-      name: path.split('/').pop() || path,
+      name: getFileName(path),
       isRecent: true,
     }));
 
@@ -100,7 +101,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
         const processedFileNames = fileNameResults
           .map((result: any) => ({
             path: result.path,
-            name: result.path.split('/').pop() || result.path,
+            name: getFileName(result.path),
             isRecent: recentFiles.includes(result.path),
             matches: result.matches || [],
             isFileNameMatch: result.isFileNameMatch || false,
@@ -181,7 +182,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
               // New file found only by content
               mergedResults.push({
                 path: contentResult.path,
-                name: contentResult.path.split('/').pop() || contentResult.path,
+                name: getFileName(contentResult.path),
                 isRecent: recentFiles.includes(contentResult.path),
                 matches: contentResult.matches || [],
                 isFileNameMatch: false,
@@ -432,7 +433,7 @@ export const QuickOpen: React.FC<QuickOpenProps> = ({
                     )}
                   </div>
                   <div className="quick-open-item-path">
-                    {file.path.replace(workspacePath, '').replace(/^\//, '')}
+                    {getRelativeDir(file.path, workspacePath)}
                   </div>
                   {file.matches && file.matches.length > 0 && (
                     <div className="quick-open-item-matches">

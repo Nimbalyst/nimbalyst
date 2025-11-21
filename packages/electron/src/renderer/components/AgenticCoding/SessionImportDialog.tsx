@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import './SessionImportDialog.css';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
+import { getFileName } from '../../utils/pathUtils';
 import type { TokenUsageCategory } from '@nimbalyst/runtime/ai/server/types';
 
 interface SessionToImport {
@@ -256,7 +257,7 @@ export const SessionImportDialog: React.FC<SessionImportDialogProps> = ({
                 workspacePaths.map(workspacePath => {
                   const workspaceSessions = sessionsByWorkspace[workspacePath];
                   const isExpanded = expandedWorkspaces.has(workspacePath);
-                  const workspaceName = workspacePath.split('/').filter(Boolean).pop() || workspacePath;
+                  const workspaceName = getFileName(workspacePath) || workspacePath;
                   const allSelected = workspaceSessions.every(s => s.selected);
                   const someSelected = workspaceSessions.some(s => s.selected);
 

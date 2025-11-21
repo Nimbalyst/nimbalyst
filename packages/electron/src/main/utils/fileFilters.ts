@@ -85,6 +85,27 @@ export const GLOB_EXCLUDE_PATTERNS = [
 export const RIPGREP_EXCLUDE_ARGS = '--glob !**/node_modules/** --glob !**/.git/** --glob !**/.worktrees/** --glob !**/worktrees/** --glob !**/dist/** --glob !**/build/** --glob !**/out/** --glob !**/.next/** --glob !**/.nuxt/** --glob !**/.cache/** --glob !**/coverage/** --glob !**/.vscode/** --glob !**/.idea/** --glob !**/__pycache__/** --glob !**/.DS_Store/**';
 
 /**
+ * Ripgrep glob arguments as array for use with execFile (cross-platform)
+ */
+export const RIPGREP_EXCLUDE_ARGS_ARRAY = [
+    '--glob', '!**/node_modules/**',
+    '--glob', '!**/.git/**',
+    '--glob', '!**/.worktrees/**',
+    '--glob', '!**/worktrees/**',
+    '--glob', '!**/dist/**',
+    '--glob', '!**/build/**',
+    '--glob', '!**/out/**',
+    '--glob', '!**/.next/**',
+    '--glob', '!**/.nuxt/**',
+    '--glob', '!**/.cache/**',
+    '--glob', '!**/coverage/**',
+    '--glob', '!**/.vscode/**',
+    '--glob', '!**/.idea/**',
+    '--glob', '!**/__pycache__/**',
+    '--glob', '!**/.DS_Store/**'
+];
+
+/**
  * Find command prune arguments for excluding directories
  */
 export const FIND_PRUNE_ARGS = '\\( -path "*/node_modules/*" -o -path "*/.git/*" -o -path "*/.worktrees/*" -o -path "*/worktrees/*" -o -path "*/dist/*" -o -path "*/build/*" -o -path "*/out/*" -o -path "*/.next/*" -o -path "*/.nuxt/*" -o -path "*/.cache/*" -o -path "*/coverage/*" -o -path "*/.vscode/*" -o -path "*/.idea/*" -o -path "*/__pycache__/*" -o -path "*/.DS_Store/*" \\) -prune -o';

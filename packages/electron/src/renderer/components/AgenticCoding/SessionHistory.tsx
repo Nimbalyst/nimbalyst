@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CollapsibleGroup } from './CollapsibleGroup';
 import { SessionListItem } from './SessionListItem';
 import { groupSessionsByTime, TimeGroupKey } from '../../utils/dateFormatting';
+import { getFileName } from '../../utils/pathUtils';
 import './SessionHistory.css';
 
 interface SessionItem {
@@ -92,7 +93,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   }, []);
 
   // Extract workspace name from path
-  const workspaceName = workspacePath.split('/').filter(Boolean).pop() || 'Workspace';
+  const workspaceName = getFileName(workspacePath) || 'Workspace';
   const workspaceColor = generateWorkspaceColor(workspacePath);
 
   // Load all sessions from database (no search query)

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getFileName } from '../../../utils/pathUtils';
 import './MCPServersPanel.css';
 
 interface MCPServerConfig {
@@ -166,7 +167,7 @@ export function MCPServersPanel() {
         if (recentProjects && Array.isArray(recentProjects)) {
           const projects = recentProjects.map((p: any) => ({
             path: typeof p === 'string' ? p : p.path,
-            name: typeof p === 'string' ? p.split('/').pop() : (p.name || p.path.split('/').pop())
+            name: typeof p === 'string' ? getFileName(p) : (p.name || getFileName(p.path))
           }));
           setAvailableProjects(projects);
 

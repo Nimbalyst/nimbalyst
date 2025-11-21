@@ -137,7 +137,8 @@ end tell`;
         //  how to use the weird Windows shell to run the command with ELECTRON_RUN_AS_NODE=1 properly.
         spawn('cmd', ['/c', 'start', 'cmd', '/k', `claude setup-token`], {
           detached: true,
-          stdio: 'ignore'
+          stdio: 'ignore',
+          shell: true
         }).unref();
 
         return {
@@ -217,7 +218,8 @@ end tell`;
         const nodePath = process.execPath;
         spawn('cmd', ['/c', 'start', 'cmd', '/k', `echo Claude Code Logout && echo. && echo Type /logout and press Enter to logout: && echo. && set ELECTRON_RUN_AS_NODE=1 && "${nodePath}" "${cliPath}"`], {
           detached: true,
-          stdio: 'ignore'
+          stdio: 'ignore',
+          shell: true
         }).unref();
 
         return {

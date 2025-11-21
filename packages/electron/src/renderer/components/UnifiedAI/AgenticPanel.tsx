@@ -11,6 +11,7 @@ import { useFileMention } from '../../hooks/useFileMention';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
 import { DiffTestDropdown } from "../AIChat/DiffTestDropdown.tsx";
+import { getFileName } from '../../utils/pathUtils';
 
 export interface AgenticPanelRef {
   createNewSession: (planPath?: string) => Promise<void>;
@@ -543,7 +544,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       if (sessionData) {
         const planPath = sessionData.metadata?.planDocumentPath as string | undefined;
         const tabName = planPath
-          ? `Plan: ${planPath.split('/').pop()}`
+          ? `Plan: ${getFileName(planPath)}`
           : sessionData.title || `Session ${sessionTabs.length + 1}`;
 
         const newTab: SessionTab = {
@@ -642,7 +643,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
 
     const tabName = planPath
-      ? `Plan: ${planPath.split('/').pop()}`
+      ? `Plan: ${getFileName(planPath)}`
       : `Session ${sessionTabs.length + 1}`;
 
     const sessionData = await window.electronAPI.aiLoadSession(session.id, workspacePath);
@@ -820,7 +821,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           if (sessionData) {
             const planPath = sessionData.metadata?.planDocumentPath as string | undefined;
             const tabName = planPath
-              ? `Plan: ${planPath.split('/').pop()}`
+              ? `Plan: ${getFileName(planPath)}`
               : 'Session 1';
 
             const tab: SessionTab = {

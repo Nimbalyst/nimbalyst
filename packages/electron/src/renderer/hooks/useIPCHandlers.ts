@@ -12,6 +12,7 @@ import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { SearchReplaceStateManager } from '@nimbalyst/runtime';
 import { aiApi } from '../services/aiApi';
 import { getSoundPlayer } from '../services/SoundPlayer';
+import { getFileName } from '../utils/pathUtils';
 
 const PLAN_STATUS_KEYS = new Set([
   'planId',
@@ -366,7 +367,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       // NOTE: contentVersion removed - EditorContainer handles remounting via destroy/create
       isInitializedRef.current = false;
       handlersRef.current.setCurrentFilePath(data.filePath);
-      handlersRef.current.setCurrentFileName(data.filePath.split('/').pop() || data.filePath);
+      handlersRef.current.setCurrentFileName(getFileName(data.filePath));
       isDirtyRef.current = false;
       handlersRef.current.setIsDirty(false);
       // NOTE: initialContentRef removed - TabEditor tracks this per-tab
@@ -526,7 +527,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
         // Update the current file path
         handlersRef.current.setCurrentFilePath(data.destinationPath);
-        handlersRef.current.setCurrentFileName(data.destinationPath.split('/').pop() || data.destinationPath);
+        handlersRef.current.setCurrentFileName(getFileName(data.destinationPath));
 
         // Update the file in main process
         if (window.electronAPI.setCurrentFile) {
@@ -559,7 +560,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         return items.map(item => {
           if (item.path === data.oldPath) {
             // Update the renamed item
-            const newFileName = data.newPath.split('/').pop() || data.newPath;
+            const newFileName = getFileName(data.newPath);
             return { ...item, path: data.newPath, name: newFileName };
           } else if (item.children) {
             // Recursively update children
@@ -574,7 +575,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       // Update current file path if it was renamed
       if (stateRef.current.currentFilePath === data.oldPath) {
         handlersRef.current.setCurrentFilePath(data.newPath);
-        handlersRef.current.setCurrentFileName(data.newPath.split('/').pop() || data.newPath);
+        handlersRef.current.setCurrentFileName(getFileName(data.newPath));
       }
     }));
     // NOTE: File tree updates handled by EditorMode directly via onWorkspaceFileTreeUpdated
@@ -587,7 +588,7 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
         // If there's a workspace path and we're not in workspace mode, open the workspace first
         if (data.workspacePath && !stateRef.current.workspaceMode) {
           // Open the workspace
-          const workspaceName = data.workspacePath.split('/').pop() || 'Workspace';
+          const workspaceName = getFileName(data.workspacePath) || 'Workspace';
           const fileTree = await window.electronAPI.getFolderContents(data.workspacePath);
           handlersRef.current.setWorkspaceMode(true);
           handlersRef.current.setWorkspacePath(data.workspacePath);

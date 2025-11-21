@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statSync, existsSync, promises as fsPromises
 import * as fs from 'fs';
 import { join, basename, dirname, extname } from 'path';
 import * as path from 'path';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
@@ -11,10 +11,11 @@ import { AnalyticsService } from '../services/analytics/AnalyticsService';
 const { writeFile, mkdir, rename, unlink, rmdir, copyFile, readFile, rm, stat, cp } = fsPromises;
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 import { windowStates, getWindowId, createWindow } from '../window/WindowManager';
 import { startFileWatcher, stopFileWatcher } from '../file/FileWatcher';
 import { getFolderContents } from '../utils/FileTree';
-import { FIND_PRUNE_ARGS, RIPGREP_EXCLUDE_ARGS } from '../utils/fileFilters';
+import { RIPGREP_EXCLUDE_ARGS_ARRAY } from '../utils/fileFilters';
 import {
     getWorkspaceRecentFiles,
     addWorkspaceRecentFile,
@@ -37,6 +38,95 @@ function getFileType(filePath: string): string {
 
 // Cache for quick open file searches
 const fileNameCaches = new Map<string, Array<{ path: string; name: string }>>();
+
+// Get the ripgrep binary path for the current platform
+function getRipgrepPath(): string {
+    const platform = os.platform();
+    const arch = os.arch();
+    let rgBinaryDir = '';
+
+    if (platform === 'darwin') {
+        rgBinaryDir = arch === 'arm64' ? 'arm64-darwin' : 'x64-darwin';
+    } else if (platform === 'win32') {
+        // Windows ARM can run x64 binaries via emulation, and there's no arm64-win32 binary
+        rgBinaryDir = 'x64-win32';
+    } else if (platform === 'linux') {
+        rgBinaryDir = arch === 'arm64' ? 'arm64-linux' : 'x64-linux';
+    }
+
+    const rgBinaryName = platform === 'win32' ? 'rg.exe' : 'rg';
+    const isPackaged = app.isPackaged;
+
+    // Use a variable to avoid Vite trying to resolve 'node_modules' as an identifier
+    const NODE_MODULES_DIR = ['node', '_', 'modules'].join('');
+
+    const possibleRgPaths: string[] = [];
+
+    if (isPackaged) {
+        const resourcesPath = process.resourcesPath;
+        possibleRgPaths.push(
+            path.join(resourcesPath, 'app.asar.unpacked', NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+        );
+    } else {
+        possibleRgPaths.push(
+            path.join(__dirname, '..', '..', NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+            path.join(process.cwd(), NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
+        );
+    }
+
+    for (const testPath of possibleRgPaths) {
+        if (existsSync(testPath)) {
+            // Make sure the binary is executable in production (non-Windows)
+            if (isPackaged && platform !== 'win32') {
+                try {
+                    fs.chmodSync(testPath, 0o755);
+                } catch (e) {
+                    console.warn('[SEARCH] Could not set executable permission on ripgrep:', e);
+                }
+            }
+            console.log('[SEARCH] Found ripgrep at:', testPath);
+            return testPath;
+        } else {
+            console.log('[SEARCH] ripgrep not found at:', testPath);
+        }
+    }
+
+    // Fall back to system rg
+    console.warn('[SEARCH] Could not find bundled ripgrep, falling back to system rg');
+    return 'rg';
+}
+
+// Cross-platform file finder using ripgrep --files
+async function findMarkdownFiles(dir: string): Promise<string[]> {
+    const rgPath = getRipgrepPath();
+
+    const rgArgs = [
+        '--files',
+        '--type', 'md',
+        ...RIPGREP_EXCLUDE_ARGS_ARRAY,
+        dir
+    ];
+
+    let stdout = '';
+    try {
+        const result = await execFileAsync(rgPath, rgArgs, { maxBuffer: 5 * 1024 * 1024 });
+        stdout = result.stdout;
+    } catch (execError: any) {
+        // ripgrep returns exit code 1 when no matches found
+        if (execError.code === 1) {
+            stdout = execError.stdout || '';
+        } else {
+            throw execError;
+        }
+    }
+
+    if (!stdout) return [];
+
+    return stdout
+        .split('\n')
+        .filter(line => line.trim())
+        .map(file => path.normalize(file));
+}
 
 export function registerWorkspaceHandlers() {
     const analytics = AnalyticsService.getInstance();
@@ -183,20 +273,15 @@ export function registerWorkspaceHandlers() {
     // Build file name cache for quick open
     ipcMain.handle('build-quick-open-cache', async (event, workspacePath: string) => {
         try {
-            const escapedPath = workspacePath.replace(/["'\\]/g, '\\$&');
-            // Use centralized prune arguments to exclude directories
-            const findCommand = `find "${escapedPath}" ${FIND_PRUNE_ARGS} -type f \\( -name "*.md" -o -name "*.markdown" \\) -print 2>/dev/null`;
-            const { stdout } = await execAsync(findCommand, { shell: '/bin/bash' });
+            // Use cross-platform Node.js file walking instead of Unix find command
+            const files = await findMarkdownFiles(workspacePath);
 
             const cache: Array<{ path: string; name: string }> = [];
-            if (stdout) {
-                const files = stdout.split('\n').filter(f => f.trim());
-                for (const file of files) {
-                    cache.push({
-                        path: file,
-                        name: basename(file).toLowerCase()
-                    });
-                }
+            for (const file of files) {
+                cache.push({
+                    path: file,
+                    name: basename(file).toLowerCase()
+                });
             }
 
             fileNameCaches.set(workspacePath, cache);
@@ -225,7 +310,8 @@ export function registerWorkspaceHandlers() {
                 .filter(item => item.name.includes(trimmedQuery))
                 .slice(0, 50)
                 .map(item => ({
-                    path: item.path,
+                    // Normalize path separators to platform-native format
+                    path: path.normalize(item.path),
                     isFileNameMatch: true,
                     matches: []
                 }));
@@ -243,63 +329,28 @@ export function registerWorkspaceHandlers() {
             const trimmedQuery = query.trim();
             if (!trimmedQuery) return [];
 
-            // Escape special characters for shell
-            const escapedTerm = trimmedQuery.replace(/["'\\]/g, '\\$&');
+            const rgPath = getRipgrepPath();
+            const rgArgs = [
+                '--type', 'md',
+                '-i',
+                '--json',
+                ...RIPGREP_EXCLUDE_ARGS_ARRAY,
+                trimmedQuery,
+                workspacePath
+            ];
 
-            // Try to use bundled ripgrep from claude-code, fall back to system rg
-            let rgPath = 'rg';
-
-            // Determine the platform-specific ripgrep binary
-            const platform = os.platform();
-            const arch = os.arch();
-            let rgBinaryDir = '';
-
-            if (platform === 'darwin') {
-                rgBinaryDir = arch === 'arm64' ? 'arm64-darwin' : 'x64-darwin';
-            } else if (platform === 'win32') {
-                rgBinaryDir = 'x64-windows';
-            } else if (platform === 'linux') {
-                rgBinaryDir = arch === 'arm64' ? 'arm64-linux' : 'x64-linux';
-            }
-
-            const rgBinaryName = platform === 'win32' ? 'rg.exe' : 'rg';
-            const isPackaged = app.isPackaged;
-
-            // Use a variable to avoid Vite trying to resolve 'node_modules' as an identifier
-            const NODE_MODULES_DIR = ['node', '_', 'modules'].join('');
-
-            // Check all possible paths, both dev and production
-            const possibleRgPaths = [];
-
-            if (isPackaged) {
-                const resourcesPath = process.resourcesPath;
-                possibleRgPaths.push(
-                    path.join(resourcesPath, 'app.asar.unpacked', NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
-                );
-            } else {
-                possibleRgPaths.push(
-                    path.join(__dirname, '..', '..', NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
-                    path.join(process.cwd(), NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
-                );
-            }
-
-            for (const testPath of possibleRgPaths) {
-                if (existsSync(testPath)) {
-                    rgPath = testPath;
-                    if (isPackaged && platform !== 'win32') {
-                        try {
-                            fs.chmodSync(rgPath, 0o755);
-                        } catch (e) {
-                            console.warn('[SEARCH] Could not set executable permission on ripgrep:', e);
-                        }
-                    }
-                    break;
+            let stdout = '';
+            try {
+                const result = await execFileAsync(rgPath, rgArgs, { maxBuffer: 5 * 1024 * 1024 });
+                stdout = result.stdout;
+            } catch (execError: any) {
+                // ripgrep returns exit code 1 when no matches found, which is not an error
+                if (execError.code === 1) {
+                    stdout = execError.stdout || '';
+                } else {
+                    throw execError;
                 }
             }
-
-            // Use centralized ripgrep exclude arguments
-            const contentCommand = `"${rgPath}" --type md -i --json ${RIPGREP_EXCLUDE_ARGS} "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
-            const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
 
             const contentMatches = new Map<string, any>();
             if (stdout) {
@@ -311,7 +362,7 @@ export function registerWorkspaceHandlers() {
                             const filePath = item.data.path.text;
                             if (!contentMatches.has(filePath)) {
                                 contentMatches.set(filePath, {
-                                    path: filePath,
+                                    path: path.normalize(filePath),
                                     isContentMatch: true,
                                     matches: []
                                 });
@@ -343,112 +394,51 @@ export function registerWorkspaceHandlers() {
             const trimmedQuery = query.trim();
             if (!trimmedQuery) return [];
 
-            // Escape special characters for shell
-            const escapedTerm = trimmedQuery.replace(/["'\\]/g, '\\$&');
+            const allResults: any[] = [];
 
-            // Search both file names and content using ripgrep
-            // Use --files-with-matches to get file list, then search content
-            const allResults = [];
-
-            // First, search file names using centralized exclusion logic
+            // First, search file names using ripgrep --files
             try {
-                const fileNameCommand = `find "${workspacePath}" ${FIND_PRUNE_ARGS} \\( -name "*.md" -o -name "*.markdown" \\) -print 2>/dev/null | grep -i "${escapedTerm}" | head -50 || true`;
-                const { stdout: fileMatches } = await execAsync(fileNameCommand);
+                const allFiles = await findMarkdownFiles(workspacePath);
+                const queryLower = trimmedQuery.toLowerCase();
+                const matchingFiles = allFiles
+                    .filter(file => basename(file).toLowerCase().includes(queryLower))
+                    .slice(0, 50);
 
-                if (fileMatches) {
-                    const files = fileMatches.split('\n').filter(f => f.trim());
-                    for (const file of files) {
-                        allResults.push({
-                            path: file,
-                            isFileNameMatch: true,
-                            matches: []
-                        });
-                    }
+                for (const file of matchingFiles) {
+                    allResults.push({
+                        path: file,
+                        isFileNameMatch: true,
+                        matches: []
+                    });
                 }
             } catch (e) {
                 // Ignore file name search errors
             }
 
             // Then search content using ripgrep
-            let contentCommand = ''; // Define at outer scope for error handling
             try {
-                // Try to use bundled ripgrep from claude-code, fall back to system rg
-                let rgPath = 'rg';
-                const app = require('electron').app;
-                const path = require('path'); // Ensure path is required locally
-                const os = require('os');
-                const fs = require('fs');
+                const rgPath = getRipgrepPath();
+                const rgArgs = [
+                    '--type', 'md',
+                    '-i',
+                    '--json',
+                    ...RIPGREP_EXCLUDE_ARGS_ARRAY,
+                    trimmedQuery,
+                    workspacePath
+                ];
 
-                // Determine the platform-specific ripgrep binary
-                const platform = os.platform();
-                const arch = os.arch();
-                let rgBinaryDir = '';
-
-                if (platform === 'darwin') {
-                    rgBinaryDir = arch === 'arm64' ? 'arm64-darwin' : 'x64-darwin';
-                } else if (platform === 'win32') {
-                    rgBinaryDir = 'x64-windows';
-                } else if (platform === 'linux') {
-                    rgBinaryDir = arch === 'arm64' ? 'arm64-linux' : 'x64-linux';
-                }
-
-                const rgBinaryName = platform === 'win32' ? 'rg.exe' : 'rg';
-
-                // In production, files are in app.asar.unpacked
-                const isPackaged = app.isPackaged;
-
-                // Use a variable to avoid Vite trying to resolve 'node_modules' as an identifier
-                const NODE_MODULES_DIR = ['node', '_', 'modules'].join('');
-
-                // Check all possible paths, both dev and production
-                const possibleRgPaths = [];
-
-                if (isPackaged) {
-                    // Production paths - files are unpacked from ASAR
-                    const resourcesPath = process.resourcesPath;
-                    possibleRgPaths.push(
-                        // Standard unpacked location
-                        path.join(resourcesPath, 'app.asar.unpacked', NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
-                    );
-                } else {
-                    // Development paths
-                    possibleRgPaths.push(
-                        path.join(__dirname, '..', '..', NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
-                        path.join(process.cwd(), NODE_MODULES_DIR, '@anthropic-ai', 'claude-agent-sdk', 'vendor', 'ripgrep', rgBinaryDir, rgBinaryName),
-                    );
-                }
-
-                // console.log('[SEARCH] Looking for ripgrep. isPackaged:', isPackaged, 'platform:', platform, 'arch:', arch);
-                // console.log('[SEARCH] Binary dir:', rgBinaryDir, 'Binary name:', rgBinaryName);
-                // console.log('[SEARCH] Checking paths:', possibleRgPaths);
-
-                for (const testPath of possibleRgPaths) {
-                    if (existsSync(testPath)) {
-                        rgPath = testPath;
-                        console.log('[SEARCH] Found ripgrep at:', rgPath);
-
-                        // Make sure the binary is executable in production
-                        if (isPackaged && platform !== 'win32') {
-                            try {
-                                fs.chmodSync(rgPath, 0o755);
-                                console.log('[SEARCH] Set executable permission on ripgrep');
-                            } catch (e) {
-                                console.warn('[SEARCH] Could not set executable permission on ripgrep:', e);
-                            }
-                        }
-                        break;
+                let stdout = '';
+                try {
+                    const result = await execFileAsync(rgPath, rgArgs, { maxBuffer: 5 * 1024 * 1024 });
+                    stdout = result.stdout;
+                } catch (execError: any) {
+                    // ripgrep returns exit code 1 when no matches found, which is not an error
+                    if (execError.code === 1) {
+                        stdout = execError.stdout || '';
                     } else {
-                        console.log('[SEARCH] Not found at:', testPath);
+                        throw execError;
                     }
                 }
-
-                if (rgPath === 'rg') {
-                    console.warn('[SEARCH] Could not find bundled ripgrep, falling back to system rg');
-                }
-
-                // Use centralized ripgrep exclude arguments
-                contentCommand = `"${rgPath}" --type md -i --json ${RIPGREP_EXCLUDE_ARGS} "${escapedTerm}" "${workspacePath}" 2>/dev/null || true`;
-                const { stdout } = await execAsync(contentCommand, { maxBuffer: 5 * 1024 * 1024 });
 
                 if (stdout) {
                     const lines = stdout.split('\n').filter(line => line.trim());
@@ -458,7 +448,7 @@ export function registerWorkspaceHandlers() {
                         try {
                             const item = JSON.parse(line);
                             if (item.type === 'match') {
-                                const filePath = item.data.path.text;
+                                const filePath = path.normalize(item.data.path.text);
                                 if (!contentMatches.has(filePath)) {
                                     contentMatches.set(filePath, {
                                         path: filePath,
@@ -467,7 +457,6 @@ export function registerWorkspaceHandlers() {
                                     });
                                 }
 
-                                // Add match with line number and text
                                 contentMatches.get(filePath).matches.push({
                                     line: item.data.line_number,
                                     text: item.data.lines.text.trim(),
@@ -484,7 +473,6 @@ export function registerWorkspaceHandlers() {
                     for (const [filePath, data] of contentMatches) {
                         const existing = allResults.find(r => r.path === filePath);
                         if (existing) {
-                            // File matches both name and content
                             existing.matches = data.matches;
                             existing.isContentMatch = true;
                         } else {
@@ -494,9 +482,7 @@ export function registerWorkspaceHandlers() {
                 }
             } catch (error: any) {
                 console.error('Error executing ripgrep:', error);
-                console.error('[SEARCH] Command was:', contentCommand);
                 console.error('[SEARCH] Error details:', error.message, error.code);
-                // Return empty results on error instead of throwing
             }
 
             // Sort by relevance: files matching both name and content first
