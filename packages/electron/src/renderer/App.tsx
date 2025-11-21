@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { usePostHog } from 'posthog-js/react';
 import { logger } from './utils/logger';
 import type { LexicalCommand } from 'rexical';
 // aiChatBridge has been replaced by editorRegistry
@@ -25,6 +26,7 @@ import { ErrorDialog } from './components/ErrorDialog/ErrorDialog';
 import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
 import { ApiKeyDialog } from './components/ApiKeyDialog';
 import { ProjectSelectionDialog } from './components/ProjectSelectionDialog/ProjectSelectionDialog';
+import { OnboardingDialog } from './components/OnboardingDialog/OnboardingDialog';
 import { GlobalSettingsScreen as AIModels } from './components/GlobalSettings/GlobalSettingsScreen.tsx';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { AgenticPanel, type AgenticPanelRef } from './components/UnifiedAI';
@@ -80,6 +82,9 @@ if (!pluginsRegistered) {
 export default function App() {
   // console.log('[APP RENDER]', new Date().toISOString(), 'App component rendering');
   logger.ui.info('App component rendering');
+
+  // PostHog for analytics
+  const posthog = usePostHog();
 
   // Check for special window modes
   const urlParams = new URLSearchParams(window.location.search);
@@ -157,6 +162,9 @@ export default function App() {
     suggestedWorkspace?: string;
   } | null>(null);
 
+  // Onboarding dialog state
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+
   // Navigation gutter state
   const [sidebarView, setSidebarView] = useState<SidebarView>('files');
 
@@ -191,6 +199,90 @@ export default function App() {
 
   // Agent panel plan reference (for launching from plan status)
   const [agentPlanReference, setAgentPlanReference] = useState<string | null>(null);
+
+  // Check for first-time user after initialization completes
+  useEffect(() => {
+    // Only check after initialization is complete
+    if (isInitializing) return;
+
+    const userRole = localStorage.getItem('user_role');
+    const nextPromptTime = localStorage.getItem('onboarding_next_prompt');
+
+    // Don't show if user has completed or permanently skipped
+    if (userRole) {
+      return;
+    }
+
+    // Check if we should wait before prompting again
+    if (nextPromptTime) {
+      const now = Date.now();
+      const promptTime = parseInt(nextPromptTime, 10);
+
+      if (now < promptTime) {
+        // Not time to show again yet
+        return;
+      }
+
+      // Time has passed, clear the timestamp
+      localStorage.removeItem('onboarding_next_prompt');
+    }
+
+    // Show onboarding dialog
+    setIsOnboardingOpen(true);
+  }, [isInitializing]);
+
+  // Handle onboarding completion
+  const handleOnboardingComplete = useCallback((role: string, customRole: string | null, email: string | null) => {
+    // Store user role in localStorage
+    const roleToStore = customRole || role;
+    localStorage.setItem('user_role', roleToStore);
+
+    // Store email if provided
+    if (email) {
+      localStorage.setItem('user_email', email);
+
+      // Associate email with user in PostHog
+      if (posthog) {
+        posthog.people.set({ email });
+      }
+    }
+
+    // Track onboarding completion event
+    if (posthog) {
+      posthog.capture('onboarding_completed', {
+        user_role: role, // Use the predefined role value (developer, product_manager, or "other")
+        custom_role_provided: !!customRole,
+        custom_role_text: customRole || undefined, // The actual custom role text
+        email_provided: !!email,
+      });
+    }
+
+    // Close the dialog
+    setIsOnboardingOpen(false);
+  }, [posthog]);
+
+  // Handle "Ask me later" - set a timestamp for 2 days from now
+  const handleOnboardingAskLater = useCallback(() => {
+    const nextPromptTime = Date.now() + (2 * 24 * 60 * 60 * 1000); // 2 days in milliseconds
+    localStorage.setItem('onboarding_next_prompt', nextPromptTime.toString());
+
+    if (posthog) {
+      posthog.capture('onboarding_deferred');
+    }
+
+    setIsOnboardingOpen(false);
+  }, [posthog]);
+
+  // Handle "Never ask again" - permanently dismiss
+  const handleOnboardingNeverAsk = useCallback(() => {
+    localStorage.setItem('user_role', 'skipped'); // Special value to indicate user chose to skip
+
+    if (posthog) {
+      posthog.capture('onboarding_skipped');
+    }
+
+    setIsOnboardingOpen(false);
+  }, [posthog]);
 
   // Load custom trackers when workspace is available
   useEffect(() => {
@@ -1344,6 +1436,12 @@ export default function App() {
         isOpen={isDiscordInvitationOpen}
         onClose={() => setIsDiscordInvitationOpen(false)}
         onDismiss={() => setIsDiscordInvitationOpen(false)}
+      />
+      <OnboardingDialog
+        isOpen={isOnboardingOpen}
+        onComplete={handleOnboardingComplete}
+        onAskLater={handleOnboardingAskLater}
+        onNeverAsk={handleOnboardingNeverAsk}
       />
       <ErrorToastContainer />
     </div>
