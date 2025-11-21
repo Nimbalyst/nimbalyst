@@ -36,6 +36,7 @@ Provide your review in the following format:
 | Type Safety | ✅ Fully Typed / ⚠️ Some Any Types / ❌ Missing Types | [Issues if any] |
 | Potential Bugs | ✅ None Found / ⚠️ See Below | [Count if any] |
 | Junk/Cleanup | ✅ Clean / ⚠️ See Below | [Items if any] |
+| Analytics Events | ✅ Not Needed / ✅ Already Added / ⚠️ Should Add | [See docs/ANALYTICS_GUIDE.md] |
 
 ## Detailed Findings
 
@@ -106,6 +107,29 @@ Provide your review in the following format:
 - Accessibility issues
 - Missing documentation
 - Test coverage gaps
+
+### Analytics Events
+[Evaluate whether PostHog analytics events should be added for this feature/change. See docs/ANALYTICS_GUIDE.md for implementation details.]
+
+Consider adding analytics for:
+- New user-facing features (track adoption/usage)
+- New UI interactions (buttons, dialogs, workflows)
+- Feature settings or preferences changes
+- Error scenarios that would help diagnose issues
+- Performance-sensitive operations (with timing categories)
+
+Do NOT add analytics for:
+- Internal refactors with no user-visible changes
+- Bug fixes (unless tracking the bug occurrence is valuable)
+- Test-only changes
+- Documentation changes
+
+If analytics should be added, suggest specific events following the naming conventions:
+- Use snake_case: `feature_used`, `dialog_opened`
+- Use noun_verb pattern: `file_opened`, `session_created`
+- Group with prefixes: `ai_*`, `file_*`, `window_*`, `project_*`
+
+[Note "Not needed for this change" if analytics are not applicable, or list suggested events]
 
 ## Suggested Commit Message
 [Provide a well-formatted commit message for the entire branch following the project's commit style, but DO NOT create the commit]
