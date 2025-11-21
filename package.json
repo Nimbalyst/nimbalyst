@@ -53,16 +53,20 @@
   ],
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.37",
+    "ajv-formats": "^3.0.1",
+    "content-type": "^1.0.5",
     "cors": "^2.8.5",
+    "cross-spawn": "^7.0.6",
     "eventsource": "^4.1.0",
     "eventsource-parser": "^3.0.6",
     "express": "^5.1.0",
-    "openai": "^6.9.1"
+    "express-rate-limit": "^8.2.1",
+    "openai": "^6.9.1",
+    "pkce-challenge": "^5.0.0",
+    "raw-body": "^3.0.1",
+    "zod-to-json-schema": "^3.25.0"
   },
   "overrides": {
-    "prismjs": "^1.30.0",
-    "@electric-sql/pglite-socket": {
-      "@electric-sql/pglite": "$@electric-sql/pglite"
-    }
+    "prismjs": "^1.30.0"
   }
 }

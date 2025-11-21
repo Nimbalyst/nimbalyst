@@ -39,7 +39,7 @@
     "@anthropic-ai/sdk": "^0.67.0",
     "@electric-sql/pglite": "^0.3.11",
     "@excalidraw/excalidraw": "0.17.6",
-    "@modelcontextprotocol/sdk": "^1.20.2",
+    "@modelcontextprotocol/sdk": "^1.22.0",
     "@monaco-editor/react": "^4.7.0",
     "@nimbalyst/runtime": "*",
     "@types/glob": "^8.1.0",
@@ -78,7 +78,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@electric-sql/pglite-socket": "^0.0.13",
+    "@electric-sql/pglite-socket": "^0.0.19",
     "@electron/notarize": "^2.3.2",
     "@eslint/js": "^9.37.0",
     "@playwright/test": "^1.55.1",
