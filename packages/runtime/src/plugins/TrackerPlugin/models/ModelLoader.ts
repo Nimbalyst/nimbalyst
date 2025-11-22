@@ -65,7 +65,6 @@ const builtinTrackers: TrackerDataModel[] = [
       { name: 'tags', type: 'array', itemType: 'string', displayInline: false },
       { name: 'created', type: 'string', displayInline: false },
       { name: 'updated', type: 'string', displayInline: false },
-      { name: 'dueDate', type: 'date', displayInline: true },
       { name: 'startDate', type: 'date', displayInline: false },
       { name: 'agentSessions', type: 'array', itemType: 'object', displayInline: false },
     ],
@@ -80,7 +79,6 @@ const builtinTrackers: TrackerDataModel[] = [
       {
         row: [
           { field: 'owner', width: 200 },
-          { field: 'dueDate', width: 150 },
           { field: 'tags', width: 'auto' },
         ],
       },

@@ -338,28 +338,28 @@ The Nimbalyst app uses **PGLite** (PostgreSQL in WebAssembly) for all data stora
 **Rules when working with database timestamps:**
 
 1. ✅ **DO**: Use `CURRENT_TIMESTAMP` for database inserts/updates
-   ```sql
+```sql
    UPDATE ai_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = $1
-   ```
+```
 
 2. ❌ **DON'T**: Use `Date.now()` with `to_timestamp()` - causes double conversion
-   ```sql
+```sql
    -- WRONG - Don't do this!
    UPDATE ai_sessions SET updated_at = to_timestamp($1 / 1000.0) WHERE id = $1
-   ```
+```
 
 3. ✅ **DO**: Retrieve timestamps through `toMillis()` function
-   ```typescript
+```typescript
    const createdAt = toMillis(row.created_at);  // Converts UTC to proper epoch ms
-   ```
+```
 
 4. ✅ **DO**: Display with `toLocaleString()` for user's local timezone
-   ```typescript
+```typescript
    new Date(timestamp).toLocaleString(undefined, {
      month: 'short', day: 'numeric', year: 'numeric',
      hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
    });
-   ```
+```
 
 **Related files:**
 - `packages/electron/src/main/database/worker.js` - Database schema and comments
@@ -415,7 +415,6 @@ planStatus:
   created: "YYYY-MM-DD"             # Creation date
   updated: "YYYY-MM-DDTHH:MM:SS.sssZ"  # Last update timestamp
   progress: [0-100]                  # Completion percentage
-  dueDate: "YYYY-MM-DD"              # Due date (optional)
   startDate: "YYYY-MM-DD"            # Start date (optional)
 ---
 ```

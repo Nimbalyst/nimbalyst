@@ -45,7 +45,6 @@ export const TRACKER_ITEM_ELEMENT_TRANSFORMER: ElementTransformer = {
     if (data.tags && data.tags.length > 0) metadata.tags = data.tags;
     if (data.created) metadata.created = data.created;
     if (data.updated) metadata.updated = data.updated;
-    if (data.dueDate) metadata.dueDate = data.dueDate;
 
     // Export as: text content @type[metadata...]
     const parts: string[] = [];
@@ -55,7 +54,6 @@ export const TRACKER_ITEM_ELEMENT_TRANSFORMER: ElementTransformer = {
     if (metadata.owner) parts.push(`owner:${metadata.owner}`);
     if (metadata.created) parts.push(`created:${metadata.created}`);
     if (metadata.updated) parts.push(`updated:${metadata.updated}`);
-    if (metadata.dueDate) parts.push(`due:${metadata.dueDate}`);
     if (metadata.tags && metadata.tags.length > 0) parts.push(`tags:${metadata.tags.join(',')}`);
 
     let result = `${textContent} #${data.type}[${parts.join(' ')}]`;
@@ -112,7 +110,6 @@ export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
           case 'owner': metadata.owner = cleanValue; break;
           case 'created': metadata.created = cleanValue; break;
           case 'updated': metadata.updated = cleanValue; break;
-          case 'due': metadata.dueDate = cleanValue; break;
           case 'tags': metadata.tags = cleanValue.split(','); break;
         }
       }
@@ -133,7 +130,6 @@ export const TRACKER_ITEM_TEXT_TRANSFORMER: TextMatchTransformer = {
         tags: metadata.tags,
         created: metadata.created || new Date().toISOString().split('T')[0],
         updated: metadata.updated,
-        dueDate: metadata.dueDate,
       };
 
       // console.log('Creating TrackerItemNode with data:', data);

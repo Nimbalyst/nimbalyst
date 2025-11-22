@@ -28,7 +28,6 @@ export type TrackerItemData = {
   tags?: string[];
   created?: string;
   updated?: string;
-  dueDate?: string;
 };
 
 export type SerializedTrackerItemNode = Spread<

@@ -84,10 +84,6 @@ fields:
     itemType: string
     displayInline: false
 
-  - name: dueDate
-    type: date
-    displayInline: true
-
 statusBarLayout:
   - row:
     - field: status
@@ -99,8 +95,6 @@ statusBarLayout:
   - row:
     - field: owner
       width: 200
-    - field: dueDate
-      width: 150
     - field: tags
       width: auto
 
