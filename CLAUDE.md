@@ -383,6 +383,8 @@ The Nimbalyst app uses **PGLite** (PostgreSQL in WebAssembly) for all data stora
 ## Adding Analytics Events
 See @docs/ANALYTICS_GUIDE.md for details on how to add anonymous usage analytics to track feature use.
 
+**IMPORTANT**: When adding, modifying, or removing PostHog events, you MUST update @docs/POSTHOG_EVENTS.md with the event name, file location, trigger, and properties. This document serves as the canonical reference for all analytics events in the codebase.
+
 ## Agentic Planning System
 
 The repository uses a structured markdown-based planning system for agent-led development workstreams. Plans are stored as markdown files with YAML frontmatter metadata.
