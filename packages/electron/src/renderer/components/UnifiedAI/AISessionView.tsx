@@ -93,13 +93,15 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
 }) => {
   return (
     <>
-      {/* Referenced files gutter at top */}
-      <FileGutter
-        sessionId={sessionId}
-        workspacePath={workspacePath}
-        type="referenced"
-        onFileClick={onFileClick}
-      />
+      {/* Referenced files gutter at top - only in chat mode (agent mode has sidebar) */}
+      {mode === 'chat' && (
+        <FileGutter
+          sessionId={sessionId}
+          workspacePath={workspacePath}
+          type="referenced"
+          onFileClick={onFileClick}
+        />
+      )}
 
       {/* Main transcript area */}
       <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
@@ -120,13 +122,15 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
         />
       </div>
 
-      {/* Edited files gutter at bottom */}
-      <FileGutter
-        sessionId={sessionId}
-        workspacePath={workspacePath}
-        type="edited"
-        onFileClick={onFileClick}
-      />
+      {/* Edited files gutter at bottom - only in chat mode (agent mode has sidebar) */}
+      {mode === 'chat' && (
+        <FileGutter
+          sessionId={sessionId}
+          workspacePath={workspacePath}
+          type="edited"
+          onFileClick={onFileClick}
+        />
+      )}
 
       {/* Queue display */}
       <PromptQueueList
