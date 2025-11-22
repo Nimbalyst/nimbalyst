@@ -1914,6 +1914,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           <SessionDropdown
             currentSessionId={activeTabId}
             sessions={availableSessions}
+            processingSessions={processingSessions}
+            unreadSessions={unreadSessions}
             onSessionSelect={openSessionInTab}
             onNewSession={() => createNewSession()}
             onDeleteSession={deleteSession}

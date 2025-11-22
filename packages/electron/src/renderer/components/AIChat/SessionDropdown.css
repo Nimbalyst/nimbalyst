@@ -28,8 +28,16 @@
 }
 
 
+.session-dropdown-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
 .session-dropdown-arrow {
   transition: transform 0.2s ease;
+  flex-shrink: 0;
 }
 
 .session-dropdown-arrow.open {
@@ -136,6 +144,27 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.session-status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.session-status-indicator.processing {
+  background-color: var(--primary-color);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.session-status-indicator.unread {
+  background-color: var(--primary-color);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .session-provider-badge {

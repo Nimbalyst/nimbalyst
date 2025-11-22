@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MaterialSymbol } from '../MaterialSymbol';
+import { ProviderIcon } from '../icons/ProviderIcons';
 import { parseModelInfo, getProviderLabel } from '../../utils/modelUtils';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { formatDate } from '@nimbalyst/runtime';
@@ -13,6 +14,8 @@ type SessionDropdownItem = Pick<SessionData, 'id' | 'createdAt' | 'name' | 'titl
 interface SessionDropdownProps {
   currentSessionId: string | null;
   sessions: SessionDropdownItem[];
+  processingSessions?: Set<string>;
+  unreadSessions?: Set<string>;
   onSessionSelect: (sessionId: string) => void;
   onNewSession: () => void;
   onDeleteSession: (sessionId: string) => void;
@@ -23,6 +26,8 @@ interface SessionDropdownProps {
 export function SessionDropdown({
   currentSessionId,
   sessions,
+  processingSessions = new Set(),
+  unreadSessions = new Set(),
   onSessionSelect,
   onNewSession,
   onDeleteSession,
@@ -49,15 +54,17 @@ export function SessionDropdown({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const getCurrentSession = () => {
+    if (!currentSessionId) return null;
+    return sessions.find(s => s.id === currentSessionId) || null;
+  };
+
   const getCurrentSessionName = () => {
-    if (!currentSessionId) return 'New Session';
-    const session = sessions.find(s => s.id === currentSessionId);
-    if (session?.title) return session.title;
-    if (session?.name) return session.name;
-    if (session) {
-      return formatDate(session.createdAt);
-    }
-    return 'Current Session';
+    const session = getCurrentSession();
+    if (!session) return 'New Session';
+    if (session.title) return session.title;
+    if (session.name) return session.name;
+    return formatDate(session.createdAt);
   };
 
   const formatSessionName = (session: SessionDropdownItem) => {
@@ -110,7 +117,11 @@ export function SessionDropdown({
         onClick={handleToggle}
         title="Session History"
       >
-        <MaterialSymbol icon="history" size={18} />
+        {currentSessionId && processingSessions.has(currentSessionId) && (
+          <div className="session-status-indicator processing" title="Running" />
+        )}
+        <ProviderIcon provider={getCurrentSession()?.provider || 'claude'} size={16} />
+        <span className="session-dropdown-name">{getCurrentSessionName()}</span>
         <MaterialSymbol icon="expand_more" size={16} className={`session-dropdown-arrow ${isOpen ? 'open' : ''}`} />
       </button>
 
@@ -156,7 +167,7 @@ export function SessionDropdown({
                         onClick={(e) => e.stopPropagation()}
                       />
                     ) : (
-                      <div 
+                      <div
                         className="session-info"
                         onClick={() => {
                           onSessionSelect(session.id);
@@ -164,6 +175,12 @@ export function SessionDropdown({
                         }}
                       >
                         <div className="session-name-row">
+                          {processingSessions.has(session.id) && (
+                            <div className="session-status-indicator processing" title="Running" />
+                          )}
+                          {!processingSessions.has(session.id) && unreadSessions.has(session.id) && (
+                            <div className="session-status-indicator unread" title="Unread response" />
+                          )}
                           <span className="session-name">{formatSessionName(session)}</span>
                           {session.provider && (
                             <span className={`session-provider-badge provider-${session.provider}`}>
