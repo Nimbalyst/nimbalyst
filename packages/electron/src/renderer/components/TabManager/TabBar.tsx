@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Tab } from './TabManager';
 
 interface TabBarProps {
@@ -38,6 +38,8 @@ export const TabBar: React.FC<TabBarProps> = ({
 }) => {
   const [contextMenuTab, setContextMenuTab] = useState<string | null>(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [adjustedContextMenuPosition, setAdjustedContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const [showTabMenu, setShowTabMenu] = useState(false);
   const [menuSelectedIndex, setMenuSelectedIndex] = useState<number>(-1);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -128,6 +130,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   // Close context menu
   const closeContextMenu = useCallback(() => {
     setContextMenuTab(null);
+    setAdjustedContextMenuPosition(null);
   }, []);
 
   // Handle context menu actions
@@ -274,6 +277,35 @@ export const TabBar: React.FC<TabBarProps> = ({
       return () => document.removeEventListener('click', handleClickOutside);
     }
   }, [contextMenuTab, closeContextMenu]);
+
+  // Adjust context menu position to keep it within viewport
+  useEffect(() => {
+    if (contextMenuTab && contextMenuRef.current) {
+      const rect = contextMenuRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      let newX = contextMenuPosition.x;
+      let newY = contextMenuPosition.y;
+
+      // If menu extends beyond right edge, shift it left
+      if (contextMenuPosition.x + rect.width > viewportWidth) {
+        newX = contextMenuPosition.x - rect.width;
+      }
+      // If menu extends beyond bottom edge, shift it up
+      if (contextMenuPosition.y + rect.height > viewportHeight) {
+        newY = contextMenuPosition.y - rect.height;
+      }
+
+      // Ensure menu doesn't go off the left or top edge
+      newX = Math.max(0, newX);
+      newY = Math.max(0, newY);
+
+      if (newX !== contextMenuPosition.x || newY !== contextMenuPosition.y) {
+        setAdjustedContextMenuPosition({ x: newX, y: newY });
+      }
+    }
+  }, [contextMenuTab, contextMenuPosition]);
 
   // Click outside to close tab menu
   React.useEffect(() => {
@@ -574,11 +606,12 @@ export const TabBar: React.FC<TabBarProps> = ({
       {/* Context Menu */}
       {contextMenuTab && (
         <div
+          ref={contextMenuRef}
           className="tab-context-menu"
           style={{
             position: 'fixed',
-            left: contextMenuPosition.x,
-            top: contextMenuPosition.y
+            left: (adjustedContextMenuPosition || contextMenuPosition).x,
+            top: (adjustedContextMenuPosition || contextMenuPosition).y
           }}
         >
           <div className="context-menu-item" onClick={handleTogglePin}>
