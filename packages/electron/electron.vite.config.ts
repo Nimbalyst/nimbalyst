@@ -254,6 +254,8 @@ export default defineConfig({
         'react',
         'react-dom',
         'es6-promise-pool',
+        // Monaco Editor - include both the main module and workers for proper bundling
+        'monaco-editor',
         'monaco-editor/esm/vs/editor/editor.worker',
         'monaco-editor/esm/vs/language/json/json.worker',
         'monaco-editor/esm/vs/language/css/css.worker',

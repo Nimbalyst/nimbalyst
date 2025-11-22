@@ -8,6 +8,10 @@
 import { loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 
+// Import Monaco CSS explicitly to ensure it's bundled locally
+// This prevents 403 errors when dev server tries to serve CSS from wrong paths
+import 'monaco-editor/min/vs/editor/editor.main.css';
+
 // Import workers as URLs - Vite will handle bundling with ?worker suffix
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
