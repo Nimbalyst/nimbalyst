@@ -151,8 +151,8 @@ export function SessionDropdown({
           )}
           <div className="session-dropdown-sessions">
             {sessions.map(session => (
-                  <div 
-                    key={session.id} 
+                  <div
+                    key={session.id}
                     className={`session-dropdown-item ${session.id === currentSessionId ? 'active' : ''}`}
                   >
                     {renamingId === session.id ? (
@@ -194,11 +194,11 @@ export function SessionDropdown({
                           )}
                         </div>
                         {session.messageCount !== undefined && (
-                          <span className="session-message-count">{session.messageCount} messages</span>
+                          <span className="session-message-count">{session.messageCount} turns</span>
                         )}
                       </div>
                     )}
-                    
+
                     <div className="session-actions">
                       {onRenameSession && (
                         <button
