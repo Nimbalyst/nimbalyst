@@ -13,9 +13,9 @@ Nimbalyst is an integrated markdown environment for managing Claude Code
 - Manage agents' work across parallel Claude Code sessions in a UI
 - Open storage of content and status in markdown, workflow in Claude Code / commands, and plain files on disk or in git
 
-## ScreenShots
-- https://github.com/Nimbalyst/nimbalyst/blob/main/Nimbalyst%20Hero%20Agent%20Dark.png
-- https://github.com/Nimbalyst/nimbalyst/blob/main/Nimbalyst%20Hero%20Files%20Dev%20Dark-%20Social.png
+## ScreenShots## Hero Screenshot
+![Nimbalyst Agent](https://raw.githubusercontent.com/Nimbalyst/nimbalyst/main/Nimbalyst%20Hero%20Agent%20Dark.png)
+![Nimbalyst File](https://github.com/Nimbalyst/nimbalyst/blob/main/Nimbalyst%20Hero%20Files%20Dev%20Dark-%20Social.png)
 
 
 ## Download
