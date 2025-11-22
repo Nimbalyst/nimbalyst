@@ -266,65 +266,34 @@ test.describe('Package Installation', () => {
 
 test.describe('Version Detection', () => {
   test('should detect installed version correctly', async () => {
-    // Manually create a command file with version 0.9.0
-    const claudeDir = path.join(workspaceDir, '.claude/commands');
-    await fs.mkdir(claudeDir, { recursive: true });
+    // Install the Developer package first to get all its files
+    await page.locator("button[aria-label=\"Settings\"]").click();
+    await page.waitForSelector('text=Tool Packages', { timeout: 5000 });
 
+    const developerCard = page.locator('.action-card:has-text("Developer")');
+    await developerCard.locator('button:has-text("Install")').click();
+    await page.waitForSelector('text=installed successfully', { timeout: 10000 });
+
+    // Close settings
+    await page.keyboard.press('Escape');
+
+    // Now manually downgrade one file to version 0.9.0
+    const claudeDir = path.join(workspaceDir, '.claude/commands');
     const oldVersionCommand = `---
 packageVersion: 0.9.0
 packageId: developer
 ---
 
-# /plan Command
+# /analyze-code Command
 
 Old version of the command.
 `;
 
-    await fs.writeFile(path.join(claudeDir, 'plan.md'), oldVersionCommand, 'utf8');
+    await fs.writeFile(path.join(claudeDir, 'analyze-code.md'), oldVersionCommand, 'utf8');
 
-    // Create tracker schema with old version
-    const trackersDir = path.join(workspaceDir, '.nimbalyst/trackers');
-    await fs.mkdir(trackersDir, { recursive: true });
-
-    const oldVersionSchema = `# Package metadata
-packageVersion: 0.9.0
-packageId: developer
-
-type: bug
-displayName: Bug
-displayNamePlural: Bugs
-icon: bug_report
-color: "#dc2626"
-
-modes:
-  inline: true
-  fullDocument: false
-`;
-
-    await fs.writeFile(path.join(trackersDir, 'bug.yaml'), oldVersionSchema, 'utf8');
-
-    // Mark as installed in workspace state (simulate previous installation)
-    // This would normally be done by PackageService, but we're simulating it
-    const stateUpdate = {
-      installedPackages: [
-        {
-          packageId: 'developer',
-          installedAt: new Date().toISOString(),
-          enabled: true,
-        },
-      ],
-    };
-
-    // Update workspace state via IPC
-    await page.evaluate(async (args) => {
-      await (window as any).electronAPI.invoke('workspace:update-state', args.workspacePath, args.update);
-    }, { workspacePath: workspaceDir, update: stateUpdate });
-
-    // Open settings
+    // Open settings again
     await page.locator("button[aria-label=\"Settings\"]").click();
     await page.waitForSelector('text=Tool Packages', { timeout: 5000 });
-
-    const developerCard = page.locator('.action-card:has-text("Developer")');
 
     // Should show installed version 0.9.0
     await expect(developerCard.locator('text=v0.9.0')).toBeVisible({ timeout: 3000 });
@@ -337,42 +306,33 @@ modes:
   });
 
   test('should update package to new version', async () => {
-    // Manually create old version files
-    const claudeDir = path.join(workspaceDir, '.claude/commands');
-    await fs.mkdir(claudeDir, { recursive: true });
+    // Install Developer package at old version 0.9.0, then update
+    await page.locator("button[aria-label=\"Settings\"]").click();
+    await page.waitForSelector('text=Tool Packages', { timeout: 5000 });
 
+    const developerCard = page.locator('.action-card:has-text("Developer")');
+
+    // Install first
+    await developerCard.locator('button:has-text("Install")').click();
+    await page.waitForSelector('text=installed successfully', { timeout: 10000 });
+
+    // Close and downgrade one file
+    await page.keyboard.press('Escape');
+    const claudeDir = path.join(workspaceDir, '.claude/commands');
     const oldCommand = `---
 packageVersion: 0.9.0
 packageId: developer
 ---
 
-# /plan Command
+# /analyze-code Command
 
 Old version.
 `;
+    await fs.writeFile(path.join(claudeDir, 'analyze-code.md'), oldCommand, 'utf8');
 
-    await fs.writeFile(path.join(claudeDir, 'plan.md'), oldCommand, 'utf8');
-
-    // Mark as installed
-    const stateUpdate = {
-      installedPackages: [
-        {
-          packageId: 'developer',
-          installedAt: new Date().toISOString(),
-          enabled: true,
-        },
-      ],
-    };
-
-    await page.evaluate(async (args) => {
-      await (window as any).electronAPI.invoke("workspace:update-state", args.workspacePath, args.update);
-    }, { workspacePath: workspaceDir, update: stateUpdate });
-
-    // Open settings
+    // Reopen settings
     await page.locator("button[aria-label=\"Settings\"]").click();
     await page.waitForSelector('text=Tool Packages', { timeout: 5000 });
-
-    const developerCard = page.locator('.action-card:has-text("Developer")');
 
     // Click update button
     const updateButton = developerCard.locator('button:has-text("Update to v1.0.0")');
@@ -391,46 +351,96 @@ Old version.
     await expect(developerCard.locator('button:has-text("Update to")')).not.toBeVisible();
 
     // Verify file was updated
-    const planPath = path.join(claudeDir, 'plan.md');
-    const updatedContent = await fs.readFile(planPath, 'utf8');
+    const analyzeCodePath = path.join(claudeDir, 'analyze-code.md');
+    const updatedContent = await fs.readFile(analyzeCodePath, 'utf8');
     expect(updatedContent).toContain('packageVersion: 1.0.0');
     expect(updatedContent).not.toContain('Old version');
   });
 
   test('should handle missing version gracefully', async () => {
-    // Create command without version metadata (old format)
-    const claudeDir = path.join(workspaceDir, '.claude/commands');
-    await fs.mkdir(claudeDir, { recursive: true });
+    // Install package, then manually remove version from one file
+    await page.locator("button[aria-label=\"Settings\"]").click();
+    await page.waitForSelector('text=Tool Packages', { timeout: 5000 });
 
-    const noVersionCommand = `# /plan Command
+    const developerCard = page.locator('.action-card:has-text("Developer")');
+    await developerCard.locator('button:has-text("Install")').click();
+    await page.waitForSelector('text=installed successfully', { timeout: 10000 });
+
+    // Close and remove version from one file
+    await page.keyboard.press('Escape');
+    const claudeDir = path.join(workspaceDir, '.claude/commands');
+    const noVersionCommand = `# /analyze-code Command
 
 Command without version metadata.
 `;
+    await fs.writeFile(path.join(claudeDir, 'analyze-code.md'), noVersionCommand, 'utf8');
 
-    await fs.writeFile(path.join(claudeDir, 'plan.md'), noVersionCommand, 'utf8');
+    // Reopen settings
+    await page.locator("button[aria-label=\"Settings\"]").click();
+    await page.waitForSelector('text=Tool Packages', { timeout: 5000 });
 
-    // Mark as installed
-    const stateUpdate = {
-      installedPackages: [
-        {
-          packageId: 'developer',
-          installedAt: new Date().toISOString(),
-          enabled: true,
-        },
-      ],
-    };
+    // Should show as installed (even without version) - check for uninstall button
+    await expect(developerCard.locator('button:has-text("Uninstall")')).toBeVisible({ timeout: 5000 });
+  });
 
-    await page.evaluate(async (args) => {
-      await (window as any).electronAPI.invoke("workspace:update-state", args.workspacePath, args.update);
-    }, { workspacePath: workspaceDir, update: stateUpdate });
+  test('should show NOT installed when files are missing', async () => {
+    // Scenario: No files exist on disk
+    // Expected: Package should show as NOT installed (regardless of any stale state)
 
     // Open settings
     await page.locator("button[aria-label=\"Settings\"]").click();
     await page.waitForSelector('text=Tool Packages', { timeout: 5000 });
 
-    const developerCard = page.locator('.action-card:has-text("Developer")');
+    const coreCard = page.locator('.action-card:has-text("Core")');
 
-    // Should show as installed (even without version) - check for uninstall button
-    await expect(developerCard.locator('button:has-text("Uninstall")')).toBeVisible({ timeout: 5000 });
+    // Should show "Install" button (NOT "Installed" or "Uninstall")
+    // because files don't exist on disk
+    await expect(coreCard.locator('button:has-text("Install")')).toBeVisible({ timeout: 5000 });
+
+    // Should NOT show "Installed" status or "Uninstall" button
+    await expect(coreCard.locator('button:has-text("Uninstall")')).not.toBeVisible();
+    await expect(coreCard.locator('span:has-text("Installed")')).not.toBeVisible();
+
+    // Verify no .claude directory exists
+    const claudeDir = path.join(workspaceDir, '.claude');
+    const claudeDirExists = await fs.access(claudeDir).then(() => true).catch(() => false);
+    expect(claudeDirExists).toBe(false);
+  });
+
+  test('should show installed when files exist on disk', async () => {
+    // Manually create Core package files
+    const claudeDir = path.join(workspaceDir, '.claude/commands');
+    await fs.mkdir(claudeDir, { recursive: true });
+
+    // Create the two Core commands
+    await fs.writeFile(path.join(claudeDir, 'plan.md'), `---
+packageVersion: 1.0.0
+packageId: core
+---
+
+# /plan Command
+Content here.
+`, 'utf8');
+
+    await fs.writeFile(path.join(claudeDir, 'track.md'), `---
+packageVersion: 1.0.0
+packageId: core
+---
+
+# /track Command
+Content here.
+`, 'utf8');
+
+    // Open settings
+    await page.locator("button[aria-label=\"Settings\"]").click();
+    await page.waitForSelector('text=Tool Packages', { timeout: 5000 });
+
+    const coreCard = page.locator('.action-card:has-text("Core")');
+
+    // Should show "Uninstall" button because files exist
+    await expect(coreCard.locator('button:has-text("Uninstall")')).toBeVisible({ timeout: 5000 });
+
+    // Should show version
+    await expect(coreCard.locator('text=v1.0.0')).toBeVisible();
   });
 });

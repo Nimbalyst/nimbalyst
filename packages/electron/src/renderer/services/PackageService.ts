@@ -82,42 +82,40 @@ export class PackageService {
   }
 
   /**
-   * Get installed packages from workspace state
+   * Get installed packages by checking file existence on disk
+   * Does NOT use persisted state - always calculates fresh
    */
   async getInstalledPackages(): Promise<InstalledPackage[]> {
     if (!this.workspacePath) {
       throw new Error('Workspace path not set');
     }
 
-    try {
-      const state = await window.electronAPI.invoke('workspace:get-state', this.workspacePath);
-      return state?.installedPackages || [];
-    } catch (error) {
-      console.error('Failed to get installed packages:', error);
-      return [];
+    const installed: InstalledPackage[] = [];
+
+    // Check each package to see if its files exist
+    for (const pkg of ALL_PACKAGES) {
+      const isInstalled = await this.isPackageInstalled(pkg.id);
+      if (isInstalled) {
+        installed.push({
+          packageId: pkg.id,
+          installedAt: new Date().toISOString(), // Placeholder - not persisted
+          enabled: true,
+        });
+      }
     }
+
+    return installed;
   }
 
   /**
    * Check if a package is installed
    *
-   * Checks both workspace state AND actual file existence on disk.
-   * A package is considered installed if:
-   * 1. It's marked as installed in workspace state, OR
-   * 2. ALL of its command files AND tracker schemas exist on disk
-   *
-   * If all files exist but state is not updated, the state will be synchronized.
+   * Checks actual file existence on disk - does NOT use or update persisted state.
+   * A package is considered installed if ALL of its files exist on disk:
+   * - ALL custom command files must exist
+   * - ALL tracker schema files must exist
    */
   async isPackageInstalled(packageId: string): Promise<boolean> {
-    // First check workspace state (fast path)
-    const installed = await this.getInstalledPackages();
-    const stateInstalled = installed.some(pkg => pkg.packageId === packageId && pkg.enabled);
-
-    if (stateInstalled) {
-      return true;
-    }
-
-    // If not in state, check if ALL files exist on disk
     const pkg = getPackageById(packageId);
     if (!pkg) {
       return false;
@@ -127,7 +125,7 @@ export class PackageService {
     for (const command of pkg.customCommands) {
       const exists = await this.checkCommandExists(command.name, pkg.settings?.commandsLocation || 'project');
       if (!exists) {
-        return false; // Missing at least one command file
+        return false;
       }
     }
 
@@ -135,50 +133,15 @@ export class PackageService {
     for (const schema of pkg.trackerSchemas) {
       const exists = await this.checkTrackerSchemaExists(schema.type);
       if (!exists) {
-        return false; // Missing at least one tracker schema
+        return false;
       }
     }
 
-    // All files exist - synchronize the state
+    // All files exist
     const hasAnyFiles = pkg.customCommands.length > 0 || pkg.trackerSchemas.length > 0;
-    if (hasAnyFiles) {
-      console.log(`[PackageService] Found all installed files for ${packageId}, synchronizing state`);
-      await this.synchronizePackageState(packageId);
-      return true;
-    }
-
-    return false;
+    return hasAnyFiles;
   }
 
-  /**
-   * Synchronize workspace state for a package that has files on disk
-   */
-  private async synchronizePackageState(packageId: string): Promise<void> {
-    try {
-      const installed = await this.getInstalledPackages();
-      const existingIndex = installed.findIndex(p => p.packageId === packageId);
-
-      const packageEntry: InstalledPackage = {
-        packageId,
-        installedAt: new Date().toISOString(),
-        enabled: true,
-      };
-
-      if (existingIndex >= 0) {
-        installed[existingIndex] = packageEntry;
-      } else {
-        installed.push(packageEntry);
-      }
-
-      await window.electronAPI.invoke('workspace:update-state', this.workspacePath, {
-        installedPackages: installed,
-      });
-
-      console.log(`[PackageService] Synchronized state for ${packageId}`);
-    } catch (error) {
-      console.error(`[PackageService] Failed to synchronize state for ${packageId}:`, error);
-    }
-  }
 
   /**
    * Check if a command file exists on disk
@@ -251,26 +214,7 @@ export class PackageService {
         await this.installTrackerSchema(schema);
       }
 
-      // Update installed packages list
-      const installed = await this.getInstalledPackages();
-      const existingIndex = installed.findIndex(p => p.packageId === packageId);
-
-      const newInstalledPackage: InstalledPackage = {
-        packageId,
-        installedAt: new Date().toISOString(),
-        enabled: true,
-      };
-
-      if (existingIndex >= 0) {
-        installed[existingIndex] = newInstalledPackage;
-      } else {
-        installed.push(newInstalledPackage);
-      }
-
-      await window.electronAPI.invoke('workspace:update-state', this.workspacePath, {
-        installedPackages: installed,
-      });
-
+      // No state persistence - installation status is determined by file existence
       console.log(`[PackageService] Successfully installed package: ${pkg.name}`);
     } catch (error) {
       console.error(`[PackageService] Failed to install package ${pkg.name}:`, error);
@@ -304,14 +248,7 @@ export class PackageService {
         await this.removeTrackerSchema(schema);
       }
 
-      // Update installed packages list
-      const installed = await this.getInstalledPackages();
-      const filtered = installed.filter(p => p.packageId !== packageId);
-
-      await window.electronAPI.invoke('workspace:update-state', this.workspacePath, {
-        installedPackages: filtered,
-      });
-
+      // No state persistence - installation status is determined by file existence
       console.log(`[PackageService] Successfully uninstalled package: ${pkg.name}`);
     } catch (error) {
       console.error(`[PackageService] Failed to uninstall package ${pkg.name}:`, error);
@@ -404,16 +341,21 @@ export class PackageService {
 
   /**
    * Get all packages with installation status
+   * Verifies actual file existence for each package (not just state)
    */
   async getAllPackagesWithStatus(): Promise<Array<{ package: ToolPackage; installed: boolean }>> {
     const packages = this.getAvailablePackages();
-    const installedPackages = await this.getInstalledPackages();
-    const installedIds = new Set(installedPackages.filter(p => p.enabled).map(p => p.packageId));
+    const statuses = await Promise.all(
+      packages.map(async pkg => {
+        const installed = await this.isPackageInstalled(pkg.id);
+        return {
+          package: pkg,
+          installed,
+        };
+      })
+    );
 
-    return packages.map(pkg => ({
-      package: pkg,
-      installed: installedIds.has(pkg.id),
-    }));
+    return statuses;
   }
 
   /**
