@@ -107,7 +107,9 @@ export class LMStudioProvider extends BaseAIProvider {
       temperature: this.config.temperature || 0.7,
       tools: tools,
       tool_choice: 'auto',  // Let the model decide when to use tools
-      stream: true
+      stream: true,
+      // Request usage data in streaming response (OpenAI-compatible extension)
+      stream_options: { include_usage: true }
     };
     
     console.log('[LMStudio] Sending request with tools:', {
@@ -149,6 +151,7 @@ export class LMStudioProvider extends BaseAIProvider {
       let streamContentBuffer = '';
       let streamConfig: any = null;
       let chunkCount = 0;
+      let usageData: { input_tokens?: number; output_tokens?: number } | undefined;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -165,10 +168,21 @@ export class LMStudioProvider extends BaseAIProvider {
           if (line.trim() === '') continue;
           if (line.trim() === 'data: [DONE]') {
             console.log('[LMStudio] Received [DONE] marker');
+            // Log the output message before returning
+            if (sessionId && fullContent) {
+              this.logAgentMessage(sessionId, 'lmstudio', 'output', fullContent);
+            }
             yield {
               type: 'complete',
               content: fullContent,
-              isComplete: true
+              isComplete: true,
+              ...(usageData && {
+                usage: {
+                  input_tokens: usageData.input_tokens || 0,
+                  output_tokens: usageData.output_tokens || 0,
+                  total_tokens: (usageData.input_tokens || 0) + (usageData.output_tokens || 0)
+                }
+              })
             };
             return;
           }
@@ -178,17 +192,25 @@ export class LMStudioProvider extends BaseAIProvider {
               const json = JSON.parse(line.slice(6));
               chunkCount++;
               const delta = json.choices?.[0]?.delta;
-              
+
+              // Capture usage data if provided (OpenAI stream_options.include_usage)
+              if (json.usage) {
+                usageData = {
+                  input_tokens: json.usage.prompt_tokens,
+                  output_tokens: json.usage.completion_tokens
+                };
+              }
+
               // Log if this is the first chunk or if it's empty
               if (chunkCount === 1) {
                 console.log('[LMStudio] First chunk from API:', JSON.stringify(json, null, 2));
               }
-              
+
               // Log if we get an empty response
               if (!delta?.content && !delta?.tool_calls && json.choices?.[0]?.finish_reason) {
                 console.log('[LMStudio] Empty response with finish_reason:', json.choices[0].finish_reason);
               }
-              
+
               // Handle text content
               if (delta?.content) {
                 fullContent += delta.content;
@@ -435,13 +457,8 @@ export class LMStudioProvider extends BaseAIProvider {
                 }
               }
               
-              if (json.choices?.[0]?.finish_reason === 'stop') {
-                yield {
-                  type: 'complete',
-                  content: fullContent,
-                  isComplete: true
-                };
-              }
+              // Note: Don't yield 'complete' here on finish_reason='stop'
+              // The [DONE] marker will handle the final completion to avoid duplicates
             } catch (error) {
               console.error('Error parsing SSE data from LMStudio:', error, 'Line:', line);
             }
@@ -477,7 +494,14 @@ export class LMStudioProvider extends BaseAIProvider {
       yield {
         type: 'complete',
         content: fullContent,
-        isComplete: true
+        isComplete: true,
+        ...(usageData && {
+          usage: {
+            input_tokens: usageData.input_tokens || 0,
+            output_tokens: usageData.output_tokens || 0,
+            total_tokens: (usageData.input_tokens || 0) + (usageData.output_tokens || 0)
+          }
+        })
       };
 
     } catch (error: any) {
