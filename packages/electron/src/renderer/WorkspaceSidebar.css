@@ -300,6 +300,15 @@
   color: #1e40af;
 }
 
+/* Special directories (.claude, .nimbalyst, .nimbalyst-local) */
+.file-tree-directory.special-directory .file-tree-icon {
+  color: #7c3aed; /* Purple/violet color */
+}
+
+.file-tree-directory.special-directory.selected .file-tree-icon {
+  color: #6d28d9; /* Darker purple when selected */
+}
+
 .file-tree-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -452,6 +461,14 @@
   color: #ffffff;
 }
 
+.dark-theme .file-tree-directory.special-directory .file-tree-icon {
+  color: #a78bfa; /* Lighter purple for dark theme */
+}
+
+.dark-theme .file-tree-directory.special-directory.selected .file-tree-icon {
+  color: #c4b5fd; /* Even lighter purple when selected in dark theme */
+}
+
 /* System preference dark mode */
 @media (prefers-color-scheme: dark) {
   html:not(.light-theme):not(.dark-theme) .workspace-sidebar {
@@ -541,6 +558,14 @@
   html:not(.light-theme):not(.dark-theme) .file-tree-directory.selected .file-tree-icon,
   html:not(.light-theme):not(.dark-theme) .file-tree-directory.selected .file-tree-chevron {
     color: #dbeafe;
+  }
+
+  html:not(.light-theme):not(.dark-theme) .file-tree-directory.special-directory .file-tree-icon {
+    color: #a78bfa; /* Lighter purple for system dark mode */
+  }
+
+  html:not(.light-theme):not(.dark-theme) .file-tree-directory.special-directory.selected .file-tree-icon {
+    color: #c4b5fd; /* Even lighter purple when selected in system dark mode */
   }
 }
 
@@ -645,6 +670,14 @@
 .crystal-dark-theme .file-tree-directory.selected .file-tree-icon,
 .crystal-dark-theme .file-tree-directory.selected .file-tree-chevron {
   color: #F3F4F6;
+}
+
+.crystal-dark-theme .file-tree-directory.special-directory .file-tree-icon {
+  color: #a78bfa; /* Lighter purple for crystal-dark theme */
+}
+
+.crystal-dark-theme .file-tree-directory.special-directory.selected .file-tree-icon {
+  color: #c4b5fd; /* Even lighter purple when selected in crystal-dark theme */
 }
 
 /* Resize handle styles */

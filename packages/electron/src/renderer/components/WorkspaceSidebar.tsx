@@ -34,6 +34,11 @@ interface WorkspaceSidebarProps {
 const FILE_TREE_FILTER_OPTIONS: ReadonlyArray<FileTreeFilter> = ['all', 'markdown', 'known', 'git-uncommitted', 'git-worktree', 'ai-read', 'ai-written'];
 const CLAUDE_SESSION_FILTERS = new Set<FileTreeFilter>(['ai-read', 'ai-written']);
 const GIT_FILTERS = new Set<FileTreeFilter>(['git-uncommitted', 'git-worktree']);
+const SPECIAL_DIRECTORIES = ['.nimbalyst-local'];
+
+function isSpecialDirectory(name: string): boolean {
+  return SPECIAL_DIRECTORIES.includes(name);
+}
 
 interface SessionFileFilterState {
   read: string[];
@@ -501,12 +506,17 @@ export function WorkspaceSidebar({
       const filterTrackedItems = (entries: FileTreeItem[]): FileTreeItem[] => {
         return entries.reduce((acc: FileTreeItem[], item) => {
           if (item.type === 'directory') {
-            const filteredChildren = item.children ? filterTrackedItems(item.children) : [];
-            if (filteredChildren.length > 0) {
-              acc.push({
-                ...item,
-                children: filteredChildren
-              });
+            // Always include special directories with all their children
+            if (isSpecialDirectory(item.name)) {
+              acc.push(item);
+            } else {
+              const filteredChildren = item.children ? filterTrackedItems(item.children) : [];
+              if (filteredChildren.length > 0) {
+                acc.push({
+                  ...item,
+                  children: filteredChildren
+                });
+              }
             }
           } else {
             const normalizedPath = normalizeFilePath(item.path);
@@ -530,12 +540,17 @@ export function WorkspaceSidebar({
       const filterGitItems = (entries: FileTreeItem[]): FileTreeItem[] => {
         return entries.reduce((acc: FileTreeItem[], item) => {
           if (item.type === 'directory') {
-            const filteredChildren = item.children ? filterGitItems(item.children) : [];
-            if (filteredChildren.length > 0) {
-              acc.push({
-                ...item,
-                children: filteredChildren
-              });
+            // Always include special directories with all their children
+            if (isSpecialDirectory(item.name)) {
+              acc.push(item);
+            } else {
+              const filteredChildren = item.children ? filterGitItems(item.children) : [];
+              if (filteredChildren.length > 0) {
+                acc.push({
+                  ...item,
+                  children: filteredChildren
+                });
+              }
             }
           } else {
             const normalizedPath = normalizeFilePath(item.path);
@@ -569,13 +584,18 @@ export function WorkspaceSidebar({
     const filterItems = (entries: FileTreeItem[]): FileTreeItem[] => {
       return entries.reduce((acc: FileTreeItem[], item) => {
         if (item.type === 'directory') {
-          const filteredChildren = item.children ? filterItems(item.children) : [];
-          // Include directory if it has any matching children
-          if (filteredChildren.length > 0) {
-            acc.push({
-              ...item,
-              children: filteredChildren
-            });
+          // Always include special directories with all their children
+          if (isSpecialDirectory(item.name)) {
+            acc.push(item);
+          } else {
+            const filteredChildren = item.children ? filterItems(item.children) : [];
+            // Include directory if it has any matching children
+            if (filteredChildren.length > 0) {
+              acc.push({
+                ...item,
+                children: filteredChildren
+              });
+            }
           }
         } else if (shouldIncludeFile(item.name)) {
           acc.push(item);

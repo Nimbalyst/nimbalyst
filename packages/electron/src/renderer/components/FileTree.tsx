@@ -35,6 +35,13 @@ interface FileTreeProps {
   };
 }
 
+// Special directories that should always appear first with distinct styling
+const SPECIAL_DIRECTORIES = ['.nimbalyst-local'];
+
+function isSpecialDirectory(name: string): boolean {
+  return SPECIAL_DIRECTORIES.includes(name);
+}
+
 function getFileIcon(fileName: string) {
   const lowerName = fileName.toLowerCase();
 
@@ -508,7 +515,7 @@ export function FileTree({ items, currentFilePath, onFileSelect, level, showIcon
             {item.type === 'directory' ? (
               <>
                 <div
-                  className={`file-tree-directory ${isDragOver ? 'drag-over' : ''} ${isSelected ? 'selected' : ''}`}
+                  className={`file-tree-directory ${isDragOver ? 'drag-over' : ''} ${isSelected ? 'selected' : ''} ${isSpecialDirectory(item.name) ? 'special-directory' : ''}`}
                   onClick={(e) => handleFolderClick(e, item.path)}
                   onContextMenu={(e) => handleContextMenu(e, item)}
                   draggable

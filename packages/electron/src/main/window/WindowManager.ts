@@ -1,6 +1,6 @@
 import { BrowserWindow, dialog, app, nativeImage, ipcMain, screen, nativeTheme, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import { join, basename } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import { WindowState, FileTreeItem } from '../types';
 import { WINDOW_CASCADE_OFFSET } from '../utils/constants';
 import { getTheme, saveWorkspaceWindowState, getWorkspaceNavigationHistory, saveWorkspaceNavigationHistory } from '../utils/store';
@@ -238,6 +238,17 @@ export function createWindow(
             if (navHistory) {
                 navigationHistoryService.restoreNavigationState(windowId, navHistory);
                 // console.log('[MAIN] Restored navigation history for workspace:', workspacePath);
+            }
+
+            // Ensure .nimbalyst-local directory exists
+            const nimbalystLocalPath = join(workspacePath, '.nimbalyst-local');
+            if (!existsSync(nimbalystLocalPath)) {
+                try {
+                    mkdirSync(nimbalystLocalPath, { recursive: true });
+                    // console.log('[MAIN] Created .nimbalyst-local directory:', nimbalystLocalPath);
+                } catch (error) {
+                    console.error('[MAIN] Failed to create .nimbalyst-local directory:', error);
+                }
             }
         }
         windowFocusOrder.set(windowId, ++focusOrderCounter); // Track initial focus order

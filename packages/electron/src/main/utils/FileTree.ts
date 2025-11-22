@@ -16,6 +16,13 @@ const MAX_TOTAL_ITEMS = 5000;
 
 let totalItemCount = 0;
 
+// Special directories that should always appear first
+const SPECIAL_DIRECTORIES = ['.nimbalyst-local'];
+
+function isSpecialDirectory(name: string): boolean {
+    return SPECIAL_DIRECTORIES.includes(name);
+}
+
 export function getFolderContents(dirPath: string, depth: number = 0): FileTreeItem[] {
     const result: FileTreeItem[] = [];
 
@@ -56,7 +63,7 @@ export function getFolderContents(dirPath: string, depth: number = 0): FileTreeI
             }
 
             // Skip hidden files except special ones
-            if (item.startsWith('.') && item !== '.nimbalyst' && item !== '.claude') {
+            if (item.startsWith('.') && item !== '.nimbalyst' && item !== '.nimbalyst-local' && item !== '.claude') {
                 continue;
             }
 
@@ -87,11 +94,26 @@ export function getFolderContents(dirPath: string, depth: number = 0): FileTreeI
             }
         }
 
-        // Sort: directories first, then files, using natural sort for numbers
+        // Sort: special directories first, then regular directories, then files
         result.sort((a, b) => {
+            const aIsSpecial = a.type === 'directory' && isSpecialDirectory(a.name);
+            const bIsSpecial = b.type === 'directory' && isSpecialDirectory(b.name);
+
+            // Special directories always come first
+            if (aIsSpecial && !bIsSpecial) return -1;
+            if (!aIsSpecial && bIsSpecial) return 1;
+
+            // If both are special, maintain their defined order
+            if (aIsSpecial && bIsSpecial) {
+                return SPECIAL_DIRECTORIES.indexOf(a.name) - SPECIAL_DIRECTORIES.indexOf(b.name);
+            }
+
+            // Regular directories before files
             if (a.type !== b.type) {
                 return a.type === 'directory' ? -1 : 1;
             }
+
+            // Natural sort within same type
             return naturalCollator.compare(a.name, b.name);
         });
     } catch (error: any) {
