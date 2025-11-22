@@ -389,13 +389,15 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         return;
       }
       setSessionHistoryRefreshTrigger(prev => prev + 1);
+      // Also refresh availableSessions so session dropdowns in other modes stay in sync
+      loadSessions();
     };
 
     window.addEventListener(SESSION_HISTORY_REFRESH_EVENT, handleExternalRefresh as EventListener);
     return () => {
       window.removeEventListener(SESSION_HISTORY_REFRESH_EVENT, handleExternalRefresh as EventListener);
     };
-  }, [workspacePath]);
+  }, [workspacePath, loadSessions]);
 
   // When switching TO agent mode, refresh SessionHistory to pick up any sessions created in other modes
   useEffect(() => {
