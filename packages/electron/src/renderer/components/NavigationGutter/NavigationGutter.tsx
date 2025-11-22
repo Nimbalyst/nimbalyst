@@ -84,6 +84,13 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
     contentMode: 'settings',
   };
 
+  // Feedback button
+  const feedbackButton: NavButton = {
+    id: 'feedback',
+    icon: 'feedback',
+    label: 'Send Feedback',
+  };
+
   const handleButtonClick = (button: NavButton) => {
     // console.log('[NavigationGutter] Button clicked:', button.id, {
     //   hasOnClick: !!button.onClick,
@@ -198,6 +205,18 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
         <div className="nav-section nav-theme">
           <ThemeToggleButton />
         </div>
+
+        <button
+          className="nimbalyst-open-feedback-button nav-button"
+          onClick={() => console.log('[NavigationGutter] Feedback button clicked')}
+          title={feedbackButton.label}
+          aria-label={feedbackButton.label}
+        >
+          <MaterialSymbol
+            icon={feedbackButton.icon}
+            size={20}
+          />
+        </button>
 
         <button
           className="nav-button"
