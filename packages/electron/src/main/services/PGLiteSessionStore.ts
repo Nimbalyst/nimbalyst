@@ -5,6 +5,7 @@
 import type {
   SessionStore,
   SessionListItem,
+  SessionListOptions,
   CreateSessionPayload,
   UpdateSessionMetadataPayload,
   ChatMessage,
@@ -147,6 +148,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       // NOTE: tokenUsage removed - it's derived from ai_agent_messages /context responses
       if ((metadata as any).metadata !== undefined) pushUpdate('metadata =', (metadata as any).metadata ?? {});
       if ((metadata as any).hasBeenNamed !== undefined) pushUpdate('has_been_named =', (metadata as any).hasBeenNamed);
+      if (metadata.isArchived !== undefined) pushUpdate('is_archived =', metadata.isArchived);
 
       if (!updates.length) {
         // Nothing to update but still touch the row so updated_at changes
@@ -200,16 +202,19 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       } satisfies ChatSession;
     },
 
-    async list(workspaceId: string): Promise<SessionListItem[]> {
+    async list(workspaceId: string, options?: SessionListOptions): Promise<SessionListItem[]> {
       await ensureReady();
+      const includeArchived = options?.includeArchived ?? false;
+      const archiveFilter = includeArchived ? '' : 'AND (s.is_archived = FALSE OR s.is_archived IS NULL)';
+
       const { rows } = await db.query<any>(
         `SELECT s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                s.created_at, s.updated_at, COUNT(m.id) as message_count
+                s.created_at, s.updated_at, s.is_archived, COUNT(m.id) as message_count
          FROM ai_sessions s
          LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input'
-         WHERE s.workspace_id=$1
+         WHERE s.workspace_id=$1 ${archiveFilter}
          GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                  s.created_at, s.updated_at
+                  s.created_at, s.updated_at, s.is_archived
          ORDER BY s.updated_at DESC`,
         [workspaceId]
       );
@@ -228,17 +233,21 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           createdAt,
           updatedAt,
           messageCount,
+          isArchived: row.is_archived ?? false,
         };
       });
     },
 
-    async search(workspaceId: string, query: string): Promise<SessionListItem[]> {
+    async search(workspaceId: string, query: string, options?: SessionListOptions): Promise<SessionListItem[]> {
       await ensureReady();
 
       // If query is empty, return all sessions (same as list)
       if (!query || query.trim().length === 0) {
-        return this.list(workspaceId);
+        return this.list(workspaceId, options);
       }
+
+      const includeArchived = options?.includeArchived ?? false;
+      const archiveFilter = includeArchived ? '' : 'AND (s.is_archived = FALSE OR s.is_archived IS NULL)';
 
       // Sanitize query for FTS - replace special characters and prepare for tsquery
       const searchTerms = query.trim().split(/\s+/).filter(Boolean).join(' & ');
@@ -256,10 +265,12 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
             s.workspace_id,
             s.created_at,
             s.updated_at,
+            s.is_archived,
             ts_rank_cd(to_tsvector('english', COALESCE(s.title, '')), to_tsquery('english', $2)) * 2 as rank
           FROM ai_sessions s
           WHERE s.workspace_id = $1
             AND to_tsvector('english', COALESCE(s.title, '')) @@ to_tsquery('english', $2)
+            ${archiveFilter}
 
           UNION
 
@@ -274,13 +285,15 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
             s.workspace_id,
             s.created_at,
             s.updated_at,
+            s.is_archived,
             MAX(ts_rank_cd(to_tsvector('english', m.content), to_tsquery('english', $2))) as rank
           FROM ai_sessions s
           INNER JOIN ai_agent_messages m ON s.id = m.session_id
           WHERE s.workspace_id = $1
             AND to_tsvector('english', m.content) @@ to_tsquery('english', $2)
+            ${archiveFilter}
           GROUP BY s.id, s.provider, s.model, s.session_type, s.mode, s.title, s.workspace_id,
-                   s.created_at, s.updated_at
+                   s.created_at, s.updated_at, s.is_archived
         )
         SELECT
           sm.id,
@@ -292,12 +305,13 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           sm.workspace_id,
           sm.created_at,
           sm.updated_at,
+          sm.is_archived,
           MAX(sm.rank) as max_rank,
           COUNT(m.id) as message_count
         FROM session_matches sm
         LEFT JOIN ai_agent_messages m ON sm.id = m.session_id AND m.direction = 'input'
         GROUP BY sm.id, sm.provider, sm.model, sm.session_type, sm.mode, sm.title, sm.workspace_id,
-                 sm.created_at, sm.updated_at
+                 sm.created_at, sm.updated_at, sm.is_archived
         ORDER BY max_rank DESC, sm.updated_at DESC`,
         [workspaceId, searchTerms]
       );
@@ -317,6 +331,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
           createdAt,
           updatedAt,
           messageCount,
+          isArchived: row.is_archived ?? false,
         };
       });
     },

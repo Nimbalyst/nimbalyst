@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 import { ProviderIcon } from '../icons/ProviderIcons';
 import './SessionListItem.css';
@@ -12,8 +12,12 @@ interface SessionListItemProps {
   isLoaded?: boolean; // Whether session is loaded in a tab
   isProcessing?: boolean; // Whether session is actively processing
   hasUnread?: boolean; // Whether session has unread messages
-  onClick: () => void;
+  isArchived?: boolean; // Whether session is archived
+  isSelected?: boolean; // Whether session is selected for bulk actions
+  onClick: (e: React.MouseEvent) => void;
   onDelete?: () => void;
+  onArchive?: () => void;
+  onUnarchive?: () => void;
   provider?: string;
   model?: string;
   messageCount?: number;
@@ -28,20 +32,80 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   isLoaded = false,
   isProcessing = false,
   hasUnread = false,
+  isArchived = false,
+  isSelected = false,
   onClick,
   onDelete,
+  onArchive,
+  onUnarchive,
   provider,
   model,
   messageCount
 }) => {
   const [isHovering, setIsHovering] = useState(false);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [adjustedContextMenuPosition, setAdjustedContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
+    setShowContextMenu(false);
     if (onDelete) {
       onDelete();
     }
   };
+
+  const handleArchiveToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowContextMenu(false);
+    if (isArchived && onUnarchive) {
+      onUnarchive();
+    } else if (!isArchived && onArchive) {
+      onArchive();
+    }
+  };
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenuPosition({ x: e.clientX, y: e.clientY });
+    setShowContextMenu(true);
+  }, []);
+
+  const handleCloseContextMenu = useCallback(() => {
+    setShowContextMenu(false);
+    setAdjustedContextMenuPosition(null);
+  }, []);
+
+  // Adjust context menu position to keep it within viewport
+  useEffect(() => {
+    if (showContextMenu && contextMenuRef.current) {
+      const rect = contextMenuRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      let newX = contextMenuPosition.x;
+      let newY = contextMenuPosition.y;
+
+      // If menu extends beyond right edge, shift it left
+      if (contextMenuPosition.x + rect.width > viewportWidth) {
+        newX = contextMenuPosition.x - rect.width;
+      }
+      // If menu extends beyond bottom edge, shift it up
+      if (contextMenuPosition.y + rect.height > viewportHeight) {
+        newY = contextMenuPosition.y - rect.height;
+      }
+
+      // Ensure menu doesn't go off the left or top edge
+      newX = Math.max(0, newX);
+      newY = Math.max(0, newY);
+
+      if (newX !== contextMenuPosition.x || newY !== contextMenuPosition.y) {
+        setAdjustedContextMenuPosition({ x: newX, y: newY });
+      }
+    }
+  }, [showContextMenu, contextMenuPosition]);
 
   // Get the first line of the title (truncate if too long)
   const displayTitle = title || 'Untitled Session';
@@ -70,10 +134,11 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   return (
     <div
         id={"session-list-item-" + id}
-      className={`session-list-item ${isActive ? 'active' : ''} ${isLoaded ? 'loaded' : ''}`}
+      className={`session-list-item ${isActive ? 'active' : ''} ${isLoaded ? 'loaded' : ''} ${isArchived ? 'archived' : ''} ${isSelected ? 'selected' : ''}`}
       onClick={onClick}
       onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
+      onMouseLeave={() => { setIsHovering(false); setShowContextMenu(false); }}
+      onContextMenu={handleContextMenu}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
@@ -82,7 +147,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
           onClick();
         }
       }}
-      aria-label={`Session: ${truncatedTitle}, created ${relativeTime}${isLoaded ? ' (loaded in tab)' : ''}`}
+      aria-label={`Session: ${truncatedTitle}, created ${relativeTime}${isLoaded ? ' (loaded in tab)' : ''}${isArchived ? ' (archived)' : ''}`}
       aria-current={isActive ? 'page' : undefined}
     >
       <div className="session-list-item-icon">
@@ -123,32 +188,77 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
         ) : messageCount !== undefined ? (
           <span className="session-list-item-message-count">{messageCount}</span>
         ) : null}
-        {onDelete && (
+        {(onArchive || onUnarchive) && (
           <button
-            className={`session-list-item-delete ${isHovering && !isActive ? 'visible' : ''}`}
-            onClick={handleDelete}
-            aria-label="Delete session"
-            title="Delete session"
+            className={`session-list-item-archive ${isHovering && !isActive ? 'visible' : ''}`}
+            onClick={handleArchiveToggle}
+            aria-label={isArchived ? "Unarchive session" : "Archive session"}
+            title={isArchived ? "Unarchive session" : "Archive session"}
             disabled={isActive}
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 14 14"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M10.5 3.5L3.5 10.5M3.5 3.5L10.5 10.5"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            {isArchived ? (
+              // Unarchive icon (box with arrow out)
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M8 11V7M6 9l2-2 2 2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            ) : (
+              // Archive icon (box with arrow in)
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M8 7v4M6 9l2 2 2-2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
           </button>
         )}
       </div>
+
+      {/* Context Menu */}
+      {showContextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="session-list-item-context-menu"
+          style={{
+            left: (adjustedContextMenuPosition || contextMenuPosition).x,
+            top: (adjustedContextMenuPosition || contextMenuPosition).y
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="session-list-item-context-menu-item"
+            onClick={handleArchiveToggle}
+          >
+            {isArchived ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M8 11V7M6 9l2-2 2 2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Unarchive
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M8 7v4M6 9l2 2 2-2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Archive
+              </>
+            )}
+          </button>
+          {onDelete && (
+            <button
+              className="session-list-item-context-menu-item destructive"
+              onClick={handleDelete}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2 4h12M5.333 4V2.667A.667.667 0 016 2h4a.667.667 0 01.667.667V4M12.667 4v9.333a1.333 1.333 0 01-1.334 1.334H4.667a1.333 1.333 0 01-1.334-1.334V4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Delete
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

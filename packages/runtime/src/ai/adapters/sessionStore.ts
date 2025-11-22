@@ -15,6 +15,7 @@ export interface SessionListItem {
   createdAt: number;
   updatedAt: number;
   messageCount?: number;
+  isArchived?: boolean;
 }
 
 export interface CreateSessionPayload {
@@ -36,6 +37,11 @@ export interface CreateSessionPayload {
 export interface UpdateSessionMetadataPayload extends Partial<CreateSessionPayload> {
   draftInput?: string;
   metadata?: Record<string, unknown>;
+  isArchived?: boolean;
+}
+
+export interface SessionListOptions {
+  includeArchived?: boolean;
 }
 
 export interface SessionStore {
@@ -43,8 +49,8 @@ export interface SessionStore {
   create(payload: CreateSessionPayload): Promise<void>;
   updateMetadata(sessionId: string, metadata: UpdateSessionMetadataPayload): Promise<void>;
   get(sessionId: string): Promise<SessionData | null>;
-  list(workspaceId: string): Promise<SessionListItem[]>;
-  search(workspaceId: string, query: string): Promise<SessionListItem[]>;
+  list(workspaceId: string, options?: SessionListOptions): Promise<SessionListItem[]>;
+  search(workspaceId: string, query: string, options?: SessionListOptions): Promise<SessionListItem[]>;
   delete(sessionId: string): Promise<void>;
   /**
    * Atomically update session title if it has not been named yet.

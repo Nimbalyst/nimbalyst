@@ -94,8 +94,8 @@ export async function registerSessionHandlers() {
         await sessionManager.updateSessionDraftInput(sessionId, draftInput);
     });
 
-    // Update session metadata (including mode)
-    ipcMain.handle('ai-sessions:update-metadata', async (event, sessionId: string, updates: any) => {
+    // Update session metadata (including mode, isArchived, etc.)
+    ipcMain.handle('sessions:update-metadata', async (event, sessionId: string, updates: any) => {
         try {
             await AISessionsRepository.updateMetadata(sessionId, updates);
             return { success: true };
@@ -103,7 +103,7 @@ export async function registerSessionHandlers() {
             console.error('[SessionHandlers] Failed to update session metadata:', error);
             return { success: false, error: String(error) };
         }
-    });
+    }); 
 
     // Update session metadata with extended fields
     ipcMain.handle('sessions:update-session-metadata', async (event, sessionId: string, updates: any) => {
@@ -138,9 +138,9 @@ export async function registerSessionHandlers() {
     });
 
     // List sessions for workspace
-    ipcMain.handle('sessions:list', async (event, workspacePath: string) => {
+    ipcMain.handle('sessions:list', async (event, workspacePath: string, options?: { includeArchived?: boolean }) => {
         try {
-            const entries = await AISessionsRepository.list(workspacePath);
+            const entries = await AISessionsRepository.list(workspacePath, options);
             // Use entry data directly - it already has all the info we need including updatedAt
             const sessions = entries.map(entry => ({
                 id: entry.id,
@@ -152,6 +152,7 @@ export async function registerSessionHandlers() {
                 model: entry.model,
                 sessionType: entry.sessionType || 'chat',
                 messageCount: entry.messageCount || 0,
+                isArchived: entry.isArchived || false,
                 metadata: {}
             }));
 
@@ -163,9 +164,9 @@ export async function registerSessionHandlers() {
     });
 
     // Search sessions for workspace (full content search)
-    ipcMain.handle('sessions:search', async (event, workspacePath: string, query: string) => {
+    ipcMain.handle('sessions:search', async (event, workspacePath: string, query: string, options?: { includeArchived?: boolean }) => {
         try {
-            const entries = await AISessionsRepository.search(workspacePath, query);
+            const entries = await AISessionsRepository.search(workspacePath, query, options);
             const sessions = [];
 
             for (const entry of entries) {
@@ -181,6 +182,7 @@ export async function registerSessionHandlers() {
                         model: session.model,
                         sessionType: session.sessionType || 'chat',
                         messageCount: entry.messageCount || 0,
+                        isArchived: entry.isArchived || false,
                         metadata: session.metadata || {}
                     });
                 }

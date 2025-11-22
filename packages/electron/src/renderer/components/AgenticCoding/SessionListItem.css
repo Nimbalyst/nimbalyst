@@ -9,6 +9,8 @@
   margin: 0 0.5rem;
   transition: background-color 0.15s ease, opacity 0.15s ease;
   opacity: 1;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .session-list-item:hover {
@@ -17,6 +19,16 @@
 
 .session-list-item.active {
   background: var(--surface-selected);
+}
+
+.session-list-item.selected {
+  background: var(--surface-selected);
+  /*outline: 2px solid var(--primary-color);*/
+  /*outline-offset: -2px;*/
+}
+
+.session-list-item.selected.active {
+  /*outline-width: 3px;*/
 }
 
 .session-list-item:focus {
@@ -125,7 +137,21 @@
   font-weight: 500;
 }
 
-.session-list-item-delete {
+/* Archived session styling */
+.session-list-item.archived {
+  opacity: 0.6;
+}
+
+.session-list-item.archived .session-list-item-title {
+  color: var(--text-tertiary);
+}
+
+.session-list-item.archived:hover {
+  opacity: 0.8;
+}
+
+/* Archive button */
+.session-list-item-archive {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -143,26 +169,71 @@
   pointer-events: none;
 }
 
-.session-list-item-delete:disabled {
+.session-list-item-archive:disabled {
   cursor: default;
   opacity: 0;
   pointer-events: none;
 }
 
-.session-list-item-delete.visible {
+.session-list-item-archive.visible {
   opacity: 0.7;
   pointer-events: auto;
 }
 
-.session-list-item-delete.visible:hover {
-  background: var(--error-color);
-  color: white;
+.session-list-item-archive.visible:hover {
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
   opacity: 1;
 }
 
-.session-list-item-delete:focus:not(:disabled) {
+.session-list-item-archive:focus:not(:disabled) {
   outline: 2px solid var(--border-focus);
   outline-offset: 1px;
   opacity: 1;
   pointer-events: auto;
+}
+
+/* Context menu */
+.session-list-item-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 140px;
+  padding: 0.25rem;
+  background: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 0.375rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.session-list-item-context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.session-list-item-context-menu-item:hover {
+  background: var(--surface-hover);
+}
+
+.session-list-item-context-menu-item.destructive {
+  color: var(--error-color);
+}
+
+.session-list-item-context-menu-item.destructive:hover {
+  background: var(--error-color);
+  color: white;
+}
+
+.session-list-item-context-menu-item svg {
+  flex-shrink: 0;
 }

@@ -368,7 +368,20 @@ class PGLiteWorker {
         ) THEN
           ALTER TABLE ai_sessions ADD COLUMN mode TEXT DEFAULT 'agent' CHECK (mode IN ('planning', 'agent'));
         END IF;
+
+        -- Add is_archived column for session archiving feature
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'ai_sessions' AND column_name = 'is_archived'
+        ) THEN
+          ALTER TABLE ai_sessions ADD COLUMN is_archived BOOLEAN DEFAULT FALSE;
+        END IF;
       END $$;
+    `);
+
+    // Create index for archived sessions filtering
+    await this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_ai_sessions_archived ON ai_sessions(is_archived);
     `);
 
     // Document History table

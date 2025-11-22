@@ -2,6 +2,7 @@ import type { Message, SessionData } from '../../ai/server/types';
 import {
   type CreateSessionPayload,
   type SessionListItem,
+  type SessionListOptions,
   type SessionStore,
   type UpdateSessionMetadataPayload,
   getSessionStore,
@@ -49,12 +50,12 @@ export const AISessionsRepository = {
     return await requireStore().get(sessionId);
   },
 
-  async list(workspaceId: string): Promise<SessionListItem[]> {
-    return await requireStore().list(workspaceId);
+  async list(workspaceId: string, options?: SessionListOptions): Promise<SessionListItem[]> {
+    return await requireStore().list(workspaceId, options);
   },
 
-  async search(workspaceId: string, query: string): Promise<SessionListItem[]> {
-    return await requireStore().search(workspaceId, query);
+  async search(workspaceId: string, query: string, options?: SessionListOptions): Promise<SessionListItem[]> {
+    return await requireStore().search(workspaceId, query, options);
   },
 
   async delete(sessionId: string): Promise<void> {

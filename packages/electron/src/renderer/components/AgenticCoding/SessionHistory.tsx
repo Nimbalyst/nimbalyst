@@ -16,6 +16,7 @@ interface SessionItem {
   messageCount: number;
   isProcessing?: boolean;
   hasUnread?: boolean;
+  isArchived?: boolean;
 }
 
 interface SessionHistoryProps {
@@ -74,6 +75,9 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [contentSearchTriggered, setContentSearchTriggered] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null); // For shift+click range selection
 
   // Track scroll position to restore after refresh
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -106,7 +110,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       }
       setError(null);
 
-      const result = await window.electronAPI.invoke('sessions:list', workspacePath);
+      const result = await window.electronAPI.invoke('sessions:list', workspacePath, { includeArchived: showArchived });
 
       if (result.success && Array.isArray(result.sessions)) {
         // Map sessions with base data only. Visual indicators (isProcessing, hasUnread)
@@ -121,7 +125,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           sessionType: s.sessionType || 'chat',
           messageCount: s.messageCount || 0,
           isProcessing: false,  // Will be updated by visual indicator effect
-          hasUnread: false      // Will be updated by visual indicator effect
+          hasUnread: false,     // Will be updated by visual indicator effect
+          isArchived: s.isArchived || false
         }));
 
         // Merge incoming sessions with existing ones to preserve React keys and reduce flicker
@@ -192,7 +197,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [workspacePath, allSessions.length]);
+  }, [workspacePath, allSessions.length, showArchived]);
 
   // Search message content in database (heavy operation)
   const searchMessageContent = useCallback(async (query: string) => {
@@ -200,7 +205,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       setIsSearching(true);
       setError(null);
 
-      const result = await window.electronAPI.invoke('sessions:search', workspacePath, query.trim());
+      const result = await window.electronAPI.invoke('sessions:search', workspacePath, query.trim(), { includeArchived: showArchived });
 
       if (result.success && Array.isArray(result.sessions)) {
         const searchResults = result.sessions.map((s: any) => ({
@@ -213,7 +218,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           sessionType: s.sessionType || 'chat',
           messageCount: s.messageCount || 0,
           isProcessing: false,
-          hasUnread: false
+          hasUnread: false,
+          isArchived: s.isArchived || false
         }));
         setSessions(searchResults);
       }
@@ -223,7 +229,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     } finally {
       setIsSearching(false);
     }
-  }, [workspacePath]);
+  }, [workspacePath, showArchived]);
 
   // Load all sessions on mount and when refreshTrigger changes
   useEffect(() => {
@@ -305,6 +311,124 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       // Reload sessions after delete
       await loadAllSessions();
     }
+  };
+
+  const handleArchiveSession = async (sessionId: string) => {
+    try {
+      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true });
+      // Remove from local state immediately for instant feedback
+      setAllSessions(prev => prev.filter(s => s.id !== sessionId));
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+    } catch (err) {
+      console.error('[SessionHistory] Failed to archive session:', err);
+    }
+  };
+
+  const handleUnarchiveSession = async (sessionId: string) => {
+    try {
+      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: false });
+      // Update local state immediately for instant feedback
+      setAllSessions(prev => prev.map(s => s.id === sessionId ? { ...s, isArchived: false } : s));
+      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, isArchived: false } : s));
+    } catch (err) {
+      console.error('[SessionHistory] Failed to unarchive session:', err);
+    }
+  };
+
+  const toggleShowArchived = () => {
+    setShowArchived(prev => !prev);
+  };
+
+  // Clear selection when clicking elsewhere
+  const clearSelection = useCallback(() => {
+    setSelectedSessionIds(new Set());
+    setLastSelectedId(null);
+  }, []);
+
+  // Handle session click with multi-select support
+  const handleSessionClick = useCallback((sessionId: string, e: React.MouseEvent) => {
+    const isMetaKey = e.metaKey || e.ctrlKey;
+    const isShiftKey = e.shiftKey;
+
+    if (isMetaKey) {
+      // Cmd/Ctrl+click: toggle selection
+      setSelectedSessionIds(prev => {
+        const next = new Set(prev);
+        if (next.has(sessionId)) {
+          next.delete(sessionId);
+        } else {
+          next.add(sessionId);
+        }
+        return next;
+      });
+      setLastSelectedId(sessionId);
+    } else if (isShiftKey) {
+      // Shift+click: range selection
+      // Use lastSelectedId, or fall back to activeSessionId as the anchor
+      const anchorId = lastSelectedId || activeSessionId;
+      if (anchorId) {
+        // Get visual order from grouped sessions (flattened)
+        const grouped = groupSessionsByTime(sessions, sortBy === 'updated' ? 'updatedAt' : 'createdAt');
+        const visualOrderIds = (Object.keys(grouped) as TimeGroupKey[]).flatMap(key => grouped[key].map(s => s.id));
+
+        const anchorIndex = visualOrderIds.indexOf(anchorId);
+        const currentIndex = visualOrderIds.indexOf(sessionId);
+
+        if (anchorIndex !== -1 && currentIndex !== -1) {
+          const start = Math.min(anchorIndex, currentIndex);
+          const end = Math.max(anchorIndex, currentIndex);
+          const rangeIds = visualOrderIds.slice(start, end + 1);
+
+          setSelectedSessionIds(new Set(rangeIds));
+          setLastSelectedId(sessionId);
+        }
+      } else {
+        // No anchor point, just select this one
+        setSelectedSessionIds(new Set([sessionId]));
+        setLastSelectedId(sessionId);
+      }
+    } else {
+      // Regular click: clear selection and select session
+      clearSelection();
+      onSessionSelect(sessionId);
+    }
+  }, [sessions, lastSelectedId, activeSessionId, sortBy, clearSelection, onSessionSelect]);
+
+  // Bulk archive selected sessions
+  const handleBulkArchive = async () => {
+    const promises = Array.from(selectedSessionIds).map(sessionId =>
+      window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: true })
+    );
+    await Promise.all(promises);
+    setAllSessions(prev => prev.filter(s => !selectedSessionIds.has(s.id)));
+    setSessions(prev => prev.filter(s => !selectedSessionIds.has(s.id)));
+    clearSelection();
+  };
+
+  // Bulk unarchive selected sessions
+  const handleBulkUnarchive = async () => {
+    const promises = Array.from(selectedSessionIds).map(sessionId =>
+      window.electronAPI.invoke('sessions:update-metadata', sessionId, { isArchived: false })
+    );
+    await Promise.all(promises);
+    setAllSessions(prev => prev.map(s => selectedSessionIds.has(s.id) ? { ...s, isArchived: false } : s));
+    setSessions(prev => prev.map(s => selectedSessionIds.has(s.id) ? { ...s, isArchived: false } : s));
+    clearSelection();
+  };
+
+  // Bulk delete selected sessions
+  const handleBulkDelete = async () => {
+    if (!onSessionDelete) return;
+
+    const count = selectedSessionIds.size;
+    const confirmed = window.confirm(`Are you sure you want to permanently delete ${count} session${count > 1 ? 's' : ''}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    for (const sessionId of selectedSessionIds) {
+      await onSessionDelete(sessionId);
+    }
+    await loadAllSessions();
+    clearSelection();
   };
 
   const toggleSortDropdown = () => {
@@ -574,6 +698,17 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
         )}
       </div>
       <div className="session-history-filters">
+        <button
+          className={`session-history-archive-filter ${showArchived ? 'active' : ''}`}
+          onClick={toggleShowArchived}
+          title={showArchived ? 'Hide archived sessions' : 'Show archived sessions'}
+          aria-label={showArchived ? 'Hide archived sessions' : 'Show archived sessions'}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M6 8h4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
+          </svg>
+        </button>
         <div className="session-history-sort-dropdown">
           <button
             className="session-history-sort-button"
@@ -613,6 +748,41 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           )}
         </div>
       </div>
+      {selectedSessionIds.size > 0 && (
+        <div className="session-history-bulk-actions">
+          <span className="session-history-bulk-count">{selectedSessionIds.size} selected</span>
+          <div className="session-history-bulk-buttons">
+            {showArchived ? (
+              <button className="session-history-bulk-button" onClick={handleBulkUnarchive} title="Unarchive selected">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M8 11V7M6 9l2-2 2 2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Unarchive
+              </button>
+            ) : (
+              <button className="session-history-bulk-button" onClick={handleBulkArchive} title="Archive selected">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M8 7v4M6 9l2 2 2-2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Archive
+              </button>
+            )}
+            {onSessionDelete && (
+              <button className="session-history-bulk-button destructive" onClick={handleBulkDelete} title="Delete selected">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M2 4h12M5.333 4V2.667A.667.667 0 016 2h4a.667.667 0 01.667.667V4M12.667 4v9.333a1.333 1.333 0 01-1.334 1.334H4.667a1.333 1.333 0 01-1.334-1.334V4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Delete
+              </button>
+            )}
+            <button className="session-history-bulk-button" onClick={clearSelection} title="Clear selection">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       <div className="session-history-list" ref={scrollContainerRef}>
         {groupKeys.length === 0 && hasSearchQuery ? (
           // No search results - show message with option to clear
@@ -651,8 +821,12 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
                     updatedAt={session.updatedAt}
                     isActive={session.id === activeSessionId}
                     isLoaded={loadedSessionIds.includes(session.id)}
-                    onClick={() => onSessionSelect(session.id)}
+                    isArchived={session.isArchived}
+                    isSelected={selectedSessionIds.has(session.id)}
+                    onClick={(e) => handleSessionClick(session.id, e)}
                     onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
+                    onArchive={() => handleArchiveSession(session.id)}
+                    onUnarchive={() => handleUnarchiveSession(session.id)}
                     provider={session.provider}
                     model={session.model}
                     messageCount={session.messageCount}
