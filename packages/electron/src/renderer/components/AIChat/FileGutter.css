@@ -1,49 +1,107 @@
 .file-gutter {
   display: flex;
   flex-direction: column;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border-primary);
   background-color: var(--surface-secondary);
-  font-size: 0.75rem;
 }
 
-.file-gutter-referenced {
-  border-bottom-color: var(--accent-primary);
-  background-color: var(--surface-tertiary);
+.file-gutter--referenced {
+  border-bottom: 1px solid var(--border-primary);
 }
 
-.file-gutter-edited {
-  border-top: 1px solid var(--success-color);
-  background-color: var(--surface-tertiary);
+.file-gutter--edited {
+  border-top: 1px solid var(--border-primary);
 }
 
-.file-gutter-single,
-.file-gutter-toggle {
+/* Header */
+.file-gutter__header {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
   padding: 0.25rem 0.5rem;
-  background: transparent;
-  border: none;
-  border-radius: 0.25rem;
-  color: var(--text-primary);
-  cursor: pointer;
-  text-align: left;
-  transition: background-color 0.2s;
-  width: 100%;
-}
-
-.file-gutter-single:hover,
-.file-gutter-toggle:hover {
-  background-color: var(--surface-hover);
-}
-
-.file-gutter-label {
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-secondary);
+  background-color: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  transition: all 0.2s;
+  cursor: pointer;
 }
 
-.file-gutter-filename {
+.file-gutter__header:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.file-gutter__header-content {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.file-gutter__section-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.file-gutter__count {
+  padding: 0.125rem 0.25rem;
+  background-color: var(--surface-tertiary);
+  border-radius: 0.25rem;
+  font-size: 9px;
+}
+
+.file-gutter__chevron {
+  width: 0.75rem;
+  height: 0.75rem;
+  transition: transform 0.2s;
+}
+
+.file-gutter__chevron--collapsed {
+  transform: rotate(-90deg);
+}
+
+/* Files list */
+.file-gutter__files {
+  margin-top: 0.25rem;
+  padding: 0 0.25rem 0.25rem 0.5rem;
+}
+
+/* File Item */
+.file-gutter__file {
+  width: 100%;
+  text-align: left;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+  margin-bottom: 0.125rem;
+  background: transparent;
+}
+
+.file-gutter__file:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--border-primary);
+}
+
+.file-gutter__file-content {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.file-gutter__file-operation-icon {
+  flex-shrink: 0;
+}
+
+.file-gutter__file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-gutter__file-name {
+  font-size: 0.8125rem;
   color: var(--text-primary);
   font-weight: 500;
   overflow: hidden;
@@ -51,54 +109,71 @@
   white-space: nowrap;
 }
 
-.file-gutter-count {
-  color: var(--text-primary);
-  background-color: var(--surface-secondary);
-  padding: 0.125rem 0.375rem;
-  border-radius: 0.25rem;
-  font-weight: 600;
-}
-
-.file-gutter-chevron {
-  margin-left: auto;
-  transition: transform 0.2s;
-}
-
-.file-gutter-chevron.expanded {
-  transform: rotate(180deg);
-}
-
-.file-gutter-list {
+.file-gutter__file-stats {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 0.25rem;
-  margin-top: 0.5rem;
-  padding-left: 1.5rem;
+  font-size: 0.6875rem;
+  flex-shrink: 0;
 }
 
-.file-gutter-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  padding: 0.375rem 0.5rem;
-  background: var(--surface-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: 0.25rem;
-  color: var(--text-primary);
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.2s;
+.file-gutter__file-stats-added {
+  color: var(--success-color);
 }
 
-.file-gutter-item:hover {
-  background-color: var(--surface-hover);
-  border-color: var(--accent-primary);
+.file-gutter__file-stats-removed {
+  color: var(--error-color);
 }
 
-.file-gutter-path {
+/* Git Status Badge */
+.file-gutter__git-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
   font-size: 0.65rem;
-  color: var(--text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 600;
+  border-radius: 2px;
+  flex-shrink: 0;
+  color: white;
+}
+
+.file-gutter__git-status--modified {
+  background-color: var(--warning-color);
+}
+
+.file-gutter__git-status--staged {
+  background-color: var(--success-color);
+}
+
+.file-gutter__git-status--untracked {
+  background-color: var(--text-tertiary);
+  color: var(--surface-primary);
+}
+
+.file-gutter__git-status--deleted {
+  background-color: var(--error-color);
+}
+
+/* Operation Icons */
+.file-gutter__icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.file-gutter__icon--create {
+  color: var(--success-color);
+}
+
+.file-gutter__icon--edit {
+  color: var(--primary-color);
+}
+
+.file-gutter__icon--delete {
+  color: var(--error-color);
+}
+
+.file-gutter__icon--rename {
+  color: var(--warning-color);
 }
