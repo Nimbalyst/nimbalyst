@@ -527,17 +527,14 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             {onModeChange && provider === 'claude-code' && <ModeTag mode={mode} onModeChange={onModeChange} />}
 
             {onModelChange && currentModel && <ModelSelector currentModel={currentModel} onModelChange={onModelChange} />}
-            {/* Show context usage only for Claude Code provider */}
-            {/* Always show for claude-code, display will show "--" if no data yet */}
-            {provider === 'claude-code' && (
-              <ContextUsageDisplay
-                inputTokens={tokenUsage?.inputTokens || 0}
-                outputTokens={tokenUsage?.outputTokens || 0}
-                totalTokens={tokenUsage?.totalTokens || 0}
-                contextWindow={tokenUsage?.contextWindow || 0}
-                categories={tokenUsage?.categories}
-              />
-            )}
+            {/* Show token usage for all providers - displays "--" if no data yet */}
+            <ContextUsageDisplay
+              inputTokens={tokenUsage?.inputTokens || 0}
+              outputTokens={tokenUsage?.outputTokens || 0}
+              totalTokens={tokenUsage?.totalTokens || 0}
+              contextWindow={tokenUsage?.contextWindow || 0}
+              categories={tokenUsage?.categories}
+            />
           </div>
         )}
 

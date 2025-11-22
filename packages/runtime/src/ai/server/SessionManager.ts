@@ -46,9 +46,8 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
   // CRITICAL: providerSessionId is stored at top-level, not in metadata
   const providerSessionId = session.providerSessionId ?? (metadata.providerSessionId as string | undefined);
 
-  // NOTE: tokenUsage is no longer stored in ai_sessions metadata
-  // It's parsed from ai_agent_messages /context responses in loadSession()
-  // This function only handles the basic session structure
+  // Read tokenUsage from metadata if present
+  const tokenUsage = metadata.tokenUsage as SessionData['tokenUsage'] | undefined;
 
   return {
     id: session.id,
@@ -66,7 +65,7 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
     providerConfig,
     providerSessionId,
     lastReadMessageTimestamp: session.lastReadMessageTimestamp ?? undefined,
-    tokenUsage: undefined, // Will be populated by loadSession() from ai_agent_messages
+    tokenUsage,
     metadata: session.metadata ?? {},
   } satisfies SessionData;
 }
@@ -550,34 +549,12 @@ export class SessionManager {
     // Fetch raw agent messages from the database (already filtered to exclude hidden messages)
     const agentMessages = await AgentMessagesRepository.list(sessionId);
 
-    // PARSE TOKEN USAGE from /context responses
-    // Query for ALL messages including hidden ones to find /context responses
-    // Claude Code logs /context responses which may or may not be marked as hidden
-    const allMessages = await AgentMessagesRepository.list(sessionId, { includeHidden: true });
-    let tokenUsage: SessionData['tokenUsage'] | undefined;
-    for (let i = allMessages.length - 1; i >= 0; i--) {
-      const msg = allMessages[i];
-      // Look for /context output messages (check both hidden and non-hidden)
-      if (msg.direction === 'output' && msg.content?.includes('## Context Usage')) {
-        const parsedUsage = parseContextUsageMessage(msg.content);
-        if (parsedUsage) {
-          tokenUsage = {
-            inputTokens: 0,  // Detailed breakdown isn't included in /context
-            outputTokens: 0,
-            totalTokens: parsedUsage.totalTokens,
-            contextWindow: parsedUsage.contextWindow,
-            categories: parsedUsage.categories
-          };
-          break; // Use most recent response
-        }
-      }
-    }
-
     // Transform raw messages into UI format
     // Hidden messages are already filtered out in transformAgentMessagesToUI
     const uiMessages = transformAgentMessagesToUI(agentMessages);
 
     // Create session data with transformed messages
+    // tokenUsage is read from metadata in sessionDataFromChatSession
     const normalized: ChatSession = {
       ...session,
       messages: uiMessages,
@@ -585,9 +562,26 @@ export class SessionManager {
 
     const sessionData = sessionDataFromChatSession(normalized, workspace);
 
-    // Add parsed token usage to session data
-    if (tokenUsage) {
-      sessionData.tokenUsage = tokenUsage;
+    // Fallback: If no tokenUsage in metadata, try parsing from /context responses
+    // This provides backwards compatibility for sessions created before tokenUsage was stored in metadata
+    if (!sessionData.tokenUsage) {
+      const allMessages = await AgentMessagesRepository.list(sessionId, { includeHidden: true });
+      for (let i = allMessages.length - 1; i >= 0; i--) {
+        const msg = allMessages[i];
+        if (msg.direction === 'output' && msg.content?.includes('## Context Usage')) {
+          const parsedUsage = parseContextUsageMessage(msg.content);
+          if (parsedUsage) {
+            sessionData.tokenUsage = {
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: parsedUsage.totalTokens,
+              contextWindow: parsedUsage.contextWindow,
+              categories: parsedUsage.categories
+            };
+            break;
+          }
+        }
+      }
     }
 
     this.currentSession = sessionData;
@@ -719,6 +713,31 @@ export class SessionManager {
     }
   }
 
-  // NOTE: updateSessionTokenUsage removed - token usage is now derived from ai_agent_messages
-  // Token usage is parsed from /context responses in loadSession()
+  /**
+   * Update session token usage in metadata
+   * This persists cumulative token usage for the session
+   */
+  async updateSessionTokenUsage(sessionId: string, tokenUsage: SessionData['tokenUsage']): Promise<void> {
+    // Get current metadata and merge token usage into it
+    const session = await AISessionsRepository.get(sessionId);
+    const currentMetadata = (session?.metadata ?? {}) as Record<string, unknown>;
+
+    await AISessionsRepository.updateMetadata(sessionId, {
+      metadata: {
+        ...currentMetadata,
+        tokenUsage
+      }
+    });
+
+    if (this.currentSession?.id === sessionId) {
+      this.currentSession = {
+        ...this.currentSession,
+        tokenUsage,
+        metadata: {
+          ...(this.currentSession.metadata ?? {}),
+          tokenUsage
+        }
+      };
+    }
+  }
 }

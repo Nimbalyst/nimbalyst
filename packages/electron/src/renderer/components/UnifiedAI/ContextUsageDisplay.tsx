@@ -27,11 +27,12 @@ interface FormattedCategory extends TokenUsageCategory {
 }
 
 /**
- * ContextUsageDisplay shows token usage for Claude Code sessions
- * Displays format: "110k/200k Tokens (55%)"
+ * ContextUsageDisplay shows token usage for AI sessions
  *
- * CRITICAL: Token data comes ONLY from /context command results.
- * If token data is not yet available (values are 0), shows "--" instead.
+ * Display formats:
+ * - With context window: "110k/200k Tokens (55%)" - shows percentage usage
+ * - Without context window: "15k Tokens" - just shows cumulative total
+ * - No data yet: "--"
  */
 export function ContextUsageDisplay({
   inputTokens,
@@ -40,13 +41,14 @@ export function ContextUsageDisplay({
   contextWindow,
   categories
 }: ContextUsageDisplayProps) {
-  // If no token data is available yet (all zeros), show placeholder
-  const hasTokenData = totalTokens > 0 && contextWindow > 0;
+  // Check what data we have
+  const hasTokenData = totalTokens > 0;
+  const hasContextWindow = contextWindow > 0;
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const tooltipId = useId();
 
-  // Calculate percentage used
-  const percentage = contextWindow > 0 ? Math.round((totalTokens / contextWindow) * 100) : 0;
+  // Calculate percentage used (only meaningful with context window)
+  const percentage = hasContextWindow ? Math.round((totalTokens / contextWindow) * 100) : 0;
 
   // Format numbers with k suffix for thousands
   const formatTokensShort = (tokens: number): string => {
@@ -78,19 +80,30 @@ export function ContextUsageDisplay({
       }));
   }, [categories]);
 
-  const enableTooltip = hasTokenData && formattedCategories.length > 0;
+  const enableTooltip = hasTokenData && (formattedCategories.length > 0 || inputTokens > 0 || outputTokens > 0);
   const shouldShowTooltip = tooltipVisible && enableTooltip;
 
   const getUsageClass = (): string => {
     if (!hasTokenData) return 'usage-normal';
-    if (percentage >= 90) return 'usage-critical';
-    if (percentage >= 80) return 'usage-warning';
+    if (hasContextWindow && percentage >= 90) return 'usage-critical';
+    if (hasContextWindow && percentage >= 80) return 'usage-warning';
     return 'usage-normal';
   };
 
+  // Build display text
+  const getDisplayText = (): string => {
+    if (!hasTokenData) return '--';
+    if (hasContextWindow) {
+      return `${formatTokensShort(totalTokens)}/${formatTokensShort(contextWindow)} (${percentage}%)`;
+    }
+    return `${formatTokensShort(totalTokens)} tokens`;
+  };
+
   const label = hasTokenData
-    ? `Context usage ${formatTokensShort(totalTokens)} of ${formatTokensShort(contextWindow)} tokens (${percentage}%)`
-    : 'Context usage data not available yet';
+    ? hasContextWindow
+      ? `Context usage ${formatTokensShort(totalTokens)} of ${formatTokensShort(contextWindow)} tokens (${percentage}%)`
+      : `Token usage: ${formatTokensShort(totalTokens)} total tokens`
+    : 'Token usage data not available yet';
 
   const handleVisibilityChange = (visible: boolean) => {
     if (!enableTooltip) return;
@@ -109,43 +122,62 @@ export function ContextUsageDisplay({
       onBlur={() => handleVisibilityChange(false)}
       role="group"
     >
-      <span className="usage-text">
-        {hasTokenData ? (
-          `${formatTokensShort(totalTokens)}/${formatTokensShort(contextWindow)} Tokens (${percentage}%)`
-        ) : (
-          '--'
-        )}
-      </span>
+      <span className="usage-text">{getDisplayText()}</span>
 
       {shouldShowTooltip && (
         <div className="context-usage-tooltip" id={tooltipId} role="tooltip">
           <div className="tooltip-header">
-            <span>Context Breakdown</span>
-            <span className="tooltip-total">
-              {formatTokensShort(totalTokens)} / {formatTokensShort(contextWindow)}
-            </span>
+            <span>{hasContextWindow ? 'Context Breakdown' : 'Token Usage'}</span>
+            {hasContextWindow && (
+              <span className="tooltip-total">
+                {formatTokensShort(totalTokens)} / {formatTokensShort(contextWindow)}
+              </span>
+            )}
           </div>
 
-          <div className="tooltip-bar">
-            {formattedCategories.map((cat, index) => (
-              <span
-                key={`${cat.name}-${index}`}
-                className="tooltip-bar-segment"
-                style={{ width: `${cat.width}%`, backgroundColor: cat.color }}
-              />
-            ))}
-          </div>
-
-          <div className="tooltip-categories">
-            {formattedCategories.map((cat, index) => (
-              <div className="tooltip-category-row" key={`${cat.name}-${index}`}>
-                <span className="tooltip-dot" style={{ backgroundColor: cat.color }} />
-                <span className="tooltip-category-name">{cat.name}</span>
-                <span className="tooltip-category-tokens">{cat.tokens.toLocaleString()} tokens</span>
-                <span className="tooltip-category-percent">{cat.percentText}%</span>
+          {/* Show input/output breakdown if available */}
+          {(inputTokens > 0 || outputTokens > 0) && (
+            <div className="tooltip-io-breakdown">
+              <div className="tooltip-io-row">
+                <span className="tooltip-io-label">Input:</span>
+                <span className="tooltip-io-value">{inputTokens.toLocaleString()}</span>
               </div>
-            ))}
-          </div>
+              <div className="tooltip-io-row">
+                <span className="tooltip-io-label">Output:</span>
+                <span className="tooltip-io-value">{outputTokens.toLocaleString()}</span>
+              </div>
+              <div className="tooltip-io-row tooltip-io-total">
+                <span className="tooltip-io-label">Total:</span>
+                <span className="tooltip-io-value">{totalTokens.toLocaleString()}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Category bar (only for Claude Code with context data) */}
+          {hasContextWindow && formattedCategories.length > 0 && (
+            <>
+              <div className="tooltip-bar">
+                {formattedCategories.map((cat, index) => (
+                  <span
+                    key={`${cat.name}-${index}`}
+                    className="tooltip-bar-segment"
+                    style={{ width: `${cat.width}%`, backgroundColor: cat.color }}
+                  />
+                ))}
+              </div>
+
+              <div className="tooltip-categories">
+                {formattedCategories.map((cat, index) => (
+                  <div className="tooltip-category-row" key={`${cat.name}-${index}`}>
+                    <span className="tooltip-dot" style={{ backgroundColor: cat.color }} />
+                    <span className="tooltip-category-name">{cat.name}</span>
+                    <span className="tooltip-category-tokens">{cat.tokens.toLocaleString()} tokens</span>
+                    <span className="tooltip-category-percent">{cat.percentText}%</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

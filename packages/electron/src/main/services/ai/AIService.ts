@@ -231,15 +231,21 @@ export class AIService {
           const parsedUsage = parseContextUsageMessage(contextResponse);
 
           if (parsedUsage) {
+            const tokenUsage = {
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: parsedUsage.totalTokens,
+              contextWindow: parsedUsage.contextWindow,
+              categories: parsedUsage.categories
+            };
+
+            // Persist token usage to session metadata
+            await this.sessionManager.updateSessionTokenUsage(session.id, tokenUsage);
+
+            // Also send IPC event to update UI immediately
             event.sender.send('ai:tokenUsageUpdated', {
               sessionId: session.id,
-              tokenUsage: {
-                inputTokens: 0,
-                outputTokens: 0,
-                totalTokens: parsedUsage.totalTokens,
-                contextWindow: parsedUsage.contextWindow,
-                categories: parsedUsage.categories
-              }
+              tokenUsage
             });
           } else {
             console.error('[AIService] Failed to parse /context response for token usage. Full response:', contextResponse);
@@ -1103,9 +1109,33 @@ export class AIService {
                 totalLength: bucketContentLength(fullResponse.length)
               });
 
-              // Note: Token usage is now fetched via /context command below for Claude Code
-              // This provides accurate context window usage instead of cumulative token counts
-              // For Claude Code, we NEVER use chunk.usage - only /context results
+              // Update session token usage if available (for non-claude-code providers)
+              // Claude Code token usage is handled via /context command in runAutoContextCommand
+              if (tokenUsage && session.provider !== 'claude-code') {
+                // Calculate cumulative usage
+                const currentUsage = session.tokenUsage ?? {
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  totalTokens: 0
+                };
+
+                // Calculate new tokens for this message
+                const newInputTokens = (tokenUsage.input_tokens || 0);
+                const newOutputTokens = tokenUsage.output_tokens || 0;
+                const newTotalTokens = newInputTokens + newOutputTokens;
+
+                const updatedUsage = {
+                  inputTokens: currentUsage.inputTokens + newInputTokens,
+                  outputTokens: currentUsage.outputTokens + newOutputTokens,
+                  totalTokens: currentUsage.totalTokens + newTotalTokens,
+                  contextWindow: currentUsage.contextWindow
+                };
+
+                await this.sessionManager.updateSessionTokenUsage(session.id, updatedUsage);
+
+                // Update local session reference for next iteration
+                session.tokenUsage = updatedUsage;
+              }
 
               // Only add assistant message if there's actual content or edits
               if (fullResponse && fullResponse.trim() !== '') {

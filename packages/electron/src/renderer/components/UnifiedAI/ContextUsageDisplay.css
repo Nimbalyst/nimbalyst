@@ -122,6 +122,38 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Input/Output breakdown for non-Claude-Code providers */
+.tooltip-io-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-primary);
+  margin-bottom: 8px;
+}
+
+.tooltip-io-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.tooltip-io-label {
+  color: var(--text-secondary);
+}
+
+.tooltip-io-value {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tooltip-io-total {
+  font-weight: 600;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-primary);
+  margin-top: 4px;
+}
+
 /* Responsive: hide on very narrow widths */
 @media (max-width: 400px) {
   .context-usage-display {
