@@ -618,6 +618,25 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, [activeTabId, loadSessions, onSessionChange]);
 
+  // Close tab when session is archived (without deleting the session data)
+  const closeArchivedSession = useCallback((sessionId: string) => {
+    setSessionTabs(prev => {
+      const filtered = prev.filter(tab => tab.id !== sessionId);
+      if (activeTabId === sessionId && filtered.length > 0) {
+        setActiveTabId(filtered[0].id);
+        if (onSessionChange) {
+          onSessionChange(filtered[0].id);
+        }
+      } else if (activeTabId === sessionId && filtered.length === 0) {
+        setActiveTabId(null);
+        if (onSessionChange) {
+          onSessionChange(null);
+        }
+      }
+      return filtered;
+    });
+  }, [activeTabId, onSessionChange]);
+
   // Create a new session
   const createNewSession = useCallback(async (planPath?: string) => {
     try {
@@ -2030,6 +2049,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
             updatedSession={updatedSession}
             onSessionSelect={openSessionInTab}
             onSessionDelete={deleteSession}
+            onSessionArchive={closeArchivedSession}
             onNewSession={() => createNewSession()}
             onImportSessions={handleOpenImportDialog}
             collapsedGroups={collapsedGroups}

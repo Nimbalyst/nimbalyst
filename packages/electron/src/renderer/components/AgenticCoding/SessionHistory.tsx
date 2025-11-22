@@ -29,6 +29,7 @@ interface SessionHistoryProps {
   updatedSession?: { id: string; timestamp: number } | null; // Session that was just updated
   onSessionSelect: (sessionId: string) => void;
   onSessionDelete?: (sessionId: string) => void;
+  onSessionArchive?: (sessionId: string) => void; // Callback when session is archived (to close tab)
   onNewSession?: () => void;
   onImportSessions?: () => void; // Callback for opening import dialog
   collapsedGroups: string[];
@@ -60,6 +61,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   updatedSession = null,
   onSessionSelect,
   onSessionDelete,
+  onSessionArchive,
   onNewSession,
   onImportSessions,
   collapsedGroups,
@@ -319,6 +321,10 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       // Remove from local state immediately for instant feedback
       setAllSessions(prev => prev.filter(s => s.id !== sessionId));
       setSessions(prev => prev.filter(s => s.id !== sessionId));
+      // Notify parent to close the tab if open
+      if (onSessionArchive) {
+        onSessionArchive(sessionId);
+      }
     } catch (err) {
       console.error('[SessionHistory] Failed to archive session:', err);
     }
@@ -402,6 +408,10 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     await Promise.all(promises);
     setAllSessions(prev => prev.filter(s => !selectedSessionIds.has(s.id)));
     setSessions(prev => prev.filter(s => !selectedSessionIds.has(s.id)));
+    // Notify parent to close tabs for all archived sessions
+    if (onSessionArchive) {
+      selectedSessionIds.forEach(sessionId => onSessionArchive(sessionId));
+    }
     clearSelection();
   };
 

@@ -103,7 +103,7 @@ export async function registerSessionHandlers() {
             console.error('[SessionHandlers] Failed to update session metadata:', error);
             return { success: false, error: String(error) };
         }
-    }); 
+    });
 
     // Update session metadata with extended fields
     ipcMain.handle('sessions:update-session-metadata', async (event, sessionId: string, updates: any) => {
