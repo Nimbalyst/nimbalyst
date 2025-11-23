@@ -90,6 +90,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
     // Build image content blocks for attachments (sent directly to Claude, not via file paths)
     const imageContentBlocks: ImageBlockParam[] = [];
+    // TODO: Debug logging - uncomment if needed for attachment troubleshooting
+    // console.log(`[CLAUDE-CODE] Attachments received:`, attachments?.length || 0, attachments);
     if (attachments && attachments.length > 0) {
       // console.log(`[CLAUDE-CODE] Processing ${attachments.length} attachments as direct content blocks`);
 
@@ -123,7 +125,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                 data: base64Data
               }
             });
-            // console.log(`[CLAUDE-CODE] Created image content block for ${attachment.filename || path.basename(attachment.filepath)}`);
+            // console.log(`[CLAUDE-CODE] Created image content block for ${attachment.filename || path.basename(attachment.filepath)}, size: ${base64Data.length} bytes`);
           } catch (error) {
             console.error(`[CLAUDE-CODE] Failed to read attachment for content block:`, error);
           }
