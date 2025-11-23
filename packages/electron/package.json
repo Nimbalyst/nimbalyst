@@ -78,10 +78,6 @@
     "web-streams-polyfill": "^4.2.0",
     "zod": "^3.24.0"
   },
-  "optionalDependencies": {
-    "@img/sharp-win32-arm64": "^0.34.5",
-    "@img/sharp-win32-x64": "^0.34.5"
-  },
   "devDependencies": {
     "@electric-sql/pglite-socket": "^0.0.19",
     "@electron/notarize": "^2.3.2",
