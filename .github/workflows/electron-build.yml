@@ -66,8 +66,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-        env:
-          npm_config_omit: optional
 
       - name: Build rexical package
         working-directory: packages/rexical
