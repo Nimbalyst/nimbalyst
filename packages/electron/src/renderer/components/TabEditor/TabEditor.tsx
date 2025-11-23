@@ -110,6 +110,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
   const [showConflictDialog, setShowConflictDialog] = useState(false);
   const [conflictDialogContent, setConflictDialogContent] = useState<string>('');
   const [showMonacoDiffBar, setShowMonacoDiffBar] = useState(false); // For Monaco diff approval bar
+  const [isEditorReady, setIsEditorReady] = useState(false); // Track when editor is mounted and ready
 
   // Refs for stable access in timers/callbacks
   const contentRef = useRef(content);
@@ -162,7 +163,8 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     // Guard against re-running this effect - only run once per filePath change
     if (hasCheckedForPendingTagsRef.current) return;
     if (!window.electronAPI?.history) return;
-    if (!editorRef.current) return;
+    // Wait for editor to be ready before checking pending diffs
+    if (!isEditorReady || !editorRef.current) return;
 
     hasCheckedForPendingTagsRef.current = true;
     // Reset the flag for this file
@@ -256,7 +258,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     };
 
     checkAndApplyPendingDiffs();
-  }, [filePath, isMarkdown]); // Only depend on filePath and isMarkdown, NOT initialContent
+  }, [filePath, isMarkdown, isEditorReady]); // Wait for editor to be ready before checking pending diffs
 
 
   // Helper: Save file with history snapshot
@@ -1386,6 +1388,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 },
                 onEditorReady: (editor) => {
                   editorRef.current = editor;
+                  setIsEditorReady(true);
                   // Force FixedTabHeaderRegistry to re-evaluate after editor remounts
                   // This ensures DiffApprovalBar appears when switching back from Monaco mode
                   setTimeout(() => {
@@ -1490,6 +1493,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 onEditorReady={(editorWrapper) => {
                   // For Monaco, we get a wrapper with editor, setContent, getContent
                   editorRef.current = editorWrapper;
+                  setIsEditorReady(true);
                 }}
               />
             </>
@@ -1528,6 +1532,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                 onEditorReady={(editorWrapper) => {
                   // For Monaco, we get a wrapper with editor, setContent, getContent, showDiff, etc.
                   editorRef.current = editorWrapper;
+                  setIsEditorReady(true);
                 }}
               />
             </>
