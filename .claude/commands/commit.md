@@ -8,18 +8,25 @@ Create a git commit following these steps:
 2. Review recent commits (`git log --oneline -5`) to match the style
 3. Draft a concise commit message:
   - Start with type prefix: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`
+  - **Focus on IMPACT and WHY, not implementation details**
+  - The title should describe the user-visible outcome or bug fixed
   - Use bullet points (dash prefix) only if there are multiple distinct changes
-  - Focus on WHAT changed and WHY (not HOW unless critical)
   - Keep each line under 72 characters
-  - Be concise - only mention what was added/changed, not what was kept
   - No emojis
 4. Stage relevant files with `git add`
 5. Create the commit with your message
 6. Run `git status` to confirm
+
+**Commit Message Guidelines:**
+- Lead with the problem solved or capability added, not the technique used
+- BAD: "feat: add pre-edit tagging for non-agentic AI providers"
+- GOOD: "fix: OpenAI/LMStudio diffs now persist across app restarts"
+- BAD: "refactor: extract helper function for validation"
+- GOOD: "fix: prevent crash when user input is empty"
+- The body can explain HOW if it's non-obvious, but title = IMPACT
 
 **Important:**
 - Do NOT add "Co-Authored-By" or any attribution lines
 - Do NOT add marketing taglines or links
 - Be direct and factual
 - Keep it brief - avoid unnecessary details about what wasn't changed
-- Only explain implementation details if they're non-obvious and important
