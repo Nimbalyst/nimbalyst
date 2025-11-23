@@ -27,7 +27,7 @@ When executing this command:
 2. **Generate task list**
   - Create markdown checkboxes from acceptance criteria
   - Add any implementation tasks from the Implementation Details section
-  - Insert this task list at the very top of the plan body (after frontmatter, before the title)
+  - Insert this task list after the plan title (after the first # heading)
 
 3. **Update plan frontmatter**
   - Set `status` to `in-development` (if currently `ready-for-development` or `draft`)
@@ -54,7 +54,7 @@ When executing this command:
 
 ## Task List Format
 
-The task list should be inserted immediately after the frontmatter and before the plan title:
+The task list should be inserted immediately after the plan title:
 
 ```markdown
 ---
@@ -62,14 +62,14 @@ planStatus:
   ...
 ---
 
+# [Plan Title]
+
 ## Implementation Progress
 
 - [ ] Task 1 from acceptance criteria
 - [ ] Task 2 from acceptance criteria
 - [ ] Implementation task A
 - [ ] Implementation task B
-
-# [Plan Title]
 
 ## Goals
 ...
