@@ -611,12 +611,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     // This is critical for file watcher comparisons
     contentRef.current = currentContent;
 
-    // CRITICAL: In diff mode, the editor content includes diff nodes which export
-    // to markdown differently than the baseline. This causes false dirty flags.
-    // Don't mark as dirty when in diff mode - user must explicitly approve/reject.
-    const isContentDirty = pendingAIEditTagRef.current
-      ? false
-      : currentContent !== initialContentRef.current;
+    // Check if content has changed from initial state
+    // In diff mode, we still track dirty state so manual edits can be autosaved
+    const isContentDirty = currentContent !== initialContentRef.current;
 
     // const timeNow = Date.now();
     // const timeSinceLastSave = lastSaveTimeRef.current ? timeNow - lastSaveTimeRef.current : Infinity;
@@ -676,17 +673,10 @@ export const TabEditor: React.FC<TabEditorProps> = ({
         // console.log(`[TabEditor] Skipping autosave - not dirty`);
         return;
       }
-
-      // CRITICAL: Skip autosave if we're in diff mode showing AI edits
-      // The content is already on disk - autosaving the diff view would cause mismatches
-      if (pendingAIEditTagRef.current) {
-        logger.ui.info(`[TabEditor] Skipping autosave - diff mode active for ${fileName}`);
-        return;
-      }
-
+      
       // Skip if not enough time has passed since last change (debounce)
       if (Date.now() - lastChangeTimeRef.current < autosaveDebounce) {
-        // console.log(`[TabEditor] Skipping autosave - debounce not elapsed`);
+        console.log(`[TabEditor] Skipping autosave - debounce not elapsed`);
         return;
       }
 
@@ -1241,90 +1231,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
     const editor = editorRef.current;
 
-    const handleApprove = async () => {
-      logger.ui.info('[TabEditor] handleApprove called, pendingAIEditTagRef:', pendingAIEditTagRef.current);
-      if (pendingAIEditTagRef.current) {
-        const { tagId, filePath } = pendingAIEditTagRef.current;
-        try {
-          // Mark tag as reviewed
-          logger.ui.info('[TabEditor] About to call updateTagStatus from handleApprove:', { tagId, filePath });
-          await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed');
-          logger.ui.info(`[TabEditor] Successfully marked AI edit tag as reviewed from handleApprove: ${tagId}`);
-
-          // Clear the pending tag reference
-          pendingAIEditTagRef.current = null;
-
-          // Exit diff mode - reload the editor with current disk content
-          const result = await window.electronAPI.readFileContent(filePath);
-          if (result && result.content) {
-            const currentContent = result.content;
-            setContent(currentContent);
-            contentRef.current = currentContent;
-            initialContentRef.current = currentContent;
-            setLastSavedContent(currentContent);
-            lastSavedContentRef.current = currentContent;
-
-            // Update editor to show final content (no diff)
-            if (editorRef.current) {
-              const transformers = getEditorTransformers();
-
-              editorRef.current.update(() => {
-                const root = $getRoot();
-                root.clear();
-                $convertFromEnhancedMarkdownString(currentContent, transformers);
-              }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
-            }
-          }
-        } catch (error) {
-          logger.ui.error(`[TabEditor] Failed to update tag status:`, error);
-        }
-      }
-    };
-
-    const handleReject = async () => {
-      if (pendingAIEditTagRef.current) {
-        const { tagId, filePath } = pendingAIEditTagRef.current;
-        try {
-          // Get the tagged (original) content
-          const tag = await window.electronAPI.history.getTag(filePath, tagId);
-          if (!tag) {
-            logger.ui.warn(`[TabEditor] Tag not found for rejection: ${tagId}`);
-            return;
-          }
-
-          // Mark tag as reviewed (user rejected, so we're done with it)
-          await window.electronAPI.history.updateTagStatus(filePath, tagId, 'reviewed');
-          logger.ui.info(`[TabEditor] Marked rejected AI edit tag as reviewed: ${tagId}`);
-
-          // Clear the pending tag reference
-          pendingAIEditTagRef.current = null;
-
-          // Restore the original (tagged) content - reject the AI edits
-          const originalContent = tag.content;
-          setContent(originalContent);
-          contentRef.current = originalContent;
-          initialContentRef.current = originalContent;
-          setLastSavedContent(originalContent);
-          lastSavedContentRef.current = originalContent;
-
-          // Write original content back to disk
-          await window.electronAPI.saveFile(originalContent, filePath);
-
-          // Update editor to show original content (no diff)
-          if (editorRef.current) {
-            const transformers = getEditorTransformers();
-
-            editorRef.current.update(() => {
-              const root = $getRoot();
-              root.clear();
-              $convertFromEnhancedMarkdownString(originalContent, transformers);
-            }, { tag: SKIP_SCROLL_INTO_VIEW_TAG });
-          }
-        } catch (error) {
-          logger.ui.error(`[TabEditor] Failed to reject edits:`, error);
-        }
-      }
-    };
+    // NOTE: handleApprove and handleReject have been removed.
+    // APPROVE_DIFF_COMMAND and REJECT_DIFF_COMMAND are now handled solely by DiffPlugin in rexical.
+    // TabEditor only handles CLEAR_DIFF_TAG_COMMAND which is dispatched by DiffPlugin after all diffs are processed.
 
     // Handle incremental approval - create tag for partial accept/reject
     const handleIncrementalApproval = async () => {
@@ -1457,23 +1366,9 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     }
 
     // Register command listeners
-    const unregisterApprove = editor.registerCommand(
-        APPROVE_DIFF_COMMAND,
-        () => {
-          handleApprove();
-          return false; // Let other handlers run
-        },
-        COMMAND_PRIORITY_LOW
-      );
-
-      const unregisterReject = editor.registerCommand(
-        REJECT_DIFF_COMMAND,
-        () => {
-          handleReject();
-          return false; // Let other handlers run
-        },
-        COMMAND_PRIORITY_LOW
-      );
+    // NOTE: APPROVE_DIFF_COMMAND and REJECT_DIFF_COMMAND are handled by DiffPlugin in rexical.
+    // TabEditor only handles CLEAR_DIFF_TAG_COMMAND which is dispatched by DiffPlugin
+    // after all diffs have been processed. This avoids duplicate handlers fighting over state.
 
       const unregisterIncremental = editor.registerCommand(
         INCREMENTAL_APPROVAL_COMMAND,
@@ -1498,8 +1393,6 @@ export const TabEditor: React.FC<TabEditorProps> = ({
       );
 
     return () => {
-      unregisterApprove();
-      unregisterReject();
       unregisterIncremental();
       unregisterClear();
     };

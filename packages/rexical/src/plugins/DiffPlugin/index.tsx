@@ -284,14 +284,13 @@ export function DiffPlugin(): JSX.Element | null {
     );
 
     // Register command to approve all diffs
+    // NOTE: Command handlers run in an implicit editor.update() context
     const approveDiffUnregister = editor.registerCommand(
       APPROVE_DIFF_COMMAND,
       () => {
         commandInProgressRef.current = true;
 
-        editor.update(() => {
-          $approveDiffs(editor);
-        });
+        $approveDiffs();
 
         // Clear diff styling after approval
         setTimeout(() => updateDiffStyling(), 0);
@@ -311,14 +310,13 @@ export function DiffPlugin(): JSX.Element | null {
     );
 
     // Register command to reject all diffs
+    // NOTE: Command handlers run in an implicit editor.update() context
     const rejectDiffUnregister = editor.registerCommand(
       REJECT_DIFF_COMMAND,
       () => {
         commandInProgressRef.current = true;
 
-        editor.update(() => {
-          $rejectDiffs(editor);
-        });
+        $rejectDiffs();
 
         // Clear diff styling after rejection
         setTimeout(() => updateDiffStyling(), 0);

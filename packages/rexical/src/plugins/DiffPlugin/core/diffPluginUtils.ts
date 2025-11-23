@@ -50,20 +50,20 @@ export type Change = {
 
 /**
  * Approves all diff changes in the editor.
+ * This is a $ function - must be called from within an update context (e.g., command handlers).
+ *
  * - Nodes with 'added' DiffState: keep them and clear the diff state
  * - Nodes with 'removed' DiffState: remove them entirely
  * - Nodes with 'modified' DiffState: keep them and clear the diff state
  * - AddNode/RemoveNode instances: handle them for backward compatibility
  */
-export function $approveDiffs(editor: LexicalEditor): void {
+export function $approveDiffs(): void {
   // Initialize handlers if not already done
   initializeHandlers();
 
-  editor.update(
-    () => {
-      const root = $getRoot();
+  const root = $getRoot();
 
-      const processElementNode = (element: ElementNode): void => {
+  const processElementNode = (element: ElementNode): void => {
         const children = [...element.getChildren()];
 
         for (const child of children) {
@@ -155,29 +155,24 @@ export function $approveDiffs(editor: LexicalEditor): void {
         }
       };
 
-      // Start processing from the root
-      processElementNode(root);
-    },
-    {
-      discrete: true,
-    },
-  );
+  // Start processing from the root
+  processElementNode(root);
 }
 
 /**
  * Rejects all diff changes in the editor.
+ * This is a $ function - must be called from within an update context (e.g., command handlers).
+ *
  * - Nodes with 'added' DiffState: remove them entirely
  * - Nodes with 'removed' DiffState: keep them and clear the diff state
  * - Nodes with 'modified' DiffState: keep them and clear the diff state (preserving original content)
  * - AddNode/RemoveNode instances: handle them for backward compatibility
  */
-export function $rejectDiffs(editor: LexicalEditor): void {
+export function $rejectDiffs(): void {
   // Initialize handlers if not already done
   initializeHandlers();
 
-  editor.update(
-    () => {
-      const root = $getRoot();
+  const root = $getRoot();
 
       const processElementNode = (element: ElementNode): void => {
         const children = [...element.getChildren()];
@@ -275,13 +270,8 @@ export function $rejectDiffs(editor: LexicalEditor): void {
         }
       };
 
-      // Start processing from the root
-      processElementNode(root);
-    },
-    {
-      discrete: true,
-    },
-  );
+  // Start processing from the root
+  processElementNode(root);
 }
 
 /**

@@ -91,6 +91,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   const isInitializedRef = useRef<boolean>(false);
   const isResizingRef = useRef<boolean>(false);
   const aiChatRef = useRef<AIChatRef>(null);
+  const saveTabByIdRef = useRef<((tabId: string) => Promise<void>) | null>(null);
 
   // Initialize tabs
   const tabs = useTabs({
@@ -121,6 +122,16 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   // Keep tabsRef updated
   useEffect(() => {
     tabsRef.current = tabs;
+  }, [tabs]);
+
+  // Handle tab close with save for dirty tabs
+  const handleTabClose = useCallback(async (tabId: string) => {
+    const tab = tabs.getTabState(tabId);
+    // Save dirty tabs before closing to prevent data loss
+    if (tab?.isDirty && saveTabByIdRef.current) {
+      await saveTabByIdRef.current(tabId);
+    }
+    tabs.removeTab(tabId);
   }, [tabs]);
 
   // Derive current file info from active tab - this is the SINGLE SOURCE OF TRUTH
@@ -266,8 +277,8 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     closeActiveTab: () => {
       console.log('[EditorMode] closeActiveTab called, activeTabId:', tabs.activeTabId);
       if (tabs.activeTabId) {
-        console.log('[EditorMode] Calling tabs.removeTab with id:', tabs.activeTabId);
-        tabs.removeTab(tabs.activeTabId);
+        console.log('[EditorMode] Calling handleTabClose with id:', tabs.activeTabId);
+        handleTabClose(tabs.activeTabId);
       } else {
         console.log('[EditorMode] No active tab to close');
       }
@@ -278,7 +289,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     openHistoryDialog: () => setIsHistoryDialogOpen(true),
     tabs: {
       addTab: tabs.addTab,
-      removeTab: tabs.removeTab,
+      removeTab: handleTabClose,
       switchTab: tabs.switchTab,
       findTabByPath: tabs.findTabByPath,
       nextTab: () => {
@@ -310,7 +321,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       tabs: tabs.tabs,
       activeTabId: tabs.activeTabId,
     }
-  }), [tabs, handleOpen, handleSaveAs, handleWorkspaceFileSelect]);
+  }), [tabs, handleOpen, handleSaveAs, handleWorkspaceFileSelect, handleTabClose]);
 
   // Handle sidebar resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -525,7 +536,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
                 }))}
                 activeTabId={tabs.activeTabId}
                 onTabSelect={tabs.switchTab}
-                onTabClose={tabs.removeTab}
+                onTabClose={handleTabClose}
                 onNewTab={() => setIsNewFileDialogOpen(true)}
                 onTogglePin={tabs.togglePin}
                 onTabReorder={tabs.reorderTabs}
@@ -546,6 +557,9 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
                   theme={theme}
                   onManualSaveReady={(saveFn) => {
                     handleSaveRef.current = saveFn;
+                  }}
+                  onSaveTabByIdReady={(saveFn) => {
+                    saveTabByIdRef.current = saveFn;
                   }}
                   onSaveComplete={(filePath) => {
                     // No need to set currentFilePath - it's derived from active tab

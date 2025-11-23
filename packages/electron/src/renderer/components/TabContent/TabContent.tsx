@@ -27,6 +27,7 @@ interface TabContentProps {
   onManualSaveReady?: (saveFunction: () => Promise<void>) => void;
   onGetContentReady?: (tabId: string, getContentFunction: () => string) => void;
   onSaveComplete?: (filePath: string) => void;
+  onSaveTabByIdReady?: (saveTabById: (tabId: string) => Promise<void>) => void;
 
   // Document action callbacks
   onViewHistory?: () => void;
@@ -47,6 +48,7 @@ export const TabContent: React.FC<TabContentProps> = ({
   onManualSaveReady,
   onGetContentReady,
   onSaveComplete,
+  onSaveTabByIdReady,
   onViewHistory,
   onRenameDocument,
   onSwitchToAgentMode,
@@ -111,6 +113,22 @@ export const TabContent: React.FC<TabContentProps> = ({
       onGetContentReady(tabId, getContentFn);
     }
   }, [onGetContentReady]);
+
+  // Create saveTabById function and expose to parent
+  const saveTabById = useCallback(async (tabId: string): Promise<void> => {
+    const saveFn = saveFunctionsRef.current.get(tabId);
+    if (saveFn) {
+      logger.ui.info(`[TabContent] Saving tab ${tabId} before close`);
+      await saveFn();
+    }
+  }, []);
+
+  // Expose saveTabById to parent on mount and when it changes
+  useEffect(() => {
+    if (onSaveTabByIdReady) {
+      onSaveTabByIdReady(saveTabById);
+    }
+  }, [onSaveTabByIdReady, saveTabById]);
 
   // Load content for physical or virtual files
   const loadContent = useCallback(async (filePath: string): Promise<string> => {
