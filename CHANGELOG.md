@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.42] - 2025-11-23
+
+
+### Changed
+- Commit command now emphasizes impact over implementation in messages
+
+### Fixed
+- OpenAI, LMStudio, and Claude API providers now work correctly (responses and tool calls were not being displayed or executed)
+- AI diffs from non-Claude-Code providers now persist across app restarts
+
 ## [0.45.41] - 2025-11-23
 
 
