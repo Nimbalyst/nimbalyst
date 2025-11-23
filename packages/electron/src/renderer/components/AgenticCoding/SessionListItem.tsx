@@ -190,11 +190,10 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
         ) : null}
         {(onArchive || onUnarchive) && (
           <button
-            className={`session-list-item-archive ${isHovering && !isActive ? 'visible' : ''}`}
+            className={`session-list-item-archive ${isHovering ? 'visible' : ''}`}
             onClick={handleArchiveToggle}
             aria-label={isArchived ? "Unarchive session" : "Archive session"}
             title={isArchived ? "Unarchive session" : "Archive session"}
-            disabled={isActive}
           >
             {isArchived ? (
               // Unarchive icon (box with arrow out)
