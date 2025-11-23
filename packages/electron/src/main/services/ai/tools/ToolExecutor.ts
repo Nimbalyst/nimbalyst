@@ -117,13 +117,18 @@ export class ToolExecutor extends EventEmitter {
       contentLength: this.bucketContentLength(args.content.length)
     });
 
-    // Start streaming - let the AI specify insertAfter with actual content
+    // Start streaming - include targetFilePath so renderer knows which document to target
+    // This prevents race conditions if user switches tabs while waiting for AI response
+    if (!args.targetFilePath) {
+      logger.ai.warn('[ToolExecutor] streamContent called without targetFilePath - edit may go to wrong document');
+    }
     this.webContents.send('ai:streamEditStart', {
       id: streamId,
       position: args.position || (args.insertAfter ? undefined : 'cursor'),
       insertAfter: args.insertAfter,
       mode: args.mode || 'append',
-      insertAtEnd: false
+      insertAtEnd: false,
+      targetFilePath: args.targetFilePath
     });
 
     // Stream content in chunks

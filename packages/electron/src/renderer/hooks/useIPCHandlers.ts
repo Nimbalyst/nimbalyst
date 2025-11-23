@@ -1096,13 +1096,24 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     // Set up AI streaming event listeners
     // These connect the aiApi events to the editorRegistry methods
+    // Track the current stream's target file path to prevent race conditions
+    // when user switches tabs during streaming
+    let currentStreamTargetFilePath: string | null = null;
+
     const handleStreamEditStart = (data: any) => {
       console.log('[AI Streaming] Stream edit started:', { sessionId: data.sessionId, config: data });
-      const filePath = editorRegistry.getActiveFilePath();
+
+      // Use explicit targetFilePath from data - this was captured when the message was sent
+      // and prevents race conditions if user switches tabs while waiting for AI
+      const filePath = data.targetFilePath;
+
       if (!filePath) {
-        console.error('[AI Streaming] No active editor for streaming');
+        console.error('[AI Streaming] CRITICAL: No targetFilePath provided in stream start - this is a bug. Cannot safely apply streaming edit.');
         return;
       }
+
+      // Store the target for subsequent content/end events
+      currentStreamTargetFilePath = filePath;
 
       editorRegistry.startStreaming(filePath, {
         id: data.id || 'ai-stream',
@@ -1118,9 +1129,11 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
       const content = typeof data === 'string' ? data : data.content;
       const sessionId = typeof data === 'object' ? data.sessionId : undefined;
       console.log('[AI Streaming] Stream edit content:', { sessionId, preview: content?.substring(0, 50) });
-      const filePath = editorRegistry.getActiveFilePath();
+
+      // Use the target file path captured at stream start
+      const filePath = currentStreamTargetFilePath;
       if (!filePath) {
-        console.error('[AI Streaming] No active editor for streaming');
+        console.error('[AI Streaming] No target file path - stream may not have started properly');
         return;
       }
 
@@ -1129,13 +1142,18 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
     const handleStreamEditEnd = (data: any) => {
       console.log('[AI Streaming] Stream edit ended:', { sessionId: data?.sessionId, error: data?.error });
-      const filePath = editorRegistry.getActiveFilePath();
+
+      // Use the target file path captured at stream start
+      const filePath = currentStreamTargetFilePath;
       if (!filePath) {
-        console.error('[AI Streaming] No active editor for streaming');
+        console.error('[AI Streaming] No target file path - stream may not have started properly');
         return;
       }
 
       editorRegistry.endStreaming(filePath, 'ai-stream');
+
+      // Clear the target after stream ends
+      currentStreamTargetFilePath = null;
     };
 
     aiApi.on('streamEditStart', handleStreamEditStart);

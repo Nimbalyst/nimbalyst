@@ -1918,14 +1918,24 @@ export class AIService {
     const executor = new ToolExecutor(webContents, sessionId, workspaceId);
     console.log(`[AIService] createToolHandler called with documentContext.filePath:`, documentContext?.filePath);
 
+    // Capture targetFilePath from documentContext at message-send time
+    // This prevents race conditions if user switches tabs while waiting for AI response
+    const targetFilePath = documentContext?.filePath;
+
     return {
       applyDiff: async (args: DiffArgs): Promise<DiffResult> => {
-        // Use the current document context file path (passed in the message)
-        const targetFilePath = documentContext?.filePath;
         console.log(`[AIService] applyDiff called, targetFilePath from closure:`, targetFilePath);
         return executor.applyDiff({ ...args, targetFilePath });
       },
+      streamContent: async (args: any): Promise<any> => {
+        console.log(`[AIService] streamContent called, targetFilePath from closure:`, targetFilePath);
+        return executor.streamContent({ ...args, targetFilePath });
+      },
       executeTool: async (name: string, args: any): Promise<any> => {
+        // For tools that need targetFilePath, inject it from the closure
+        if (name === 'streamContent' || name === 'applyDiff') {
+          return executor.executeTool(name, { ...args, targetFilePath });
+        }
         return executor.executeTool(name, args);
       }
     };

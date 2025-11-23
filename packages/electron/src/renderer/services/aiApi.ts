@@ -250,19 +250,17 @@ class AIApi {
           logger.api.warn('applyDiff payload missing replacements');
         }
 
-        // Get target file path - use explicit path if provided, otherwise use active editor
-        let targetFilePath = data.targetFilePath;
+        // CRITICAL: Require explicit targetFilePath to prevent race conditions
+        // The targetFilePath was captured when the message was sent and must be provided.
+        // Using the active editor as fallback is DANGEROUS because the user may have
+        // switched tabs while waiting for the AI response.
+        const targetFilePath = data.targetFilePath;
 
         if (!targetFilePath) {
-          // Use the active editor from the registry
-          targetFilePath = editorRegistry.getActiveFilePath();
-          logger.api.info('No explicit targetFilePath, using active editor:', targetFilePath);
-        }
-
-        if (!targetFilePath) {
+          logger.api.error('CRITICAL: applyDiff called without targetFilePath - this is a bug that could apply edits to the wrong document');
           window.electronAPI.sendMcpApplyDiffResult(data.resultChannel, {
             success: false,
-            error: 'No target file path available and no active editor'
+            error: 'No target file path provided - cannot safely apply diff (user may have switched tabs)'
           });
           return;
         }
