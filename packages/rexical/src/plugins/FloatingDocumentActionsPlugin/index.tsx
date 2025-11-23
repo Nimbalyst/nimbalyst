@@ -411,6 +411,19 @@ export default function FloatingDocumentActionsPlugin({
                         </div>
                         <div className="ai-session-actions">
                           <button
+                              className="ai-session-action-button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleLoadSessionInAgentMode(session.id);
+                              }}
+                              title="Open in Agent mode"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M19 3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V5H19V19Z" fill="currentColor"/>
+                            </svg>
+                            Agent
+                          </button>
+                          <button
                             className="ai-session-action-button"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -422,19 +435,6 @@ export default function FloatingDocumentActionsPlugin({
                               <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2Z" fill="currentColor"/>
                             </svg>
                             Chat
-                          </button>
-                          <button
-                            className="ai-session-action-button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleLoadSessionInAgentMode(session.id);
-                            }}
-                            title="Open in Agent mode"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M19 3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.11 21 21 20.1 21 19V5C21 3.9 20.11 3 19 3ZM19 19H5V5H19V19Z" fill="currentColor"/>
-                            </svg>
-                            Agent
                           </button>
                         </div>
                       </div>
