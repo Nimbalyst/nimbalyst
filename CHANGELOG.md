@@ -19,6 +19,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.41] - 2025-11-23
+
+
+### Added
+- Native spell check context menu with correction suggestions, "Learn Spelling", and "Ignore Spelling"
+
+### Changed
+- Remove redundant tab activation polling check
+
+### Fixed
+- Wait for editor ready before checking pending diffs
+- Prevent AI edits going to wrong document on tab switch
+- Restore Monaco diff mode on mount for code files (diff view was not displaying for code files)
+- Preserve manual edits during diff mode and save on tab close (manual edits were being lost when accepting/rejecting diffs or closing tabs)
+
+### Removed
+- Remove sharp dependency (no longer needed)
+
 ## [0.45.40] - 2025-11-23
 
 
