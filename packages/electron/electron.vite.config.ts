@@ -187,8 +187,12 @@ export default defineConfig({
       optimizeExcalidrawPlugin(),
       optimizeShikiPlugin(),
       // Monaco Editor plugin handles worker and CSS bundling
+      // customDistPath fixes Windows path bug where path.join incorrectly concatenates absolute paths
       (monacoEditorPlugin as any).default({
-        languageWorkers: ['editorWorkerService', 'css', 'html', 'json', 'typescript']
+        languageWorkers: ['editorWorkerService', 'css', 'html', 'json', 'typescript'],
+        customDistPath: (root: string, outDir: string, _base: string) => {
+          return resolve(root, outDir, 'monacoeditorwork')
+        }
       }),
       // NOTE: On Windows, vite-plugin-static-copy uses fast-glob which expects
       // POSIX-style paths. Absolute Windows paths with backslashes won't match
