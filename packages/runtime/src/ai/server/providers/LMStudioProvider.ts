@@ -169,9 +169,9 @@ export class LMStudioProvider extends BaseAIProvider {
           if (line.trim() === '') continue;
           if (line.trim() === 'data: [DONE]') {
             console.log('[LMStudio] Received [DONE] marker');
-            // Log the output message before returning
+            // Log the output message - await to ensure it's saved before signaling completion
             if (sessionId && fullContent) {
-              this.logAgentMessage(sessionId, 'lmstudio', 'output', fullContent);
+              await this.logAgentMessage(sessionId, 'lmstudio', 'output', fullContent);
             }
             yield {
               type: 'complete',
@@ -344,7 +344,56 @@ export class LMStudioProvider extends BaseAIProvider {
                           yield {
                             type: 'stream_edit_end'
                           };
-                          
+
+                          // Log streamContent tool call to database
+                          const toolId = currentToolCall?.id || `tool-${Date.now()}`;
+                          if (sessionId) {
+                            // Parse full args for logging
+                            let fullArgs: any = {};
+                            try {
+                              fullArgs = JSON.parse(toolCallBuffer);
+                            } catch (e) {
+                              fullArgs = { content: rawContent, position: streamConfig?.position || 'cursor' };
+                            }
+
+                            // Log the tool_use block
+                            this.logAgentMessage(sessionId, 'lmstudio', 'output', JSON.stringify({
+                              type: 'assistant',
+                              message: {
+                                content: [{
+                                  type: 'tool_use',
+                                  id: toolId,
+                                  name: 'streamContent',
+                                  input: fullArgs
+                                }]
+                              }
+                            }));
+
+                            // Log the tool_result block
+                            this.logAgentMessage(sessionId, 'lmstudio', 'output', JSON.stringify({
+                              type: 'assistant',
+                              message: {
+                                content: [{
+                                  type: 'tool_result',
+                                  tool_use_id: toolId,
+                                  content: JSON.stringify({ success: true, message: 'Content streamed to editor' }),
+                                  is_error: false
+                                }]
+                              }
+                            }));
+                          }
+
+                          // Yield tool_call event so AIService can track it
+                          yield {
+                            type: 'tool_call',
+                            toolCall: {
+                              id: toolId,
+                              name: 'streamContent',
+                              arguments: { content: rawContent, position: streamConfig?.position || 'cursor' },
+                              result: { success: true, message: 'Content streamed to editor' }
+                            }
+                          };
+
                           isStreamingContent = false;
                           streamContentBuffer = '';
                           streamConfig = null;
@@ -437,16 +486,50 @@ export class LMStudioProvider extends BaseAIProvider {
                           console.warn(`[LMStudio] No tool handler registered - skipping execution for ${toolName}`);
                         }
 
+                        const toolId = currentToolCall.id || `tool-${Date.now()}`;
+
+                        // Log tool call to database in format that UI can reconstruct
+                        if (sessionId) {
+                          // Log the tool_use block
+                          this.logAgentMessage(sessionId, 'lmstudio', 'output', JSON.stringify({
+                            type: 'assistant',
+                            message: {
+                              content: [{
+                                type: 'tool_use',
+                                id: toolId,
+                                name: toolName,
+                                input: args
+                              }]
+                            }
+                          }));
+
+                          // Log the tool_result block
+                          const resultContent = executionResult !== undefined
+                            ? (typeof executionResult === 'string' ? executionResult : JSON.stringify(executionResult))
+                            : 'Tool executed';
+                          this.logAgentMessage(sessionId, 'lmstudio', 'output', JSON.stringify({
+                            type: 'assistant',
+                            message: {
+                              content: [{
+                                type: 'tool_result',
+                                tool_use_id: toolId,
+                                content: resultContent,
+                                is_error: executionError !== undefined
+                              }]
+                            }
+                          }));
+                        }
+
                         yield {
                           type: 'tool_call',
                           toolCall: {
-                            id: currentToolCall.id,
+                            id: toolId,
                             name: toolName,
                             arguments: args,
                             ...(executionResult !== undefined ? { result: executionResult } : {})
                           }
                         };
-                        
+
                         // Reset for next tool call
                         currentToolCall = null;
                         toolCallBuffer = '';
@@ -486,9 +569,9 @@ export class LMStudioProvider extends BaseAIProvider {
         }
       }
 
-      // Log the output message
+      // Log the output message - await to ensure it's saved before signaling completion
       if (sessionId && fullContent) {
-        this.logAgentMessage(sessionId, 'lmstudio', 'output', fullContent);
+        await this.logAgentMessage(sessionId, 'lmstudio', 'output', fullContent);
       }
 
       // Ensure we send a complete event

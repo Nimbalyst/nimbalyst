@@ -309,12 +309,17 @@ export class OpenAIProvider extends BaseAIProvider {
           for (const callId in toolCallAccumulator) {
             const toolCall = toolCallAccumulator[callId];
             toolCallCount++;
+            const toolId = toolCall.id || `tool-${toolCallCount}`;
             try {
               const args = JSON.parse(toolCall.function.arguments);
-              console.log(`[OpenAIProvider] Tool call #${toolCallCount}: ${toolCall.function.name}`);
-              
-              // Handle streamContent specially
-              if (toolCall.function.name === 'streamContent') {
+              const toolName = toolCall.function.name;
+              console.log(`[OpenAIProvider] Tool call #${toolCallCount}: ${toolName}`);
+
+              let executionResult: any | undefined;
+              let executionError: string | undefined;
+
+              // Handle streamContent specially - it streams directly to editor
+              if (toolName === 'streamContent') {
                 const position = args.position || 'cursor';
                 const insertAtEnd = position === 'end' || position === 'end of document';
 
@@ -324,12 +329,10 @@ export class OpenAIProvider extends BaseAIProvider {
                     position,
                     insertAfter: args.insertAfter,
                     insertAtEnd,
-                    // Don't set mode - let the editor plugin decide based on insertAtEnd
                     mode: undefined
                   }
                 };
 
-                // Stream the content
                 if (args.content) {
                   yield {
                     type: 'stream_edit_content',
@@ -340,11 +343,11 @@ export class OpenAIProvider extends BaseAIProvider {
                 yield {
                   type: 'stream_edit_end'
                 };
-              } else {
-                const toolName = toolCall.function.name;
-                let executionResult: any | undefined;
-                let executionError: string | undefined;
 
+                // Mark as successful execution
+                executionResult = { success: true, message: 'Content streamed to editor' };
+              } else {
+                // Execute other tools via tool handler
                 if (this.toolHandler) {
                   const toolStartTime = Date.now();
                   try {
@@ -375,16 +378,50 @@ export class OpenAIProvider extends BaseAIProvider {
                 } else {
                   console.warn(`[OpenAIProvider] No tool handler registered - skipping execution for ${toolName}`);
                 }
-
-                yield {
-                  type: 'tool_call',
-                  toolCall: {
-                    name: toolName,
-                    arguments: args,
-                    ...(executionResult !== undefined ? { result: executionResult } : {})
-                  }
-                };
               }
+
+              // Log tool call to database in format that UI can reconstruct
+              if (sessionId) {
+                // Log the tool_use block
+                this.logAgentMessage(sessionId, 'openai', 'output', JSON.stringify({
+                  type: 'assistant',
+                  message: {
+                    content: [{
+                      type: 'tool_use',
+                      id: toolId,
+                      name: toolName,
+                      input: args
+                    }]
+                  }
+                }));
+
+                // Log the tool_result block
+                const resultContent = executionResult !== undefined
+                  ? (typeof executionResult === 'string' ? executionResult : JSON.stringify(executionResult))
+                  : 'Tool executed';
+                this.logAgentMessage(sessionId, 'openai', 'output', JSON.stringify({
+                  type: 'assistant',
+                  message: {
+                    content: [{
+                      type: 'tool_result',
+                      tool_use_id: toolId,
+                      content: resultContent,
+                      is_error: executionError !== undefined
+                    }]
+                  }
+                }));
+              }
+
+              // Yield tool_call event so AIService can track it
+              yield {
+                type: 'tool_call',
+                toolCall: {
+                  id: toolId,
+                  name: toolName,
+                  arguments: args,
+                  ...(executionResult !== undefined ? { result: executionResult } : {})
+                }
+              };
             } catch (error) {
               console.error(`[OpenAIProvider] Error parsing tool arguments for call ${callId}:`, error);
             }
@@ -418,14 +455,15 @@ export class OpenAIProvider extends BaseAIProvider {
         }
       }
 
-      // Log the output message
+      // Log the text output message if there was any text content
+      // Note: Tool calls are logged individually above, so we only log text here
       if (sessionId && fullContent) {
-        this.logAgentMessage(sessionId, 'openai', 'output', fullContent, {
+        await this.logAgentMessage(sessionId, 'openai', 'output', fullContent, {
           usage: usageData
         });
       }
 
-      // Yield complete AFTER the loop ends with usage data if available
+      // Yield complete AFTER any final message is saved to database
       yield {
         type: 'complete',
         content: fullContent,

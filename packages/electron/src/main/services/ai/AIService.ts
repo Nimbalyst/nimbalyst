@@ -932,8 +932,17 @@ export class AIService {
                     toolCalls: [chunk.toolCall]  // Also send as toolCall so it displays in chat
                   });
                 } else if (chunk.toolCall.name === 'streamContent') {
-                  // Mark that we used streamContent - we'll handle this specially
+                  // Mark that we used streamContent AND track the tool call
                   hasStreamingContent = true;
+                  toolCallCount++;
+                  toolCalls.push(chunk.toolCall);
+                  // Send to renderer so it displays in chat transcript
+                  event.sender.send('ai:streamResponse', {
+                    sessionId: session.id,
+                    partial: '',
+                    isComplete: false,
+                    toolCalls: [chunk.toolCall]
+                  });
                 } else {
                   // For other tools, just send the tool call
                   event.sender.send('ai:streamResponse', {
@@ -978,9 +987,11 @@ export class AIService {
 
             case 'stream_edit_start':
               // Forward streaming edit start event to renderer
+              // Include targetFilePath so renderer knows which file to edit
               // console.log('[AIService] Forwarding stream_edit_start to renderer:', chunk.config);
               event.sender.send('ai:streamEditStart', {
                 sessionId: session.id,
+                targetFilePath: documentContext?.filePath,
                 ...chunk.config
               });
               hasStreamingContent = true;  // Mark that we're doing streaming

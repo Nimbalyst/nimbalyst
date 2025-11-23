@@ -184,8 +184,11 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
    * Log an agent message to the audit table
    * This should be called for both input (user/system to AI) and output (AI response) messages
    *
-   * IMPORTANT: This is a fire-and-forget operation - it does NOT block the AI request
-   * Emits 'message:logged' event after successful write to trigger UI updates
+   * Returns a Promise that resolves when the message is saved.
+   * Callers can await this for final output messages to ensure the database write
+   * completes before signaling completion to the UI.
+   * For input messages and streaming chunks, the Promise can be ignored (fire-and-forget).
+   * Emits 'message:logged' event after successful write to trigger UI updates.
    */
   protected logAgentMessage(
     sessionId: string,
@@ -194,9 +197,8 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
     content: string,
     metadata?: Record<string, unknown>,
     hidden?: boolean
-  ): void {
-    // Fire and forget - don't block the AI request
-    AgentMessagesRepository.create({
+  ): Promise<void> {
+    return AgentMessagesRepository.create({
       sessionId,
       source,
       direction,

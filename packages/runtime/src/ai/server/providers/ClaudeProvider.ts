@@ -741,14 +741,14 @@ export class ClaudeProvider extends BaseAIProvider {
           // No tool uses, conversation is complete
           conversationComplete = true;
 
-          // Log the output message
+          // Log the output message - await to ensure it's saved before signaling completion
           if (sessionId && fullContent) {
-            this.logAgentMessage(sessionId, 'claude', 'output', fullContent, {
+            await this.logAgentMessage(sessionId, 'claude', 'output', fullContent, {
               usage: totalUsageData
             });
           }
 
-          // Yield the complete chunk with usage data if available
+          // Yield the complete chunk AFTER the message is saved to database
           yield {
             type: 'complete',
             content: fullContent,
