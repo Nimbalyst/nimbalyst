@@ -27,6 +27,9 @@ import { logger } from '../../utils/logger';
 import { windowStates } from '../../window/WindowManager';
 import { sessionFileTracker } from '../SessionFileTracker';
 import {AnalyticsService} from "../analytics/AnalyticsService.ts";
+import { historyManager } from '../../HistoryManager';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const LOG_PREVIEW_LENGTH = 400;
 
@@ -80,6 +83,62 @@ function bucketAgeInDays(timestampMs: number): string {
   if (ageDays < 30) return '1-4-weeks';
   if (ageDays < 90) return '1-3-months';
   return '3-months-plus';
+}
+
+/**
+ * Tag file before edit for non-agentic providers (OpenAI, LMStudio, etc.)
+ * Creates a pre-edit tag in the history database with pending-review status
+ * This enables diff visualization and persistence across app restarts
+ */
+async function tagFileBeforeEdit(
+  filePath: string,
+  sessionId: string,
+  toolUseId: string
+): Promise<void> {
+  try {
+    // Check if there are already pending tags for this file
+    // If yes, skip creating a new tag - we want to show ALL edits together as one diff
+    const pendingTags = await historyManager.getPendingTags(filePath);
+
+    if (pendingTags && pendingTags.length > 0) {
+      // Tag already exists, don't create a new one
+      logger.ai.debug('[AIService] Pre-edit tag already exists, skipping', {
+        file: path.basename(filePath),
+        existingTagId: pendingTags[0].id,
+      });
+      return;
+    }
+
+    // No pending tags - create the first one for this edit session
+    const tagId = `ai-edit-pending-${sessionId}-${toolUseId}`;
+    logger.ai.info('[AIService] Creating pre-edit tag', {
+      file: path.basename(filePath),
+      tagId,
+    });
+
+    // Read current file content
+    const content = fs.readFileSync(filePath, 'utf-8');
+
+    await historyManager.createTag(
+      filePath,
+      tagId,
+      content,
+      sessionId,
+      toolUseId
+    );
+
+    // Small delay to ensure tag is committed to database
+    await new Promise(resolve => setTimeout(resolve, 10));
+  } catch (error) {
+    // Check if this is a unique constraint violation (expected if tag already exists)
+    const errorStr = String(error);
+    if (errorStr.includes('unique') || errorStr.includes('UNIQUE') || errorStr.includes('duplicate')) {
+      // This is fine - means another rapid edit already created the tag
+      return;
+    }
+    logger.ai.error('[AIService] Failed to create pre-edit tag:', error);
+    // Don't throw - allow the edit to proceed even if tagging fails
+  }
 }
 
 // Helper function to categorize AI errors
@@ -908,6 +967,13 @@ export class AIService {
                 // Send tool call to renderer
                 // For applyDiff (including MCP variants), include it as BOTH an edit AND a toolCall
                 if (toolName === 'applyDiff' || toolName?.endsWith('__applyDiff')) {
+                  // Create pre-edit tag BEFORE applying diff (for non-agentic providers)
+                  // This enables diff visualization and persistence across app restarts
+                  if (documentContext?.filePath && session.provider !== 'claude-code') {
+                    const toolUseId = chunk.toolCall.id || `diff-${Date.now()}`;
+                    await tagFileBeforeEdit(documentContext.filePath, session.id, toolUseId);
+                  }
+
                   const edit = {
                     type: 'diff',
                     replacements: chunk.toolCall.arguments.replacements,
@@ -986,6 +1052,14 @@ export class AIService {
               break;
 
             case 'stream_edit_start':
+              // Create pre-edit tag BEFORE streaming content (for non-agentic providers)
+              // This enables diff visualization and persistence across app restarts
+              if (documentContext?.filePath && session.provider !== 'claude-code') {
+                // Generate a tool use ID based on session and timestamp
+                const streamToolUseId = `stream-${Date.now()}`;
+                await tagFileBeforeEdit(documentContext.filePath, session.id, streamToolUseId);
+              }
+
               // Forward streaming edit start event to renderer
               // Include targetFilePath so renderer knows which file to edit
               // console.log('[AIService] Forwarding stream_edit_start to renderer:', chunk.config);
