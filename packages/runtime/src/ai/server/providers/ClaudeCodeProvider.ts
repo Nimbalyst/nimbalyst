@@ -4,6 +4,7 @@
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import type { MessageParam, ImageBlockParam, TextBlockParam, ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { BaseAIProvider } from '../AIProvider';
 import {
   DocumentContext,
@@ -87,39 +88,46 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     this.currentMode = (documentContext as any)?.mode || 'agent';
     // console.log(`[CLAUDE-CODE] Session mode: ${this.currentMode}`);
 
-    // Handle attachments by copying them to a temp location Claude can access
-    let attachmentRefs: string[] = [];
-    if (attachments && attachments.length > 0 && workspacePath) {
-      // console.log(`[CLAUDE-CODE] Processing ${attachments.length} attachments`);
-
-      // Create temp attachments directory in workspace
-      const tempAttachmentsDir = path.join(workspacePath, '.nimbalyst', 'ai-chat-attachments', sessionId || 'default');
-      await fs.promises.mkdir(tempAttachmentsDir, { recursive: true });
+    // Build image content blocks for attachments (sent directly to Claude, not via file paths)
+    const imageContentBlocks: ImageBlockParam[] = [];
+    if (attachments && attachments.length > 0) {
+      // console.log(`[CLAUDE-CODE] Processing ${attachments.length} attachments as direct content blocks`);
 
       for (const attachment of attachments) {
         if (attachment.type === 'image' && attachment.filepath) {
           try {
-            // Copy image to temp location
-            const filename = path.basename(attachment.filepath);
-            const tempPath = path.join(tempAttachmentsDir, filename);
-
-            // Read original and write to temp location
+            // Read image file and convert to base64
             const imageData = await fs.promises.readFile(attachment.filepath);
-            await fs.promises.writeFile(tempPath, imageData);
+            const base64Data = imageData.toString('base64');
 
-            // console.log(`[CLAUDE-CODE] Copied attachment to temp location: ${tempPath}`);
-            attachmentRefs.push(tempPath);
+            // Determine media type from mimeType or extension
+            let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/png';
+            if (attachment.mimeType) {
+              const mimeType = attachment.mimeType.toLowerCase();
+              if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') {
+                mediaType = 'image/jpeg';
+              } else if (mimeType === 'image/gif') {
+                mediaType = 'image/gif';
+              } else if (mimeType === 'image/webp') {
+                mediaType = 'image/webp';
+              } else if (mimeType === 'image/png') {
+                mediaType = 'image/png';
+              }
+            }
+
+            imageContentBlocks.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: mediaType,
+                data: base64Data
+              }
+            });
+            // console.log(`[CLAUDE-CODE] Created image content block for ${attachment.filename || path.basename(attachment.filepath)}`);
           } catch (error) {
-            console.error(`[CLAUDE-CODE] Failed to copy attachment:`, error);
+            console.error(`[CLAUDE-CODE] Failed to read attachment for content block:`, error);
           }
         }
-      }
-
-      // If we have attachments, prepend them to the message
-      if (attachmentRefs.length > 0) {
-        const attachmentsList = attachmentRefs.map(p => `- ${p}`).join('\n');
-        message = `I have attached the following image files for you to examine:\n${attachmentsList}\n\nPlease use your Read tool to view these images.\n\n${message}`;
-        // console.log(`[CLAUDE-CODE] Updated message with ${attachmentRefs.length} attachment references`);
       }
     }
 
@@ -331,8 +339,45 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // Log MCP servers being passed to SDK (CONTAINS SENSITIVE CONFIG - commented out for production)
       // console.log('[CLAUDE-CODE] Final MCP config for SDK:', JSON.stringify(options.mcpServers, null, 2));
 
+      // Build the prompt - use streaming input mode when we have image attachments
+      // This allows us to send images directly as content blocks instead of file paths
+      // See: https://platform.claude.com/docs/en/agent-sdk/streaming-vs-single-mode
+      type SDKUserMessage = {
+        type: 'user';
+        message: MessageParam;
+        parent_tool_use_id: string | null;
+      };
+
+      let promptInput: string | AsyncIterable<SDKUserMessage>;
+
+      if (imageContentBlocks.length > 0) {
+        // Use streaming input mode with content blocks for images + text
+        const contentBlocks: ContentBlockParam[] = [
+          ...imageContentBlocks,
+          { type: 'text', text: message } as TextBlockParam
+        ];
+
+        // Create an async generator that yields a single user message with the content blocks
+        async function* createStreamingInput(): AsyncGenerator<SDKUserMessage> {
+          yield {
+            type: 'user',
+            message: {
+              role: 'user',
+              content: contentBlocks
+            },
+            parent_tool_use_id: null
+          };
+        }
+
+        promptInput = createStreamingInput();
+        // console.log(`[CLAUDE-CODE] Using streaming input with ${imageContentBlocks.length} image(s) + text`);
+      } else {
+        // Simple string prompt when no images
+        promptInput = message;
+      }
+
       const queryIterator = query({
-        prompt: message,
+        prompt: promptInput,
         options
       }) as AsyncIterable<any>;
 
