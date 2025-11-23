@@ -82,7 +82,7 @@
     "@excalidraw/excalidraw": "0.17.6",
     "@types/react-syntax-highlighter": "^15.5.13",
     "esbuild": "0.25.10",
-    "openai": "^4.56.0",
+    "openai": "^4.104.0",
     "posthog-js": "^1.280.1",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^15.5.0",
