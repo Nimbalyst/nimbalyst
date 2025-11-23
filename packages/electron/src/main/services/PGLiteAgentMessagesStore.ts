@@ -40,7 +40,7 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
             message.source,
             message.direction,
             message.content,
-            message.metadata ?? null,
+            message.metadata ? JSON.stringify(message.metadata) : null,
             message.hidden ?? false,
           ]
         );
@@ -80,16 +80,27 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
 
       const { rows } = await db.query<any>(query, params);
 
-      return rows.map(row => ({
-        id: Number(row.id),
-        sessionId: row.session_id,
-        createdAt: row.created_at ? new Date(row.created_at) : undefined,
-        source: row.source,
-        direction: row.direction,
-        content: row.content,
-        metadata: row.metadata ?? undefined,
-        hidden: row.hidden ?? false,
-      }));
+      return rows.map(row => {
+        // Parse metadata if it's a string (JSONB may come back as string or object)
+        let metadata = row.metadata;
+        if (typeof metadata === 'string') {
+          try {
+            metadata = JSON.parse(metadata);
+          } catch {
+            // Keep as string if parsing fails
+          }
+        }
+        return {
+          id: Number(row.id),
+          sessionId: row.session_id,
+          createdAt: row.created_at ? new Date(row.created_at) : undefined,
+          source: row.source,
+          direction: row.direction,
+          content: row.content,
+          metadata: metadata ?? undefined,
+          hidden: row.hidden ?? false,
+        };
+      });
     },
   };
 }

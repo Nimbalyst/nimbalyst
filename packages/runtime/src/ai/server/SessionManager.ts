@@ -35,6 +35,7 @@ function chatMessageFromServerMessage(msg: any): Message {
     errorMessage: msg.errorMessage,
     isStreamingStatus: msg.isStreamingStatus,
     streamingData: msg.streamingData,
+    attachments: msg.attachments,
   };
 }
 
@@ -130,10 +131,13 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
           const parsed = JSON.parse(agentMsg.content);
           if (parsed.prompt) {
             // Claude Code format: { prompt: "...", options: {...} }
+            // Extract attachments from metadata if present
+            const attachments = agentMsg.metadata?.attachments;
             uiMessages.push({
               role: 'user',
               content: parsed.prompt,
-              timestamp
+              timestamp,
+              attachments: attachments && attachments.length > 0 ? attachments : undefined
             });
           } else if (parsed.type === 'user' && parsed.message) {
             // Slash command format: { type: "user", message: { role: "user", content: "..." } }
@@ -170,18 +174,24 @@ function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
               // Regular user message with string content
               let content = typeof msg.content === 'string' ? msg.content : '';
 
+              // Extract attachments from metadata if present
+              const attachments = agentMsg.metadata?.attachments;
               uiMessages.push({
                 role: msg.role || 'user',
                 content: content,
-                timestamp
+                timestamp,
+                attachments: attachments && attachments.length > 0 ? attachments : undefined
               });
             }
           }
         } catch (parseError) {
           // Not JSON - treat as raw text (regular Claude SDK format)
+          // Extract attachments from metadata if present
+          const attachments = agentMsg.metadata?.attachments;
           uiMessages.push({
             role: 'user',
             content: agentMsg.content,
+            attachments: attachments && attachments.length > 0 ? attachments : undefined,
             timestamp
           });
         }

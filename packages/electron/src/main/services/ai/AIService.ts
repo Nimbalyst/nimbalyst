@@ -548,11 +548,12 @@ export class AIService {
       perfLog.provider = session.provider;
       perfLog.model = session.model || 'default';
 
-      // Add user message to session
+      // Add user message to session (include attachments if present)
       const userMessage: Message = {
         role: 'user',
         content: message,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        attachments: attachments && attachments.length > 0 ? attachments : undefined
       };
       await this.sessionManager.addMessage(userMessage, session.id);
 

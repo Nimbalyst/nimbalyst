@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import type { Message } from '../../../ai/server/types';
+import type { Message, ChatAttachment } from '../../../ai/server/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { JSONViewer } from './JSONViewer';
 import { DiffViewer } from './DiffViewer';
 import { LoginRequiredWidget } from './LoginRequiredWidget';
 import { formatToolDisplayName } from '../utils/toolNameFormatter';
+import './MessageSegment.css';
 
 interface MessageSegmentProps {
   message: Message;
@@ -29,6 +30,7 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
   shouldShowLoginWidget = true
 }) => {
   const [isDiffExpanded, setDiffExpanded] = useState(false);
+  const [enlargedImage, setEnlargedImage] = useState<ChatAttachment | null>(null);
 
   // Render thinking indicator
   const renderThinking = () => {
@@ -353,6 +355,109 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
     );
   };
 
+  // Render attachments for user messages (thumbnails with click-to-enlarge)
+  const renderAttachments = () => {
+    if (!isUser || !message.attachments || message.attachments.length === 0) return null;
+
+    const getFileIcon = (type: 'image' | 'pdf' | 'document'): string => {
+      switch (type) {
+        case 'image':
+          return 'image';
+        case 'pdf':
+          return 'picture_as_pdf';
+        case 'document':
+          return 'description';
+        default:
+          return 'insert_drive_file';
+      }
+    };
+
+    const formatFileSize = (bytes: number): string => {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    };
+
+    return (
+      <div className="message-attachments">
+        {message.attachments.map((attachment) => (
+          <div
+            key={attachment.id}
+            className="message-attachment-item"
+            onClick={() => attachment.type === 'image' && setEnlargedImage(attachment)}
+            title={attachment.type === 'image' ? 'Click to enlarge' : attachment.filename}
+          >
+            {attachment.type === 'image' && attachment.thumbnail ? (
+              <img
+                src={attachment.thumbnail}
+                alt={attachment.filename}
+                className="message-attachment-thumbnail"
+              />
+            ) : (
+              <div className="message-attachment-icon">
+                <span className="material-icons">{getFileIcon(attachment.type)}</span>
+              </div>
+            )}
+            <div className="message-attachment-info">
+              <span className="message-attachment-filename">{attachment.filename}</span>
+              <span className="message-attachment-size">{formatFileSize(attachment.size)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Render image lightbox modal
+  const renderImageModal = () => {
+    if (!enlargedImage) return null;
+
+    // For enlarged view, use the full file path (not thumbnail)
+    // Convert file path to file:// URL for Electron
+    const getEnlargedSrc = () => {
+      if (enlargedImage.filepath) {
+        // If it's already a file:// URL or data URL, use as-is
+        if (enlargedImage.filepath.startsWith('file://') || enlargedImage.filepath.startsWith('data:')) {
+          return enlargedImage.filepath;
+        }
+        // Convert file path to file:// URL
+        return `file://${enlargedImage.filepath}`;
+      }
+      // Fallback to thumbnail if no filepath
+      return enlargedImage.thumbnail || '';
+    };
+
+    return (
+      <div
+        className="message-attachment-modal-overlay"
+        onClick={() => setEnlargedImage(null)}
+      >
+        <div
+          className="message-attachment-modal"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="message-attachment-modal-close"
+            onClick={() => setEnlargedImage(null)}
+            aria-label="Close"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M15 5L5 15M5 5L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <img
+            src={getEnlargedSrc()}
+            alt={enlargedImage.filename}
+            className="message-attachment-modal-image"
+          />
+          <div className="message-attachment-modal-caption">
+            {enlargedImage.filename}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Render edits as diffs
   const renderEdits = () => {
     if (!message.edits || message.edits.length === 0) return null;
@@ -409,10 +514,12 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+      {renderAttachments()}
       {renderTextContent()}
       {renderToolCall()}
       {renderEdits()}
       {renderError()}
+      {renderImageModal()}
     </div>
   );
 };

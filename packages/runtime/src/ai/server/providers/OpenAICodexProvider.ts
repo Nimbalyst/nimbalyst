@@ -504,7 +504,8 @@ export class OpenAICodexProvider extends BaseAIProvider {
     documentContext?: DocumentContext,
     sessionId?: string,
     messages?: Message[],
-    workspacePath?: string
+    workspacePath?: string,
+    _attachments?: any[]
   ): AsyncIterableIterator<StreamChunk> {
     console.log('[OpenAICodexProvider] ========== sendMessage START ==========');
     console.log('[OpenAICodexProvider] sendMessage called:', {

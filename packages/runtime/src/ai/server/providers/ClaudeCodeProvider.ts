@@ -330,8 +330,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       // console.log('[CLAUDE-CODE] Calling query with prompt length:', message.length);
       // console.log('[CLAUDE-CODE] Creating query iterator...');
 
-      // Log the raw input to the SDK
+      // Log the raw input to the SDK (include attachments in metadata for UI restoration)
       if (sessionId) {
+        const metadataToLog = attachments && attachments.length > 0 ? { attachments } : undefined;
         this.logAgentMessage(sessionId, 'claude-code', 'input', JSON.stringify({
           prompt: message,
           options: {
@@ -345,7 +346,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             disallowedTools: options.disallowedTools,
             permissionMode: options.permissionMode
           }
-        }), undefined, this.markMessagesAsHidden);
+        }), metadataToLog, this.markMessagesAsHidden);
       }
 
       // TODO: Debug logging - uncomment if needed for MCP troubleshooting
