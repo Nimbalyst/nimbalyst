@@ -21,6 +21,11 @@ import { buildClaudeCodeSystemPromptAddendum } from '../../prompt';
 import { setupClaudeCodeEnvironment, getClaudeCodeExecutableOptions } from '../../../electron/claudeCodeEnvironment';
 import { SessionManager } from '../SessionManager';
 
+/**
+ * Track changes in the agent-sdk and claude-code itself here:
+ * https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md
+ * https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md
+ */
 export class ClaudeCodeProvider extends BaseAIProvider {
   // Single abort controller - each provider instance is per-session via ProviderFactory
   private abortController: AbortController | null = null;
