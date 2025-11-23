@@ -3,6 +3,7 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import viteStravuPlugin from '../shared/viteStravuPlugin.ts'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
+import monacoEditorPlugin from 'vite-plugin-monaco-editor'
 import fs from 'fs'
 
 // Custom plugin to exclude Excalidraw locales and optimize imports (copied from rexical)
@@ -185,6 +186,10 @@ export default defineConfig({
       react(),
       optimizeExcalidrawPlugin(),
       optimizeShikiPlugin(),
+      // Monaco Editor plugin handles worker and CSS bundling
+      (monacoEditorPlugin as any).default({
+        languageWorkers: ['editorWorkerService', 'css', 'html', 'json', 'typescript']
+      }),
       // NOTE: On Windows, vite-plugin-static-copy uses fast-glob which expects
       // POSIX-style paths. Absolute Windows paths with backslashes won't match
       // and cause "No file was found to copy" errors in CI. Normalize to POSIX.
@@ -216,8 +221,9 @@ export default defineConfig({
         ignored: ['!**/rexical/src/**', '!**/runtime/src/**']
       },
       fs: {
-        // Allow serving files from rexical and runtime
-        allow: ['..']
+        // Allow serving files from parent directories and node_modules
+        // Monaco Editor requires serving CSS files from node_modules
+        allow: ['..', '../../node_modules']
       }
     },
     build: {
