@@ -139,7 +139,6 @@ export default defineConfig({
           '@anthropic-ai/sdk', // Anthropic SDK - keep external to avoid bundling issues
           /^@modelcontextprotocol\/sdk/, // MCP SDK - keep external to avoid bundling zod
           'openai', // OpenAI SDK - keep external
-          'sharp', // Native module with platform-specific binaries
           // Node runtime dependencies required by AI SDKs
           'node-fetch',
           'formdata-node',

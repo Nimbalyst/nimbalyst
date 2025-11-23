@@ -30,9 +30,9 @@ export function AttachmentPreview({ attachment, onRemove }: AttachmentPreviewPro
   return (
     <div className="attachment-preview">
       <div className="attachment-preview-thumbnail">
-        {attachment.type === 'image' && attachment.thumbnail ? (
+        {attachment.type === 'image' ? (
           <img
-            src={attachment.thumbnail}
+            src={`file://${attachment.filepath}`}
             alt={attachment.filename}
             className="attachment-preview-image"
           />

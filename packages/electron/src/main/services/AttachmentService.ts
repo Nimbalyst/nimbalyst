@@ -4,10 +4,9 @@
  */
 
 import { promises as fs } from 'fs';
-import { join, extname, basename } from 'path';
+import { join, basename } from 'path';
 import { createHash } from 'crypto';
 import type { ChatAttachment } from '@nimbalyst/runtime';
-import sharp from 'sharp';
 import {AnalyticsService} from "./analytics/AnalyticsService.ts";
 
 export interface AttachmentValidation {
@@ -41,7 +40,6 @@ export class AttachmentService {
   // File size limits (in bytes)
   private static readonly MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
   private static readonly MAX_DOCUMENT_SIZE = 10 * 1024 * 1024; // 10MB
-  private static readonly THUMBNAIL_SIZE = 200;
 
   constructor(workspacePath: string) {
     this.workspacePath = workspacePath;
@@ -86,17 +84,6 @@ export class AttachmentService {
       // Determine attachment type
       const type = this.getAttachmentType(mimeType);
 
-      // Generate thumbnail for images
-      let thumbnail: string | undefined;
-      if (type === 'image') {
-        try {
-          thumbnail = await this.generateThumbnail(filepath);
-        } catch (error) {
-          console.warn('[AttachmentService] Failed to generate thumbnail', error);
-          // Continue without thumbnail
-        }
-      }
-
       // Create attachment object
       const attachment: ChatAttachment = {
         id: this.generateId(filepath),
@@ -105,7 +92,6 @@ export class AttachmentService {
         mimeType,
         size: fileBuffer.length,
         type,
-        thumbnail,
         addedAt: timestamp
       };
 
@@ -153,28 +139,6 @@ export class AttachmentService {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to delete attachment'
       };
-    }
-  }
-
-  /**
-   * Generate a thumbnail for an image file
-   */
-  async generateThumbnail(filepath: string): Promise<string> {
-    try {
-      const thumbnailBuffer = await sharp(filepath)
-        .resize(AttachmentService.THUMBNAIL_SIZE, AttachmentService.THUMBNAIL_SIZE, {
-          fit: 'inside',
-          withoutEnlargement: true
-        })
-        .jpeg({ quality: 80 })
-        .toBuffer();
-
-      // Return as base64 data URL
-      const base64 = thumbnailBuffer.toString('base64');
-      return `data:image/jpeg;base64,${base64}`;
-    } catch (error) {
-      console.error('[AttachmentService] Thumbnail generation failed', error);
-      throw error;
     }
   }
 
