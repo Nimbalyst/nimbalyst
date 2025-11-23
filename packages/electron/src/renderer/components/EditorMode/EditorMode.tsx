@@ -471,7 +471,7 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   return (
     <>
       {/* Main content area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'row', overflow: 'hidden', minWidth: 0 }}>
+      <div className="editor-mode__content" style={{ flex: 1, display: 'flex', flexDirection: 'row', overflow: 'hidden', minWidth: 0 }}>
         {/* Left sidebar - file tree */}
         <div style={{ width: sidebarWidth, position: 'relative' }}>
           <WorkspaceSidebar

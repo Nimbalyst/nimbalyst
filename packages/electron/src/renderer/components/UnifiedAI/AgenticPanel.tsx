@@ -1903,7 +1903,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   if (loading) {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-primary)' }}>
+      <div className="agentic-panel agentic-panel--loading" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-primary)' }}>
         <div style={{ color: 'var(--text-secondary)' }}>Loading session...</div>
       </div>
     );
@@ -1911,7 +1911,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   if (error) {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-primary)' }}>
+      <div className="agentic-panel agentic-panel--error" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--surface-primary)' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ color: 'var(--status-error)', marginBottom: '0.5rem' }}>Failed to load session</div>
           <div style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>{error}</div>
@@ -1927,7 +1927,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     // console.log('[AgenticPanel] Chat mode - onContentModeChange available:', !!onContentModeChange);
 
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
+      <div className="agentic-panel agentic-panel--chat" style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
         {/* Header with session dropdown */}
         <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'space-between' }}>
           <SessionDropdown
@@ -2031,7 +2031,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
   // Agent mode: multi-tab with session history
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
+    <div className="agentic-panel agentic-panel--agent" style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--surface-primary)' }}>
       <ResizablePanel
         leftWidth={sessionHistoryWidth}
         minWidth={180}

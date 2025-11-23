@@ -261,7 +261,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
         {!isSidebarCollapsed && (
           <>
             {/* Header with Files label */}
-            <div style={{
+            <div className="session-files-right-panel" style={{
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',

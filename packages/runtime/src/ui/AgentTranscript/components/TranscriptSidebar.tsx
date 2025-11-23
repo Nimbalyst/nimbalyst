@@ -25,7 +25,7 @@ export const TranscriptSidebar: React.FC<TranscriptSidebarProps> = ({
   };
 
   return (
-    <div style={{
+    <div className="transcript-sidebar" style={{
       display: 'flex',
       flex: 1,
       height: '100%',
