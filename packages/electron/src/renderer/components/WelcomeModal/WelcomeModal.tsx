@@ -17,6 +17,9 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
   onComplete,
   onSkip,
 }) => {
+  // Skip rendering in Playwright tests
+  const isPlaywright = window.PLAYWRIGHT || (window as any).PLAYWRIGHT;
+
   const [currentStep, setCurrentStep] = useState<Step>('welcome');
   const [plansLocation, setPlansLocation] = useState<'nimbalyst-local/plans' | 'plans' | 'custom'>('nimbalyst-local/plans');
   const [customPlansLocation, setCustomPlansLocation] = useState('');
@@ -135,6 +138,11 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
     }
     setIsProcessing(false);
   };
+
+  // Don't render in Playwright tests
+  if (isPlaywright) {
+    return null;
+  }
 
   return (
     <div className="welcome-modal-overlay">
