@@ -19,6 +19,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.40] - 2025-11-23
+
+
+### Added
+- Display image thumbnails in agent transcript
+- ExitPlanMode confirmation hook for planning mode
+- Memory mode to AIInput for Claude Code
+- Allow archiving active/selected sessions
+- Token usage tracking restored for all AI providers
+- Enhance FileGutter with git status and operation icons
+- Session archiving system with multi-select support
+- Enhanced session dropdown with name, provider icon, and status
+- User role question on first startup
+- Analytics for branch-review command
+- `.nimbalyst-local` directory with color in project root
+- Links to changelogs for agent-sdk and claude-code
+- Feedback survey button
+
+### Changed
+- Update session message count label from "messages" to "turns"
+- Remove dueDate field from plans tracker system
+- Windows build changed to x64 instead of arm64
+- Detect installed packages on the fly instead of saving state
+- Add identifying CSS classes to major React components
+- Use vite-plugin-monaco-editor to fix CSS 403 errors
+
+### Fixed
+- Hide WelcomeModal in Playwright tests
+- Update invoke method for session metadata to use correct namespace
+- Place implementation checkboxes after plan title, not before
+- Pass workspacePath prop to AgentTranscriptPanel for git status
+- Generate unique filenames for pasted images
+- Send images directly to Claude SDK instead of file paths
+- LMStudio messages not appearing in agent transcript
+- Add Monaco CSS import to fix 403 errors in dev mode
+- Hide FileGutter in agent mode to avoid duplicating sidebar
+- Close session tab when archiving
+- Prevent tab context menu from going off screen
+- Sync session dropdown across agent and files modes
+- Update sharp dependencies for cross-platform compatibility
+- Remove platform-specific sharp dependency that broke macOS installs
+- Windows was using the old icon
+- Add cross-platform path handling for Windows compatibility
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.45.39] - 2025-11-20
 
 
