@@ -206,6 +206,19 @@ export const TabEditor: React.FC<TabEditorProps> = ({
 
         // If content differs, apply the diff
         if (oldContent !== newContent) {
+          // For code files, use Monaco diff mode
+          if (!isMarkdown) {
+            logger.ui.info(`[TabEditor] Applying Monaco diff mode for code file on mount`);
+            if (editorRef.current.showDiff) {
+              editorRef.current.showDiff(oldContent, newContent);
+              setShowMonacoDiffBar(true);
+            } else {
+              logger.ui.warn(`[TabEditor] Monaco editor doesn't have showDiff method`);
+            }
+            return;
+          }
+
+          // For markdown files, use Lexical diff mode
           // Reset editor to old (tagged) content first
           const transformers = getEditorTransformers();
 
@@ -243,7 +256,7 @@ export const TabEditor: React.FC<TabEditorProps> = ({
     };
 
     checkAndApplyPendingDiffs();
-  }, [filePath]); // Only depend on filePath, NOT initialContent
+  }, [filePath, isMarkdown]); // Only depend on filePath and isMarkdown, NOT initialContent
 
 
   // Helper: Save file with history snapshot
