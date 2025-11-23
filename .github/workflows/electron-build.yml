@@ -67,6 +67,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Workaround for npm optional dependency bug with rollup native modules
+      # See: https://github.com/npm/cli/issues/4828
+      - name: Rebuild native modules
+        run: npm rebuild
+
       - name: Build rexical package
         working-directory: packages/rexical
         env:
