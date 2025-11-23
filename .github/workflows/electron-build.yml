@@ -58,8 +58,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+          # Note: npm cache disabled due to rollup optional dependency bug
+          # See: https://github.com/npm/cli/issues/4828
 
       - name: Upgrade npm to 10.x
         run: npm install -g npm@10
