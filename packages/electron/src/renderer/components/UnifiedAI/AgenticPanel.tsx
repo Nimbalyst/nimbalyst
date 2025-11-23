@@ -1427,7 +1427,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
     // Persist mode to database
     try {
-      await window.electronAPI.invoke('ai-sessions:update-metadata', sessionId, { mode: newMode });
+      await window.electronAPI.invoke('sessions:update-metadata', sessionId, { mode: newMode });
     } catch (error) {
       console.error('[AgenticPanel] Failed to update session mode:', error);
     }
