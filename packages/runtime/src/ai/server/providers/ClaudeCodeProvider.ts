@@ -35,6 +35,12 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   private editedFilesThisTurn: Set<string> = new Set(); // Track files edited in current turn
   private markMessagesAsHidden: boolean = false; // Flag to mark next messages as hidden
 
+  // ExitPlanMode confirmation flow - stores pending confirmation resolvers
+  private pendingExitPlanModeConfirmations: Map<string, {
+    resolve: (approved: boolean) => void;
+    reject: (error: Error) => void;
+  }> = new Map();
+
   // Session naming MCP server port (injected from electron main process)
   private static sessionNamingServerPort: number | null = null;
 
@@ -1262,6 +1268,9 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     } else {
       // console.log('[CLAUDE-CODE] No active request to abort');
     }
+
+    // Clean up any pending ExitPlanMode confirmations
+    this.rejectAllPendingConfirmations();
   }
 
   /**
@@ -1342,6 +1351,32 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     return {
       claudeSessionId
     };
+  }
+
+  /**
+   * Resolve a pending ExitPlanMode confirmation request
+   * Called by AIService when renderer responds to confirmation prompt
+   */
+  public resolveExitPlanModeConfirmation(requestId: string, approved: boolean): void {
+    const pending = this.pendingExitPlanModeConfirmations.get(requestId);
+    if (pending) {
+      pending.resolve(approved);
+      this.pendingExitPlanModeConfirmations.delete(requestId);
+      // TODO: Debug logging - uncomment if needed
+      // console.log(`[CLAUDE-CODE] ExitPlanMode confirmation resolved: ${approved ? 'approved' : 'denied'}`);
+    } else {
+      console.warn(`[CLAUDE-CODE] No pending ExitPlanMode confirmation found for requestId: ${requestId}`);
+    }
+  }
+
+  /**
+   * Reject all pending ExitPlanMode confirmations (e.g., on abort)
+   */
+  public rejectAllPendingConfirmations(): void {
+    for (const [requestId, pending] of this.pendingExitPlanModeConfirmations) {
+      pending.reject(new Error('Request aborted'));
+    }
+    this.pendingExitPlanModeConfirmations.clear();
   }
 
   private async getMcpServersConfig(sessionId?: string, workspacePath?: string) {
@@ -1455,7 +1490,82 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
       // console.log(`[CLAUDE-CODE] PreToolUse hook: ${toolName}`, { toolUseID, toolInput });
 
-      // Only intercept file editing tools
+      // EXITPLANMODE CONFIRMATION: Intercept ExitPlanMode tool calls in planning mode
+      // TODO: Debug logging - uncomment if needed for ExitPlanMode troubleshooting
+      // if (toolName === 'ExitPlanMode') {
+      //   console.log(`[CLAUDE-CODE] ExitPlanMode tool called, currentMode=${this.currentMode}`);
+      // }
+
+      if (toolName === 'ExitPlanMode' && this.currentMode === 'planning') {
+        // TODO: Debug logging - uncomment if needed
+        // console.log(`[CLAUDE-CODE] ExitPlanMode intercepted - requesting user confirmation`);
+
+        // Generate unique request ID for this confirmation
+        const requestId = `exit-plan-${sessionId}-${Date.now()}`;
+        const planSummary = toolInput?.plan || '';
+
+        // Create a promise that will be resolved when user responds
+        const confirmationPromise = new Promise<boolean>((resolve, reject) => {
+          this.pendingExitPlanModeConfirmations.set(requestId, { resolve, reject });
+
+          // Set up abort handler
+          if (options.signal) {
+            options.signal.addEventListener('abort', () => {
+              this.pendingExitPlanModeConfirmations.delete(requestId);
+              reject(new Error('Request aborted'));
+            }, { once: true });
+          }
+        });
+
+        // Emit event to notify renderer to show confirmation UI
+        this.emit('exitPlanMode:confirm', {
+          requestId,
+          sessionId,
+          planSummary,
+          timestamp: Date.now()
+        });
+
+        try {
+          const approved = await confirmationPromise;
+
+          if (approved) {
+            // User approved - update our mode state and allow ExitPlanMode to proceed
+            // TODO: Debug logging - uncomment if needed
+            // console.log(`[CLAUDE-CODE] ExitPlanMode approved by user, switching to agent mode`);
+            this.currentMode = 'agent';
+            return {
+              hookSpecificOutput: {
+                hookEventName: 'PreToolUse' as const,
+                permissionDecision: 'allow' as const
+              }
+            };
+          } else {
+            // User denied - keep in planning mode
+            // TODO: Debug logging - uncomment if needed
+            // console.log(`[CLAUDE-CODE] ExitPlanMode denied by user, staying in planning mode`);
+            return {
+              hookSpecificOutput: {
+                hookEventName: 'PreToolUse' as const,
+                permissionDecision: 'deny' as const,
+                errorMessage: `The user chose to continue planning. Please refine the plan further before attempting to exit plan mode.`
+              }
+            };
+          }
+        } catch (error) {
+          // Handle abort or other errors
+          // TODO: Debug logging - uncomment if needed
+          // console.log(`[CLAUDE-CODE] ExitPlanMode confirmation failed:`, error);
+          return {
+            hookSpecificOutput: {
+              hookEventName: 'PreToolUse' as const,
+              permissionDecision: 'deny' as const,
+              errorMessage: `ExitPlanMode was cancelled or interrupted.`
+            }
+          };
+        }
+      }
+
+      // Handle non-file-editing tools (except ExitPlanMode which is handled above)
       if (toolName !== 'Edit' && toolName !== 'Write' && toolName !== 'MultiEdit') {
         // console.log(`[CLAUDE-CODE] PreToolUse: Not a file editing tool, allowing`);
         return {

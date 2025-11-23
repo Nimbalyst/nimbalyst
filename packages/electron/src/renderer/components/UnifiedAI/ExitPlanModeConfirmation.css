@@ -1,0 +1,87 @@
+.exit-plan-mode-confirmation {
+  margin: 12px 16px;
+  padding: 16px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+}
+
+.exit-plan-mode-confirmation-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.exit-plan-mode-confirmation-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
+}
+
+.exit-plan-mode-confirmation-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.exit-plan-mode-confirmation-plan {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--surface-tertiary);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.exit-plan-mode-confirmation-plan-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.exit-plan-mode-confirmation-plan-content {
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.exit-plan-mode-confirmation-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.exit-plan-mode-confirmation-button {
+  flex: 1;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.exit-plan-mode-confirmation-button:hover {
+  opacity: 0.9;
+}
+
+.exit-plan-mode-confirmation-button:active {
+  opacity: 0.8;
+}
+
+.exit-plan-mode-confirmation-button-primary {
+  background: var(--primary-color);
+  color: white;
+}
+
+.exit-plan-mode-confirmation-button-secondary {
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+.exit-plan-mode-confirmation-button-secondary:hover {
+  background: var(--surface-hover);
+}

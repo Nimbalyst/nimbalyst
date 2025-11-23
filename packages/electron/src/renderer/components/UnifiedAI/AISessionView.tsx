@@ -6,6 +6,7 @@ import { PromptQueueList } from './PromptQueueList';
 import { FileGutter } from '../AIChat/FileGutter';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
+import { ExitPlanModeConfirmation, ExitPlanModeConfirmationData } from './ExitPlanModeConfirmation';
 
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
@@ -196,6 +197,51 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
   const inputRef = useRef<AIInputRef>(null);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [queuedPrompts, setQueuedPrompts] = useState<any[]>([]);
+  const [pendingExitPlanConfirmation, setPendingExitPlanConfirmation] = useState<ExitPlanModeConfirmationData | null>(null);
+
+  // Listen for ExitPlanMode confirmation requests for this session
+  useEffect(() => {
+    const handleExitPlanModeConfirm = (data: ExitPlanModeConfirmationData) => {
+      // Only show confirmation for this session
+      if (data.sessionId === sessionId) {
+        // TODO: Debug logging - uncomment if needed
+        // console.log(`[AISessionView] ExitPlanMode confirmation requested for session ${sessionId}`);
+        setPendingExitPlanConfirmation(data);
+      }
+    };
+
+    const cleanup = window.electronAPI.on('ai:exitPlanModeConfirm', handleExitPlanModeConfirm);
+    return () => {
+      cleanup?.();
+    };
+  }, [sessionId]);
+
+  // Handle ExitPlanMode confirmation response
+  const handleExitPlanModeApprove = useCallback(async (requestId: string, confirmSessionId: string) => {
+    // TODO: Debug logging - uncomment if needed
+    // console.log(`[AISessionView] User approved ExitPlanMode: ${requestId}`);
+    try {
+      await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, true);
+      setPendingExitPlanConfirmation(null);
+      // Update the UI mode to 'agent' since we've exited plan mode
+      if (onAIModeChange) {
+        onAIModeChange('agent');
+      }
+    } catch (error) {
+      console.error('[AISessionView] Failed to send ExitPlanMode approval:', error);
+    }
+  }, [onAIModeChange]);
+
+  const handleExitPlanModeDeny = useCallback(async (requestId: string, confirmSessionId: string) => {
+    // TODO: Debug logging - uncomment if needed
+    // console.log(`[AISessionView] User denied ExitPlanMode: ${requestId}`);
+    try {
+      await window.electronAPI.invoke('ai:exitPlanModeConfirmResponse', requestId, confirmSessionId, false);
+      setPendingExitPlanConfirmation(null);
+    } catch (error) {
+      console.error('[AISessionView] Failed to send ExitPlanMode denial:', error);
+    }
+  }, []);
 
   // Extract queue from session metadata when sessionData changes
   useEffect(() => {
@@ -403,6 +449,15 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
         onTodoClick={handleTodoClick}
         onCancelQueuedPrompt={handleCancelQueuedPrompt}
       />
+
+      {/* ExitPlanMode confirmation - shown when agent requests to exit planning mode */}
+      {pendingExitPlanConfirmation && (
+        <ExitPlanModeConfirmation
+          data={pendingExitPlanConfirmation}
+          onApprove={handleExitPlanModeApprove}
+          onDeny={handleExitPlanModeDeny}
+        />
+      )}
 
       {/* Input area - separate so typing doesn't re-render transcript */}
       <AIInput

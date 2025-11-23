@@ -716,6 +716,14 @@ export class AIService {
       provider.removeAllListeners('message:logged');
       provider.on('message:logged', onMessageLogged);
 
+      // Listen for ExitPlanMode confirmation requests and forward to renderer
+      const onExitPlanModeConfirm = (data: { requestId: string; sessionId: string; planSummary: string; timestamp: number }) => {
+        logger.main.info('[AIService] ExitPlanMode confirmation requested:', data.requestId);
+        event.sender.send('ai:exitPlanModeConfirm', data);
+      };
+      provider.removeAllListeners('exitPlanMode:confirm');
+      provider.on('exitPlanMode:confirm', onExitPlanModeConfirm);
+
       // Track user @ mentions in the message
       try {
         await sessionFileTracker.trackUserMessage(
@@ -1490,6 +1498,33 @@ export class AIService {
       }
 
       return { success };
+    });
+
+    // Handle ExitPlanMode confirmation response from renderer
+    ipcMain.handle('ai:exitPlanModeConfirmResponse', async (event, requestId: string, sessionId: string, approved: boolean) => {
+      logger.main.info(`[AIService] ExitPlanMode confirmation response: requestId=${requestId}, approved=${approved}`);
+
+      // Find the session and its provider
+      const session = await this.sessionManager.loadSession(sessionId);
+      if (!session) {
+        logger.main.warn(`[AIService] Session not found for ExitPlanMode response: ${sessionId}`);
+        return { success: false, error: 'Session not found' };
+      }
+
+      const provider = ProviderFactory.getProvider(session.provider as AIProviderType, sessionId);
+      if (!provider) {
+        logger.main.warn(`[AIService] Provider not found for ExitPlanMode response: ${sessionId}`);
+        return { success: false, error: 'Provider not found' };
+      }
+
+      // Check if this is a ClaudeCodeProvider with the resolve method
+      if (typeof (provider as any).resolveExitPlanModeConfirmation === 'function') {
+        (provider as any).resolveExitPlanModeConfirmation(requestId, approved);
+        return { success: true };
+      } else {
+        logger.main.warn(`[AIService] Provider does not support ExitPlanMode confirmation: ${session.provider}`);
+        return { success: false, error: 'Provider does not support ExitPlanMode confirmation' };
+      }
     });
 
     // Cancel current request
