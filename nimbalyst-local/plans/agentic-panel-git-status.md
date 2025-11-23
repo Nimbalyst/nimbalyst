@@ -18,7 +18,6 @@ planStatus:
   progress: 100
   startDate: "2025-11-09"
 ---
-
 ## Implementation Progress
 
 - [x] Create GitStatusService for checking file git status
