@@ -370,7 +370,12 @@ export function AgenticInput({
 
         const file = item.getAsFile();
         if (file) {
-          await handleFileAttachment(file);
+          // Generate unique filename for pasted images (clipboard gives generic "image.png")
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const ext = file.type.split('/')[1] || 'png';
+          const uniqueName = `pasted-image-${timestamp}.${ext}`;
+          const renamedFile = new File([file], uniqueName, { type: file.type });
+          await handleFileAttachment(renamedFile);
         }
       }
     }
