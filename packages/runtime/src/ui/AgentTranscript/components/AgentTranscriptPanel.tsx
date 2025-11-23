@@ -22,6 +22,7 @@ interface AgentTranscriptPanelProps {
   initialSettings?: TranscriptSettings;
   onFileClick?: (filePath: string) => void;
   hideSidebar?: boolean;  // Hide the prompts/files sidebar
+  workspacePath?: string; // Explicit workspace path (falls back to sessionData.workspacePath)
 }
 
 export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
@@ -32,8 +33,11 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   showSettings,
   initialSettings,
   onFileClick,
-  hideSidebar = false
+  hideSidebar = false,
+  workspacePath: workspacePathProp
 }) => {
+  // Use prop if provided, otherwise fall back to sessionData.workspacePath
+  const effectiveWorkspacePath = workspacePathProp || sessionData.workspacePath;
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const stored = localStorage.getItem(`agent-transcript-sidebar-${sessionId}`);
     return stored === 'true';
@@ -208,7 +212,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
           onSettingsChange={onSettingsChange}
           showSettings={showSettings}
           documentContext={sessionData.documentContext}
-          workspacePath={sessionData.workspacePath}
+          workspacePath={effectiveWorkspacePath}
         />
 
         {/* Floating Actions - hidden if hideSidebar is true */}
@@ -294,7 +298,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
                 <FileEditsSidebar
                   fileEdits={fileEdits}
                   onFileClick={onFileClick}
-                  workspacePath={sessionData.workspacePath}
+                  workspacePath={effectiveWorkspacePath}
                 />
               </div>
 

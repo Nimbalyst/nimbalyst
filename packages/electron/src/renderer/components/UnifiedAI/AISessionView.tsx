@@ -112,6 +112,7 @@ const TranscriptSectionComponent: React.FC<TranscriptSectionProps> = ({
           onFileClick={onFileClick}
           onTodoClick={onTodoClick}
           hideSidebar={mode === 'chat'} // Hide sidebar in chat mode
+          workspacePath={workspacePath}
           initialSettings={{
             showToolCalls: true,
             compactMode: false,
