@@ -6,6 +6,13 @@ import { AttachmentPreviewList } from '../AgenticCoding/AttachmentPreviewList';
 import { ModeTag, AIMode } from './ModeTag';
 import { ModelSelector } from './ModelSelector';
 import { ContextUsageDisplay } from './ContextUsageDisplay';
+import {
+  MemoryPromptIndicator,
+  MemorySaveButton,
+  useMemoryMode,
+  shouldActivateMemoryMode,
+  getMemoryContent,
+} from './interactivePrompts';
 import '../AIChat/AIChat.css';
 
 export interface AIInputRef {
@@ -107,6 +114,18 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
     const [slashCommandOptions, setSlashCommandOptions] = useState<TypeaheadOption[]>([]);
     const [allSlashCommands, setAllSlashCommands] = useState<any[]>([]);
     const [dragActive, setDragActive] = useState(false);
+
+    // Memory mode hook
+    const {
+      isMemoryMode,
+      memoryTarget,
+      isSaving,
+      enterMemoryMode,
+      exitMemoryMode,
+      toggleMemoryTarget,
+      setMemoryTarget,
+      saveToMemory,
+    } = useMemoryMode(workspacePath);
 
     // Expose focus method and textarea element through the ref
     useImperativeHandle(ref, () => ({
@@ -269,6 +288,19 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       };
     }, [handleSelectionChange]);
 
+    // Detect memory mode trigger (# as first character, Claude Code provider only)
+    useEffect(() => {
+      if (shouldActivateMemoryMode(value, provider)) {
+        if (!isMemoryMode) {
+          enterMemoryMode();
+        }
+      } else {
+        if (isMemoryMode) {
+          exitMemoryMode();
+        }
+      }
+    }, [value, provider, isMemoryMode, enterMemoryMode, exitMemoryMode]);
+
     // Handle typeahead option selection
     const handleTypeaheadSelect = useCallback((option: TypeaheadOption) => {
       if (!typeaheadMatch || !textareaRef.current) return;
@@ -342,6 +374,37 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           e.preventDefault();
           setTypeaheadMatch(null);
           setSelectedIndex(null);
+          return;
+        }
+      }
+
+      // Handle memory mode keyboard shortcuts
+      if (isMemoryMode && !typeaheadMatch) {
+        // Arrow keys toggle between user/project memory target
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          toggleMemoryTarget();
+          return;
+        }
+
+        // Enter saves to memory
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          const content = getMemoryContent(value);
+          if (content.trim()) {
+            saveToMemory(content).then((success) => {
+              if (success) {
+                onChange(''); // Clear input on success
+              }
+            });
+          }
+          return;
+        }
+
+        // Escape exits memory mode
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onChange(''); // Clear input to exit memory mode
           return;
         }
       }
@@ -510,8 +573,29 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
       }
     };
 
+    // Handle memory save button click
+    const handleMemorySave = useCallback(() => {
+      const content = getMemoryContent(value);
+      if (content.trim()) {
+        saveToMemory(content).then((success) => {
+          if (success) {
+            onChange(''); // Clear input on success
+          }
+        });
+      }
+    }, [value, saveToMemory, onChange]);
+
     return (
-      <div className="ai-chat-input" style={{ position: 'relative' }}>
+      <div className={`ai-chat-input ${isMemoryMode ? 'memory-mode' : ''}`} style={{ position: 'relative' }}>
+        {/* Memory mode indicator */}
+        {isMemoryMode && (
+          <MemoryPromptIndicator
+            target={memoryTarget}
+            onTargetChange={setMemoryTarget}
+            isSaving={isSaving}
+          />
+        )}
+
         {/* Attachment preview list */}
         {attachments && attachments.length > 0 && (
           <AttachmentPreviewList
@@ -520,8 +604,8 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
           />
         )}
 
-        {/* Inline controls row */}
-        {(onModeChange || onModelChange || (tokenUsage && provider === 'claude-code')) && (
+        {/* Inline controls row - hidden in memory mode */}
+        {!isMemoryMode && (onModeChange || onModelChange || (tokenUsage && provider === 'claude-code')) && (
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -578,7 +662,14 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
               resize: 'none'
             }}
           />
-          {isLoading ? (
+          {isMemoryMode ? (
+            // Memory mode: show save button
+            <MemorySaveButton
+              onSave={handleMemorySave}
+              disabled={disabled || !getMemoryContent(value).trim()}
+              isSaving={isSaving}
+            />
+          ) : isLoading ? (
             onCancel && (
               <button
                 className="ai-chat-cancel-button"
@@ -625,6 +716,7 @@ export const AIInput = forwardRef<AIInputRef, AIInputProps>(
             maxHeight={500}
           />
         )}
+
       </div>
     );
   }

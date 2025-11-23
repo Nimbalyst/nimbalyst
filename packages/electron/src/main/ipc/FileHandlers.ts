@@ -483,6 +483,68 @@ export function registerFileHandlers() {
         }
     });
 
+    // Append to CLAUDE.md memory files
+    // Supports both user memory (~/.claude/CLAUDE.md) and project memory (<workspace>/CLAUDE.md)
+    ipcMain.handle('memory:append', async (event, { content, target, workspacePath }: { content: string; target: 'user' | 'project'; workspacePath?: string }) => {
+        try {
+            if (!content || !content.trim()) {
+                return {
+                    success: false,
+                    error: 'Content cannot be empty'
+                };
+            }
+
+            let memoryFilePath: string;
+
+            if (target === 'user') {
+                // User memory goes to ~/.claude/CLAUDE.md
+                const claudeDir = join(homedir(), '.claude');
+                memoryFilePath = join(claudeDir, 'CLAUDE.md');
+
+                // Ensure the ~/.claude directory exists
+                if (!existsSync(claudeDir)) {
+                    mkdirSync(claudeDir, { recursive: true });
+                }
+            } else {
+                // Project memory goes to <workspace>/CLAUDE.md (at the repo root)
+                if (!workspacePath) {
+                    return {
+                        success: false,
+                        error: 'Workspace path is required for project memory'
+                    };
+                }
+
+                memoryFilePath = join(workspacePath, 'CLAUDE.md');
+            }
+
+            // Read existing content if file exists
+            let existingContent = '';
+            if (existsSync(memoryFilePath)) {
+                existingContent = readFileSync(memoryFilePath, 'utf-8');
+            }
+
+            // Append content with separator if file already has content
+            const separator = existingContent.trim() ? '\n' : '';
+            const formattedContent = `${existingContent.trim()}${separator}${content.trim()}\n`;
+
+            // Write the updated content
+            writeFileSync(memoryFilePath, formattedContent, 'utf-8');
+
+            logger.ai.info(`[MEMORY] Appended to ${target} memory:`, memoryFilePath);
+
+            return {
+                success: true,
+                filePath: memoryFilePath
+            };
+        } catch (error) {
+            logger.ai.error('[MEMORY] Error appending to memory:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            };
+        }
+    });
+
     // Start watching a file (when tab is opened)
     ipcMain.handle('start-watching-file', async (event, filePath: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
