@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, app, nativeImage, ipcMain, screen, nativeTheme, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import { BrowserWindow, dialog, app, nativeImage, ipcMain, screen, nativeTheme, Menu, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import { join, basename } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { WindowState, FileTreeItem } from '../types';
@@ -484,6 +484,68 @@ export function createWindow(
         // Handle responsive again
         window.webContents.on('responsive', () => {
             console.log('[MAIN] Window became responsive again');
+        });
+
+        // Handle context menu for spell check suggestions
+        window.webContents.on('context-menu', (_event, params) => {
+            const menuTemplate: Electron.MenuItemConstructorOptions[] = [];
+
+            // Spell check suggestions
+            if (params.misspelledWord) {
+                if (params.dictionarySuggestions.length > 0) {
+                    for (const suggestion of params.dictionarySuggestions) {
+                        menuTemplate.push({
+                            label: suggestion,
+                            click: () => {
+                                window.webContents.replaceMisspelling(suggestion);
+                            }
+                        });
+                    }
+                } else {
+                    menuTemplate.push({
+                        label: 'No suggestions',
+                        enabled: false
+                    });
+                }
+
+                menuTemplate.push({ type: 'separator' });
+
+                menuTemplate.push({
+                    label: 'Add to Dictionary',
+                    click: () => {
+                        window.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord);
+                    }
+                });
+
+                menuTemplate.push({ type: 'separator' });
+            }
+
+            // Standard edit operations when there's editable content
+            if (params.isEditable) {
+                menuTemplate.push(
+                    { label: 'Cut', role: 'cut', enabled: params.editFlags.canCut },
+                    { label: 'Copy', role: 'copy', enabled: params.editFlags.canCopy },
+                    { label: 'Paste', role: 'paste', enabled: params.editFlags.canPaste }
+                );
+
+                if (params.selectionText) {
+                    menuTemplate.push(
+                        { type: 'separator' },
+                        { label: 'Select All', role: 'selectAll' }
+                    );
+                }
+            } else if (params.selectionText) {
+                // Non-editable but has selection - just show copy
+                menuTemplate.push(
+                    { label: 'Copy', role: 'copy' }
+                );
+            }
+
+            // Only show menu if we have items
+            if (menuTemplate.length > 0) {
+                const menu = Menu.buildFromTemplate(menuTemplate);
+                menu.popup({ window });
+            }
         });
 
         // When the window is ready, send initial data
