@@ -2,7 +2,7 @@
  * IPC handlers for chat attachment operations
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, app } from 'electron';
 import { AttachmentService } from '../services/AttachmentService';
 import { getWindowId, windowStates } from '../window/WindowManager';
 
@@ -14,7 +14,8 @@ const attachmentServices = new Map<string, AttachmentService>();
  */
 function getAttachmentService(workspacePath: string): AttachmentService {
   if (!attachmentServices.has(workspacePath)) {
-    attachmentServices.set(workspacePath, new AttachmentService(workspacePath));
+    const userDataPath = app.getPath('userData');
+    attachmentServices.set(workspacePath, new AttachmentService(workspacePath, userDataPath));
   }
   return attachmentServices.get(workspacePath)!;
 }

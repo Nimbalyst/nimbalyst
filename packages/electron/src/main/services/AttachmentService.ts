@@ -14,6 +14,14 @@ export interface AttachmentValidation {
   error?: string;
 }
 
+/**
+ * Convert workspace path to a safe directory name
+ * e.g., /Users/ghinkle/sources/datamodellm -> -Users-ghinkle-sources-datamodellm
+ */
+function workspacePathToDir(workspacePath: string): string {
+  return workspacePath.replace(/[\/\\:]/g, '-');
+}
+
 export class AttachmentService {
   private workspacePath: string;
   private attachmentsDir: string;
@@ -41,13 +49,16 @@ export class AttachmentService {
   private static readonly MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
   private static readonly MAX_DOCUMENT_SIZE = 10 * 1024 * 1024; // 10MB
 
-  constructor(workspacePath: string) {
+  constructor(workspacePath: string, userDataPath: string) {
     this.workspacePath = workspacePath;
-    this.attachmentsDir = join(workspacePath, 'assets', 'chat-attachments');
+    // Store attachments in app user data, organized by project
+    // e.g., ~/Library/Application Support/@nimbalyst/electron/chat-attachments/-Users-ghinkle-sources-datamodellm/
+    const workspaceDir = workspacePathToDir(workspacePath);
+    this.attachmentsDir = join(userDataPath, 'chat-attachments', workspaceDir);
   }
 
   /**
-   * Save an attachment file to the workspace
+   * Save an attachment file to app user data
    */
   async saveAttachment(
     fileBuffer: Buffer,
