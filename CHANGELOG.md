@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.45.43] - 2025-11-24
+
+
+### Added
+- Pasted images now work in other markdown editors (use asset storage system instead of temp files)
+- @ mentioned files auto-attach for non-agent models
+- Configure models option to model selector dropdown
+
+### Fixed
+- Chat attachments no longer pollute project directories (now stored in dedicated assets folder)
+- Image attachments now display in transcript
+- API errors now display in chat instead of failing silently
+- Swap session action button order to match physical layout
+
 ## [0.45.42] - 2025-11-23
 
 
