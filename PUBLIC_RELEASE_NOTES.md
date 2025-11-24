@@ -1,80 +1,29 @@
-# Nimbalyst v0.45.34
+# Nimbalyst v0.46.0 - Public Release Notes
 
-## New Features
+### New Features
 
-**Session History**
-- Search session history by pressing Tab while browsing sessions
-- Full-text search across all your AI chat sessions
+- **File tree filtering**: Filter files by git status (modified, untracked, all files)
+- **Choose your Claude model**: Select from Opus 4.5, Opus 4, Sonnet 4, and other Claude models when chatting with AI
+- **Session archiving**: Archive AI sessions you're done with to keep your workspace organized
+- **Image attachments work everywhere**: Pasted images now work correctly in all markdown editors, not just Nimbalyst
+- **File mentions auto-attach**: @ mentioned files automatically attach when using OpenAI, LMStudio, or Claude API providers
+- **Image thumbnails in chat**: View image thumbnails directly in the AI agent transcript
+- **Reopen closed tabs**: Press Cmd+Shift+T to reopen the last tab you closed
+- **Native spell check**: Right-click misspelled words to see spelling suggestions, learn spellings, or ignore them
+- **Blue dot indicators**: See which documents have pending AI edits that haven't been accepted yet
 
-**File Tree**
-- Natural sorting for easier navigation
-- Filter file tree to show only git modified files
-- Filter files by read/written status
-- Type-specific icons for better file type recognition
+### Improvements
 
-**AI Chat**
-- Token usage breakdown showing category details
-- Sessions automatically named via MCP
-- Floating prompts outline dropdown in agent transcript for quick access
-- Find functionality in agent transcript
+- **Cleaner projects**: Chat attachments are now stored in a dedicated folder instead of cluttering your project directory
+- **Better file navigation**: Clicking files in AI agent transcripts now properly opens them in editor mode
+- **Improved file mention display**: Better display and scrolling for file mention typeahead
 
-**Code Editing**
-- Inline diff mode for Monaco code editor with approval controls
-- Markdown syntax highlighting in Monaco editor
-- AI edits to code files now show approval controls for review
+### Fixed
 
-
-**Other**
-- Discord link added to Help menu
-- Image viewer for standalone image files
-- Project-aware file opening from OS
-- File tree filter and icon visibility settings are now persisted
-
-## Improvements
-
-- Better display for MCP tool calls in chat
-- Login button remains visible even when logged in (prevents OAuth expiry issues)
-- View mode toggle replaces markdown mode conversion for simpler workflow
-
-## Fixed
-
-**Session Management**
-- Session history now refreshes more smoothly when switching between sessions
-- Session list correctly maintains your selected sort order when filtering
-- Sessions now open correctly when switching from Files to Agent mode
-- Session state tracking improved for better cross-mode visibility
-- Search box preserved when no sessions match in agent mode
-
-**AI Chat**
-- Fixed issue that could cause errors when creating new AI sessions
-- Expired Claude Code sessions now display clear error messages
-- Claude Code session import message filtering and ordering improved
-
-**File Tree & Editor**
-- Session history timestamps now display correctly in your timezone
-- File tree sync and auto-scroll issues resolved
-- File tree auto-expand and selection clearing fixed
-- Monaco editor now updates correctly when files change on disk
-- Scrolling behavior for change groups in editor improved
-
-**Performance & Stability**
-- App no longer freezes on large workspace directories
-- Performance limits added to workspace manager file scanning
-- Monaco diff editor disposal errors fixed
-- Prevented editor.registerCommand crash during hot module reload
-- Workspace-relative paths in workspace:open-file handler resolved
-
-**UI/UX**
-- Slash commands now load correctly
-- Monaco diff approval bar now appears for AI edits to code files
-- Fixed visual "TEST MODE" indicator in development builds
-- Removed double scrollbars in Monaco markdown mode
-- Removed duplicate Files header in agent sidebar
-- Discord invite URL updated to correct link
-- Prevented false diffs for hashtags in unchanged content
-- DiffApprovalBar now appears correctly after view mode switch
-
-**Other**
-- DMG/ZIP files without version in filename are now handled correctly
-- Quick open name match badge removed for cleaner interface
-- Newlines preserved in user messages in transcript
+- **Session dropdown sync**: Session dropdown now syncs correctly across agent and files modes
+- **Better error visibility**: API errors now show clearly in the chat instead of failing silently
+- **Code diff view restored**: Diff visualization now properly displays for code files when reviewing AI changes
+- **Manual edits preserved**: Edits you make while reviewing AI diffs are no longer lost when accepting, rejecting, or switching tabs
+- **More reliable AI editing**: Fixed issues where AI edits could go to the wrong document when switching tabs
+- **Cross-platform compatibility**: Better path handling for Windows compatibility
+- **OpenAI, LMStudio, and Claude API providers fixed**: These providers were completely broken - responses weren't showing and AI edits weren't being applied. They now work correctly
