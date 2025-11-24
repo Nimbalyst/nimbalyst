@@ -126,3 +126,24 @@
   background: var(--border-primary);
   margin: 4px 0;
 }
+
+.model-selector-configure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  text-align: left;
+}
+
+.model-selector-configure:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}

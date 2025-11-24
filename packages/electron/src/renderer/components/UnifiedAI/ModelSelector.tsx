@@ -59,6 +59,11 @@ export function ModelSelector({ currentModel, onModelChange }: ModelSelectorProp
     setIsOpen(false);
   };
 
+  const handleConfigureModels = () => {
+    setIsOpen(false);
+    window.electronAPI.openAIModels();
+  };
+
   const getCurrentModelName = () => {
     if (!currentModel) return 'Select Model';
 
@@ -172,6 +177,16 @@ export function ModelSelector({ currentModel, onModelChange }: ModelSelectorProp
                   ))}
                 </>
               )}
+
+              {/* Configure Models */}
+              <div className="model-selector-divider" />
+              <button
+                className="model-selector-configure"
+                onClick={handleConfigureModels}
+              >
+                <MaterialSymbol icon="settings" size={14} />
+                <span>Configure models</span>
+              </button>
             </>
           )}
         </div>
