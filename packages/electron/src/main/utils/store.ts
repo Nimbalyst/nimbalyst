@@ -32,10 +32,10 @@ interface AppStoreSchema {
   osNotificationsEnabled?: boolean;
   // Release channel
   releaseChannel?: ReleaseChannel;
-  // User onboarding
-  userRole?: string; // The user's selected role (or 'skipped' if permanently dismissed)
-  userEmail?: string; // Optional email provided during onboarding
-  onboardingNextPrompt?: number; // Timestamp for when to show onboarding again (if deferred)
+  // User role onboarding
+  userRole?: string;  // 'developer', 'product_manager', custom role, or 'skipped'
+  userEmail?: string;  // Optional email from onboarding
+  onboardingNextPrompt?: number;  // Timestamp for when to show onboarding again (Ask Later)
 }
 
 export interface TabState {
@@ -660,29 +660,37 @@ export function setReleaseChannel(channel: ReleaseChannel): void {
   appStore.set('releaseChannel', channel);
 }
 
-// User Onboarding
-export interface OnboardingState {
+// User Role Onboarding Settings
+export interface UserOnboardingState {
   userRole?: string;
   userEmail?: string;
-  onboardingNextPrompt?: number;
+  nextPromptTime?: number;
 }
 
-export function getOnboardingState(): OnboardingState {
+export function getUserOnboardingState(): UserOnboardingState {
   return {
     userRole: appStore.get('userRole'),
     userEmail: appStore.get('userEmail'),
-    onboardingNextPrompt: appStore.get('onboardingNextPrompt')
+    nextPromptTime: appStore.get('onboardingNextPrompt'),
   };
 }
 
-export function updateOnboardingState(state: Partial<OnboardingState>): void {
-  if (state.userRole !== undefined) {
-    appStore.set('userRole', state.userRole);
+export function setUserRole(role: string): void {
+  appStore.set('userRole', role);
+}
+
+export function setUserEmail(email: string): void {
+  appStore.set('userEmail', email);
+}
+
+export function setOnboardingNextPrompt(timestamp: number | undefined): void {
+  if (timestamp === undefined) {
+    appStore.delete('onboardingNextPrompt');
+  } else {
+    appStore.set('onboardingNextPrompt', timestamp);
   }
-  if (state.userEmail !== undefined) {
-    appStore.set('userEmail', state.userEmail);
-  }
-  if (state.onboardingNextPrompt !== undefined) {
-    appStore.set('onboardingNextPrompt', state.onboardingNextPrompt);
-  }
+}
+
+export function clearOnboardingNextPrompt(): void {
+  appStore.delete('onboardingNextPrompt');
 }

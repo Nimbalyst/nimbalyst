@@ -202,20 +202,12 @@ export default function App() {
 
   // Check for first-time user after initialization completes
   useEffect(() => {
-    // Only check after initialization is complete
+    // Only check after initialization is complete and electronAPI is available
     if (isInitializing) return;
+    if (!window.electronAPI?.onboarding) return;
 
-    const checkOnboarding = async () => {
-      // Only show in workspace mode windows
-      if (!workspaceMode) {
-        return;
-      }
-
-      // Small delay to let other windows start up first
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Recheck after delay - another window might have already shown it
-      const state = await window.electronAPI.invoke('onboarding:get');
+    const checkOnboardingState = async () => {
+      const state = await window.electronAPI.onboarding.getState();
 
       // Don't show if user has completed or permanently skipped
       if (state.userRole) {
@@ -223,33 +215,35 @@ export default function App() {
       }
 
       // Check if we should wait before prompting again
-      if (state.onboardingNextPrompt) {
+      if (state.nextPromptTime) {
         const now = Date.now();
-        if (now < state.onboardingNextPrompt) {
+
+        if (now < state.nextPromptTime) {
           // Not time to show again yet
           return;
         }
 
         // Time has passed, clear the timestamp
-        await window.electronAPI.invoke('onboarding:update', { onboardingNextPrompt: undefined });
+        await window.electronAPI.onboarding.clearNextPrompt();
       }
 
       // Show onboarding dialog
       setIsOnboardingOpen(true);
     };
 
-    checkOnboarding();
-  }, [isInitializing, workspaceMode]);
+    checkOnboardingState();
+  }, [isInitializing]);
 
   // Handle onboarding completion
   const handleOnboardingComplete = useCallback(async (role: string, customRole: string | null, email: string | null) => {
+    // Store user role via IPC
     const roleToStore = customRole || role;
+    await window.electronAPI?.onboarding?.setRole(roleToStore);
 
-    // Store onboarding data in electron-store
-    await window.electronAPI.invoke('onboarding:update', {
-      userRole: roleToStore,
-      userEmail: email || undefined
-    });
+    // Store email if provided
+    if (email) {
+      await window.electronAPI?.onboarding?.setEmail(email);
+    }
 
     // Associate email with user in PostHog if provided
     if (email && posthog) {
@@ -273,7 +267,7 @@ export default function App() {
   // Handle "Ask me later" - set a timestamp for 2 days from now
   const handleOnboardingAskLater = useCallback(async () => {
     const nextPromptTime = Date.now() + (2 * 24 * 60 * 60 * 1000); // 2 days in milliseconds
-    await window.electronAPI.invoke('onboarding:update', { onboardingNextPrompt: nextPromptTime });
+    await window.electronAPI?.onboarding?.setNextPrompt(nextPromptTime);
 
     if (posthog) {
       posthog.capture('onboarding_deferred');
@@ -284,7 +278,7 @@ export default function App() {
 
   // Handle "Never ask again" - permanently dismiss
   const handleOnboardingNeverAsk = useCallback(async () => {
-    await window.electronAPI.invoke('onboarding:update', { userRole: 'skipped' });
+    await window.electronAPI?.onboarding?.setRole('skipped'); // Special value to indicate user chose to skip
 
     if (posthog) {
       posthog.capture('onboarding_skipped');

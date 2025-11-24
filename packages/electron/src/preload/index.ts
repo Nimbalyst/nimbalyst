@@ -554,6 +554,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setSessionId: (sessionId: string) => ipcRenderer.invoke('analytics:set-session-id', sessionId),
   },
 
+  // User onboarding
+  onboarding: {
+    getState: () => ipcRenderer.invoke('onboarding:get-state'),
+    setRole: (role: string) => ipcRenderer.invoke('onboarding:set-role', role),
+    setEmail: (email: string) => ipcRenderer.invoke('onboarding:set-email', email),
+    setNextPrompt: (timestamp: number | undefined) => ipcRenderer.invoke('onboarding:set-next-prompt', timestamp),
+    clearNextPrompt: () => ipcRenderer.invoke('onboarding:clear-next-prompt'),
+  },
+
   // Generic IPC methods for services that need them
   invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
   send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),

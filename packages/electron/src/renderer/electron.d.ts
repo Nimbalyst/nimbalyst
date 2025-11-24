@@ -161,6 +161,15 @@ interface ElectronAPI {
     setSessionId: (sessionId: string) => void;
   }
 
+  // User onboarding
+  onboarding?: {
+    getState: () => Promise<{ userRole?: string; userEmail?: string; nextPromptTime?: number }>;
+    setRole: (role: string) => Promise<void>;
+    setEmail: (email: string) => Promise<void>;
+    setNextPrompt: (timestamp: number | undefined) => Promise<void>;
+    clearNextPrompt: () => Promise<void>;
+  }
+
   // Document Service
   documentService: import('@nimbalyst/runtime').DocumentService;
 

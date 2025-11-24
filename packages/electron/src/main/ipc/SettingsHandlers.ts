@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getUserOnboardingState, setUserRole, setUserEmail, setOnboardingNextPrompt, clearOnboardingNextPrompt } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
@@ -84,14 +84,24 @@ export function registerSettingsHandlers() {
         return getRecentItems('workspaces');
     });
 
-    // Onboarding state
-    ipcMain.handle('onboarding:get', async () => {
-        const { getOnboardingState } = await import('../utils/store');
-        return getOnboardingState();
+    // User onboarding state handlers
+    ipcMain.handle('onboarding:get-state', () => {
+        return getUserOnboardingState();
     });
 
-    ipcMain.handle('onboarding:update', async (_event, state: Partial<OnboardingState>) => {
-        const { updateOnboardingState } = await import('../utils/store');
-        updateOnboardingState(state);
+    ipcMain.handle('onboarding:set-role', (_event, role: string) => {
+        setUserRole(role);
+    });
+
+    ipcMain.handle('onboarding:set-email', (_event, email: string) => {
+        setUserEmail(email);
+    });
+
+    ipcMain.handle('onboarding:set-next-prompt', (_event, timestamp: number | undefined) => {
+        setOnboardingNextPrompt(timestamp);
+    });
+
+    ipcMain.handle('onboarding:clear-next-prompt', () => {
+        clearOnboardingNextPrompt();
     });
 }
