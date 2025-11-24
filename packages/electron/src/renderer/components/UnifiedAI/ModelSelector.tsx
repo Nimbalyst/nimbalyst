@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MaterialSymbol } from '../MaterialSymbol';
 import { getProviderIcon } from '../icons/ProviderIcons';
+import { getClaudeCodeModelLabel } from '../../utils/modelUtils';
 import './ModelSelector.css';
 
 interface Model {
@@ -74,7 +75,9 @@ export function ModelSelector({ currentModel, onModelChange }: ModelSelectorProp
     }
 
     // Fallback - strip provider prefix for display
-    if (currentModel === 'claude-code') return 'Claude Code';
+    if (currentModel.startsWith('claude-code')) {
+      return getClaudeCodeModelLabel(currentModel);
+    }
     const [, ...modelParts] = currentModel.split(':');
     return modelParts.join(':') || currentModel;
   };

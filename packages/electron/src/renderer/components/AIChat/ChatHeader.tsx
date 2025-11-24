@@ -59,10 +59,17 @@ export function ChatHeader({
     if (currentSessionId) {
       const session = sessions.find(s => s.id === currentSessionId);
       if (session) {
-        // Format as provider:model or just provider for claude-code
-        return session.provider === 'claude-code'
-          ? 'claude-code'
-          : `${session.provider}:${session.model}`;
+        if (session.provider === 'claude-code') {
+          return session.model || 'claude-code';
+        }
+
+        if (session.model) {
+          return session.model.includes(':')
+            ? session.model
+            : `${session.provider}:${session.model}`;
+        }
+
+        return session.provider;
       }
     }
     return currentModel;

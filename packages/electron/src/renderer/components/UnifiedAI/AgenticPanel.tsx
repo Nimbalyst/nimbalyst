@@ -1472,6 +1472,14 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
       await window.electronAPI.invoke('sessions:update-provider-and-model', sessionId, newProvider, newModel);
       console.log(`[AgenticPanel] Provider and model changes persisted successfully`);
+
+      try {
+        await window.electronAPI.aiRefreshSessionProvider(sessionId);
+        console.log('[AgenticPanel] Provider cache cleared for session', sessionId);
+      } catch (refreshErr) {
+        console.error('[AgenticPanel] Failed to refresh provider cache:', refreshErr);
+        // Non-fatal - the provider will be re-initialized on next use
+      }
     } catch (err) {
       console.error('[AgenticPanel] Failed to update session provider/model:', err);
     }

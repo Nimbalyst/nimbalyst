@@ -26,6 +26,15 @@ import { SessionManager } from '../SessionManager';
  * https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md
  * https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md
  */
+const CLAUDE_CODE_VARIANTS = ['opus', 'sonnet', 'haiku'] as const;
+type ClaudeCodeVariant = typeof CLAUDE_CODE_VARIANTS[number];
+
+const CLAUDE_CODE_MODEL_LABELS: Record<ClaudeCodeVariant, string> = {
+  opus: 'Opus',
+  sonnet: 'Sonnet',
+  haiku: 'Haiku'
+};
+
 export class ClaudeCodeProvider extends BaseAIProvider {
   // Single abort controller - each provider instance is per-session via ProviderFactory
   private abortController: AbortController | null = null;
@@ -44,7 +53,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
   // Session naming MCP server port (injected from electron main process)
   private static sessionNamingServerPort: number | null = null;
 
-  static readonly DEFAULT_MODEL = 'claude-code';
+  static readonly DEFAULT_MODEL = 'claude-code:sonnet';
 
   /**
    * Set the session naming MCP server port (called from electron main process)
@@ -75,6 +84,19 @@ export class ClaudeCodeProvider extends BaseAIProvider {
    */
   public setHiddenMode(hidden: boolean): void {
     this.markMessagesAsHidden = hidden;
+  }
+
+  private resolveModelVariant(): ClaudeCodeVariant {
+    const fallback: ClaudeCodeVariant = 'sonnet';
+    const configured = this.config.model || ClaudeCodeProvider.DEFAULT_MODEL;
+    const raw = configured.includes(':') ? configured.split(':').pop()! : configured;
+    const normalized = raw?.toLowerCase();
+
+    if (normalized && (CLAUDE_CODE_VARIANTS as readonly string[]).includes(normalized)) {
+      return normalized as ClaudeCodeVariant;
+    }
+
+    return fallback;
   }
 
 
@@ -196,7 +218,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
         mcpServers: await this.getMcpServersConfig(sessionId, workspacePath),
         cwd: workspacePath,
         abortController: this.abortController,
-        model: 'sonnet',
+        model: this.resolveModelVariant(),
         permissionMode: 'bypassPermissions',
         // PHASE 3: PreToolUse hook for tagging "before" state
         // PostToolUse hook for triggering file watcher (no snapshot creation)
@@ -1938,13 +1960,13 @@ Do NOT call this tool more than once per session. It should be called early, typ
    * Get Claude Code model
    */
   static getModels(): AIModel[] {
-    return [{
-      id: 'claude-code',
-      name: 'Claude Code',
+    return CLAUDE_CODE_VARIANTS.map(variant => ({
+      id: `claude-code:${variant}`,
+      name: `Claude Code · ${CLAUDE_CODE_MODEL_LABELS[variant]}`,
       provider: 'claude-code' as const,
       maxTokens: 8192,
       contextWindow: 200000
-    }];
+    }));
   }
 
   /**

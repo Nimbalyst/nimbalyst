@@ -11,6 +11,40 @@ interface ModelInfo {
   shortModelName: string;
 }
 
+type ClaudeCodeVariant = 'opus' | 'sonnet' | 'haiku';
+
+function extractClaudeCodeVariant(modelId?: string): ClaudeCodeVariant | null {
+  if (!modelId) return null;
+  const raw = modelId.includes(':') ? modelId.split(':').pop()! : modelId;
+  const normalized = raw.toLowerCase();
+  if (normalized === 'opus' || normalized === 'sonnet' || normalized === 'haiku') {
+    return normalized;
+  }
+  // Legacy case: 'claude-code' without variant defaults to sonnet (what it was before)
+  if (normalized === 'claude-code') {
+    return 'sonnet';
+  }
+  return null;
+}
+
+function formatVariantLabel(variant: ClaudeCodeVariant): string {
+  return variant.charAt(0).toUpperCase() + variant.slice(1);
+}
+
+export function getClaudeCodeModelLabel(modelId?: string): string {
+  const variant = extractClaudeCodeVariant(modelId);
+  // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
+  if (!variant) return 'Claude Code (Sonnet)';
+  return `Claude Code (${formatVariantLabel(variant)})`;
+}
+
+export function getClaudeCodeModelShortLabel(modelId?: string): string {
+  const variant = extractClaudeCodeVariant(modelId);
+  // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
+  if (!variant) return 'Sonnet';
+  return formatVariantLabel(variant);
+}
+
 /**
  * Parse and format model information for display
  */
@@ -18,12 +52,13 @@ export function parseModelInfo(modelId?: string): ModelInfo | null {
   if (!modelId) return null;
 
   // Special case for Claude Code
-  if (modelId === 'claude-code') {
-    return { 
-      providerId: 'claude-code', 
-      providerName: 'Claude Code', 
-      modelName: 'MCP',
-      shortModelName: 'MCP'
+  if (modelId.startsWith('claude-code')) {
+    const modelName = getClaudeCodeModelShortLabel(modelId);
+    return {
+      providerId: 'claude-code',
+      providerName: 'Claude Code',
+      modelName,
+      shortModelName: modelName
     };
   }
 

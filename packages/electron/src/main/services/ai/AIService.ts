@@ -560,8 +560,8 @@ export class AIService {
 
       // Get model details if specified
       let model = modelId;
-      if (!model && provider !== 'claude-code') {
-        // For non-claude-code providers, try to get a default model
+      if (!model) {
+        // Use provider defaults when no explicit model is supplied
         model = await ModelRegistry.getDefaultModel(provider);
       }
 
@@ -572,9 +572,10 @@ export class AIService {
       };
 
       // Only add model to config if we have one and it's not claude-code
-      if (model && provider !== 'claude-code') {
-        // Strip provider prefix if present (e.g., "openai:gpt-4" -> "gpt-4")
-        if (model.includes(':')) {
+      if (model) {
+        if (provider === 'claude-code') {
+          providerConfig.model = model;
+        } else if (model.includes(':')) {
           providerConfig.model = model.split(':').slice(1).join(':');
         } else {
           providerConfig.model = model;
@@ -627,7 +628,7 @@ export class AIService {
 
       // Only add model if it exists and provider isn't claude-code or openai-codex
       // Both claude-code and openai-codex manage their own model selection
-      if (session.providerConfig?.model && provider !== 'claude-code' && provider !== 'openai-codex') {
+      if (session.providerConfig?.model && provider !== 'openai-codex') {
         initConfig.model = session.providerConfig.model;
       }
 
@@ -835,8 +836,8 @@ export class AIService {
           reinitConfig.baseUrl = apiKeys['lmstudio_url'] || 'http://127.0.0.1:8234';
         }
 
-        // Only add model if it exists and provider isn't claude-code
-        if ((session.model || session.providerConfig?.model) && session.provider !== 'claude-code') {
+        // Only add model if it exists (openai-codex manages selection itself)
+        if ((session.model || session.providerConfig?.model) && session.provider !== 'openai-codex') {
           const fullModel = session.model || session.providerConfig?.model;
           // console.log('[AIService] Reinitializing provider with model:', {
           //   sessionModel: session.model,
@@ -845,15 +846,18 @@ export class AIService {
           //   provider: session.provider
           // });
 
-          // Strip provider prefix if present (e.g., "claude:claude-sonnet-4" -> "claude-sonnet-4")
-          if (fullModel && fullModel.includes(':')) {
-            reinitConfig.model = fullModel.split(':').slice(1).join(':');
-            // console.log('[AIService] Stripped model prefix:', {
-            //   original: fullModel,
-            //   stripped: reinitConfig.model
-            // });
-          } else {
-            reinitConfig.model = fullModel;
+          if (fullModel) {
+            if (session.provider === 'claude-code') {
+              reinitConfig.model = fullModel;
+            } else if (fullModel.includes(':')) {
+              reinitConfig.model = fullModel.split(':').slice(1).join(':');
+              // console.log('[AIService] Stripped model prefix:', {
+              //   original: fullModel,
+              //   stripped: reinitConfig.model
+              // });
+            } else {
+              reinitConfig.model = fullModel;
+            }
           }
         }
 
@@ -2018,6 +2022,11 @@ export class AIService {
       return { success: true };
     });
 
+    ipcMain.handle('ai:refreshSessionProvider', async (_event, sessionId: string) => {
+      ProviderFactory.destroyProvider(sessionId);
+      return { success: true };
+    });
+
     // Get slash commands from active claude-code provider
     ipcMain.handle('ai:getSlashCommands', async (event, sessionId?: string) => {
       try {
@@ -2111,6 +2120,9 @@ export class AIService {
         if (!provider?.enabled) return false;
         // If specific models are selected, filter to those
         if (provider.models && provider.models.length > 0) {
+          if (model.provider === 'claude-code' && provider.models.includes('claude-code')) {
+            return true;
+          }
           return provider.models.includes(model.id);
         }
         // Otherwise include all models for this provider

@@ -38,7 +38,7 @@ export class ModelRegistry {
       switch (provider) {
         case 'claude':
           const { ClaudeProvider } = await import('./providers/ClaudeProvider');
-          models = ClaudeProvider.getModels();
+          models = this.filterLatestClaudeModels(ClaudeProvider.getModels());
           console.log('[ModelRegistry] Claude models:', models);
           break;
         case 'claude-code':
@@ -137,5 +137,46 @@ export class ModelRegistry {
       this.cachedModels.clear();
       this.lastFetch.clear();
     }
+  }
+
+  private static filterLatestClaudeModels(models: AIModel[]): AIModel[] {
+    const latestByVariant = new Map<string, { model: AIModel; releaseDate: number }>();
+    let parseFailed = false;
+
+    for (const model of models) {
+      const metadata = this.extractClaudeModelMetadata(model);
+      if (!metadata) {
+        parseFailed = true;
+        break;
+      }
+
+      const existing = latestByVariant.get(metadata.variant);
+      if (!existing || metadata.releaseDate > existing.releaseDate) {
+        latestByVariant.set(metadata.variant, { model, releaseDate: metadata.releaseDate });
+      }
+    }
+
+    if (parseFailed) {
+      console.warn('[ModelRegistry] Failed to parse Claude model metadata - returning full list');
+      return models;
+    }
+
+    return Array.from(latestByVariant.values()).map(entry => entry.model);
+  }
+
+  private static extractClaudeModelMetadata(model: AIModel): { variant: string; releaseDate: number } | null {
+    const idPart = model.id.includes(':') ? model.id.split(':').pop()! : model.id;
+    const normalized = idPart.toLowerCase();
+    const variantMatch = normalized.match(/(opus|sonnet|haiku)/);
+    const dateMatch = normalized.match(/(\d{8})$/);
+
+    if (!variantMatch || !dateMatch) {
+      return null;
+    }
+
+    return {
+      variant: variantMatch[1],
+      releaseDate: Number.parseInt(dateMatch[1], 10)
+    };
   }
 }

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MaterialSymbol } from '../MaterialSymbol';
 import { getProviderIcon } from '../icons/ProviderIcons';
+import { getClaudeCodeModelLabel } from '../../utils/modelUtils';
 import './NewSessionButton.css';
 
 interface Model {
@@ -96,7 +97,7 @@ export function NewSessionButton({
       if (model) return model.name;
     }
     // Fallback
-    if (modelId === 'claude-code') return 'Claude Code';
+    if (modelId.startsWith('claude-code')) return getClaudeCodeModelLabel(modelId);
     const [, ...modelParts] = modelId.split(':');
     return modelParts.join(':') || modelId;
   };
@@ -123,7 +124,7 @@ export function NewSessionButton({
     }
     
     // Fallback - strip provider prefix for display
-    if (currentModel === 'claude-code') return 'Claude Code';
+    if (currentModel.startsWith('claude-code')) return getClaudeCodeModelLabel(currentModel);
     const [, ...modelParts] = currentModel.split(':');
     return modelParts.join(':') || currentModel;
   };
