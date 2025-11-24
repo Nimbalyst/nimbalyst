@@ -387,9 +387,9 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
             onClick={() => attachment.type === 'image' && setEnlargedImage(attachment)}
             title={attachment.type === 'image' ? 'Click to enlarge' : attachment.filename}
           >
-            {attachment.type === 'image' && attachment.thumbnail ? (
+            {attachment.type === 'image' ? (
               <img
-                src={attachment.thumbnail}
+                src={attachment.thumbnail || `file://${attachment.filepath}`}
                 alt={attachment.filename}
                 className="message-attachment-thumbnail"
               />
