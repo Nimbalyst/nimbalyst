@@ -1337,6 +1337,7 @@ export default function App() {
                   planDocumentPath={agentPlanReference || undefined}
                   onContentModeChange={setActiveMode}
                   onSessionChange={setActiveSessionId}
+                  onFileOpen={handleWorkspaceFileSelect}
                   isActive={activeMode === 'agent'}
                 />
               ) : (

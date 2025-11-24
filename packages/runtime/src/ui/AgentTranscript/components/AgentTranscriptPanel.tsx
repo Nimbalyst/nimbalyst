@@ -122,7 +122,7 @@ export const AgentTranscriptPanel: React.FC<AgentTranscriptPanelProps> = ({
   const handleFileUpdate = useCallback(async (updatedSessionId: string) => {
     // Only refresh if the update is for this session
     if (updatedSessionId === sessionId) {
-      console.log('[AgentTranscriptPanel] Files updated, refreshing...');
+      // console.log('[AgentTranscriptPanel] Files updated, refreshing...');
       try {
         const result = await (window as any).electronAPI.invoke('session-files:get-by-session', sessionId);
         if (result.success && result.files) {

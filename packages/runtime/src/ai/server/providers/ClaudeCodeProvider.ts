@@ -123,7 +123,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
 
     // Build image content blocks for attachments (sent directly to Claude, not via file paths)
     const imageContentBlocks: ImageBlockParam[] = [];
-    // TODO: Debug logging - uncomment if needed for attachment troubleshooting
+    // Debug logging - uncomment if needed for attachment troubleshooting
     // console.log(`[CLAUDE-CODE] Attachments received:`, attachments?.length || 0, attachments);
     if (attachments && attachments.length > 0) {
       // console.log(`[CLAUDE-CODE] Processing ${attachments.length} attachments as direct content blocks`);
@@ -393,9 +393,16 @@ export class ClaudeCodeProvider extends BaseAIProvider {
           { type: 'text', text: message } as TextBlockParam
         ];
 
+        // Debug logging - uncomment if needed for troubleshooting
+        // console.log(`[CLAUDE-CODE] Content blocks structure:`, JSON.stringify(contentBlocks.map(b => ({
+        //   type: b.type,
+        //   ...(b.type === 'image' ? { media_type: (b as any).source?.media_type, data_length: (b as any).source?.data?.length } : {}),
+        //   ...(b.type === 'text' ? { text_length: (b as any).text?.length } : {})
+        // })), null, 2));
+
         // Create an async generator that yields a single user message with the content blocks
         async function* createStreamingInput(): AsyncGenerator<SDKUserMessage> {
-          yield {
+          const msg: SDKUserMessage = {
             type: 'user',
             message: {
               role: 'user',
@@ -403,6 +410,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
             },
             parent_tool_use_id: null
           };
+          // console.log(`[CLAUDE-CODE] Yielding streaming message with ${contentBlocks.length} content blocks`);
+          yield msg;
         }
 
         promptInput = createStreamingInput();

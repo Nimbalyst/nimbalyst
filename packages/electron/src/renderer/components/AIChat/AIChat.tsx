@@ -22,6 +22,7 @@ interface AIChatProps {
   onSessionIdChange?: (sessionId: string | null) => void;
   onShowApiKeyError?: () => void;
   onContentModeChange?: (mode: string) => void;
+  onFileOpen?: (filePath: string) => Promise<void>; // Canonical file opening function
 }
 
 /**
@@ -44,7 +45,8 @@ export const AIChat = forwardRef<AIChatRef, AIChatProps>(function AIChat({
   sessionToLoad,
   onSessionLoaded,
   onSessionIdChange,
-  onShowApiKeyError
+  onShowApiKeyError,
+  onFileOpen
 }, ref) {
   const isResizingRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -136,6 +138,7 @@ export const AIChat = forwardRef<AIChatRef, AIChatProps>(function AIChat({
             documentContext={documentContext}
             onSessionChange={onSessionIdChange}
             onContentModeChange={onContentModeChange}
+            onFileOpen={onFileOpen}
           />
         </div>
       )}

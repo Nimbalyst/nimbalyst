@@ -42,6 +42,7 @@ export interface AgenticPanelProps {
   // Callbacks for external coordination
   onSessionChange?: (sessionId: string | null) => void;
   onContentModeChange?: (mode: string) => void; // Switch to files mode when opening a document
+  onFileOpen?: (filePath: string) => Promise<void>; // Canonical file opening function from App
 }
 
 interface SessionTab {
@@ -98,7 +99,8 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   planDocumentPath,
   isActive = true,
   onSessionChange,
-  onContentModeChange
+  onContentModeChange,
+  onFileOpen
 }: AgenticPanelProps, ref) {
   // Session state
   const [sessionTabs, setSessionTabs] = useState<SessionTab[]>([]);
@@ -1653,21 +1655,20 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
     }
   }, []);
 
-  // Handle file click
+  // Handle file click - use the canonical file opening path
   const handleFileClick = useCallback(async (filePath: string) => {
     try {
-      await window.electronAPI.invoke('workspace:open-file', {
-        workspacePath,
-        filePath
-      });
-      // Switch to files mode after opening the file
-      if (onContentModeChange) {
-        onContentModeChange('files');
+      if (onFileOpen) {
+        // Use the canonical file opening function from App
+        // This goes through App.handleWorkspaceFileSelect -> editorModeRef.selectFile -> handleWorkspaceFileSelect -> addTab
+        await onFileOpen(filePath);
+      } else {
+        console.error('[AgenticPanel] onFileOpen not provided - cannot open file');
       }
     } catch (err) {
       console.error('[AgenticPanel] Failed to open file:', err);
     }
-  }, [workspacePath, onContentModeChange]);
+  }, [onFileOpen]);
 
   // Tab management (agent mode only)
   const handleTabSelect = useCallback(async (tabId: string) => {
