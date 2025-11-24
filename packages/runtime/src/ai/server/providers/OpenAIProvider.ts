@@ -255,6 +255,21 @@ export class OpenAIProvider extends BaseAIProvider {
           });
         }
 
+        // Check for error in the chunk (some providers send errors in the stream)
+        if ((chunk as any).error) {
+          const errorMessage = (chunk as any).error.message || (chunk as any).error.type || JSON.stringify((chunk as any).error);
+          console.error('[OpenAIProvider] Error in streaming response:', errorMessage);
+
+          // Log error to database
+          this.logError(sessionId, 'openai', new Error(errorMessage), 'streaming_response');
+
+          yield {
+            type: 'error',
+            error: errorMessage
+          };
+          return;
+        }
+
         if (!firstChunkTime) {
           firstChunkTime = Date.now();
           clearTimeout(timeoutCheck);  // Clear the timeout check

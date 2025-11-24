@@ -192,6 +192,22 @@ export class LMStudioProvider extends BaseAIProvider {
             try {
               const json = JSON.parse(line.slice(6));
               chunkCount++;
+
+              // Check for error in the response (LMStudio/OpenAI format)
+              if (json.error) {
+                const errorMessage = json.error.message || json.error.type || JSON.stringify(json.error);
+                console.error('[LMStudio] Error in streaming response:', errorMessage);
+
+                // Log error to database
+                this.logError(sessionId, 'lmstudio', new Error(errorMessage), 'streaming_response');
+
+                yield {
+                  type: 'error',
+                  error: errorMessage
+                };
+                return;
+              }
+
               const delta = json.choices?.[0]?.delta;
 
               // Capture usage data if provided (OpenAI stream_options.include_usage)
