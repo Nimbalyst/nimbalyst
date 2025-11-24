@@ -136,7 +136,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   // Handle context menu actions
   const handleCloseOthers = useCallback(() => {
     tabs.forEach(tab => {
-      if (tab.id !== contextMenuTab) {
+      if (tab.id !== contextMenuTab && !tab.isPinned) {
         onTabClose(tab.id);
       }
     });
@@ -147,7 +147,9 @@ export const TabBar: React.FC<TabBarProps> = ({
     const currentIndex = tabs.findIndex(tab => tab.id === contextMenuTab);
     if (currentIndex >= 0) {
       tabs.slice(currentIndex + 1).forEach(tab => {
-        onTabClose(tab.id);
+        if (!tab.isPinned) {
+          onTabClose(tab.id);
+        }
       });
     }
     closeContextMenu();
@@ -155,7 +157,9 @@ export const TabBar: React.FC<TabBarProps> = ({
 
   const handleCloseAll = useCallback(() => {
     tabs.forEach(tab => {
-      onTabClose(tab.id);
+      if (!tab.isPinned) {
+        onTabClose(tab.id);
+      }
     });
     closeContextMenu();
   }, [tabs, onTabClose, closeContextMenu]);
@@ -237,7 +241,9 @@ export const TabBar: React.FC<TabBarProps> = ({
   // Close all tabs from menu
   const handleCloseAllFromMenu = useCallback(() => {
     tabs.forEach(tab => {
-      onTabClose(tab.id);
+      if (!tab.isPinned) {
+        onTabClose(tab.id);
+      }
     });
     setShowTabMenu(false);
     setMenuSelectedIndex(-1);
