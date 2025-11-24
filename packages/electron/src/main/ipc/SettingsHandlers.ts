@@ -1,8 +1,9 @@
 import { ipcMain } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getUserOnboardingState, setUserRole, setUserEmail, setOnboardingNextPrompt, clearOnboardingNextPrompt, getDefaultAIModel, setDefaultAIModel } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
+import type { OnboardingState } from '../utils/store';
 
 export function registerSettingsHandlers() {
     // Get sidebar width
@@ -83,25 +84,15 @@ export function registerSettingsHandlers() {
         return getRecentItems('workspaces');
     });
 
-    // User onboarding state handlers
-    ipcMain.handle('onboarding:get-state', () => {
-        return getUserOnboardingState();
+    // Onboarding state
+    ipcMain.handle('onboarding:get', async () => {
+        const { getOnboardingState } = await import('../utils/store');
+        return getOnboardingState();
     });
 
-    ipcMain.handle('onboarding:set-role', (_event, role: string) => {
-        setUserRole(role);
-    });
-
-    ipcMain.handle('onboarding:set-email', (_event, email: string) => {
-        setUserEmail(email);
-    });
-
-    ipcMain.handle('onboarding:set-next-prompt', (_event, timestamp: number | undefined) => {
-        setOnboardingNextPrompt(timestamp);
-    });
-
-    ipcMain.handle('onboarding:clear-next-prompt', () => {
-        clearOnboardingNextPrompt();
+    ipcMain.handle('onboarding:update', async (_event, state: Partial<OnboardingState>) => {
+        const { updateOnboardingState } = await import('../utils/store');
+        updateOnboardingState(state);
     });
 
     // Default AI model settings

@@ -662,39 +662,31 @@ export function setReleaseChannel(channel: ReleaseChannel): void {
   appStore.set('releaseChannel', channel);
 }
 
-// User Role Onboarding Settings
-export interface UserOnboardingState {
+// User Onboarding
+export interface OnboardingState {
   userRole?: string;
   userEmail?: string;
-  nextPromptTime?: number;
+  onboardingNextPrompt?: number;
 }
 
-export function getUserOnboardingState(): UserOnboardingState {
+export function getOnboardingState(): OnboardingState {
   return {
     userRole: appStore.get('userRole'),
     userEmail: appStore.get('userEmail'),
-    nextPromptTime: appStore.get('onboardingNextPrompt'),
+    onboardingNextPrompt: appStore.get('onboardingNextPrompt')
   };
 }
 
-export function setUserRole(role: string): void {
-  appStore.set('userRole', role);
-}
-
-export function setUserEmail(email: string): void {
-  appStore.set('userEmail', email);
-}
-
-export function setOnboardingNextPrompt(timestamp: number | undefined): void {
-  if (timestamp === undefined) {
-    appStore.delete('onboardingNextPrompt');
-  } else {
-    appStore.set('onboardingNextPrompt', timestamp);
+export function updateOnboardingState(state: Partial<OnboardingState>): void {
+  if (state.userRole !== undefined) {
+    appStore.set('userRole', state.userRole);
   }
-}
-
-export function clearOnboardingNextPrompt(): void {
-  appStore.delete('onboardingNextPrompt');
+  if (state.userEmail !== undefined) {
+    appStore.set('userEmail', state.userEmail);
+  }
+  if (state.onboardingNextPrompt !== undefined) {
+    appStore.set('onboardingNextPrompt', state.onboardingNextPrompt);
+  }
 }
 
 // Default AI Model Settings
