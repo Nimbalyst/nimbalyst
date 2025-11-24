@@ -780,8 +780,7 @@ export default function App() {
         e.preventDefault();
         setIsAIChatCollapsed(prev => !prev);
       }
-      // NOTE: Cmd+Shift+T for reopening last closed tab disabled - needs EditorMode integration
-      // TODO: Move this functionality to EditorMode
+      // NOTE: Cmd+Shift+T handled by menu system (reopen-last-closed-tab IPC event)
       // Cmd+Y (Mac) or Ctrl+Y (Windows/Linux) for History
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
         e.preventDefault();
@@ -1163,6 +1162,26 @@ export default function App() {
 
     return () => {
       window.electronAPI?.off?.('close-active-tab', handleCloseActiveTab);
+    };
+  }, []); // Empty deps - listener registered once, uses refs for current values
+
+  // Handle reopen-last-closed-tab from menu - route to active panel
+  useEffect(() => {
+    const handleReopenLastClosedTab = () => {
+      // console.log('[App] handleReopenLastClosedTab called, activeMode:', activeModeRef.current);
+      if (activeModeRef.current === 'agent') {
+        // console.log('[App] Calling agenticPanelRef.current?.reopenLastClosedSession()');
+        agenticPanelRef.current?.reopenLastClosedSession?.();
+      } else if (activeModeRef.current === 'files' || activeModeRef.current === 'plan') {
+        // console.log('[App] Calling editorModeRef.current?.reopenLastClosedTab()');
+        editorModeRef.current?.reopenLastClosedTab?.();
+      }
+    };
+
+    window.electronAPI.on('reopen-last-closed-tab', handleReopenLastClosedTab);
+
+    return () => {
+      window.electronAPI?.off?.('reopen-last-closed-tab', handleReopenLastClosedTab);
     };
   }, []); // Empty deps - listener registered once, uses refs for current values
 

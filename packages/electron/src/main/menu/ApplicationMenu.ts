@@ -560,6 +560,29 @@ export async function createApplicationMenu() {
                     }
                 },
                 {
+                    label: 'Reopen Closed Tab',
+                    accelerator: KeyboardShortcuts.file.reopenClosedTab,
+                    click: async () => {
+                        const focused = getFocusedWindow();
+                        if (focused) {
+                            const windowId = getWindowId(focused);
+                            if (windowId !== null) {
+                                const state = windowStates.get(windowId);
+
+                                // Only works in workspace or agentic coding mode
+                                if (state?.mode === 'workspace' || state?.mode === 'agentic-coding') {
+                                    logger.menu.info(`[Reopen Closed Tab] Sending reopen-last-closed-tab to window ${windowId}`);
+                                    focused.webContents.send('reopen-last-closed-tab');
+                                } else {
+                                    logger.menu.warn('[Reopen Closed Tab] Not in workspace/agentic mode');
+                                }
+                            }
+                        } else {
+                            logger.menu.warn('[Reopen Closed Tab] No focused window found');
+                        }
+                    }
+                },
+                {
                     label: 'Close Project',
                     accelerator: KeyboardShortcuts.file.closeProject,
                     click: async () => {

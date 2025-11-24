@@ -12,6 +12,7 @@ export const KeyboardShortcuts = {
     openFolder: 'Cmd+Shift+O',
     save: 'Cmd+S',
     closeTab: 'Cmd+W',
+    reopenClosedTab: 'Cmd+Shift+T',
     closeProject: 'Cmd+Shift+W',
     quit: 'Cmd+Q'
   },

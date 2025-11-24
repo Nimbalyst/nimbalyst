@@ -18,6 +18,7 @@ import { HistoryDialog } from '../HistoryDialog';
 
 export interface EditorModeRef {
   closeActiveTab: () => void;
+  reopenLastClosedTab: () => Promise<void>;
   handleOpen: () => Promise<void>;
   handleSaveAs: () => Promise<void>;
   selectFile: (filePath: string) => Promise<void>;
@@ -288,6 +289,10 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
       } else {
         console.log('[EditorMode] No active tab to close');
       }
+    },
+    reopenLastClosedTab: async () => {
+      // console.log('[EditorMode] reopenLastClosedTab called');
+      await tabs.reopenLastClosedTab(handleWorkspaceFileSelect);
     },
     handleOpen,
     handleSaveAs,

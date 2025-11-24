@@ -47,7 +47,7 @@ interface UseTabsResult {
   getTabState: (tabId: string) => TabData | undefined;
   closeAllTabs: () => void;
   closeSavedTabs: () => void;
-  reopenLastClosedTab: () => void;
+  reopenLastClosedTab: (fileSelectFn: (filePath: string) => Promise<void>) => Promise<void>;
 }
 
 // Simple hash function for content validation
@@ -76,6 +76,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
   const [tabOrder, setTabOrder] = useState<string[]>([]);
   const [closedTabs, setClosedTabs] = useState<TabData[]>([]);
   const tabIdCounter = useRef(0);
+  const reopeningRef = useRef(false); // Track if we're currently reopening a tab
 
   const MAX_CLOSED_TAB_HISTORY = 10;
 
@@ -88,95 +89,15 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
   // Get active tab
   const activeTab = activeTabId ? tabs.get(activeTabId) || null : null;
 
-  // Add a new tab
-  const addTab = useCallback((filePath: string, content: string = '', switchToTab: boolean = true): string | null => {
-    if (!enabled) return null;
-
-    // Check if tab already exists
-    const existingTab = Array.from(tabs.values()).find(tab => tab.filePath === filePath);
-    if (existingTab) {
-      // Only switch to tab if requested
-      if (switchToTab) {
-        // Directly set active tab instead of calling switchTab to avoid circular dependency
-        // onTabChange will be called by the useEffect when activeTabId changes
-        setActiveTabId(existingTab.id);
-      }
-      return existingTab.id;
-    }
-
-    // Check max tabs limit
-    if (tabs.size >= maxTabs) {
-      // Try to close an unpinned, saved tab
-      const unpinnedSavedTabs = Array.from(tabs.values()).filter(
-        tab => !tab.isPinned && !tab.isDirty
-      );
-
-      if (unpinnedSavedTabs.length === 0) {
-        console.warn('Cannot add new tab: max tabs reached and all tabs are pinned or dirty');
-        return null;
-      }
-
-      // Close the oldest unpinned saved tab
-      const tabToClose = unpinnedSavedTabs[0];
-      removeTab(tabToClose.id);
-    }
-
-    // Create new tab
-    const tabId = generateTabId();
-    const fileName = getFileName(filePath) || 'Untitled';
-
-    const newTab: TabData = {
-      id: tabId,
-      filePath,
-      fileName,
-      content,
-      isDirty: false,
-      isPinned: false,
-      lastSaved: new Date(),
-      contentHash: simpleHash(content),
-      contentLoadedAt: new Date()
-    };
-
-    // console.log('[useTabs] Creating new tab:', { tabId, fileName, filePath });
-    setTabs(prev => new Map(prev).set(tabId, newTab));
-    setTabOrder(prev => [...prev, tabId]);
-
-    // Only switch to the new tab if requested
-    if (switchToTab) {
-      setActiveTabId(tabId);
-      // console.log('[useTabs] Set activeTabId to:', tabId);
-    }
-    // console.log('[useTabs] About to check file watcher condition');
-
-    // Start watching the file for external changes (skip virtual files)
-    // Access window.electronAPI directly to avoid stale closure
-    const electronAPI = (window as any).electronAPI;
-    // console.log('[useTabs] electronAPI exists?', !!electronAPI, 'filePath:', filePath);
-
-    if (electronAPI && !filePath.startsWith('virtual://')) {
-      // console.log('[useTabs] Calling start-watching-file for:', filePath);
-      electronAPI.invoke('start-watching-file', filePath).then((result: any) => {
-        // console.log('[useTabs] start-watching-file result:', result);
-      }).catch((err: Error) => {
-        console.error('[useTabs] Failed to start watching file:', err);
-      });
-    } else {
-      // console.log('[useTabs] NOT calling start-watching-file - electronAPI:', !!electronAPI, 'isVirtual:', filePath.startsWith('virtual://'));
-    }
-
-    // console.log('[useTabs] After file watcher code');
-    return tabId;
-  }, [enabled, tabs, maxTabs, generateTabId, onTabChange]);
-
-  // Remove a tab
+  // Remove a tab (defined first because addTab depends on it)
   const removeTab = useCallback((tabId: string): void => {
-    console.log('[useTabs] removeTab called with tabId:', tabId);
+    // console.log('[useTabs] removeTab called with tabId:', tabId);
     const tab = tabs.get(tabId);
     if (!tab) {
-      console.log('[useTabs] No tab found with id:', tabId);
+      // console.log('[useTabs] No tab found with id:', tabId);
       return;
     }
-    console.log('[useTabs] Found tab to remove:', tab.fileName);
+    // console.log('[useTabs] Found tab to remove:', tab.fileName);
 
     // Add to closed tabs history (before removing)
     setClosedTabs(prev => {
@@ -217,6 +138,104 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
       }
     }
   }, [tabs, tabOrder, activeTabId, onTabClose, onTabChange, MAX_CLOSED_TAB_HISTORY]);
+
+  // Add a new tab
+  const addTab = useCallback((filePath: string, content: string = '', switchToTab: boolean = true): string | null => {
+    if (!enabled) return null;
+
+    // Use ref to store the tab ID that was created or found
+    let resultTabId: string | null = null;
+    let isNewTab = false;
+    let tabToCloseId: string | null = null;
+
+    // Check if tab already exists and add new tab in a single state update
+    setTabs(prev => {
+      // Check if tab already exists using the LATEST state
+      const existingTab = Array.from(prev.values()).find(tab => tab.filePath === filePath);
+      if (existingTab) {
+        // Tab already exists, don't create a new one
+        resultTabId = existingTab.id;
+        if (switchToTab) {
+          setActiveTabId(existingTab.id);
+        }
+        return prev; // Return unchanged state
+      }
+
+      // Check max tabs limit
+      if (prev.size >= maxTabs) {
+        // Try to close an unpinned, saved tab
+        const unpinnedSavedTabs = Array.from(prev.values()).filter(
+          tab => !tab.isPinned && !tab.isDirty
+        );
+
+        if (unpinnedSavedTabs.length === 0) {
+          console.warn('Cannot add new tab: max tabs reached and all tabs are pinned or dirty');
+          resultTabId = null;
+          return prev; // Return unchanged state
+        }
+
+        // Mark tab for removal (will close it after state update)
+        tabToCloseId = unpinnedSavedTabs[0].id;
+      }
+
+      // Create new tab
+      const tabId = generateTabId();
+      const fileName = getFileName(filePath) || 'Untitled';
+
+      const newTab: TabData = {
+        id: tabId,
+        filePath,
+        fileName,
+        content,
+        isDirty: false,
+        isPinned: false,
+        lastSaved: new Date(),
+        contentHash: simpleHash(content),
+        contentLoadedAt: new Date()
+      };
+
+      resultTabId = tabId;
+      isNewTab = true;
+      // console.log('[useTabs] Creating new tab:', { tabId, fileName, filePath });
+      return new Map(prev).set(tabId, newTab);
+    });
+
+    // Close tab if we hit max limit (do this AFTER state update completes)
+    if (tabToCloseId) {
+      removeTab(tabToCloseId);
+    }
+
+    // Update tab order if we created a new tab
+    if (isNewTab && resultTabId) {
+      setTabOrder(prev => [...prev, resultTabId!]);
+    }
+
+    // Only switch to the new tab if requested
+    if (switchToTab && resultTabId) {
+      setActiveTabId(resultTabId);
+      // console.log('[useTabs] Set activeTabId to:', resultTabId);
+    }
+    // console.log('[useTabs] About to check file watcher condition');
+
+    // Start watching the file for external changes (skip virtual files)
+    // Access window.electronAPI directly to avoid stale closure
+    const electronAPI = (window as any).electronAPI;
+    // console.log('[useTabs] electronAPI exists?', !!electronAPI, 'filePath:', filePath);
+
+    if (electronAPI && !filePath.startsWith('virtual://')) {
+      // console.log('[useTabs] Calling start-watching-file for:', filePath);
+      electronAPI.invoke('start-watching-file', filePath).then((result: any) => {
+        // console.log('[useTabs] start-watching-file result:', result);
+      }).catch((err: Error) => {
+        console.error('[useTabs] Failed to start watching file:', err);
+      });
+    } else {
+      // console.log('[useTabs] NOT calling start-watching-file - electronAPI:', !!electronAPI, 'isVirtual:', filePath.startsWith('virtual://'));
+    }
+
+    // console.log('[useTabs] After file watcher code');
+    return resultTabId;
+  }, [enabled, tabs, maxTabs, generateTabId, onTabChange, removeTab]);
 
   // Switch to a different tab
   const switchTab = useCallback((tabId: string, fromNavigation: boolean = false): void => {
@@ -269,15 +288,50 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
   }, [tabs, removeTab]);
 
   // Reopen the last closed tab
-  const reopenLastClosedTab = useCallback((): void => {
+  const reopenLastClosedTab = useCallback(async (fileSelectFn: (filePath: string) => Promise<void>): Promise<void> => {
+    // Prevent concurrent execution (rapid double-calls)
+    if (reopeningRef.current) {
+      // console.log('[useTabs] Already reopening a tab, skipping duplicate call');
+      return;
+    }
+
     if (closedTabs.length === 0) return;
 
-    const [lastClosed, ...remainingClosed] = closedTabs;
-    setClosedTabs(remainingClosed);
+    reopeningRef.current = true;
 
-    // Reopen the tab - it will get a new ID
-    addTab(lastClosed.filePath);
-  }, [closedTabs, addTab]);
+    try {
+      // Find the first closed tab that isn't currently open
+      let tabToReopen: TabData | null = null;
+      let newClosedTabs = closedTabs;
+
+      for (let i = 0; i < closedTabs.length; i++) {
+        const candidateTab = closedTabs[i];
+        const existingTab = Array.from(tabs.values()).find(tab => tab.filePath === candidateTab.filePath);
+
+        if (!existingTab) {
+          // Found a tab that's not currently open
+          tabToReopen = candidateTab;
+          // Remove all checked tabs from history (including the one we're reopening)
+          newClosedTabs = closedTabs.slice(i + 1);
+          break;
+        }
+      }
+
+      // Update closed tabs history (remove stale entries)
+      if (newClosedTabs !== closedTabs) {
+        setClosedTabs(newClosedTabs);
+      }
+
+      // If we found a tab to reopen, open it
+      if (tabToReopen) {
+        await fileSelectFn(tabToReopen.filePath);
+      } else {
+        // console.log('[useTabs] All closed tabs are already open');
+      }
+    } finally {
+      reopeningRef.current = false;
+    }
+  }, [closedTabs, tabs]);
 
   // Toggle pin status and move tab to appropriate position
   const togglePin = useCallback((tabId: string): void => {

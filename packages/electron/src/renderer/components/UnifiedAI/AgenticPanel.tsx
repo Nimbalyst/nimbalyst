@@ -17,6 +17,7 @@ export interface AgenticPanelRef {
   createNewSession: (planPath?: string) => Promise<void>;
   openSessionInTab: (sessionId: string) => Promise<void>;
   closeActiveTab: () => void;
+  reopenLastClosedSession: () => void;
   nextTab: () => void;
   previousTab: () => void;
 }
@@ -566,9 +567,12 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
           // console.log('[AgenticPanel] Chat mode: replacing current session');
           setSessionTabs([newTab]);
         } else {
-          // In agent mode, add as new tab
+          // In agent mode, add as new tab (remove any existing tab with same ID first)
           // console.log('[AgenticPanel] Agent mode: adding new tab');
-          setSessionTabs(prev => [...prev, newTab]);
+          setSessionTabs(prev => {
+            const filtered = prev.filter(tab => tab != null && tab.id !== newTab.id);
+            return [...filtered, newTab];
+          });
         }
 
         setActiveTabId(sessionData.id);
@@ -1718,6 +1722,19 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
         handleTabClose(activeTabId);
       }
     },
+    reopenLastClosedSession: () => {
+      if (closedSessions.length === 0) {
+        // console.log('[AgenticPanel] No closed sessions to reopen');
+        return;
+      }
+
+      const [lastClosed, ...remaining] = closedSessions;
+      // console.log('[AgenticPanel] Reopening session:', lastClosed.id, lastClosed.name);
+      setClosedSessions(remaining);
+
+      // Reopen the session in a new tab
+      openSessionInTab(lastClosed.sessionData.id);
+    },
     nextTab: () => {
       const filtered = sessionTabs.filter(t => t != null);
       if (filtered.length === 0 || !activeTabId) return;
@@ -1732,7 +1749,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       const prevIndex = currentIndex <= 0 ? filtered.length - 1 : currentIndex - 1;
       handleTabSelect(filtered[prevIndex].id);
     }
-  }), [createNewSession, activeTabId, handleTabClose, sessionTabs, handleTabSelect]);
+  }), [createNewSession, openSessionInTab, activeTabId, handleTabClose, sessionTabs, handleTabSelect, closedSessions]);
 
   const handleTogglePin = useCallback((tabId: string) => {
     setSessionTabs(prev => {
