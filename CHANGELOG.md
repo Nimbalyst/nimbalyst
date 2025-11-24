@@ -19,6 +19,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.46.0] - 2025-11-24
+
+
+### Added
+- Users can now disable analytics in settings
+- Cmd+Shift+T now reopens last closed tab
+- Selection of different Claude models (Opus 4.5, Opus 4, Sonnet 4, etc.)
+- Remember what model was used when creating a new session
+
+### Changed
+- Refactor: consolidate all file opening to single clean API
+- Use store.ts app settings instead of localStorage for onboarding screen state
+- Update Claude Agent SDK to latest version to support Opus 4.5
+
+### Fixed
+- Skip onboarding check in Playwright tests
+- Agent file clicks now open in editor mode
+- Pinned tabs now protected from bulk close operations
+- Restore correct onboarding implementation
+- Onboarding dialog no longer appears in every window
+
 ## [0.45.43] - 2025-11-24
 
 
