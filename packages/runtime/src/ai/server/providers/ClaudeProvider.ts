@@ -800,7 +800,8 @@ export class ClaudeProvider extends BaseAIProvider {
       tools: true,
       mcpSupport: false,  // No MCP support, uses direct tool calling
       edits: true,
-      resumeSession: false  // Cannot resume Claude sessions
+      resumeSession: false,  // Cannot resume Claude sessions
+      supportsFileTools: false  // Files should be attached to messages, not accessed via tools
     };
   }
 

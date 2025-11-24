@@ -86,6 +86,143 @@ function bucketAgeInDays(timestampMs: number): string {
 }
 
 /**
+ * Extract file paths from @ mentions in a message
+ * Returns array of file paths mentioned with @
+ */
+function extractFileMentions(message: string): string[] {
+  // Match @ mentions followed by file path patterns
+  // Supports: @file.md, @path/to/file.ts, @"path with spaces/file.md"
+  const mentionRegex = /@(?:"([^"]+)"|([^\s]+))/g;
+  const mentions: string[] = [];
+  let match;
+
+  while ((match = mentionRegex.exec(message)) !== null) {
+    const filePath = match[1] || match[2]; // Quoted or unquoted path
+    if (filePath) {
+      mentions.push(filePath);
+    }
+  }
+
+  return mentions;
+}
+
+/**
+ * Check if a file is binary by reading its first chunk
+ */
+function isBinaryFile(filePath: string): boolean {
+  try {
+    const buffer = fs.readFileSync(filePath);
+    const chunkSize = Math.min(512, buffer.length);
+
+    // Check for null bytes or high proportion of non-text bytes
+    for (let i = 0; i < chunkSize; i++) {
+      const byte = buffer[i];
+      if (byte === 0) return true; // Null byte = binary
+      // Control characters except whitespace
+      if (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) {
+        return true;
+      }
+    }
+    return false;
+  } catch (error) {
+    return false; // If we can't read it, treat as text and let read fail later
+  }
+}
+
+/**
+ * Attach file contents for @ mentions in non-agent providers
+ * For providers that don't support file tools (supportsFileTools: false),
+ * automatically read and attach @ referenced files to the message
+ */
+async function attachMentionedFiles(
+  message: string,
+  workspacePath: string,
+  provider: AIProvider
+): Promise<{ enhancedMessage: string; attachedFiles: Array<{ path: string; size: number }> }> {
+  const capabilities = provider.getCapabilities();
+
+  // If provider supports file tools, don't auto-attach files
+  if (capabilities.supportsFileTools) {
+    return { enhancedMessage: message, attachedFiles: [] };
+  }
+
+  // Extract file mentions
+  const mentions = extractFileMentions(message);
+  if (mentions.length === 0) {
+    return { enhancedMessage: message, attachedFiles: [] };
+  }
+
+  logger.main.info(`[AIService] Found ${mentions.length} file @ mentions for non-agent provider`, { mentions });
+
+  const MAX_FILE_SIZE = 1024 * 1024; // 1MB limit
+  const attachedFiles: Array<{ path: string; size: number }> = [];
+  const fileContents: Array<{ path: string; content: string }> = [];
+
+  for (const mentionedPath of mentions) {
+    try {
+      // Resolve relative path to workspace
+      const fullPath = path.isAbsolute(mentionedPath)
+        ? mentionedPath
+        : path.join(workspacePath, mentionedPath);
+
+      // Security: Ensure file is within workspace
+      const resolvedPath = path.resolve(fullPath);
+      const resolvedWorkspace = path.resolve(workspacePath);
+      if (!resolvedPath.startsWith(resolvedWorkspace)) {
+        logger.main.warn(`[AIService] Skipping @ mention outside workspace: ${mentionedPath}`);
+        continue;
+      }
+
+      // Check if file exists
+      if (!fs.existsSync(resolvedPath)) {
+        logger.main.warn(`[AIService] @ mentioned file not found: ${mentionedPath}`);
+        continue;
+      }
+
+      // Check file size
+      const stats = fs.statSync(resolvedPath);
+      if (stats.size > MAX_FILE_SIZE) {
+        logger.main.warn(`[AIService] @ mentioned file too large (${stats.size} bytes): ${mentionedPath}`);
+        continue;
+      }
+
+      // Check if binary
+      if (isBinaryFile(resolvedPath)) {
+        logger.main.warn(`[AIService] @ mentioned file is binary, skipping: ${mentionedPath}`);
+        continue;
+      }
+
+      // Read file content
+      const content = fs.readFileSync(resolvedPath, 'utf-8');
+      fileContents.push({ path: mentionedPath, content });
+      attachedFiles.push({ path: mentionedPath, size: stats.size });
+
+      logger.main.info(`[AIService] Attached @ mentioned file: ${mentionedPath} (${stats.size} bytes)`);
+    } catch (error) {
+      logger.main.error(`[AIService] Error reading @ mentioned file ${mentionedPath}:`, error);
+    }
+  }
+
+  // If no files were attached, return original message
+  if (fileContents.length === 0) {
+    return { enhancedMessage: message, attachedFiles: [] };
+  }
+
+  // Format enhanced message with file contents inline
+  let enhancedMessage = '';
+
+  // Add file contents at the beginning
+  for (const { path: filePath, content } of fileContents) {
+    enhancedMessage += `[File: ${filePath}]\n\`\`\`\n${content}\n\`\`\`\n\n`;
+  }
+
+  // Add original message
+  enhancedMessage += message;
+
+  return { enhancedMessage, attachedFiles };
+}
+
+/**
  * Tag file before edit for non-agentic providers (OpenAI, LMStudio, etc.)
  * Creates a pre-edit tag in the history database with pending-review status
  * This enables diff visualization and persistence across app restarts
@@ -857,6 +994,16 @@ export class AIService {
           // No need to configure per-session context
         }
 
+        // Attach @ mentioned files for non-agent providers
+        const { enhancedMessage, attachedFiles } = await attachMentionedFiles(message, workspacePath, provider);
+        const messageToSend = enhancedMessage;
+
+        if (attachedFiles.length > 0) {
+          logger.main.info(`[AIService] Attached ${attachedFiles.length} files via @ mentions`, {
+            files: attachedFiles.map(f => ({ path: f.path, size: f.size }))
+          });
+        }
+
         // Add sessionType, mode, and attachments to documentContext for provider to use in system prompt
         const contextWithSession = documentContext ? {
           ...documentContext,
@@ -865,7 +1012,7 @@ export class AIService {
           attachments
         } as any : { sessionType: session.sessionType, mode: session.mode, attachments } as any;
 
-        for await (const chunk of provider.sendMessage(message, contextWithSession, session.id, sessionMessages, workspacePath, attachments)) {
+        for await (const chunk of provider.sendMessage(messageToSend, contextWithSession, session.id, sessionMessages, workspacePath, attachments)) {
           if (!chunk) continue;
           chunkCount++;
 

@@ -152,6 +152,13 @@ export interface ProviderCapabilities {
   mcpSupport: boolean;
   edits: boolean;
   resumeSession: boolean;
+  /**
+   * If true, this provider uses tools to read files when @ referenced
+   * If false, files are automatically attached as context to the message
+   * Agent models (Claude Code) should set this to true
+   * Non-agent models (Claude, OpenAI, LM Studio) should set this to false
+   */
+  supportsFileTools: boolean;
 }
 
 export interface ProviderSettings {

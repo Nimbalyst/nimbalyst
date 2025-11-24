@@ -668,7 +668,8 @@ export class OpenAICodexProvider extends BaseAIProvider {
       tools: true,  // Via MCP bridge script
       mcpSupport: true,  // Using stdio-to-HTTP bridge for MCP
       edits: true,
-      resumeSession: false
+      resumeSession: false,
+      supportsFileTools: true  // Uses MCP tools to access files
     };
   }
 

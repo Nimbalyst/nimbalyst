@@ -57,11 +57,11 @@ export class OpenAIProvider extends BaseAIProvider {
     sessionId?: string,
     messages?: Message[],
     workspacePath?: string,
-    _attachments?: any[]
+    attachments?: any[]
   ): AsyncIterableIterator<StreamChunk> {
     const startTime = Date.now();
     console.log(`[OpenAIProvider] Starting sendMessage - message length: ${message.length}, hasContext: ${!!documentContext}, contextMessages: ${messages?.length || 0}`);
-    
+
     if (!this.openai) {
       throw new Error('OpenAI provider not initialized');
     }
@@ -78,7 +78,7 @@ export class OpenAIProvider extends BaseAIProvider {
     const apiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'system', content: systemPrompt }
     ];
-    
+
     // Add existing messages if provided
     if (messages && messages.length > 0) {
       console.log(`[OpenAIProvider] Processing ${messages.length} context messages`);
@@ -88,24 +88,95 @@ export class OpenAIProvider extends BaseAIProvider {
           console.warn('[OpenAIProvider] Skipping message with empty content:', msg);
           continue;
         }
-        
+
         // Convert tool messages to assistant messages for OpenAI
         if (msg.role === 'tool') {
           continue; // Skip tool messages for now
         }
-        
-        apiMessages.push({
-          role: msg.role === 'user' ? 'user' : 'assistant',
-          content: msg.content
-        });
+
+        // Check if message has attachments (images)
+        if (msg.attachments && msg.attachments.length > 0) {
+          // Build content array with images and text
+          const content: OpenAI.Chat.ChatCompletionContentPart[] = [];
+
+          // Add images first
+          for (const attachment of msg.attachments) {
+            if (attachment.type === 'image') {
+              try {
+                const fileBuffer = await fs.readFile(attachment.filepath);
+                const base64Data = fileBuffer.toString('base64');
+
+                content.push({
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:${attachment.mimeType};base64,${base64Data}`
+                  }
+                });
+              } catch (error) {
+                console.error('[OpenAIProvider] Failed to read attachment:', error);
+              }
+            }
+          }
+
+          // Add text content
+          content.push({
+            type: 'text',
+            text: msg.content
+          });
+
+          apiMessages.push({
+            role: msg.role === 'user' ? 'user' : 'assistant',
+            content
+          });
+        } else {
+          // No attachments, use simple text content
+          apiMessages.push({
+            role: msg.role === 'user' ? 'user' : 'assistant',
+            content: msg.content
+          });
+        }
       }
     }
-    
-    // Add the new user message
+
+    // Add the new user message (check for attachments)
     if (!message || message.trim() === '') {
       throw new Error('Cannot send empty message to OpenAI API');
     }
-    apiMessages.push({ role: 'user', content: message });
+
+    // Check if current message has attachments (images)
+    if (attachments && attachments.length > 0) {
+      const content: OpenAI.Chat.ChatCompletionContentPart[] = [];
+
+      // Add images first
+      for (const attachment of attachments) {
+        if (attachment.type === 'image') {
+          try {
+            const fileBuffer = await fs.readFile(attachment.filepath);
+            const base64Data = fileBuffer.toString('base64');
+
+            content.push({
+              type: 'image_url',
+              image_url: {
+                url: `data:${attachment.mimeType};base64,${base64Data}`
+              }
+            });
+          } catch (error) {
+            console.error('[OpenAIProvider] Failed to read attachment:', error);
+          }
+        }
+      }
+
+      // Add text content
+      content.push({
+        type: 'text',
+        text: message
+      });
+
+      apiMessages.push({ role: 'user', content });
+    } else {
+      // No attachments, use simple text content
+      apiMessages.push({ role: 'user', content: message });
+    }
 
     // Log the input message
     if (sessionId) {
@@ -529,7 +600,8 @@ export class OpenAIProvider extends BaseAIProvider {
       tools: true,
       mcpSupport: false,
       edits: true,
-      resumeSession: false
+      resumeSession: false,
+      supportsFileTools: false  // Files should be attached to messages, not accessed via tools
     };
   }
 

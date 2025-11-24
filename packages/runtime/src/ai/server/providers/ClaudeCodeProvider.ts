@@ -1334,7 +1334,8 @@ export class ClaudeCodeProvider extends BaseAIProvider {
       tools: true,
       mcpSupport: true,  // Full MCP support
       edits: true,
-      resumeSession: true  // Can resume Claude Code sessions
+      resumeSession: true,  // Can resume Claude Code sessions
+      supportsFileTools: true  // Uses tools to access files (Read, Glob, etc.)
     };
   }
 

@@ -3,10 +3,11 @@
  */
 
 import { BaseAIProvider } from '../AIProvider';
-import { 
-  DocumentContext, 
-  ProviderConfig, 
-  ProviderCapabilities, 
+import { promises as fs } from 'fs';
+import {
+  DocumentContext,
+  ProviderConfig,
+  ProviderCapabilities,
   StreamChunk,
   Message,
   AIModel
@@ -48,7 +49,7 @@ export class LMStudioProvider extends BaseAIProvider {
     sessionId?: string,
     messages?: Message[],
     workspacePath?: string,
-    _attachments?: any[]
+    attachments?: any[]
   ): AsyncIterableIterator<StreamChunk> {
     // Build system prompt with document context
     const systemPrompt = this.buildSystemPrompt(documentContext);
@@ -60,7 +61,7 @@ export class LMStudioProvider extends BaseAIProvider {
     const apiMessages: any[] = [
       { role: 'system', content: systemPrompt }
     ];
-    
+
     // Add existing messages if provided
     if (messages && messages.length > 0) {
       for (const msg of messages) {
@@ -68,7 +69,7 @@ export class LMStudioProvider extends BaseAIProvider {
         if (!msg.content || msg.content.trim() === '') {
           continue;
         }
-        
+
         // Handle tool/function messages
         if (msg.role === 'tool') {
           // LMStudio expects tool results in a specific format
@@ -78,19 +79,90 @@ export class LMStudioProvider extends BaseAIProvider {
             content: msg.content || JSON.stringify(msg.toolCall?.result || {})
           });
         } else {
-          apiMessages.push({
-            role: msg.role === 'user' ? 'user' : 'assistant',
-            content: msg.content
-          });
+          // Check if message has attachments (images)
+          if (msg.attachments && msg.attachments.length > 0) {
+            // Build content array with images and text
+            const content: any[] = [];
+
+            // Add images first
+            for (const attachment of msg.attachments) {
+              if (attachment.type === 'image') {
+                try {
+                  const fileBuffer = await fs.readFile(attachment.filepath);
+                  const base64Data = fileBuffer.toString('base64');
+
+                  content.push({
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:${attachment.mimeType};base64,${base64Data}`
+                    }
+                  });
+                } catch (error) {
+                  console.error('[LMStudioProvider] Failed to read attachment:', error);
+                }
+              }
+            }
+
+            // Add text content
+            content.push({
+              type: 'text',
+              text: msg.content
+            });
+
+            apiMessages.push({
+              role: msg.role === 'user' ? 'user' : 'assistant',
+              content
+            });
+          } else {
+            // No attachments, use simple text content
+            apiMessages.push({
+              role: msg.role === 'user' ? 'user' : 'assistant',
+              content: msg.content
+            });
+          }
         }
       }
     }
-    
-    // Add the new user message
+
+    // Add the new user message (check for attachments)
     if (!message || message.trim() === '') {
       throw new Error('Cannot send empty message to LMStudio');
     }
-    apiMessages.push({ role: 'user', content: message });
+
+    // Check if current message has attachments (images)
+    if (attachments && attachments.length > 0) {
+      const content: any[] = [];
+
+      // Add images first
+      for (const attachment of attachments) {
+        if (attachment.type === 'image') {
+          try {
+            const fileBuffer = await fs.readFile(attachment.filepath);
+            const base64Data = fileBuffer.toString('base64');
+
+            content.push({
+              type: 'image_url',
+              image_url: {
+                url: `data:${attachment.mimeType};base64,${base64Data}`
+              }
+            });
+          } catch (error) {
+            console.error('[LMStudioProvider] Failed to read attachment:', error);
+          }
+        }
+      }
+
+      // Add text content
+      content.push({
+        type: 'text',
+        text: message
+      });
+
+      apiMessages.push({ role: 'user', content });
+    } else {
+      // No attachments, use simple text content
+      apiMessages.push({ role: 'user', content: message });
+    }
 
     // Log the input message
     if (sessionId) {
@@ -640,7 +712,8 @@ export class LMStudioProvider extends BaseAIProvider {
       tools: true,  // LMStudio supports native OpenAI-style function calling
       mcpSupport: false,
       edits: true,  // Enable edits through native tool support
-      resumeSession: false
+      resumeSession: false,
+      supportsFileTools: false  // Files should be attached to messages, not accessed via tools
     };
   }
 
