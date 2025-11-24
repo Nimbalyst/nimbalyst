@@ -206,6 +206,11 @@ export default function App() {
     if (isInitializing) return;
 
     const checkOnboarding = async () => {
+      // Skip in Playwright tests
+      if ((window as any).PLAYWRIGHT) {
+        return;
+      }
+
       // Only show in workspace mode windows
       if (!workspaceMode) {
         return;
