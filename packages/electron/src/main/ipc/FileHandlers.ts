@@ -1,8 +1,9 @@
 import { ipcMain, dialog, BrowserWindow, app } from 'electron';
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { basename, join, dirname, extname } from 'path';
- import { windowStates, savingWindows, findWindowByFilePath, createWindow, getWindowId, windows, documentServices } from '../window/WindowManager';
+import { windowStates, savingWindows, findWindowByFilePath, createWindow, getWindowId, windows, documentServices } from '../window/WindowManager';
 import { loadFileIntoWindow, saveFile } from '../file/FileOperations';
+import { openFileWithDialog, openFile } from '../file/FileOpener';
 import { startFileWatcher, stopFileWatcher, chokidarFileWatcher } from '../file/FileWatcher';
 import { AUTOSAVE_DELAY } from '../utils/constants';
 import { addWorkspaceRecentFile } from '../utils/store';
@@ -51,50 +52,23 @@ function hasFrontmatter(content: string): boolean {
 
 export function registerFileHandlers() {
     const analytics = AnalyticsService.getInstance();
-    // Open file dialog
+    // Open file dialog - uses unified FileOpener API
     ipcMain.handle('open-file', async (event) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) return null;
 
-        const result = await dialog.showOpenDialog(window, {
-            properties: ['openFile'],
-            filters: [
-                { name: 'Markdown Files', extensions: ['md', 'markdown'] },
-                { name: 'Text Files', extensions: ['txt'] },
-                { name: 'All Files', extensions: ['*'] }
-            ]
-        });
+        try {
+            const result = await openFileWithDialog(window);
+            if (!result) return null;
 
-        if (!result.canceled && result.filePaths.length > 0) {
-            const filePath = result.filePaths[0];
-            const windowId = getWindowId(window);
-            if (windowId === null) {
-                console.error('[FileHandlers] Failed to find custom window ID');
-                return null;
-            }
-            const state = windowStates.get(windowId);
-
-            if (state) {
-                state.filePath = filePath;
-                state.documentEdited = false;
-            }
-
-            const content = readFileSync(filePath, 'utf-8');
-
-            // Track file opened
-            analytics.sendEvent('file_opened', {
-                source: 'dialog',
-                fileType: getFileType(filePath),
-                hasWorkspace: !!state?.workspacePath
-            });
-
-            // Start watching the file
-            startFileWatcher(window, filePath);
-
-            return { filePath, content };
+            return {
+                filePath: result.filePath,
+                content: result.content
+            };
+        } catch (error) {
+            console.error('[FileHandlers] Failed to open file:', error);
+            return null;
         }
-
-        return null;
     });
 
     // Save file

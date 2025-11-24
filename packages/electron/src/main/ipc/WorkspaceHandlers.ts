@@ -7,6 +7,7 @@ import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
 import { AnalyticsService } from '../services/analytics/AnalyticsService';
+import { openWorkspaceFile, openFileInNewWindow, openFile } from '../file/FileOpener';
 
 const { writeFile, mkdir, rename, unlink, rmdir, copyFile, readFile, rm, stat, cp } = fsPromises;
 
@@ -190,11 +191,11 @@ export function registerWorkspaceHandlers() {
         }
     });
 
-    // Switch workspace file
+    // Switch workspace file - uses unified FileOpener API
     ipcMain.handle('switch-workspace-file', async (event, filePath: string) => {
         const window = BrowserWindow.fromWebContents(event.sender);
         if (!window) {
-            console.error('[SWITCH_FILE] ✗ No window found for event sender');
+            console.error('[SWITCH_FILE] No window found for event sender');
             return null;
         }
 
@@ -203,69 +204,28 @@ export function registerWorkspaceHandlers() {
             return null;
         }
 
-        console.log('[SWITCH_FILE] Switching to file:', filePath);
-        const windowId = getWindowId(window);
-        if (windowId === null) {
-            console.error('[SWITCH_FILE] Failed to find custom window ID');
-            return null;
-        }
-
         try {
-            const content = readFileSync(filePath, 'utf-8');
-            // console.log('[SWITCH_FILE] File read successfully, length:', content.length);
+            const windowId = getWindowId(window);
+            const state = windowId !== null ? windowStates.get(windowId) : null;
 
-            let state = windowStates.get(windowId);
-            // console.log('[SWITCH_FILE] Window state exists:', !!state);
+            // Use unified FileOpener API with skipFileWatcher=true
+            // File watchers are managed separately by start-watching-file/stop-watching-file
+            // when tabs are opened/closed, not when switching between them
+            const result = await openFile({
+                filePath,
+                workspacePath: state?.workspacePath || undefined,
+                source: 'tab_switch',
+                targetWindow: window,
+                skipFileWatcher: true,  // Tabs manage their own watchers
+                skipAnalytics: true      // Don't track tab switches as file opens
+            });
 
-            // Create state if it doesn't exist
-            if (!state) {
-                // console.log('[SWITCH_FILE] Creating new window state for window:', windowId);
-                state = {
-                    mode: 'workspace',
-                    filePath: null,
-                    documentEdited: false,
-                    workspacePath: null
-                };
-                windowStates.set(windowId, state);
-            }
-
-            const oldFilePath = state.filePath;
-            // console.log('[SWITCH_FILE] Previous file:', oldFilePath);
-
-            // Note: We no longer stop the old file watcher here.
-            // SimpleFileWatcher now supports watching multiple files per window,
-            // so all open tabs can be watched simultaneously.
-
-            // Update state
-            state.filePath = filePath;
-            state.documentEdited = false;
-            // console.log('[SWITCH_FILE] Updated window state with new file path');
-
-            // Add to recent workspace files
-            if (state.workspacePath) {
-                addWorkspaceRecentFile(state.workspacePath, filePath);
-                // console.log('[SWITCH_FILE] Added to recent files');
-            }
-
-            // NOTE: File watching is now handled by start-watching-file/stop-watching-file
-            // which are called when tabs are opened/closed, not when switching between them.
-            // This ensures all open tabs remain watched even when in the background.
-
-            // Set represented filename for macOS
-            if (process.platform === 'darwin') {
-                window.setRepresentedFilename(filePath);
-                // console.log('[SWITCH_FILE] Updated macOS represented filename');
-            }
-
-            // console.log('[SWITCH_FILE] ✓ Switch complete, state:', {
-            //     filePath: state.filePath,
-            //     workspacePath: state.workspacePath,
-            //     documentEdited: state.documentEdited
-            // });
-
-            return { filePath, content };
+            return {
+                filePath: result.filePath,
+                content: result.content
+            };
         } catch (error) {
-            console.error('[SWITCH_FILE] ✗ Error switching workspace file:', error);
+            console.error('[SWITCH_FILE] Error switching workspace file:', error);
             return null;
         }
     });
@@ -762,50 +722,8 @@ export function registerWorkspaceHandlers() {
         try {
             const { workspacePath, filePath } = options;
 
-            // Resolve workspace-relative path to absolute path
-            const absoluteFilePath = path.isAbsolute(filePath)
-                ? filePath
-                : path.join(workspacePath, filePath);
-
-            // Find the workspace window for this workspace path
-            let targetWindow: BrowserWindow | null = null;
-            for (const [windowId, state] of windowStates) {
-                if (state?.workspacePath === workspacePath && state.mode === 'workspace') {
-                    const window = BrowserWindow.getAllWindows().find(w => getWindowId(w) === windowId);
-                    if (window && !window.isDestroyed()) {
-                        targetWindow = window;
-                        break;
-                    }
-                }
-            }
-
-            // If no workspace window found, create a new one
-            if (!targetWindow) {
-                targetWindow = createWindow(true, false);
-                await new Promise<void>(resolve => {
-                    targetWindow!.once('ready-to-show', () => {
-                        const windowId = getWindowId(targetWindow!);
-                        if (windowId !== null) {
-                            const state = windowStates.get(windowId);
-                            if (state) {
-                                state.workspacePath = workspacePath;
-                            }
-                        }
-                        resolve();
-                    });
-                });
-            }
-
-            // Focus the window and load the file
-            targetWindow.focus();
-            await loadFileIntoWindow(targetWindow, absoluteFilePath);
-
-            // Track file opened from workspace
-            analytics.sendEvent('file_opened', {
-                source: 'workspace_tree',
-                fileType: getFileType(absoluteFilePath),
-                hasWorkspace: true
-            });
+            // Use unified FileOpener API
+            await openWorkspaceFile(workspacePath, filePath, 'workspace_tree');
 
             return { success: true };
         } catch (error: any) {
@@ -816,10 +734,8 @@ export function registerWorkspaceHandlers() {
 
     ipcMain.handle('open-file-in-new-window', async (event, filePath: string) => {
         try {
-            const newWindow = createWindow(true, false);
-            newWindow.once('ready-to-show', () => {
-                loadFileIntoWindow(newWindow, filePath);
-            });
+            // Use unified FileOpener API
+            await openFileInNewWindow(filePath);
             return { success: true };
         } catch (error: any) {
             console.error('Error opening file in new window:', error);
