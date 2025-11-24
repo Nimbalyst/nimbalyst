@@ -205,54 +205,63 @@ export default function App() {
     // Only check after initialization is complete
     if (isInitializing) return;
 
-    const userRole = localStorage.getItem('user_role');
-    const nextPromptTime = localStorage.getItem('onboarding_next_prompt');
-
-    // Don't show if user has completed or permanently skipped
-    if (userRole) {
-      return;
-    }
-
-    // Check if we should wait before prompting again
-    if (nextPromptTime) {
-      const now = Date.now();
-      const promptTime = parseInt(nextPromptTime, 10);
-
-      if (now < promptTime) {
-        // Not time to show again yet
+    const checkOnboarding = async () => {
+      // Only show in workspace mode windows
+      if (!workspaceMode) {
         return;
       }
 
-      // Time has passed, clear the timestamp
-      localStorage.removeItem('onboarding_next_prompt');
-    }
+      // Small delay to let other windows start up first
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Show onboarding dialog
-    setIsOnboardingOpen(true);
-  }, [isInitializing]);
+      // Recheck after delay - another window might have already shown it
+      const state = await window.electronAPI.invoke('onboarding:get');
+
+      // Don't show if user has completed or permanently skipped
+      if (state.userRole) {
+        return;
+      }
+
+      // Check if we should wait before prompting again
+      if (state.onboardingNextPrompt) {
+        const now = Date.now();
+        if (now < state.onboardingNextPrompt) {
+          // Not time to show again yet
+          return;
+        }
+
+        // Time has passed, clear the timestamp
+        await window.electronAPI.invoke('onboarding:update', { onboardingNextPrompt: undefined });
+      }
+
+      // Show onboarding dialog
+      setIsOnboardingOpen(true);
+    };
+
+    checkOnboarding();
+  }, [isInitializing, workspaceMode]);
 
   // Handle onboarding completion
-  const handleOnboardingComplete = useCallback((role: string, customRole: string | null, email: string | null) => {
-    // Store user role in localStorage
+  const handleOnboardingComplete = useCallback(async (role: string, customRole: string | null, email: string | null) => {
     const roleToStore = customRole || role;
-    localStorage.setItem('user_role', roleToStore);
 
-    // Store email if provided
-    if (email) {
-      localStorage.setItem('user_email', email);
+    // Store onboarding data in electron-store
+    await window.electronAPI.invoke('onboarding:update', {
+      userRole: roleToStore,
+      userEmail: email || undefined
+    });
 
-      // Associate email with user in PostHog
-      if (posthog) {
-        posthog.people.set({ email });
-      }
+    // Associate email with user in PostHog if provided
+    if (email && posthog) {
+      posthog.people.set({ email });
     }
 
     // Track onboarding completion event
     if (posthog) {
       posthog.capture('onboarding_completed', {
-        user_role: role, // Use the predefined role value (developer, product_manager, or "other")
+        user_role: role,
         custom_role_provided: !!customRole,
-        custom_role_text: customRole || undefined, // The actual custom role text
+        custom_role_text: customRole || undefined,
         email_provided: !!email,
       });
     }
@@ -262,9 +271,9 @@ export default function App() {
   }, [posthog]);
 
   // Handle "Ask me later" - set a timestamp for 2 days from now
-  const handleOnboardingAskLater = useCallback(() => {
+  const handleOnboardingAskLater = useCallback(async () => {
     const nextPromptTime = Date.now() + (2 * 24 * 60 * 60 * 1000); // 2 days in milliseconds
-    localStorage.setItem('onboarding_next_prompt', nextPromptTime.toString());
+    await window.electronAPI.invoke('onboarding:update', { onboardingNextPrompt: nextPromptTime });
 
     if (posthog) {
       posthog.capture('onboarding_deferred');
@@ -274,8 +283,8 @@ export default function App() {
   }, [posthog]);
 
   // Handle "Never ask again" - permanently dismiss
-  const handleOnboardingNeverAsk = useCallback(() => {
-    localStorage.setItem('user_role', 'skipped'); // Special value to indicate user chose to skip
+  const handleOnboardingNeverAsk = useCallback(async () => {
+    await window.electronAPI.invoke('onboarding:update', { userRole: 'skipped' });
 
     if (posthog) {
       posthog.capture('onboarding_skipped');

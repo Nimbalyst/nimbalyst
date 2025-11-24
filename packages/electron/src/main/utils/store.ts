@@ -32,6 +32,10 @@ interface AppStoreSchema {
   osNotificationsEnabled?: boolean;
   // Release channel
   releaseChannel?: ReleaseChannel;
+  // User onboarding
+  userRole?: string; // The user's selected role (or 'skipped' if permanently dismissed)
+  userEmail?: string; // Optional email provided during onboarding
+  onboardingNextPrompt?: number; // Timestamp for when to show onboarding again (if deferred)
 }
 
 export interface TabState {
@@ -654,4 +658,31 @@ export function getReleaseChannel(): ReleaseChannel {
 
 export function setReleaseChannel(channel: ReleaseChannel): void {
   appStore.set('releaseChannel', channel);
+}
+
+// User Onboarding
+export interface OnboardingState {
+  userRole?: string;
+  userEmail?: string;
+  onboardingNextPrompt?: number;
+}
+
+export function getOnboardingState(): OnboardingState {
+  return {
+    userRole: appStore.get('userRole'),
+    userEmail: appStore.get('userEmail'),
+    onboardingNextPrompt: appStore.get('onboardingNextPrompt')
+  };
+}
+
+export function updateOnboardingState(state: Partial<OnboardingState>): void {
+  if (state.userRole !== undefined) {
+    appStore.set('userRole', state.userRole);
+  }
+  if (state.userEmail !== undefined) {
+    appStore.set('userEmail', state.userEmail);
+  }
+  if (state.onboardingNextPrompt !== undefined) {
+    appStore.set('onboardingNextPrompt', state.onboardingNextPrompt);
+  }
 }

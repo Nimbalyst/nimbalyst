@@ -3,6 +3,7 @@ import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isComp
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
+import type { OnboardingState } from '../utils/store';
 
 export function registerSettingsHandlers() {
     // Get sidebar width
@@ -81,5 +82,16 @@ export function registerSettingsHandlers() {
     // Get recent projects
     ipcMain.handle('settings:get-recent-projects', () => {
         return getRecentItems('workspaces');
+    });
+
+    // Onboarding state
+    ipcMain.handle('onboarding:get', async () => {
+        const { getOnboardingState } = await import('../utils/store');
+        return getOnboardingState();
+    });
+
+    ipcMain.handle('onboarding:update', async (_event, state: Partial<OnboardingState>) => {
+        const { updateOnboardingState } = await import('../utils/store');
+        updateOnboardingState(state);
     });
 }
