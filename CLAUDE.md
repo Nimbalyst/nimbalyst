@@ -288,6 +288,13 @@ The application supports multiple AI providers, including two distinct ways to a
 
 The Nimbalyst app uses **PGLite** (PostgreSQL in WebAssembly) for all data storage, providing a robust database system that works both in development and packaged builds.
 
+**CRITICAL: Never use localStorage in the renderer process.** All persistent state must be stored via IPC to the main process using either:
+- **app-settings store** (`packages/electron/src/main/utils/store.ts`) for global app settings
+- **workspace-settings store** for per-project state
+- **PGLite database** for complex data like AI sessions and document history
+
+localStorage is not reliable in Electron and data can be lost. Use the existing store infrastructure instead.
+
 ### Database System
 - **Technology**: PGLite (PostgreSQL in WebAssembly) running in Node.js worker thread
 - **Storage**: Persistent file-based database with ACID compliance
