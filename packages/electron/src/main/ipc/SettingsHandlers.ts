@@ -3,7 +3,6 @@ import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isComp
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
-import type { OnboardingState } from '../utils/store';
 
 export function registerSettingsHandlers() {
     // Get sidebar width
