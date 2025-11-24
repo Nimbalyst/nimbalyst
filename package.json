@@ -53,7 +53,7 @@
     "packages/rexical"
   ],
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.37",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.51",
     "ajv-formats": "^3.0.1",
     "content-type": "^1.0.5",
     "cors": "^2.8.5",
