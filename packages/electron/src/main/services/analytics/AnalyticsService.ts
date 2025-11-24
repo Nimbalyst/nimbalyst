@@ -4,6 +4,7 @@ import {ulid} from "ulid";
 import {logger} from "../../utils/logger.ts";
 import {beforePosthogSendNodeJS} from "./analytics-utils.ts";
 import {app} from "electron";
+import {isAnalyticsEnabled, setAnalyticsEnabled} from "../../utils/store.ts";
 
 const POSTHOG_PROJECT_PUBLIC_ID = 'phc_s3lQIILexwlGHvxrMBqti355xUgkRocjMXW4LjV0ATw';
 
@@ -76,7 +77,9 @@ export class AnalyticsService {
     this.postHogClient ??= this.initPostHogClient();
     await this.postHogClient?.optIn()
 
-    this.getSettingsStore().set({ analyticsEnabled: true });
+    setAnalyticsEnabled(true);
+
+    // Keep analytics ID in the analytics-specific store
     if (!this.getSettingsStore().get("analyticsId")) {
       this.getSettingsStore().set({ analyticsId: `nimbalyst_${ulid()}` });
     }
@@ -90,7 +93,7 @@ export class AnalyticsService {
       await this.postHogClient.optOut()
     }
 
-    this.getSettingsStore().set({ analyticsEnabled: false });
+    setAnalyticsEnabled(false);
   }
 
   /**
@@ -147,10 +150,8 @@ export class AnalyticsService {
   }
 
   public allowedToSendAnalytics(): boolean {
-    // Send analytics from all builds (dev and official)
-    // Users are marked with 'is_dev_user' property if they've ever used a non-official build
-    // This allows filtering dev users in PostHog while still collecting their data
-    return true;
+    // Check if user has enabled analytics in settings
+    return isAnalyticsEnabled();
   }
 
   public getDistinctId(): string {

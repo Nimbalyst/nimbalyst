@@ -103,4 +103,13 @@ export function registerSettingsHandlers() {
     ipcMain.handle('settings:set-default-ai-model', (_event, model: string) => {
         setDefaultAIModel(model);
     });
+
+    // Analytics settings
+    ipcMain.handle('analytics:is-enabled', () => {
+        return isAnalyticsEnabled();
+    });
+
+    ipcMain.handle('analytics:set-enabled', (_event, enabled: boolean) => {
+        setAnalyticsEnabled(enabled);
+    });
 }

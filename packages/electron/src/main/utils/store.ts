@@ -32,12 +32,14 @@ interface AppStoreSchema {
   osNotificationsEnabled?: boolean;
   // Release channel
   releaseChannel?: ReleaseChannel;
-  // User role onboarding
-  userRole?: string;  // 'developer', 'product_manager', custom role, or 'skipped'
-  userEmail?: string;  // Optional email from onboarding
-  onboardingNextPrompt?: number;  // Timestamp for when to show onboarding again (Ask Later)
   // Default AI model for new sessions (format: "provider:model" e.g., "claude-code:sonnet")
   defaultAIModel?: string;
+  // Analytics
+  analyticsEnabled?: boolean;
+  // User onboarding
+  userRole?: string; // The user's selected role (or 'skipped' if permanently dismissed)
+  userEmail?: string; // Optional email provided during onboarding
+  onboardingNextPrompt?: number; // Timestamp for when to show onboarding again (if deferred)
 }
 
 export interface TabState {
@@ -696,4 +698,13 @@ export function getDefaultAIModel(): string | undefined {
 
 export function setDefaultAIModel(model: string): void {
   appStore.set('defaultAIModel', model);
+}
+
+// Analytics Settings
+export function isAnalyticsEnabled(): boolean {
+  return appStore.get('analyticsEnabled', true); // Default to enabled
+}
+
+export function setAnalyticsEnabled(enabled: boolean): void {
+  appStore.set('analyticsEnabled', enabled);
 }

@@ -7,6 +7,8 @@ interface AdvancedPanelProps {
   onAiDebugLoggingChange: (value: boolean) => void;
   releaseChannel: 'stable' | 'alpha';
   onReleaseChannelChange: (value: 'stable' | 'alpha') => void;
+  analyticsEnabled: boolean;
+  onAnalyticsEnabledChange: (value: boolean) => void;
 }
 
 export function AdvancedPanel({
@@ -15,7 +17,9 @@ export function AdvancedPanel({
   aiDebugLogging,
   onAiDebugLoggingChange,
   releaseChannel,
-  onReleaseChannelChange
+  onReleaseChannelChange,
+  analyticsEnabled,
+  onAnalyticsEnabledChange
 }: AdvancedPanelProps) {
   const isDevelopment = import.meta.env.DEV;
   const [showReleaseChannel, setShowReleaseChannel] = useState(false);
@@ -69,6 +73,30 @@ export function AdvancedPanel({
           </div>
         </div>
       )}
+
+      <div className="provider-panel-section">
+        <h4 className="provider-panel-section-title">Privacy</h4>
+        <p className="provider-panel-hint">
+          Control how Nimbalyst collects anonymous usage data.
+        </p>
+
+        <div className="setting-item">
+          <label className="setting-label">
+            <input
+              type="checkbox"
+              checked={analyticsEnabled}
+              onChange={(e) => onAnalyticsEnabledChange(e.target.checked)}
+              className="setting-checkbox"
+            />
+            <div className="setting-text">
+              <span className="setting-name">Send Anonymous Usage Data</span>
+              <span className="setting-description">
+                Help improve Nimbalyst by sending anonymous usage data. No prompts, content, or personal information is ever collected.
+              </span>
+            </div>
+          </label>
+        </div>
+      </div>
 
       {isDevelopment ? (
         <div className="provider-panel-section">

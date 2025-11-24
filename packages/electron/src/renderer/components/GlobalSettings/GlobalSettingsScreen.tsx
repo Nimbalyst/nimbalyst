@@ -10,7 +10,6 @@ import { OpenAIPanel } from './panels/OpenAIPanel';
 import { OpenAICodexPanel } from './panels/OpenAICodexPanel';
 import { LMStudioPanel } from './panels/LMStudioPanel';
 import { AdvancedPanel } from './panels/AdvancedPanel';
-import {AnalyticsSettingsPanel} from "./panels/AnalyticsPanel.tsx";
 import { NotificationsPanel } from './panels/NotificationsPanel';
 import { MCPServersPanel } from './panels/MCPServersPanel';
 
@@ -192,6 +191,7 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
   const [completionSoundType, setCompletionSoundType] = useState<'chime' | 'bell' | 'pop' | 'none'>('chime');
   const [osNotificationsEnabled, setOSNotificationsEnabled] = useState(false);
   const [releaseChannel, setReleaseChannel] = useState<'stable' | 'alpha'>('stable');
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
 
   // Load current settings on mount
   useEffect(() => {
@@ -237,6 +237,10 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
       // Load release channel setting
       const channel = await window.electronAPI.invoke('release-channel:get');
       setReleaseChannel(channel);
+
+      // Load analytics setting
+      const analyticsEnabledSetting = await window.electronAPI.invoke('analytics:is-enabled');
+      setAnalyticsEnabled(analyticsEnabledSetting);
 
       // Fetch ALL models once
       try {
@@ -477,6 +481,12 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
           releaseChannel={releaseChannel}
           onReleaseChannelChange={(value) => {
             setReleaseChannel(value);
+            setHasChanges(true);
+          }}
+          analyticsEnabled={analyticsEnabled}
+          onAnalyticsEnabledChange={async (value) => {
+            setAnalyticsEnabled(value);
+            await window.electronAPI.invoke('analytics:set-enabled', value);
             setHasChanges(true);
           }}
         />;
