@@ -36,6 +36,8 @@ interface AppStoreSchema {
   userRole?: string;  // 'developer', 'product_manager', custom role, or 'skipped'
   userEmail?: string;  // Optional email from onboarding
   onboardingNextPrompt?: number;  // Timestamp for when to show onboarding again (Ask Later)
+  // Default AI model for new sessions (format: "provider:model" e.g., "claude-code:sonnet")
+  defaultAIModel?: string;
 }
 
 export interface TabState {
@@ -693,4 +695,13 @@ export function setOnboardingNextPrompt(timestamp: number | undefined): void {
 
 export function clearOnboardingNextPrompt(): void {
   appStore.delete('onboardingNextPrompt');
+}
+
+// Default AI Model Settings
+export function getDefaultAIModel(): string | undefined {
+  return appStore.get('defaultAIModel');
+}
+
+export function setDefaultAIModel(model: string): void {
+  appStore.set('defaultAIModel', model);
 }

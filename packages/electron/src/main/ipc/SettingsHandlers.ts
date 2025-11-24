@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getUserOnboardingState, setUserRole, setUserEmail, setOnboardingNextPrompt, clearOnboardingNextPrompt } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getUserOnboardingState, setUserRole, setUserEmail, setOnboardingNextPrompt, clearOnboardingNextPrompt, getDefaultAIModel, setDefaultAIModel } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
@@ -103,5 +103,14 @@ export function registerSettingsHandlers() {
 
     ipcMain.handle('onboarding:clear-next-prompt', () => {
         clearOnboardingNextPrompt();
+    });
+
+    // Default AI model settings
+    ipcMain.handle('settings:get-default-ai-model', () => {
+        return getDefaultAIModel();
+    });
+
+    ipcMain.handle('settings:set-default-ai-model', (_event, model: string) => {
+        setDefaultAIModel(model);
     });
 }

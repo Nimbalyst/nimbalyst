@@ -640,11 +640,19 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   // Create a new session
   const createNewSession = useCallback(async (planPath?: string) => {
     try {
+      // Get the default model from app settings, fallback to claude-code
+      const defaultModel = await window.electronAPI.invoke('settings:get-default-ai-model') || 'claude-code:sonnet';
+
+      // Parse provider from model ID (format: "provider:model" or just "provider")
+      const [provider] = defaultModel.split(':');
+
+      console.log(`[AgenticPanel] Creating new session with default model: ${defaultModel}, provider: ${provider}`);
+
       const session = await window.electronAPI.aiCreateSession(
-        'claude-code',
+        provider as 'claude' | 'claude-code' | 'openai' | 'lmstudio',
         undefined,
         workspacePath,
-        undefined,
+        defaultModel,
         mode === 'agent' ? 'coding' : 'chat'
       );
 
@@ -693,7 +701,7 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       sessionData,
       draftInput: initialDraftInput,
       mode: sessionData.mode || 'agent',
-      model: sessionData.model || sessionData.provider || 'claude-code'
+      model: sessionData.model || defaultModel
     };
 
     if (mode === 'chat') {
@@ -1472,6 +1480,10 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
 
       await window.electronAPI.invoke('sessions:update-provider-and-model', sessionId, newProvider, newModel);
       console.log(`[AgenticPanel] Provider and model changes persisted successfully`);
+
+      // Save as the default model for future sessions
+      await window.electronAPI.invoke('settings:set-default-ai-model', newModel);
+      console.log(`[AgenticPanel] Saved ${newModel} as default model for new sessions`);
 
       try {
         await window.electronAPI.aiRefreshSessionProvider(sessionId);
