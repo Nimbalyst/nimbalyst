@@ -139,6 +139,12 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
   const currentFilePath = tabs.activeTab?.filePath || null;
   const currentFileName = tabs.activeTab?.fileName || null;
 
+  // Expose current document path and workspace path to window for image paste/rendering
+  useEffect(() => {
+    (window as any).__currentDocumentPath = currentFilePath;
+    (window as any).workspacePath = workspacePath;
+  }, [currentFilePath, workspacePath]);
+
   // Build document context for AI features
   const documentContext = useDocumentContext({
     activeTab: tabs.activeTab,

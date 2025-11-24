@@ -105,6 +105,43 @@ function LazyImage({
   } | null>(null);
   const isSVGImage = isSVG(src);
 
+  // Resolve relative paths to absolute file:// URLs for Electron
+  const resolvedSrc = useCallback(() => {
+    // If it's already an absolute URL (http://, https://, file://, data:), use as-is
+    if (src.match(/^(https?|file|data):/)) {
+      return src;
+    }
+
+    // If in Electron and we have a current document path, resolve relative to document
+    if (typeof window !== 'undefined' && (window as any).__currentDocumentPath) {
+      const documentPath = (window as any).__currentDocumentPath;
+
+      // Handle old .nimbalyst/assets/ paths (workspace-relative)
+      if (src.includes('.nimbalyst/assets/')) {
+        // Get workspace path (directory containing .nimbalyst)
+        const workspacePath = (window as any).workspacePath;
+        if (workspacePath) {
+          // Remove leading ./ or / if present
+          const cleanSrc = src.replace(/^\.?\//, '');
+          const absolutePath = workspacePath + '/' + cleanSrc;
+          return 'file://' + absolutePath;
+        }
+      }
+
+      // Handle new assets/ paths (document-relative)
+      // Get document directory
+      const lastSlash = documentPath.lastIndexOf('/');
+      const documentDir = lastSlash >= 0 ? documentPath.substring(0, lastSlash) : '';
+
+      // Resolve relative path
+      const absolutePath = documentDir + '/' + src;
+      return 'file://' + absolutePath;
+    }
+
+    // Fallback: use src as-is (for web or when no document context)
+    return src;
+  }, [src])();
+
   // Set initial dimensions for SVG images
   useEffect(() => {
     if (imageRef.current && isSVGImage) {
@@ -116,7 +153,7 @@ function LazyImage({
     }
   }, [imageRef, isSVGImage]);
 
-  const hasError = useSuspenseImage(src);
+  const hasError = useSuspenseImage(resolvedSrc);
 
   useEffect(() => {
     if (hasError) {
@@ -171,7 +208,7 @@ function LazyImage({
   return (
     <img
       className={className || undefined}
-      src={src}
+      src={resolvedSrc}
       alt={altText}
       ref={imageRef}
       style={imageStyle}

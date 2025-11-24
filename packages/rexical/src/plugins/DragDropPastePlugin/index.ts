@@ -30,15 +30,17 @@ async function processImageFile(file: File): Promise<string> {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Array.from(new Uint8Array(arrayBuffer));
 
+      // Get current document path from window global (set by EditorMode)
+      const documentPath = (window as any).__currentDocumentPath || undefined;
+
       // Store via document service
-      const { hash, extension } = await (window as any).electronAPI.invoke(
+      const { relativePath } = await (window as any).electronAPI.invoke(
         'document-service:store-asset',
-        { buffer, mimeType: file.type }
+        { buffer, mimeType: file.type, documentPath }
       );
 
-      // Return relative path to asset
-      // TODO: Calculate proper relative path based on current document location
-      return `.nimbalyst/assets/${hash}.${extension}`;
+      // Return the relative path provided by the service
+      return relativePath;
     } catch (error) {
       console.error('Failed to store asset, falling back to base64:', error);
       // Fall through to base64 fallback

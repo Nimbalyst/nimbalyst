@@ -122,15 +122,15 @@ export function InsertImageUploadedDialogBody({
         const arrayBuffer = await file.arrayBuffer();
         const buffer = Array.from(new Uint8Array(arrayBuffer));
 
+        // Get current document path from window global (set by EditorMode)
+        const documentPath = (window as any).__currentDocumentPath || undefined;
+
         // Store via document service
-        const { hash, extension } = await (window as any).electronAPI.invoke(
+        const { relativePath } = await (window as any).electronAPI.invoke(
           'document-service:store-asset',
-          { buffer, mimeType: file.type }
+          { buffer, mimeType: file.type, documentPath }
         );
 
-        // Get current document path to calculate relative path
-        // For now, use a placeholder - this will be replaced with actual document path
-        const relativePath = `.nimbalyst/assets/${hash}.${extension}`;
         setSrc(relativePath);
       } catch (error) {
         console.error('Failed to store asset:', error);

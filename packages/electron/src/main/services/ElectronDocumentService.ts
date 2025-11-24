@@ -979,7 +979,7 @@ export class ElectronDocumentService implements DocumentService {
   }
 
   // Asset management methods
-  async storeAsset(buffer: Buffer, mimeType: string): Promise<{ hash: string, extension: string }> {
+  async storeAsset(buffer: Buffer, mimeType: string, documentPath?: string): Promise<{ hash: string, extension: string, relativePath: string }> {
     // Hash the image buffer
     const hash = crypto.createHash('sha256').update(buffer).digest('hex');
 
@@ -993,25 +993,39 @@ export class ElectronDocumentService implements DocumentService {
       'image/svg+xml': 'svg'
     };
     const extension = extensionMap[mimeType] || 'png';
+    const filename = `${hash}.${extension}`;
 
-    // Ensure .nimbalyst/assets directory exists
-    const assetsDir = path.join(this.workspacePath, '.nimbalyst', 'assets');
+    // Determine asset storage location based on document path
+    let assetsDir: string;
+    let relativePath: string;
+
+    if (documentPath) {
+      // Store in assets/ folder adjacent to the document
+      const documentDir = path.dirname(documentPath);
+      assetsDir = path.join(documentDir, 'assets');
+      relativePath = `assets/${filename}`;
+    } else {
+      // Fallback to workspace-level storage (for backward compatibility)
+      assetsDir = path.join(this.workspacePath, '.nimbalyst', 'assets');
+      relativePath = `.nimbalyst/assets/${filename}`;
+    }
+
+    // Ensure assets directory exists
     await fs.mkdir(assetsDir, { recursive: true });
 
     // Write file with hash as name
-    const filename = `${hash}.${extension}`;
     const assetPath = path.join(assetsDir, filename);
 
     // Only write if file doesn't already exist (deduplication)
     try {
       await fs.access(assetPath);
-      console.log(`[DocumentService] Asset ${hash}.${extension} already exists, skipping write`);
+      console.log(`[DocumentService] Asset ${filename} already exists at ${assetsDir}, skipping write`);
     } catch {
       await fs.writeFile(assetPath, buffer);
-      console.log(`[DocumentService] Stored asset ${hash}.${extension} (${buffer.length} bytes)`);
+      console.log(`[DocumentService] Stored asset ${filename} at ${assetsDir} (${buffer.length} bytes)`);
     }
 
-    return { hash, extension };
+    return { hash, extension, relativePath };
   }
 
   async getAssetPath(hash: string): Promise<string | null> {
@@ -1338,11 +1352,11 @@ export function setupDocumentServiceHandlers(resolver: DocumentServiceResolver) 
   });
 
   // Asset management handlers
-  ipcMain.handle('document-service:store-asset', async (event, payload: { buffer: number[]; mimeType: string }) => {
+  ipcMain.handle('document-service:store-asset', async (event, payload: { buffer: number[]; mimeType: string; documentPath?: string }) => {
     try {
-      const { buffer, mimeType } = payload;
+      const { buffer, mimeType, documentPath } = payload;
       const bufferObj = Buffer.from(buffer);
-      return await requireDocumentService(event).storeAsset(bufferObj, mimeType);
+      return await requireDocumentService(event).storeAsset(bufferObj, mimeType, documentPath);
     } catch (error) {
       console.error('[DocumentService] store-asset failed:', error);
       throw error;
