@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.46.1] - 2025-11-25
+
+
+### Added
+- Model version now displayed in selector for Claude Code
+- Prompt caching support for AI responses (reduces API costs and improves response times)
+
+### Changed
+- Session timestamps now match sort order for consistent display
+
+### Fixed
+- Users migrating from older versions now see all available Claude Code models
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.46.0] - 2025-11-24
 
 
