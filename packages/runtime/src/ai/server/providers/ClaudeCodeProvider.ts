@@ -29,6 +29,14 @@ import { SessionManager } from '../SessionManager';
 const CLAUDE_CODE_VARIANTS = ['opus', 'sonnet', 'haiku'] as const;
 type ClaudeCodeVariant = typeof CLAUDE_CODE_VARIANTS[number];
 
+// Map variants to their current version numbers
+// These correspond to the underlying Claude models used by Claude Code
+const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
+  opus: '4.5',
+  sonnet: '4.5',
+  haiku: '3.5'
+};
+
 const CLAUDE_CODE_MODEL_LABELS: Record<ClaudeCodeVariant, string> = {
   opus: 'Opus',
   sonnet: 'Sonnet',
@@ -1969,13 +1977,16 @@ Do NOT call this tool more than once per session. It should be called early, typ
    * Get Claude Code model
    */
   static getModels(): AIModel[] {
-    return CLAUDE_CODE_VARIANTS.map(variant => ({
+    console.log('[ClaudeCodeProvider.getModels] Building models from CLAUDE_CODE_VARIANTS:', CLAUDE_CODE_VARIANTS);
+    const models = CLAUDE_CODE_VARIANTS.map(variant => ({
       id: `claude-code:${variant}`,
-      name: `Claude Code · ${CLAUDE_CODE_MODEL_LABELS[variant]}`,
+      name: `Claude Code · ${CLAUDE_CODE_MODEL_LABELS[variant]} ${CLAUDE_CODE_VARIANT_VERSIONS[variant]}`,
       provider: 'claude-code' as const,
       maxTokens: 8192,
       contextWindow: 200000
     }));
+    console.log('[ClaudeCodeProvider.getModels] Returning models:', models.map(m => ({ id: m.id, name: m.name })));
+    return models;
   }
 
   /**

@@ -13,6 +13,14 @@ interface ModelInfo {
 
 type ClaudeCodeVariant = 'opus' | 'sonnet' | 'haiku';
 
+// Map Claude Code variants to their current version numbers
+// These correspond to the underlying Claude models used by Claude Code
+const CLAUDE_CODE_VARIANT_VERSIONS: Record<ClaudeCodeVariant, string> = {
+  opus: '4.5',
+  sonnet: '4.5',
+  haiku: '3.5'
+};
+
 function extractClaudeCodeVariant(modelId?: string): ClaudeCodeVariant | null {
   if (!modelId) return null;
   const raw = modelId.includes(':') ? modelId.split(':').pop()! : modelId;
@@ -34,15 +42,17 @@ function formatVariantLabel(variant: ClaudeCodeVariant): string {
 export function getClaudeCodeModelLabel(modelId?: string): string {
   const variant = extractClaudeCodeVariant(modelId);
   // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
-  if (!variant) return 'Claude Code (Sonnet)';
-  return `Claude Code (${formatVariantLabel(variant)})`;
+  if (!variant) return 'Claude Code (Sonnet 4.5)';
+  const version = CLAUDE_CODE_VARIANT_VERSIONS[variant];
+  return `Claude Code (${formatVariantLabel(variant)} ${version})`;
 }
 
 export function getClaudeCodeModelShortLabel(modelId?: string): string {
   const variant = extractClaudeCodeVariant(modelId);
   // If no variant detected (shouldn't happen with legacy handling), default to Sonnet
-  if (!variant) return 'Sonnet';
-  return formatVariantLabel(variant);
+  if (!variant) return 'Sonnet 4.5';
+  const version = CLAUDE_CODE_VARIANT_VERSIONS[variant];
+  return `${formatVariantLabel(variant)} ${version}`;
 }
 
 /**

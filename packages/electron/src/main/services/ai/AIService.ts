@@ -2072,16 +2072,28 @@ export class AIService {
 
     // Get ENABLED models for actual use
     ipcMain.handle('ai:getModels', async () => {
+      console.log('[AIService] ai:getModels called - fetching enabled models');
       const providerSettings = this.getSettingsStore().get('providerSettings', {}) as Record<AIProviderType, any>;
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
       const claudeCodeSettings = providerSettings['claude-code'] || {};
+
+      console.log('[AIService] ai:getModels - claude-code settings:', {
+        enabled: claudeCodeSettings.enabled,
+        models: claudeCodeSettings.models
+      });
 
       // Get all models - pass provider settings for LMStudio URL
       const modelsConfig = {
         ...apiKeys,
         lmstudio_url: providerSettings['lmstudio']?.baseUrl || 'http://127.0.0.1:8234'
       };
+      console.log('[AIService] ai:getModels - calling ModelRegistry.getAllModels');
       const allModels = await ModelRegistry.getAllModels(modelsConfig);
+
+      // Log claude-code models specifically
+      const claudeCodeModels = allModels.filter(m => m.provider === 'claude-code');
+      console.log('[AIService] ai:getModels - claude-code models from registry:',
+        claudeCodeModels.map(m => ({ id: m.id, name: m.name })));
 
       // Build enabled providers map
       const enabledProviders: Record<AIProviderType, { enabled: boolean; models?: string[] }> = {
@@ -2138,6 +2150,11 @@ export class AIService {
         }
         grouped[model.provider].push(model);
       }
+
+      // Log final claude-code models being returned
+      const enabledClaudeCodeModels = enabledModels.filter(m => m.provider === 'claude-code');
+      console.log('[AIService] ai:getModels - returning enabled claude-code models:',
+        enabledClaudeCodeModels.map(m => ({ id: m.id, name: m.name })));
 
       return {
         success: true,
