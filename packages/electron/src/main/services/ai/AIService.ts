@@ -2074,6 +2074,7 @@ export class AIService {
     ipcMain.handle('ai:getModels', async () => {
       const providerSettings = this.getSettingsStore().get('providerSettings', {}) as Record<AIProviderType, any>;
       const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
+      const claudeCodeSettings = providerSettings['claude-code'] || {};
 
       // Get all models - pass provider settings for LMStudio URL
       const modelsConfig = {
@@ -2089,9 +2090,9 @@ export class AIService {
           models: providerSettings['claude']?.models
         },
         'claude-code': {
-          // Claude Code is always available if API key exists (it's the MCP integration)
-          enabled: !!(apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY),
-          models: providerSettings['claude-code']?.models
+          // Respect the user's toggle but don't require an API key—Claude Code uses CLI auth
+          enabled: claudeCodeSettings.enabled !== false,
+          models: claudeCodeSettings.models
         },
         'openai': {
           enabled: providerSettings['openai']?.enabled === true && !!(apiKeys['openai'] || process.env.OPENAI_API_KEY),
