@@ -1,19 +1,11 @@
 import type { DocumentContext } from './types';
 
 export function buildSystemPrompt(documentContext?: DocumentContext): string {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-  });
-  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-
   // Check if this is an agentic coding session (no specific document context)
   const sessionType = (documentContext as any)?.sessionType;
   const hasDocument = !!(documentContext && (documentContext.filePath || documentContext.content));
 
-  let base = `Current date and time: ${dateStr} at ${timeStr}
-
-You are an AI assistant integrated into the Nimbalyst editor, a markdown-focused text editor.
+  let base = `You are an AI assistant integrated into the Nimbalyst editor, a markdown-focused text editor.
 When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
 
   // In agentic coding mode, there's no specific document - agent works across codebase
@@ -162,12 +154,6 @@ ALWAYS use applyDiff for table modifications - it's more reliable than streaming
 
 
 export function buildClaudeCodeSystemPromptAddendum(documentContext?: DocumentContext, hasSessionNaming?: boolean): string {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-  });
-  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-
   const hasDocument = !!(documentContext && (documentContext.filePath || documentContext.content));
 
   let base = `The following is an addendum to the above. Anything in the addendum supersedes the above.

@@ -1906,15 +1906,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
     const sessionType = (documentContext as any)?.sessionType;
     if (sessionType === 'coding') {
       // Minimal prompt for agentic coding mode - let Claude Code work naturally
-      const now = new Date();
-      const dateStr = now.toLocaleDateString('en-US', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-      });
-      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-
-      let prompt = `Current date and time: ${dateStr} at ${timeStr}
-
-You are an AI assistant integrated into the Nimbalyst editor's agentic coding workspace.
+      let prompt = `You are an AI assistant integrated into the Nimbalyst editor's agentic coding workspace.
 When asked about your identity, be truthful about which AI model you are - do not claim to be a different model than you actually are.`;
 
       // Add session naming instructions if MCP server is available
