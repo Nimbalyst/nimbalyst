@@ -769,7 +769,27 @@ export const RichTranscriptView = React.forwardRef<
                           {isUser ? 'You' : ''}
                         </span>
                         <span className="rich-transcript-message-time">
-                          {parseTimestamp(message.timestamp)?.toLocaleTimeString() || ''}
+                          {(() => {
+                            const date = parseTimestamp(message.timestamp);
+                            if (!date) return '';
+
+                            const today = new Date();
+                            const isToday =
+                              date.getDate() === today.getDate() &&
+                              date.getMonth() === today.getMonth() &&
+                              date.getFullYear() === today.getFullYear();
+
+                            if (isToday) {
+                              return date.toLocaleTimeString();
+                            } else {
+                              return date.toLocaleString(undefined, {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit'
+                              });
+                            }
+                          })()}
                         </span>
                       </div>
                       {/* Action buttons */}
