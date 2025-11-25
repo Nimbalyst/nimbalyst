@@ -43,11 +43,6 @@ Nimbalyst automatically checks for updates and notifies you when a new version i
 
 Found a bug or have a feature request? Please [create an issue](https://github.com/nimbalyst/nimbalyst/issues/new/choose).
 
-Before creating an issue:
-- Search [existing issues](https://github.com/nimbalyst/nimbalyst/issues) to avoid duplicates
-- Include your OS version and Nimbalyst version
-- Provide steps to reproduce bugs
-
 ## Community
 - [Documentation](https://docs.nimbalyst.com/) - Watch video and read documentation
 - [Discord](https://discord.gg/FgD9S2MCYB) - Join the discussion on Discord
@@ -55,11 +50,6 @@ Before creating an issue:
 ## License
 
 Nimbalyst is proprietary software. All rights reserved. © 2025 Nimbalyst. 
-
-## Privacy & Security
-
-- All documents are stored locally on your device
-- AI features require internet connection but documents are never uploaded
 
 ## Acknowledgments
 
