@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import './TrackerBottomPanel.css';
 import { TrackerTable, SortColumn as TrackerSortColumn, SortDirection as TrackerSortDirection } from '@nimbalyst/runtime/plugins/TrackerPlugin';
-import { MaterialSymbol } from '../MaterialSymbol';
+import { MaterialSymbol, getFileIcon } from '@nimbalyst/runtime';
 import { globalRegistry, loadBuiltinTrackers } from '@nimbalyst/runtime/plugins/TrackerPlugin/models';
 import { usePostHog } from 'posthog-js/react';
 

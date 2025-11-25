@@ -1,5 +1,5 @@
 import React from 'react';
-import { MaterialSymbol } from '../MaterialSymbol';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import { getProviderIcon } from '../icons/ProviderIcons';
 import { ProviderIcon } from '../icons/ProviderIcons';
 import { parseModelInfo } from '../../utils/modelUtils';

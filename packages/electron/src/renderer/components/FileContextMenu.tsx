@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MaterialSymbol } from './MaterialSymbol';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import './FileContextMenu.css';
 
 interface FileContextMenuProps {

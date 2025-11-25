@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MaterialSymbol } from '../MaterialSymbol';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import { getProviderIcon } from '../icons/ProviderIcons';
 import { getClaudeCodeModelLabel } from '../../utils/modelUtils';
 import './NewSessionButton.css';

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getDocumentService } from '../services/RendererDocumentService';
 import type { Document } from '@nimbalyst/runtime';
+import { getFileIcon } from '@nimbalyst/runtime';
 import type { TypeaheadOption } from '../components/Typeahead/GenericTypeahead';
 
 
@@ -100,38 +101,6 @@ export function useFileMention({
     }
   }, [documentService, loadDocuments, documents.length]);
 
-  // Get icon based on file type
-  const getFileIcon = (doc: Document): string => {
-    const ext = doc.type?.toLowerCase();
-
-    // Markdown
-    if (ext === 'md' || ext === 'markdown') return 'description';
-
-    // Web
-    if (ext === 'html' || ext === 'htm') return 'code';
-    if (ext === 'css' || ext === 'scss' || ext === 'sass' || ext === 'less') return 'palette';
-
-    // JavaScript/TypeScript
-    if (['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs'].includes(ext || '')) return 'javascript';
-
-    // Python
-    if (ext === 'py') return 'code';
-
-    // Config files
-    if (['json', 'yaml', 'yml', 'toml', 'xml'].includes(ext || '')) return 'settings';
-
-    // Shell scripts
-    if (['sh', 'bash', 'zsh', 'fish', 'ps1'].includes(ext || '')) return 'terminal';
-
-    // SQL
-    if (ext === 'sql') return 'storage';
-
-    // Text files
-    if (ext === 'txt') return 'article';
-
-    // Default to generic file icon
-    return 'insert_drive_file';
-  };
 
   // Convert documents to typeahead options
   const options = useMemo<TypeaheadOption[]>(() => {
@@ -145,7 +114,7 @@ export function useFileMention({
       return {
         id: doc.id,
         label: displayLabel,
-        icon: getFileIcon(doc),
+        icon: getFileIcon(doc.name, 18),
         data: doc
       };
     });

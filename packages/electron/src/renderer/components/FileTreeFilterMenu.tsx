@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MaterialSymbol } from './MaterialSymbol';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import './FileTreeFilterMenu.css';
 
 export type FileTreeFilter = 'all' | 'markdown' | 'known' | 'git-uncommitted' | 'git-worktree' | 'ai-read' | 'ai-written';

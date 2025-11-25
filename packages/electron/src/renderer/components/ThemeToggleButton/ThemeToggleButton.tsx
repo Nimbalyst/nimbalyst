@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { MaterialSymbol } from '../MaterialSymbol';
+import { MaterialSymbol } from '@nimbalyst/runtime';
+
 import './ThemeToggleButton.css';
 
 type Theme = 'light' | 'dark' | 'crystal-dark';

@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { TrackerDataModel, FieldDefinition } from '../models/TrackerDataModel';
-import { MaterialSymbol } from './MaterialSymbol';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import { CustomSelect } from './CustomSelect';
 import './StatusBar.css';
 

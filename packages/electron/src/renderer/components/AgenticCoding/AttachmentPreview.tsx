@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ChatAttachment } from '@nimbalyst/runtime';
+import { getFileIcon } from '@nimbalyst/runtime';
 import './AttachmentPreview.css';
 
 interface AttachmentPreviewProps {
@@ -14,19 +15,6 @@ export function AttachmentPreview({ attachment, onRemove }: AttachmentPreviewPro
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const getFileIcon = (type: 'image' | 'pdf' | 'document'): string => {
-    switch (type) {
-      case 'image':
-        return 'image';
-      case 'pdf':
-        return 'picture_as_pdf';
-      case 'document':
-        return 'description';
-      default:
-        return 'insert_drive_file';
-    }
-  };
-
   return (
     <div className="attachment-preview">
       <div className="attachment-preview-thumbnail">
@@ -37,8 +25,8 @@ export function AttachmentPreview({ attachment, onRemove }: AttachmentPreviewPro
             className="attachment-preview-image"
           />
         ) : (
-          <span className="material-icons attachment-preview-icon">
-            {getFileIcon(attachment.type)}
+          <span className="attachment-preview-icon">
+            {getFileIcon(attachment.filename, 18)}
           </span>
         )}
       </div>

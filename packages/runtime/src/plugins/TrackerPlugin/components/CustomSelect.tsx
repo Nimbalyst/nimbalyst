@@ -3,7 +3,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MaterialSymbol } from './MaterialSymbol';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import './CustomSelect.css';
 
 export interface SelectOption {

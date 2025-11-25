@@ -1,5 +1,5 @@
 import React from 'react';
-import { MaterialSymbol } from '../MaterialSymbol';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import './NavigationGutter.css';
 import type { ContentMode } from '../../types/WindowModeTypes';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';

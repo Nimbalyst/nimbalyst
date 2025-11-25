@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MaterialSymbol } from '../MaterialSymbol';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import { editorRegistry } from '@nimbalyst/runtime/ai/EditorRegistry';
 import { $convertFromEnhancedMarkdownString, getEditorTransformers } from 'rexical';
 import { $getRoot } from 'lexical';

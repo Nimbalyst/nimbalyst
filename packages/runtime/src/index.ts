@@ -63,5 +63,7 @@ export { VirtualDocumentBanner } from './components/VirtualDocumentBanner';
 // UI Components
 export * from './ui/AgentTranscript';
 export * from './ui/icons/ProviderIcons';
+export * from './ui/icons/MaterialSymbol';
+export * from './ui/icons/fileIcons';
 // Utils
 export * from './utils/dateUtils';

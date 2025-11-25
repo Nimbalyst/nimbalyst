@@ -7,7 +7,7 @@ export interface TypeaheadOption {
   id: string;
   label: string;
   description?: string;
-  icon?: string;
+  icon?: string | React.ReactElement;
   section?: string;
   data?: any;
   disabled?: boolean;
@@ -55,10 +55,14 @@ export function GenericTypeahead({
 }: GenericTypeaheadProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [isPositioned, setIsPositioned] = useState(false);
 
   // Calculate menu position based on cursor (viewport coordinates for portal)
   useEffect(() => {
     if (!anchorElement) return;
+
+    // Reset positioned state when options change
+    setIsPositioned(false);
 
     // Initial position calculation
     const calculatePosition = () => {
@@ -104,6 +108,7 @@ export function GenericTypeahead({
         }
 
         setPosition({ top: absoluteTop, left: absoluteLeft });
+        setIsPositioned(true);
       } catch (err) {
         console.error('[GenericTypeahead] Failed to calculate position:', err);
         // Fallback to below textarea
@@ -112,15 +117,16 @@ export function GenericTypeahead({
           top: textareaRect.bottom + 2,
           left: textareaRect.left
         });
+        setIsPositioned(true);
       }
     };
 
-    // Calculate immediately
-    calculatePosition();
+    // Use requestAnimationFrame to ensure DOM has rendered
+    const rafId = requestAnimationFrame(() => {
+      calculatePosition();
+    });
 
-    // Recalculate after menu renders to get accurate height
-    const timer = setTimeout(calculatePosition, 0);
-    return () => clearTimeout(timer);
+    return () => cancelAnimationFrame(rafId);
   }, [anchorElement, cursorPosition, options.length, maxHeight, minWidth]);
 
   // Scroll selected option into view
@@ -197,7 +203,9 @@ export function GenericTypeahead({
         left: `${position.left}px`,
         maxHeight: `${maxHeight}px`,
         minWidth: `${minWidth}px`,
-        maxWidth: `${maxWidth}px`
+        maxWidth: `${maxWidth}px`,
+        opacity: isPositioned ? 1 : 0,
+        transition: 'opacity 0.1s ease-in'
       }}
     >
       <div className="generic-typeahead-content">
@@ -222,9 +230,15 @@ export function GenericTypeahead({
                   onMouseEnter={() => onSelectedIndexChange(flatIndex)}
                 >
                   {option.icon && (
-                    <span className="material-symbols-outlined generic-typeahead-option-icon">
-                      {option.icon}
-                    </span>
+                    typeof option.icon === 'string' ? (
+                      <span className="material-symbols-outlined generic-typeahead-option-icon">
+                        {option.icon}
+                      </span>
+                    ) : (
+                      <span className="generic-typeahead-option-icon">
+                        {option.icon}
+                      </span>
+                    )
                   )}
                   <div className="generic-typeahead-option-label">
                     {option.label}

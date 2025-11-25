@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MaterialSymbol } from '../components/MaterialSymbol';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import './HistoryWindow.css';
 
 interface Snapshot {
