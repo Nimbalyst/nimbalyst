@@ -14,6 +14,7 @@ interface SessionListItemProps {
   hasUnread?: boolean; // Whether session has unread messages
   isArchived?: boolean; // Whether session is archived
   isSelected?: boolean; // Whether session is selected for bulk actions
+  sortBy?: 'updated' | 'created'; // Which timestamp to display based on sort order
   onClick: (e: React.MouseEvent) => void;
   onDelete?: () => void;
   onArchive?: () => void;
@@ -34,6 +35,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
   hasUnread = false,
   isArchived = false,
   isSelected = false,
+  sortBy = 'updated',
   onClick,
   onDelete,
   onArchive,
@@ -113,9 +115,10 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
     ? displayTitle.substring(0, 40) + '...'
     : displayTitle;
 
-  // Use updatedAt if available, otherwise fall back to createdAt
-  const timestamp = updatedAt || createdAt;
+  // Show timestamp based on current sort order
+  const timestamp = sortBy === 'updated' ? (updatedAt || createdAt) : createdAt;
   const relativeTime = getRelativeTimeString(timestamp);
+  const timestampLabel = sortBy === 'updated' ? 'updated' : 'created';
 
   // Format the full datetime for display in local timezone
   const fullDateTime = new Date(timestamp).toLocaleString(undefined, {
@@ -147,7 +150,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
           onClick();
         }
       }}
-      aria-label={`Session: ${truncatedTitle}, created ${relativeTime}${isLoaded ? ' (loaded in tab)' : ''}${isArchived ? ' (archived)' : ''}`}
+      aria-label={`Session: ${truncatedTitle}, ${timestampLabel} ${relativeTime}${isLoaded ? ' (loaded in tab)' : ''}${isArchived ? ' (archived)' : ''}`}
       aria-current={isActive ? 'page' : undefined}
     >
       <div className="session-list-item-icon">

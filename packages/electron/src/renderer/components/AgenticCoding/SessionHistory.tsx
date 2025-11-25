@@ -833,6 +833,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
                     isLoaded={loadedSessionIds.includes(session.id)}
                     isArchived={session.isArchived}
                     isSelected={selectedSessionIds.has(session.id)}
+                    sortBy={sortBy}
                     onClick={(e) => handleSessionClick(session.id, e)}
                     onDelete={onSessionDelete ? () => handleDeleteSession(session.id) : undefined}
                     onArchive={() => handleArchiveSession(session.id)}
