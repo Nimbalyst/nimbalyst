@@ -35,7 +35,7 @@ export class ElectronDocumentService implements DocumentService {
   private trackerItemWatchers: Map<string, (change: TrackerItemChangeEvent) => void> = new Map();
 
   // Performance limits - balance between completeness and performance
-  private static readonly MAX_FILES_TO_SCAN = 1000;   // Stop scanning after 1000 files
+  private static readonly MAX_FILES_TO_SCAN = 2000;   // Stop scanning after 1000 files
   private static readonly MAX_SCAN_TIME_MS = 2000;    // Stop scanning after 2 seconds
   private static readonly MAX_DEPTH = 8;              // Maximum directory depth
 
@@ -266,7 +266,6 @@ export class ElectronDocumentService implements DocumentService {
 
     const elapsed = Date.now() - scanState.startTime;
     if (elapsed > ElectronDocumentService.MAX_SCAN_TIME_MS) {
-      console.warn(`[DocumentService] Stopped scanning after ${elapsed}ms (limit: ${ElectronDocumentService.MAX_SCAN_TIME_MS}ms, scanned ${scanState.count} files)`);
       scanState.stopped = true;
       return documents;
     }
@@ -305,7 +304,6 @@ export class ElectronDocumentService implements DocumentService {
       for (const item of items) {
         // Check time limit on EVERY iteration to bail out quickly
         if (Date.now() - scanState.startTime > ElectronDocumentService.MAX_SCAN_TIME_MS) {
-          console.warn(`[DocumentService] Time limit exceeded during scan (${Date.now() - scanState.startTime}ms)`);
           scanState.stopped = true;
           break;
         }
@@ -370,17 +368,18 @@ export class ElectronDocumentService implements DocumentService {
   private async scanDocuments(): Promise<Document[]> {
     try {
       // Use synchronous file system operations like the file tree
-      const docs = this.scanDirectory(this.workspacePath);
+      const scanState = { count: 0, startTime: Date.now(), stopped: false };
+      const docs = this.scanDirectory(this.workspacePath, '', 0, scanState);
 
-      // Debug logging - comment out for production
-      // const typeCount = new Map<string, number>();
-      // docs.forEach(doc => {
-      //   const type = doc.type || 'unknown';
-      //   typeCount.set(type, (typeCount.get(type) || 0) + 1);
-      // });
-      // if (typeCount.size > 0) {
-      //   console.log('[DocumentService] File types found:', JSON.stringify(Object.fromEntries(typeCount)));
-      // }
+      // Log warning if scan was incomplete due to limits
+      if (scanState.stopped) {
+        const elapsed = Date.now() - scanState.startTime;
+        console.warn(
+          `[DocumentService] Scan incomplete: scanned ${scanState.count} files in ${elapsed}ms. ` +
+          `Limits: ${ElectronDocumentService.MAX_FILES_TO_SCAN} files, ${ElectronDocumentService.MAX_SCAN_TIME_MS}ms, depth ${ElectronDocumentService.MAX_DEPTH}. ` +
+          `Some files may not appear in @ mentions.`
+        );
+      }
 
       return docs;
     } catch (err) {
