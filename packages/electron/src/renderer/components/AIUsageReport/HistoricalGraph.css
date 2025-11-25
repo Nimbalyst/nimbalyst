@@ -1,0 +1,55 @@
+.historical-graph {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.historical-graph-loading,
+.no-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+.historical-graph-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.historical-graph-controls h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.time-range-selector {
+  display: flex;
+  gap: 4px;
+}
+
+.time-range-selector button {
+  padding: 6px 14px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.time-range-selector button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.time-range-selector button.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}

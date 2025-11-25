@@ -1,0 +1,22 @@
+.model-comparison {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.model-comparison-loading,
+.no-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+.model-comparison h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}

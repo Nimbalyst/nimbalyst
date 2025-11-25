@@ -1,0 +1,48 @@
+.ai-usage-report {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.ai-usage-report-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dashboard-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 16px;
+}
+
+.dashboard-section {
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+/* Scrollbar styling */
+.ai-usage-report-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ai-usage-report-content::-webkit-scrollbar-track {
+  background: var(--surface-secondary);
+}
+
+.ai-usage-report-content::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 4px;
+}
+
+.ai-usage-report-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}

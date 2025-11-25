@@ -26,6 +26,7 @@ import { initializeClaudeCodeSessionHandlers } from './ipc/ClaudeCodeSessionHand
 import { registerNotificationHandlers } from './ipc/NotificationHandlers';
 import { registerGitStatusHandlers } from './ipc/GitStatusHandlers';
 import { registerProjectSelectionHandlers } from './ipc/ProjectSelectionHandlers';
+import { registerUsageAnalyticsHandlers } from './ipc/UsageAnalyticsHandlers';
 import {
     type AppTheme,
     dismissDiscordInvitation,
@@ -292,6 +293,7 @@ app.whenReady().then(async () => {
     setupWorkspaceManagerHandlers();
     setupSessionFileHandlers();
     registerSlashCommandHandlers();
+    await registerUsageAnalyticsHandlers();
     registerAttachmentHandlers();
     registerProjectSelectionHandlers();
     registerClaudeCodeHandlers();

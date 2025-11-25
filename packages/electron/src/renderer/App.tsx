@@ -29,6 +29,7 @@ import { ProjectSelectionDialog } from './components/ProjectSelectionDialog/Proj
 import { OnboardingDialog } from './components/OnboardingDialog/OnboardingDialog';
 import { GlobalSettingsScreen as AIModels } from './components/GlobalSettings/GlobalSettingsScreen.tsx';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
+import { AIUsageReport } from './components/AIUsageReport';
 import { AgenticPanel, type AgenticPanelRef } from './components/UnifiedAI';
 import EditorMode, { type EditorModeRef } from './components/EditorMode/EditorMode';
 import { NavigationGutter, type SidebarView } from './components/NavigationGutter';
@@ -119,6 +120,16 @@ export default function App() {
       }
     }, []);
     return <WorkspaceManager />;
+  }
+
+  if (windowMode === 'usage-report') {
+    // Set window title for AI Usage Report
+    React.useEffect(() => {
+      if (window.electronAPI) {
+        window.electronAPI.setTitle('AI Usage Report - Nimbalyst');
+      }
+    }, []);
+    return <AIUsageReport onClose={() => window.close()} />;
   }
 
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);

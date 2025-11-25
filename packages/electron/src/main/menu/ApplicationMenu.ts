@@ -30,6 +30,7 @@ import { windows, windowStates, createWindow, findWindowByFilePath, getWindowId 
 import { createAboutWindow } from '../window/AboutWindow';
 import { createWorkspaceManagerWindow } from '../window/WorkspaceManagerWindow.ts';
 import { createAIModelsWindow } from '../window/AIModelsWindow';
+import { createAIUsageReportWindow } from '../window/AIUsageReportWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceState, getWorkspaceWindowState } from '../utils/store';
 import { updateWindowTitleBars, updateNativeTheme } from '../theme/ThemeManager';
@@ -994,6 +995,17 @@ export async function createApplicationMenu() {
                             hasKeyboardEquivalent: true,
                         });
                         createWorkspaceManagerWindow();
+                    }
+                },
+                {
+                    label: 'AI Usage Report',
+                    click: async () => {
+                        // Track menu action
+                        AnalyticsService.getInstance().sendEvent('menu_action_used', {
+                            menu: 'window',
+                            action: 'ai_usage_report',
+                        });
+                        createAIUsageReportWindow();
                     }
                 },
                 // {
