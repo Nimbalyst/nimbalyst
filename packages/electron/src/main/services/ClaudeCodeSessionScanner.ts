@@ -39,16 +39,16 @@ export interface ClaudeCodeEntry {
   message?: {
     role?: string;
     content?: any;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_creation_input_tokens?: number;
+      cache_read_input_tokens?: number;
+    };
   };
   cwd?: string;
   gitBranch?: string;
   version?: string;
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-    cache_creation_input_tokens?: number;
-    cache_read_input_tokens?: number;
-  };
   [key: string]: any;
 }
 
@@ -159,6 +159,9 @@ export async function extractSessionMetadata(filePath: string): Promise<SessionM
     let hasErrors = false;
     let workspacePath: string | null = null;
 
+    // Track unique message IDs to avoid counting streaming chunks multiple times
+    const seenMessageIds = new Set<string>();
+
     // Parse entries
     for (const line of lines) {
       const entry = parseJSONLLine(line);
@@ -206,28 +209,52 @@ export async function extractSessionMetadata(filePath: string): Promise<SessionM
         }
       }
 
-      // Extract first user message
+      // Extract first user message (skip system messages and caveats)
       if (!firstMessage && entry.type === 'user' && entry.message?.content) {
         const content = entry.message.content;
+        let text = '';
+
         if (typeof content === 'string') {
-          firstMessage = content.slice(0, 200); // First 200 chars
+          text = content;
         } else if (Array.isArray(content)) {
           // Handle multi-part content
           for (const part of content) {
             if (part.type === 'text' && part.text) {
-              firstMessage = part.text.slice(0, 200);
+              text = part.text;
               break;
             }
           }
         }
+
+        // Skip system messages, caveats, slash commands, and command output
+        const lowerText = text.toLowerCase();
+        const trimmedText = text.trim();
+        const isSystemMessage =
+          lowerText.includes('caveat:') ||
+          lowerText.includes('<nimbalyst_system_message>') ||
+          lowerText.includes('<command-name>') ||
+          lowerText.includes('<local-command-stdout>') ||
+          lowerText.includes('<system-reminder>') ||
+          lowerText.includes('the messages below were generated') ||
+          trimmedText.startsWith('/');  // Skip slash commands like /clear, /context, etc.
+
+        if (trimmedText && !isSystemMessage) {
+          firstMessage = text.slice(0, 200);
+        }
       }
 
-      // Aggregate token usage
-      if (entry.type === 'assistant' && entry.usage) {
-        inputTokens += entry.usage.input_tokens || 0;
-        outputTokens += entry.usage.output_tokens || 0;
-        inputTokens += entry.usage.cache_creation_input_tokens || 0;
-        inputTokens += entry.usage.cache_read_input_tokens || 0;
+      // Aggregate token usage - deduplicate by message ID to avoid counting streaming chunks
+      // Each streamed response has multiple JSONL entries but the same message.id
+      if (entry.type === 'assistant' && entry.message?.usage) {
+        const messageId = entry.message.id || entry.uuid;
+
+        // Only count tokens once per unique message
+        if (!seenMessageIds.has(messageId)) {
+          seenMessageIds.add(messageId);
+          const usage = entry.message.usage;
+          inputTokens += usage.input_tokens || 0;
+          outputTokens += usage.output_tokens || 0;
+        }
       }
     }
 

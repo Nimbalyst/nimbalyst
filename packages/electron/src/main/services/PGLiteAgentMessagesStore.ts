@@ -29,21 +29,38 @@ export function createPGLiteAgentMessagesStore(db: PGliteLike, ensureDbReady?: E
       await db.query('BEGIN', []);
 
       try {
-        await db.query(
-          `INSERT INTO ai_agent_messages (
-            session_id, source, direction, content, metadata, hidden
-          ) VALUES (
-            $1, $2, $3, $4, $5, $6
-          )`,
-          [
-            message.sessionId,
-            message.source,
-            message.direction,
-            message.content,
-            message.metadata ? JSON.stringify(message.metadata) : null,
-            message.hidden ?? false,
-          ]
-        );
+        // Use provided createdAt timestamp if available, otherwise default to NOW()
+        const hasCustomTimestamp = message.createdAt !== undefined;
+        const insertQuery = hasCustomTimestamp
+          ? `INSERT INTO ai_agent_messages (
+              session_id, source, direction, content, metadata, hidden, created_at
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7
+            )`
+          : `INSERT INTO ai_agent_messages (
+              session_id, source, direction, content, metadata, hidden
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6
+            )`;
+
+        const params = [
+          message.sessionId,
+          message.source,
+          message.direction,
+          message.content,
+          message.metadata ? JSON.stringify(message.metadata) : null,
+          message.hidden ?? false,
+        ];
+
+        if (hasCustomTimestamp) {
+          // Convert createdAt to Date object if it's a string
+          const timestamp = message.createdAt instanceof Date
+            ? message.createdAt
+            : new Date(message.createdAt);
+          params.push(timestamp);
+        }
+
+        await db.query(insertQuery, params);
 
         // Update the session's updated_at timestamp so it appears at the top of the list
         await db.query(

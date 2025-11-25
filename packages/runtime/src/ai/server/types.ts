@@ -301,4 +301,5 @@ export interface CreateAgentMessageInput {
   content: string;
   metadata?: Record<string, unknown>;
   hidden?: boolean;  // Whether to hide this message from UI (e.g., /context commands)
+  createdAt?: Date | string;  // Optional timestamp for imported messages (defaults to NOW())
 }

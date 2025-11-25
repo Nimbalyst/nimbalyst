@@ -62,8 +62,13 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
     async create(payload: CreateSessionPayload): Promise<void> {
       await ensureReady();
       const now = Date.now();
-      const createdAt = payload.createdAt ?? now;
-      const updatedAt = payload.updatedAt ?? now;
+      const createdAtMs = payload.createdAt ?? now;
+      const updatedAtMs = payload.updatedAt ?? now;
+
+      // Convert epoch milliseconds to Date objects
+      // PostgreSQL will handle these correctly without timezone conversion issues
+      const createdAt = new Date(createdAtMs);
+      const updatedAt = new Date(updatedAtMs);
 
       // TODO: Debug logging - uncomment if needed
       // console.log('[PGLiteSessionStore] Creating session:', {
@@ -81,7 +86,7 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8,
           $9, $10, $11, $12, $13,
-          $14, to_timestamp($15 / 1000.0), to_timestamp($16 / 1000.0)
+          $14, $15, $16
         )
         ON CONFLICT (id) DO UPDATE SET
           workspace_id = EXCLUDED.workspace_id,

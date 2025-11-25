@@ -65,78 +65,133 @@ async function parseSessionFile(filePath: string): Promise<ClaudeCodeEntry[]> {
 }
 
 /**
- * Convert Claude Code entry to Nimbalyst message format
+ * Convert Claude Code JSONL entry to Nimbalyst message format
+ *
+ * IMPORTANT: This must produce the SAME format as ClaudeCodeProvider.logAgentMessage()
+ * so that SessionManager.transformAgentMessagesToUI() can parse it correctly.
+ *
+ * Live session format examples:
+ * - Input: { prompt: "...", options: {...} }
+ * - Output (text): { type: "text", content: "..." }
+ * - Output (assistant): { type: "assistant", message: { content: [...], ... } }
+ * - Output (user/tool result): { type: "user", message: { role: "user", content: [...] }, ... }
  */
 function entryToMessage(entry: ClaudeCodeEntry): { direction: 'input' | 'output'; content: string; metadata: any; timestamp: string } | null {
-  // Skip meta messages (command outputs, caveats, etc.)
+  // Skip queue-operation entries (these are internal SDK bookkeeping)
+  if ((entry as any).type === 'queue-operation') {
+    return null;
+  }
+
+  // Skip meta messages (command outputs, caveats, etc.) - these clutter the transcript
   if ((entry as any).isMeta) {
     return null;
   }
 
-  // Skip system/summary/snapshot entries
+  // Skip system/summary/snapshot entries - only process user and assistant messages
   if (entry.type !== 'user' && entry.type !== 'assistant') {
     return null;
   }
 
-  if (entry.type === 'user') {
-    // User message
-    let content = '';
+  // Check if this is a user message that's actually input (first message without parentUuid)
+  // vs a tool result response (has parentUuid or contains tool_result)
+  const isFirstUserMessage = entry.type === 'user' &&
+    !entry.parentUuid &&
+    entry.message?.content &&
+    (typeof entry.message.content === 'string' ||
+     (Array.isArray(entry.message.content) &&
+      entry.message.content.some((p: any) => p.type === 'text') &&
+      !entry.message.content.some((p: any) => p.type === 'tool_result')));
+
+  if (isFirstUserMessage) {
+    // This is a user INPUT message - format like ClaudeCodeProvider does for input
+    // Extract the prompt text
+    let promptText = '';
     if (typeof entry.message?.content === 'string') {
-      content = entry.message.content;
+      promptText = entry.message.content;
     } else if (Array.isArray(entry.message?.content)) {
-      // Multi-part content - extract text parts
-      content = entry.message.content
+      const textParts = entry.message.content
         .filter((part: any) => part.type === 'text')
-        .map((part: any) => part.text)
-        .join('\n');
+        .map((part: any) => part.text);
+      promptText = textParts.join('\n');
     }
 
     // Skip empty messages
-    if (!content.trim()) {
+    if (!promptText.trim()) {
       return null;
     }
 
+    // Format as ClaudeCodeProvider does: { prompt: "...", options: {...} }
     return {
       direction: 'input',
-      content,
+      content: JSON.stringify({
+        prompt: promptText,
+        options: {
+          cwd: entry.cwd,
+        }
+      }),
       timestamp: entry.timestamp,
-      metadata: {
-        role: 'user',
-        timestamp: entry.timestamp,
-        cwd: entry.cwd,
-        gitBranch: entry.gitBranch,
-        entryType: entry.type,
-      },
+      metadata: null,
     };
-  } else if (entry.type === 'assistant') {
-    // Assistant message
-    let content = '';
-    if (typeof entry.message?.content === 'string') {
-      content = entry.message.content;
-    } else if (Array.isArray(entry.message?.content)) {
-      // Multi-part content - extract text and tool use
-      content = entry.message.content
-        .filter((part: any) => part.type === 'text')
-        .map((part: any) => part.text)
-        .join('\n');
+  }
+
+  if (entry.type === 'user') {
+    // This is a user message in an OUTPUT context (tool result or system message)
+    // Format like ClaudeCodeProvider does: { type: "user", message: {...}, ... }
+
+    // Check if this is a tool result message
+    const hasToolResults = Array.isArray(entry.message?.content) &&
+      entry.message.content.some((p: any) => p.type === 'tool_result');
+
+    if (hasToolResults) {
+      // Tool result - store in the format transformAgentMessagesToUI expects
+      return {
+        direction: 'output',
+        content: JSON.stringify({
+          type: 'user',
+          message: entry.message,
+          session_id: entry.sessionId,
+          uuid: entry.uuid,
+          tool_use_result: (entry as any).toolUseResult,
+        }),
+        timestamp: entry.timestamp,
+        metadata: null,
+      };
     }
 
-    // Skip empty messages
-    if (!content.trim()) {
+    // Other user message in output context (e.g., local command stdout)
+    return {
+      direction: 'output',
+      content: JSON.stringify({
+        type: 'user',
+        message: entry.message,
+        session_id: entry.sessionId,
+        uuid: entry.uuid,
+      }),
+      timestamp: entry.timestamp,
+      metadata: null,
+    };
+  }
+
+  if (entry.type === 'assistant') {
+    // Assistant message - store in the format transformAgentMessagesToUI expects
+    // Format: { type: "assistant", message: {...}, session_id: "...", uuid: "..." }
+
+    // Skip if no message content
+    if (!entry.message) {
       return null;
     }
 
     return {
       direction: 'output',
-      content,
+      content: JSON.stringify({
+        type: 'assistant',
+        message: entry.message,
+        parent_tool_use_id: (entry as any).parentToolUseId || null,
+        session_id: entry.sessionId,
+        uuid: entry.uuid,
+      }),
       timestamp: entry.timestamp,
-      metadata: {
-        role: 'assistant',
-        timestamp: entry.timestamp,
-        usage: entry.usage,
-        toolUse: entry.message?.content?.filter?.((part: any) => part.type === 'tool_use'),
-        entryType: entry.type,
-      },
+      metadata: null,
     };
   }
 
@@ -241,15 +296,24 @@ export async function syncSession(
           imported: true,
           importedAt: Date.now(),
         },
+        metadata: {
+          tokenUsage: metadata.tokenUsage,
+        },
         createdAt: metadata.createdAt,
         updatedAt: metadata.updatedAt,
       });
-      log.info(`Created new session ${metadata.sessionId} with providerSessionId for resumption`);
+      log.info(`Created new session ${metadata.sessionId} with token usage: ${metadata.tokenUsage.totalTokens} total`);
     } else {
+      // Merge token usage into existing metadata
+      const existingMetadata = existingSession.metadata || {};
       await sessionStore.updateMetadata(metadata.sessionId, {
         title: metadata.title || existingSession.title,
+        metadata: {
+          ...existingMetadata,
+          tokenUsage: metadata.tokenUsage,
+        },
       });
-      log.info(`Updated existing session ${metadata.sessionId}`);
+      log.info(`Updated session ${metadata.sessionId} with token usage: ${metadata.tokenUsage.totalTokens} total`);
     }
 
     // Convert entries to messages and sort by timestamp
@@ -269,6 +333,7 @@ export async function syncSession(
         direction: message.direction,
         content: message.content,
         metadata: message.metadata,
+        createdAt: message.timestamp,
       });
       messagesAdded++;
     }

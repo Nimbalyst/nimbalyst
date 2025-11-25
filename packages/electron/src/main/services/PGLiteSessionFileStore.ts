@@ -49,12 +49,14 @@ export function createPGLiteSessionFileStore(db: PGliteLike, ensureDbReady?: Ens
 
       const id = uuidv4();
       const now = Date.now();
+      const timestampMs = link.timestamp || now;
+      const timestamp = new Date(timestampMs);
 
       await db.query(
         `INSERT INTO session_files (
           id, session_id, workspace_id, file_path, link_type, timestamp, metadata
         ) VALUES (
-          $1, $2, $3, $4, $5, to_timestamp($6 / 1000.0), $7
+          $1, $2, $3, $4, $5, $6, $7
         )`,
         [
           id,
@@ -62,7 +64,7 @@ export function createPGLiteSessionFileStore(db: PGliteLike, ensureDbReady?: Ens
           link.workspaceId,
           link.filePath,
           link.linkType,
-          link.timestamp || now,
+          timestamp,
           link.metadata || {}
         ]
       );
