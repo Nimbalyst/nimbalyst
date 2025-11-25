@@ -300,34 +300,45 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     reopeningRef.current = true;
 
     try {
-      // Find the first closed tab that isn't currently open
+      // Try to find and open a closed tab that isn't currently open
       let tabToReopen: TabData | null = null;
-      let newClosedTabs = closedTabs;
+      let newClosedTabs = [...closedTabs];
+      let i = 0;
 
-      for (let i = 0; i < closedTabs.length; i++) {
-        const candidateTab = closedTabs[i];
+      // Keep trying closed tabs until we successfully open one or run out
+      while (i < newClosedTabs.length) {
+        const candidateTab = newClosedTabs[i];
         const existingTab = Array.from(tabs.values()).find(tab => tab.filePath === candidateTab.filePath);
 
         if (!existingTab) {
-          // Found a tab that's not currently open
-          tabToReopen = candidateTab;
-          // Remove all checked tabs from history (including the one we're reopening)
-          newClosedTabs = closedTabs.slice(i + 1);
-          break;
+          // Found a tab that's not currently open - try to open it
+          try {
+            await fileSelectFn(candidateTab.filePath);
+            // Success! Remove this tab and all previous tabs from closed history
+            newClosedTabs = newClosedTabs.slice(i + 1);
+            setClosedTabs(newClosedTabs);
+            return; // Exit successfully
+          } catch (error) {
+            // File doesn't exist or failed to open - remove it from history and try next
+            console.warn(`[useTabs] Failed to reopen tab for ${candidateTab.filePath}:`, error);
+            newClosedTabs.splice(i, 1);
+            // Don't increment i - we just removed this item, so next item is now at index i
+            continue;
+          }
+        } else {
+          // Tab is already open - remove from closed history
+          newClosedTabs.splice(i, 1);
+          // Don't increment i - we just removed this item
+          continue;
         }
       }
 
-      // Update closed tabs history (remove stale entries)
-      if (newClosedTabs !== closedTabs) {
+      // Update closed tabs if we removed any invalid entries
+      if (newClosedTabs.length !== closedTabs.length) {
         setClosedTabs(newClosedTabs);
       }
 
-      // If we found a tab to reopen, open it
-      if (tabToReopen) {
-        await fileSelectFn(tabToReopen.filePath);
-      } else {
-        // console.log('[useTabs] All closed tabs are already open');
-      }
+      // console.log('[useTabs] No valid closed tabs to reopen');
     } finally {
       reopeningRef.current = false;
     }
@@ -496,8 +507,8 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
       onTabChangeRef.current(currentActiveTab);
     }
 
-    // Update EditorRegistry with the active file path
-    if (currentActiveTab) {
+    // Update EditorRegistry with the active file path (only for markdown files)
+    if (currentActiveTab && currentActiveTab.filePath.endsWith('.md')) {
       editorRegistry.setActive(currentActiveTab.filePath);
     }
   }, [activeTabId]);
