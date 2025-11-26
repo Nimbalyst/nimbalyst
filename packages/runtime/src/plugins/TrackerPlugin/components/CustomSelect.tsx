@@ -3,8 +3,8 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MaterialSymbol } from '@nimbalyst/runtime';
 import './CustomSelect.css';
+import {MaterialSymbol} from "../../../ui";
 
 export interface SelectOption {
   value: string;
