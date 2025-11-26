@@ -136,7 +136,7 @@ export class SlashCommandService {
   }
 
   /**
-   * Scan a directory for command files
+   * Scan a directory for command files (recursively)
    * @param dirPath Path to commands directory
    * @param source Source type (project or user)
    * @returns List of parsed commands
@@ -151,34 +151,58 @@ export class SlashCommandService {
         return commands;
       }
 
-      const files = fs.readdirSync(dirPath);
-
-      for (const file of files) {
-        // Only process markdown files
-        if (!file.endsWith('.md')) {
-          continue;
-        }
-
-        const filePath = path.join(dirPath, file);
-
-        try {
-          const command = parseCommandFile(filePath, source);
-
-          if (command && validateCommand(command)) {
-            commands.push(command);
-            // console.log(`[SlashCommandService] Loaded command: ${command.name} from ${source}`);
-          } else {
-            console.warn(`[SlashCommandService] Invalid command file: ${filePath}`);
-          }
-        } catch (error) {
-          console.error(`[SlashCommandService] Error parsing command file ${filePath}:`, error);
-        }
-      }
+      // Recursively scan directory
+      this.scanDirectoryRecursive(dirPath, dirPath, source, commands);
     } catch (error) {
       console.error(`[SlashCommandService] Error scanning directory ${dirPath}:`, error);
     }
 
     return commands;
+  }
+
+  /**
+   * Recursively scan a directory for command files
+   * @param currentPath Current directory being scanned
+   * @param rootPath Root commands directory (for computing relative paths)
+   * @param source Source type (project or user)
+   * @param commands Array to collect commands
+   */
+  private scanDirectoryRecursive(
+    currentPath: string,
+    rootPath: string,
+    source: 'project' | 'user',
+    commands: SlashCommand[]
+  ): void {
+    try {
+      const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(currentPath, entry.name);
+
+        if (entry.isDirectory()) {
+          // Recursively scan subdirectories
+          this.scanDirectoryRecursive(fullPath, rootPath, source, commands);
+        } else if (entry.isFile() && entry.name.endsWith('.md')) {
+          // Process markdown files
+          try {
+            // Compute relative path from root for namespacing
+            const relativePath = path.relative(rootPath, fullPath);
+            const command = parseCommandFile(fullPath, source, relativePath);
+
+            if (command && validateCommand(command)) {
+              commands.push(command);
+              // console.log(`[SlashCommandService] Loaded command: ${command.name} from ${source}`);
+            } else {
+              console.warn(`[SlashCommandService] Invalid command file: ${fullPath}`);
+            }
+          } catch (error) {
+            console.error(`[SlashCommandService] Error parsing command file ${fullPath}:`, error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[SlashCommandService] Error reading directory ${currentPath}:`, error);
+    }
   }
 
   /**

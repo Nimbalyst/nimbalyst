@@ -26,15 +26,31 @@ interface CommandFrontmatter {
  * Parse a command markdown file with YAML frontmatter
  * @param filePath Path to the command file
  * @param source Source of the command (project or user)
+ * @param relativePath Optional relative path from commands root for namespaced commands
  * @returns Parsed command or null if parsing fails
  */
-export function parseCommandFile(filePath: string, source: 'project' | 'user'): SlashCommand | null {
+export function parseCommandFile(
+  filePath: string,
+  source: 'project' | 'user',
+  relativePath?: string
+): SlashCommand | null {
   try {
     // Read file content
     const content = fs.readFileSync(filePath, 'utf-8');
 
-    // Extract command name from filename (without .md extension)
-    const commandName = path.basename(filePath, '.md').trim();
+    // Extract command name from relative path or filename
+    let commandName: string;
+    if (relativePath) {
+      // Build namespaced name from relative path: "BMad/agents/bmad-master.md" → "BMad:agents:bmad-master"
+      commandName = relativePath
+        .replace(/\.md$/, '')           // Remove .md extension
+        .replace(/\\/g, '/')            // Normalize Windows paths to forward slashes
+        .replace(/\//g, ':')            // Replace path separators with colons
+        .trim();
+    } else {
+      // Fall back to just the filename (backward compatibility)
+      commandName = path.basename(filePath, '.md').trim();
+    }
 
     if (!commandName) {
       console.warn(`[CommandFileParser] Could not extract command name from: ${filePath}`);
@@ -120,8 +136,8 @@ export function validateCommand(command: SlashCommand): boolean {
     return false;
   }
 
-  // Command name should not contain special characters
-  if (!/^[a-z0-9-_]+$/i.test(command.name)) {
+  // Command name should not contain special characters (allow colons for namespacing)
+  if (!/^[a-zA-Z0-9-_:]+$/.test(command.name)) {
     console.warn(`[CommandFileParser] Invalid command name: ${command.name}`);
     return false;
   }
