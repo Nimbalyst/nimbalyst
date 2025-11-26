@@ -34,7 +34,7 @@ Plans are structured markdown documents with YAML frontmatter that track feature
 
 ## File Location and Naming
 
-**Location**: \`.nimbalyst-local/plans/[descriptive-name].md\`
+**Location**: \`nimbalyst-local/plans/[descriptive-name].md\`
 
 **Naming conventions**:
 - Use kebab-case: \`user-authentication-system.md\`, \`marketing-campaign-q4.md\`
@@ -88,7 +88,7 @@ When the user types \`/plan [description]\`:
 2. Generate unique \`planId\` from description (kebab-case)
 3. Choose appropriate \`planType\` based on description
 4. Set \`created\` to today's date, \`updated\` to current timestamp
-5. Create file in \`.nimbalyst-local/plans/\` with proper frontmatter
+5. Create file in \`nimbalyst-local/plans/\` with proper frontmatter
 6. Include relevant sections based on plan type
 
 ## Best Practices
@@ -114,7 +114,7 @@ Create a tracking item in the appropriate tracking document.
 
 ## Tracking System Overview
 
-Tracking items are organized by type in \`.nimbalyst-local/tracker/\`. Common types include:
+Tracking items are organized by type in \`nimbalyst-local/tracker/\`. Common types include:
 - **Bugs**: Issues and defects that need fixing
 - **Tasks**: Work items and todos
 - **Ideas**: Concepts and proposals to explore
@@ -142,7 +142,7 @@ Where \`[type]\` is the tracker type (e.g., bug, task, idea, feature-request, et
    - "critical", "urgent", "blocking" → high/critical
    - "nice to have", "minor", "low" → low
    - Otherwise → medium
-4. Add to appropriate tracker file (\`.nimbalyst-local/tracker/[type]s.md\`)
+4. Add to appropriate tracker file (\`nimbalyst-local/tracker/[type]s.md\`)
 5. Confirm to the user where the item was tracked
 
 ## Examples

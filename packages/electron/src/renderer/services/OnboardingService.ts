@@ -622,7 +622,7 @@ Create a tracking item (bug, task, idea, or decision) in the appropriate trackin
 
 ## Tracking System Overview
 
-Tracking items are organized by type in \`.nimbalyst-local/tracker/\`:
+Tracking items are organized by type in \`nimbalyst-local/tracker/\`:
 - **Bugs** (bugs.md): Issues and defects that need fixing
 - **Tasks** (tasks.md): Work items and todos
 - **Ideas** (ideas.md): Feature ideas and improvements
@@ -634,7 +634,7 @@ The command should intelligently choose where to place tracking items:
 
 1. **In current plan document** - If working within a plan file (has \`planStatus\` frontmatter), add the item to a relevant section (e.g., "Known Issues", "Tasks", "Ideas")
 2. **In related plan document** - If the item relates to a specific feature/component, check for a plan document for that feature in the plans directory
-3. **In global tracker** - Default to \`.nimbalyst-local/tracker/[type]s.md\` for general items
+3. **In global tracker** - Default to \`nimbalyst-local/tracker/[type]s.md\` for general items
 
 This keeps related items together for better context and organization.
 
@@ -716,7 +716,7 @@ Where \`[type]\` is one of: \`bug\`, \`task\`, \`idea\`, or \`decision\`
 1. **Parse the type** from the command
 2. **Generate ULID** for the unique item ID
 3. **Determine priority** based on description
-4. **Add to appropriate tracker file** in \`.nimbalyst-local/tracker/[type]s.md\`
+4. **Add to appropriate tracker file** in \`nimbalyst-local/tracker/[type]s.md\`
 5. **Confirm** to the user where the item was tracked
 
 **Examples:**
@@ -771,12 +771,12 @@ If you're working on a plan document (has \`planStatus\` frontmatter):
 
 ### 2. In Related Feature Plan
 If the bug is related to a specific feature/component:
-- Checks for a plan document for that feature in \`.nimbalyst-local/plans/\`
+- Checks for a plan document for that feature in \`nimbalyst-local/plans/\`
 - If found, adds the bug there for context
 
 ### 3. In Global Bug Tracker
 Otherwise (general bug or no specific context):
-- Adds to \`.nimbalyst-local/tracker/bugs.md\`
+- Adds to \`nimbalyst-local/tracker/bugs.md\`
 - Creates the file with proper structure if it doesn't exist
 
 ## Bug Tracker Syntax
@@ -843,7 +843,7 @@ Generate a unique ULID (Universally Unique Lexicographically Sortable Identifier
 
 ## Bug Tracker File Structure
 
-If creating \`.nimbalyst-local/tracker/bugs.md\`, use this template:
+If creating \`nimbalyst-local/tracker/bugs.md\`, use this template:
 
 \`\`\`markdown
 # Bugs
@@ -927,12 +927,12 @@ If you're working on a plan document (has \`planStatus\` frontmatter):
 
 ### 2. In Related Feature Plan
 If the idea is related to a specific feature/component:
-- Checks for a plan document for that feature in \`.nimbalyst-local/plans/\`
+- Checks for a plan document for that feature in \`nimbalyst-local/plans/\`
 - If found, adds the idea there for context
 
 ### 3. In Global Ideas Tracker
 Otherwise (general idea or no specific context):
-- Adds to \`.nimbalyst-local/tracker/ideas.md\`
+- Adds to \`nimbalyst-local/tracker/ideas.md\`
 - Creates the file with proper structure if it doesn't exist
 
 ## Idea Tracker Syntax
@@ -999,7 +999,7 @@ Generate a unique ULID (Universally Unique Lexicographically Sortable Identifier
 
 ## Ideas Tracker File Structure
 
-If creating \`.nimbalyst-local/tracker/ideas.md\`, use this template:
+If creating \`nimbalyst-local/tracker/ideas.md\`, use this template:
 
 \`\`\`markdown
 # Ideas
@@ -1079,7 +1079,7 @@ This project uses Nimbalyst for structured planning and task tracking.
 
 ### File Organization
 - Plans are stored in \`${plansLocation}/\` as markdown files with YAML frontmatter
-- Tracking items are stored in \`.nimbalyst-local/tracker/\` organized by type (bugs.md, tasks.md, ideas.md, decisions.md)
+- Tracking items are stored in \`nimbalyst-local/tracker/\` organized by type (bugs.md, tasks.md, ideas.md, decisions.md)
 
 For detailed documentation on planning, tracking, and templates, see the command files in ${commandsLocation}/commands/.`;
   }
@@ -1165,8 +1165,8 @@ When creating your own plans:
     workspacePath: string,
     type: 'bugs' | 'tasks' | 'ideas' | 'decisions'
   ): Promise<void> {
-    const trackerPath = `${workspacePath}/.nimbalyst-local/tracker/${type}.md`;
-    const relativePath = `.nimbalyst-local/tracker/${type}.md`; // Relative to workspace
+    const trackerPath = `${workspacePath}/nimbalyst-local/tracker/${type}.md`;
+    const relativePath = `nimbalyst-local/tracker/${type}.md`; // Relative to workspace
 
     try {
       // Check if tracker already exists

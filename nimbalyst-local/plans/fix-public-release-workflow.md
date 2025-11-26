@@ -71,7 +71,7 @@ Commit 39833e6 removed `GH_TOKEN` from the build step to prevent electron-builde
 ## Files Modified
 
 - `.github/workflows/electron-build.yml` (lines 116-119, 252-284)
-- `.nimbalyst-local/plans/fix-public-release-workflow.md` (this file)
+- `nimbalyst-local/plans/fix-public-release-workflow.md` (this file)
 
 ## Next Steps
 

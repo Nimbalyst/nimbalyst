@@ -1647,7 +1647,7 @@ export class ClaudeCodeProvider extends BaseAIProvider {
                   permissionDecision: 'deny' as const,
                   errorMessage: `Planning mode restricts file operations to markdown files only. ` +
                     `Cannot use ${toolName} on '${filePath}'. ` +
-                    `Please only edit .md files in the .nimbalyst-local/plans/ directory.`
+                    `Please only edit .md files in the nimbalyst-local/plans/ directory.`
                 }
               };
             }

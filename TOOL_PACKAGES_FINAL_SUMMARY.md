@@ -97,10 +97,10 @@ Features:
 - `packages/electron/src/renderer/services/PackageService.ts`
 
 ### Documentation
-- `.nimbalyst-local/plans/tool-packages-system.md`
-- `.nimbalyst-local/plans/tool-packages-implementation-summary.md`
-- `.nimbalyst-local/plans/package-version-tracking-summary.md`
-- `.nimbalyst-local/plans/e2e-test-status-tracking.md`
+- `nimbalyst-local/plans/tool-packages-system.md`
+- `nimbalyst-local/plans/tool-packages-implementation-summary.md`
+- `nimbalyst-local/plans/package-version-tracking-summary.md`
+- `nimbalyst-local/plans/e2e-test-status-tracking.md`
 
 ### Tests
 - `packages/electron/e2e/settings/package-installation.spec.ts`

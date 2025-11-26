@@ -6,7 +6,7 @@
 export interface OnboardingConfig {
   version: string;
   onboardingCompleted: boolean;
-  plansLocation: '.nimbalyst-local/plans' | 'plans' | string;
+  plansLocation: 'nimbalyst-local/plans' | 'plans' | string;
   checkInPlans: boolean;
   commandsLocation: 'project' | 'global'; // .claude/ vs ~/.claude/
   claudeCodeIntegration: {
@@ -24,7 +24,7 @@ export interface OnboardingConfig {
 export const DEFAULT_ONBOARDING_CONFIG: OnboardingConfig = {
   version: '1.0.0',
   onboardingCompleted: false,
-  plansLocation: '.nimbalyst-local/plans',
+  plansLocation: 'nimbalyst-local/plans',
   checkInPlans: false,
   commandsLocation: 'project',
   claudeCodeIntegration: {
