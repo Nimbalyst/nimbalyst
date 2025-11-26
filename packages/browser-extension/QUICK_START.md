@@ -115,7 +115,7 @@ This is expected - the Nimbalyst app needs to implement the protocol handler (Ph
 
 2. **For testing**: See `DEVELOPMENT.md` Testing section for comprehensive test cases
 
-3. **For Nimbalyst integration**: See the plan document at `nimbalyst-local/plans/browser-extension-web-clipping.md`
+3. **For Nimbalyst integration**: See the plan document at `.nimbalyst-local/plans/browser-extension-web-clipping.md`
 
 ## File Structure
 

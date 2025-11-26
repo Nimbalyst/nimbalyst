@@ -1,8 +1,8 @@
 # plan
-Create a new plan document in the nimbalyst-local/plans/ directory following these guidelines:
+Create a new plan document in the .nimbalyst-local/plans/ directory following these guidelines:
 
 ## File Naming and Location
-- Location: nimbalyst-local/plans/[descriptive-name].md
+- Location: .nimbalyst-local/plans/[descriptive-name].md
 - Use kebab-case for filenames (e.g., user-authentication-system.md)
 - Name should be descriptive of the feature or task
 

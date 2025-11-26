@@ -21,7 +21,7 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
   const isPlaywright = window.PLAYWRIGHT || (window as any).PLAYWRIGHT;
 
   const [currentStep, setCurrentStep] = useState<Step>('welcome');
-  const [plansLocation, setPlansLocation] = useState<'nimbalyst-local/plans' | 'plans' | 'custom'>('nimbalyst-local/plans');
+  const [plansLocation, setPlansLocation] = useState<'.nimbalyst-local/plans' | 'plans' | 'custom'>('.nimbalyst-local/plans');
   const [customPlansLocation, setCustomPlansLocation] = useState('');
   const [checkInPlans, setCheckInPlans] = useState(false);
   const [commandsLocation, setCommandsLocation] = useState<'project' | 'global'>('project');
@@ -210,15 +210,15 @@ const WelcomeModal: React.FC<WelcomeModalProps> = ({
                   <input
                     type="radio"
                     name="plansLocation"
-                    value="nimbalyst-local/plans"
-                    checked={plansLocation === 'nimbalyst-local/plans'}
+                    value=".nimbalyst-local/plans"
+                    checked={plansLocation === '.nimbalyst-local/plans'}
                     onChange={(e) => {
-                      setPlansLocation('nimbalyst-local/plans');
+                      setPlansLocation('.nimbalyst-local/plans');
                       setCheckInPlans(false);
                     }}
                   />
                   <div className="plan-location-content">
-                    <strong>nimbalyst-local/plans</strong> (Recommended)
+                    <strong>.nimbalyst-local/plans</strong> (Recommended)
                     <p>Private plans not checked into version control. Best for personal planning.</p>
                   </div>
                 </label>

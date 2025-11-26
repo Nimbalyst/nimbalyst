@@ -11,11 +11,11 @@ You should be context-aware when tracking ideas:
   - If no such section exists, create a "## Future Ideas" section
 
 2. **If the idea is related to a specific feature/component**:
-  - Check if there's a plan document for that feature in `nimbalyst-local/plans/`
+  - Check if there's a plan document for that feature in `.nimbalyst-local/plans/`
   - If found, add the idea there
 
 3. **Otherwise** (general idea or no specific context):
-  - Add the idea to `nimbalyst-local/tracker/ideas.md`
+  - Add the idea to `.nimbalyst-local/tracker/ideas.md`
   - If the file doesn't exist, create it with proper structure
 
 ## Idea Tracker Syntax
@@ -64,7 +64,7 @@ Full idea ID format: `ida_01HQXYZ7890ABCDEF12345`
 
 ## File Structure for ideas.md
 
-If creating a new `nimbalyst-local/tracker/ideas.md` file, use this structure:
+If creating a new `.nimbalyst-local/tracker/ideas.md` file, use this structure:
 
 ```markdown
 # Ideas

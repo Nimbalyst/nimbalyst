@@ -11,11 +11,11 @@ You should be context-aware when tracking bugs:
    - If no such section exists, create a "## Known Issues" section
 
 2. **If the bug is related to a specific feature/component**:
-   - Check if there's a plan document for that feature in `nimbalyst-local/plans/`
+   - Check if there's a plan document for that feature in `.nimbalyst-local/plans/`
    - If found, add the bug there
 
 3. **Otherwise** (general bug or no specific context):
-   - Add the bug to `nimbalyst-local/tracker/bugs.md`
+   - Add the bug to `.nimbalyst-local/tracker/bugs.md`
    - If the file doesn't exist, create it with proper structure
 
 ## Bug Tracker Syntax
@@ -64,7 +64,7 @@ Full bug ID format: `bug_01HQXYZ7890ABCDEF12345`
 
 ## File Structure for bugs.md
 
-If creating a new `nimbalyst-local/tracker/bugs.md` file, use this structure:
+If creating a new `.nimbalyst-local/tracker/bugs.md` file, use this structure:
 
 ```markdown
 # Bugs

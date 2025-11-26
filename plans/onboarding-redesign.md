@@ -106,7 +106,7 @@ Instead of a modal wizard, use a feature cards screen that:
 ### 1. Plans Directory Card
 - Shows current status: configured or not
 - Button: "Set Up Plans Directory"
-- On click: Creates `nimbalyst-local/plans` folder and adds to .gitignore
+- On click: Creates `.nimbalyst-local/plans` folder and adds to .gitignore
 - Uses sensible default (no configuration needed)
 - Action completes immediately, status updates
 

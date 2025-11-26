@@ -13,8 +13,8 @@ The `/implement` command reads a plan file and begins implementation while keepi
 ```
 
 **Examples:**
-- `/implement nimbalyst-local/plans/user-authentication.md`
-- `/implement user-authentication.md` (assumes nimbalyst-local/plans/ directory)
+- `/implement .nimbalyst-local/plans/user-authentication.md`
+- `/implement user-authentication.md` (assumes .nimbalyst-local/plans/ directory)
 
 ## Execution Steps
 
@@ -110,7 +110,7 @@ Use TodoWrite for your own internal task tracking during implementation:
 
 User types: `/implement user-authentication.md`
 
-1. Read `nimbalyst-local/plans/user-authentication.md`
+1. Read `.nimbalyst-local/plans/user-authentication.md`
 2. Extract acceptance criteria:
   - Users can register with email/password
   - Users can log in with email/password
