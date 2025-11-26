@@ -432,6 +432,65 @@ const EditorMode = forwardRef<EditorModeRef, EditorModeProps>(function EditorMod
     return cleanup;
   }, [selectedFolderPath]);
 
+  // Listen for file-new-wireframe IPC event from menu
+  useEffect(() => {
+    const handleNewWireframe = async () => {
+      if (!workspacePath || !window.electronAPI) return;
+
+      try {
+        // Create a default wireframe file name
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const fileName = `wireframe-${timestamp}.wireframe.html`;
+        const directory = selectedFolderPath || workspacePath;
+        const filePath = `${directory}/${fileName}`;
+
+        // Create basic wireframe HTML content
+        const content = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wireframe</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>New Wireframe</h1>
+        <p>Edit this wireframe using the AI chat or edit the HTML directly.</p>
+    </div>
+</body>
+</html>`;
+
+        await window.electronAPI.createFile(filePath, content);
+
+        // Open the new wireframe file
+        await handleWorkspaceFileSelect(filePath);
+      } catch (error) {
+        console.error('Error creating new wireframe:', error);
+      }
+    };
+
+    if (window.electronAPI?.on) {
+      const cleanup = window.electronAPI.on('file-new-wireframe', handleNewWireframe);
+      return cleanup;
+    }
+
+    return undefined;
+  }, [workspacePath, selectedFolderPath, handleWorkspaceFileSelect]);
+
   // Handle new file creation
   const handleNewFile = useCallback(async (fileName: string) => {
     if (!workspacePath || !window.electronAPI) return;

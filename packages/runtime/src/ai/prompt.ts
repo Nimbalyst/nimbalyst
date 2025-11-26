@@ -35,25 +35,99 @@ You can still answer questions, provide information, and have general conversati
     }
   }
 
+  const fileType = documentContext?.fileType || 'markdown';
+  const isWireframe = fileType === 'wireframe';
+  const wireframeSelection = (documentContext as any)?.wireframeSelection;
+  const wireframeDrawing = (documentContext as any)?.wireframeDrawing;
+
   return base + `
 
 ═══════════════════════════════════════════════════════════
 🎯 ACTIVE DOCUMENT (the file the user is asking you to edit):
 ═══════════════════════════════════════════════════════════
 File path: ${documentContext?.filePath || 'untitled'}
-File type: ${documentContext?.fileType || 'markdown'}
+File type: ${fileType}
 ${(documentContext as any)?.cursorPosition ? `Cursor position: Line ${(documentContext as any).cursorPosition.line}, Column ${(documentContext as any).cursorPosition.column}` : ''}
 ${selectionPreview ? `Selected text: "${selectionPreview}"` : ''}
+${wireframeSelection ? `
+🎯 SELECTED WIREFRAME ELEMENT:
+The user has clicked on this element in the wireframe preview:
+- Tag: <${wireframeSelection.tagName}>
+- CSS Selector: ${wireframeSelection.selector}
+- HTML:
+\`\`\`html
+${wireframeSelection.outerHTML}
+\`\`\`
+
+When the user refers to "this element", "this button", "this section", etc.,
+they mean THIS selected element above. Use its CSS selector to target it precisely in edits.
+` : ''}
+${wireframeDrawing ? `
+✏️ USER DRAWING ANNOTATIONS:
+The user has drawn annotations on the wireframe to show you what they want.
+The drawing includes circles, arrows, and marks to indicate:
+- Which elements to modify (circled items)
+- Where to move things (arrows)
+- Areas of focus (highlighted regions)
+
+IMAGE: The drawing is attached as an image in this message.
+You can see the visual annotations the user made.
+
+INTERPRET THE DRAWING:
+- Circles usually indicate "change this element"
+- Arrows usually indicate "move from here to there"
+- Lines connecting elements indicate relationships
+- Crossed-out items indicate "remove this"
+
+The user expects you to understand their visual intent from the drawing.
+` : ''}
 
 **IMPORTANT**: When the user says "this file", "this document", "here", or "clean up",
 they are referring to THIS file above (${documentContext?.filePath || 'untitled'}),
 NOT any other files mentioned in project instructions or context.
 
-${documentContext?.content ? `Full content of the active document:\n\`\`\`\n${documentContext.content}\n\`\`\`\n` : ''}
+${documentContext?.content ? `Full content of the active document:\n\`\`\`${isWireframe ? 'html' : ''}\n${documentContext.content}\n\`\`\`\n` : ''}
 ═══════════════════════════════════════════════════════════
 
-You can edit this markdown file using your native Edit and Write tools.
-When you edit files, changes will appear as visual diffs that the user can review and approve/reject.
+${isWireframe ? `
+🎨 WIREFRAME EDITING MODE
+You are editing a WireframeLM design file (.wireframe.html).
+
+WIREFRAME DESIGN GUIDELINES:
+- This is a static HTML mockup for UI/UX design - NOT a functional web app
+- Focus on layout, visual hierarchy, and design patterns
+- Use semantic HTML and clean, minimal CSS
+- Use placeholder content (lorem ipsum, sample data) for realistic mockups
+- Keep styles inline or in <style> tags within the file
+- Use modern CSS (flexbox, grid, CSS variables) for layouts
+- Include responsive design patterns when appropriate
+
+COMMON WIREFRAME PATTERNS:
+- Navigation bars, headers, footers
+- Card layouts, grids, lists
+- Forms with inputs, labels, buttons
+- Modal dialogs, sidebars, panels
+- Loading states, empty states, error states
+- Mobile-first responsive designs
+
+EDITING WIREFRAMES:
+- Use applyDiff to modify existing HTML/CSS
+- Use streamContent to add new sections
+- Be concise - wireframes should be clean and focused
+- Provide semantic HTML structure with appropriate ARIA labels
+- Use CSS variables for colors and spacing for easy theming
+
+EXAMPLE REQUESTS:
+- "add a login form" → Create HTML form with email/password fields and button
+- "make it responsive" → Add media queries for mobile/tablet breakpoints
+- "add a navigation bar" → Create semantic <nav> with links
+- "use a card layout" → Wrap content in grid/flex containers with card styling
+
+You can edit this wireframe using your native Edit and Write tools.
+Changes will appear as visual diffs that the user can review and approve/reject.
+The wireframe will render in real-time in the editor's preview iframe.
+` : `You can edit this ${fileType} file using your native Edit and Write tools.
+When you edit files, changes will appear as visual diffs that the user can review and approve/reject.`}
 
 🚨 CRITICAL TOOL USAGE RULES - YOU MUST FOLLOW THESE:
 1. EVERY edit request REQUIRES using a tool - NO EXCEPTIONS

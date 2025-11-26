@@ -32,6 +32,7 @@ import { MonacoCodeEditor } from '../MonacoCodeEditor';
 import { MonacoDiffApprovalBar } from '../MonacoDiffApprovalBar';
 import { ImageViewer } from '../ImageViewer';
 import { getFileType } from '../../utils/fileTypeDetector';
+import { customEditorRegistry } from '../CustomEditors';
 import { logger } from '../../utils/logger';
 
 interface TabEditorProps {
@@ -92,10 +93,39 @@ export const TabEditor: React.FC<TabEditorProps> = ({
                                                       onOpenSessionInChat,
                                                       workspaceId,
                                                     }) => {
-  // Detect file type (markdown vs code vs image)
-  const fileType = useMemo(() => getFileType(filePath), [filePath]);
+  // Detect file type (markdown vs code vs image vs custom)
+  const fileType = useMemo(() => {
+    // Extract extension and check if custom editor is registered
+    // Handle compound extensions like .wireframe.html by checking multiple levels
+    const checkCustomEditor = (ext: string): boolean => {
+      const lastDot = filePath.lastIndexOf('.');
+      if (lastDot <= 0) return false;
+
+      const singleExt = filePath.substring(lastDot).toLowerCase();
+
+      // Check single extension first (e.g., .html)
+      if (customEditorRegistry.hasEditor(singleExt)) {
+        return true;
+      }
+
+      // Check compound extension (e.g., .wireframe.html)
+      const secondLastDot = filePath.lastIndexOf('.', lastDot - 1);
+      if (secondLastDot > 0) {
+        const compoundExt = filePath.substring(secondLastDot).toLowerCase();
+        if (customEditorRegistry.hasEditor(compoundExt)) {
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    return getFileType(filePath, checkCustomEditor);
+  }, [filePath]);
+
   const isMarkdown = fileType === 'markdown';
   const isImage = fileType === 'image';
+  const isCustom = fileType === 'custom';
 
   // View mode state for markdown files (lexical = rich text editor, monaco = raw markdown)
   const [markdownViewMode, setMarkdownViewMode] = useState<'lexical' | 'monaco'>('lexical');
@@ -1354,7 +1384,53 @@ export const TabEditor: React.FC<TabEditorProps> = ({
           fileName={fileName}
           editor={editorRef.current}
         />
-          {isImage ? (
+          {isCustom ? (() => {
+            // Render custom editor if one is registered for this file type
+            // Check for compound extensions like .wireframe.html
+            const lastDot = filePath.lastIndexOf('.');
+            let CustomEditor = null;
+
+            if (lastDot > 0) {
+              // Try single extension first
+              const singleExt = filePath.substring(lastDot).toLowerCase();
+              CustomEditor = customEditorRegistry.getEditor(singleExt);
+
+              // Try compound extension if single didn't match
+              if (!CustomEditor) {
+                const secondLastDot = filePath.lastIndexOf('.', lastDot - 1);
+                if (secondLastDot > 0) {
+                  const compoundExt = filePath.substring(secondLastDot).toLowerCase();
+                  CustomEditor = customEditorRegistry.getEditor(compoundExt);
+                }
+              }
+            }
+
+            if (CustomEditor) {
+              return (
+                <CustomEditor
+                  key={filePath}
+                  filePath={filePath}
+                  fileName={fileName}
+                  initialContent={initialContent}
+                  theme={theme}
+                  isActive={isActive}
+                  workspaceId={workspaceId}
+                  onContentChange={onContentChange}
+                  onDirtyChange={onDirtyChange}
+                  onGetContentReady={onGetContentReady}
+                  onViewHistory={onViewHistory}
+                  onRenameDocument={onRenameDocument}
+                />
+              );
+            }
+
+            // Fallback if custom editor is not found (shouldn't happen)
+            return (
+              <div style={{ padding: '20px', color: 'var(--text-primary)' }}>
+                <p>No custom editor found for file type: {ext}</p>
+              </div>
+            );
+          })() : isImage ? (
             <ImageViewer
               key={filePath}
               filePath={filePath}

@@ -8,11 +8,60 @@ export interface DocumentContext {
   cursorPosition: undefined;
   selection: undefined;
   getLatestContent: (() => string) | undefined;
+  wireframeSelection?: {
+    selector: string;
+    outerHTML: string;
+    tagName: string;
+  };
+  wireframeDrawing?: string; // Data URL of drawing annotations
 }
 
 interface UseDocumentContextProps {
   activeTab: Tab | null;
   getContentRef: React.MutableRefObject<(() => string) | null>;
+}
+
+/**
+ * Detect file type from file path for AI context
+ */
+function detectFileType(filePath: string): string {
+  if (!filePath) return 'unknown';
+
+  const lowerPath = filePath.toLowerCase();
+
+  // Check for compound extensions first (more specific)
+  if (lowerPath.endsWith('.wireframe.html')) return 'wireframe';
+
+  // Check single extensions
+  const lastDot = lowerPath.lastIndexOf('.');
+  if (lastDot === -1) return 'unknown';
+
+  const ext = lowerPath.substring(lastDot);
+
+  switch (ext) {
+    case '.md':
+    case '.markdown':
+      return 'markdown';
+    case '.json':
+      return 'json';
+    case '.yaml':
+    case '.yml':
+      return 'yaml';
+    case '.js':
+    case '.jsx':
+    case '.ts':
+    case '.tsx':
+      return 'javascript';
+    case '.html':
+      return 'html';
+    case '.css':
+    case '.scss':
+      return 'css';
+    case '.py':
+      return 'python';
+    default:
+      return 'code';
+  }
 }
 
 /**
@@ -30,7 +79,7 @@ export function useDocumentContext({ activeTab, getContentRef }: UseDocumentCont
     if (!activeTab) {
       return {
         filePath: '',
-        fileType: 'markdown',
+        fileType: 'unknown',
         content: '',
         cursorPosition: undefined,
         selection: undefined,
@@ -38,13 +87,26 @@ export function useDocumentContext({ activeTab, getContentRef }: UseDocumentCont
       };
     }
 
+    const fileType = detectFileType(activeTab.filePath || '');
+
+    // Get wireframe selection and drawing if file is a wireframe
+    const wireframeSelection = fileType === 'wireframe'
+      ? (window as any).__wireframeSelectedElement
+      : undefined;
+
+    const wireframeDrawing = fileType === 'wireframe'
+      ? (window as any).__wireframeDrawing
+      : undefined;
+
     return {
       filePath: activeTab.filePath || '',
-      fileType: 'markdown',
+      fileType,
       content: getContentRef.current ? getContentRef.current() : '',
       cursorPosition: undefined, // TODO: Get from Lexical editor
       selection: undefined, // TODO: Get selected text from Lexical
-      getLatestContent: getContentRef.current || undefined
+      getLatestContent: getContentRef.current || undefined,
+      wireframeSelection,
+      wireframeDrawing
     };
   }, [activeTab, activeTab?.filePath, getContentRef.current]);
 }

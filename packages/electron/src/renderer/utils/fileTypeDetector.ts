@@ -1,11 +1,11 @@
 /**
  * File Type Detection Utility
  *
- * Determines whether a file should be edited as markdown (Lexical)
- * or code (Monaco), and maps file extensions to Monaco language IDs.
+ * Determines whether a file should be edited as markdown (Lexical),
+ * code (Monaco), image viewer, or a custom editor.
  */
 
-export type EditorType = 'markdown' | 'code' | 'image';
+export type EditorType = 'markdown' | 'code' | 'image' | 'custom';
 
 /**
  * Browser-compatible path utilities
@@ -35,8 +35,15 @@ export function isImageFile(filePath: string): boolean {
 
 /**
  * Determine which editor should be used for a given file
+ *
+ * Note: This function can optionally check for custom editors if a registry
+ * check function is provided. To avoid circular dependencies, the custom editor
+ * check is done by the caller (TabEditor).
  */
-export function getFileType(filePath: string): EditorType {
+export function getFileType(
+  filePath: string,
+  customEditorCheck?: (ext: string) => boolean
+): EditorType {
   const ext = getExtname(filePath).toLowerCase();
 
   if (ext === '.md' || ext === '.markdown') {
@@ -45,6 +52,11 @@ export function getFileType(filePath: string): EditorType {
 
   if (isImageFile(filePath)) {
     return 'image';
+  }
+
+  // Check if a custom editor is registered for this extension
+  if (customEditorCheck && customEditorCheck(ext)) {
+    return 'custom';
   }
 
   return 'code';

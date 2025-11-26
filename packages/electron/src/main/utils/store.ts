@@ -40,6 +40,8 @@ interface AppStoreSchema {
   userRole?: string; // The user's selected role (or 'skipped' if permanently dismissed)
   userEmail?: string; // Optional email provided during onboarding
   onboardingNextPrompt?: number; // Timestamp for when to show onboarding again (if deferred)
+  // Custom Editors
+  wireframeLMEnabled?: boolean; // Enable WireframeLM custom editor
 }
 
 export interface TabState {
@@ -707,4 +709,13 @@ export function isAnalyticsEnabled(): boolean {
 
 export function setAnalyticsEnabled(enabled: boolean): void {
   appStore.set('analyticsEnabled', enabled);
+}
+
+// WireframeLM Settings
+export function isWireframeLMEnabled(): boolean {
+  return appStore.get('wireframeLMEnabled', true); // Default to enabled
+}
+
+export function setWireframeLMEnabled(enabled: boolean): void {
+  appStore.set('wireframeLMEnabled', enabled);
 }

@@ -43,6 +43,8 @@ import { registerDiffApprovalBarPlugin } from './plugins/registerDiffApprovalBar
 import { registerSearchReplacePlugin } from './plugins/registerSearchReplacePlugin';
 import ProjectSettingsScreen from './components/ProjectSettingsScreen/ProjectSettingsScreen.tsx';
 import { loadCustomTrackers } from './services/CustomTrackerLoader';
+import { customEditorRegistry } from './components/CustomEditors';
+import { WireframeViewer } from './components/CustomEditors/WireframeEditor/WireframeViewer';
 import './WorkspaceWelcome.css';
 import './components/GlobalSettings/GlobalSettingsScreen.css';
 
@@ -83,6 +85,32 @@ if (!pluginsRegistered) {
 export default function App() {
   // console.log('[APP RENDER]', new Date().toISOString(), 'App component rendering');
   logger.ui.info('App component rendering');
+
+  // Register custom editors based on settings
+  useEffect(() => {
+    const registerCustomEditors = async () => {
+      try {
+
+        // Conditionally register WireframeLM based on settings
+        const wireframeLMEnabled = await window.electronAPI.invoke('wireframeLM:is-enabled');
+        if (wireframeLMEnabled) {
+          customEditorRegistry.register({
+            extensions: ['.wireframe.html'],
+            component: WireframeViewer,
+            name: 'WireframeLM',
+            supportsAI: true,
+          });
+          logger.ui.info('[CustomEditors] WireframeLM editor registered');
+        }
+
+        logger.ui.info('[CustomEditors] Custom editors registration complete');
+      } catch (error) {
+        logger.ui.error('[CustomEditors] Failed to register custom editors:', error);
+      }
+    };
+
+    registerCustomEditors();
+  }, []);
 
   // PostHog for analytics
   const posthog = usePostHog();

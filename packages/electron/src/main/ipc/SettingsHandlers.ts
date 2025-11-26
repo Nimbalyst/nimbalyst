@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isWireframeLMEnabled, setWireframeLMEnabled } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
@@ -111,5 +111,15 @@ export function registerSettingsHandlers() {
 
     ipcMain.handle('analytics:set-enabled', (_event, enabled: boolean) => {
         setAnalyticsEnabled(enabled);
+    });
+
+    // WireframeLM settings
+    ipcMain.handle('wireframeLM:is-enabled', () => {
+        return isWireframeLMEnabled();
+    });
+
+    ipcMain.handle('wireframeLM:set-enabled', (_event, enabled: boolean) => {
+        setWireframeLMEnabled(enabled);
+        logger.store.info(`[SettingsHandlers] WireframeLM ${enabled ? 'enabled' : 'disabled'}`);
     });
 }
