@@ -19,6 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 <!-- Removed features go here -->
 
+## [0.46.2] - 2025-11-26
+
+
+### Added
+- WireframeLM-style wireframe editor with AI integration
+- Recursive scanning for Claude commands and agents (BMAD v4 fix)
+- Maximum file scan limit increased from 1,000 to 2,000
+- TypeScript files now show distinct TS icon in file tree
+- Message timestamps show date when not from today
+- AI usage analytics dashboard
+
+### Changed
+<!-- Changes to existing functionality go here -->
+
+### Fixed
+- AI-created files now open automatically from files panel
+- Claude Code session imports now show accurate data
+- Corrected missing dots in `.nimbalyst-local` directory references
+
+### Removed
+<!-- Removed features go here -->
+
 ## [0.46.1] - 2025-11-25
 
 
