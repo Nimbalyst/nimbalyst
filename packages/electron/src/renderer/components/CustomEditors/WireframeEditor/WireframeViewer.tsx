@@ -37,12 +37,14 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [drawingColor, setDrawingColor] = useState('#FF0000'); // Red by default
   const [drawingDataUrl, setDrawingDataUrl] = useState<string | null>(null);
+  const [scrollOffset, setScrollOffset] = useState({ x: 0, y: 0 });
   const [annotationTimestamp, setAnnotationTimestamp] = useState<number | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const getMonacoContentRef = useRef<(() => string) | null>(null);
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const drawingPathsRef = useRef<Array<{ points: { x: number; y: number }[]; color: string }>>([]);
 
   // Capture screenshot of the wireframe (based on WireframeLM implementation)
   const handleCaptureScreenshot = useCallback(async () => {
@@ -503,6 +505,38 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
     logger.ui.info('[WireframeViewer] All annotations cleared');
   }, []);
 
+  // Redraw all paths with current scroll offset
+  const redrawCanvas = useCallback(() => {
+    const canvas = drawingCanvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Redraw all paths offset by scroll position
+    drawingPathsRef.current.forEach(path => {
+      if (path.points.length < 2) return;
+
+      ctx.strokeStyle = path.color;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      ctx.beginPath();
+      const firstPoint = path.points[0];
+      ctx.moveTo(firstPoint.x - scrollOffset.x, firstPoint.y - scrollOffset.y);
+
+      for (let i = 1; i < path.points.length; i++) {
+        const point = path.points[i];
+        ctx.lineTo(point.x - scrollOffset.x, point.y - scrollOffset.y);
+      }
+      ctx.stroke();
+    });
+  }, [scrollOffset]);
+
   // Clear drawing
   const handleClearDrawing = useCallback(() => {
     const canvas = drawingCanvasRef.current;
@@ -510,6 +544,7 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawingPathsRef.current = [];
         setDrawingDataUrl(null);
         logger.ui.info('[WireframeViewer] Drawing cleared');
       }
@@ -535,18 +570,37 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
     if (!isDrawingMode) return;
 
     const canvas = drawingCanvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      logger.ui.warn('[WireframeViewer] No canvas ref on mouse down');
+      return;
+    }
+
+    // Check if canvas has valid dimensions
+    if (canvas.width === 0 || canvas.height === 0) {
+      logger.ui.warn('[WireframeViewer] Canvas has zero dimensions, cannot draw');
+      return;
+    }
 
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Store absolute coordinates (viewport coords + scroll offset)
+    const x = e.clientX - rect.left + scrollOffset.x;
+    const y = e.clientY - rect.top + scrollOffset.y;
 
     isDrawingRef.current = true;
     lastPointRef.current = { x, y };
 
     // Update annotation timestamp when drawing starts
     setAnnotationTimestamp(Date.now());
-  }, [isDrawingMode]);
+
+
+    // Start a new path
+    drawingPathsRef.current.push({
+      points: [{ x, y }],
+      color: drawingColor
+    });
+
+    logger.ui.info('[WireframeViewer] Drawing started at:', { x, y });
+  }, [isDrawingMode, scrollOffset, drawingColor]);
 
   const handleDrawingMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawingMode || !isDrawingRef.current) return;
@@ -558,24 +612,29 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Store absolute coordinates (viewport coords + scroll offset)
+    const x = e.clientX - rect.left + scrollOffset.x;
+    const y = e.clientY - rect.top + scrollOffset.y;
 
-    if (lastPointRef.current) {
-      // Draw line from last point to current point
+    if (lastPointRef.current && drawingPathsRef.current.length > 0) {
+      // Add point to current path
+      const currentPath = drawingPathsRef.current[drawingPathsRef.current.length - 1];
+      currentPath.points.push({ x, y });
+
+      // Draw line from last point to current point (viewport coordinates)
       ctx.strokeStyle = drawingColor;
       ctx.lineWidth = 3;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
 
       ctx.beginPath();
-      ctx.moveTo(lastPointRef.current.x, lastPointRef.current.y);
-      ctx.lineTo(x, y);
+      ctx.moveTo(lastPointRef.current.x - scrollOffset.x, lastPointRef.current.y - scrollOffset.y);
+      ctx.lineTo(x - scrollOffset.x, y - scrollOffset.y);
       ctx.stroke();
     }
 
     lastPointRef.current = { x, y };
-  }, [isDrawingMode, drawingColor]);
+  }, [isDrawingMode, drawingColor, scrollOffset]);
 
   const handleDrawingMouseUp = useCallback(() => {
     isDrawingRef.current = false;
@@ -594,25 +653,63 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
     lastPointRef.current = null;
   }, []);
 
-  // Setup drawing canvas when iframe loads or resizes
+  // Setup drawing canvas when iframe loads or resizes - match viewport size only
   useEffect(() => {
     const iframe = iframeRef.current;
     const canvas = drawingCanvasRef.current;
 
     if (viewMode === 'preview' && iframe && canvas) {
-      // Match canvas size to iframe
+      // Match canvas size to iframe viewport (not scrollable content)
       const updateCanvasSize = () => {
-        canvas.width = iframe.offsetWidth;
-        canvas.height = iframe.offsetHeight;
+        const width = iframe.offsetWidth;
+        const height = iframe.offsetHeight;
+
+        // Only update if dimensions are valid
+        if (width > 0 && height > 0) {
+          canvas.width = width;
+          canvas.height = height;
+          logger.ui.info('[WireframeViewer] Canvas sized to viewport:', { width, height });
+          redrawCanvas(); // Redraw after resize
+        } else {
+          logger.ui.warn('[WireframeViewer] Iframe has zero dimensions, deferring canvas setup');
+        }
       };
 
+      // Initial size
       updateCanvasSize();
+
+      // Track iframe scroll and update scroll offset
+      const iframeDoc = iframe.contentDocument;
+      if (iframeDoc) {
+        const handleScroll = () => {
+          const scrollX = iframeDoc.documentElement.scrollLeft || iframeDoc.body.scrollLeft;
+          const scrollY = iframeDoc.documentElement.scrollTop || iframeDoc.body.scrollTop;
+          setScrollOffset({ x: scrollX, y: scrollY });
+        };
+
+        iframeDoc.addEventListener('scroll', handleScroll);
+        // Clean up scroll listener
+        return () => {
+          iframeDoc.removeEventListener('scroll', handleScroll);
+        };
+      }
+
+      // Also update when drawing mode is toggled (with a small delay to ensure iframe is ready)
+      if (isDrawingMode) {
+        const timeoutId = setTimeout(updateCanvasSize, 100);
+        return () => clearTimeout(timeoutId);
+      }
 
       // Update on window resize
       window.addEventListener('resize', updateCanvasSize);
       return () => window.removeEventListener('resize', updateCanvasSize);
     }
-  }, [viewMode]);
+  }, [viewMode, isDrawingMode, redrawCanvas]);
+
+  // Redraw canvas when scroll offset changes
+  useEffect(() => {
+    redrawCanvas();
+  }, [scrollOffset, redrawCanvas]);
 
   // Capture composite screenshot (wireframe + drawing) and send to AI chat
   const handleSendToAI = useCallback(async () => {
@@ -954,13 +1051,21 @@ export const WireframeViewer: React.FC<CustomEditorProps> = ({
             sandbox="allow-scripts allow-same-origin"
             title={`Wireframe: ${fileName}`}
           />
-          {/* Drawing Canvas Overlay */}
+          {/* Drawing Canvas Overlay - matches iframe viewport exactly */}
           <canvas
             ref={drawingCanvasRef}
             onMouseDown={handleDrawingMouseDown}
             onMouseMove={handleDrawingMouseMove}
             onMouseUp={handleDrawingMouseUp}
             onMouseLeave={handleDrawingMouseLeave}
+            onWheel={(e) => {
+              // Pass wheel events through to iframe for scrolling
+              if (isDrawingMode && iframeRef.current?.contentDocument) {
+                const iframeDoc = iframeRef.current.contentDocument;
+                iframeDoc.documentElement.scrollTop += e.deltaY;
+                iframeDoc.documentElement.scrollLeft += e.deltaX;
+              }
+            }}
             style={{
               position: 'absolute',
               top: 0,
