@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Message, ChatAttachment } from '../../../ai/server/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { JSONViewer } from './JSONViewer';
@@ -31,6 +31,20 @@ export const MessageSegment: React.FC<MessageSegmentProps> = ({
 }) => {
   const [isDiffExpanded, setDiffExpanded] = useState(false);
   const [enlargedImage, setEnlargedImage] = useState<ChatAttachment | null>(null);
+
+  // Handle Escape key to close enlarged image modal
+  useEffect(() => {
+    if (!enlargedImage) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setEnlargedImage(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [enlargedImage]);
 
   // Render thinking indicator
   const renderThinking = () => {
