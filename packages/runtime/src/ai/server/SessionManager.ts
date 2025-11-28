@@ -79,7 +79,7 @@ function sessionDataFromChatSession(session: ChatSession, fallbackWorkspace: str
  * 2. Create all tool messages with sub-agent metadata
  * 3. Build hierarchy and filter out child tools from top-level
  */
-function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
+export function transformAgentMessagesToUI(agentMessages: any[]): Message[] {
   const uiMessages: Message[] = [];
   const allToolMessages = new Map<string, Message>(); // Map tool ID -> Message
   const parentToolMap = new Map<string, string>(); // Map child tool ID -> parent tool ID

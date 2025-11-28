@@ -12,6 +12,7 @@ import { LMStudioPanel } from './panels/LMStudioPanel';
 import { AdvancedPanel } from './panels/AdvancedPanel';
 import { NotificationsPanel } from './panels/NotificationsPanel';
 import { MCPServersPanel } from './panels/MCPServersPanel';
+import { SyncPanel, type SyncConfig } from './panels/SyncPanel';
 
 // Apply theme IMMEDIATELY when module loads - BEFORE React renders
 // This prevents flash of wrong theme
@@ -104,7 +105,7 @@ interface AIModelsProps {
   onClose: () => void;
 }
 
-type ProviderId = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio' | 'advanced' | 'analytics' | 'notifications' | 'mcp-servers';
+type ProviderId = 'claude' | 'claude-code' | 'openai' | 'openai-codex' | 'lmstudio' | 'advanced' | 'analytics' | 'notifications' | 'mcp-servers' | 'sync';
 type NavItemId = ProviderId;
 
 interface Provider {
@@ -192,6 +193,14 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
   const [osNotificationsEnabled, setOSNotificationsEnabled] = useState(false);
   const [releaseChannel, setReleaseChannel] = useState<'stable' | 'alpha'>('stable');
   const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
+  const [syncConfig, setSyncConfig] = useState<SyncConfig>({
+    enabled: false,
+    serverUrl: '',
+    userId: '',
+    authToken: '',
+  });
+  const [syncTestStatus, setSyncTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [syncTestMessage, setSyncTestMessage] = useState<string | undefined>();
 
   // Load current settings on mount
   useEffect(() => {
@@ -241,6 +250,12 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
       // Load analytics setting
       const analyticsEnabledSetting = await window.electronAPI.invoke('analytics:is-enabled');
       setAnalyticsEnabled(analyticsEnabledSetting);
+
+      // Load sync config
+      const syncConfigSetting = await window.electronAPI.invoke('sync:get-config');
+      if (syncConfigSetting) {
+        setSyncConfig(syncConfigSetting);
+      }
 
       // Fetch ALL models once
       try {
@@ -341,6 +356,9 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
 
     // Save release channel setting
     await window.electronAPI.invoke('release-channel:set', releaseChannel);
+
+    // Save sync config
+    await window.electronAPI.invoke('sync:set-config', syncConfig.enabled ? syncConfig : null);
 
     // Clear the model cache to force refresh with new API keys
     await window.electronAPI.aiClearModelCache?.();
@@ -514,6 +532,34 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
           return <MCPServersPanel />;
         }
         return null;
+      case 'sync':
+        return (
+          <SyncPanel
+            config={syncConfig}
+            onConfigChange={(config) => {
+              setSyncConfig(config);
+              setHasChanges(true);
+            }}
+            onTestConnection={async () => {
+              setSyncTestStatus('testing');
+              setSyncTestMessage(undefined);
+              try {
+                const result = await window.electronAPI.invoke('sync:test-connection', syncConfig);
+                if (result.success) {
+                  setSyncTestStatus('success');
+                } else {
+                  setSyncTestStatus('error');
+                  setSyncTestMessage(result.error || 'Connection failed');
+                }
+              } catch (error) {
+                setSyncTestStatus('error');
+                setSyncTestMessage(error instanceof Error ? error.message : 'Connection failed');
+              }
+            }}
+            testStatus={syncTestStatus}
+            testMessage={syncTestMessage}
+          />
+        );
       default:
         return null;
     }
@@ -616,12 +662,20 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
 
           <div className="nav-section nav-section-bottom">
             {releaseChannel === 'alpha' && (
-              <button
-                className={`nav-action-button ${selectedNav === 'mcp-servers' ? 'active' : ''}`}
-                onClick={() => setSelectedNav('mcp-servers')}
-              >
-                MCP Servers
-              </button>
+              <>
+                <button
+                  className={`nav-action-button ${selectedNav === 'mcp-servers' ? 'active' : ''}`}
+                  onClick={() => setSelectedNav('mcp-servers')}
+                >
+                  MCP Servers
+                </button>
+                <button
+                  className={`nav-action-button ${selectedNav === 'sync' ? 'active' : ''}`}
+                  onClick={() => setSelectedNav('sync')}
+                >
+                  Session Sync {syncConfig.enabled && <span style={{ marginLeft: '4px', opacity: 0.7 }}>●</span>}
+                </button>
+              </>
             )}
             <button
               className={`nav-action-button ${selectedNav === 'notifications' ? 'active' : ''}`}

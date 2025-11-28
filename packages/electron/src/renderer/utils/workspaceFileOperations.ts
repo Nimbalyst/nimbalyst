@@ -64,7 +64,8 @@ export async function handleWorkspaceFileSelect(options: FileSelectOptions): Pro
       console.log('[TABS] Adding tab for file:', result.filePath);
       const tabId = tabs.addTab(result.filePath, result.content);
       if (!tabId) {
-        console.warn('Failed to add tab - max tabs reached');
+        console.error('[TABS] Failed to add tab for file:', result.filePath);
+        console.error('[TABS] This should not happen - tabs should be unlimited');
         // Could show a dialog here
       } else {
         console.log('[TABS] Added tab with ID:', tabId);

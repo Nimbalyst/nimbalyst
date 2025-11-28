@@ -47,7 +47,99 @@ function toMillis(value: unknown): number {
 }
 
 
+// Module-level reference for standalone functions
+let moduleDb: PGliteLike | null = null;
+let moduleEnsureReady: EnsureReadyFn | null = null;
+
+interface SyncedMessage {
+  id: string;
+  sessionId: string;
+  createdAt: number;
+  source: string;
+  direction: 'input' | 'output';
+  content: string;
+  metadata?: Record<string, unknown>;
+  hidden?: boolean;
+}
+
+/**
+ * Get all sessions for sync (no workspace filter)
+ * Uses the module-level db reference set by createPGLiteSessionStore
+ */
+export async function getAllSessionsForSync(includeMessages = false): Promise<Array<{
+  id: string;
+  title: string;
+  provider: string;
+  model?: string;
+  mode?: string;
+  workspaceId?: string;
+  workspacePath?: string;
+  messageCount: number;
+  updatedAt: number;
+  createdAt: number;
+  messages?: SyncedMessage[];
+}>> {
+  if (!moduleDb) {
+    throw new Error('Session store not initialized');
+  }
+  if (moduleEnsureReady) {
+    await moduleEnsureReady();
+  }
+
+  const { rows } = await moduleDb.query<any>(
+    `SELECT s.id, s.provider, s.model, s.mode, s.title, s.workspace_id,
+            s.created_at, s.updated_at, COUNT(m.id) as message_count
+     FROM ai_sessions s
+     LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input'
+     WHERE (s.is_archived = FALSE OR s.is_archived IS NULL)
+     GROUP BY s.id, s.provider, s.model, s.mode, s.title, s.workspace_id, s.created_at, s.updated_at
+     ORDER BY s.updated_at DESC`
+  );
+
+  const sessions = rows.map((row: any) => ({
+    id: row.id,
+    title: row.title || 'Untitled',
+    provider: row.provider || 'unknown',
+    model: row.model,
+    mode: row.mode,
+    workspaceId: row.workspace_id,
+    workspacePath: row.workspace_id, // workspace_id is the path in this system
+    messageCount: parseInt(row.message_count) || 0,
+    updatedAt: toMillis(row.updated_at),
+    createdAt: toMillis(row.created_at),
+    messages: undefined as SyncedMessage[] | undefined,
+  }));
+
+  // Optionally fetch messages for each session
+  if (includeMessages) {
+    for (const session of sessions) {
+      const { rows: msgRows } = await moduleDb.query<any>(
+        `SELECT id, session_id, created_at, source, direction, content, metadata, hidden
+         FROM ai_agent_messages
+         WHERE session_id = $1 AND (hidden = false OR hidden IS NULL)
+         ORDER BY created_at ASC`,
+        [session.id]
+      );
+      session.messages = msgRows.map((m: any) => ({
+        id: m.id,
+        sessionId: m.session_id,
+        createdAt: toMillis(m.created_at),
+        source: m.source,
+        direction: m.direction,
+        content: m.content,
+        metadata: m.metadata,
+        hidden: m.hidden,
+      }));
+    }
+  }
+
+  return sessions;
+}
+
 export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureReadyFn): SessionStore {
+  // Store db reference for module-level functions
+  moduleDb = db;
+  moduleEnsureReady = ensureDbReady ?? null;
   const ensureReady = async () => {
     if (ensureDbReady) {
       await ensureDbReady();

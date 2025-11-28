@@ -18,6 +18,7 @@ import { createPGLiteWorkspaceRepository } from './PGLiteWorkspaceRepository';
 import { createPGLiteDocumentsRepository } from './PGLiteDocumentsRepository';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
+import { initializeSync, shutdownSync } from './SyncManager';
 
 class RepositoryManager {
   private sessionStore: SessionStore | null = null;
@@ -48,8 +49,8 @@ class RepositoryManager {
         query: database.query.bind(database),
       };
 
-      // Create session store
-      this.sessionStore = createPGLiteSessionStore(
+      // Create base session store
+      const baseSessionStore = createPGLiteSessionStore(
         dbAdapter,
         async () => {
           if (!database.isInitialized()) {
@@ -57,6 +58,9 @@ class RepositoryManager {
           }
         }
       );
+
+      // Wrap with sync if configured (returns base store if sync not enabled)
+      this.sessionStore = await initializeSync(baseSessionStore);
 
       // Register session store with runtime's AISessionsRepository
       AISessionsRepository.setStore(this.sessionStore);
@@ -162,6 +166,9 @@ class RepositoryManager {
    * Clean up resources
    */
   async cleanup(): Promise<void> {
+    // Shutdown sync first
+    shutdownSync();
+
     if (this.sessionStore) {
       AISessionsRepository.clearStore();
     }

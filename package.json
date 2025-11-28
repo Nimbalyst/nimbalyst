@@ -30,7 +30,14 @@
     "cap:build": "npm run build --prefix packages/capacitor",
     "cap:ios": "npm run ios --prefix packages/capacitor",
     "cap:android": "npm run android --prefix packages/capacitor",
-    "cap:sync": "npm run cap:sync --prefix packages/capacitor"
+    "cap:sync": "npm run cap:sync --prefix packages/capacitor",
+    "collab:dev": "npm run dev --prefix packages/collab",
+    "collab:build": "npm run build --prefix packages/collab",
+    "collab:start": "npm start --prefix packages/collab",
+    "collabv2:dev": "npm run dev --prefix packages/collabv2",
+    "collabv2:build": "npm run build --prefix packages/collabv2",
+    "collabv2:deploy": "npm run deploy --prefix packages/collabv2",
+    "collabv2:test": "npm run test --prefix packages/collabv2"
   },
   "devDependencies": {
     "@babel/plugin-transform-flow-strip-types": "^7.24.7",
@@ -50,7 +57,9 @@
     "packages/electron",
     "packages/runtime",
     "packages/core",
-    "packages/rexical"
+    "packages/rexical",
+    "packages/collab",
+    "packages/collabv2"
   ],
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.51",

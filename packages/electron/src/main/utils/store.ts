@@ -42,6 +42,13 @@ interface AppStoreSchema {
   onboardingNextPrompt?: number; // Timestamp for when to show onboarding again (if deferred)
   // Custom Editors
   wireframeLMEnabled?: boolean; // Enable WireframeLM custom editor
+  // Session Sync (optional device sync via Y.js)
+  sessionSync?: {
+    enabled: boolean;
+    serverUrl: string; // e.g., 'ws://localhost:8787' or 'wss://sync.nimbalyst.com'
+    userId: string;
+    authToken: string;
+  };
 }
 
 export interface TabState {
@@ -718,4 +725,24 @@ export function isWireframeLMEnabled(): boolean {
 
 export function setWireframeLMEnabled(enabled: boolean): void {
   appStore.set('wireframeLMEnabled', enabled);
+}
+
+// Session Sync Settings
+export interface SessionSyncConfig {
+  enabled: boolean;
+  serverUrl: string;
+  userId: string;
+  authToken: string;
+}
+
+export function getSessionSyncConfig(): SessionSyncConfig | undefined {
+  return appStore.get('sessionSync');
+}
+
+export function setSessionSyncConfig(config: SessionSyncConfig | undefined): void {
+  if (config) {
+    appStore.set('sessionSync', config);
+  } else {
+    appStore.delete('sessionSync');
+  }
 }

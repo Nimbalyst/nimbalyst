@@ -522,12 +522,4 @@ Defensive coding that masks failures is worse than crashing:
 **Rule of thumb:** If you're adding code to "handle" missing required data, you're probably hiding a bug. Throw instead.
 - nimbalyst always preserves newlines and spacing in markdown
 
----
-
-<!-- Added: 2025-11-23T04:10:33.530Z -->
-orange should be used to indicate dev mode
-
----
-
-<!-- Added: 2025-11-23T04:14:00.768Z -->
-red is for errors
+Put react components that might be used by the mobile app version in the runtime package, not electron

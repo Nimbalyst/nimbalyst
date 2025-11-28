@@ -30,7 +30,7 @@ export async function registerSessionHandlers() {
         try {
             const { session, workspaceId } = payload;
 
-            await AISessionsRepository.create({
+            const createPayload = {
                 id: session.id,
                 provider: session.provider,
                 model: session.model,
@@ -38,7 +38,10 @@ export async function registerSessionHandlers() {
                 workspaceId: workspaceId,
                 providerConfig: session.providerConfig,
                 providerSessionId: session.providerSessionId
-            });
+            };
+            console.log('[SessionHandlers] Creating session with payload:', JSON.stringify(createPayload));
+
+            await AISessionsRepository.create(createPayload);
 
             // Update with full metadata
             if (session.metadata) {

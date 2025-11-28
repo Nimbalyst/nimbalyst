@@ -1,0 +1,43 @@
+{
+  "name": "@nimbalyst/collabv2",
+  "version": "0.1.0",
+  "description": "Cloudflare Workers Y.js sync server for device sync with E2E encryption",
+  "main": "dist/worker.js",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "deploy": "wrangler deploy",
+    "build": "tsc && esbuild src/worker.ts --bundle --format=esm --outfile=dist/worker.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "db:migrate": "wrangler d1 migrations apply nimbalyst-yjssync --local",
+    "db:migrate:prod": "wrangler d1 migrations apply nimbalyst-yjssync",
+    "db:query": "wrangler d1 execute nimbalyst-yjssync --local",
+    "tail": "wrangler tail"
+  },
+  "keywords": [
+    "yjs",
+    "cloudflare",
+    "durable-objects",
+    "crdt",
+    "collaboration",
+    "e2e-encryption"
+  ],
+  "author": "Nimbalyst Team",
+  "license": "MIT",
+  "dependencies": {
+    "lib0": "^0.2.97",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.18"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240925.0",
+    "@types/node": "^22",
+    "esbuild": "^0.25.0",
+    "miniflare": "^3.20240925.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8",
+    "wrangler": "^4.51.0",
+    "y-websocket": "^2.0.4"
+  }
+}

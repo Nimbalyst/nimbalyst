@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isWireframeLMEnabled, setWireframeLMEnabled } from '../utils/store';
+import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isWireframeLMEnabled, setWireframeLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
 import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
@@ -121,5 +121,48 @@ export function registerSettingsHandlers() {
     ipcMain.handle('wireframeLM:set-enabled', (_event, enabled: boolean) => {
         setWireframeLMEnabled(enabled);
         logger.store.info(`[SettingsHandlers] WireframeLM ${enabled ? 'enabled' : 'disabled'}`);
+    });
+
+    // Session sync settings
+    ipcMain.handle('sync:get-config', () => {
+        return getSessionSyncConfig();
+    });
+
+    ipcMain.handle('sync:set-config', (_event, config: SessionSyncConfig | null) => {
+        setSessionSyncConfig(config ?? undefined);
+        logger.store.info(`[SettingsHandlers] Session sync ${config?.enabled ? 'enabled' : 'disabled'}`);
+    });
+
+    ipcMain.handle('sync:test-connection', async (_event, config: SessionSyncConfig) => {
+        // Simple test - try to connect to the health endpoint
+        if (!config.serverUrl) {
+            return { success: false, error: 'Server URL is required' };
+        }
+
+        try {
+            // Convert ws:// to http:// for health check
+            const httpUrl = config.serverUrl
+                .replace(/^ws:/, 'http:')
+                .replace(/^wss:/, 'https:')
+                .replace(/\/$/, '');
+
+            const response = await fetch(`${httpUrl}/health`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${config.userId}:${config.authToken}`,
+                },
+                signal: AbortSignal.timeout(5000),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                return { success: true, data };
+            } else {
+                return { success: false, error: `Server returned ${response.status}` };
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Connection failed';
+            return { success: false, error: message };
+        }
     });
 }

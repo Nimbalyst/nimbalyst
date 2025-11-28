@@ -379,11 +379,12 @@ export function useIPCHandlers(props: UseIPCHandlersProps) {
 
         // TabContent/TabEditor will handle editor creation and state management
         const tabId = editorModeRef.current.tabs.addTab(data.filePath, data.content);
-        // console.log('[FILE_OPS] addTab returned:', tabId);
+        console.log('[FILE_OPS] addTab returned:', tabId);
         if (tabId) {
-          // console.log('[FILE_OPS] Tab added with ID:', tabId);
+          console.log('[FILE_OPS] Tab added with ID:', tabId);
         } else {
-          console.warn('[FILE_OPS] Failed to add tab - max tabs reached or addTab returned falsy');
+          console.error('[FILE_OPS] Failed to add tab for file opened from OS:', data.filePath);
+          console.error('[FILE_OPS] This should not happen - tabs should be unlimited');
         }
       } else {
         console.error('[FILE_OPS] tabs object not available in editorModeRef!');

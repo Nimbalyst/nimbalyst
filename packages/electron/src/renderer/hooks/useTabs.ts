@@ -141,7 +141,12 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
 
   // Add a new tab
   const addTab = useCallback((filePath: string, content: string = '', switchToTab: boolean = true): string | null => {
-    if (!enabled) return null;
+    console.log('[useTabs] addTab called:', { filePath, enabled, currentTabCount: tabs.size, maxTabs });
+
+    if (!enabled) {
+      console.warn('[useTabs] addTab called but tabs are disabled');
+      return null;
+    }
 
     // Use ref to store the tab ID that was created or found
     let resultTabId: string | null = null;
@@ -150,6 +155,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
 
     // Check if tab already exists and add new tab in a single state update
     setTabs(prev => {
+      console.log('[useTabs] setTabs prev.size:', prev.size);
       // Check if tab already exists using the LATEST state
       const existingTab = Array.from(prev.values()).find(tab => tab.filePath === filePath);
       if (existingTab) {
@@ -163,6 +169,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
 
       // Check max tabs limit
       if (prev.size >= maxTabs) {
+        console.warn('[useTabs] Max tabs check triggered:', { currentTabs: prev.size, maxTabs });
         // Try to close an unpinned, saved tab
         const unpinnedSavedTabs = Array.from(prev.values()).filter(
           tab => !tab.isPinned && !tab.isDirty
@@ -234,6 +241,7 @@ export function useTabs(options: UseTabsOptions & { getNavigationState?: () => a
     }
 
     // console.log('[useTabs] After file watcher code');
+    console.log('[useTabs] addTab returning:', resultTabId);
     return resultTabId;
   }, [enabled, tabs, maxTabs, generateTabId, onTabChange, removeTab]);
 

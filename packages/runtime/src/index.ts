@@ -10,6 +10,7 @@ export * from './ai/models';
 export * from './ai/tools';
 export * from './ai/modelConstants';
 export * from './ai/adapters/sessionStore';
+export { transformAgentMessagesToUI } from './ai/server/SessionManager';
 export * from './storage/repositories/AISessionsRepository';
 export * from './storage/repositories/SessionFilesRepository';
 export { AgentMessagesRepository } from './storage/repositories/AgentMessagesRepository';

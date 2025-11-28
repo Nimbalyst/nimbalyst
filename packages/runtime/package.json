@@ -67,6 +67,10 @@
     "./storage/repositories/AgentMessagesRepository": {
       "import": "./dist/storage/repositories/AgentMessagesRepository.js",
       "types": "./dist/storage/repositories/AgentMessagesRepository.d.ts"
+    },
+    "./sync": {
+      "import": "./dist/sync/index.js",
+      "types": "./dist/sync/index.d.ts"
     }
   },
   "files": [
