@@ -2002,7 +2002,7 @@ Do NOT call this tool more than once per session. It should be called early, typ
    * Get Claude Code model
    */
   static getModels(): AIModel[] {
-    console.log('[ClaudeCodeProvider.getModels] Building models from CLAUDE_CODE_VARIANTS:', CLAUDE_CODE_VARIANTS);
+    // console.log('[ClaudeCodeProvider.getModels] Building models from CLAUDE_CODE_VARIANTS:', CLAUDE_CODE_VARIANTS);
     const models = CLAUDE_CODE_VARIANTS.map(variant => ({
       id: `claude-code:${variant}`,
       name: `Claude Code · ${CLAUDE_CODE_MODEL_LABELS[variant]} ${CLAUDE_CODE_VARIANT_VERSIONS[variant]}`,
@@ -2010,7 +2010,7 @@ Do NOT call this tool more than once per session. It should be called early, typ
       maxTokens: 8192,
       contextWindow: 200000
     }));
-    console.log('[ClaudeCodeProvider.getModels] Returning models:', models.map(m => ({ id: m.id, name: m.name })));
+    // console.log('[ClaudeCodeProvider.getModels] Returning models:', models.map(m => ({ id: m.id, name: m.name })));
     return models;
   }
 

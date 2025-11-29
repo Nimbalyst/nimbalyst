@@ -94,12 +94,12 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
   }
 
   const { rows } = await moduleDb.query<any>(
-    `SELECT s.id, s.provider, s.model, s.mode, s.title, s.workspace_id,
+    `SELECT s.id, s.provider, s.model, s.mode, s.title, s.workspace_id, s.draft_input,
             s.created_at, s.updated_at, COUNT(m.id) as message_count
      FROM ai_sessions s
      LEFT JOIN ai_agent_messages m ON s.id = m.session_id AND m.direction = 'input'
      WHERE (s.is_archived = FALSE OR s.is_archived IS NULL)
-     GROUP BY s.id, s.provider, s.model, s.mode, s.title, s.workspace_id, s.created_at, s.updated_at
+     GROUP BY s.id, s.provider, s.model, s.mode, s.title, s.workspace_id, s.draft_input, s.created_at, s.updated_at
      ORDER BY s.updated_at DESC`
   );
 
@@ -113,6 +113,8 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
     // NULL workspace_id means session was created before workspace tracking
     workspaceId: row.workspace_id || 'default',
     workspacePath: row.workspace_id || 'default', // workspace_id is the path in this system
+    // NOTE: Do NOT include draftInput in bulk sync - it should only sync when actually changed
+    // Including it here causes spurious metadata_updated events for all sessions on startup
     messageCount: parseInt(row.message_count) || 0,
     updatedAt: toMillis(row.updated_at),
     createdAt: toMillis(row.created_at),

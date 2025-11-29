@@ -7,10 +7,10 @@ import { BaseAIProvider } from '../AIProvider';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { 
-  DocumentContext, 
-  ProviderConfig, 
-  ProviderCapabilities, 
+import {
+  DocumentContext,
+  ProviderConfig,
+  ProviderCapabilities,
   StreamChunk,
   Message,
   AIModel
@@ -31,9 +31,9 @@ export class OpenAIProvider extends BaseAIProvider {
       temperature: config.temperature,
       maxTokens: config.maxTokens
     });
-    
+
     this.config = config;
-    
+
     if (!config.apiKey) {
       throw new Error('API key required for OpenAI provider');
     }
@@ -195,11 +195,11 @@ export class OpenAIProvider extends BaseAIProvider {
       if (!this.config.model) {
         throw new Error('No model specified for OpenAI provider');
       }
-      
+
       // Remove provider prefix from model ID for API call
       const modelId = this.config.model.replace('openai:', '');
       console.log(`[OpenAIProvider] Using model: ${modelId}`);
-      
+
       const completionParams: any = {
         model: modelId,
         messages: apiMessages,
@@ -208,31 +208,31 @@ export class OpenAIProvider extends BaseAIProvider {
         stream: true,
         stream_options: { include_usage: true }  // Request usage data in streaming response
       };
-      
+
       // Some models (o1 series, gpt-5, gpt-4.5) don't support temperature parameter
       // They only work with the default temperature of 1
-      const supportsTemperature = 
-        !modelId.startsWith('o1') && 
-        !modelId.startsWith('gpt-5') && 
+      const supportsTemperature =
+        !modelId.startsWith('o1') &&
+        !modelId.startsWith('gpt-5') &&
         !modelId.startsWith('gpt-4.5');
       if (supportsTemperature) {
         completionParams.temperature = this.config.temperature || 0;
       }
-      
+
       // All recent models use max_completion_tokens
       // Only legacy models (gpt-3.5-turbo, gpt-4-turbo) use max_tokens
-      const usesLegacyMaxTokens = 
-        modelId.startsWith('gpt-3.5') || 
+      const usesLegacyMaxTokens =
+        modelId.startsWith('gpt-3.5') ||
         modelId === 'gpt-4-turbo' ||
         modelId === 'gpt-4-turbo-preview';
-      
+
       if (usesLegacyMaxTokens) {
         completionParams.max_tokens = this.config.maxTokens || 4000;
       } else {
         // All other models (gpt-4o, gpt-4.5, gpt-5, o1, etc.) use max_completion_tokens
         completionParams.max_completion_tokens = this.config.maxTokens || 4000;
       }
-      
+
       console.log(`[OpenAIProvider] Calling OpenAI API with ${apiMessages.length} messages`);
       console.log(`[OpenAIProvider] Request params:`, {
         model: completionParams.model,
@@ -244,36 +244,36 @@ export class OpenAIProvider extends BaseAIProvider {
         stream: completionParams.stream
       });
       console.log(`[OpenAIProvider] Actual completionParams keys:`, Object.keys(completionParams));
-      
+
       const apiCallStartTime = Date.now();
-      
+
       console.log(`[OpenAIProvider] About to call OpenAI completions.create...`);
       console.log(`[OpenAIProvider] Full API URL: https://api.openai.com/v1/chat/completions`);
       console.log(`[OpenAIProvider] Headers: Authorization: Bearer ${this.config.apiKey?.substring(0, 10)}...`);
-      
+
       let response;
       try {
         const createStartTime = Date.now();
         console.log(`[OpenAIProvider] Calling openai.chat.completions.create at ${new Date().toISOString()}`);
-        
+
         const beforeAwait = Date.now();
-        
+
         // Write debug info to file
         const debugFile = path.join(os.tmpdir(), 'openai-debug.log');
         fs.appendFileSync(debugFile, `\n[${new Date().toISOString()}] About to call OpenAI API with model: ${completionParams.model}\n`);
-        
+
         // Track if we're in Electron
         console.log(`[OpenAIProvider] Running in Electron: ${!!process.versions.electron}`);
         console.log(`[OpenAIProvider] Process type: ${process.type || 'node'}`);
-        
+
         response = await this.openai.chat.completions.create(completionParams, {
           signal: this.abortController.signal
         });
-        
+
         const afterAwait = Date.now();
         fs.appendFileSync(debugFile, `[${new Date().toISOString()}] API call returned after ${afterAwait - beforeAwait}ms\n`);
         console.log(`[OpenAIProvider] await returned after ${afterAwait - beforeAwait}ms`);
-        
+
         console.log(`[OpenAIProvider] completions.create returned after ${Date.now() - createStartTime}ms`);
         const hasAsyncIterator = !!(response as any)?.[Symbol.asyncIterator];
         console.log(`[OpenAIProvider] Response type: ${typeof response}, has Symbol.asyncIterator: ${hasAsyncIterator}`);
@@ -301,14 +301,14 @@ export class OpenAIProvider extends BaseAIProvider {
       // Stream the response
       console.log(`[OpenAIProvider] About to start iterating response stream at ${new Date().toISOString()}`);
       const iteratorStartTime = Date.now();
-      
+
       // Add a timeout check
       const timeoutCheck = setTimeout(() => {
         if (!firstChunkTime) {
           console.warn(`[OpenAIProvider] WARNING: No chunks received after 5 seconds of iteration`);
         }
       }, 5000);
-      
+
       const responseStream = response as unknown as AsyncIterable<any>;
       for await (const chunk of responseStream) {
         if (chunkCount === 0) {
@@ -353,7 +353,7 @@ export class OpenAIProvider extends BaseAIProvider {
           console.log(`  - Chunk data:`, chunk?.choices?.[0]?.delta);
         }
         const delta = chunk.choices[0]?.delta;
-        
+
         if (delta?.content) {
           // Text chunk
           fullContent += delta.content;
@@ -363,12 +363,12 @@ export class OpenAIProvider extends BaseAIProvider {
             content: delta.content
           };
         }
-        
+
         if (delta?.tool_calls) {
           // Handle tool calls
           for (const toolCall of delta.tool_calls) {
             const callId = toolCall.index || 0;
-            
+
             if (!toolCallAccumulator[callId]) {
               toolCallAccumulator[callId] = {
                 id: toolCall.id || `call_${callId}`,
@@ -379,17 +379,17 @@ export class OpenAIProvider extends BaseAIProvider {
                 }
               };
             }
-            
+
             if (toolCall.function?.name) {
               toolCallAccumulator[callId].function.name = toolCall.function.name;
             }
-            
+
             if (toolCall.function?.arguments) {
               toolCallAccumulator[callId].function.arguments += toolCall.function.arguments;
             }
           }
         }
-        
+
         if (chunk.choices[0]?.finish_reason === 'tool_calls') {
           // Process accumulated tool calls
           for (const callId in toolCallAccumulator) {
@@ -513,7 +513,7 @@ export class OpenAIProvider extends BaseAIProvider {
             }
           }
         }
-        
+
         const finishReason = chunk.choices[0]?.finish_reason;
         if (finishReason) {
           console.log(`[OpenAIProvider] Chunk #${chunkCount} finish_reason: '${finishReason}'`);
@@ -622,16 +622,16 @@ export class OpenAIProvider extends BaseAIProvider {
     if (!apiKey) return this.getDefaultModels();
 
     try {
-      console.log('[OpenAIProvider] Fetching available models from OpenAI API');
+      // console.log('[OpenAIProvider] Fetching available models from OpenAI API');
       const modelFetchStart = Date.now();
       const openai = new OpenAI({ apiKey });
       const response = await openai.models.list();
-      console.log(`[OpenAIProvider] Fetched ${response.data.length} models in ${Date.now() - modelFetchStart}ms`);
-      
+      // console.log(`[OpenAIProvider] Fetched ${response.data.length} models in ${Date.now() - modelFetchStart}ms`);
+
       // Filter to only allowed models
       const availableIds = new Set(response.data.map(m => m.id));
       const filtered: AIModel[] = [];
-      
+
       for (const model of OPENAI_MODELS) {
         if (availableIds.has(model.id)) {
           filtered.push({
@@ -643,8 +643,8 @@ export class OpenAIProvider extends BaseAIProvider {
           });
         }
       }
-      
-      console.log(`[OpenAIProvider] Filtered to ${filtered.length} allowed models`);
+
+      // console.log(`[OpenAIProvider] Filtered to ${filtered.length} allowed models`);
       return filtered.length > 0 ? filtered : [];
     } catch (error) {
       console.error('[OpenAIProvider] Failed to fetch models:', error);

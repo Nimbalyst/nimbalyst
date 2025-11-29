@@ -43,10 +43,10 @@ export class ModelRegistry {
           break;
         case 'claude-code':
           // Use SDK version with dynamic loading
-          console.log('[ModelRegistry] Fetching claude-code models via ClaudeCodeProvider.getModels()');
+          // console.log('[ModelRegistry] Fetching claude-code models via ClaudeCodeProvider.getModels()');
           const { ClaudeCodeProvider } = await import('./providers/ClaudeCodeProvider');
           models = ClaudeCodeProvider.getModels();
-          console.log('[ModelRegistry] Claude Code models retrieved:', models.map(m => ({ id: m.id, name: m.name })));
+          // console.log('[ModelRegistry] Claude Code models retrieved:', models.map(m => ({ id: m.id, name: m.name })));
           break;
         case 'openai':
           const { OpenAIProvider } = await import('./providers/OpenAIProvider');
