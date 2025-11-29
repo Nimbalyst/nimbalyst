@@ -224,14 +224,17 @@ export function createMessageSyncHandler(syncProvider: SyncProvider) {
     async onMessageCreated(message: AgentMessage): Promise<void> {
       // Auto-connect session if not already connected
       if (!syncProvider.isConnected(message.sessionId)) {
+        console.log(`[MessageSyncHandler] Session ${message.sessionId} not connected, auto-connecting...`);
         try {
           await syncProvider.connect(message.sessionId);
+          console.log(`[MessageSyncHandler] Successfully connected session ${message.sessionId}`);
         } catch (error) {
-          console.warn(`[MessageSyncHandler] Failed to connect session ${message.sessionId}:`, error);
+          console.error(`[MessageSyncHandler] Failed to connect session ${message.sessionId}:`, error);
           return;
         }
       }
 
+      console.log(`[MessageSyncHandler] Pushing message_added for session ${message.sessionId}`);
       syncProvider.pushChange(message.sessionId, {
         type: 'message_added',
         message,
