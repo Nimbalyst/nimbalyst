@@ -1327,27 +1327,33 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
   }, []);
 
   // Persist draft input to database (debounced)
+  // Track previous draft input values to only save when they actually change
+  const previousDraftInputRef = useRef<Map<string, string>>(new Map());
+
   useEffect(() => {
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    const previousDraftInput = previousDraftInputRef.current;
 
     sessionTabs.forEach(tab => {
       if (tab.draftInput !== undefined) {
-        // Clear existing timer for this session
-        const existingTimer = timers.get(tab.id);
-        if (existingTimer) {
-          clearTimeout(existingTimer);
+        const previousValue = previousDraftInput.get(tab.id);
+
+        // Only save if draft input actually changed
+        if (previousValue !== tab.draftInput) {
+          // Update previous value
+          previousDraftInput.set(tab.id, tab.draftInput);
+
+          // Set new timer to save after 500ms of inactivity
+          const timer = setTimeout(async () => {
+            try {
+              await window.electronAPI.invoke('sessions:update-draft-input', tab.id, tab.draftInput || '');
+            } catch (err) {
+              console.error('[AgenticPanel] Failed to save draft input:', err);
+            }
+          }, 500);
+
+          timers.set(tab.id, timer);
         }
-
-        // Set new timer to save after 500ms of inactivity
-        const timer = setTimeout(async () => {
-          try {
-            await window.electronAPI.invoke('sessions:update-draft-input', tab.id, tab.draftInput || '');
-          } catch (err) {
-            console.error('[AgenticPanel] Failed to save draft input:', err);
-          }
-        }, 500);
-
-        timers.set(tab.id, timer);
       }
     });
 
