@@ -209,6 +209,33 @@ export async function registerSessionHandlers() {
         }
     });
 
+    // Migrate unassigned sessions to a workspace
+    ipcMain.handle('sessions:migrate-unassigned', async (event, workspacePath: string) => {
+        try {
+            const { migrateUnassignedSessions, countUnassignedSessions } = await import('../services/migrateUnassignedSessions');
+            const { getDatabase } = await import('../services/PGLiteSessionStore');
+            const db = getDatabase();
+
+            if (!db) {
+                return { success: false, error: 'Database not initialized' };
+            }
+
+            const countBefore = await countUnassignedSessions(db);
+            const result = await migrateUnassignedSessions(db, workspacePath);
+
+            console.log(`[SessionHandlers] Migrated ${result.migrated} sessions to workspace: ${workspacePath}`);
+
+            return {
+                success: true,
+                migrated: result.migrated,
+                countBefore
+            };
+        } catch (error) {
+            console.error('[SessionHandlers] Failed to migrate sessions:', error);
+            return { success: false, error: String(error) };
+        }
+    });
+
     // Mark session as read (update read state)
     ipcMain.handle('sessions:mark-read', async (event, sessionId: string, lastMessageTimestamp: number | null) => {
         try {

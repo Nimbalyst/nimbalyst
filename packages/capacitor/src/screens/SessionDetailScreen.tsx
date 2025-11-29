@@ -4,7 +4,8 @@ import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { useSync } from '../contexts/SyncContext';
 import { AgentTranscriptPanel, transformAgentMessagesToUI } from '@nimbalyst/runtime';
-import type { SessionData, Message } from '@nimbalyst/runtime';
+import { AIInput } from '@nimbalyst/runtime/ui';
+import type { SessionData, Message, ChatAttachment } from '@nimbalyst/runtime';
 
 interface SyncedMessage {
   id: string;
@@ -32,6 +33,11 @@ export function SessionDetailScreen() {
   const [metadata, setMetadata] = useState<SessionMetadata>({});
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Input state
+  const [inputValue, setInputValue] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
 
   const docRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<WebsocketProvider | null>(null);
@@ -77,7 +83,7 @@ export function SessionDetailScreen() {
     const updateMessages = () => {
       const msgs = messagesArray.toArray().map((msg) => {
         // Convert Y.js types to plain objects if needed
-        return typeof msg.toJSON === 'function' ? msg.toJSON() : msg;
+        return (msg as any)?.toJSON ? (msg as any).toJSON() : msg;
       });
       console.log('[SessionDetail] Messages:', msgs);
       setMessages(msgs.filter((m) => !m.hidden));
@@ -91,6 +97,12 @@ export function SessionDetailScreen() {
       });
       console.log('[SessionDetail] Metadata:', meta);
       setMetadata(meta);
+
+      // Sync draft input from Y.Doc (if different from local state)
+      const draft = metadataMap.get('draftInput');
+      if (typeof draft === 'string' && draft !== inputValue) {
+        setInputValue(draft);
+      }
     };
 
     // Observe changes
@@ -144,21 +156,91 @@ export function SessionDetailScreen() {
 
   const title = metadata.title || 'Untitled Session';
 
+  // Generate unique ID for messages
+  const generateId = () => {
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  };
+
+  // Handle input change - sync draft to Y.Doc
+  const handleInputChange = (value: string) => {
+    setInputValue(value);
+
+    // Sync draft input to Y.Doc
+    if (docRef.current) {
+      const metadataMap = docRef.current.getMap('metadata');
+      metadataMap.set('draftInput', value);
+    }
+  };
+
+  // Handle sending a message
+  const handleSendMessage = async (message: string) => {
+    if (!message.trim() || !sessionId || !docRef.current) {
+      console.log('[SessionDetail] Cannot send: missing data', { message: !!message.trim(), sessionId, doc: !!docRef.current });
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      // Create user message
+      const userMessage: SyncedMessage = {
+        id: generateId(),
+        createdAt: Date.now(),
+        source: 'user',
+        direction: 'input',
+        content: message,
+      };
+
+      console.log('[SessionDetail] Sending message:', userMessage);
+
+      // Push to Y.Doc messages array
+      const messagesArray = docRef.current.getArray<SyncedMessage>('messages');
+      messagesArray.push([userMessage]);
+
+      // Update metadata with pending execution flag and clear draft
+      const metadataMap = docRef.current.getMap('metadata');
+      metadataMap.set('pendingExecution', {
+        messageId: userMessage.id,
+        sentAt: Date.now(),
+        sentBy: 'mobile',
+      });
+      metadataMap.set('draftInput', ''); // Clear draft after sending
+
+      // Clear input
+      setInputValue('');
+      setAttachments([]);
+
+      console.log('[SessionDetail] Message sent successfully');
+    } catch (err) {
+      console.error('[SessionDetail] Failed to send message:', err);
+      setError('Failed to send message');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleAttachmentAdd = (attachment: ChatAttachment) => {
+    setAttachments(prev => [...prev, attachment]);
+  };
+
+  const handleAttachmentRemove = (attachmentId: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== attachmentId));
+  };
+
   return (
-    <div className="flex flex-col min-h-screen">
-      {/* Header */}
-      <header className="flex items-center px-4 py-3 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)]">
+    <div className="flex flex-col h-screen">
+      {/* Header - Fixed */}
+      <header className="sticky top-0 z-10 flex items-center px-3 py-2 border-b border-[var(--border-primary)] bg-[var(--surface-secondary)]">
         <button
           onClick={() => navigate('/')}
-          className="mr-3 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          className="mr-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="m15 18-6-6 6-6"/>
           </svg>
         </button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-semibold truncate">{title}</h1>
-          <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
+          <h1 className="text-base font-semibold truncate">{title}</h1>
+          <div className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
             {metadata.provider && <span>{metadata.provider}</span>}
             {metadata.model && <span>/ {metadata.model}</span>}
             <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
@@ -166,8 +248,8 @@ export function SessionDetailScreen() {
         </div>
       </header>
 
-      {/* Transcript */}
-      <main className="flex-1 overflow-hidden">
+      {/* Transcript - Scrollable */}
+      <main className="flex-1 overflow-auto">
         {error && (
           <div className="m-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">
             {error}
@@ -186,6 +268,22 @@ export function SessionDetailScreen() {
           />
         )}
       </main>
+
+      {/* AI Input - Fixed at bottom */}
+      <footer className="flex-shrink-0">
+        <AIInput
+          value={inputValue}
+          onChange={handleInputChange}
+          onSend={handleSendMessage}
+          disabled={!connected || isSending}
+          isLoading={isSending}
+          placeholder={connected ? "Type your message..." : "Connecting..."}
+          attachments={attachments}
+          onAttachmentAdd={handleAttachmentAdd}
+          onAttachmentRemove={handleAttachmentRemove}
+          simpleMode={true}
+        />
+      </footer>
     </div>
   );
 }

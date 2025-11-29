@@ -4,22 +4,25 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "vite --host",
+    "build": "vite build",
+    "build:check": "tsc -b && vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist node_modules/.vite"
   },
   "dependencies": {
-    "@capacitor/core": "^6.0.0",
-    "@capacitor/preferences": "^6.0.0",
+    "@capacitor/core": "^7.4.4",
+    "@capacitor/preferences": "^7.0.2",
     "@nimbalyst/runtime": "file:../runtime",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.0.0",
-    "yjs": "^13.6.0",
-    "y-websocket": "^2.0.0"
+    "y-websocket": "^2.0.0",
+    "yjs": "^13.6.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.4.4",
+    "@capacitor/ios": "^7.4.4",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.3.0",

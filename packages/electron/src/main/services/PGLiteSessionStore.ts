@@ -51,6 +51,13 @@ function toMillis(value: unknown): number {
 let moduleDb: PGliteLike | null = null;
 let moduleEnsureReady: EnsureReadyFn | null = null;
 
+/**
+ * Get the database instance for direct queries (e.g., migrations)
+ */
+export function getDatabase(): PGliteLike | null {
+  return moduleDb;
+}
+
 interface SyncedMessage {
   id: string;
   sessionId: string;
@@ -102,8 +109,10 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
     provider: row.provider || 'unknown',
     model: row.model,
     mode: row.mode,
-    workspaceId: row.workspace_id,
-    workspacePath: row.workspace_id, // workspace_id is the path in this system
+    // Ensure workspaceId is never null/undefined for Y.js sync compatibility
+    // NULL workspace_id means session was created before workspace tracking
+    workspaceId: row.workspace_id || 'default',
+    workspacePath: row.workspace_id || 'default', // workspace_id is the path in this system
     messageCount: parseInt(row.message_count) || 0,
     updatedAt: toMillis(row.updated_at),
     createdAt: toMillis(row.created_at),

@@ -11,7 +11,11 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "paths": {
+      "@nimbalyst/runtime": ["../runtime/src"],
+      "rexical": ["../rexical/src"]
+    }
   },
   "include": ["src"]
 }

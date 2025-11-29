@@ -128,60 +128,25 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     error: null,
   });
   const [allSessions, setAllSessions] = useState<SessionIndexEntry[]>([]);
+  const [projectsFromIndex, setProjectsFromIndex] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() => loadSelectedProject());
 
   // Refs for Y.js objects (persist across renders)
   const docRef = useRef<Y.Doc | null>(null);
   const providerRef = useRef<WebsocketProvider | null>(null);
+  const projectsDocRef = useRef<Y.Doc | null>(null);
+  const projectsProviderRef = useRef<WebsocketProvider | null>(null);
 
   const setConfig = useCallback((newConfig: SyncConfig | null) => {
     setConfigState(newConfig);
     saveConfig(newConfig);
   }, []);
 
-  // Compute projects from sessions
+  // Projects MUST come from ProjectsIndex - desktop is the source of truth
   const projects = React.useMemo((): Project[] => {
-    console.log('[SyncContext] Computing projects from', allSessions.length, 'sessions');
-    const projectMap = new Map<string, Project>();
-
-    for (const session of allSessions) {
-      const workspaceId = session.workspaceId || 'default';
-      const workspacePath = session.workspacePath;
-
-      console.log('[SyncContext] Session workspace info:', {
-        sessionId: session.id.substring(0, 8),
-        workspaceId,
-        workspacePath,
-      });
-
-      if (!projectMap.has(workspaceId)) {
-        // Extract project name from workspace path
-        let name = 'Default Project';
-        if (workspacePath) {
-          const parts = workspacePath.split('/');
-          name = parts[parts.length - 1] || workspacePath;
-        }
-
-        projectMap.set(workspaceId, {
-          id: workspaceId,
-          name,
-          path: workspacePath,
-          sessionCount: 0,
-        });
-      }
-
-      const project = projectMap.get(workspaceId)!;
-      project.sessionCount++;
-    }
-
-    // Sort by session count descending
-    const projectsList = Array.from(projectMap.values()).sort(
-      (a, b) => b.sessionCount - a.sessionCount
-    );
-
-    console.log('[SyncContext] Computed projects:', projectsList);
-    return projectsList;
-  }, [allSessions]);
+    console.log('[SyncContext] Projects from ProjectsIndex:', projectsFromIndex.length);
+    return projectsFromIndex;
+  }, [projectsFromIndex]);
 
   // Filter sessions by selected project
   const sessions = React.useMemo((): SessionIndexEntry[] => {
@@ -195,9 +160,26 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       return allSessions;
     }
 
-    const filtered = allSessions.filter(
-      (session) => (session.workspaceId || 'default') === selectedProjectId
-    );
+    const filtered = allSessions.filter((session) => {
+      // Check both workspaceId and workspacePath (desktop uses workspaceId = path)
+      const sessionWorkspace = session.workspaceId || session.workspacePath || 'default';
+      const matches = sessionWorkspace === selectedProjectId;
+
+      // Debug log first few sessions to see what's being compared
+      if (allSessions.indexOf(session) < 3) {
+        console.log('[SyncContext] Comparing session:', {
+          sessionId: session.id,
+          workspaceId: session.workspaceId,
+          workspacePath: session.workspacePath,
+          sessionWorkspace,
+          selectedProjectId,
+          matches,
+          sessionKeys: Object.keys(session),
+        });
+      }
+
+      return matches;
+    });
 
     console.log('[SyncContext] Filtered to', filtered.length, 'sessions for project', selectedProjectId);
     return filtered;
@@ -222,7 +204,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     sessionsMap.forEach((entry, id) => {
       // Y.js Map values may be plain objects or Y.js types
       // Convert to plain object if needed
-      const plainEntry = typeof entry.toJSON === 'function' ? entry.toJSON() : entry;
+      const plainEntry = (entry as any)?.toJSON ? (entry as any).toJSON() : entry;
       console.log('[SyncContext] Session entry:', id, plainEntry);
       sessionList.push({ ...plainEntry, id });
     });
@@ -233,6 +215,34 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     setAllSessions(sessionList);
   }, []);
 
+  // Update projects from ProjectsIndex Y.Doc
+  const updateProjectsFromDoc = useCallback(() => {
+    if (!projectsDocRef.current) {
+      setProjectsFromIndex([]);
+      return;
+    }
+
+    const projectsMap = projectsDocRef.current.getMap<any>('projects');
+    const projectList: Project[] = [];
+
+    projectsMap.forEach((entry, id) => {
+      const plainEntry = (entry as any)?.toJSON ? (entry as any).toJSON() : entry;
+      console.log('[SyncContext] Project entry:', id, plainEntry);
+
+      projectList.push({
+        id: plainEntry.id || id,
+        name: plainEntry.name || 'Unknown',
+        path: plainEntry.path,
+        sessionCount: plainEntry.sessionCount || 0,
+      });
+    });
+
+    // Sort by session count descending
+    projectList.sort((a, b) => b.sessionCount - a.sessionCount);
+    console.log('[SyncContext] Projects from index:', projectList);
+    setProjectsFromIndex(projectList);
+  }, []);
+
   const selectProject = useCallback((project: Project | null) => {
     const projectId = project?.id || null;
     setSelectedProjectId(projectId);
@@ -241,7 +251,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(() => {
     updateSessionsFromDoc();
-  }, [updateSessionsFromDoc]);
+    updateProjectsFromDoc();
+  }, [updateSessionsFromDoc, updateProjectsFromDoc]);
 
   // Connect to SessionsIndex Y.Doc when config changes
   useEffect(() => {
@@ -338,6 +349,82 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       }
     };
   }, [config, updateSessionsFromDoc]);
+
+  // Connect to ProjectsIndex Y.Doc when config changes
+  useEffect(() => {
+    // Cleanup previous connection
+    if (projectsProviderRef.current) {
+      projectsProviderRef.current.disconnect();
+      projectsProviderRef.current.destroy();
+      projectsProviderRef.current = null;
+    }
+    if (projectsDocRef.current) {
+      projectsDocRef.current.destroy();
+      projectsDocRef.current = null;
+    }
+
+    if (!config) {
+      setProjectsFromIndex([]);
+      return;
+    }
+
+    // Create new Y.Doc for ProjectsIndex
+    const projectsDoc = new Y.Doc();
+    projectsDocRef.current = projectsDoc;
+
+    // The document ID for projects index: {userId}:projects
+    const projectsDocId = `${config.userId}:projects`;
+    const wsUrl = `${config.serverUrl}/sync`;
+
+    console.log('[SyncContext] Connecting to ProjectsIndex:', projectsDocId, 'at', wsUrl);
+
+    const projectsProvider = new WebsocketProvider(wsUrl, projectsDocId, projectsDoc, {
+      params: {
+        authorization: `Bearer ${config.userId}:${config.authToken}`,
+      },
+      connect: true,
+    });
+    projectsProviderRef.current = projectsProvider;
+
+    // Log connection status
+    projectsProvider.on('status', ({ status }: { status: string }) => {
+      console.log('[SyncContext] ProjectsIndex connection status:', status);
+    });
+
+    projectsProvider.on('connection-error', (error: any) => {
+      console.error('[SyncContext] ProjectsIndex connection error:', error);
+    });
+
+    // Listen for sync
+    projectsProvider.on('sync', (isSynced: boolean) => {
+      if (isSynced) {
+        console.log('[SyncContext] ProjectsIndex synced');
+        updateProjectsFromDoc();
+      }
+    });
+
+    // Listen for changes to the projects map
+    const projectsMap = projectsDoc.getMap<any>('projects');
+    projectsMap.observe(() => {
+      updateProjectsFromDoc();
+    });
+
+    // Initial update
+    updateProjectsFromDoc();
+
+    // Cleanup on unmount or config change
+    return () => {
+      if (projectsProviderRef.current) {
+        projectsProviderRef.current.disconnect();
+        projectsProviderRef.current.destroy();
+        projectsProviderRef.current = null;
+      }
+      if (projectsDocRef.current) {
+        projectsDocRef.current.destroy();
+        projectsDocRef.current = null;
+      }
+    };
+  }, [config, updateProjectsFromDoc]);
 
   const value: SyncContextValue = {
     config,

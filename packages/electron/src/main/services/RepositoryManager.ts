@@ -14,11 +14,12 @@ import { AISessionsRepository, SessionFilesRepository, AgentMessagesRepository }
 import { createPGLiteSessionStore } from './PGLiteSessionStore';
 import { createPGLiteSessionFileStore } from './PGLiteSessionFileStore';
 import { createPGLiteAgentMessagesStore } from './PGLiteAgentMessagesStore';
+import { createSyncedAgentMessagesStore } from './SyncedAgentMessagesStore';
 import { createPGLiteWorkspaceRepository } from './PGLiteWorkspaceRepository';
 import { createPGLiteDocumentsRepository } from './PGLiteDocumentsRepository';
 import { database } from '../database/PGLiteDatabaseWorker';
 import { logger } from '../utils/logger';
-import { initializeSync, shutdownSync } from './SyncManager';
+import { initializeSync, shutdownSync, isSyncEnabled } from './SyncManager';
 
 class RepositoryManager {
   private sessionStore: SessionStore | null = null;
@@ -78,8 +79,8 @@ class RepositoryManager {
       // Register session file store with runtime's SessionFilesRepository
       SessionFilesRepository.setStore(this.sessionFileStore);
 
-      // Create agent messages store
-      this.agentMessagesStore = createPGLiteAgentMessagesStore(
+      // Create base agent messages store
+      const baseAgentMessagesStore = createPGLiteAgentMessagesStore(
         dbAdapter,
         async () => {
           if (!database.isInitialized()) {
@@ -87,6 +88,11 @@ class RepositoryManager {
           }
         }
       );
+
+      // Wrap with sync if enabled (must happen after initializeSync)
+      this.agentMessagesStore = isSyncEnabled()
+        ? createSyncedAgentMessagesStore(baseAgentMessagesStore)
+        : baseAgentMessagesStore;
 
       // Register agent messages store with runtime's AgentMessagesRepository
       AgentMessagesRepository.setStore(this.agentMessagesStore);

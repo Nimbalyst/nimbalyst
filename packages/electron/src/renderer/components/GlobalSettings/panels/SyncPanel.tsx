@@ -1,10 +1,16 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 export interface SyncConfig {
   enabled: boolean;
   serverUrl: string;
   userId: string;
   authToken: string;
+  enabledProjects?: string[]; // workspace paths that are enabled for sync
+}
+
+interface Project {
+  path: string;
+  name: string;
 }
 
 interface SyncPanelProps {
@@ -23,9 +29,41 @@ export function SyncPanel({
   testMessage,
 }: SyncPanelProps) {
   const isDevelopment = import.meta.env.DEV;
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  // Load projects from workspace store
+  useEffect(() => {
+    async function loadProjects() {
+      try {
+        const workspaces = await window.electronAPI.invoke('get-recent-workspaces');
+        setProjects(workspaces.map((ws: any) => ({
+          path: ws.path,
+          name: ws.name,
+        })));
+      } catch (error) {
+        console.error('Failed to load workspaces:', error);
+      }
+    }
+    loadProjects();
+  }, []);
 
   const handleFieldChange = (field: keyof SyncConfig, value: string | boolean) => {
     onConfigChange({ ...config, [field]: value });
+  };
+
+  const handleProjectToggle = (projectPath: string, enabled: boolean) => {
+    const enabledProjects = config.enabledProjects || [];
+    const updated = enabled
+      ? [...enabledProjects, projectPath]
+      : enabledProjects.filter(p => p !== projectPath);
+
+    onConfigChange({ ...config, enabledProjects: updated });
+  };
+
+  const isProjectEnabled = (projectPath: string): boolean => {
+    // If enabledProjects is not set, default to all enabled
+    if (!config.enabledProjects) return true;
+    return config.enabledProjects.includes(projectPath);
   };
 
   return (
@@ -130,6 +168,40 @@ export function SyncPanel({
                 <span className="test-status error">{testMessage || 'Connection failed'}</span>
               )}
             </div>
+          </div>
+
+          <div className="provider-panel-section">
+            <h4 className="provider-panel-section-title">Projects to Sync</h4>
+            <p className="provider-panel-hint">
+              Select which projects should sync their AI sessions to other devices.
+            </p>
+
+            {projects.length === 0 ? (
+              <p className="provider-panel-hint" style={{ fontStyle: 'italic', marginTop: '12px' }}>
+                No projects found. Open a workspace to see projects here.
+              </p>
+            ) : (
+              <div style={{ marginTop: '12px' }}>
+                {projects.map((project) => (
+                  <div key={project.path} className="setting-item">
+                    <label className="setting-label">
+                      <input
+                        type="checkbox"
+                        checked={isProjectEnabled(project.path)}
+                        onChange={(e) => handleProjectToggle(project.path, e.target.checked)}
+                        className="setting-checkbox"
+                      />
+                      <div className="setting-text">
+                        <span className="setting-name">{project.name}</span>
+                        <span className="setting-description" style={{ fontSize: '11px', opacity: 0.6 }}>
+                          {project.path}
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {isDevelopment && (
