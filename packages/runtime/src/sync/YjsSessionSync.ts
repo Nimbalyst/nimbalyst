@@ -56,6 +56,9 @@ export function createYjsSessionSync(config: SyncConfig): SyncProvider {
   let indexDoc: Y.Doc | null = null;
   let indexProvider: WebsocketProvider | null = null;
 
+  // Queue for index updates that fail due to disconnection
+  const pendingIndexUpdates = new Map<string, Partial<SyncedSessionMetadata>>();
+
   function getWebSocketUrl(sessionId: string): string {
     const base = config.serverUrl.replace(/\/$/, '');
     return `${base}/sync`;
@@ -78,6 +81,17 @@ export function createYjsSessionSync(config: SyncConfig): SyncProvider {
       connect: true,
     });
 
+    // When connected, flush any pending index updates
+    indexProvider.on('status', ({ status }: { status: string }) => {
+      if (status === 'connected' && pendingIndexUpdates.size > 0) {
+        console.log('[YjsSessionSync] Index connected, flushing', pendingIndexUpdates.size, 'pending updates');
+        for (const [sessionId, metadata] of pendingIndexUpdates.entries()) {
+          updateSessionIndex(sessionId, metadata);
+        }
+        pendingIndexUpdates.clear();
+      }
+    });
+
     // Wait for connection
     return new Promise((resolve) => {
       const checkConnection = () => {
@@ -97,12 +111,16 @@ export function createYjsSessionSync(config: SyncConfig): SyncProvider {
    */
   function updateSessionIndex(sessionId: string, metadata: Partial<SyncedSessionMetadata>): void {
     if (!indexDoc) {
-      console.warn('[YjsSessionSync] Cannot update index - indexDoc is null');
+      console.warn('[YjsSessionSync] Cannot update index - indexDoc is null, queuing update');
+      pendingIndexUpdates.set(sessionId, metadata);
       return;
     }
 
     if (!indexProvider?.wsconnected) {
-      console.warn('[YjsSessionSync] Cannot update index - not connected');
+      console.warn('[YjsSessionSync] Index not connected, queuing update for session:', sessionId);
+      // Merge with any existing pending update for this session
+      const existing = pendingIndexUpdates.get(sessionId);
+      pendingIndexUpdates.set(sessionId, { ...existing, ...metadata });
       return;
     }
 
@@ -204,6 +222,13 @@ export function createYjsSessionSync(config: SyncConfig): SyncProvider {
   connectToIndex()
     .then(() => {
       console.log('[YjsSessionSync] Connected to SessionsIndex, wsconnected:', indexProvider?.wsconnected);
+      if (indexProvider?.wsconnected && pendingIndexUpdates.size > 0) {
+        console.log('[YjsSessionSync] Flushing', pendingIndexUpdates.size, 'pending updates immediately');
+        for (const [sessionId, metadata] of pendingIndexUpdates.entries()) {
+          updateSessionIndex(sessionId, metadata);
+        }
+        pendingIndexUpdates.clear();
+      }
     })
     .catch((err) => {
       console.warn('[YjsSessionSync] Failed to connect to SessionsIndex:', err);

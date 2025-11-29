@@ -1583,6 +1583,16 @@ const AgenticPanel = forwardRef<AgenticPanelRef, AgenticPanelProps>(function Age
       return newMap;
     });
 
+    // CRITICAL: Immediately clear draft input in database to prevent it from
+    // being restored by Y.js sync. Don't wait for the debounced effect.
+    try {
+      await window.electronAPI.invoke('sessions:update-draft-input', sessionId, '');
+      // Also update the previous draft input tracker so the debounced effect doesn't overwrite
+      previousDraftInputRef.current.set(sessionId, '');
+    } catch (err) {
+      console.error('[AgenticPanel] Failed to clear draft input:', err);
+    }
+
     sendingSessionsRef.current.add(sessionId);
     setSendingSessions(prev => new Set(prev).add(sessionId));
 

@@ -194,11 +194,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   // Update sessions from Y.Doc
   const updateSessionsFromDoc = useCallback(() => {
     if (!docRef.current) {
+      console.log('[SyncContext] No docRef, clearing sessions');
       setAllSessions([]);
       return;
     }
 
     const sessionsMap = docRef.current.getMap<SessionIndexEntry>('sessions');
+    console.log('[SyncContext] SessionsMap size:', sessionsMap.size);
     const sessionList: SessionIndexEntry[] = [];
 
     sessionsMap.forEach((entry, id) => {
@@ -211,7 +213,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
     // Sort by lastMessageAt descending
     sessionList.sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
-    console.log('[SyncContext] Sessions list:', sessionList);
+    console.log('[SyncContext] Total sessions after sorting:', sessionList.length);
+    console.log('[SyncContext] Session IDs:', sessionList.map(s => s.id.substring(0, 8)));
     setAllSessions(sessionList);
   }, []);
 
