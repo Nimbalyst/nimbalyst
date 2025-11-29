@@ -71,10 +71,84 @@ function handleOptions(): Response {
 }
 
 /**
+ * Auto-migrate database schema on startup
+ */
+async function ensureSchema(db: D1Database): Promise<void> {
+  try {
+    // Check if tables exist by querying sqlite_master
+    const result = await db.prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='ydoc_snapshots'`
+    ).first();
+
+    if (!result) {
+      console.log('[Auto-migrate] Running initial schema migration...');
+
+      // Run 0001_initial.sql
+      await db.batch([
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS ydoc_snapshots (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            state_vector BLOB NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          )
+        `),
+        db.prepare(`CREATE INDEX IF NOT EXISTS idx_user_session ON ydoc_snapshots(user_id, session_id)`),
+        db.prepare(`CREATE INDEX IF NOT EXISTS idx_updated_at ON ydoc_snapshots(updated_at DESC)`),
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS session_metadata (
+            session_id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            title TEXT,
+            created_at INTEGER NOT NULL,
+            last_synced_at INTEGER NOT NULL,
+            device_count INTEGER DEFAULT 0,
+            snapshot_count INTEGER DEFAULT 0
+          )
+        `),
+        db.prepare(`CREATE INDEX IF NOT EXISTS idx_metadata_user ON session_metadata(user_id, last_synced_at DESC)`),
+      ]);
+
+      console.log('[Auto-migrate] Initial schema created');
+    }
+
+    // Check if compressed column exists
+    const compressedCheck = await db.prepare(
+      `SELECT sql FROM sqlite_master WHERE type='table' AND name='ydoc_snapshots'`
+    ).first<{ sql: string }>();
+
+    if (compressedCheck && !compressedCheck.sql.includes('compressed')) {
+      console.log('[Auto-migrate] Adding compression support...');
+
+      // Run 0002_add_compression.sql
+      await db.batch([
+        db.prepare(`ALTER TABLE ydoc_snapshots ADD COLUMN compressed INTEGER DEFAULT 0 NOT NULL`),
+        db.prepare(`CREATE INDEX IF NOT EXISTS idx_compressed ON ydoc_snapshots(compressed)`),
+      ]);
+
+      console.log('[Auto-migrate] Compression support added');
+    }
+
+    console.log('[Auto-migrate] Schema is up to date');
+  } catch (error) {
+    console.error('[Auto-migrate] Failed to migrate schema:', error);
+    // Don't throw - allow worker to start even if migration fails
+  }
+}
+
+/**
  * Main Worker fetch handler
  */
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+    // Auto-migrate schema on first request (runs once per worker instance)
+    if (!(_ctx as any).__schemaMigrated) {
+      await ensureSchema(env.DB);
+      (_ctx as any).__schemaMigrated = true;
+    }
+
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return handleOptions();
