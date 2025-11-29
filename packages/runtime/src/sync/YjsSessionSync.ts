@@ -8,14 +8,15 @@
 
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
+import type { AgentMessage } from '../ai/server/types';
 import type {
   SyncConfig,
   SyncStatus,
   SyncProvider,
   SessionChange,
-  SyncedMessage,
   SyncedSessionMetadata,
   SessionIndexData,
+  ProjectIndexEntry,
 } from './types';
 
 interface SessionSync {
@@ -117,6 +118,8 @@ export function createYjsSessionSync(config: SyncConfig): SyncProvider {
         provider: metadata.provider ?? existing?.provider ?? 'unknown',
         model: metadata.model ?? existing?.model,
         mode: metadata.mode ?? existing?.mode,
+        workspaceId: metadata.workspaceId ?? existing?.workspaceId,
+        workspacePath: metadata.workspacePath ?? existing?.workspacePath,
         lastMessagePreview: existing?.lastMessagePreview,
         lastMessageAt: existing?.lastMessageAt ?? now,
         messageCount: existing?.messageCount ?? 0,
@@ -138,6 +141,61 @@ export function createYjsSessionSync(config: SyncConfig): SyncProvider {
     const sessionsMap = indexDoc.getMap<SessionIndexEntry>('sessions');
     indexDoc.transact(() => {
       sessionsMap.delete(sessionId);
+    });
+  }
+
+  /**
+   * Update SessionsIndex when a message is added
+   */
+  function updateIndexForMessage(sessionId: string, message: AgentMessage): void {
+    if (!indexDoc) {
+      console.warn('[YjsSessionSync] Cannot update index for message - indexDoc is null');
+      return;
+    }
+
+    if (!indexProvider?.wsconnected) {
+      console.warn('[YjsSessionSync] Cannot update index for message - not connected');
+      return;
+    }
+
+    const sessionsMap = indexDoc.getMap<SessionIndexEntry>('sessions');
+
+    indexDoc.transact(() => {
+      const existing = sessionsMap.get(sessionId);
+      if (!existing) {
+        console.warn('[YjsSessionSync] Cannot update index for message - session not in index:', sessionId);
+        return;
+      }
+
+      // Extract preview text from message content
+      let preview = '';
+      if (typeof message.content === 'string') {
+        preview = message.content.slice(0, 100);
+      } else if (message.content && typeof message.content === 'object') {
+        // Handle structured content (Claude Code format)
+        try {
+          const contentStr = JSON.stringify(message.content);
+          preview = contentStr.slice(0, 100);
+        } catch {
+          preview = '';
+        }
+      }
+
+      const now = Date.now();
+      const messageTimestamp = message.createdAt
+        ? (message.createdAt instanceof Date ? message.createdAt.getTime() : new Date(message.createdAt).getTime())
+        : now;
+
+      const entry: SessionIndexEntry = {
+        ...existing,
+        lastMessagePreview: preview || existing.lastMessagePreview,
+        lastMessageAt: messageTimestamp,
+        messageCount: (existing.messageCount || 0) + 1,
+        updatedAt: now,
+      };
+
+      console.log('[YjsSessionSync] Updating index for new message:', sessionId, 'count:', entry.messageCount);
+      sessionsMap.set(sessionId, entry);
     });
   }
 
@@ -175,17 +233,17 @@ export function createYjsSessionSync(config: SyncConfig): SyncProvider {
     const session = sessions.get(sessionId);
     if (!session) return () => {};
 
-    const messages = doc.getArray<SyncedMessage>('messages');
+    const messages = doc.getArray<AgentMessage>('messages');
     const metadata = doc.getMap<unknown>('metadata');
 
     // Listen for remote message additions
-    const messageObserver = (event: Y.YArrayEvent<SyncedMessage>) => {
+    const messageObserver = (event: Y.YArrayEvent<AgentMessage>) => {
       if (event.transaction.local) return; // Ignore local changes
 
       event.changes.added.forEach((item) => {
         item.content.getContent().forEach((message) => {
           session.changeListeners.forEach((cb) =>
-            cb({ type: 'message_added', message: message as SyncedMessage })
+            cb({ type: 'message_added', message: message as AgentMessage })
           );
         });
       });
@@ -367,7 +425,7 @@ export function createYjsSessionSync(config: SyncConfig): SyncProvider {
       doc.transact(() => {
         switch (change.type) {
           case 'message_added': {
-            const messages = doc.getArray<SyncedMessage>('messages');
+            const messages = doc.getArray<AgentMessage>('messages');
             messages.push([change.message]);
             break;
           }
@@ -395,12 +453,14 @@ export function createYjsSessionSync(config: SyncConfig): SyncProvider {
       // Also update the SessionsIndex
       if (change.type === 'metadata_updated') {
         updateSessionIndex(sessionId, change.metadata);
+      } else if (change.type === 'message_added') {
+        updateIndexForMessage(sessionId, change.message);
       } else if (change.type === 'session_deleted') {
         removeFromIndex(sessionId);
       }
     },
 
-    syncSessionsToIndex(sessionsData: SessionIndexData[]): void {
+    syncSessionsToIndex(sessionsData: SessionIndexData[], options?: { syncMessages?: boolean }): void {
       if (!indexDoc) {
         console.warn('[YjsSessionSync] Cannot sync to index - indexDoc is null');
         return;
@@ -437,22 +497,113 @@ export function createYjsSessionSync(config: SyncConfig): SyncProvider {
 
       console.log('[YjsSessionSync] Index now has', sessionsMap.size, 'sessions');
 
-      // Also sync messages to individual session Y.Docs
-      for (const session of sessionsData) {
-        if (session.messages && session.messages.length > 0) {
-          this.syncSessionMessages(session.id, session.messages, {
+      // Only sync messages if explicitly requested (opt-in instead of automatic)
+      // This prevents memory exhaustion from loading all sessions at once
+      if (options?.syncMessages === true) {
+        console.log('[YjsSessionSync] Batching message sync for', sessionsData.length, 'sessions');
+        this.batchSyncSessionMessages(sessionsData);
+      } else {
+        console.log('[YjsSessionSync] Skipping message sync (use syncMessages: true to enable)');
+      }
+    },
+
+    /**
+     * Batch sync session messages with delay to prevent server memory exhaustion
+     * Syncs messages in small batches with delays between them
+     */
+    async batchSyncSessionMessages(sessionsData: SessionIndexData[]): Promise<void> {
+      const sessionsWithMessages = sessionsData.filter(s => s.messages && s.messages.length > 0);
+      const batchSize = 3; // Only 3 concurrent connections at a time
+      const delayMs = 1000; // 1 second delay between batches
+
+      console.log('[YjsSessionSync] Batch syncing', sessionsWithMessages.length, 'sessions in batches of', batchSize);
+
+      for (let i = 0; i < sessionsWithMessages.length; i += batchSize) {
+        const batch = sessionsWithMessages.slice(i, i + batchSize);
+
+        console.log(`[YjsSessionSync] Syncing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(sessionsWithMessages.length / batchSize)} (${batch.length} sessions)`);
+
+        // Sync batch in parallel (but only batchSize at a time)
+        batch.forEach(session => {
+          this.syncSessionMessages(session.id, session.messages!, {
             title: session.title,
             provider: session.provider,
             model: session.model,
           });
+        });
+
+        // Delay before next batch (except for last batch)
+        if (i + batchSize < sessionsWithMessages.length) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
         }
       }
+
+      console.log('[YjsSessionSync] Batch sync complete');
+    },
+
+    /**
+     * Sync projects to the ProjectsIndex Y.Doc ({userId}:projects)
+     * This tells the mobile app which projects exist and which are enabled for sync
+     */
+    syncProjectsToIndex(projects: ProjectIndexEntry[]): void {
+      // Create/connect to ProjectsIndex Y.Doc
+      const projectsDoc = new Y.Doc();
+      const projectsDocId = `${config.userId}:projects`;
+      const wsUrl = getWebSocketUrl(projectsDocId);
+
+      const projectsProvider = new WebsocketProvider(wsUrl, projectsDocId, projectsDoc, {
+        params: {
+          authorization: `Bearer ${config.userId}:${config.authToken}`,
+        },
+        connect: true,
+      });
+
+      // Wait for connection, then sync
+      const doSync = () => {
+        if (!projectsProvider.wsconnected) return;
+
+        console.log('[YjsSessionSync] Syncing', projects.length, 'projects to ProjectsIndex');
+
+        const projectsMap = projectsDoc.getMap<ProjectIndexEntry>('projects');
+
+        projectsDoc.transact(() => {
+          // Clear and rebuild
+          projectsMap.clear();
+          for (const project of projects) {
+            projectsMap.set(project.id, project);
+          }
+        });
+
+        console.log('[YjsSessionSync] ProjectsIndex now has', projectsMap.size, 'projects');
+
+        // Disconnect after sync
+        setTimeout(() => {
+          projectsProvider.disconnect();
+          projectsProvider.destroy();
+          projectsDoc.destroy();
+        }, 1000);
+      };
+
+      projectsProvider.on('sync', (isSynced: boolean) => {
+        if (isSynced) doSync();
+      });
+
+      // Timeout fallback
+      setTimeout(() => {
+        if (projectsProvider.wsconnected) {
+          doSync();
+        } else {
+          projectsProvider.disconnect();
+          projectsProvider.destroy();
+          projectsDoc.destroy();
+        }
+      }, 5000);
     },
 
     /**
      * Sync messages to an individual session Y.Doc
      */
-    syncSessionMessages(sessionId: string, messages: SyncedMessage[], metadata?: { title?: string; provider?: string; model?: string }): void {
+    syncSessionMessages(sessionId: string, messages: AgentMessage[], metadata?: { title?: string; provider?: string; model?: string }): void {
       // Create a temporary connection to sync messages
       const doc = new Y.Doc();
       const wsUrl = getWebSocketUrl(sessionId);
@@ -468,19 +619,31 @@ export function createYjsSessionSync(config: SyncConfig): SyncProvider {
       const doSync = () => {
         if (!provider.wsconnected) return;
 
-        console.log('[YjsSessionSync] Syncing', messages.length, 'messages to session', sessionId);
-
-        const messagesArray = doc.getArray<SyncedMessage>('messages');
+        const messagesArray = doc.getArray<AgentMessage>('messages');
         const metadataMap = doc.getMap<unknown>('metadata');
 
-        doc.transact(() => {
-          // Clear existing and add all messages
-          if (messagesArray.length > 0) {
-            messagesArray.delete(0, messagesArray.length);
-          }
-          messagesArray.push(messages);
+        const currentLength = messagesArray.length;
+        const incomingLength = messages.length;
 
-          // Also set basic metadata
+        console.log('[YjsSessionSync] Syncing session', sessionId, '- current:', currentLength, 'incoming:', incomingLength);
+
+        doc.transact(() => {
+          // CRITICAL: Only append NEW messages, never delete existing ones
+          // Deleting creates tombstones in the Y.js CRDT that bloat the state vector
+          // Since AI chat messages are append-only, we only need to add new messages
+          if (incomingLength > currentLength) {
+            const newMessages = messages.slice(currentLength);
+            messagesArray.push(newMessages);
+            console.log('[YjsSessionSync] Appended', newMessages.length, 'new messages');
+          } else if (incomingLength < currentLength) {
+            // This shouldn't happen in normal operation (messages can't disappear)
+            // Log a warning but don't delete - let the user investigate
+            console.warn('[YjsSessionSync] Incoming message count', incomingLength, 'is less than current', currentLength, '- skipping sync');
+          } else {
+            console.log('[YjsSessionSync] No new messages to sync');
+          }
+
+          // Always update metadata (these are lightweight)
           if (metadata) {
             if (metadata.title) metadataMap.set('title', metadata.title);
             if (metadata.provider) metadataMap.set('provider', metadata.provider);

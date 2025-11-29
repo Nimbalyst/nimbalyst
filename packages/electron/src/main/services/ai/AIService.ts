@@ -297,9 +297,13 @@ export class AIService {
   private sendMessageHandler: ((event: Electron.IpcMainInvokeEvent, message: string, documentContext?: DocumentContext, sessionId?: string, workspacePath?: string) => Promise<{ content: string }>) | null = null;
   // NOTE: Providers are now tracked per-session in ProviderFactory, not per-window
   // This allows multiple concurrent sessions in the same window (e.g., agent mode tabs)
+  private mobileSyncHandler: any = null; // MobileSyncHandler instance (lazy loaded)
 
   constructor(sessionStore: SessionStore) {
     this.sessionManager = new SessionManager(sessionStore);
+
+    // Initialize mobile sync handler if sync is enabled
+    this.initializeMobileSyncHandler();
 
     // Initialize SessionStateManager with the database worker
     // Import dynamically to avoid circular dependencies
@@ -376,6 +380,177 @@ export class AIService {
         console.error('[AIService] Error initializing API keys:', error);
       }
     });
+  }
+
+  private async initializeMobileSyncHandler() {
+    // Lazy load sync manager and mobile sync handler
+    try {
+      const { getSyncProvider } = await import('../SyncManager');
+      const syncProvider = getSyncProvider();
+
+      if (!syncProvider) {
+        logger.main.debug('[AIService] Sync not enabled, mobile sync handler not initialized');
+        return;
+      }
+
+      logger.main.info('[AIService] Initializing mobile sync handler...');
+      const { MobileSyncHandler } = await import('./MobileSyncHandler');
+      this.mobileSyncHandler = new MobileSyncHandler(syncProvider);
+
+      logger.main.info('[AIService] Mobile sync handler initialized successfully');
+    } catch (error) {
+      logger.main.error('[AIService] Failed to initialize mobile sync handler:', error);
+    }
+  }
+
+  private async processMobileMessage(sessionId: string, messageId: string): Promise<void> {
+    logger.main.info('[AIService] Processing mobile message:', { sessionId, messageId });
+
+    try {
+      // Load session to get provider/model config
+      const session = await this.sessionManager.loadSession(sessionId);
+      if (!session) {
+        logger.main.error('[AIService] Session not found:', sessionId);
+        return;
+      }
+
+      // Get the latest messages from database (includes the mobile message)
+      const { AgentMessagesRepository } = await import('@nimbalyst/runtime');
+      const agentMessages = await AgentMessagesRepository.list(sessionId);
+
+      // Transform to UI format
+      const { transformAgentMessagesToUI } = await import('@nimbalyst/runtime/ai/server/SessionManager');
+      const uiMessages = transformAgentMessagesToUI(agentMessages);
+
+      logger.main.info('[AIService] Loaded messages for mobile request:', {
+        messageCount: uiMessages.length,
+        lastMessage: previewForLog(uiMessages[uiMessages.length - 1]?.content),
+      });
+
+      // Get workspace path from session
+      const workspacePath = session.workspacePath || undefined;
+
+      // No document context for mobile messages
+      const documentContext: DocumentContext | undefined = undefined;
+
+      // Get provider for this session
+      const provider = await this.getProviderForSession(session);
+
+      // Register tool handler - mobile messages don't have specific target file
+      const toolHandler = this.createToolHandler(
+        null as any, // No event sender for mobile
+        documentContext,
+        sessionId,
+        workspacePath
+      );
+      provider.registerToolHandler(toolHandler);
+
+      // Send to AI provider with current message history
+      const response = await provider.chat(
+        uiMessages,
+        documentContext,
+        toolHandler,
+        {
+          onChunk: async (chunk: string) => {
+            // Chunks are streamed to Y.Doc via normal message sync
+            // Mobile will receive them via onRemoteChange
+          },
+        }
+      );
+
+      logger.main.info('[AIService] Mobile message processed successfully', {
+        responsePreview: previewForLog(response.content),
+      });
+
+      // Response is automatically added to database by provider
+      // and synced to mobile via message sync handler
+    } catch (error) {
+      logger.main.error('[AIService] Failed to process mobile message:', error);
+      throw error;
+    }
+  }
+
+  private setupSyncHandler(provider: AIProvider, sessionId: string): void {
+    // Only set up sync handler once per provider
+    if ((provider as any)._syncHandlerSetup) {
+      return;
+    }
+    (provider as any)._syncHandlerSetup = true;
+
+    // Import sync handler
+    const { getMessageSyncHandler } = require('../SyncManager');
+    const messageSyncHandler = getMessageSyncHandler();
+
+    if (!messageSyncHandler) {
+      // Sync not enabled
+      return;
+    }
+
+    // Listen for message:logged events and push to sync
+    provider.on('message:logged', async ({ sessionId: eventSessionId, direction }) => {
+      try {
+        // Only sync after the message is written to database
+        // Get the most recent message for this session
+        const { AgentMessagesRepository } = await import('@nimbalyst/runtime');
+        const messages = await AgentMessagesRepository.list(eventSessionId, { limit: 1, offset: 0, includeHidden: true });
+
+        if (messages && messages.length > 0) {
+          const latestMessage = messages[0];
+          logger.main.debug(`[AIService] Syncing message for session ${eventSessionId}`);
+          messageSyncHandler.onMessageCreated(latestMessage);
+        }
+      } catch (error) {
+        logger.main.warn('[AIService] Failed to sync message:', error);
+      }
+    });
+  }
+
+  private async getProviderForSession(session: SessionData): Promise<AIProvider> {
+    const providerType = session.provider as AIProviderType;
+    const model = session.model;
+
+    // Get API keys
+    const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
+
+    // Create provider config
+    const config: ProviderConfig = {
+      provider: providerType,
+      apiKey: apiKeys[providerType === 'claude' || providerType === 'claude-code' ? 'anthropic' : providerType] || '',
+      model: model,
+    };
+
+    // Get or create provider
+    const provider = await ProviderFactory.getProvider(session.id, config);
+
+    // Hook up sync handler if sync is enabled
+    this.setupSyncHandler(provider, session.id);
+
+    return provider;
+  }
+
+  private async createToolHandlerForSession(
+    sessionId: string,
+    workspacePath: string | undefined,
+    event: Electron.IpcMainInvokeEvent | null
+  ): Promise<ToolHandler> {
+    const session = await this.sessionManager.getSession(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    return async (toolName: string, toolArgs: Record<string, unknown>) => {
+      logger.main.info(`[AIService] Tool called from mobile: ${toolName}`, toolArgs);
+
+      // Use ToolExecutor to handle tool execution
+      const executor = new ToolExecutor(
+        sessionId,
+        workspacePath,
+        event?.sender || null
+      );
+
+      const result = await executor.executeTool(toolName, toolArgs);
+      return result;
+    };
   }
 
   private async runAutoContextCommand(
@@ -654,6 +829,16 @@ export class AIService {
 
       // NOTE: No longer tracking provider per-window - ProviderFactory handles per-session tracking
       // This allows multiple concurrent sessions in the same window
+
+      // Watch for mobile messages if sync is enabled
+      if (this.mobileSyncHandler) {
+        await this.mobileSyncHandler.watchSession(
+          session.id,
+          async (sessionId: string, messageId: string) => {
+            await this.processMobileMessage(sessionId, messageId);
+          }
+        );
+      }
 
       this.analytics.sendEvent('create_ai_session', { provider });
       return session;
@@ -1661,6 +1846,16 @@ export class AIService {
         });
       }
 
+      // Watch for mobile messages if sync is enabled
+      if (this.mobileSyncHandler) {
+        await this.mobileSyncHandler.watchSession(
+          session.id,
+          async (sessionId: string, messageId: string) => {
+            await this.processMobileMessage(sessionId, messageId);
+          }
+        );
+      }
+
       return session;
     });
 
@@ -1732,6 +1927,11 @@ export class AIService {
       // Clean up provider if it exists
       if (success) {
         ProviderFactory.destroyProvider(sessionId);
+
+        // Stop watching for mobile messages
+        if (this.mobileSyncHandler) {
+          this.mobileSyncHandler.unwatchSession(sessionId);
+        }
       }
 
       return { success };

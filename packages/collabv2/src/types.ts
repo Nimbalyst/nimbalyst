@@ -39,7 +39,8 @@ export interface YDocSnapshot {
   id: string; // Durable Object ID (userId:sessionId)
   user_id: string;
   session_id: string;
-  state_vector: ArrayBuffer; // Encrypted Y.Doc binary state
+  state_vector: ArrayBuffer; // Y.Doc binary state (may be gzip-compressed)
+  compressed: number; // 0 = uncompressed, 1 = gzip-compressed
   created_at: number; // Unix timestamp (milliseconds)
   updated_at: number;
 }
@@ -65,6 +66,14 @@ export interface SyncResult {
 export interface PersistenceConfig {
   snapshotIntervalMs: number; // Time between snapshots (default: 5 min)
   snapshotSizeThreshold: number; // Size threshold for snapshot (default: 1MB)
+}
+
+// Memory management configuration
+export interface MemoryConfig {
+  maxDocumentSizeBytes: number; // Maximum document size to load (default: 10MB)
+  warnThresholdBytes: number; // Log warning if document exceeds this (default: 5MB)
+  evictionTimeoutMs: number; // Evict idle documents after this time (default: 5 min)
+  enableLazyLoading: boolean; // Load documents on-demand vs on startup (default: true)
 }
 
 // Auth validation result

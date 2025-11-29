@@ -60,7 +60,10 @@ export interface SyncProvider {
   pushChange(sessionId: string, change: SessionChange): void;
 
   /** Bulk update the sessions index with existing sessions */
-  syncSessionsToIndex?(sessions: SessionIndexData[]): void;
+  syncSessionsToIndex?(sessions: SessionIndexData[], options?: { syncMessages?: boolean }): void;
+
+  /** Sync projects to the ProjectsIndex (tells mobile which projects exist and are enabled) */
+  syncProjectsToIndex?(projects: ProjectIndexEntry[]): void;
 }
 
 /** Session data for bulk index sync */
@@ -94,6 +97,22 @@ export interface SyncedSessionMetadata {
   mode?: string;
   provider?: string;
   model?: string;
+  workspaceId?: string;
+  workspacePath?: string;
   isArchived?: boolean;
+  draftInput?: string;
   updatedAt: number;
+}
+
+/**
+ * Project/workspace entry in the ProjectsIndex Y.Doc
+ * Lists all available projects so mobile knows what exists
+ */
+export interface ProjectIndexEntry {
+  id: string; // workspace path
+  name: string; // project name (extracted from path)
+  path: string; // full workspace path
+  sessionCount: number; // number of sessions in this project
+  lastActivityAt: number; // timestamp of most recent session activity
+  enabled: boolean; // whether this project is enabled for sync (user controlled)
 }

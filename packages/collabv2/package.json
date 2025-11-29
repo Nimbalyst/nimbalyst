@@ -4,7 +4,7 @@
   "description": "Cloudflare Workers Y.js sync server for device sync with E2E encryption",
   "main": "dist/worker.js",
   "scripts": {
-    "dev": "wrangler dev --local",
+    "dev": "wrangler dev --local --ip 0.0.0.0",
     "deploy": "wrangler deploy",
     "build": "tsc && esbuild src/worker.ts --bundle --format=esm --outfile=dist/worker.js",
     "test": "vitest run",

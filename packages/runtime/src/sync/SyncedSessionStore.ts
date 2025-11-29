@@ -20,7 +20,8 @@ import type {
   SessionListOptions,
   ChatSession,
 } from '../ai/adapters/sessionStore';
-import type { SyncProvider, SyncedMessage, SessionChange } from './types';
+import type { AgentMessage } from '../ai/server/types';
+import type { SyncProvider, SessionChange } from './types';
 
 export interface SyncedSessionStoreOptions {
   /** Auto-connect to sync when session is accessed */
@@ -96,6 +97,7 @@ export function createSyncedSessionStore(
           mode: payload.mode,
           provider: payload.provider,
           model: payload.model,
+          workspaceId: payload.workspaceId,
           updatedAt: Date.now(),
         };
         console.log('[SyncedSessionStore] Creating session with metadata:', payload.id, metadata);
@@ -113,9 +115,9 @@ export function createSyncedSessionStore(
       // Update base store
       await baseStore.updateMetadata(sessionId, metadata);
 
-      // Only sync metadata fields that are relevant for the index
-      // Don't push changes for fields like draftInput, providerSessionId, etc.
-      const syncableFields = ['title', 'mode', 'isArchived', 'provider', 'model'];
+      // Only sync metadata fields that are relevant for cross-device sync
+      // Don't push changes for fields like providerSessionId, etc.
+      const syncableFields = ['title', 'mode', 'isArchived', 'provider', 'model', 'draftInput'];
       const hasSyncableField = syncableFields.some(
         (field) => (metadata as Record<string, unknown>)[field] !== undefined
       );
@@ -126,12 +128,14 @@ export function createSyncedSessionStore(
       }
 
       // Build sync metadata with only defined fields
+      // NOTE: updatedAt is set when draftInput changes to keep sessions sorted correctly
       const syncMetadata: Record<string, unknown> = { updatedAt: Date.now() };
       if (metadata.title !== undefined) syncMetadata.title = metadata.title;
       if (metadata.mode !== undefined) syncMetadata.mode = metadata.mode;
       if (metadata.isArchived !== undefined) syncMetadata.isArchived = metadata.isArchived;
       if ((metadata as any).provider !== undefined) syncMetadata.provider = (metadata as any).provider;
       if ((metadata as any).model !== undefined) syncMetadata.model = (metadata as any).model;
+      if (metadata.draftInput !== undefined) syncMetadata.draftInput = metadata.draftInput;
 
       // Push to sync
       await ensureSyncConnected(sessionId);
@@ -217,8 +221,16 @@ export function createMessageSyncHandler(syncProvider: SyncProvider) {
     /**
      * Call this after a message is created to sync it.
      */
-    onMessageCreated(message: SyncedMessage): void {
-      if (!syncProvider.isConnected(message.sessionId)) return;
+    async onMessageCreated(message: AgentMessage): Promise<void> {
+      // Auto-connect session if not already connected
+      if (!syncProvider.isConnected(message.sessionId)) {
+        try {
+          await syncProvider.connect(message.sessionId);
+        } catch (error) {
+          console.warn(`[MessageSyncHandler] Failed to connect session ${message.sessionId}:`, error);
+          return;
+        }
+      }
 
       syncProvider.pushChange(message.sessionId, {
         type: 'message_added',
@@ -232,7 +244,7 @@ export function createMessageSyncHandler(syncProvider: SyncProvider) {
      */
     onRemoteMessage(
       sessionId: string,
-      callback: (message: SyncedMessage) => void
+      callback: (message: AgentMessage) => void
     ): () => void {
       return syncProvider.onRemoteChange(sessionId, (change) => {
         if (change.type === 'message_added') {

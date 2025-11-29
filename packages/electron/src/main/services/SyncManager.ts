@@ -26,11 +26,13 @@ async function loadSyncModule() {
 interface SyncManagerState {
   provider: import('@nimbalyst/runtime/sync').SyncProvider | null;
   config: SessionSyncConfig | null;
+  messageSyncHandler: ReturnType<typeof import('@nimbalyst/runtime/sync').createMessageSyncHandler> | null;
 }
 
 const state: SyncManagerState = {
   provider: null,
   config: null,
+  messageSyncHandler: null,
 };
 
 /**
@@ -56,7 +58,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
       userId: config.userId,
     });
 
-    const { createYjsSessionSync, createSyncedSessionStore } = await loadSyncModule();
+    const { createYjsSessionSync, createSyncedSessionStore, createMessageSyncHandler } = await loadSyncModule();
 
     // Create sync provider
     const provider = createYjsSessionSync({
@@ -65,16 +67,20 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
       authToken: config.authToken,
     });
 
+    // Create message sync handler
+    const messageSyncHandler = createMessageSyncHandler(provider);
+
     // Store state
     state.provider = provider;
     state.config = config;
+    state.messageSyncHandler = messageSyncHandler;
 
     // Wrap store with sync capabilities
     const syncedStore = createSyncedSessionStore(baseStore, provider, {
       autoConnect: true,
     });
 
-    // Sync existing sessions to index after a short delay to allow connection
+    // Sync existing sessions and projects to index after a short delay to allow connection
     logger.main.info('[SyncManager] Setting up bulk sync timer...');
     setTimeout(async () => {
       logger.main.info('[SyncManager] Bulk sync timer fired');
@@ -85,12 +91,86 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
           logger.main.info('[SyncManager] Importing getAllSessionsForSync...');
           const { getAllSessionsForSync } = await import('./PGLiteSessionStore');
           logger.main.info('[SyncManager] Calling getAllSessionsForSync...');
-          const sessions = await getAllSessionsForSync(true); // Include messages
-          logger.main.info('[SyncManager] Got sessions:', sessions.length);
+          const allSessions = await getAllSessionsForSync(true); // Include messages
+          logger.main.info('[SyncManager] Got sessions:', allSessions.length);
 
-          if (sessions.length > 0) {
-            logger.main.info(`[SyncManager] Syncing ${sessions.length} existing sessions to index`);
-            provider.syncSessionsToIndex(sessions);
+          // Build projects list from recent workspaces store
+          const { getRecentItems, store } = await import('../utils/store');
+          const recentWorkspaces = getRecentItems('workspaces');
+          const syncSettings = store.get('sessionSync');
+          const enabledProjects = syncSettings?.enabledProjects;
+
+          logger.main.info('[SyncManager] Found', recentWorkspaces.length, 'workspaces in store');
+          logger.main.info('[SyncManager] Enabled projects:', enabledProjects);
+
+          // Build session counts for each workspace
+          const sessionCounts = new Map<string, number>();
+          const lastActivity = new Map<string, number>();
+
+          for (const session of allSessions) {
+            const workspaceId = session.workspaceId || 'default';
+            sessionCounts.set(workspaceId, (sessionCounts.get(workspaceId) || 0) + 1);
+            lastActivity.set(workspaceId, Math.max(lastActivity.get(workspaceId) || 0, session.updatedAt));
+          }
+
+          // Create project entries from workspaces
+          const projects = recentWorkspaces.map(ws => ({
+            id: ws.path,
+            name: ws.name,
+            path: ws.path,
+            sessionCount: sessionCounts.get(ws.path) || 0,
+            lastActivityAt: lastActivity.get(ws.path) || Date.now(),
+            // If enabledProjects is not set, all projects are enabled by default
+            enabled: !enabledProjects || enabledProjects.includes(ws.path),
+          }));
+
+          // Add "Default Project" if there are sessions without workspace
+          if (sessionCounts.has('default')) {
+            projects.push({
+              id: 'default',
+              name: 'Default Project',
+              path: 'default',
+              sessionCount: sessionCounts.get('default') || 0,
+              lastActivityAt: lastActivity.get('default') || Date.now(),
+              enabled: !enabledProjects || enabledProjects.includes('default'),
+            });
+          }
+
+          logger.main.info('[SyncManager] Built', projects.length, 'projects from workspace store');
+          logger.main.info('[SyncManager] Enabled projects:', projects.filter(p => p.enabled).map(p => p.name));
+
+          if (allSessions.length > 0) {
+
+            // Log workspace distribution
+            const workspaceStats = new Map<string, number>();
+            for (const session of allSessions) {
+              const wsId = session.workspaceId || 'null';
+              workspaceStats.set(wsId, (workspaceStats.get(wsId) || 0) + 1);
+            }
+            logger.main.info('[SyncManager] Workspace distribution:', Object.fromEntries(workspaceStats));
+
+            // Sync projects first
+            logger.main.info('[SyncManager] provider.syncProjectsToIndex exists:', !!provider.syncProjectsToIndex);
+            logger.main.info('[SyncManager] Projects to sync:', JSON.stringify(projects, null, 2));
+
+            if (provider.syncProjectsToIndex) {
+              logger.main.info('[SyncManager] Calling syncProjectsToIndex with', projects.length, 'projects');
+              provider.syncProjectsToIndex(projects);
+              logger.main.info('[SyncManager] syncProjectsToIndex call completed');
+            } else {
+              logger.main.error('[SyncManager] syncProjectsToIndex method not available on provider!');
+            }
+
+            // Filter sessions to only enabled projects
+            const enabledProjectIds = new Set(projects.filter(p => p.enabled).map(p => p.id));
+            const sessionsToSync = allSessions.filter(session => {
+              const workspaceId = session.workspaceId || 'default';
+              return enabledProjectIds.has(workspaceId);
+            });
+
+            logger.main.info(`[SyncManager] Syncing ${sessionsToSync.length} of ${allSessions.length} sessions (from enabled projects)`);
+            // Enable message sync now that append-only fix prevents tombstone bloat
+            provider.syncSessionsToIndex(sessionsToSync, { syncMessages: true });
           } else {
             logger.main.info('[SyncManager] No sessions to sync');
           }
@@ -117,6 +197,13 @@ export function getSyncProvider(): import('@nimbalyst/runtime/sync').SyncProvide
 }
 
 /**
+ * Get the message sync handler (if sync is enabled).
+ */
+export function getMessageSyncHandler(): ReturnType<typeof import('@nimbalyst/runtime/sync').createMessageSyncHandler> | null {
+  return state.messageSyncHandler;
+}
+
+/**
  * Check if sync is currently active.
  */
 export function isSyncEnabled(): boolean {
@@ -132,6 +219,7 @@ export function shutdownSync(): void {
     state.provider.disconnectAll();
     state.provider = null;
     state.config = null;
+    state.messageSyncHandler = null;
   }
 }
 

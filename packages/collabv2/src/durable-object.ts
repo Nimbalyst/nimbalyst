@@ -6,7 +6,7 @@
  */
 
 import * as Y from 'yjs';
-import type { Env, ClientInfo, PersistenceConfig } from './types';
+import type { Env, ClientInfo, PersistenceConfig, MemoryConfig } from './types';
 import {
   handleSyncMessage,
   encodeDocumentState,
@@ -19,6 +19,7 @@ import {
   saveSnapshot,
   shouldSnapshot,
   DEFAULT_PERSISTENCE_CONFIG,
+  DEFAULT_MEMORY_CONFIG,
   incrementDeviceCount,
   decrementDeviceCount,
 } from './persistence';
@@ -27,8 +28,8 @@ export class YjsSyncObject implements DurableObject {
   private state: DurableObjectState;
   private env: Env;
 
-  // In-memory Y.Doc
-  private ydoc: Y.Doc;
+  // In-memory Y.Doc (may be null if using lazy loading)
+  private ydoc: Y.Doc | null = null;
 
   // Connected WebSocket clients
   private clients: Map<WebSocket, ClientInfo>;
@@ -37,24 +38,33 @@ export class YjsSyncObject implements DurableObject {
   private dirty: boolean;
   private lastSnapshotTime: number;
   private config: PersistenceConfig;
+  private memoryConfig: MemoryConfig;
 
   // Document identity (extracted from DO ID)
   private userId: string | null = null;
   private sessionId: string | null = null;
 
+  // Memory management
+  private documentLoaded: boolean = false;
+  private lastActivityTime: number;
+
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
     this.env = env;
-    this.ydoc = new Y.Doc();
     this.clients = new Map();
     this.dirty = false;
     this.lastSnapshotTime = Date.now();
+    this.lastActivityTime = Date.now();
     this.config = DEFAULT_PERSISTENCE_CONFIG;
+    this.memoryConfig = DEFAULT_MEMORY_CONFIG;
 
-    // Load state from D1 on creation
-    this.state.blockConcurrencyWhile(async () => {
-      await this.loadFromD1();
-    });
+    // Lazy loading: Don't load document until first client connects
+    // This saves memory for inactive sessions
+    if (!this.memoryConfig.enableLazyLoading) {
+      this.state.blockConcurrencyWhile(async () => {
+        await this.ensureDocumentLoaded();
+      });
+    }
 
     // Enable WebSocket auto-response for ping/pong during hibernation
     this.state.setWebSocketAutoResponse(
@@ -63,6 +73,9 @@ export class YjsSyncObject implements DurableObject {
         JSON.stringify({ type: 'pong' })
       )
     );
+
+    // Set alarm for document eviction (if no clients)
+    this.scheduleEvictionCheck();
   }
 
   /**
@@ -130,6 +143,9 @@ export class YjsSyncObject implements DurableObject {
     ws: WebSocket,
     message: ArrayBuffer | string
   ): Promise<void> {
+    // Update activity timestamp
+    this.lastActivityTime = Date.now();
+
     // Handle JSON control messages (ping/pong, etc.)
     if (typeof message === 'string') {
       try {
@@ -140,6 +156,14 @@ export class YjsSyncObject implements DurableObject {
       } catch {
         // Ignore invalid JSON
       }
+      return;
+    }
+
+    // Ensure document is loaded before processing Y.js messages
+    await this.ensureDocumentLoaded();
+
+    if (!this.ydoc) {
+      console.error('Failed to load document');
       return;
     }
 
@@ -209,32 +233,114 @@ export class YjsSyncObject implements DurableObject {
   }
 
   /**
-   * Alarm handler - called before hibernation timeout
-   * Used to ensure state is persisted before DO hibernates
+   * Alarm handler - called periodically for maintenance
+   * - Saves dirty documents
+   * - Evicts idle documents to free memory
    */
   async alarm(): Promise<void> {
+    // Save state if dirty
     if (this.dirty) {
       await this.snapshotToD1();
     }
+
+    // Evict document if no clients and past eviction timeout
+    if (this.clients.size === 0 && this.documentLoaded) {
+      const idleTime = Date.now() - this.lastActivityTime;
+      if (idleTime > this.memoryConfig.evictionTimeoutMs) {
+        await this.evictDocument();
+      }
+    }
+
+    // Schedule next check
+    this.scheduleEvictionCheck();
   }
 
   /**
-   * Load document state from D1 on startup
+   * Ensure document is loaded from D1 (lazy loading)
+   * Only loads if not already loaded, with size limits
    */
-  private async loadFromD1(): Promise<void> {
+  private async ensureDocumentLoaded(): Promise<void> {
+    if (this.documentLoaded && this.ydoc) {
+      return; // Already loaded
+    }
+
     const documentId = this.state.id.toString();
 
     try {
       const existingState = await loadSnapshot(this.env.DB, documentId);
+
       if (existingState) {
+        const sizeInBytes = existingState.length;
+        const sizeInMB = sizeInBytes / (1024 * 1024);
+
+        // Check if document exceeds maximum size
+        if (sizeInBytes > this.memoryConfig.maxDocumentSizeBytes) {
+          console.error(
+            `Document ${documentId} exceeds max size: ${sizeInMB.toFixed(2)}MB > ${(this.memoryConfig.maxDocumentSizeBytes / (1024 * 1024)).toFixed(2)}MB`
+          );
+          // Create empty doc instead of refusing to load
+          // This allows new edits but loses history (emergency fallback)
+          this.ydoc = new Y.Doc();
+          this.documentLoaded = true;
+          return;
+        }
+
+        // Warn if document is large but under limit
+        if (sizeInBytes > this.memoryConfig.warnThresholdBytes) {
+          console.warn(
+            `Large document ${documentId}: ${sizeInMB.toFixed(2)}MB (warning threshold: ${(this.memoryConfig.warnThresholdBytes / (1024 * 1024)).toFixed(2)}MB)`
+          );
+        }
+
         this.ydoc = createDoc(existingState);
-        console.log(`Loaded snapshot for ${documentId}, size: ${existingState.length} bytes`);
+        this.documentLoaded = true;
+        console.log(`Loaded snapshot for ${documentId}, size: ${sizeInBytes} bytes (${sizeInMB.toFixed(2)}MB)`);
+      } else {
+        // No existing snapshot - create new document
+        this.ydoc = new Y.Doc();
+        this.documentLoaded = true;
+        console.log(`Created new document for ${documentId}`);
       }
     } catch (error) {
       console.error('Failed to load from D1:', error);
+      // Fallback to empty document
+      this.ydoc = new Y.Doc();
+      this.documentLoaded = true;
     }
 
     this.lastSnapshotTime = Date.now();
+  }
+
+  /**
+   * Evict document from memory to free resources
+   * Ensures state is saved before eviction
+   */
+  private async evictDocument(): Promise<void> {
+    if (!this.documentLoaded || !this.ydoc) {
+      return;
+    }
+
+    // Save if dirty before evicting
+    if (this.dirty) {
+      await this.snapshotToD1();
+    }
+
+    const documentId = this.state.id.toString();
+    console.log(`Evicting idle document ${documentId} to free memory`);
+
+    // Destroy Y.Doc and clear reference
+    this.ydoc.destroy();
+    this.ydoc = null;
+    this.documentLoaded = false;
+  }
+
+  /**
+   * Schedule next eviction check alarm
+   */
+  private scheduleEvictionCheck(): void {
+    // Check every minute for idle documents
+    const nextCheck = Date.now() + 60 * 1000;
+    this.state.storage.setAlarm(nextCheck);
   }
 
   /**
@@ -246,8 +352,21 @@ export class YjsSyncObject implements DurableObject {
       return;
     }
 
+    if (!this.ydoc || !this.documentLoaded) {
+      console.warn('Cannot snapshot: document not loaded');
+      return;
+    }
+
     const documentId = this.state.id.toString();
     const stateVector = encodeDocumentState(this.ydoc);
+    const sizeInBytes = stateVector.length;
+    const sizeInMB = (sizeInBytes / (1024 * 1024)).toFixed(2);
+
+    // Log detailed size information BEFORE attempting to save
+    console.log(`[SNAPSHOT] Attempting to save snapshot for ${documentId}`);
+    console.log(`[SNAPSHOT] Size: ${sizeInBytes} bytes (${sizeInMB}MB)`);
+    console.log(`[SNAPSHOT] Session ID: ${this.sessionId}`);
+    console.log(`[SNAPSHOT] User ID: ${this.userId}`);
 
     try {
       await saveSnapshot(
@@ -260,9 +379,13 @@ export class YjsSyncObject implements DurableObject {
 
       this.dirty = false;
       this.lastSnapshotTime = Date.now();
-      console.log(`Saved snapshot for ${documentId}, size: ${stateVector.length} bytes`);
+      console.log(`[SNAPSHOT] Successfully saved snapshot for ${documentId}, size: ${sizeInBytes} bytes (${sizeInMB}MB)`);
     } catch (error) {
-      console.error('Failed to save to D1:', error);
+      console.error(`[SNAPSHOT] Failed to save snapshot for ${documentId}:`, error);
+      console.error(`[SNAPSHOT] Document size was: ${sizeInBytes} bytes (${sizeInMB}MB)`);
+
+      // Re-throw so we can see the full error
+      throw error;
     }
   }
 
@@ -286,7 +409,8 @@ export class YjsSyncObject implements DurableObject {
    * Handle status request (for debugging)
    */
   private handleStatusRequest(): Response {
-    const docSize = getDocumentSize(this.ydoc);
+    const docSize = this.ydoc && this.documentLoaded ? getDocumentSize(this.ydoc) : 0;
+    const idleTime = Date.now() - this.lastActivityTime;
 
     return new Response(
       JSON.stringify({
@@ -294,10 +418,15 @@ export class YjsSyncObject implements DurableObject {
         userId: this.userId,
         sessionId: this.sessionId,
         connectedClients: this.clients.size,
+        documentLoaded: this.documentLoaded,
         documentSizeBytes: docSize,
+        documentSizeMB: (docSize / (1024 * 1024)).toFixed(2),
         dirty: this.dirty,
         lastSnapshotTime: this.lastSnapshotTime,
         timeSinceSnapshot: Date.now() - this.lastSnapshotTime,
+        lastActivityTime: this.lastActivityTime,
+        idleTimeMs: idleTime,
+        memoryConfig: this.memoryConfig,
       }),
       {
         headers: { 'Content-Type': 'application/json' },
