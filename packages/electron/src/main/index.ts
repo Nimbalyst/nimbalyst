@@ -37,6 +37,7 @@ import {
     updateWorkspaceState
 } from './utils/store';
 import { registerMCPConfigHandlers } from './ipc/MCPConfigHandlers';
+import { registerDatabaseBrowserHandlers } from './ipc/DatabaseBrowserHandlers';
 import { AIService } from './services/ai/AIService';
 import { detectFileWorkspace, suggestWorkspaceForFile } from './utils/workspaceDetection';
 // import { AgentService } from './services/agents/AgentService';
@@ -305,6 +306,7 @@ app.whenReady().then(async () => {
     registerNotificationHandlers();
     registerGitStatusHandlers();
     registerMCPConfigHandlers();
+    registerDatabaseBrowserHandlers();
     registerWireframeHandlers();
 
     // Initialize AI service
@@ -544,12 +546,12 @@ app.whenReady().then(async () => {
 
             // Log memory usage every hour
             if (uptime % 3600000 < 60000) {
-                console.log('[Memory] Usage:', {
+                console.log('[Memory] Usage:', JSON.stringify({
                     rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
                     heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
                     heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
                     uptime: `${Math.round(uptime / 1000 / 60)} minutes`
-                });
+                }));
             }
 
             // If memory usage is high (>1GB heap), trigger garbage collection

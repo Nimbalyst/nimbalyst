@@ -30,6 +30,7 @@ import { OnboardingDialog } from './components/OnboardingDialog/OnboardingDialog
 import { GlobalSettingsScreen as AIModels } from './components/GlobalSettings/GlobalSettingsScreen.tsx';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { AIUsageReport } from './components/AIUsageReport';
+import { DatabaseBrowser } from './components/DatabaseBrowser/DatabaseBrowser';
 import { AgenticPanel, type AgenticPanelRef } from './components/UnifiedAI';
 import EditorMode, { type EditorModeRef } from './components/EditorMode/EditorMode';
 import { NavigationGutter, type SidebarView } from './components/NavigationGutter';
@@ -158,6 +159,16 @@ export default function App() {
       }
     }, []);
     return <AIUsageReport onClose={() => window.close()} />;
+  }
+
+  if (windowMode === 'database-browser') {
+    // Set window title for Database Browser
+    React.useEffect(() => {
+      if (window.electronAPI) {
+        window.electronAPI.setTitle('Database Browser - Nimbalyst');
+      }
+    }, []);
+    return <DatabaseBrowser />;
   }
 
   const [currentFilePath, setCurrentFilePath] = useState<string | null>(null);

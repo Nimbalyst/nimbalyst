@@ -31,6 +31,7 @@ import { createAboutWindow } from '../window/AboutWindow';
 import { createWorkspaceManagerWindow } from '../window/WorkspaceManagerWindow.ts';
 import { createAIModelsWindow } from '../window/AIModelsWindow';
 import { createAIUsageReportWindow } from '../window/AIUsageReportWindow';
+import { createDatabaseBrowserWindow } from '../window/DatabaseBrowserWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
 import { getRecentItems, clearRecentItems, addToRecentItems, getTheme, setTheme, store, getWorkspaceState, getWorkspaceWindowState } from '../utils/store';
 import { updateWindowTitleBars, updateNativeTheme } from '../theme/ThemeManager';
@@ -1305,6 +1306,13 @@ Note: Only one connection at a time is supported.`,
                                 });
                             }
                         }
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'Database Browser',
+                    click: async () => {
+                        createDatabaseBrowserWindow();
                     }
                 }
                 ] : [])
