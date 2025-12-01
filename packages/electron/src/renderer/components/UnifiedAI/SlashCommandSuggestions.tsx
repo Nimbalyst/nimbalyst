@@ -134,15 +134,20 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
       </div>
       <div className="slash-command-suggestions-pills">
         {displayCommands.map((cmd) => (
-          <button
-            key={cmd.command.name}
-            className="slash-command-pill"
-            onClick={() => handleCommandClick(cmd)}
-            title={cmd.command.description || `Run /${cmd.command.name}`}
-          >
-            <span className="slash-command-pill-icon">/</span>
-            <span className="slash-command-pill-name">{cmd.command.name}</span>
-          </button>
+          <div key={cmd.command.name} className="slash-command-pill-wrapper">
+            <button
+              className="slash-command-pill"
+              onClick={() => handleCommandClick(cmd)}
+            >
+              <span className="slash-command-pill-icon">/</span>
+              <span className="slash-command-pill-name">{cmd.command.name}</span>
+            </button>
+            {cmd.command.description && (
+              <div className="slash-command-tooltip" role="tooltip">
+                {cmd.command.description}
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </div>

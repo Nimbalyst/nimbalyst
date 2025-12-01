@@ -61,3 +61,63 @@
 .slash-command-pill-name {
   white-space: nowrap;
 }
+
+/* Pill wrapper for tooltip positioning */
+.slash-command-pill-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Tooltip styling */
+.slash-command-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  background-color: var(--surface-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  white-space: normal;
+  min-width: 200px;
+  max-width: 320px;
+  text-align: center;
+  line-height: 1.4;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+/* Tooltip arrow */
+.slash-command-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--border-primary);
+}
+
+.slash-command-tooltip::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--surface-primary);
+  z-index: 1;
+}
+
+/* Show tooltip on hover */
+.slash-command-pill-wrapper:hover .slash-command-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
