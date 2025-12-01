@@ -173,12 +173,27 @@ interface SessionConnection {
   encryptionKey?: CryptoKey;
 }
 
+// Cache of session index entries for partial update merging
+interface CachedSessionIndex {
+  session_id: string;
+  project_id: string;
+  title: string;
+  provider: string;
+  model?: string;
+  mode?: 'agent' | 'planning';
+  message_count: number;
+  last_message_at: number;
+  created_at: number;
+  updated_at: number;
+}
+
 // ============================================================================
 // CollabV3 Sync Provider
 // ============================================================================
 
 export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   const sessions = new Map<string, SessionConnection>();
+  const sessionIndexCache = new Map<string, CachedSessionIndex>();
   let indexWs: WebSocket | null = null;
   let indexConnected = false;
 
@@ -596,14 +611,39 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       // Handle index updates based on change type
       if (indexWs && indexConnected) {
         if (change.type === 'session_deleted') {
-          // Delete from index
+          // Delete from index and cache
+          sessionIndexCache.delete(sessionId);
           const indexDeleteMsg: ClientMessage = { type: 'index_delete', session_id: sessionId };
           console.log('[CollabV3] Sending index_delete for session:', sessionId);
           indexWs.send(JSON.stringify(indexDeleteMsg));
         } else if (change.type === 'metadata_updated') {
           const meta = change.metadata;
-          // Only send index update if we have the required fields for a new/updated session
-          if (meta.title && meta.provider && meta.updatedAt) {
+          const cached = sessionIndexCache.get(sessionId);
+          const updatedAt = meta.updatedAt ?? Date.now();
+
+          // Build index entry by merging with cached data
+          // This allows partial updates (e.g., just title) to work
+          if (cached) {
+            // Merge partial update with cached entry
+            const indexEntry: SessionIndexEntry = {
+              session_id: sessionId,
+              project_id: meta.workspaceId ?? cached.project_id,
+              title: meta.title ?? cached.title,
+              provider: meta.provider ?? cached.provider,
+              model: meta.model ?? cached.model,
+              mode: (meta.mode ?? cached.mode) as SessionIndexEntry['mode'],
+              message_count: cached.message_count,
+              last_message_at: updatedAt,
+              created_at: cached.created_at,
+              updated_at: updatedAt,
+            };
+            // Update cache
+            sessionIndexCache.set(sessionId, indexEntry);
+            const indexMsg: ClientMessage = { type: 'index_update', session: indexEntry };
+            console.log('[CollabV3] Sending index_update (partial merge) for session:', sessionId, 'title:', indexEntry.title);
+            indexWs.send(JSON.stringify(indexMsg));
+          } else if (meta.title && meta.provider) {
+            // New session - need at least title and provider
             const indexEntry: SessionIndexEntry = {
               session_id: sessionId,
               project_id: meta.workspaceId ?? 'default',
@@ -611,14 +651,18 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               provider: meta.provider,
               model: meta.model,
               mode: meta.mode as SessionIndexEntry['mode'],
-              message_count: 0, // New session starts with 0 messages
-              last_message_at: meta.updatedAt,
-              created_at: meta.updatedAt, // Use updatedAt as createdAt for new sessions
-              updated_at: meta.updatedAt,
+              message_count: 0,
+              last_message_at: updatedAt,
+              created_at: updatedAt,
+              updated_at: updatedAt,
             };
+            // Add to cache
+            sessionIndexCache.set(sessionId, indexEntry);
             const indexMsg: ClientMessage = { type: 'index_update', session: indexEntry };
-            console.log('[CollabV3] Sending index_update for session:', sessionId);
+            console.log('[CollabV3] Sending index_update (new) for session:', sessionId);
             indexWs.send(JSON.stringify(indexMsg));
+          } else {
+            console.log('[CollabV3] Skipping index update - no cached data and missing required fields for session:', sessionId);
           }
         }
       }
@@ -645,6 +689,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           created_at: session.createdAt,
           updated_at: session.updatedAt,
         };
+
+        // Cache the entry for partial update merging later
+        sessionIndexCache.set(session.id, entry);
 
         const msg: ClientMessage = { type: 'index_update', session: entry };
         indexWs.send(JSON.stringify(msg));
