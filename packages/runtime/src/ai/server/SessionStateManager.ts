@@ -301,13 +301,16 @@ export class SessionStateManager extends EventEmitter {
 
   /**
    * Private: Update database with new status
+   * Note: Only updates last_activity, NOT updated_at. The updated_at timestamp
+   * should only change when messages are added to the session, so that session
+   * history sorting accurately reflects when the last message was sent/received.
    */
   private async updateDatabase(sessionId: string, status: SessionStatus): Promise<void> {
     if (!this.database) return;
 
     try {
       await this.database.query(
-        `UPDATE ai_sessions SET status = $1, last_activity = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        `UPDATE ai_sessions SET status = $1, last_activity = CURRENT_TIMESTAMP WHERE id = $2`,
         [status, sessionId]
       );
     } catch (error) {
