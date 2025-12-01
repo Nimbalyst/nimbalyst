@@ -4,6 +4,7 @@ import './NavigationGutter.css';
 import type { ContentMode } from '../../types/WindowModeTypes';
 import { KeyboardShortcuts, getShortcutDisplay } from '../../../shared/KeyboardShortcuts';
 import { ThemeToggleButton } from '../ThemeToggleButton/ThemeToggleButton';
+import { SyncStatusButton } from '../SyncStatusButton/SyncStatusButton';
 
 export type NavigationMode = 'planning' | 'coding';
 export type SidebarView = 'files' | 'plans' | 'settings';
@@ -20,6 +21,7 @@ interface NavigationGutterProps {
   onToggleTasksPanel?: () => void;
   onToggleIdeasPanel?: () => void;
   bottomPanel?: TrackerBottomPanelType | null;
+  workspacePath?: string | null;
 }
 
 interface NavButton {
@@ -35,11 +37,13 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
   contentMode,
   onContentModeChange,
   onOpenHistory,
+  onOpenSettings,
   onTogglePlansPanel,
   onToggleBugsPanel,
   onToggleTasksPanel,
   onToggleIdeasPanel,
   bottomPanel,
+  workspacePath,
 }) => {
   // Content mode buttons - primary navigation (top)
   const contentModeButtonsTop: NavButton[] = [
@@ -200,6 +204,12 @@ export const NavigationGutter: React.FC<NavigationGutterProps> = ({
 
       {/* Settings (bottom) */}
       <div className="nav-section nav-settings">
+
+        {/* Sync Status - Above Theme Toggle */}
+        <SyncStatusButton
+          workspacePath={workspacePath || undefined}
+          onOpenSettings={onOpenSettings}
+        />
 
         {/* Theme Toggle - Above Settings */}
         <div className="nav-section nav-theme">

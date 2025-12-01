@@ -155,8 +155,15 @@ export function registerSettingsHandlers() {
             });
 
             if (response.ok) {
-                const data = await response.json();
-                return { success: true, data };
+                // CollabV3 returns plain text "OK", collabv2 returns JSON
+                const text = await response.text();
+                try {
+                    const data = JSON.parse(text);
+                    return { success: true, data };
+                } catch {
+                    // Plain text response (e.g., "OK" from CollabV3)
+                    return { success: true, data: { status: text } };
+                }
             } else {
                 return { success: false, error: `Server returned ${response.status}` };
             }
@@ -164,5 +171,106 @@ export function registerSettingsHandlers() {
             const message = error instanceof Error ? error.message : 'Connection failed';
             return { success: false, error: message };
         }
+    });
+
+    // Get sync status for the navigation gutter button
+    ipcMain.handle('sync:get-status', async (_event, workspacePath?: string) => {
+        const config = getSessionSyncConfig();
+
+        // Not configured at all
+        if (!config?.enabled || !config.serverUrl || !config.userId || !config.authToken) {
+            return {
+                appConfigured: false,
+                projectEnabled: false,
+                connected: false,
+                syncing: false,
+                error: null,
+                stats: {
+                    sessionCount: 0,
+                    lastSyncedAt: null,
+                },
+            };
+        }
+
+        // Check if project is enabled
+        const isProjectEnabled = !config.enabledProjects ||
+            (workspacePath ? config.enabledProjects.includes(workspacePath) : true);
+
+        // Get sync provider status from SyncManager
+        const { isSyncEnabled, getSyncProvider } = await import('../services/SyncManager');
+        const provider = getSyncProvider();
+        const syncActive = isSyncEnabled();
+
+        // Get session count for this workspace
+        let sessionCount = 0;
+        let lastSyncedAt: number | null = null;
+
+        if (workspacePath && syncActive) {
+            try {
+                const { getAllSessionsForSync } = await import('../services/PGLiteSessionStore');
+                const allSessions = await getAllSessionsForSync(false);
+                // Filter sessions for this workspace
+                const sessions = allSessions.filter(s => s.workspaceId === workspacePath || s.workspacePath === workspacePath);
+                sessionCount = sessions.length;
+                // Find most recent update
+                for (const session of sessions) {
+                    if (session.updatedAt && (!lastSyncedAt || session.updatedAt > lastSyncedAt)) {
+                        lastSyncedAt = session.updatedAt;
+                    }
+                }
+            } catch (error) {
+                logger.store.warn('[sync:get-status] Failed to get session count:', error);
+            }
+        }
+
+        // Check connection status
+        // The provider doesn't expose a direct "isConnected" status, but we can infer from syncActive
+        const connected = syncActive && provider !== null;
+
+        return {
+            appConfigured: true,
+            projectEnabled: isProjectEnabled,
+            connected,
+            syncing: false, // We don't have real-time syncing status yet
+            error: null,
+            stats: {
+                sessionCount,
+                lastSyncedAt,
+            },
+        };
+    });
+
+    // Toggle sync for a specific project
+    ipcMain.handle('sync:toggle-project', async (_event, workspacePath: string, enabled: boolean) => {
+        if (!workspacePath) {
+            throw new Error('workspacePath is required for sync:toggle-project');
+        }
+
+        const config = getSessionSyncConfig();
+        if (!config) {
+            throw new Error('Sync is not configured');
+        }
+
+        let enabledProjects = config.enabledProjects || [];
+
+        if (enabled) {
+            // Add project to enabled list if not already present
+            if (!enabledProjects.includes(workspacePath)) {
+                enabledProjects = [...enabledProjects, workspacePath];
+            }
+        } else {
+            // Remove project from enabled list
+            enabledProjects = enabledProjects.filter(p => p !== workspacePath);
+        }
+
+        // Save updated config
+        setSessionSyncConfig({
+            ...config,
+            enabledProjects,
+        });
+
+        logger.store.info(`[sync:toggle-project] Project sync ${enabled ? 'enabled' : 'disabled'} for: ${workspacePath}`);
+
+        return { success: true };
     });
 }

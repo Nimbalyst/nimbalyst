@@ -1302,6 +1302,10 @@ export default function App() {
         onToggleIdeasPanel={() => {
           setBottomPanel(prev => prev === 'idea' ? null : 'idea');
         }}
+        workspacePath={workspacePath}
+        onOpenSettings={() => {
+          setActiveMode('settings');
+        }}
       />
 
       {/* Right: Main content area + Bottom Panel */}

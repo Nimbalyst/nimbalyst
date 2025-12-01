@@ -1,0 +1,197 @@
+.sync-status-button-container {
+  position: relative;
+}
+
+.sync-status-button {
+  position: relative;
+}
+
+/* Status indicator dot */
+.sync-indicator {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--surface-primary);
+}
+
+.sync-indicator.connected {
+  background-color: #22c55e;
+}
+
+.sync-indicator.syncing {
+  background-color: #3b82f6;
+  animation: pulse 1s infinite;
+}
+
+.sync-indicator.disconnected {
+  background-color: #f59e0b;
+}
+
+.sync-indicator.error {
+  background-color: #ef4444;
+}
+
+.sync-indicator.disabled {
+  background-color: var(--text-tertiary);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Button states */
+.sync-status-button.connected {
+  color: var(--text-secondary);
+}
+
+.sync-status-button.syncing {
+  color: var(--text-secondary);
+}
+
+.sync-status-button.disconnected {
+  color: var(--text-tertiary);
+}
+
+.sync-status-button.error {
+  color: var(--text-tertiary);
+}
+
+.sync-status-button.disabled {
+  color: var(--text-tertiary);
+  opacity: 0.6;
+}
+
+/* Menu */
+.sync-menu {
+  position: absolute;
+  left: calc(100% + 8px);
+  bottom: 0;
+  min-width: 240px;
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.sync-menu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  background-color: var(--surface-tertiary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.sync-menu-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sync-status-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.sync-status-badge.connected {
+  background-color: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.sync-status-badge.syncing {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.sync-status-badge.disconnected {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.sync-status-badge.error {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.sync-status-badge.disabled {
+  background-color: var(--surface-tertiary);
+  color: var(--text-tertiary);
+}
+
+.sync-menu-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  font-size: 12px;
+}
+
+.sync-menu-stats {
+  padding: 12px 14px;
+}
+
+.sync-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.sync-stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.sync-stat-value {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.sync-menu-divider {
+  height: 1px;
+  background-color: var(--border-primary);
+  margin: 0;
+}
+
+.sync-menu-actions {
+  padding: 6px;
+}
+
+.sync-menu-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.sync-menu-action:hover {
+  background-color: var(--surface-hover);
+}
+
+.sync-menu-action span:first-child {
+  color: var(--text-secondary);
+}
