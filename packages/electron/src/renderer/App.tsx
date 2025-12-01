@@ -43,6 +43,7 @@ import { registerTrackerPlugin } from './plugins/registerTrackerPlugin';
 import { registerDiffApprovalBarPlugin } from './plugins/registerDiffApprovalBarPlugin';
 import { registerSearchReplacePlugin } from './plugins/registerSearchReplacePlugin';
 import ProjectSettingsScreen from './components/ProjectSettingsScreen/ProjectSettingsScreen.tsx';
+import { SettingsView } from './components/Settings/SettingsView';
 import { loadCustomTrackers } from './services/CustomTrackerLoader';
 import { customEditorRegistry } from './components/CustomEditors';
 import { WireframeViewer } from './components/CustomEditors/WireframeEditor/WireframeViewer';
@@ -1413,9 +1414,9 @@ export default function App() {
             {/* Settings Mode - conditionally rendered for now */}
             {activeMode === 'settings' && (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
-                <ProjectSettingsScreen
-                  workspacePath={workspacePath || ''}
-                  workspaceName={workspaceName || ''}
+                <SettingsView
+                  workspacePath={workspacePath}
+                  workspaceName={workspaceName}
                   onClose={async () => {
                     // Mark onboarding as complete when closing first-time setup
                     if (isFirstTimeSetup && workspacePath) {
@@ -1429,7 +1430,6 @@ export default function App() {
                     }
                     setActiveMode('files');
                   }}
-                  isFirstTime={isFirstTimeSetup}
                 />
               </div>
             )}

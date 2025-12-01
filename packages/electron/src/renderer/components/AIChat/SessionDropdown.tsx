@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MaterialSymbol } from '@nimbalyst/runtime';
-import { ProviderIcon } from '../icons/ProviderIcons';
+import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { parseModelInfo, getProviderLabel } from '../../utils/modelUtils';
 import type { SessionData } from '@nimbalyst/runtime/ai/server/types';
 import { formatDate } from '@nimbalyst/runtime';

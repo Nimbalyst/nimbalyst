@@ -541,7 +541,14 @@ export async function createApplicationMenu() {
                               source: 'menu',
                               section: 'general',
                           });
-                          createAIModelsWindow();
+                          // Switch to settings mode in the focused window
+                          const focused = getFocusedWindow();
+                          if (focused && !isAboutWindow(focused)) {
+                              focused.webContents.send('set-content-mode', 'settings');
+                          } else {
+                              // Fallback to opening a separate window if no workspace window is focused
+                              createAIModelsWindow();
+                          }
                       }
                   },
                 ]: []),
@@ -1347,7 +1354,14 @@ Note: Only one connection at a time is supported.`,
                             source: 'menu',
                             section: 'general',
                         });
-                        createAIModelsWindow();
+                        // Switch to settings mode in the focused window
+                        const focused = getFocusedWindow();
+                        if (focused && !isAboutWindow(focused)) {
+                            focused.webContents.send('set-content-mode', 'settings');
+                        } else {
+                            // Fallback to opening a separate window if no workspace window is focused
+                            createAIModelsWindow();
+                        }
                     }
                 },
                 { type: 'separator' },

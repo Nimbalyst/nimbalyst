@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
-import { ProviderIcon } from '../icons/ProviderIcons';
 import './SessionListItem.css';
 
 interface SessionListItemProps {

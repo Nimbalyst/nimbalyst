@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getProviderIcon } from '../icons/ProviderIcons';
+import { getProviderIcon } from '@nimbalyst/runtime';
 import { usePostHog } from 'posthog-js/react';
 import './GlobalSettingsScreen.css';
 
@@ -533,33 +533,36 @@ export function GlobalSettingsScreen({ onClose }: AIModelsProps) {
         }
         return null;
       case 'sync':
-        return (
-          <SyncPanel
-            config={syncConfig}
-            onConfigChange={(config) => {
-              setSyncConfig(config);
-              setHasChanges(true);
-            }}
-            onTestConnection={async () => {
-              setSyncTestStatus('testing');
-              setSyncTestMessage(undefined);
-              try {
-                const result = await window.electronAPI.invoke('sync:test-connection', syncConfig);
-                if (result.success) {
-                  setSyncTestStatus('success');
-                } else {
-                  setSyncTestStatus('error');
-                  setSyncTestMessage(result.error || 'Connection failed');
-                }
-              } catch (error) {
-                setSyncTestStatus('error');
-                setSyncTestMessage(error instanceof Error ? error.message : 'Connection failed');
-              }
-            }}
-            testStatus={syncTestStatus}
-            testMessage={syncTestMessage}
-          />
-        );
+        if (releaseChannel !== 'alpha') {
+          return (
+              <SyncPanel
+                  config={syncConfig}
+                  onConfigChange={(config) => {
+                    setSyncConfig(config);
+                    setHasChanges(true);
+                  }}
+                  onTestConnection={async () => {
+                    setSyncTestStatus('testing');
+                    setSyncTestMessage(undefined);
+                    try {
+                      const result = await window.electronAPI.invoke('sync:test-connection', syncConfig);
+                      if (result.success) {
+                        setSyncTestStatus('success');
+                      } else {
+                        setSyncTestStatus('error');
+                        setSyncTestMessage(result.error || 'Connection failed');
+                      }
+                    } catch (error) {
+                      setSyncTestStatus('error');
+                      setSyncTestMessage(error instanceof Error ? error.message : 'Connection failed');
+                    }
+                  }}
+                  testStatus={syncTestStatus}
+                  testMessage={syncTestMessage}
+              />
+          );
+        }
+        return null;
       default:
         return null;
     }

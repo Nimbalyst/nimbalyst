@@ -382,6 +382,56 @@ export class AIService {
     });
   }
 
+  /**
+   * Get API key for a provider, considering project-level overrides.
+   * Project-specific API keys take precedence over global keys.
+   */
+  private getApiKeyForProvider(provider: string, workspacePath?: string): string | undefined {
+    const globalApiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
+
+    // Check for project-level API key override
+    if (workspacePath) {
+      const { getAIProviderOverrides } = require('../../utils/store');
+      const overrides = getAIProviderOverrides(workspacePath);
+      if (overrides?.providers?.[provider]?.apiKey) {
+        return overrides.providers[provider].apiKey;
+      }
+    }
+
+    // Fall back to global API key
+    switch (provider) {
+      case 'claude':
+      case 'claude-code':
+        return globalApiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
+      case 'openai':
+      case 'openai-codex':
+        return globalApiKeys['openai'] || process.env.OPENAI_API_KEY;
+      case 'lmstudio':
+        return 'not-required';
+      default:
+        return globalApiKeys[provider];
+    }
+  }
+
+  /**
+   * Check if a provider is enabled for a workspace, considering project-level overrides.
+   */
+  private isProviderEnabledForWorkspace(provider: string, workspacePath?: string): boolean {
+    const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
+    const globalEnabled = providerSettings[provider]?.enabled ?? false;
+
+    // Check for project-level override
+    if (workspacePath) {
+      const { getAIProviderOverrides } = require('../../utils/store');
+      const overrides = getAIProviderOverrides(workspacePath);
+      if (overrides?.providers?.[provider]?.enabled !== undefined) {
+        return overrides.providers[provider].enabled;
+      }
+    }
+
+    return globalEnabled;
+  }
+
   private async initializeMobileSyncHandler() {
     // Lazy load sync manager and mobile sync handler
     try {
@@ -703,32 +753,33 @@ export class AIService {
       //   sessionType
       // });
 
-      // Get API key based on provider
-      const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
-      let apiKey: string | undefined;
+      // Check if provider is enabled for this workspace (considers project overrides)
+      if (!this.isProviderEnabledForWorkspace(provider, workspacePath)) {
+        throw new Error(`Provider ${provider} is not enabled for this workspace`);
+      }
 
+      // Get API key using project-aware helper (considers project overrides)
+      let apiKey = this.getApiKeyForProvider(provider, workspacePath);
+
+      // Validate API key requirement based on provider
       switch (provider) {
         case 'claude':
-          apiKey = apiKeys['anthropic'] || process.env.ANTHROPIC_API_KEY;
           if (!apiKey) {
             throw new Error('Anthropic API key not configured');
           }
           break;
         case 'claude-code':
           // Claude Code: API key is optional, uses SSO login if not provided
-          apiKey = apiKeys['claude-code'];
           // No error if missing - will use SSO login
           break;
         case 'openai':
         case 'openai-codex':
-          apiKey = apiKeys['openai'] || process.env.OPENAI_API_KEY;
           if (!apiKey) {
             throw new Error('OpenAI API key not configured');
           }
           break;
         case 'lmstudio':
           // LMStudio doesn't need an API key, just the base URL
-          apiKey = 'not-required';
           break;
         default:
           throw new Error(`Unknown provider: ${provider}`);
@@ -2376,6 +2427,83 @@ export class AIService {
     ipcMain.handle('mcp:applyDiff:result', async (event, resultChannel: string, result: any) => {
       // Forward result back through the result channel
       event.sender.send(resultChannel, result);
+    });
+
+    // ============================================================
+    // Project-level AI Settings Override Handlers
+    // ============================================================
+
+    // Get project-level AI provider overrides
+    ipcMain.handle('ai:getProjectSettings', async (_event, workspacePath: string) => {
+      if (!workspacePath) {
+        return { success: false, error: 'workspacePath is required' };
+      }
+
+      const { getAIProviderOverrides } = await import('../../utils/store');
+      const overrides = getAIProviderOverrides(workspacePath);
+
+      return {
+        success: true,
+        overrides: overrides || null,
+      };
+    });
+
+    // Save project-level AI provider overrides
+    ipcMain.handle('ai:saveProjectSettings', async (_event, workspacePath: string, overrides: any) => {
+      if (!workspacePath) {
+        return { success: false, error: 'workspacePath is required' };
+      }
+
+      const { saveAIProviderOverrides } = await import('../../utils/store');
+
+      // If overrides is null/undefined or empty, clear the overrides
+      if (!overrides || (Object.keys(overrides).length === 0)) {
+        saveAIProviderOverrides(workspacePath, undefined);
+      } else {
+        saveAIProviderOverrides(workspacePath, overrides);
+      }
+
+      return { success: true };
+    });
+
+    // Get effective (merged) AI settings for a workspace
+    ipcMain.handle('ai:getEffectiveSettings', async (_event, workspacePath?: string) => {
+      const { mergeAISettings } = await import('../../utils/aiSettingsMerge');
+
+      // Get global settings
+      const apiKeys = this.getSettingsStore().get('apiKeys', {}) as Record<string, string>;
+      const providerSettings = this.getSettingsStore().get('providerSettings', {}) as any;
+      const showToolCalls = this.getSettingsStore().get('showToolCalls', false) as boolean;
+      const aiDebugLogging = this.getSettingsStore().get('aiDebugLogging', false) as boolean;
+      const defaultProvider = this.getSettingsStore().get('defaultProvider', 'claude-code') as string;
+
+      const globalSettings = {
+        defaultProvider,
+        apiKeys: this.maskApiKeys(apiKeys),
+        providerSettings,
+        showToolCalls,
+        aiDebugLogging,
+      };
+
+      // Merge with project overrides
+      const effective = mergeAISettings(globalSettings, workspacePath);
+
+      return {
+        success: true,
+        settings: effective,
+      };
+    });
+
+    // Clear project-level AI overrides
+    ipcMain.handle('ai:clearProjectSettings', async (_event, workspacePath: string) => {
+      if (!workspacePath) {
+        return { success: false, error: 'workspacePath is required' };
+      }
+
+      const { clearAIProviderOverrides } = await import('../../utils/store');
+      clearAIProviderOverrides(workspacePath);
+
+      return { success: true };
     });
   }
 

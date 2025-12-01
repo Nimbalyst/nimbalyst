@@ -86,6 +86,39 @@ export interface NavigationHistoryState {
   currentIndex: number;
 }
 
+/**
+ * Per-provider override settings for project-level configuration.
+ * Values of `undefined` mean "inherit from global settings".
+ * Explicit values override the global setting.
+ */
+export interface ProviderOverride {
+  /** Override enabled state: true = force enabled, false = force disabled, undefined = inherit */
+  enabled?: boolean;
+  /** Override selected models (if provided, replaces global model selection) */
+  models?: string[];
+  /** Override default model for this provider */
+  defaultModel?: string;
+  /** Project-specific API key (optional, overrides global key) */
+  apiKey?: string;
+}
+
+/**
+ * Project-level AI provider overrides.
+ * Allows projects to customize AI settings without affecting global configuration.
+ *
+ * Use cases:
+ * - Disable a provider for a specific project
+ * - Enable a provider only for certain projects
+ * - Use different models per project
+ * - Use project-specific API keys (e.g., client-provided keys)
+ */
+export interface AIProviderOverrides {
+  /** Override default provider for this project */
+  defaultProvider?: string;
+  /** Per-provider overrides */
+  providers?: Record<string, ProviderOverride>;
+}
+
 export interface SessionHistoryLayout {
   width: number;
   collapsed: boolean;
@@ -136,6 +169,8 @@ export interface WorkspaceState {
   fileTreeFilter?: WorkspaceFileTreeFilter;
   // File tree icons visibility
   showFileIcons?: boolean;
+  // AI provider overrides for this project
+  aiProviderOverrides?: AIProviderOverrides;
   lastUpdated: number;
 }
 
@@ -212,6 +247,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
       installedPackages: undefined,
       fileTreeFilter: undefined,
       showFileIcons: undefined,
+      aiProviderOverrides: undefined,
       lastUpdated: Date.now(),
     };
   }
@@ -287,6 +323,7 @@ function normalizeWorkspaceState(raw: any, path: string): WorkspaceState {
     installedPackages: raw.installedPackages ? [...raw.installedPackages] : undefined,
     fileTreeFilter: raw.fileTreeFilter ?? undefined,
     showFileIcons: raw.showFileIcons ?? undefined,
+    aiProviderOverrides: raw.aiProviderOverrides ? { ...raw.aiProviderOverrides } : undefined,
     lastUpdated: raw.lastUpdated ?? raw.updated_at ?? Date.now(),
   };
 }
@@ -341,6 +378,10 @@ function cloneWorkspaceState(state: WorkspaceState): WorkspaceState {
     installedPackages: state.installedPackages ? [...state.installedPackages] : undefined,
     fileTreeFilter: state.fileTreeFilter,
     showFileIcons: state.showFileIcons,
+    aiProviderOverrides: state.aiProviderOverrides ? {
+      defaultProvider: state.aiProviderOverrides.defaultProvider,
+      providers: state.aiProviderOverrides.providers ? { ...state.aiProviderOverrides.providers } : undefined,
+    } : undefined,
     lastUpdated: state.lastUpdated,
   };
 }
@@ -613,6 +654,23 @@ export function getFileTreeFilter(workspacePath: string): WorkspaceFileTreeFilte
 export function saveFileTreeFilter(workspacePath: string, filter: WorkspaceFileTreeFilter): void {
   updateWorkspaceState(workspacePath, workspace => {
     workspace.fileTreeFilter = filter;
+  });
+}
+
+// AI Provider Override State Management
+export function getAIProviderOverrides(workspacePath: string): AIProviderOverrides | undefined {
+  return getWorkspaceState(workspacePath).aiProviderOverrides;
+}
+
+export function saveAIProviderOverrides(workspacePath: string, overrides: AIProviderOverrides | undefined): void {
+  updateWorkspaceState(workspacePath, workspace => {
+    workspace.aiProviderOverrides = overrides;
+  });
+}
+
+export function clearAIProviderOverrides(workspacePath: string): void {
+  updateWorkspaceState(workspacePath, workspace => {
+    delete workspace.aiProviderOverrides;
   });
 }
 

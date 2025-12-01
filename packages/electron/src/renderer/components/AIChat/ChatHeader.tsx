@@ -1,7 +1,5 @@
 import React from 'react';
-import { MaterialSymbol } from '@nimbalyst/runtime';
-import { getProviderIcon } from '../icons/ProviderIcons';
-import { ProviderIcon } from '../icons/ProviderIcons';
+import { MaterialSymbol, getProviderIcon, ProviderIcon } from '@nimbalyst/runtime';
 import { parseModelInfo } from '../../utils/modelUtils';
 import { SessionDropdown } from './SessionDropdown';
 import { NewSessionButton } from './NewSessionButton';

@@ -131,16 +131,23 @@ const MCP_SERVER_TEMPLATES: MCPServerTemplate[] = [
   }
 ];
 
-export function MCPServersPanel() {
+interface MCPServersPanelProps {
+  /** Default scope to show (user or workspace). Defaults to 'user'. */
+  defaultScope?: 'user' | 'workspace';
+  /** If provided, pre-select this workspace path when in workspace scope. */
+  workspacePath?: string;
+}
+
+export function MCPServersPanel({ defaultScope = 'user', workspacePath: propWorkspacePath }: MCPServersPanelProps = {}) {
   const [servers, setServers] = useState<MCPServerWithName[]>([]);
   const [selectedServer, setSelectedServer] = useState<MCPServerWithName | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
-  const [configScope, setConfigScope] = useState<'user' | 'workspace'>('user');
+  const [workspacePath, setWorkspacePath] = useState<string | null>(propWorkspacePath || null);
+  const [configScope, setConfigScope] = useState<'user' | 'workspace'>(defaultScope);
   const [availableProjects, setAvailableProjects] = useState<Array<{ path: string; name: string }>>([]);
-  const [selectedProjectPath, setSelectedProjectPath] = useState<string | null>(null);
+  const [selectedProjectPath, setSelectedProjectPath] = useState<string | null>(propWorkspacePath || null);
 
   // Form state
   const [formName, setFormName] = useState('');
