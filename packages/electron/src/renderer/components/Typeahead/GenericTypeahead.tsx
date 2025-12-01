@@ -240,8 +240,15 @@ export function GenericTypeahead({
                       </span>
                     )
                   )}
-                  <div className="generic-typeahead-option-label">
-                    {option.label}
+                  <div className="generic-typeahead-option-text">
+                    <div className="generic-typeahead-option-label">
+                      {option.label}
+                    </div>
+                    {option.description && (
+                      <div className="generic-typeahead-option-description">
+                        {option.description}
+                      </div>
+                    )}
                   </div>
                 </div>
               );

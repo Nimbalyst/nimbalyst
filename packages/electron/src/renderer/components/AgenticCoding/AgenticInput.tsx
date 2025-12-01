@@ -123,15 +123,21 @@ export function AgenticInput({
     const lowerQuery = query.toLowerCase();
     const filtered = allSlashCommands
       .filter(cmd => cmd.name.toLowerCase().includes(lowerQuery))
-      .map(cmd => ({
-        id: cmd.name,
-        label: `/${cmd.name}`,
-        description: cmd.description || `Execute ${cmd.name} command`,
-        icon: getCommandIcon(cmd),
-        section: cmd.source === 'builtin' ? 'Built-in Commands' :
-                 cmd.source === 'project' ? 'Project Commands' : 'User Commands',
-        data: cmd
-      }));
+      .map(cmd => {
+        // Build label with argument hint if available (e.g., "/fix-issue [issue-number]")
+        const label = cmd.argumentHint
+          ? `/${cmd.name} ${cmd.argumentHint}`
+          : `/${cmd.name}`;
+        return {
+          id: cmd.name,
+          label,
+          description: cmd.description || `Execute ${cmd.name} command`,
+          icon: getCommandIcon(cmd),
+          section: cmd.source === 'builtin' ? 'Built-in Commands' :
+                   cmd.source === 'project' ? 'Project Commands' : 'User Commands',
+          data: cmd
+        };
+      });
 
     setSlashCommandOptions(filtered);
   }, [allSlashCommands]);

@@ -7,9 +7,20 @@ import * as fs from 'fs';
 import * as yaml from 'js-yaml';
 import path from "path";
 
+export interface SlashCommandHandoff {
+  label: string;
+  agent: string;
+  prompt?: string;
+  send?: boolean;
+}
+
 export interface SlashCommand {
   name: string;                  // Command name (without "/")
   description?: string;          // Description from frontmatter or default
+  argumentHint?: string;         // Argument hint from frontmatter (e.g., "[issue-number] [priority]")
+  agentName?: string;            // Agent name from frontmatter (for agent-type commands)
+  handoffs?: SlashCommandHandoff[]; // Workflow handoffs to other commands
+  tools?: string[];              // External tool dependencies (e.g., MCP tools)
   source: 'builtin' | 'project' | 'user';
   filePath?: string;             // For custom commands
   allowedTools?: string[];       // From frontmatter
@@ -18,7 +29,11 @@ export interface SlashCommand {
 
 interface CommandFrontmatter {
   description?: string;
+  'argument-hint'?: string;
   'allowed-tools'?: string | string[];
+  name?: string;                   // Agent name
+  handoffs?: SlashCommandHandoff[]; // Workflow handoffs
+  tools?: string[];                // External tool dependencies
   [key: string]: any;
 }
 
@@ -78,6 +93,10 @@ export function parseCommandFile(
     return {
       name: commandName,
       description: frontmatter.description,
+      argumentHint: frontmatter['argument-hint'],
+      agentName: frontmatter.name,
+      handoffs: frontmatter.handoffs,
+      tools: frontmatter.tools,
       source,
       filePath,
       allowedTools,

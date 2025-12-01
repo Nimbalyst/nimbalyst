@@ -58,11 +58,26 @@
   color: var(--text-secondary);
 }
 
-.generic-typeahead-option-label {
+.generic-typeahead-option-text {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.generic-typeahead-option-label {
   font-size: 0.875rem;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.generic-typeahead-option-description {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  white-space: normal;
+  word-wrap: break-word;
+  line-height: 1.3;
 }
