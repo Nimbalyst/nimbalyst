@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { usePostHog } from 'posthog-js/react';
 import PackageService from '../../services/PackageService';
-import type { CustomCommand, ToolPackage } from '../../../shared/types/toolPackages';
+import type { CustomCommand } from '../../../shared/types/toolPackages';
 import './SlashCommandSuggestions.css';
 
 interface CommandWithPackage {
   command: CustomCommand;
+  packageId: string;
   packageName: string;
 }
 
@@ -48,6 +50,7 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
   workspacePath,
   onCommandSelect
 }) => {
+  const posthog = usePostHog();
   const [installedCommands, setInstalledCommands] = useState<CommandWithPackage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -77,6 +80,7 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
             for (const cmd of pkg.customCommands) {
               commands.push({
                 command: cmd,
+                packageId: pkg.id,
                 packageName: pkg.name
               });
             }
@@ -104,8 +108,19 @@ export const SlashCommandSuggestions: React.FC<SlashCommandSuggestionsProps> = (
   }, [installedCommands]);
 
   const handleCommandClick = useCallback((cmd: CommandWithPackage) => {
+    // Track the suggestion click in analytics.
+    // PRIVACY NOTE: It's safe to send commandName and packageId because this component
+    // only displays commands from official Nimbalyst packages (defined in ALL_PACKAGES
+    // in packages/electron/src/shared/toolPackages/index.ts). User-created custom
+    // commands are never shown here. If that changes in the future, add filtering
+    // to avoid sending potentially sensitive custom command names to analytics.
+    posthog?.capture('slash_command_suggestion_clicked', {
+      commandName: cmd.command.name,
+      packageId: cmd.packageId,
+    });
+
     onCommandSelect(`/${cmd.command.name} `);
-  }, [onCommandSelect]);
+  }, [onCommandSelect, posthog]);
 
   // Don't render if not applicable or no installed commands
   if (!shouldShow || isLoading || displayCommands.length === 0) {

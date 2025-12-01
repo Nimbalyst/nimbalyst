@@ -59,6 +59,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | Event Name | File(s) | Trigger | Properties |
 |------------|---------|---------|------------|
 | `claude_code_session_started` | `AIService.ts:1178` | Claude Code provider initializes session | `mcpServerCount`<br/>`slashCommandCount`<br/>`agentCount` |
+| `slash_command_suggestion_clicked` | `SlashCommandSuggestions.tsx:117` | User clicks a slash command suggestion pill in empty session | `commandName`<br/>`packageId` |
 
 ### AI Tool Execution
 
