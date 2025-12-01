@@ -7,6 +7,7 @@ import { FileGutter } from '../AIChat/FileGutter';
 import type { TypeaheadOption } from '../Typeahead/GenericTypeahead';
 import type { AIMode } from './ModeTag';
 import { ExitPlanModeConfirmation, ExitPlanModeConfirmationData } from './ExitPlanModeConfirmation';
+import { SlashCommandSuggestions } from './SlashCommandSuggestions';
 
 interface Todo {
   status: 'pending' | 'in_progress' | 'completed';
@@ -421,6 +422,15 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
     }
   }, [sessionId, queuedPrompts, sessionData.metadata, workspacePath]);
 
+  // Handle slash command suggestion selection
+  const handleCommandSelect = useCallback((command: string) => {
+    if (onDraftInputChange) {
+      onDraftInputChange(sessionId, command);
+    }
+    // Focus the input after inserting command
+    inputRef.current?.focus();
+  }, [sessionId, onDraftInputChange]);
+
   // Feature flags based on mode and provider
   const enableSlashCommands = sessionData.provider === 'claude-code'; // Only for Claude Code
   const enableAttachments = true; // Available in both chat and agent modes
@@ -458,6 +468,15 @@ const AISessionViewComponent = forwardRef<AISessionViewRef, AISessionViewProps>(
           onDeny={handleExitPlanModeDeny}
         />
       )}
+
+      {/* Slash command suggestions - shown for empty Claude Code sessions */}
+      <SlashCommandSuggestions
+        provider={sessionData.provider}
+        hasMessages={sessionData.messages.length > 0}
+        workspacePath={workspacePath}
+        sessionId={sessionId}
+        onCommandSelect={handleCommandSelect}
+      />
 
       {/* Input area - separate so typing doesn't re-render transcript */}
       <AIInput
