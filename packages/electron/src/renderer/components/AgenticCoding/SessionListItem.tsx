@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { ProviderIcon } from '@nimbalyst/runtime';
+import { MaterialSymbol, ProviderIcon } from '@nimbalyst/runtime';
 import { getRelativeTimeString } from '../../utils/dateFormatting';
 import './SessionListItem.css';
 
@@ -169,24 +169,11 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
       <div className="session-list-item-right">
         {isProcessing ? (
           <div className="session-list-item-status processing" title="Processing...">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="32 16" strokeLinecap="round">
-                <animateTransform
-                  attributeName="transform"
-                  type="rotate"
-                  from="0 12 12"
-                  to="360 12 12"
-                  dur="1s"
-                  repeatCount="indefinite"
-                />
-              </circle>
-            </svg>
+            <MaterialSymbol icon="progress_activity" size={14} />
           </div>
         ) : hasUnread ? (
           <div className="session-list-item-status unread" title="Unread response">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="8" cy="8" r="4" fill="currentColor" />
-            </svg>
+            <MaterialSymbol icon="circle" size={8} fill />
           </div>
         ) : messageCount !== undefined ? (
           <span className="session-list-item-message-count">{messageCount}</span>
@@ -199,17 +186,9 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
             title={isArchived ? "Unarchive session" : "Archive session"}
           >
             {isArchived ? (
-              // Unarchive icon (box with arrow out)
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M8 11V7M6 9l2-2 2 2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+              <MaterialSymbol icon="unarchive" size={14} />
             ) : (
-              // Archive icon (box with arrow in)
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M8 7v4M6 9l2 2 2-2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+              <MaterialSymbol icon="archive" size={14} />
             )}
           </button>
         )}
@@ -232,18 +211,12 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
           >
             {isArchived ? (
               <>
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M8 11V7M6 9l2-2 2 2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+                <MaterialSymbol icon="unarchive" size={14} />
                 Unarchive
               </>
             ) : (
               <>
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M2 5h12M4 5v8a1 1 0 001 1h6a1 1 0 001-1V5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M8 7v4M6 9l2 2 2-2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+                <MaterialSymbol icon="archive" size={14} />
                 Archive
               </>
             )}
@@ -253,9 +226,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({
               className="session-list-item-context-menu-item destructive"
               onClick={handleDelete}
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2 4h12M5.333 4V2.667A.667.667 0 016 2h4a.667.667 0 01.667.667V4M12.667 4v9.333a1.333 1.333 0 01-1.334 1.334H4.667a1.333 1.333 0 01-1.334-1.334V4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+              <MaterialSymbol icon="delete" size={14} />
               Delete
             </button>
           )}

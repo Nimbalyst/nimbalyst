@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import { getFileName } from '../../utils/pathUtils';
 import './FileGutter.css';
 
@@ -180,29 +181,13 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick }: File
   const getOperationIcon = (operation?: string) => {
     switch (operation) {
       case 'create':
-        return (
-          <svg className="file-gutter__icon file-gutter__icon--create" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-        );
+        return <MaterialSymbol icon="add" size={14} className="file-gutter__icon file-gutter__icon--create" />;
       case 'edit':
-        return (
-          <svg className="file-gutter__icon file-gutter__icon--edit" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-        );
+        return <MaterialSymbol icon="edit" size={14} className="file-gutter__icon file-gutter__icon--edit" />;
       case 'delete':
-        return (
-          <svg className="file-gutter__icon file-gutter__icon--delete" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        );
+        return <MaterialSymbol icon="delete" size={14} className="file-gutter__icon file-gutter__icon--delete" />;
       case 'rename':
-        return (
-          <svg className="file-gutter__icon file-gutter__icon--rename" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-          </svg>
-        );
+        return <MaterialSymbol icon="drive_file_rename_outline" size={14} className="file-gutter__icon file-gutter__icon--rename" />;
       default:
         return null;
     }
@@ -237,17 +222,9 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick }: File
 
   const getSectionIcon = () => {
     if (type === 'referenced') {
-      return (
-        <svg className="file-gutter__section-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-        </svg>
-      );
+      return <MaterialSymbol icon="tag" size={14} className="file-gutter__section-icon" />;
     }
-    return (
-      <svg className="file-gutter__section-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-      </svg>
-    );
+    return <MaterialSymbol icon="edit_document" size={14} className="file-gutter__section-icon" />;
   };
 
   const label = type === 'referenced' ? 'Referenced' : 'Edited';
@@ -263,14 +240,11 @@ export function FileGutter({ sessionId, workspacePath, type, onFileClick }: File
           <span>{label}</span>
           <span className="file-gutter__count">{groupedFiles.length}</span>
         </div>
-        <svg
+        <MaterialSymbol
+          icon="expand_more"
+          size={16}
           className={`file-gutter__chevron ${isExpanded ? '' : 'file-gutter__chevron--collapsed'}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        />
       </button>
 
       {isExpanded && (

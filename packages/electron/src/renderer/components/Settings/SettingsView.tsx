@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { usePostHog } from 'posthog-js/react';
+import { MaterialSymbol } from '@nimbalyst/runtime';
 import { SettingsSidebar, type SettingsCategory } from './SettingsSidebar';
 import './SettingsView.css';
 
@@ -501,10 +502,7 @@ export function SettingsView({ workspacePath, workspaceName, onClose }: Settings
         <span className="settings-view-title">Settings</span>
 
         <div className="settings-search">
-          <svg className="settings-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8"/>
-            <path d="M21 21l-4.35-4.35"/>
-          </svg>
+          <MaterialSymbol icon="search" size={14} className="settings-search-icon" />
           <input
             type="text"
             placeholder="Search settings..."
