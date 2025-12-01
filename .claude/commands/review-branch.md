@@ -37,6 +37,7 @@ Provide your review in the following format:
 | Potential Bugs | ✅ None Found / ⚠️ See Below | [Count if any] |
 | Junk/Cleanup | ✅ Clean / ⚠️ See Below | [Items if any] |
 | Analytics Events | ✅ Not Needed / ✅ Already Added / ⚠️ Should Add | [See docs/ANALYTICS_GUIDE.md] |
+| CLAUDE.md Updates | ✅ Not Needed / ⚠️ Should Update | [See criteria below] |
 
 ## Detailed Findings
 
@@ -130,6 +131,35 @@ If analytics should be added, suggest specific events following the naming conve
 - Group with prefixes: `ai_*`, `file_*`, `window_*`, `project_*`
 
 [Note "Not needed for this change" if analytics are not applicable, or list suggested events]
+
+### CLAUDE.md Documentation
+[Evaluate whether CLAUDE.md should be updated to document new patterns, conventions, or workflows introduced by this change.]
+
+**SHOULD update CLAUDE.md when the change introduces:**
+- New architectural patterns or conventions that future development should follow
+- New commands, scripts, or workflows (npm scripts, build commands, etc.)
+- New environment variables or configuration options
+- Changes to important file locations or directory structure
+- New IPC channels or API patterns
+- New CSS variables or theming conventions
+- New database tables, columns, or data patterns
+- New error handling patterns or conventions
+- Platform-specific behavior or requirements
+- New testing patterns or approaches
+- Security considerations that affect development
+- External tool or dependency setup requirements
+
+**Should NOT update CLAUDE.md for:**
+- Bug fixes that don't change patterns or conventions
+- Internal refactors with no workflow impact
+- New components/features that follow existing documented patterns
+- Minor UI tweaks or styling changes
+- Test additions following existing test patterns
+- Dependency version bumps (unless they change workflows)
+- Code cleanup or dead code removal
+- Changes already covered by existing documentation
+
+[Note "Not needed for this change" if no documentation updates are required, or specify which sections of CLAUDE.md should be updated and what content should be added]
 
 ## Suggested Commit Message
 [Provide a well-formatted commit message for the entire branch following the project's commit style, but DO NOT create the commit]
