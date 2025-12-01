@@ -9,7 +9,8 @@ import type {
   CreateSessionPayload,
   UpdateSessionMetadataPayload,
   ChatMessage,
-  ChatSession
+  ChatSession,
+  AgentMessage
 } from '@nimbalyst/runtime';
 
 type PGliteLike = {
@@ -58,16 +59,8 @@ export function getDatabase(): PGliteLike | null {
   return moduleDb;
 }
 
-interface SyncedMessage {
-  id: string;
-  sessionId: string;
-  createdAt: number;
-  source: string;
-  direction: 'input' | 'output';
-  content: string;
-  metadata?: Record<string, unknown>;
-  hidden?: boolean;
-}
+// Use AgentMessage from runtime for sync compatibility
+type SyncedMessage = AgentMessage;
 
 /**
  * Get all sessions for sync (no workspace filter)
@@ -121,25 +114,25 @@ export async function getAllSessionsForSync(includeMessages = false): Promise<Ar
     messages: undefined as SyncedMessage[] | undefined,
   }));
 
-  // Optionally fetch messages for each session
+  // Optionally fetch messages for each session (include hidden - mobile filters client-side)
   if (includeMessages) {
     for (const session of sessions) {
       const { rows: msgRows } = await moduleDb.query<any>(
         `SELECT id, session_id, created_at, source, direction, content, metadata, hidden
          FROM ai_agent_messages
-         WHERE session_id = $1 AND (hidden = false OR hidden IS NULL)
+         WHERE session_id = $1
          ORDER BY created_at ASC`,
         [session.id]
       );
-      session.messages = msgRows.map((m: any) => ({
+      session.messages = msgRows.map((m: any): AgentMessage => ({
         id: m.id,
         sessionId: m.session_id,
-        createdAt: toMillis(m.created_at),
+        createdAt: m.created_at instanceof Date ? m.created_at : new Date(toMillis(m.created_at)),
         source: m.source,
         direction: m.direction,
         content: m.content,
         metadata: m.metadata,
-        hidden: m.hidden,
+        hidden: m.hidden ?? false,
       }));
     }
   }
@@ -258,16 +251,15 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
       if ((metadata as any).hasBeenNamed !== undefined) pushUpdate('has_been_named =', (metadata as any).hasBeenNamed);
       if (metadata.isArchived !== undefined) pushUpdate('is_archived =', metadata.isArchived);
 
+      // NOTE: We intentionally do NOT update updated_at here. The updated_at timestamp
+      // should only change when messages are added (via PGLiteAgentMessagesStore.create),
+      // so that session history sorting accurately reflects the last message time.
       if (!updates.length) {
-        // Nothing to update but still touch the row so updated_at changes
-        await db.query(
-          'UPDATE ai_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id=$1',
-          [sessionId]
-        );
+        // Nothing to update - no-op
         return;
       }
 
-      const setClause = `${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP`;
+      const setClause = updates.join(', ');
       await db.query(
         `UPDATE ai_sessions SET ${setClause} WHERE id=$1`,
         values
@@ -451,9 +443,12 @@ export function createPGLiteSessionStore(db: PGliteLike, ensureDbReady?: EnsureR
 
     async updateTitleIfNotNamed(sessionId: string, title: string): Promise<boolean> {
       await ensureReady();
+      // NOTE: We intentionally do NOT update updated_at here. The updated_at timestamp
+      // should only change when messages are added, so session history sorting
+      // accurately reflects the last message time.
       const { rows } = await db.query<{ affected_rows: number }>(
         `UPDATE ai_sessions
-         SET title = $2, has_been_named = true, updated_at = CURRENT_TIMESTAMP
+         SET title = $2, has_been_named = true
          WHERE id = $1 AND (has_been_named = false OR has_been_named IS NULL)
          RETURNING 1 as affected_rows`,
         [sessionId, title]

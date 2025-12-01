@@ -207,7 +207,8 @@ export abstract class BaseAIProvider extends EventEmitter implements AIProvider 
       hidden
     }).then(() => {
       // Emit event to notify listeners that new message was written to database
-      this.emit('message:logged', { sessionId, direction });
+      // Include hidden flag so sync handlers can skip hidden messages
+      this.emit('message:logged', { sessionId, direction, hidden: hidden ?? false });
     }).catch(error => {
       // Don't fail the request if logging fails - just log the error
       console.error('[BaseAIProvider] Failed to log agent message:', error);

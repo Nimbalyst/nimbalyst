@@ -487,16 +487,17 @@ export class AIService {
     }
 
     // Listen for message:logged events and push to sync
-    provider.on('message:logged', async ({ sessionId: eventSessionId, direction }) => {
+    // Include hidden messages - mobile will filter them client-side
+    provider.on('message:logged', async ({ sessionId: eventSessionId, direction, hidden }: { sessionId: string; direction: string; hidden?: boolean }) => {
       try {
         // Only sync after the message is written to database
-        // Get the most recent message for this session
+        // Get the most recent message for this session (include hidden so they sync with the flag)
         const { AgentMessagesRepository } = await import('@nimbalyst/runtime');
         const messages = await AgentMessagesRepository.list(eventSessionId, { limit: 1, offset: 0, includeHidden: true });
 
         if (messages && messages.length > 0) {
           const latestMessage = messages[0];
-          logger.main.debug(`[AIService] Syncing message for session ${eventSessionId}`);
+          logger.main.debug(`[AIService] Syncing message for session ${eventSessionId}, hidden: ${latestMessage.hidden}`);
           messageSyncHandler.onMessageCreated(latestMessage);
         }
       } catch (error) {
@@ -1095,7 +1096,9 @@ export class AIService {
       provider.registerToolHandler(toolHandler);
 
       // Listen for message:logged events and forward to renderer to trigger UI updates
-      const onMessageLogged = (data: { sessionId: string; direction: string }) => {
+      // Skip hidden messages - they shouldn't trigger UI refreshes
+      const onMessageLogged = (data: { sessionId: string; direction: string; hidden?: boolean }) => {
+        if (data.hidden) return;
         event.sender.send('ai:message-logged', data);
       };
       // Remove all previous listeners to avoid duplicates
