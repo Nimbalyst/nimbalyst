@@ -136,8 +136,8 @@ export function validateCommand(command: SlashCommand): boolean {
     return false;
   }
 
-  // Command name should not contain special characters (allow colons for namespacing)
-  if (!/^[a-zA-Z0-9-_:]+$/.test(command.name)) {
+  // Command name should not contain special characters (allow colons for namespacing, periods for packages like speckit)
+  if (!/^[a-zA-Z0-9-_:.]+$/.test(command.name)) {
     console.warn(`[CommandFileParser] Invalid command name: ${command.name}`);
     return false;
   }
