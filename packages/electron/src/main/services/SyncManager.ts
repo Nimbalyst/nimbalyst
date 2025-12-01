@@ -1,10 +1,14 @@
 /**
- * SyncManager - Manages optional Y.js session sync.
+ * SyncManager - Manages optional session sync.
  *
  * This service is responsible for:
  * - Reading sync configuration from app settings
  * - Creating and managing the SyncProvider instance
  * - Wrapping the session store with sync capabilities when enabled
+ *
+ * Supports two sync backends:
+ * - CollabV3 (recommended): Simple append-only protocol with DO SQLite storage
+ * - Y.js (legacy): CRDT-based sync with D1 BLOB storage
  *
  * The sync feature is completely optional. If not configured, nothing happens.
  */
@@ -21,6 +25,34 @@ async function loadSyncModule() {
     syncModule = await import('@nimbalyst/runtime/sync');
   }
   return syncModule;
+}
+
+/**
+ * Derive an encryption key from a passphrase using PBKDF2.
+ * This is used for E2E encryption in CollabV3.
+ */
+async function deriveEncryptionKey(passphrase: string, salt: string): Promise<CryptoKey> {
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(passphrase),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+
+  return crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: encoder.encode(salt),
+      iterations: 100000,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
 }
 
 interface SyncManagerState {
@@ -53,19 +85,47 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
   }
 
   try {
+    const backend = config.backend ?? 'collabv3';
     logger.main.info('[SyncManager] Initializing session sync...', {
+      backend,
       serverUrl: config.serverUrl,
       userId: config.userId,
     });
 
-    const { createYjsSessionSync, createSyncedSessionStore, createMessageSyncHandler } = await loadSyncModule();
+    const {
+      createYjsSessionSync,
+      createCollabV3Sync,
+      createSyncedSessionStore,
+      createMessageSyncHandler,
+    } = await loadSyncModule();
 
-    // Create sync provider
-    const provider = createYjsSessionSync({
-      serverUrl: config.serverUrl,
-      userId: config.userId,
-      authToken: config.authToken,
-    });
+    // Create sync provider based on backend
+    let provider: import('@nimbalyst/runtime/sync').SyncProvider;
+
+    if (backend === 'collabv3') {
+      // CollabV3 requires encryption key for E2E encryption
+      if (!config.encryptionPassphrase) {
+        logger.main.warn('[SyncManager] CollabV3 requires encryption passphrase - using userId as fallback');
+      }
+      const passphrase = config.encryptionPassphrase || config.userId;
+      const encryptionKey = await deriveEncryptionKey(passphrase, `nimbalyst:${config.userId}`);
+
+      provider = createCollabV3Sync({
+        serverUrl: config.serverUrl,
+        userId: config.userId,
+        authToken: config.authToken,
+        encryptionKey,
+      });
+      logger.main.info('[SyncManager] Created CollabV3 sync provider');
+    } else {
+      // Legacy Y.js backend
+      provider = createYjsSessionSync({
+        serverUrl: config.serverUrl,
+        userId: config.userId,
+        authToken: config.authToken,
+      });
+      logger.main.info('[SyncManager] Created Y.js sync provider (legacy)');
+    }
 
     // Create message sync handler
     const messageSyncHandler = createMessageSyncHandler(provider);

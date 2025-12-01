@@ -42,12 +42,16 @@ interface AppStoreSchema {
   onboardingNextPrompt?: number; // Timestamp for when to show onboarding again (if deferred)
   // Custom Editors
   wireframeLMEnabled?: boolean; // Enable WireframeLM custom editor
-  // Session Sync (optional device sync via Y.js)
+  // Session Sync (optional device sync)
   sessionSync?: {
     enabled: boolean;
-    serverUrl: string; // e.g., 'ws://localhost:8787' or 'wss://sync.nimbalyst.com'
+    backend: 'collabv3' | 'yjs'; // 'collabv3' is recommended, 'yjs' is legacy
+    serverUrl: string; // e.g., 'ws://localhost:8790' or 'wss://sync.nimbalyst.com'
     userId: string;
     authToken: string;
+    // For CollabV3 E2E encryption
+    encryptionPassphrase?: string; // User-provided passphrase for key derivation
+    enabledProjects?: string[]; // List of workspace paths enabled for sync
   };
 }
 
@@ -730,13 +734,21 @@ export function setWireframeLMEnabled(enabled: boolean): void {
 // Session Sync Settings
 export interface SessionSyncConfig {
   enabled: boolean;
+  backend: 'collabv3' | 'yjs';
   serverUrl: string;
   userId: string;
   authToken: string;
+  encryptionPassphrase?: string;
+  enabledProjects?: string[];
 }
 
 export function getSessionSyncConfig(): SessionSyncConfig | undefined {
-  return appStore.get('sessionSync');
+  const config = appStore.get('sessionSync');
+  if (config && !config.backend) {
+    // Default to collabv3 for new configs, yjs for existing
+    return { ...config, backend: 'collabv3' };
+  }
+  return config;
 }
 
 export function setSessionSyncConfig(config: SessionSyncConfig | undefined): void {

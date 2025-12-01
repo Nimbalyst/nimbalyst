@@ -71,6 +71,10 @@
     "./sync": {
       "import": "./dist/sync/index.js",
       "types": "./dist/sync/index.d.ts"
+    },
+    "./ui": {
+      "import": "./dist/ui/index.js",
+      "types": "./dist/ui/index.d.ts"
     }
   },
   "files": [

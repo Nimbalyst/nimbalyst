@@ -1,0 +1,24 @@
+{
+  "name": "@nimbalyst/collabv3",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --ip 0.0.0.0",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "partysocket": "^1.0.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "partykit": "^0.0.111",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.6",
+    "wrangler": "^4.51.0"
+  }
+}

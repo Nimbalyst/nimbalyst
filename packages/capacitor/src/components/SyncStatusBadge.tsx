@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSync } from '../contexts/SyncContext';
+import { useSync } from '../contexts/CollabV3SyncContext';
 
 export function SyncStatusBadge() {
   const { status, isConfigured } = useSync();

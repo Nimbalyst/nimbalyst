@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSync } from '../contexts/SyncContext';
+import { useSync } from '../contexts/CollabV3SyncContext';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
 import { SessionCard } from '../components/SessionCard';
 import { ProjectPicker } from '../components/ProjectPicker';

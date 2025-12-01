@@ -1,6 +1,6 @@
 // Import and re-export types from server types to avoid duplication
-import type { Message, DocumentContext, SessionData, AgentMessage, CreateAgentMessageInput, AgentMessageDirection } from './server/types';
-export type { Message, DocumentContext, SessionData, AgentMessage, CreateAgentMessageInput, AgentMessageDirection };
+import type { Message, DocumentContext, SessionData, AgentMessage, CreateAgentMessageInput, AgentMessageDirection, ChatAttachment } from './server/types';
+export type { Message, DocumentContext, SessionData, AgentMessage, CreateAgentMessageInput, AgentMessageDirection, ChatAttachment };
 
 // Core AI types
 export interface AIToolCall {

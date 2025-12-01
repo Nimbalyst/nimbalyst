@@ -1,13 +1,13 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { SyncProvider } from './contexts/SyncContext';
+import { CollabV3SyncProvider } from './contexts/CollabV3SyncContext';
 import { SessionListScreen } from './screens/SessionListScreen';
 import { SessionDetailScreen } from './screens/SessionDetailScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 
 export function App() {
   return (
-    <SyncProvider>
+    <CollabV3SyncProvider>
       <div className="min-h-screen bg-[var(--surface-primary)] safe-area-top safe-area-bottom">
         <Routes>
           <Route path="/" element={<SessionListScreen />} />
@@ -16,6 +16,6 @@ export function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
-    </SyncProvider>
+    </CollabV3SyncProvider>
   );
 }

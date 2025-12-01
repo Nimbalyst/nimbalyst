@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSync } from '../contexts/SyncContext';
+import { useSync } from '../contexts/CollabV3SyncContext';
 import { SyncStatusBadge } from '../components/SyncStatusBadge';
 
 export function SettingsScreen() {
   const navigate = useNavigate();
   const { config, setConfig, status, isConfigured } = useSync();
 
-  const [serverUrl, setServerUrl] = useState(config?.serverUrl ?? 'ws://localhost:8788');
+  const [serverUrl, setServerUrl] = useState(config?.serverUrl ?? 'ws://localhost:8790');
   const [userId, setUserId] = useState(config?.userId ?? '');
   const [authToken, setAuthToken] = useState(config?.authToken ?? '');
 
@@ -32,7 +32,7 @@ export function SettingsScreen() {
 
   const handleDisconnect = () => {
     setConfig(null);
-    setServerUrl('ws://localhost:8788');
+    setServerUrl('ws://localhost:8790');
     setUserId('');
     setAuthToken('');
   };
@@ -89,7 +89,7 @@ export function SettingsScreen() {
                 type="text"
                 value={serverUrl}
                 onChange={(e) => setServerUrl(e.target.value)}
-                placeholder="ws://localhost:8788"
+                placeholder="ws://localhost:8790"
                 className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--surface-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]"
               />
               <p className="mt-1 text-xs text-[var(--text-tertiary)]">
@@ -154,8 +154,8 @@ export function SettingsScreen() {
             How to connect
           </h3>
           <ol className="text-xs text-[var(--text-secondary)] space-y-2 list-decimal list-inside">
-            <li>Start the sync server: <code className="bg-[var(--surface-tertiary)] px-1 rounded">cd packages/collabv2 && npm run dev</code></li>
-            <li>Enter the server URL (default: ws://localhost:8788)</li>
+            <li>Start the sync server: <code className="bg-[var(--surface-tertiary)] px-1 rounded">cd packages/collabv3 && npm run dev</code></li>
+            <li>Enter the server URL (default: ws://localhost:8790)</li>
             <li>Enter your user ID and auth token</li>
             <li>Tap Connect to start syncing</li>
           </ol>

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Project } from '../contexts/SyncContext';
+import type { Project } from '../contexts/CollabV3SyncContext';
 
 interface ProjectPickerProps {
   projects: Project[];

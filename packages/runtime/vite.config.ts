@@ -14,9 +14,11 @@ export default defineConfig(({ mode }) => ({
   ],
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
+      entry: {
+        index: resolve(__dirname, 'src/index.ts'),
+        'ui/index': resolve(__dirname, 'src/ui/index.ts'),
+      },
       name: 'StravuRuntime',
-      fileName: 'index',
       formats: ['es']
     },
     rollupOptions: {

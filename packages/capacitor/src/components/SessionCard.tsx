@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { SessionIndexEntry } from '../contexts/SyncContext';
+import type { SessionIndexEntry } from '../contexts/CollabV3SyncContext';
 
 interface SessionCardProps {
   session: SessionIndexEntry;

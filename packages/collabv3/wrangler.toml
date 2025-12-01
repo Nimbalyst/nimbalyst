@@ -1,0 +1,55 @@
+# CollabV3 - PartyKit-based sync server
+name = "nimbalyst-collabv3"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Development
+[dev]
+port = 8790
+
+# Durable Objects
+[[durable_objects.bindings]]
+name = "SESSION_ROOM"
+class_name = "SessionRoom"
+
+[[durable_objects.bindings]]
+name = "INDEX_ROOM"
+class_name = "IndexRoom"
+
+# DO migrations - enable SQLite storage
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SessionRoom", "IndexRoom"]
+
+# D1 Database (for global user index only)
+[[d1_databases]]
+binding = "DB"
+database_name = "nimbalyst-collabv3"
+database_id = "placeholder-replace-after-creation"
+
+# KV for rate limiting and feature flags (optional)
+# [[kv_namespaces]]
+# binding = "KV"
+# id = "placeholder"
+
+# R2 for attachments (optional, future)
+# [[r2_buckets]]
+# binding = "ATTACHMENTS"
+# bucket_name = "nimbalyst-attachments"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "development"
+
+# Staging environment
+[env.staging]
+name = "nimbalyst-collabv3-staging"
+[env.staging.vars]
+ENVIRONMENT = "staging"
+
+# Production environment
+[env.production]
+name = "nimbalyst-collabv3"
+[env.production.vars]
+ENVIRONMENT = "production"

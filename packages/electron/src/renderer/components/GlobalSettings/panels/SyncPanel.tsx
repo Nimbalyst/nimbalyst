@@ -103,7 +103,7 @@ export function SyncPanel({
           <div className="provider-panel-section">
             <h4 className="provider-panel-section-title">Server Configuration</h4>
             <p className="provider-panel-hint">
-              Configure the sync server connection. For local development, use ws://localhost:8788
+              Configure the sync server connection. For local development, use ws://localhost:8790
             </p>
 
             <div className="api-key-section">
@@ -113,10 +113,10 @@ export function SyncPanel({
                 className="api-key-input"
                 value={config.serverUrl}
                 onChange={(e) => handleFieldChange('serverUrl', e.target.value)}
-                placeholder="ws://localhost:8788"
+                placeholder="ws://localhost:8790"
               />
               <span className="api-key-hint">
-                WebSocket URL of the sync server (e.g., ws://localhost:8788 or wss://sync.example.com)
+                WebSocket URL of the sync server (e.g., ws://localhost:8790 or wss://sync.example.com)
               </span>
             </div>
 
@@ -218,8 +218,7 @@ export function SyncPanel({
                 overflow: 'auto',
                 margin: '8px 0'
               }}>
-{`cd packages/collabv2
-npm run db:migrate  # First time only
+{`cd packages/collabv3
 npm run dev`}
               </pre>
               <button
@@ -227,7 +226,7 @@ npm run dev`}
                 onClick={() => {
                   onConfigChange({
                     ...config,
-                    serverUrl: 'ws://localhost:8788',
+                    serverUrl: 'ws://localhost:8790',
                     userId: 'dev-user',
                     authToken: 'dev-token',
                   });

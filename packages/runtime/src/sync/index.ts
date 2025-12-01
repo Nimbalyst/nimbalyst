@@ -1,18 +1,23 @@
 /**
  * Session Sync Module
  *
- * Provides optional real-time sync of AI sessions across devices using Y.js CRDTs.
+ * Provides optional real-time sync of AI sessions across devices.
+ *
+ * Two implementations available:
+ * - CollabV3 (recommended): Simple append-only protocol with DO SQLite storage
+ * - Y.js (legacy): CRDT-based sync with D1 BLOB storage
  *
  * Usage:
  *
  * ```typescript
- * import { createYjsSessionSync, createSyncedSessionStore } from '@nimbalyst/runtime/sync';
+ * import { createCollabV3Sync, createSyncedSessionStore } from '@nimbalyst/runtime/sync';
  *
  * // 1. Create sync provider with config
- * const syncProvider = createYjsSessionSync({
+ * const syncProvider = createCollabV3Sync({
  *   serverUrl: 'wss://sync.nimbalyst.com',
  *   userId: 'user-123',
  *   authToken: 'token',
+ *   encryptionKey: derivedKey, // Required for E2E encryption
  * });
  *
  * // 2. Wrap your existing session store
@@ -36,10 +41,13 @@ export type {
   SyncStatus,
   SyncProvider,
   SessionChange,
-  SyncedMessage,
   SyncedSessionMetadata,
 } from './types';
 
+// CollabV3 - recommended for new deployments
+export { createCollabV3Sync } from './CollabV3Sync';
+
+// Y.js - legacy, kept for existing deployments
 export { createYjsSessionSync } from './YjsSessionSync';
 
 export {

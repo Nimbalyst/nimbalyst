@@ -1,11 +1,39 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import * as Y from 'yjs';
-import { WebsocketProvider } from 'y-websocket';
-import { useSync } from '../contexts/SyncContext';
+import { useSync } from '../contexts/CollabV3SyncContext';
 import { AgentTranscriptPanel, transformAgentMessagesToUI } from '@nimbalyst/runtime';
 import { AIInput } from '@nimbalyst/runtime/ui';
-import type { SessionData, Message, ChatAttachment } from '@nimbalyst/runtime';
+import type { SessionData, ChatAttachment } from '@nimbalyst/runtime';
+import forge from 'node-forge';
+
+/**
+ * CollabV3 Message Types
+ */
+
+interface EncryptedMessage {
+  id: string;
+  sequence: number;
+  created_at: number;
+  source: 'user' | 'assistant' | 'tool' | 'system';
+  direction: 'input' | 'output';
+  encrypted_content: string;
+  iv: string;
+  metadata: {
+    tool_name?: string;
+    has_attachments?: boolean;
+    content_length?: number;
+  };
+}
+
+interface SessionMetadata {
+  title: string;
+  provider: string;
+  model?: string;
+  mode?: 'agent' | 'planning';
+  project_id: string;
+  created_at: number;
+  updated_at: number;
+}
 
 interface SyncedMessage {
   id: string;
@@ -17,11 +45,142 @@ interface SyncedMessage {
   hidden?: boolean;
 }
 
-interface SessionMetadata {
-  title?: string;
-  provider?: string;
-  model?: string;
-  mode?: string;
+type ClientMessage =
+  | { type: 'sync_request'; since_id?: string; since_seq?: number }
+  | { type: 'append_message'; message: EncryptedMessage }
+  | { type: 'update_metadata'; metadata: Partial<SessionMetadata> };
+
+type ServerMessage =
+  | {
+      type: 'sync_response';
+      messages: EncryptedMessage[];
+      metadata: SessionMetadata | null;
+      has_more: boolean;
+      cursor: string | null;
+    }
+  | {
+      type: 'message_broadcast';
+      message: EncryptedMessage;
+      from_connection_id?: string;
+    }
+  | {
+      type: 'metadata_broadcast';
+      metadata: Partial<SessionMetadata>;
+      from_connection_id?: string;
+    }
+  | { type: 'error'; code: string; message: string };
+
+// ============================================================================
+// Base64 Utilities (handles large byte arrays)
+// ============================================================================
+
+/**
+ * Convert Uint8Array to base64 string.
+ * Uses chunked approach to avoid call stack size limits with large arrays.
+ */
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  // For small arrays, use simple approach
+  if (bytes.length < 1024) {
+    return btoa(String.fromCharCode(...bytes));
+  }
+
+  // For large arrays, chunk to avoid stack overflow
+  const CHUNK_SIZE = 8192;
+  let result = '';
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length));
+    result += String.fromCharCode(...chunk);
+  }
+  return btoa(result);
+}
+
+/**
+ * Convert base64 string to Uint8Array.
+ * Returns a Uint8Array backed by an ArrayBuffer (not SharedArrayBuffer).
+ */
+function base64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(base64);
+  const buffer = new ArrayBuffer(binary.length);
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+// ============================================================================
+// Encryption Utilities (using node-forge for mobile compatibility)
+// ============================================================================
+
+// Key type for forge-based encryption
+type ForgeKey = string; // Raw key bytes as binary string
+
+/**
+ * Derive encryption key from passphrase using PBKDF2
+ * Returns raw key bytes as a binary string (compatible with forge)
+ */
+async function deriveEncryptionKey(passphrase: string, salt: string): Promise<ForgeKey> {
+  // Use forge's PBKDF2 - returns binary string
+  const key = forge.pkcs5.pbkdf2(passphrase, salt, 100000, 32, 'sha256');
+  return key;
+}
+
+/**
+ * Encrypt content for sending using AES-GCM
+ */
+async function encrypt(
+  content: string,
+  key: ForgeKey
+): Promise<{ encrypted: string; iv: string }> {
+  // Generate random IV (12 bytes for GCM)
+  const iv = forge.random.getBytesSync(12);
+
+  // Create cipher
+  const cipher = forge.cipher.createCipher('AES-GCM', key);
+  cipher.start({ iv, tagLength: 128 });
+  cipher.update(forge.util.createBuffer(content, 'utf8'));
+  cipher.finish();
+
+  // Get encrypted data and auth tag
+  const encrypted = cipher.output.getBytes();
+  const tag = cipher.mode.tag.getBytes();
+
+  // Combine encrypted + tag (this is how Web Crypto API returns it)
+  const combined = encrypted + tag;
+
+  return {
+    encrypted: forge.util.encode64(combined),
+    iv: forge.util.encode64(iv),
+  };
+}
+
+/**
+ * Decrypt content from server using AES-GCM
+ */
+async function decrypt(encrypted: string, iv: string, key: ForgeKey): Promise<string> {
+  const encryptedBytes = forge.util.decode64(encrypted);
+  const ivBytes = forge.util.decode64(iv);
+
+  // Split encrypted data and tag (tag is last 16 bytes)
+  const tagLength = 16;
+  const ciphertext = encryptedBytes.slice(0, -tagLength);
+  const tag = encryptedBytes.slice(-tagLength);
+
+  // Create decipher
+  const decipher = forge.cipher.createDecipher('AES-GCM', key);
+  decipher.start({
+    iv: ivBytes,
+    tagLength: 128,
+    tag: forge.util.createBuffer(tag),
+  });
+  decipher.update(forge.util.createBuffer(ciphertext));
+
+  const success = decipher.finish();
+  if (!success) {
+    throw new Error('Decryption failed - authentication tag mismatch');
+  }
+
+  return decipher.output.toString('utf8');
 }
 
 export function SessionDetailScreen() {
@@ -29,8 +188,10 @@ export function SessionDetailScreen() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { config } = useSync();
 
+  console.log('[SessionDetail] Render - sessionId:', sessionId, 'config:', config ? 'present' : 'null');
+
   const [messages, setMessages] = useState<SyncedMessage[]>([]);
-  const [metadata, setMetadata] = useState<SessionMetadata>({});
+  const [metadata, setMetadata] = useState<Partial<SessionMetadata>>({});
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,107 +200,196 @@ export function SessionDetailScreen() {
   const [isSending, setIsSending] = useState(false);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
 
-  const docRef = useRef<Y.Doc | null>(null);
-  const providerRef = useRef<WebsocketProvider | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const encryptionKeyRef = useRef<ForgeKey | null>(null);
+  const lastSequenceRef = useRef<number>(0);
 
+  // Decrypt a message
+  const decryptMessage = useCallback(
+    async (encrypted: EncryptedMessage): Promise<SyncedMessage | null> => {
+      if (!encryptionKeyRef.current) {
+        console.error('[SessionDetail] No encryption key');
+        return null;
+      }
+
+      try {
+        const decrypted = await decrypt(
+          encrypted.encrypted_content,
+          encrypted.iv,
+          encryptionKeyRef.current
+        );
+        const parsed = JSON.parse(decrypted);
+
+        return {
+          id: encrypted.id,
+          createdAt: encrypted.created_at,
+          source: encrypted.source,
+          direction: encrypted.direction,
+          content: parsed.content,
+          metadata: parsed.metadata,
+          hidden: false,
+        };
+      } catch (err) {
+        console.error('[SessionDetail] Failed to decrypt message:', err);
+        return null;
+      }
+    },
+    []
+  );
+
+  // Handle incoming server messages
+  const handleServerMessage = useCallback(
+    async (data: string) => {
+      try {
+        const message: ServerMessage = JSON.parse(data);
+
+        switch (message.type) {
+          case 'sync_response': {
+            // Decrypt all messages
+            const decrypted: SyncedMessage[] = [];
+            for (const encrypted of message.messages) {
+              const msg = await decryptMessage(encrypted);
+              if (msg) {
+                decrypted.push(msg);
+                lastSequenceRef.current = Math.max(lastSequenceRef.current, encrypted.sequence);
+              }
+            }
+
+            setMessages((prev) => {
+              // Merge with existing (avoid duplicates)
+              const existing = new Set(prev.map((m) => m.id));
+              const newMsgs = decrypted.filter((m) => !existing.has(m.id));
+              return [...prev, ...newMsgs].sort((a, b) => a.createdAt - b.createdAt);
+            });
+
+            if (message.metadata) {
+              setMetadata(message.metadata);
+            }
+
+            // Request more if needed
+            if (message.has_more && message.cursor && wsRef.current) {
+              const nextRequest: ClientMessage = {
+                type: 'sync_request',
+                since_seq: parseInt(message.cursor, 10),
+              };
+              wsRef.current.send(JSON.stringify(nextRequest));
+            }
+
+            console.log('[SessionDetail] Synced', decrypted.length, 'messages');
+            break;
+          }
+
+          case 'message_broadcast': {
+            const msg = await decryptMessage(message.message);
+            if (msg) {
+              lastSequenceRef.current = Math.max(
+                lastSequenceRef.current,
+                message.message.sequence
+              );
+              setMessages((prev) => {
+                // Avoid duplicates
+                if (prev.some((m) => m.id === msg.id)) {
+                  return prev;
+                }
+                return [...prev, msg].sort((a, b) => a.createdAt - b.createdAt);
+              });
+            }
+            break;
+          }
+
+          case 'metadata_broadcast': {
+            setMetadata((prev) => ({ ...prev, ...message.metadata }));
+            break;
+          }
+
+          case 'error': {
+            console.error('[SessionDetail] Server error:', message.code, message.message);
+            setError(message.message);
+            break;
+          }
+        }
+      } catch (err) {
+        console.error('[SessionDetail] Failed to handle message:', err);
+      }
+    },
+    [decryptMessage]
+  );
+
+  // Connect to SessionRoom
   useEffect(() => {
+    console.log('[SessionDetail] useEffect running - config:', !!config, 'sessionId:', sessionId);
+
     if (!config || !sessionId) {
+      console.log('[SessionDetail] Missing config or sessionId, setting error');
       setError('Missing configuration or session ID');
       return;
     }
 
-    // Create Y.Doc for this session
-    const doc = new Y.Doc();
-    docRef.current = doc;
+    let ws: WebSocket | null = null;
 
-    const wsUrl = `${config.serverUrl}/sync`;
+    const connect = async () => {
+      console.log('[SessionDetail] connect() called');
+      // Derive encryption key
+      const passphrase = config.encryptionPassphrase || config.userId;
+      encryptionKeyRef.current = await deriveEncryptionKey(
+        passphrase,
+        `nimbalyst:${config.userId}`
+      );
 
-    const provider = new WebsocketProvider(wsUrl, sessionId, doc, {
-      params: {
-        authorization: `Bearer ${config.userId}:${config.authToken}`,
-      },
-      connect: true,
-    });
-    providerRef.current = provider;
+      // Build WebSocket URL
+      const baseUrl = config.serverUrl.replace(/\/$/, '');
+      const wsBase = baseUrl.replace(/^http/, 'ws');
+      const roomId = `user:${config.userId}:session:${sessionId}`;
+      const wsUrl = `${wsBase}/sync/${roomId}?user_id=${config.userId}&token=${config.authToken}`;
 
-    // Status tracking
-    provider.on('status', ({ status }: { status: string }) => {
-      setConnected(status === 'connected');
-      if (status === 'connected') {
+      console.log('[SessionDetail] Connecting to:', roomId);
+
+      ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('[SessionDetail] Connected');
+        setConnected(true);
         setError(null);
-      }
-    });
 
-    provider.on('connection-error', () => {
-      setError('Connection failed');
-      setConnected(false);
-    });
+        // Request initial sync
+        const syncRequest: ClientMessage = { type: 'sync_request' };
+        ws?.send(JSON.stringify(syncRequest));
+      };
 
-    // Get messages array and metadata map
-    const messagesArray = doc.getArray<SyncedMessage>('messages');
-    const metadataMap = doc.getMap<unknown>('metadata');
+      ws.onclose = () => {
+        console.log('[SessionDetail] Disconnected');
+        setConnected(false);
+        wsRef.current = null;
+      };
 
-    // Update messages from Y.Doc
-    const updateMessages = () => {
-      const msgs = messagesArray.toArray().map((msg) => {
-        // Convert Y.js types to plain objects if needed
-        return (msg as any)?.toJSON ? (msg as any).toJSON() : msg;
-      });
-      console.log('[SessionDetail] Messages:', msgs);
-      setMessages(msgs.filter((m) => !m.hidden));
+      ws.onerror = (event) => {
+        console.error('[SessionDetail] WebSocket error:', event);
+        setError('Connection error');
+        setConnected(false);
+      };
+
+      ws.onmessage = (event) => {
+        handleServerMessage(event.data);
+      };
     };
 
-    // Update metadata from Y.Doc
-    const updateMetadata = () => {
-      const meta: SessionMetadata = {};
-      metadataMap.forEach((value, key) => {
-        (meta as Record<string, unknown>)[key] = value;
-      });
-      console.log('[SessionDetail] Metadata:', meta);
-      setMetadata(meta);
-
-      // Sync draft input from Y.Doc (if different from local state)
-      const draft = metadataMap.get('draftInput');
-      if (typeof draft === 'string' && draft !== inputValue) {
-        setInputValue(draft);
-      }
-    };
-
-    // Observe changes
-    messagesArray.observe(updateMessages);
-    metadataMap.observe(updateMetadata);
-
-    // Initial update after sync
-    provider.on('sync', (isSynced: boolean) => {
-      if (isSynced) {
-        updateMessages();
-        updateMetadata();
-      }
+    connect().catch(err => {
+      console.error('[SessionDetail] Connect error:', err);
+      setError(`Connection failed: ${err.message || err}`);
     });
 
-    // Cleanup
     return () => {
-      messagesArray.unobserve(updateMessages);
-      metadataMap.unobserve(updateMetadata);
-
-      if (providerRef.current) {
-        providerRef.current.disconnect();
-        providerRef.current.destroy();
-        providerRef.current = null;
+      if (ws) {
+        ws.close();
       }
-      if (docRef.current) {
-        docRef.current.destroy();
-        docRef.current = null;
-      }
+      wsRef.current = null;
     };
-  }, [config, sessionId]);
+  }, [config, sessionId, handleServerMessage]);
 
   // Convert synced messages to SessionData format
   const sessionData = useMemo((): SessionData => {
-    console.log('[SessionDetail] Raw messages:', messages);
-
-    // Use the same transformation function that the desktop app uses!
-    // This properly handles Claude Code format, tool calls, thinking, etc.
+    // Use the same transformation function that the desktop app uses
     const convertedMessages = transformAgentMessagesToUI(messages);
 
     return {
@@ -161,55 +411,68 @@ export function SessionDetailScreen() {
     return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
   };
 
-  // Handle input change - sync draft to Y.Doc
+  // Handle input change
   const handleInputChange = (value: string) => {
     setInputValue(value);
-
-    // Sync draft input to Y.Doc
-    if (docRef.current) {
-      const metadataMap = docRef.current.getMap('metadata');
-      metadataMap.set('draftInput', value);
-    }
+    // Note: Draft sync via metadata is not yet implemented in CollabV3
   };
 
   // Handle sending a message
   const handleSendMessage = async (message: string) => {
-    if (!message.trim() || !sessionId || !docRef.current) {
-      console.log('[SessionDetail] Cannot send: missing data', { message: !!message.trim(), sessionId, doc: !!docRef.current });
+    if (!message.trim() || !sessionId || !wsRef.current || !encryptionKeyRef.current) {
+      console.log('[SessionDetail] Cannot send: missing data');
       return;
     }
 
     setIsSending(true);
     try {
-      // Create user message
-      const userMessage: SyncedMessage = {
+      // Encrypt the message content
+      const content = JSON.stringify({
+        content: message,
+        metadata: {},
+      });
+      const { encrypted, iv } = await encrypt(content, encryptionKeyRef.current);
+
+      // Create encrypted message
+      const encryptedMessage: EncryptedMessage = {
         id: generateId(),
-        createdAt: Date.now(),
+        sequence: 0, // Server assigns sequence
+        created_at: Date.now(),
         source: 'user',
         direction: 'input',
-        content: message,
+        encrypted_content: encrypted,
+        iv,
+        metadata: {
+          content_length: message.length,
+        },
       };
 
-      console.log('[SessionDetail] Sending message:', userMessage);
+      // Send to server
+      const clientMsg: ClientMessage = {
+        type: 'append_message',
+        message: encryptedMessage,
+      };
+      wsRef.current.send(JSON.stringify(clientMsg));
 
-      // Push to Y.Doc messages array
-      const messagesArray = docRef.current.getArray<SyncedMessage>('messages');
-      messagesArray.push([userMessage]);
-
-      // Update metadata with pending execution flag and clear draft
-      const metadataMap = docRef.current.getMap('metadata');
-      metadataMap.set('pendingExecution', {
-        messageId: userMessage.id,
-        sentAt: Date.now(),
-        sentBy: 'mobile',
-      });
-      metadataMap.set('draftInput', ''); // Clear draft after sending
+      // Optimistically add to local state
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: encryptedMessage.id,
+          createdAt: encryptedMessage.created_at,
+          source: 'user',
+          direction: 'input',
+          content: message,
+          metadata: {},
+          hidden: false,
+        },
+      ]);
 
       // Clear input
       setInputValue('');
       setAttachments([]);
 
-      console.log('[SessionDetail] Message sent successfully');
+      console.log('[SessionDetail] Message sent');
     } catch (err) {
       console.error('[SessionDetail] Failed to send message:', err);
       setError('Failed to send message');
@@ -219,11 +482,11 @@ export function SessionDetailScreen() {
   };
 
   const handleAttachmentAdd = (attachment: ChatAttachment) => {
-    setAttachments(prev => [...prev, attachment]);
+    setAttachments((prev) => [...prev, attachment]);
   };
 
   const handleAttachmentRemove = (attachmentId: string) => {
-    setAttachments(prev => prev.filter(a => a.id !== attachmentId));
+    setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
   };
 
   return (
@@ -234,8 +497,18 @@ export function SessionDetailScreen() {
           onClick={() => navigate('/')}
           className="mr-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m15 18-6-6 6-6"/>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m15 18-6-6 6-6" />
           </svg>
         </button>
         <div className="flex-1 min-w-0">
@@ -251,9 +524,7 @@ export function SessionDetailScreen() {
       {/* Transcript - Scrollable */}
       <main className="flex-1 overflow-auto">
         {error && (
-          <div className="m-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">
-            {error}
-          </div>
+          <div className="m-4 p-3 rounded-lg bg-red-50 text-red-600 text-sm">{error}</div>
         )}
 
         {messages.length === 0 ? (
@@ -277,7 +548,7 @@ export function SessionDetailScreen() {
           onSend={handleSendMessage}
           disabled={!connected || isSending}
           isLoading={isSending}
-          placeholder={connected ? "Type your message..." : "Connecting..."}
+          placeholder={connected ? 'Type your message...' : 'Connecting...'}
           attachments={attachments}
           onAttachmentAdd={handleAttachmentAdd}
           onAttachmentRemove={handleAttachmentRemove}
