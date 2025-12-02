@@ -4,6 +4,7 @@
   flex-direction: column;
   background-color: var(--bg-primary);
   position: relative;
+  overflow-x: hidden;
 }
 
 .rich-transcript-settings {
@@ -33,6 +34,7 @@
 .rich-transcript-scroll-container {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
@@ -122,12 +124,18 @@
   flex-direction: column;
   gap: 0.5rem;
   padding: 0 0.75rem;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .rich-transcript-message {
   border-radius: 0.375rem;
   transition: all 0.2s;
   position: relative;
+  max-width: 100%;
+  overflow-x: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .rich-transcript-message.user {

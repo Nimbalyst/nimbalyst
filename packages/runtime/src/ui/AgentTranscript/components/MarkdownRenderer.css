@@ -2,6 +2,10 @@
 .markdown-content {
   font-size: 0.9375rem;
   line-height: 1.625;
+  max-width: 100%;
+  overflow-x: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 /* Remove default margins for first and last children */
@@ -32,6 +36,8 @@
   word-break: normal;
   tab-size: 2;
   hyphens: none;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 /* Syntax highlighting token colors using CSS variables */

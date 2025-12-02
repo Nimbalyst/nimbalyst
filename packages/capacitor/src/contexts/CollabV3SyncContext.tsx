@@ -47,6 +47,8 @@ interface SyncContextValue {
   selectProject: (project: Project | null) => void;
   refresh: () => void;
   isConfigured: boolean;
+  /** Whether we've received the initial data from the server (true even if sessions array is empty) */
+  hasReceivedInitialData: boolean;
   /**
    * Send an index update to notify other devices of pending execution.
    * This sends via the index WebSocket so desktop can receive it without
@@ -265,6 +267,8 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() =>
     loadSelectedProject()
   );
+  // Track whether we've received initial data from the server
+  const [hasReceivedInitialData, setHasReceivedInitialData] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -349,6 +353,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
 
             setAllSessions(convertedSessions);
             setProjects(convertedProjects);
+            setHasReceivedInitialData(true);
             setStatus((prev) => ({
               ...prev,
               syncing: false,
@@ -577,11 +582,14 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
   // Connect when config changes
   useEffect(() => {
     if (config) {
+      // Reset initial data flag when reconnecting with new config
+      setHasReceivedInitialData(false);
       connect();
     } else {
       disconnect();
       setAllSessions([]);
       setProjects([]);
+      setHasReceivedInitialData(false);
       setStatus({
         connected: false,
         syncing: false,
@@ -621,6 +629,7 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
     selectProject,
     refresh,
     isConfigured: config !== null,
+    hasReceivedInitialData,
     sendIndexUpdate,
   };
 

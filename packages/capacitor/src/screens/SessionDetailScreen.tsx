@@ -39,6 +39,7 @@ interface WireSessionMetadata {
     sentAt: number;
     sentBy: 'mobile' | 'desktop';
   };
+  isExecuting?: boolean;
 }
 
 interface SyncedMessage {
@@ -402,6 +403,16 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
     // Use the same transformation function that the desktop app uses
     const convertedMessages = transformAgentMessagesToUI(messages);
 
+    // Determine session status for "Thinking..." indicator
+    // isExecuting means the desktop is currently processing
+    // pendingExecution means we sent a message and are waiting for desktop to pick it up
+    let sessionStatus: string | undefined;
+    if (metadata.isExecuting) {
+      sessionStatus = 'running';
+    } else if (metadata.pendingExecution) {
+      sessionStatus = 'waiting';
+    }
+
     return {
       id: sessionId || '',
       provider: metadata.provider || 'unknown',
@@ -411,6 +422,7 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
       createdAt: messages[0]?.createdAt || Date.now(),
       updatedAt: messages[messages.length - 1]?.createdAt || Date.now(),
       title: metadata.title,
+      metadata: sessionStatus ? { sessionStatus } : undefined,
     };
   }, [sessionId, messages, metadata]);
 

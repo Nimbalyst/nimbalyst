@@ -15,6 +15,7 @@ export function SessionListScreen() {
     isConfigured,
     refresh,
     status,
+    hasReceivedInitialData,
   } = useSync();
   const [showProjectPicker, setShowProjectPicker] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -26,8 +27,8 @@ export function SessionListScreen() {
     setTimeout(() => setIsRefreshing(false), 1000);
   };
 
-  // Show loading state when syncing and no sessions yet
-  const isLoading = status.syncing && sessions.length === 0;
+  // Show loading state until we've received initial data from the server
+  const isLoading = isConfigured && !hasReceivedInitialData;
 
   return (
     <div className="flex flex-col h-screen">
