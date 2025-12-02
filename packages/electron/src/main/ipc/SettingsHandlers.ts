@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
 import * as os from 'os';
 import { getWorkspaceState, updateWorkspaceState, getTheme, getThemeSync, isCompletionSoundEnabled, setCompletionSoundEnabled, getCompletionSoundType, setCompletionSoundType, CompletionSoundType, getReleaseChannel, setReleaseChannel, ReleaseChannel, getRecentItems, getDefaultAIModel, setDefaultAIModel, isAnalyticsEnabled, setAnalyticsEnabled, isWireframeLMEnabled, setWireframeLMEnabled, getSessionSyncConfig, setSessionSyncConfig, SessionSyncConfig } from '../utils/store';
 import { logger } from '../utils/logger';
@@ -6,6 +6,10 @@ import { SoundNotificationService } from '../services/SoundNotificationService';
 import { autoUpdaterService } from '../services/autoUpdater';
 import type { OnboardingState } from '../utils/store';
 import { getCredentials, getUserId, resetCredentials, generateQRPairingPayload, isUsingSecureStorage } from '../services/CredentialService';
+import { onSyncStatusChange } from '../services/SyncManager';
+
+// Track if we've subscribed to sync status changes
+let syncStatusListenerSetup = false;
 
 /**
  * Get the local network IP address (for LAN access from mobile devices)
@@ -273,21 +277,26 @@ export function registerSettingsHandlers() {
         const provider = getSyncProvider();
         const syncActive = isSyncEnabled();
 
-        // Get session count for this workspace
+        // Get session count for this workspace using a simple, fast query
         let sessionCount = 0;
         let lastSyncedAt: number | null = null;
 
         if (workspacePath && syncActive) {
             try {
-                const { getAllSessionsForSync } = await import('../services/PGLiteSessionStore');
-                const allSessions = await getAllSessionsForSync(false);
-                // Filter sessions for this workspace
-                const sessions = allSessions.filter(s => s.workspaceId === workspacePath || s.workspacePath === workspacePath);
-                sessionCount = sessions.length;
-                // Find most recent update
-                for (const session of sessions) {
-                    if (session.updatedAt && (!lastSyncedAt || session.updatedAt > lastSyncedAt)) {
-                        lastSyncedAt = session.updatedAt;
+                // Get session count for status display (only called on mount, not polled)
+                const { database } = await import('../database/PGLiteDatabaseWorker');
+                const { rows } = await database.query<{ count: string; max_updated: Date | null }>(
+                    `SELECT COUNT(*) as count, MAX(updated_at) as max_updated
+                     FROM ai_sessions
+                     WHERE workspace_id = $1 AND (is_archived = FALSE OR is_archived IS NULL)`,
+                    [workspacePath]
+                );
+                if (rows[0]) {
+                    sessionCount = parseInt(rows[0].count) || 0;
+                    if (rows[0].max_updated) {
+                        lastSyncedAt = rows[0].max_updated instanceof Date
+                            ? rows[0].max_updated.getTime()
+                            : new Date(rows[0].max_updated).getTime();
                     }
                 }
             } catch (error) {
@@ -344,6 +353,24 @@ export function registerSettingsHandlers() {
         logger.store.info(`[sync:toggle-project] Project sync ${enabled ? 'enabled' : 'disabled'} for: ${workspacePath}`);
 
         return { success: true };
+    });
+
+    // Subscribe to sync status changes and broadcast to all windows
+    // This is called once when the first window requests it
+    ipcMain.handle('sync:subscribe-status', () => {
+        if (syncStatusListenerSetup) {
+            return; // Already subscribed
+        }
+        syncStatusListenerSetup = true;
+
+        onSyncStatusChange((status) => {
+            // Broadcast to all windows
+            for (const window of BrowserWindow.getAllWindows()) {
+                window.webContents.send('sync:status-changed', status);
+            }
+        });
+
+        logger.store.info('[sync:subscribe-status] Subscribed to sync status changes');
     });
 
     // ============================================================

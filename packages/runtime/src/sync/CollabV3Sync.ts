@@ -309,9 +309,22 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
     const { encrypted, iv } = await encrypt(content, key);
 
-    // Generate a unique sync ID - local message IDs may not be unique (e.g., 0 before DB insert)
-    // Use UUID to ensure uniqueness across all synced messages
-    const syncId = crypto.randomUUID();
+    // Generate a STABLE sync ID from message content + timestamp
+    // This prevents duplicate messages when the same message is synced multiple times
+    // We hash: sessionId + timestamp + first 100 chars of content + direction
+    const timestamp = message.createdAt instanceof Date
+      ? message.createdAt.getTime()
+      : typeof message.createdAt === 'number'
+        ? message.createdAt
+        : Date.now();
+    const contentPreview = message.content.substring(0, 100);
+    const hashInput = `${message.sessionId}:${timestamp}:${message.direction}:${contentPreview}`;
+
+    // Use SubtleCrypto to generate a stable hash
+    const encoder = new TextEncoder();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(hashInput));
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const syncId = hashArray.slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
 
     return {
       id: syncId,
@@ -502,7 +515,12 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
 
   // Connect to index for session list updates
   function connectToIndex(): void {
-    if (indexWs) return;
+    if (indexWs) {
+      console.log('[CollabV3] connectToIndex() - already connected');
+      return;
+    }
+
+    console.log('[CollabV3] connectToIndex() - CREATING INDEX WebSocket');
 
     const url = getWebSocketUrl(getIndexRoomId());
     const wsUrl = `${url}?user_id=${config.userId}&token=${config.authToken}`;
@@ -618,7 +636,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       return;
     }
 
-    console.log('[CollabV3] Syncing', messages.length, 'messages to session', sessionId);
+    console.log('[CollabV3] syncSessionMessages() - CREATING TEMP WebSocket for session', sessionId, 'with', messages.length, 'messages');
 
     // Connect to session room
     const roomId = getRoomId(sessionId);
@@ -771,12 +789,26 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     }
   }
 
+  // Hard limit on concurrent session WebSocket connections to prevent performance issues
+  const MAX_SESSION_CONNECTIONS = 5;
+
   // Create provider object
   const provider: SyncProvider = {
     async connect(sessionId: string): Promise<void> {
       if (sessions.has(sessionId)) {
+        console.log(`[CollabV3] connect() - already connected to session ${sessionId}`);
         return; // Already connected
       }
+
+      // Enforce hard limit on concurrent connections
+      if (sessions.size >= MAX_SESSION_CONNECTIONS) {
+        console.warn(`[CollabV3] connect() - REJECTING connection for ${sessionId}, already at max (${MAX_SESSION_CONNECTIONS} connections)`);
+        return; // Silently reject - caller should handle missing connection gracefully
+      }
+
+      // Log stack trace to identify what's creating connections
+      const stack = new Error().stack?.split('\n').slice(2, 6).join('\n') || '';
+      console.log(`[CollabV3] connect() - CREATING NEW WebSocket for session ${sessionId} (${sessions.size + 1}/${MAX_SESSION_CONNECTIONS})\n${stack}`);
 
       const roomId = getRoomId(sessionId);
       const url = getWebSocketUrl(roomId);

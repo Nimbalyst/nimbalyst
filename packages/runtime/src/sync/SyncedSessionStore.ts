@@ -137,8 +137,11 @@ export function createSyncedSessionStore(
       if ((metadata as any).model !== undefined) syncMetadata.model = (metadata as any).model;
       if (metadata.draftInput !== undefined) syncMetadata.draftInput = metadata.draftInput;
 
-      // Push to sync
-      await ensureSyncConnected(sessionId);
+      // NOTE: Do NOT call ensureSyncConnected here!
+      // Metadata updates should only push to sessions that are ALREADY connected.
+      // Creating a WebSocket connection for every metadata update (like draft input changes)
+      // causes massive performance issues when many session tabs are open.
+      // If the session isn't connected yet, the update will be synced when it is.
       pushToSync(sessionId, {
         type: 'metadata_updated',
         metadata: syncMetadata as any,
@@ -146,10 +149,10 @@ export function createSyncedSessionStore(
     },
 
     async get(sessionId: string): Promise<ChatSession | null> {
-      // Connect sync when session is accessed
-      await ensureSyncConnected(sessionId);
-
-      // Return from base store
+      // NOTE: Do NOT connect to sync here - reading doesn't need a connection.
+      // Connections are only needed for write operations (create, update).
+      // Auto-connecting on every get() causes too many WebSocket connections
+      // when loading session lists or resuming sessions.
       return baseStore.get(sessionId);
     },
 
@@ -196,9 +199,8 @@ export function createSyncedSessionStore(
 
       const result = await baseStore.updateTitleIfNotNamed(sessionId, title);
 
-      // If title was updated, push to sync
+      // If title was updated, push to sync (only if already connected)
       if (result) {
-        await ensureSyncConnected(sessionId);
         pushToSync(sessionId, {
           type: 'metadata_updated',
           metadata: { title, updatedAt: Date.now() },
@@ -220,8 +222,10 @@ export function createMessageSyncHandler(syncProvider: SyncProvider) {
   return {
     /**
      * Call this after a message is created to sync it.
+     * @param message The message to sync
+     * @param sessionUpdatedAt Optional timestamp (ms) for session updated_at - MUST match local DB
      */
-    async onMessageCreated(message: AgentMessage): Promise<void> {
+    async onMessageCreated(message: AgentMessage, sessionUpdatedAt?: number): Promise<void> {
       // Auto-connect session if not already connected
       if (!syncProvider.isConnected(message.sessionId)) {
         console.log(`[MessageSyncHandler] Session ${message.sessionId} not connected, auto-connecting...`);
@@ -239,6 +243,15 @@ export function createMessageSyncHandler(syncProvider: SyncProvider) {
         type: 'message_added',
         message,
       });
+
+      // Also update the session index with the same timestamp used in local DB
+      // This ensures updated_at matches exactly for sync comparisons
+      if (sessionUpdatedAt !== undefined) {
+        syncProvider.pushChange(message.sessionId, {
+          type: 'metadata_updated',
+          metadata: { updatedAt: sessionUpdatedAt },
+        });
+      }
     },
 
     /**

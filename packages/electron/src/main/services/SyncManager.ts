@@ -63,13 +63,58 @@ interface SyncManagerState {
   provider: import('@nimbalyst/runtime/sync').SyncProvider | null;
   config: SessionSyncConfig | null;
   messageSyncHandler: ReturnType<typeof import('@nimbalyst/runtime/sync').createMessageSyncHandler> | null;
+  connected: boolean;
+  syncing: boolean;
+  error: string | null;
 }
 
 const state: SyncManagerState = {
   provider: null,
   config: null,
   messageSyncHandler: null,
+  connected: false,
+  syncing: false,
+  error: null,
 };
+
+// Event emitter for sync status changes
+type SyncStatusListener = (status: { connected: boolean; syncing: boolean; error: string | null }) => void;
+const statusListeners = new Set<SyncStatusListener>();
+
+/**
+ * Subscribe to sync status changes.
+ * Returns an unsubscribe function.
+ */
+export function onSyncStatusChange(listener: SyncStatusListener): () => void {
+  statusListeners.add(listener);
+  // Immediately emit current status
+  listener({ connected: state.connected, syncing: state.syncing, error: state.error });
+  return () => statusListeners.delete(listener);
+}
+
+/**
+ * Update sync status and notify listeners.
+ */
+function updateSyncStatus(update: Partial<{ connected: boolean; syncing: boolean; error: string | null }>) {
+  let changed = false;
+  if (update.connected !== undefined && update.connected !== state.connected) {
+    state.connected = update.connected;
+    changed = true;
+  }
+  if (update.syncing !== undefined && update.syncing !== state.syncing) {
+    state.syncing = update.syncing;
+    changed = true;
+  }
+  if (update.error !== undefined && update.error !== state.error) {
+    state.error = update.error;
+    changed = true;
+  }
+
+  if (changed) {
+    const status = { connected: state.connected, syncing: state.syncing, error: state.error };
+    statusListeners.forEach(listener => listener(status));
+  }
+}
 
 // Cache the device ID so it's stable across sync reinitializations
 let cachedDeviceId: string | null = null;
@@ -129,6 +174,13 @@ function getDeviceInfo(userId: string): DeviceInfo {
  * Returns a wrapped session store if sync is enabled, or the original store if not.
  */
 export async function initializeSync(baseStore: SessionStore): Promise<SessionStore> {
+  // TEMPORARY: Hard disable sync to debug performance issue
+  const FORCE_DISABLE_SYNC = false;
+  if (FORCE_DISABLE_SYNC) {
+    logger.main.info('[SyncManager] Session sync FORCE DISABLED for debugging');
+    return baseStore;
+  }
+
   const config = getSessionSyncConfig();
 
   if (!config?.enabled) {
@@ -204,6 +256,7 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
     // Sync existing sessions and projects to index using delta sync
     logger.main.info('[SyncManager] Setting up incremental sync...');
     setTimeout(async () => {
+      const syncStart = performance.now();
       logger.main.info('[SyncManager] Starting incremental sync...');
       try {
         if (!provider.syncSessionsToIndex || !provider.fetchIndex) {
@@ -212,11 +265,13 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         }
 
         // Step 1: Fetch the server's current index
+        const fetchStart = performance.now();
         logger.main.info('[SyncManager] Fetching server index...');
         let serverIndex: Awaited<ReturnType<NonNullable<typeof provider.fetchIndex>>>;
         try {
           serverIndex = await provider.fetchIndex();
-          logger.main.info('[SyncManager] Server has', serverIndex.sessions.length, 'sessions');
+          const fetchTime = performance.now() - fetchStart;
+          logger.main.info(`[SyncManager] Server has ${serverIndex.sessions.length} sessions (fetch took ${fetchTime.toFixed(1)}ms)`);
         } catch (fetchError) {
           logger.main.warn('[SyncManager] Failed to fetch server index, falling back to full sync:', fetchError);
           // Fall back to full sync if we can't fetch the index
@@ -229,9 +284,11 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         );
 
         // Step 2: Get local sessions (without messages first for comparison)
+        const localStart = performance.now();
         const { getAllSessionsForSync } = await import('./PGLiteSessionStore');
         const allLocalSessions = await getAllSessionsForSync(false); // No messages yet
-        logger.main.info('[SyncManager] Local has', allLocalSessions.length, 'sessions');
+        const localTime = performance.now() - localStart;
+        logger.main.info(`[SyncManager] Local has ${allLocalSessions.length} sessions (query took ${localTime.toFixed(1)}ms)`);
 
         // Step 3: Build project list from workspaces
         const { getRecentItems, store } = await import('../utils/store');
@@ -288,15 +345,21 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
             // New session - needs full sync (index + messages)
             sessionsNeedingIndexUpdate.push(localSession);
             sessionsNeedingMessageSync.push(localSession.id);
-          } else if (localSession.updatedAt > serverSession.updated_at) {
-            // Session updated locally - needs index update
-            sessionsNeedingIndexUpdate.push(localSession);
-            // Check if message count changed (new messages added)
-            if (localSession.messageCount > serverSession.message_count) {
+          } else {
+            // Check if we have more messages than the server
+            // This is the reliable way to know if messages need syncing
+            // (timestamps can drift between devices)
+            const serverMessageCount = serverSession.message_count || 0;
+            const localMessageCount = localSession.messageCount || 0;
+
+            if (localMessageCount > serverMessageCount) {
+              // We have messages the server doesn't have
+              sessionsNeedingIndexUpdate.push(localSession);
               sessionsNeedingMessageSync.push(localSession.id);
+              logger.main.info(`[SyncManager] Session ${localSession.id} needs message sync: local=${localMessageCount} server=${serverMessageCount}`);
             }
+            // If server has same or more messages, we're in sync (or server has messages from other devices)
           }
-          // else: Session is up to date, skip it
         }
 
         logger.main.info('[SyncManager] Delta sync results:', {
@@ -312,18 +375,24 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
         }
 
         // Step 6: Sync only the sessions that need it
-        if (sessionsNeedingIndexUpdate.length === 0) {
+        if (sessionsNeedingIndexUpdate.length === 0 && sessionsNeedingMessageSync.length === 0) {
           logger.main.info('[SyncManager] All sessions up to date, no sync needed');
         } else {
-          // For sessions needing message sync, load their messages
+          // For sessions needing message sync, load ONLY the messages the server doesn't have (delta sync)
           if (sessionsNeedingMessageSync.length > 0) {
-            const sessionsWithMessages = await getAllSessionsForSync(true);
-            const messageMap = new Map(sessionsWithMessages.map(s => [s.id, s.messages]));
+            const { getSessionMessagesForSync } = await import('./PGLiteSessionStore');
 
-            // Attach messages to sessions that need them
             for (const session of sessionsNeedingIndexUpdate) {
               if (sessionsNeedingMessageSync.includes(session.id)) {
-                session.messages = messageMap.get(session.id);
+                // Get the server's message count as offset - only fetch messages after that
+                const serverSession = serverSessionMap.get(session.id);
+                const serverMessageCount = serverSession?.message_count || 0;
+
+                // Only load messages the server doesn't have
+                const newMessages = await getSessionMessagesForSync(session.id, serverMessageCount);
+                session.messages = newMessages;
+
+                logger.main.info(`[SyncManager] Session ${session.id}: syncing ${newMessages.length} new messages (server has ${serverMessageCount})`);
               }
             }
           }
@@ -333,15 +402,21 @@ export async function initializeSync(baseStore: SessionStore): Promise<SessionSt
             syncMessages: sessionsNeedingMessageSync.length > 0,
           });
         }
+        const totalSyncTime = performance.now() - syncStart;
+        logger.main.info(`[SyncManager] Incremental sync completed in ${totalSyncTime.toFixed(1)}ms`);
       } catch (error) {
         logger.main.warn('[SyncManager] Failed to sync sessions:', error);
       }
     }, 2000); // Wait for index connection
 
+    // Mark as connected
+    updateSyncStatus({ connected: true, syncing: false, error: null });
+
     logger.main.info('[SyncManager] Session sync initialized successfully');
     return syncedStore;
   } catch (error) {
     logger.main.error('[SyncManager] Failed to initialize sync:', error);
+    updateSyncStatus({ connected: false, syncing: false, error: String(error) });
     // Return base store on failure - sync is optional
     return baseStore;
   }
@@ -378,6 +453,7 @@ export function shutdownSync(): void {
     state.provider = null;
     state.config = null;
     state.messageSyncHandler = null;
+    updateSyncStatus({ connected: false, syncing: false, error: null });
   }
 }
 

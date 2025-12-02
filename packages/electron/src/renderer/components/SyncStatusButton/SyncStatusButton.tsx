@@ -45,7 +45,7 @@ export const SyncStatusButton: React.FC<SyncStatusButtonProps> = ({ workspacePat
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Fetch sync status
+  // Fetch sync status (called once on mount and when workspace changes)
   const fetchStatus = useCallback(async () => {
     try {
       const result = await window.electronAPI.invoke('sync:get-status', workspacePath);
@@ -57,11 +57,27 @@ export const SyncStatusButton: React.FC<SyncStatusButtonProps> = ({ workspacePat
     }
   }, [workspacePath]);
 
-  // Initial fetch and periodic refresh
+  // Initial fetch and subscribe to status changes (no polling)
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 5000); // Refresh every 5 seconds
-    return () => clearInterval(interval);
+
+    // Subscribe to sync status changes (main process will broadcast)
+    window.electronAPI.invoke('sync:subscribe-status');
+
+    // Listen for status change events
+    const handleStatusChange = (newStatus: { connected: boolean; syncing: boolean; error: string | null }) => {
+      setStatus(prev => ({
+        ...prev,
+        connected: newStatus.connected,
+        syncing: newStatus.syncing,
+        error: newStatus.error,
+      }));
+    };
+
+    const unsubscribe = window.electronAPI.on('sync:status-changed', handleStatusChange);
+    return () => {
+      unsubscribe?.();
+    };
   }, [fetchStatus]);
 
   // Close menu when clicking outside
