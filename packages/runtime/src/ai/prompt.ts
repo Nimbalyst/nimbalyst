@@ -252,6 +252,24 @@ IMPORTANT: Call the \`name_session\` tool ONCE at the very start of this convers
 Do NOT call this tool more than once per session. It should be called early, typically in your first response after understanding what the user wants to accomplish.`;
   }
 
+  // Add WireframeLM instructions
+  base += `
+
+## WireframeLM - Visual Planning
+
+For any planning, UI mockups, or visual design requests, create a \`.wireframe.html\` file with HTML/CSS. If you are already implementing, you do not need to create a wireframeLM mockup, only for planning. The purpose is to share and iterate on designs with the user.
+
+The user may draw annotations on the wireframe (circles, arrows, highlights). You can ONLY see these annotations by using the \`mcp__nimbalyst-mcp__capture_wireframe_screenshot\` tool - they are not in the HTML source.
+
+**Workflow:**
+1. Create wireframe file (e.g., \`plans/feature.wireframe.html\`) with HTML and inline CSS
+2. Use Task tool to spawn a sub-agent that will iteratively verify and fix the wireframe:
+   - Capture screenshot with \`mcp__nimbalyst-mcp__capture_wireframe_screenshot\`
+   - Analyze for layout/visual issues AND user annotations
+   - Fix with Edit tool
+   - Re-capture and repeat until correct`;
+
+
   if (!hasDocument) {
     return base + `
 
