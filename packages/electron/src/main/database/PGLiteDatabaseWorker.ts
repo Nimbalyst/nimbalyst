@@ -127,6 +127,11 @@ export class PGLiteDatabaseWorker {
         logger.main.warn('[PGLite Worker] Database was corrupted and has been auto-recovered');
         logger.main.warn('[PGLite Worker] Checking for backups...');
 
+        // Track corruption detection
+        this.analytics.sendEvent('database_corruption_detected', {
+          hasBackups: !!(this.backupService && this.backupService.hasBackups())
+        });
+
         // Check if we have backups available
         if (this.backupService && this.backupService.hasBackups()) {
           logger.main.info('[PGLite Worker] Backups available - offering restore option');
@@ -145,6 +150,9 @@ export class PGLiteDatabaseWorker {
           if (response.response === 0) {
             // User chose to restore from backup
             logger.main.info('[PGLite Worker] User chose to restore from backup');
+            this.analytics.sendEvent('database_corruption_recovery_choice', {
+              choice: 'restore_from_backup'
+            });
 
             // Don't close yet - we need the worker for backup verification!
             // The restore process will handle closing and reopening
@@ -154,6 +162,10 @@ export class PGLiteDatabaseWorker {
 
             if (restoreResult.success) {
               logger.main.info(`[PGLite Worker] Successfully restored from ${restoreResult.source} backup`);
+              this.analytics.sendEvent('database_corruption_restore_result', {
+                success: true,
+                source: restoreResult.source
+              });
 
               // Worker was closed during restore - recreate it
               logger.main.info('[PGLite Worker] Recreating worker thread after restore...');
@@ -170,6 +182,10 @@ export class PGLiteDatabaseWorker {
               }).catch(() => {});
             } else {
               logger.main.error('[PGLite Worker] Failed to restore from backup:', restoreResult.error);
+              this.analytics.sendEvent('database_corruption_restore_result', {
+                success: false,
+                errorType: restoreResult.error?.includes('verification') ? 'verification_failed' : 'restore_failed'
+              });
 
               dialog.showMessageBox({
                 type: 'error',
@@ -180,11 +196,83 @@ export class PGLiteDatabaseWorker {
               }).catch(() => {});
             }
           } else {
-            logger.main.info('[PGLite Worker] User chose to start fresh');
+            // User clicked "Start Fresh" - show confirmation dialog
+            logger.main.info('[PGLite Worker] User clicked Start Fresh - showing confirmation');
+
+            const confirmResponse = await dialog.showMessageBox({
+              type: 'warning',
+              title: 'Confirm Start Fresh',
+              message: 'Are you sure you want to start fresh?',
+              detail: 'This will permanently delete all AI chat sessions and document history. Your document files will not be affected.\n\nThis action cannot be undone.',
+              buttons: ['Cancel', 'Yes, Start Fresh'],
+              defaultId: 0,
+              cancelId: 0
+            });
+
+            if (confirmResponse.response === 1) {
+              // User confirmed starting fresh
+              logger.main.info('[PGLite Worker] User confirmed starting fresh');
+              this.analytics.sendEvent('database_corruption_recovery_choice', {
+                choice: 'start_fresh',
+                confirmed: true
+              });
+            } else {
+              // User cancelled - go back to restore option
+              logger.main.info('[PGLite Worker] User cancelled start fresh - attempting restore');
+              this.analytics.sendEvent('database_corruption_recovery_choice', {
+                choice: 'start_fresh',
+                confirmed: false
+              });
+
+              // Attempt restore as fallback
+              const restoreResult = await this.backupService.restoreFromBackup();
+
+              if (restoreResult.success) {
+                logger.main.info(`[PGLite Worker] Successfully restored from ${restoreResult.source} backup`);
+                this.analytics.sendEvent('database_corruption_restore_result', {
+                  success: true,
+                  source: restoreResult.source,
+                  trigger: 'cancel_start_fresh'
+                });
+
+                // Worker was closed during restore - recreate it
+                logger.main.info('[PGLite Worker] Recreating worker thread after restore...');
+                this.createWorker();
+
+                // Re-initialize with restored database
+                await this.sendMessage('init');
+
+                dialog.showMessageBox({
+                  type: 'info',
+                  title: 'Database Restored',
+                  message: `Your database has been successfully restored from the ${restoreResult.source} backup.`,
+                  buttons: ['OK']
+                }).catch(() => {});
+              } else {
+                logger.main.error('[PGLite Worker] Failed to restore from backup:', restoreResult.error);
+                this.analytics.sendEvent('database_corruption_restore_result', {
+                  success: false,
+                  errorType: restoreResult.error?.includes('verification') ? 'verification_failed' : 'restore_failed',
+                  trigger: 'cancel_start_fresh'
+                });
+
+                dialog.showMessageBox({
+                  type: 'error',
+                  title: 'Restore Failed',
+                  message: 'Failed to restore from backup. Starting with a fresh database.',
+                  detail: restoreResult.error,
+                  buttons: ['OK']
+                }).catch(() => {});
+              }
+            }
           }
         } else {
           // No backups available - just show the auto-recovery notification
           logger.main.warn('[PGLite Worker] No backups available - fresh database created');
+          this.analytics.sendEvent('database_corruption_recovery_choice', {
+            choice: 'auto_fresh',
+            reason: 'no_backups_available'
+          });
 
           dialog.showMessageBox({
             type: 'warning',

@@ -109,6 +109,9 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | Event Name | File(s) | Trigger | Properties |
 |------------|---------|---------|------------|
 | `database_error` | `PGLiteDatabaseWorker.ts:255, 275` | Database operation fails | `operation` (read/write)<br/>`errorType`<br/>`tableName` |
+| `database_corruption_detected` | `PGLiteDatabaseWorker.ts:131` | Database corruption detected during initialization | `hasBackups` |
+| `database_corruption_recovery_choice` | `PGLiteDatabaseWorker.ts:153, 215, 222, 272` | User makes a choice in database corruption recovery dialog | `choice` (restore_from_backup/start_fresh/auto_fresh)<br/>`confirmed` (for start_fresh)<br/>`reason` (for auto_fresh) |
+| `database_corruption_restore_result` | `PGLiteDatabaseWorker.ts:165, 185, 232, 253` | Result of attempting to restore from backup | `success`<br/>`source` (current/previous)<br/>`errorType` (verification_failed/restore_failed)<br/>`trigger` (cancel_start_fresh) |
 | `feature_first_use` | `AIService.ts:406`<br/>`WindowManager.ts:230`<br/>`AnalyticsHandlers.ts:45` | User uses a feature for the first time | `feature`<br/>`daysSinceInstall` |
 
 ### Special System Events
@@ -120,13 +123,13 @@ All events include `$session_id` property automatically. Dev users are marked wi
 
 ## Event Summary Statistics
 
-- **Total Events**: 43 unique event names
-- **Main Process Events**: 33 (via AnalyticsService)
+- **Total Events**: 46 unique event names
+- **Main Process Events**: 36 (via AnalyticsService)
 - **Renderer Process Events**: 10 (via usePostHog hook)
 - **File Operations**: 7 events
 - **Workspace Operations**: 4 events
 - **AI-Related**: 20 events
-- **System/Infrastructure**: 5 events
+- **System/Infrastructure**: 8 events
 
 ## Privacy Requirements
 
