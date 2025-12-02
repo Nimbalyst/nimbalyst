@@ -28,6 +28,11 @@ import { loadFileIntoWindow } from '../file/FileOperations';
 
 // Helper function to get file type from extension
 function getFileType(filePath: string): string {
+    const lowerPath = filePath.toLowerCase();
+    // Check for compound extensions first
+    if (lowerPath.endsWith('.wireframe.html')) {
+        return 'wireframe';
+    }
     const ext = extname(filePath).toLowerCase();
     const typeMap: Record<string, string> = {
         '.md': 'markdown',

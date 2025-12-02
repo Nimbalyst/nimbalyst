@@ -20,7 +20,7 @@ All events include `$session_id` property automatically. Dev users are marked wi
 | `file_saved` | `FileHandlers.ts:199` | User manually saves file (Cmd+S) | `saveType` (manual)<br/>`fileType`<br/>`hasFrontmatter`<br/>`wordCount` |
 | `file_save_failed` | `FileHandlers.ts:212, 277` | File save operation fails | `errorType`<br/>`fileType`<br/>`isAutoSave` |
 | `file_conflict_detected` | `FileHandlers.ts:138` | File changed on disk since last load | `fileType`<br/>`conflictResolution` (pending) |
-| `file_created` | `FileHandlers.ts:399`<br/>`WorkspaceHandlers.ts:149` | User creates new file | `creationType` (new_file_menu)<br/>`fileType` |
+| `file_created` | `FileHandlers.ts:399`<br/>`WorkspaceHandlers.ts:154` | User creates new file | `creationType` (new_file_menu/ai_tool)<br/>`fileType` (markdown/wireframe/text/other) |
 | `file_renamed` | `WorkspaceHandlers.ts:592` | User renames file in workspace | None |
 | `file_deleted` | `WorkspaceHandlers.ts:618` | User deletes file from workspace | None |
 
