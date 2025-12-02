@@ -80,6 +80,18 @@ export function ContextUsageDisplay({
       }));
   }, [categories]);
 
+  // Categories that represent actual usage (exclude "Free space" from bar fill)
+  const usedCategories = useMemo(() => {
+    return formattedCategories.filter(cat =>
+      !cat.name.toLowerCase().includes('free')
+    );
+  }, [formattedCategories]);
+
+  // Total width of used categories for the bar fill
+  const usedPercentage = useMemo(() => {
+    return usedCategories.reduce((sum, cat) => sum + cat.width, 0);
+  }, [usedCategories]);
+
   const enableTooltip = hasTokenData && (formattedCategories.length > 0 || inputTokens > 0 || outputTokens > 0);
   const shouldShowTooltip = tooltipVisible && enableTooltip;
 
@@ -157,24 +169,39 @@ export function ContextUsageDisplay({
           {hasContextWindow && formattedCategories.length > 0 && (
             <>
               <div className="tooltip-bar">
-                {formattedCategories.map((cat, index) => (
-                  <span
-                    key={`${cat.name}-${index}`}
-                    className="tooltip-bar-segment"
-                    style={{ width: `${cat.width}%`, backgroundColor: cat.color }}
-                  />
-                ))}
+                <div className="tooltip-bar-fill" style={{ width: `${usedPercentage}%` }}>
+                  {usedCategories.map((cat, index) => {
+                    // Calculate width relative to the used portion
+                    const relativeWidth = usedPercentage > 0 ? (cat.width / usedPercentage) * 100 : 0;
+                    return (
+                      <span
+                        key={`${cat.name}-${index}`}
+                        className="tooltip-bar-segment"
+                        style={{ width: `${relativeWidth}%`, backgroundColor: cat.color }}
+                      />
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="tooltip-categories">
-                {formattedCategories.map((cat, index) => (
-                  <div className="tooltip-category-row" key={`${cat.name}-${index}`}>
-                    <span className="tooltip-dot" style={{ backgroundColor: cat.color }} />
-                    <span className="tooltip-category-name">{cat.name}</span>
-                    <span className="tooltip-category-tokens">{cat.tokens.toLocaleString()} tokens</span>
-                    <span className="tooltip-category-percent">{cat.percentText}%</span>
-                  </div>
-                ))}
+                {formattedCategories.map((cat, index) => {
+                  const isFreeSpace = cat.name.toLowerCase().includes('free');
+                  return (
+                    <div
+                      className={`tooltip-category-row${isFreeSpace ? ' free-space' : ''}`}
+                      key={`${cat.name}-${index}`}
+                    >
+                      <span
+                        className="tooltip-dot"
+                        style={isFreeSpace ? undefined : { backgroundColor: cat.color }}
+                      />
+                      <span className="tooltip-category-name">{cat.name}</span>
+                      <span className="tooltip-category-tokens">{cat.tokens.toLocaleString()} tokens</span>
+                      <span className="tooltip-category-percent">{cat.percentText}%</span>
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}

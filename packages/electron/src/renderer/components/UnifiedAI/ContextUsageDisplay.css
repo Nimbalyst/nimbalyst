@@ -74,16 +74,28 @@
 }
 
 .tooltip-bar {
-  display: flex;
-  height: 6px;
+  position: relative;
+  height: 10px;
   border-radius: 999px;
   overflow: hidden;
-  background-color: var(--surface-secondary);
+  background-color: var(--surface-tertiary);
+  border: 1px solid var(--border-primary);
   margin-bottom: 10px;
+}
+
+.tooltip-bar-fill {
+  display: flex;
+  height: 100%;
+  border-radius: 999px;
 }
 
 .tooltip-bar-segment {
   height: 100%;
+}
+
+.tooltip-category-row.free-space .tooltip-dot {
+  background-color: transparent;
+  border: 1px solid var(--border-primary);
 }
 
 .tooltip-categories {
