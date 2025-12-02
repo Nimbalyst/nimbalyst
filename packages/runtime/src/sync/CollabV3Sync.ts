@@ -50,6 +50,11 @@ interface SessionMetadata {
   project_id: string;
   created_at: number;
   updated_at: number;
+  pendingExecution?: {
+    messageId: string;
+    sentAt: number;
+    sentBy: 'mobile' | 'desktop';
+  };
 }
 
 interface SessionIndexEntry {
@@ -451,6 +456,7 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       provider: broadcast.metadata.provider,
       model: broadcast.metadata.model,
       updatedAt: broadcast.metadata.updated_at ?? Date.now(),
+      pendingExecution: broadcast.metadata.pendingExecution,
     };
 
     session.changeListeners.forEach((cb) =>
@@ -883,6 +889,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           if (change.metadata.provider) metadata.provider = change.metadata.provider;
           if (change.metadata.model) metadata.model = change.metadata.model;
           if (change.metadata.mode) metadata.mode = change.metadata.mode as SessionMetadata['mode'];
+          // pendingExecution can be set or explicitly cleared (undefined)
+          if ('pendingExecution' in change.metadata) {
+            metadata.pendingExecution = change.metadata.pendingExecution;
+          }
           clientMessage = { type: 'update_metadata', metadata };
           break;
         }

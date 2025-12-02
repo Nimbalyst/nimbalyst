@@ -149,6 +149,12 @@ export interface SyncedSessionMetadata {
   isArchived?: boolean;
   draftInput?: string;
   updatedAt: number;
+  /** Signals that a message is waiting for desktop to process it */
+  pendingExecution?: {
+    messageId: string;
+    sentAt: number;
+    sentBy: 'mobile' | 'desktop';
+  };
 }
 
 /**

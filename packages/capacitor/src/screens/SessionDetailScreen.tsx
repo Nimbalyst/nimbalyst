@@ -33,6 +33,11 @@ interface SessionMetadata {
   project_id: string;
   created_at: number;
   updated_at: number;
+  pendingExecution?: {
+    messageId: string;
+    sentAt: number;
+    sentBy: 'mobile' | 'desktop';
+  };
 }
 
 interface SyncedMessage {
@@ -458,6 +463,19 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
       };
       wsRef.current.send(JSON.stringify(clientMsg));
 
+      // Set pendingExecution to signal desktop to process this message
+      const pendingMsg: ClientMessage = {
+        type: 'update_metadata',
+        metadata: {
+          pendingExecution: {
+            messageId: encryptedMessage.id,
+            sentAt: Date.now(),
+            sentBy: 'mobile',
+          },
+        },
+      };
+      wsRef.current.send(JSON.stringify(pendingMsg));
+
       // Optimistically add to local state
       setMessages((prev) => [
         ...prev,
@@ -476,7 +494,7 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
       setInputValue('');
       setAttachments([]);
 
-      console.log('[SessionDetail] Message sent');
+      console.log('[SessionDetail] Message sent with pendingExecution flag');
     } catch (err) {
       console.error('[SessionDetail] Failed to send message:', err);
       setError('Failed to send message');
