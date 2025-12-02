@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import type { SessionIndexEntry as RuntimeSessionIndexEntry } from '@nimbalyst/runtime/sync';
 
 /**
  * CollabV3 Sync Context for Mobile
@@ -11,25 +12,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 // Types
 // ============================================================================
 
-export interface SessionIndexEntry {
-  id: string;
-  title: string;
-  provider: string;
-  model?: string;
-  mode?: 'agent' | 'planning';
-  workspaceId?: string;
-  workspacePath?: string;
-  lastMessageAt: number;
-  lastMessagePreview?: string;
-  messageCount: number;
-  updatedAt: number;
-  createdAt: number;
-  pendingExecution?: {
-    messageId: string;
-    sentAt: number;
-    sentBy: string;
-  };
-}
+// Re-export the shared type from runtime
+export type SessionIndexEntry = RuntimeSessionIndexEntry;
 
 export interface Project {
   id: string;
@@ -80,6 +64,12 @@ interface ServerSessionEntry {
   last_message_at: number;
   created_at: number;
   updated_at: number;
+  pendingExecution?: {
+    messageId: string;
+    sentAt: number;
+    sentBy: string;
+  };
+  isExecuting?: boolean;
 }
 
 interface ServerProjectEntry {
@@ -316,6 +306,12 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
       messageCount: server.message_count,
       updatedAt: server.updated_at,
       createdAt: server.created_at,
+      // Cast sentBy to the expected literal type (server sends string)
+      pendingExecution: server.pendingExecution ? {
+        ...server.pendingExecution,
+        sentBy: server.pendingExecution.sentBy as 'mobile' | 'desktop',
+      } : undefined,
+      isExecuting: server.isExecuting,
     };
   }, []);
 

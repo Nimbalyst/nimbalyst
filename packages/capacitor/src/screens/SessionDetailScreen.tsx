@@ -25,7 +25,8 @@ interface EncryptedMessage {
   };
 }
 
-interface SessionMetadata {
+// Wire protocol type for session metadata (snake_case to match server)
+interface WireSessionMetadata {
   title: string;
   provider: string;
   model?: string;
@@ -50,16 +51,36 @@ interface SyncedMessage {
   hidden?: boolean;
 }
 
+// Wire protocol type for index updates (snake_case to match server)
+interface WireSessionIndexEntry {
+  session_id: string;
+  project_id: string;
+  title: string;
+  provider: string;
+  model?: string;
+  mode?: 'agent' | 'planning';
+  message_count: number;
+  last_message_at: number;
+  created_at: number;
+  updated_at: number;
+  pendingExecution?: {
+    messageId: string;
+    sentAt: number;
+    sentBy: 'mobile' | 'desktop';
+  };
+}
+
 type ClientMessage =
   | { type: 'sync_request'; since_id?: string; since_seq?: number }
   | { type: 'append_message'; message: EncryptedMessage }
-  | { type: 'update_metadata'; metadata: Partial<SessionMetadata> };
+  | { type: 'update_metadata'; metadata: Partial<WireSessionMetadata> }
+  | { type: 'index_update'; session: Partial<WireSessionIndexEntry> & { session_id: string } };
 
 type ServerMessage =
   | {
       type: 'sync_response';
       messages: EncryptedMessage[];
-      metadata: SessionMetadata | null;
+      metadata: WireSessionMetadata | null;
       has_more: boolean;
       cursor: string | null;
     }
@@ -70,7 +91,7 @@ type ServerMessage =
     }
   | {
       type: 'metadata_broadcast';
-      metadata: Partial<SessionMetadata>;
+      metadata: Partial<WireSessionMetadata>;
       from_connection_id?: string;
     }
   | { type: 'error'; code: string; message: string };
@@ -200,7 +221,7 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
   console.log('[SessionDetail] Render - sessionId:', sessionId, 'config:', config ? 'present' : 'null');
 
   const [messages, setMessages] = useState<SyncedMessage[]>([]);
-  const [metadata, setMetadata] = useState<Partial<SessionMetadata>>({});
+  const [metadata, setMetadata] = useState<Partial<WireSessionMetadata>>({});
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -464,17 +485,30 @@ export function SessionDetailScreen({ hiddenBackButton }: SessionDetailScreenPro
       wsRef.current.send(JSON.stringify(clientMsg));
 
       // Set pendingExecution to signal desktop to process this message
+      const pendingExecution = {
+        messageId: encryptedMessage.id,
+        sentAt: Date.now(),
+        sentBy: 'mobile' as const,
+      };
+
+      // Send metadata update for the session room
       const pendingMsg: ClientMessage = {
         type: 'update_metadata',
-        metadata: {
-          pendingExecution: {
-            messageId: encryptedMessage.id,
-            sentAt: Date.now(),
-            sentBy: 'mobile',
-          },
-        },
+        metadata: { pendingExecution },
       };
       wsRef.current.send(JSON.stringify(pendingMsg));
+
+      // Also send index_update so desktop receives via index broadcast
+      // (desktop may not be connected to this specific session room)
+      const indexMsg: ClientMessage = {
+        type: 'index_update',
+        session: {
+          session_id: sessionId,
+          pendingExecution,
+          updated_at: Date.now(),
+        },
+      };
+      wsRef.current.send(JSON.stringify(indexMsg));
 
       // Optimistically add to local state
       setMessages((prev) => [

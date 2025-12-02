@@ -55,6 +55,7 @@ interface SessionMetadata {
     sentAt: number;
     sentBy: 'mobile' | 'desktop';
   };
+  isExecuting?: boolean;
 }
 
 interface SessionIndexEntry {
@@ -68,6 +69,13 @@ interface SessionIndexEntry {
   last_message_at: number;
   created_at: number;
   updated_at: number;
+  pendingExecution?: {
+    messageId: string;
+    sentAt: number;
+    sentBy: 'mobile' | 'desktop';
+  };
+  /** Whether the session is currently executing (processing AI request) */
+  isExecuting?: boolean;
 }
 
 type ClientMessage =
@@ -208,6 +216,9 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
   let indexWs: WebSocket | null = null;
   let indexConnected = false;
   let deviceAnnounceInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Listeners for index changes (session updates broadcast to all connected clients)
+  const indexChangeListeners = new Set<(sessionId: string, entry: SessionIndexEntry) => void>();
 
   // Queue for operations that need to wait for index connection
   type PendingOperation = { type: 'sessions'; data: SessionIndexData[]; options?: { syncMessages?: boolean } } | { type: 'projects'; data: ProjectIndexEntry[] };
@@ -447,8 +458,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
     sessionId: string,
     broadcast: Extract<ServerMessage, { type: 'metadata_broadcast' }>
   ): void {
+    console.log('[CollabV3] Received metadata_broadcast for session:', sessionId, 'metadata:', JSON.stringify(broadcast.metadata));
+
     const session = sessions.get(sessionId);
-    if (!session) return;
+    if (!session) {
+      console.log('[CollabV3] No session found for metadata_broadcast, sessionId:', sessionId);
+      return;
+    }
 
     const metadata: Partial<SyncedSessionMetadata> = {
       title: broadcast.metadata.title,
@@ -457,7 +473,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
       model: broadcast.metadata.model,
       updatedAt: broadcast.metadata.updated_at ?? Date.now(),
       pendingExecution: broadcast.metadata.pendingExecution,
+      isExecuting: broadcast.metadata.isExecuting,
     };
+
+    console.log('[CollabV3] Notifying', session.changeListeners.size, 'change listeners with pendingExecution:', metadata.pendingExecution, 'isExecuting:', metadata.isExecuting);
 
     session.changeListeners.forEach((cb) =>
       cb({ type: 'metadata_updated', metadata })
@@ -540,7 +559,16 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           case 'index_broadcast':
             // Another device updated a session, cache it
             sessionIndexCache.set(message.session.session_id, message.session);
-            console.log('[CollabV3] Received index_broadcast for session:', message.session.session_id);
+            console.log('[CollabV3] Received index_broadcast for session:', message.session.session_id, 'pendingExecution:', message.session.pendingExecution);
+
+            // Notify all index change listeners
+            indexChangeListeners.forEach((callback) => {
+              try {
+                callback(message.session.session_id, message.session);
+              } catch (err) {
+                console.error('[CollabV3] Error in index change listener:', err);
+              }
+            });
             break;
 
           case 'devices_list':
@@ -893,6 +921,10 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
           if ('pendingExecution' in change.metadata) {
             metadata.pendingExecution = change.metadata.pendingExecution;
           }
+          // isExecuting can be set or explicitly cleared
+          if ('isExecuting' in change.metadata) {
+            metadata.isExecuting = change.metadata.isExecuting;
+          }
           clientMessage = { type: 'update_metadata', metadata };
           break;
         }
@@ -939,11 +971,15 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               last_message_at: updatedAt,
               created_at: cached.created_at,
               updated_at: updatedAt,
+              // Include pendingExecution if set (or explicitly cleared)
+              pendingExecution: 'pendingExecution' in meta ? meta.pendingExecution : cached.pendingExecution,
+              // Include isExecuting if set (or explicitly cleared)
+              isExecuting: 'isExecuting' in meta ? meta.isExecuting : cached.isExecuting,
             };
             // Update cache
             sessionIndexCache.set(sessionId, indexEntry);
             const indexMsg: ClientMessage = { type: 'index_update', session: indexEntry };
-            console.log('[CollabV3] Sending index_update (partial merge) for session:', sessionId, 'title:', indexEntry.title);
+            console.log('[CollabV3] Sending index_update (partial merge) for session:', sessionId, 'title:', indexEntry.title, 'isExecuting:', indexEntry.isExecuting);
             indexWs.send(JSON.stringify(indexMsg));
           } else if (meta.title && meta.provider) {
             // New session - need at least title and provider
@@ -958,11 +994,13 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
               last_message_at: updatedAt,
               created_at: updatedAt,
               updated_at: updatedAt,
+              pendingExecution: meta.pendingExecution,
+              isExecuting: meta.isExecuting,
             };
             // Add to cache
             sessionIndexCache.set(sessionId, indexEntry);
             const indexMsg: ClientMessage = { type: 'index_update', session: indexEntry };
-            console.log('[CollabV3] Sending index_update (new) for session:', sessionId);
+            console.log('[CollabV3] Sending index_update (new) for session:', sessionId, 'isExecuting:', indexEntry.isExecuting);
             indexWs.send(JSON.stringify(indexMsg));
           } else {
             console.log('[CollabV3] Skipping index update - no cached data and missing required fields for session:', sessionId);
@@ -1037,6 +1075,15 @@ export function createCollabV3Sync(config: SyncConfig): SyncProvider {
         indexWs!.send(JSON.stringify(request));
         console.log('[CollabV3] Sent index_sync_request');
       });
+    },
+
+    onIndexChange(callback: (sessionId: string, entry: SessionIndexEntry) => void): () => void {
+      indexChangeListeners.add(callback);
+      console.log('[CollabV3] Added index change listener, total:', indexChangeListeners.size);
+      return () => {
+        indexChangeListeners.delete(callback);
+        console.log('[CollabV3] Removed index change listener, total:', indexChangeListeners.size);
+      };
     },
   };
 

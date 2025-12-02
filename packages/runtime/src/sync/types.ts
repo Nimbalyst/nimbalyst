@@ -102,6 +102,12 @@ export interface SyncProvider {
       last_message_at: number;
       created_at: number;
       updated_at: number;
+      pendingExecution?: {
+        messageId: string;
+        sentAt: number;
+        sentBy: 'mobile' | 'desktop';
+      };
+      isExecuting?: boolean;
     }>;
     projects: Array<{
       project_id: string;
@@ -111,6 +117,23 @@ export interface SyncProvider {
       sync_enabled: boolean;
     }>;
   }>;
+
+  /** Subscribe to index changes (session updates broadcast to all connected clients) */
+  onIndexChange?(callback: (sessionId: string, entry: {
+    session_id: string;
+    title?: string;
+    provider?: string;
+    model?: string;
+    mode?: 'agent' | 'planning';
+    message_count?: number;
+    updated_at?: number;
+    pendingExecution?: {
+      messageId: string;
+      sentAt: number;
+      sentBy: 'mobile' | 'desktop';
+    };
+    isExecuting?: boolean;
+  }) => void): () => void;
 }
 
 /** Session data for bulk index sync */
@@ -155,6 +178,35 @@ export interface SyncedSessionMetadata {
     sentAt: number;
     sentBy: 'mobile' | 'desktop';
   };
+  /** Whether the session is currently executing (processing AI request) */
+  isExecuting?: boolean;
+}
+
+/**
+ * Session entry in the session index
+ * Used for session list display on both desktop and mobile
+ */
+export interface SessionIndexEntry {
+  id: string;
+  title: string;
+  provider: string;
+  model?: string;
+  mode?: 'agent' | 'planning';
+  workspaceId?: string;
+  workspacePath?: string;
+  lastMessageAt: number;
+  lastMessagePreview?: string;
+  messageCount: number;
+  updatedAt: number;
+  createdAt: number;
+  /** Signals that a message is waiting for desktop to process it */
+  pendingExecution?: {
+    messageId: string;
+    sentAt: number;
+    sentBy: 'mobile' | 'desktop';
+  };
+  /** Whether the session is currently executing (processing AI request) */
+  isExecuting?: boolean;
 }
 
 /**

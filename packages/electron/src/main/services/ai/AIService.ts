@@ -434,22 +434,44 @@ export class AIService {
 
   private async initializeMobileSyncHandler() {
     // Lazy load sync manager and mobile sync handler
-    try {
-      const { getSyncProvider } = await import('../SyncManager');
-      const syncProvider = getSyncProvider();
+    // Retry a few times since sync may not be initialized yet
+    const maxRetries = 5;
+    const retryDelayMs = 1000;
 
-      if (!syncProvider) {
-        logger.main.debug('[AIService] Sync not enabled, mobile sync handler not initialized');
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const { getSyncProvider } = await import('../SyncManager');
+        const syncProvider = getSyncProvider();
+
+        if (!syncProvider) {
+          if (attempt < maxRetries) {
+            logger.main.debug(`[AIService] Sync not ready yet, retrying in ${retryDelayMs}ms (attempt ${attempt}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+            continue;
+          }
+          logger.main.debug('[AIService] Sync not enabled after retries, mobile sync handler not initialized');
+          return;
+        }
+
+        logger.main.info('[AIService] Initializing mobile sync handler...');
+        const { MobileSyncHandler } = await import('./MobileSyncHandler');
+        this.mobileSyncHandler = new MobileSyncHandler(syncProvider);
+
+        // Set the message handler so we can process mobile messages
+        this.mobileSyncHandler.setMessageHandler(async (sessionId: string, messageId: string) => {
+          await this.processMobileMessage(sessionId, messageId);
+        });
+
+        // Start listening for pending executions via index changes
+        // This is more efficient than connecting to every session's WebSocket
+        await this.mobileSyncHandler.startIndexListener();
+
+        logger.main.info('[AIService] Mobile sync handler initialized successfully');
+        return;
+      } catch (error) {
+        logger.main.error('[AIService] Failed to initialize mobile sync handler:', error);
         return;
       }
-
-      logger.main.info('[AIService] Initializing mobile sync handler...');
-      const { MobileSyncHandler } = await import('./MobileSyncHandler');
-      this.mobileSyncHandler = new MobileSyncHandler(syncProvider);
-
-      logger.main.info('[AIService] Mobile sync handler initialized successfully');
-    } catch (error) {
-      logger.main.error('[AIService] Failed to initialize mobile sync handler:', error);
     }
   }
 

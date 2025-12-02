@@ -4,11 +4,11 @@ const config: CapacitorConfig = {
   appId: 'com.nimbalyst.app',
   appName: 'Nimbalyst',
   webDir: 'dist',
-  // For local development, uncomment and set your dev server URL:
-  // server: {
-  //   url: 'http://YOUR_LOCAL_IP:4102',
-  //   cleartext: true
-  // }
+  // Use Vite dev server for HMR during development
+  server: {
+    url: 'http://192.168.1.253:4102',
+    cleartext: true
+  }
 };
 
 export default config;

@@ -14,6 +14,9 @@ let handlersRegistered = false;
 // Track active subscriptions per window
 const windowSubscriptions = new Map<number, () => void>();
 
+// Track sync subscription cleanup
+let syncSubscriptionCleanup: (() => void) | null = null;
+
 export async function registerSessionStateHandlers() {
   if (handlersRegistered) {
     console.log('[SessionStateHandlers] Handlers already registered, skipping');
@@ -24,6 +27,9 @@ export async function registerSessionStateHandlers() {
 
   // Initialize the state manager
   await stateManager.initialize();
+
+  // Subscribe to state changes and sync to mobile
+  setupSyncSubscription(stateManager);
 
   // Get active session IDs
   ipcMain.handle('ai-session-state:get-active', async (_event) => {
@@ -177,11 +183,56 @@ export async function registerSessionStateHandlers() {
 }
 
 /**
+ * Setup sync subscription to push execution state changes to mobile
+ */
+function setupSyncSubscription(stateManager: ReturnType<typeof getSessionStateManager>): void {
+  // Lazy load sync manager to avoid circular dependencies
+  import('../services/SyncManager').then(({ getSyncProvider }) => {
+    const syncProvider = getSyncProvider();
+    if (!syncProvider) {
+      console.log('[SessionStateHandlers] Sync not enabled, skipping execution state sync');
+      return;
+    }
+
+    console.log('[SessionStateHandlers] Setting up execution state sync to mobile');
+
+    const unsubscribe = stateManager.subscribe((event: SessionStateEvent) => {
+      // Sync execution state changes to mobile
+      if (event.type === 'started' || event.type === 'ended' || event.type === 'interrupted') {
+        const isExecuting = event.type === 'started';
+        const sessionId = event.sessionId;
+
+        console.log('[SessionStateHandlers] Syncing execution state:', { sessionId, isExecuting });
+
+        // Push metadata update with isExecuting state
+        syncProvider.pushChange(sessionId, {
+          type: 'metadata_updated',
+          metadata: {
+            isExecuting,
+            updatedAt: Date.now(),
+          },
+        });
+      }
+    });
+
+    syncSubscriptionCleanup = unsubscribe;
+  }).catch((error) => {
+    console.error('[SessionStateHandlers] Failed to setup sync subscription:', error);
+  });
+}
+
+/**
  * Shutdown handler - called when app is closing
  */
 export async function shutdownSessionStateHandlers() {
   const stateManager = getSessionStateManager();
   await stateManager.shutdown();
+
+  // Clean up sync subscription
+  if (syncSubscriptionCleanup) {
+    syncSubscriptionCleanup();
+    syncSubscriptionCleanup = null;
+  }
 
   // Clean up all subscriptions
   for (const unsubscribe of windowSubscriptions.values()) {

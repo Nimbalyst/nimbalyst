@@ -42,6 +42,8 @@ export type {
   SyncProvider,
   SessionChange,
   SyncedSessionMetadata,
+  SessionIndexEntry,
+  DeviceInfo,
 } from './types';
 
 // CollabV3 - recommended for new deployments
