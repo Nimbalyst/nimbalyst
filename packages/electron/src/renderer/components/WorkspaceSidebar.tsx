@@ -3,6 +3,7 @@ import { FileTree } from './FileTree';
 import { InputModal } from './InputModal';
 import { PlansPanel } from './PlansPanel/PlansPanel';
 import { FileTreeFilterMenu, FileTreeFilter } from './FileTreeFilterMenu';
+import { NewFileMenu, NewFileType } from './NewFileMenu';
 import { createInitialFileContent } from '../utils/fileUtils';
 import { getFileName } from '../utils/pathUtils';
 import '../WorkspaceSidebar.css';
@@ -124,7 +125,12 @@ export function WorkspaceSidebar({
   const [gitWorktreeModifiedFiles, setGitWorktreeModifiedFiles] = useState<string[]>([]);
   const [isGitWorktree, setIsGitWorktree] = useState(false);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const newFileButtonRef = useRef<HTMLButtonElement>(null);
   const hasLoadedSettingsRef = useRef(false);
+  const [showNewFileMenu, setShowNewFileMenu] = useState(false);
+  const [newFileMenuPosition, setNewFileMenuPosition] = useState({ x: 0, y: 0 });
+  const [wireframeEnabled, setWireframeEnabled] = useState(false);
+  const [pendingFileType, setPendingFileType] = useState<NewFileType | null>(null);
 
   // Load file tree settings from workspace state
   useEffect(() => {
@@ -173,7 +179,18 @@ export function WorkspaceSidebar({
     onSelectedFolderChange?.(folderPath);
   };
 
-  const handleNewFile = () => {
+  const handleNewFileButtonClick = () => {
+    if (newFileButtonRef.current) {
+      const rect = newFileButtonRef.current.getBoundingClientRect();
+      setNewFileMenuPosition({
+        x: rect.left,
+        y: rect.bottom + 4
+      });
+      setShowNewFileMenu(true);
+    }
+  };
+
+  const handleNewFileTypeSelect = (fileType: NewFileType) => {
     // Priority: selected folder > parent of current file > workspace root
     if (selectedFolder) {
       setTargetFolder(selectedFolder);
@@ -181,8 +198,39 @@ export function WorkspaceSidebar({
       const parentDir = currentFilePath.substring(0, currentFilePath.lastIndexOf('/'));
       setTargetFolder(parentDir);
     }
+
+    setPendingFileType(fileType);
     setIsFileModalOpen(true);
   };
+
+  const createWireframeContent = () => `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wireframe</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>New Wireframe</h1>
+        <p>Start designing your wireframe here.</p>
+    </div>
+</body>
+</html>`;
 
   const handleNewFolder = () => {
     // Priority: selected folder > parent of current file > workspace root
@@ -199,16 +247,26 @@ export function WorkspaceSidebar({
 
   const handleCreateFile = async (fileName: string) => {
     setIsFileModalOpen(false);
+    const fileType = pendingFileType;
+    setPendingFileType(null);
 
-    // Ensure it has .md extension
-    const fullFileName = fileName.endsWith('.md') || fileName.endsWith('.markdown')
-      ? fileName
-      : `${fileName}.md`;
+    // Determine full filename based on type
+    let fullFileName: string;
+    if (fileType === 'markdown') {
+      // Add .md extension if not present
+      fullFileName = fileName.endsWith('.md') || fileName.endsWith('.markdown') ? fileName : `${fileName}.md`;
+    } else if (fileType === 'wireframe') {
+      // Add .wireframe.html extension if not present
+      fullFileName = fileName.endsWith('.wireframe.html') ? fileName : `${fileName}.wireframe.html`;
+    } else {
+      // Any type - keep filename as-is
+      fullFileName = fileName;
+    }
 
     try {
       const basePath = targetFolder || workspacePath;
       const filePath = `${basePath}/${fullFileName}`;
-      const content = createInitialFileContent(fullFileName);
+      const content = fileType === 'wireframe' ? createWireframeContent() : createInitialFileContent(fullFileName);
 
       const result = await (window as any).electronAPI?.createFile?.(filePath, content);
       if (result?.success) {
@@ -391,6 +449,23 @@ export function WorkspaceSidebar({
         setIsGitWorktree(false);
       });
   }, [workspacePath]);
+
+  // Check if wireframe feature is enabled
+  useEffect(() => {
+    if (!window.electronAPI?.invoke) {
+      setWireframeEnabled(false);
+      return;
+    }
+
+    window.electronAPI.invoke('wireframeLM:is-enabled')
+      .then(result => {
+        setWireframeEnabled(result === true);
+      })
+      .catch(error => {
+        console.error('Failed to check wireframe enabled status:', error);
+        setWireframeEnabled(false);
+      });
+  }, []);
 
   // Load git uncommitted files when filter is active
   const loadGitUncommittedFiles = useCallback(async () => {
@@ -773,8 +848,9 @@ export function WorkspaceSidebar({
           {currentView === 'files' && (
             <>
               <button
+                ref={newFileButtonRef}
                 className="workspace-action-button"
-                onClick={handleNewFile}
+                onClick={handleNewFileButtonClick}
                 title="New file"
                 aria-label="New file"
               >
@@ -912,6 +988,15 @@ export function WorkspaceSidebar({
               onClose={() => setShowFilterMenu(false)}
             />
           )}
+          {showNewFileMenu && (
+            <NewFileMenu
+              x={newFileMenuPosition.x}
+              y={newFileMenuPosition.y}
+              onSelect={handleNewFileTypeSelect}
+              onClose={() => setShowNewFileMenu(false)}
+              wireframeEnabled={wireframeEnabled}
+            />
+          )}
         </>
       ) : (
         <PlansPanel
@@ -922,13 +1007,33 @@ export function WorkspaceSidebar({
 
       <InputModal
         isOpen={isFileModalOpen}
-        title={targetFolder ? `New File in ${getFileName(targetFolder)}` : "New File"}
-        placeholder="Enter file name (e.g., document.md)"
+        title={
+          pendingFileType === 'markdown'
+            ? (targetFolder ? `New Markdown File in ${getFileName(targetFolder)}` : "New Markdown File")
+            : pendingFileType === 'wireframe'
+              ? (targetFolder ? `New Wireframe in ${getFileName(targetFolder)}` : "New Wireframe")
+              : (targetFolder ? `New File in ${getFileName(targetFolder)}` : "New File")
+        }
+        placeholder={
+          pendingFileType === 'markdown'
+            ? "Enter name"
+            : pendingFileType === 'wireframe'
+              ? "Enter name"
+              : "Enter file name with extension"
+        }
+        suffix={
+          pendingFileType === 'markdown'
+            ? ".md"
+            : pendingFileType === 'wireframe'
+              ? ".wireframe.html"
+              : undefined
+        }
         defaultValue=""
         onConfirm={handleCreateFile}
         onCancel={() => {
           setIsFileModalOpen(false);
           setTargetFolder(null);
+          setPendingFileType(null);
         }}
       />
 

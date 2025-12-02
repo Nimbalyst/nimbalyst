@@ -38,15 +38,40 @@
   color: #f3f4f6;
 }
 
+.input-modal-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.input-modal-input-wrapper.has-suffix .input-modal-input {
+  padding-right: 120px;
+}
+
 .input-modal-input {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid #e5e7eb;
   border-radius: 4px;
   font-size: 14px;
-  margin-bottom: 16px;
   background: white;
   color: #1f2937;
+  box-sizing: border-box;
+}
+
+.input-modal-suffix {
+  position: absolute;
+  right: 12px;
+  color: #9ca3af;
+  font-size: 14px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.dark-theme .input-modal-suffix,
+.crystal-dark-theme .input-modal-suffix {
+  color: #6b7280;
 }
 
 .dark-theme .input-modal-input,

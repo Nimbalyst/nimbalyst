@@ -6,17 +6,19 @@ interface InputModalProps {
   title: string;
   placeholder: string;
   defaultValue?: string;
+  suffix?: string;
   onConfirm: (value: string) => void;
   onCancel: () => void;
 }
 
-export function InputModal({ 
-  isOpen, 
-  title, 
-  placeholder, 
+export function InputModal({
+  isOpen,
+  title,
+  placeholder,
   defaultValue = '',
-  onConfirm, 
-  onCancel 
+  suffix,
+  onConfirm,
+  onCancel
 }: InputModalProps) {
   const [value, setValue] = useState(defaultValue);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -52,15 +54,18 @@ export function InputModal({
       <div className="input-modal" onClick={(e) => e.stopPropagation()}>
         <form onSubmit={handleSubmit}>
           <h3 className="input-modal-title">{title}</h3>
-          <input
-            ref={inputRef}
-            type="text"
-            className="input-modal-input"
-            placeholder={placeholder}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
+          <div className={`input-modal-input-wrapper ${suffix ? 'has-suffix' : ''}`}>
+            <input
+              ref={inputRef}
+              type="text"
+              className="input-modal-input"
+              placeholder={placeholder}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+            {suffix && <span className="input-modal-suffix">{suffix}</span>}
+          </div>
           <div className="input-modal-buttons">
             <button 
               type="button" 
