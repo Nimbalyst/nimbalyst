@@ -91,9 +91,20 @@ interface ServerProjectEntry {
   sync_enabled: boolean;
 }
 
+interface DeviceInfo {
+  device_id: string;
+  name: string;
+  type: 'desktop' | 'mobile' | 'tablet' | 'unknown';
+  platform: string;
+  app_version?: string;
+  connected_at: number;
+  last_active_at: number;
+}
+
 type ClientMessage =
   | { type: 'index_sync_request'; project_id?: string }
-  | { type: 'index_update'; session: ServerSessionEntry };
+  | { type: 'index_update'; session: ServerSessionEntry }
+  | { type: 'device_announce'; device: DeviceInfo };
 
 type ServerMessage =
   | {
@@ -119,6 +130,81 @@ type ServerMessage =
 
 const STORAGE_KEY = 'nimbalyst_sync_config_v3';
 const SELECTED_PROJECT_KEY = 'nimbalyst_selected_project';
+const DEVICE_ID_KEY = 'nimbalyst_device_id';
+
+/**
+ * Get or generate a stable device ID for this device.
+ */
+function getOrCreateDeviceId(): string {
+  let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+  if (!deviceId) {
+    // Generate a random device ID
+    deviceId = 'mobile-' + Math.random().toString(36).substring(2, 15) +
+               Math.random().toString(36).substring(2, 15);
+    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+  }
+  return deviceId;
+}
+
+/**
+ * Detect the platform and device type.
+ */
+function detectPlatform(): { platform: string; type: 'mobile' | 'tablet' | 'unknown' } {
+  const userAgent = navigator.userAgent.toLowerCase();
+
+  // Check for iPad
+  if (/ipad/.test(userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+    return { platform: 'ios', type: 'tablet' };
+  }
+
+  // Check for iPhone
+  if (/iphone/.test(userAgent)) {
+    return { platform: 'ios', type: 'mobile' };
+  }
+
+  // Check for Android tablet vs phone (tablets typically have larger screens)
+  if (/android/.test(userAgent)) {
+    // Android tablets usually don't have "mobile" in user agent
+    if (!/mobile/.test(userAgent)) {
+      return { platform: 'android', type: 'tablet' };
+    }
+    return { platform: 'android', type: 'mobile' };
+  }
+
+  return { platform: 'web', type: 'unknown' };
+}
+
+/**
+ * Get a friendly device name.
+ */
+function getDeviceName(): string {
+  const { platform, type } = detectPlatform();
+
+  if (platform === 'ios') {
+    return type === 'tablet' ? 'iPad' : 'iPhone';
+  }
+  if (platform === 'android') {
+    return type === 'tablet' ? 'Android Tablet' : 'Android Phone';
+  }
+  return 'Mobile Device';
+}
+
+/**
+ * Get device info for sending to the server.
+ */
+function getDeviceInfo(): DeviceInfo {
+  const { platform, type } = detectPlatform();
+
+  return {
+    device_id: getOrCreateDeviceId(),
+    name: getDeviceName(),
+    type,
+    platform,
+    app_version: '1.0.0', // TODO: Get from Capacitor app info
+    connected_at: Date.now(),
+    last_active_at: Date.now(),
+  };
+}
 
 function loadConfig(): SyncConfig | null {
   try {
@@ -360,6 +446,16 @@ export function CollabV3SyncProvider({ children }: { children: React.ReactNode }
         connected: true,
         error: null,
       }));
+
+      // Announce this device to the server
+      const deviceInfo = getDeviceInfo();
+      const announceMsg: ClientMessage = {
+        type: 'device_announce',
+        device: deviceInfo,
+      };
+      ws.send(JSON.stringify(announceMsg));
+      console.log('[CollabV3] Announced device:', deviceInfo.name, deviceInfo.type, deviceInfo.platform);
+
       // Request initial sync
       requestSync();
     };
