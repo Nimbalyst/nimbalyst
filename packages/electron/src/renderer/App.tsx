@@ -27,7 +27,6 @@ import { ErrorToastContainer } from './components/ErrorToast/ErrorToast';
 import { ApiKeyDialog } from './components/ApiKeyDialog';
 import { ProjectSelectionDialog } from './components/ProjectSelectionDialog/ProjectSelectionDialog';
 import { OnboardingDialog } from './components/OnboardingDialog/OnboardingDialog';
-import { GlobalSettingsScreen as AIModels } from './components/GlobalSettings/GlobalSettingsScreen.tsx';
 import { WorkspaceManager } from './components/WorkspaceManager/WorkspaceManager.tsx';
 import { AIUsageReport } from './components/AIUsageReport';
 import { DatabaseBrowser } from './components/DatabaseBrowser/DatabaseBrowser';
@@ -48,7 +47,6 @@ import { loadCustomTrackers } from './services/CustomTrackerLoader';
 import { customEditorRegistry } from './components/CustomEditors';
 import { WireframeViewer } from './components/CustomEditors/WireframeEditor/WireframeViewer';
 import './WorkspaceWelcome.css';
-import './components/GlobalSettings/GlobalSettingsScreen.css';
 
 logger.ui.info('App.tsx loading');
 logger.ui.info('About to import StravuEditor');
@@ -130,18 +128,6 @@ export default function App() {
   // Document context hook needs to be after tabs - will declare after special window modes
 
   // Handle special window modes
-  if (windowMode === 'ai-models') {
-    // Set window title for AI Models
-    React.useEffect(() => {
-      if (window.electronAPI) {
-        window.electronAPI.setTitle('Global Settings');
-      }
-    }, []);
-    return <AIModels onClose={() => window.close()} />;
-  }
-
-
-
   if (windowMode === 'workspace-manager') {
     // Set window title for Workspace Manager
     React.useEffect(() => {
@@ -1478,7 +1464,7 @@ export default function App() {
         onClose={() => setIsApiKeyDialogOpen(false)}
         onOpenPreferences={() => {
           setIsApiKeyDialogOpen(false);
-          window.electronAPI.openAIModels();
+          setActiveMode('settings');
         }}
       />
       {projectSelection && (

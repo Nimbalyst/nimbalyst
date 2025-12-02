@@ -1,5 +1,5 @@
 import React from 'react';
-import { ProviderConfig, Model } from '../GlobalSettingsScreen.tsx';
+import { ProviderConfig, Model } from '../../Settings/SettingsView';
 
 interface LMStudioPanelProps {
   config: ProviderConfig;

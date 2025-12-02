@@ -535,8 +535,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     loadVirtual: (virtualPath: string) => ipcRenderer.invoke('document-service:load-virtual', virtualPath)
   },
-  // Open AI Models window
-  openAIModels: () => ipcRenderer.invoke('window:open-ai-models'),
 
   // Open external links
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),

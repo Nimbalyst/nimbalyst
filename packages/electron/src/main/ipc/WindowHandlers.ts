@@ -2,7 +2,6 @@ import { ipcMain, BrowserWindow, shell, nativeImage } from 'electron';
 import { windowStates, windows, getWindowId } from '../window/WindowManager';
 import { updateApplicationMenu } from '../menu/ApplicationMenu';
 import { startFileWatcher } from '../file/FileWatcher';
-import { createAIModelsWindow } from '../window/AIModelsWindow';
 import { basename, join } from 'path';
 import { getFolderContents } from '../utils/FileTree';
 import { writeFileSync, existsSync } from 'fs';
@@ -35,11 +34,6 @@ export function registerWindowHandlers() {
         return {
             mode: 'document'
         };
-    });
-
-    // Open AI Models window
-    ipcMain.handle('window:open-ai-models', async () => {
-        createAIModelsWindow();
     });
 
     // Open external URL in default browser

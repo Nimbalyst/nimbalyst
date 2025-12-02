@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ProviderConfig, Model } from '../GlobalSettingsScreen.tsx';
+import { ProviderConfig, Model } from '../../Settings/SettingsView';
 // Commented out for now - using built-in SDK only
 // import { InstallationProgress } from './InstallationProgress';
 // import { CLIInstaller } from '../services/CLIInstaller';

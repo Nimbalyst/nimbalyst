@@ -483,16 +483,18 @@ export function SettingsView({ workspacePath, workspaceName, onClose }: Settings
     }
   };
 
-  // Handle scope changes
+  // Categories that are only available in project scope
+  const projectOnlyCategories: SettingsCategory[] = ['tool-packages'];
+
+  // Handle scope changes - preserve selected category when possible
   const handleScopeChange = (newScope: SettingsScope) => {
     setScope(newScope);
-    // When switching to project scope, select claude-code (first AI provider)
-    if (newScope === 'project' && workspacePath) {
-      setSelectedCategory('claude-code');
-    } else if (newScope === 'user' && selectedCategory === 'tool-packages') {
-      // When switching to user scope from project-only category, go to claude-code
+    // Only change category if current one is not available in the new scope
+    if (newScope === 'user' && projectOnlyCategories.includes(selectedCategory)) {
+      // Switching to user scope from a project-only category
       setSelectedCategory('claude-code');
     }
+    // When switching to project scope, keep the current category (all user categories are available in project scope)
   };
 
   return (

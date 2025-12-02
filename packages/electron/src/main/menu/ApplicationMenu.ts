@@ -29,7 +29,6 @@ import * as fs from 'fs';
 import { windows, windowStates, createWindow, findWindowByFilePath, getWindowId } from '../window/WindowManager';
 import { createAboutWindow } from '../window/AboutWindow';
 import { createWorkspaceManagerWindow } from '../window/WorkspaceManagerWindow.ts';
-import { createAIModelsWindow } from '../window/AIModelsWindow';
 import { createAIUsageReportWindow } from '../window/AIUsageReportWindow';
 import { createDatabaseBrowserWindow } from '../window/DatabaseBrowserWindow';
 import { loadFileIntoWindow } from '../file/FileOperations';
@@ -72,9 +71,6 @@ function createWindowListMenu(): any[] {
         // Check for special windows first
         if (isWorkspaceManagerWindow(window)) {
             title = 'Project Manager';
-            category = 'other';
-        } else if (isAIModelsWindow(window)) {
-            title = 'AI Models';
             category = 'other';
         } else if (isAboutWindow(window)) {
             title = 'About';
@@ -545,9 +541,6 @@ export async function createApplicationMenu() {
                           const focused = getFocusedWindow();
                           if (focused && !isAboutWindow(focused)) {
                               focused.webContents.send('set-content-mode', 'settings');
-                          } else {
-                              // Fallback to opening a separate window if no workspace window is focused
-                              createAIModelsWindow();
                           }
                       }
                   },
@@ -1358,9 +1351,6 @@ Note: Only one connection at a time is supported.`,
                         const focused = getFocusedWindow();
                         if (focused && !isAboutWindow(focused)) {
                             focused.webContents.send('set-content-mode', 'settings');
-                        } else {
-                            // Fallback to opening a separate window if no workspace window is focused
-                            createAIModelsWindow();
                         }
                     }
                 },
@@ -1554,12 +1544,3 @@ function isWorkspaceManagerWindow(window: BrowserWindow): boolean {
     return window.getTitle() === 'Project Manager - Nimbalyst';
 }
 
-// Helper to check if window is AI models window
-function isAIModelsWindow(window: BrowserWindow): boolean {
-    // Check if window is destroyed first
-    if (!window || window.isDestroyed()) {
-        return false;
-    }
-    // Check if this is the AI models window by checking the title
-    return window.getTitle() === 'AI Models';
-}

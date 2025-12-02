@@ -481,8 +481,7 @@ app.whenReady().then(async () => {
             const workspaceWindow = allWindows.find(win => {
                 const url = win.webContents.getURL();
                 return !url.includes('mode=workspace-manager') &&
-                       !url.includes('mode=session-manager') &&
-                       !url.includes('mode=ai-models');
+                       !url.includes('mode=session-manager');
             });
 
             if (workspaceWindow && workspaceWindow.webContents.isLoading() === false) {

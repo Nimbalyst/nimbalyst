@@ -164,9 +164,6 @@ interface ElectronAPI {
   // Document Service
   documentService: import('@nimbalyst/runtime').DocumentService;
 
-  // Open AI Models window
-  openAIModels: () => Promise<void>;
-
   // Open external links
   openExternal: (url: string) => Promise<void>;
 

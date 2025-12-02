@@ -61,7 +61,7 @@ export function ModelSelector({ currentModel, onModelChange }: ModelSelectorProp
 
   const handleConfigureModels = () => {
     setIsOpen(false);
-    window.electronAPI.openAIModels();
+    window.electronAPI.send('set-content-mode', 'settings');
   };
 
   const getCurrentModelName = () => {
