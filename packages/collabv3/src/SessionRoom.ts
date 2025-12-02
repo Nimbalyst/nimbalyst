@@ -328,6 +328,7 @@ export class SessionRoom implements DurableObject {
 
   /**
    * Handle append message - store and broadcast
+   * Deduplicates by message ID to prevent sync loops from creating duplicates
    */
   private async handleAppendMessage(
     ws: WebSocket,
@@ -335,6 +336,18 @@ export class SessionRoom implements DurableObject {
     message: EncryptedMessage
   ): Promise<void> {
     const sql = this.state.storage.sql;
+
+    // Check if message with this ID already exists (deduplication)
+    const existing = sql.exec<{ id: string }>(
+      `SELECT id FROM messages WHERE id = ?`,
+      message.id
+    ).toArray();
+
+    if (existing.length > 0) {
+      // Message already exists - skip insert, don't broadcast
+      console.warn('[SessionRoom] Skipping duplicate message:', message.id);
+      return;
+    }
 
     // Get next sequence number
     const maxSeqResult = sql.exec<{ max_seq: number | null }>(
